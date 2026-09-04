@@ -196,22 +196,27 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "start-downloads",
-          batchSize: 5,
+          batchSize: 3,
           autoAnalyze: false,
         }),
       });
       const dlData = await dlRes.json();
       if (!dlData.ok) throw new Error(dlData.error || "ITY start-downloads failed");
 
-      // A few more pending batches; long downloads continue on ChốtKiểm via drain/proxy-hunt.
+      // One tiny kick-sample only; mass audio drain continues on ChốtKiểm (proxy-hunt/drain).
       let pendingCount = Number(dlData.pendingCount ?? 0);
-      for (let i = 0; i < 3; i += 1) {
+      setItyProgress((p) => ({
+        ...p,
+        pendingCount,
+        message: `Đã kích proxy-hunt/drain nền · còn ~${pendingCount} pending — thử 1 lô process-pending nhỏ…`,
+      }));
+      try {
         const batch = await fetch("/api/ity", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "process-pending",
-            batchSize: 3,
+            batchSize: 1,
             autoAnalyze: false,
           }),
         });
@@ -221,10 +226,15 @@ export default function HomePage() {
           ...p,
           pendingCount,
           message: batchData.timedOut
-            ? `Tải ghi âm chậm/timeout — còn ~${pendingCount} pending (drain nền vẫn chạy)`
-            : `Đã kích batch tải · còn ~${pendingCount} pending`,
+            ? `Process-pending timeout — còn ~${pendingCount} pending (drain/proxy-hunt nền vẫn chạy)`
+            : `Đã kích tải mẫu · còn ~${pendingCount} pending (phần còn lại tải nền trên ChốtKiểm)`,
         }));
-        if (!pendingCount) break;
+      } catch {
+        setItyProgress((p) => ({
+          ...p,
+          pendingCount,
+          message: `Bỏ qua process-pending chậm — còn ~${pendingCount} pending (drain nền vẫn chạy)`,
+        }));
       }
 
       const statusRes = await fetch("/api/ity");

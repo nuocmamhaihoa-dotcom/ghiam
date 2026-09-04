@@ -114,7 +114,7 @@ export async function fetchItyDownloadStatus(): Promise<ItyDownloadStatus> {
   );
   return {
     ok: bool(raw.ok, true),
-    pendingCount: num(raw.pendingCount),
+    pendingCount: num(raw.pendingCount ?? raw.pending),
     recordingKeyConfigured: bool(raw.recordingKeyConfigured, false),
     serverCanDownload: bool(raw.serverCanDownload, false),
     recordingHostBlocked: bool(raw.recordingHostBlocked, false),
@@ -156,25 +156,44 @@ export async function startItyProxyHunt(): Promise<Record<string, unknown>> {
   });
 }
 
-/** Process a small pending-download batch (slow — keep tiny). */
+/** Process a small pending-download batch (slow — keep tiny, hard-cap wait). */
 export async function processItyPendingDownloads(input: {
   callIds: string[];
   autoAnalyze?: boolean;
   concurrency?: number;
+  timeoutMs?: number;
 }): Promise<Record<string, unknown>> {
   if (!input.callIds.length) {
     return { ok: true, processed: 0, message: "Không có callId" };
   }
 
-  return ckFetch<Record<string, unknown>>("/api/sync/ity/process-pending", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      callIds: input.callIds.slice(0, 10),
-      autoAnalyze: input.autoAnalyze === true,
-      concurrency: input.concurrency ?? 1,
-    }),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(),
+    input.timeoutMs ?? 25_000,
+  );
+  try {
+    return await ckFetch<Record<string, unknown>>(
+      "/api/sync/ity/process-pending",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          callIds: input.callIds.slice(0, 3),
+          autoAnalyze: input.autoAnalyze === true,
+          concurrency: input.concurrency ?? 1,
+        }),
+      },
+    );
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("ITY process-pending timeout — drain/proxy-hunt vẫn chạy nền");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function fetchItySettingsSummary(): Promise<{

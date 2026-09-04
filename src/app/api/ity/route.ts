@@ -63,8 +63,8 @@ type ItyActionBody = {
 /**
  * Client-driven ITY sync (avoids single long request timeouts):
  * - sync-round: one metadata page batch (default daysBack=10)
- * - start-downloads: kick proxy-hunt + try a small pending batch
- * - process-pending: download audio for next / given callIds
+ * - start-downloads: kick proxy-hunt/drain only (no blocking process-pending)
+ * - process-pending: download audio for next / given callIds (small batches)
  */
 export async function POST(req: NextRequest) {
   try {
@@ -89,34 +89,23 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "start-downloads") {
+      // Kick background hunt/drain only — do NOT await process-pending here
+      // (slow batches cause nginx/gateway timeouts; client can call process-pending separately).
       const hunt = await startItyProxyHunt();
-      const pending = await fetchItyPendingDownloads(body.batchSize ?? 5);
-      let processed: Record<string, unknown> | null = null;
-      let processError: string | null = null;
-
-      if (pending.items.length > 0) {
-        try {
-          processed = await processItyPendingDownloads({
-            callIds: pending.items.map((i) => i.callId),
-            autoAnalyze: body.autoAnalyze === true,
-            concurrency: 1,
-          });
-        } catch (error) {
-          processError =
-            error instanceof Error ? error.message : "process-pending timeout/error";
-        }
-      }
-
       const download = await fetchItyDownloadStatus().catch(() => null);
+      const pending = await fetchItyPendingDownloads(
+        Math.min(body.batchSize ?? 3, 5),
+      ).catch(() => ({ count: download?.pendingCount ?? 0, items: [] }));
 
       return NextResponse.json({
         ok: true,
         action,
         hunt,
-        processed,
-        processError,
+        processed: null,
+        processError: null,
         pendingCount: download?.pendingCount ?? pending.count,
         serverCanDownload: download?.serverCanDownload ?? null,
+        hint: "Proxy-hunt/drain đã kích nền trên ChốtKiểm. Dùng process-pending cho lô nhỏ nếu cần.",
       });
     }
 
