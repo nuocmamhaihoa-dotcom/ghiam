@@ -38,4 +38,7 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# local recording library + proxy pool snapshots
+/data/
 next-env.d.ts
