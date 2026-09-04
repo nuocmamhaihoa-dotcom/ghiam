@@ -175,8 +175,14 @@ export default function HomePage() {
           message: `Lô ${round}: trang ${lastPage}/${remoteTotal ? Math.ceil(remoteTotal / 100) : "?"} · nhập ${imported} · bỏ qua ${skipped}`,
         });
 
-        if (!r.hasMore || !data.nextStartPage) break;
-        startPage = Number(data.nextStartPage);
+                // Advance locally — ChốtKiểm lastPage can stall under load.
+        const suggested = Number(data.nextStartPage || 0);
+        const nextPage = Math.max(suggested, startPage + 1);
+        const pageCap = remoteTotal ? Math.ceil(remoteTotal / 100) + 5 : 200;
+        if (!r.hasMore || nextPage > pageCap || (Number(r.discovered || 0) === 0 && Number(r.imported || 0) === 0)) {
+          break;
+        }
+        startPage = nextPage;
       }
 
       setItyProgress((p) => ({

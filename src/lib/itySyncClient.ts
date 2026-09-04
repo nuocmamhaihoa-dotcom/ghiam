@@ -89,7 +89,7 @@ export async function runItySyncRound(
         daysBack: input.daysBack ?? 10,
         metadataOnly: true,
         autoAnalyze: input.autoAnalyze ?? false,
-        full: false,
+        full: true,
         startPage: input.startPage ?? 1,
         maxPages: input.maxPages ?? 1,
         pageLimit: input.pageLimit ?? 100,
