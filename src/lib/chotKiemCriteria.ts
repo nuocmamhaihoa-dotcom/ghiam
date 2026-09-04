@@ -45,15 +45,15 @@ export type ChotKiemScorecard = {
 };
 
 const LABELS: Record<CriteriaKey, { label: string; short: string; required: boolean }> = {
-  greeting: { label: "1. Chào hỏi khách hàng", short: "1.Chào KH", required: false },
+  greeting: { label: "1. Chào khách hàng", short: "1.Chào KH", required: true },
   productName: { label: "2. Giới thiệu tên sản phẩm", short: "2.Tên SP", required: true },
   quantity: { label: "3. Chốt số lượng sản phẩm", short: "3.Số lượng", required: true },
   price: { label: "4. Chốt giá bán sản phẩm", short: "4.Giá bán", required: true },
   deliveryAddress: { label: "5. Chốt rõ địa chỉ khách hàng", short: "5.Địa chỉ", required: true },
   customerAgreed: { label: "6. Khách hàng đồng ý nhận hàng", short: "6.Đồng ý nhận", required: true },
-  customerRefused: { label: "7. Khách có từ chối nhận hàng không?", short: "7.Có từ chối?", required: true },
+  customerRefused: { label: "7. Khách có từ chối nhận hàng không?", short: "7.Có từ chối?", required: false },
   customerAttitude: { label: "8. Thái độ khách hàng", short: "8.Thái độ KH", required: false },
-  agentAttitude: { label: "9. Thái độ nhân viên", short: "9.Thái độ NV", required: false },
+  agentAttitude: { label: "9. Thái độ nhân viên", short: "9.Thái độ NV", required: true },
 };
 
 const CLOSE_LABELS: Record<CloseOutcome, string> = {

@@ -4,12 +4,77 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Metric, OutcomeBadge, ScoreRing, SectionTitle } from "@/components/ui";
 import { INDUSTRY_PLAYBOOKS } from "@/lib/analyzeCall";
-import { getInsights, loadCalls, resetDemoCalls, type StoredCall } from "@/lib/store";
+import { CHOTKIEM_LIVE_STATS } from "@/lib/chotKiemSeed";
+import {
+  getInsights,
+  loadCalls,
+  mergeChotKiemSamples,
+  resetDemoCalls,
+  type StoredCall,
+} from "@/lib/store";
+
+type LiveStats = {
+  totals: {
+    calls: number;
+    avgScore: number;
+    completeCalls: number;
+    uniquePhones: number;
+    agents: number;
+  };
+  criteria: {
+    passRate: number;
+    avgScore: number;
+    coreFailFrequency: Array<{ key: string; label: string; failCount: number }>;
+  };
+  fetchedAt?: string;
+};
 
 export default function HomePage() {
   const [calls, setCalls] = useState<StoredCall[]>([]);
-  useEffect(() => setCalls(loadCalls()), []);
+  const [live, setLive] = useState<LiveStats | null>(null);
+  const [syncMsg, setSyncMsg] = useState("");
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    setCalls(loadCalls());
+    fetch("/api/chotkiem")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.ok) setLive(d.stats);
+      })
+      .catch(() => undefined);
+  }, []);
+
   const insights = getInsights(calls);
+  const liveTotals = live?.totals;
+  const liveGaps =
+    live?.criteria.coreFailFrequency?.length
+      ? live.criteria.coreFailFrequency
+      : CHOTKIEM_LIVE_STATS.topGaps.map((g) => ({
+          key: g.key,
+          label: g.label,
+          failCount: g.failCount,
+        }));
+
+  async function syncFromChotKiem() {
+    setSyncing(true);
+    setSyncMsg("");
+    try {
+      const res = await fetch("/api/chotkiem", { method: "POST" });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Sync failed");
+      if (data.stats) setLive(data.stats);
+      const next = mergeChotKiemSamples(data.samples || []);
+      setCalls(next);
+      setSyncMsg(
+        `Đã kéo ${data.imported} cuộc từ ChốtKiểm (kho ${data.stats?.totals?.calls ?? "?"} cuộc).`,
+      );
+    } catch (e) {
+      setSyncMsg(e instanceof Error ? e.message : "Không sync được ChốtKiểm");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -22,13 +87,24 @@ export default function HomePage() {
             CallCraft đọc cuộc gọi và dạy sale cách mở đầu, xử lý từ chối, chốt đơn.
           </h1>
           <p className="mt-4 max-w-xl text-[var(--muted)]">
-            MVP chạy trên transcript tiếng Việt. Độ gần coach người ~75–85% khi có nhãn kết quả.
-            Gắn Whisper + prosody model để nâng ngữ điệu lên ~85–90%.
+            Đã nối ChốtKiểm (`222.255.215.55`) — rubric QA 9 tiêu chí + sync mẫu cuộc gọi live.
+            Độ gần coach người ~75–85% trên transcript.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link href="/analyze" className="rounded-full bg-[var(--accent)] px-5 py-2.5 text-sm font-medium text-white">
+            <Link
+              href="/analyze"
+              className="rounded-full bg-[var(--accent)] px-5 py-2.5 text-sm font-medium text-white"
+            >
               Phân tích cuộc gọi mới
             </Link>
+            <button
+              type="button"
+              onClick={() => void syncFromChotKiem()}
+              disabled={syncing}
+              className="rounded-full border border-[var(--accent)] bg-[var(--accent)]/10 px-5 py-2.5 text-sm text-[var(--accent)] disabled:opacity-60"
+            >
+              {syncing ? "Đang sync…" : "Sync từ ChốtKiểm"}
+            </button>
             <button
               type="button"
               onClick={() => setCalls(resetDemoCalls())}
@@ -37,13 +113,50 @@ export default function HomePage() {
               Reset data demo
             </button>
           </div>
+          {syncMsg ? <p className="mt-3 text-sm text-[var(--muted)]">{syncMsg}</p> : null}
         </div>
         <div className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-6">
-          <div className="mb-3 flex items-center justify-between">
-            <SectionTitle title="Độ tin cậy kỹ thuật" />
-            <ScoreRing score={80} label="vs coach" />
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <SectionTitle
+              title="ChốtKiểm live"
+              subtitle={
+                live?.fetchedAt
+                  ? `Cập nhật ${new Date(live.fetchedAt).toLocaleString("vi-VN")}`
+                  : "Snapshot / API"
+              }
+            />
+            <ScoreRing
+              score={Math.round(liveTotals?.avgScore ?? CHOTKIEM_LIVE_STATS.avgScore)}
+              label="điểm TB"
+            />
           </div>
-          <p className="text-sm text-[var(--muted)]">{insights.realismNote}</p>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <div className="text-[var(--muted)]">Kho ghi âm</div>
+              <div className="font-[family-name:var(--font-display)] text-xl">
+                {liveTotals?.calls ?? CHOTKIEM_LIVE_STATS.calls}
+              </div>
+            </div>
+            <div>
+              <div className="text-[var(--muted)]">Pass rate</div>
+              <div className="font-[family-name:var(--font-display)] text-xl">
+                {live?.criteria.passRate ?? CHOTKIEM_LIVE_STATS.passRate}%
+              </div>
+            </div>
+            <div>
+              <div className="text-[var(--muted)]">Đủ tiêu chí</div>
+              <div className="font-[family-name:var(--font-display)] text-xl">
+                {liveTotals?.completeCalls ?? CHOTKIEM_LIVE_STATS.completeCalls}
+              </div>
+            </div>
+            <div>
+              <div className="text-[var(--muted)]">Sale / agent</div>
+              <div className="font-[family-name:var(--font-display)] text-xl">
+                {liveTotals?.agents ?? CHOTKIEM_LIVE_STATS.agents}
+              </div>
+            </div>
+          </div>
+          <p className="mt-4 text-xs text-[var(--muted)]">{insights.realismNote}</p>
         </div>
       </section>
 
@@ -63,31 +176,43 @@ export default function HomePage() {
         <div className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-5">
           <SectionTitle
             title="Tiêu chí ChốtKiểm hay thiếu"
-            subtitle="Các mục bắt buộc sale hay bỏ sót (port từ 222.255.215.55)"
+            subtitle="Gap từ kho live 222.255.215.55 (+ phân tích local)"
           />
           <div className="space-y-3">
-            {insights.criteriaGaps.length === 0 ? (
-              <p className="text-sm text-[var(--muted)]">Demo calls đạt khá đều — chưa thấy gap rõ.</p>
-            ) : (
-              insights.criteriaGaps.map((g) => (
-                <div key={g.label} className="flex items-center justify-between rounded-xl bg-[var(--chip)]/70 px-3 py-2">
-                  <div className="text-sm font-medium">{g.label}</div>
-                  <div className="text-sm text-[var(--bad)]">{g.count} cuộc thiếu</div>
-                </div>
-              ))
-            )}
+            {liveGaps.slice(0, 6).map((g) => (
+              <div
+                key={g.key || g.label}
+                className="flex items-center justify-between rounded-xl bg-[var(--chip)]/70 px-3 py-2"
+              >
+                <div className="text-sm font-medium">{g.label}</div>
+                <div className="text-sm text-[var(--bad)]">{g.failCount} cuộc thiếu</div>
+              </div>
+            ))}
+            {insights.criteriaGaps.length > 0 ? (
+              <p className="text-xs text-[var(--muted)]">
+                Local: {insights.criteriaGaps.map((g) => `${g.label}×${g.count}`).join(" · ")}
+              </p>
+            ) : null}
           </div>
         </div>
         <div className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-5">
-          <SectionTitle title="Từ khóa khiến khách đồng ý" subtitle="Tỉ lệ xuất hiện trong cuộc thắng" />
+          <SectionTitle
+            title="Từ khóa khiến khách đồng ý"
+            subtitle="Tỉ lệ xuất hiện trong cuộc thắng"
+          />
           <div className="space-y-3">
             {insights.topKeywords.map((k) => (
               <div key={k.keyword} className="flex items-center gap-3">
                 <div className="w-28 text-sm font-medium">{k.keyword}</div>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--chip)]">
-                  <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${k.lift}%` }} />
+                  <div
+                    className="h-full rounded-full bg-[var(--accent)]"
+                    style={{ width: `${k.lift}%` }}
+                  />
                 </div>
-                <div className="w-20 text-right text-sm text-[var(--muted)]">{k.lift}% · {k.count}</div>
+                <div className="w-20 text-right text-sm text-[var(--muted)]">
+                  {k.lift}% · {k.count}
+                </div>
               </div>
             ))}
           </div>
@@ -96,7 +221,10 @@ export default function HomePage() {
           <SectionTitle title="Theo ngành hàng" />
           <div className="space-y-3">
             {insights.industries.map((row) => (
-              <div key={row.industry} className="flex items-center justify-between rounded-xl bg-[var(--chip)]/70 px-3 py-2">
+              <div
+                key={row.industry}
+                className="flex items-center justify-between rounded-xl bg-[var(--chip)]/70 px-3 py-2"
+              >
                 <div>
                   <div className="font-medium">{row.industry}</div>
                   <div className="text-xs text-[var(--muted)]">{row.total} cuộc</div>
@@ -116,7 +244,9 @@ export default function HomePage() {
           <SectionTitle title="Cách mở đầu thành công" />
           <div className="space-y-3">
             {insights.bestOpenings.map((s, i) => (
-              <p key={i} className="prose-quote rounded-r-xl py-2 text-sm">{s}</p>
+              <p key={i} className="prose-quote rounded-r-xl py-2 text-sm">
+                {s}
+              </p>
             ))}
           </div>
         </div>
@@ -124,7 +254,9 @@ export default function HomePage() {
           <SectionTitle title="Cách chốt đơn hiệu quả" />
           <div className="space-y-3">
             {insights.bestCloses.map((s, i) => (
-              <p key={i} className="prose-quote rounded-r-xl py-2 text-sm">{s}</p>
+              <p key={i} className="prose-quote rounded-r-xl py-2 text-sm">
+                {s}
+              </p>
             ))}
           </div>
         </div>
@@ -147,7 +279,9 @@ export default function HomePage() {
       <section className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-5">
         <div className="mb-4 flex items-end justify-between">
           <SectionTitle title="Cuộc gọi gần đây" />
-          <Link href="/calls" className="text-sm text-[var(--accent)]">Xem tất cả</Link>
+          <Link href="/calls" className="text-sm text-[var(--accent)]">
+            Xem tất cả
+          </Link>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
@@ -161,14 +295,21 @@ export default function HomePage() {
               </tr>
             </thead>
             <tbody>
-              {calls.slice(0, 6).map((c) => (
+              {calls.slice(0, 8).map((c) => (
                 <tr key={c.id} className="border-t border-[var(--line)]">
                   <td className="py-3">
-                    <Link href={`/calls/${c.id}`} className="font-medium hover:text-[var(--accent)]">{c.title}</Link>
-                    <div className="text-xs text-[var(--muted)]">{c.agentName}</div>
+                    <Link href={`/calls/${c.id}`} className="font-medium hover:text-[var(--accent)]">
+                      {c.title}
+                    </Link>
+                    <div className="text-xs text-[var(--muted)]">
+                      {c.agentName}
+                      {c.source === "chotkiem" ? " · ChốtKiểm" : ""}
+                    </div>
                   </td>
                   <td className="py-3">{c.industry}</td>
-                  <td className="py-3"><OutcomeBadge outcome={c.outcome} /></td>
+                  <td className="py-3">
+                    <OutcomeBadge outcome={c.outcome} />
+                  </td>
                   <td className="py-3">{c.analysis.overallScore}</td>
                   <td className="py-3">{c.analysis.speakingRateWpm}</td>
                 </tr>
@@ -183,7 +324,10 @@ export default function HomePage() {
           title={`${INDUSTRY_PLAYBOOKS.length} playbook ngành sẵn sàng`}
           subtitle="Mở đầu · từ chối · chốt · từ khóa · ngữ điệu · tốc độ"
         />
-        <Link href="/playbooks" className="inline-flex rounded-full bg-[var(--ink)] px-5 py-2.5 text-sm text-white">
+        <Link
+          href="/playbooks"
+          className="inline-flex rounded-full bg-[var(--ink)] px-5 py-2.5 text-sm text-white"
+        >
           Xem kịch bản theo ngành
         </Link>
       </section>
