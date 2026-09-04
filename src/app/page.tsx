@@ -29,11 +29,42 @@ type LiveStats = {
   fetchedAt?: string;
 };
 
+type ItyStatus = {
+  settings?: { enabledAccounts?: string[]; accountCount?: number };
+  download?: { pendingCount?: number; serverCanDownload?: boolean };
+  pending?: { count?: number };
+};
+
+type ItyProgress = {
+  phase: "idle" | "metadata" | "downloads" | "done" | "error";
+  round: number;
+  discovered: number;
+  imported: number;
+  skipped: number;
+  remoteTotal: number;
+  lastPage: number;
+  pendingCount: number;
+  message: string;
+};
+
 export default function HomePage() {
   const [calls, setCalls] = useState<StoredCall[]>([]);
   const [live, setLive] = useState<LiveStats | null>(null);
   const [syncMsg, setSyncMsg] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [ityBusy, setItyBusy] = useState(false);
+  const [ityStatus, setItyStatus] = useState<ItyStatus | null>(null);
+  const [ityProgress, setItyProgress] = useState<ItyProgress>({
+    phase: "idle",
+    round: 0,
+    discovered: 0,
+    imported: 0,
+    skipped: 0,
+    remoteTotal: 0,
+    lastPage: 0,
+    pendingCount: 0,
+    message: "",
+  });
 
   useEffect(() => {
     setCalls(loadCalls());
@@ -41,6 +72,12 @@ export default function HomePage() {
       .then((r) => r.json())
       .then((d) => {
         if (d.ok) setLive(d.stats);
+      })
+      .catch(() => undefined);
+    fetch("/api/ity")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.ok) setItyStatus(d);
       })
       .catch(() => undefined);
   }, []);
@@ -76,6 +113,138 @@ export default function HomePage() {
     }
   }
 
+  /** Pull all ITY recordings for the last 10 days via ChốtKiểm (paginated). */
+  async function syncItyLast10Days() {
+    if (ityBusy) return;
+    setItyBusy(true);
+    setItyProgress({
+      phase: "metadata",
+      round: 0,
+      discovered: 0,
+      imported: 0,
+      skipped: 0,
+      remoteTotal: 0,
+      lastPage: 0,
+      pendingCount: ityStatus?.download?.pendingCount ?? 0,
+      message: "Đang quét metadata ITY 10 ngày gần nhất…",
+    });
+
+    try {
+      let startPage = 1;
+      let discovered = 0;
+      let imported = 0;
+      let skipped = 0;
+      let remoteTotal = 0;
+      let lastPage = 0;
+      let round = 0;
+
+      // Client-driven rounds keep each request under gateway timeouts.
+      for (let i = 0; i < 80; i += 1) {
+        round = i + 1;
+        const res = await fetch("/api/ity", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "sync-round",
+            daysBack: 10,
+            startPage,
+            maxPages: 1,
+            pageLimit: 100,
+            autoAnalyze: false,
+          }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "ITY sync-round failed");
+
+        const r = data.round || {};
+        discovered += Number(r.discovered || 0);
+        imported += Number(r.imported || 0);
+        skipped += Number(r.skipped || 0);
+        remoteTotal = Math.max(remoteTotal, Number(r.remoteTotal || 0));
+        lastPage = Number(r.lastPage || startPage);
+
+        setItyProgress({
+          phase: "metadata",
+          round,
+          discovered,
+          imported,
+          skipped,
+          remoteTotal,
+          lastPage,
+          pendingCount: Number(r.pendingBrowserDownload || 0),
+          message: `Lô ${round}: trang ${lastPage}/${remoteTotal ? Math.ceil(remoteTotal / 100) : "?"} · nhập ${imported} · bỏ qua ${skipped}`,
+        });
+
+        if (!r.hasMore || !data.nextStartPage) break;
+        startPage = Number(data.nextStartPage);
+      }
+
+      setItyProgress((p) => ({
+        ...p,
+        phase: "downloads",
+        message: "Metadata xong — kích tải ghi âm nền + xử lý hàng chờ…",
+      }));
+
+      const dlRes = await fetch("/api/ity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "start-downloads",
+          batchSize: 5,
+          autoAnalyze: false,
+        }),
+      });
+      const dlData = await dlRes.json();
+      if (!dlData.ok) throw new Error(dlData.error || "ITY start-downloads failed");
+
+      // A few more pending batches; long downloads continue on ChốtKiểm via drain/proxy-hunt.
+      let pendingCount = Number(dlData.pendingCount ?? 0);
+      for (let i = 0; i < 3; i += 1) {
+        const batch = await fetch("/api/ity", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "process-pending",
+            batchSize: 3,
+            autoAnalyze: false,
+          }),
+        });
+        const batchData = await batch.json();
+        if (batchData.pendingCount != null) pendingCount = Number(batchData.pendingCount);
+        setItyProgress((p) => ({
+          ...p,
+          pendingCount,
+          message: batchData.timedOut
+            ? `Tải ghi âm chậm/timeout — còn ~${pendingCount} pending (drain nền vẫn chạy)`
+            : `Đã kích batch tải · còn ~${pendingCount} pending`,
+        }));
+        if (!pendingCount) break;
+      }
+
+      const statusRes = await fetch("/api/ity");
+      const statusData = await statusRes.json();
+      if (statusData.ok) setItyStatus(statusData);
+      pendingCount = Number(
+        statusData.download?.pendingCount ?? statusData.pending?.count ?? pendingCount,
+      );
+
+      setItyProgress((p) => ({
+        ...p,
+        phase: "done",
+        pendingCount,
+        message: `Xong quét 10 ngày: phát hiện ${p.discovered}, nhập mới ${p.imported}, bỏ qua ${p.skipped}. Pending ghi âm còn ~${pendingCount} (ChốtKiểm tải nền).`,
+      }));
+    } catch (e) {
+      setItyProgress((p) => ({
+        ...p,
+        phase: "error",
+        message: e instanceof Error ? e.message : "Lỗi sync ITY",
+      }));
+    } finally {
+      setItyBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-8">
       <section className="grid gap-6 lg:grid-cols-[1.35fr_0.75fr]">
@@ -100,10 +269,18 @@ export default function HomePage() {
             <button
               type="button"
               onClick={() => void syncFromChotKiem()}
-              disabled={syncing}
+              disabled={syncing || ityBusy}
               className="rounded-full border border-[var(--accent)] bg-[var(--accent)]/10 px-5 py-2.5 text-sm text-[var(--accent)] disabled:opacity-60"
             >
               {syncing ? "Đang sync…" : "Sync từ ChốtKiểm"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void syncItyLast10Days()}
+              disabled={ityBusy || syncing}
+              className="rounded-full border border-[var(--line)] bg-[var(--ink)] px-5 py-2.5 text-sm text-white disabled:opacity-60"
+            >
+              {ityBusy ? "Đang tải ITY…" : "Tải ITY 10 ngày"}
             </button>
             <button
               type="button"
@@ -114,6 +291,55 @@ export default function HomePage() {
             </button>
           </div>
           {syncMsg ? <p className="mt-3 text-sm text-[var(--muted)]">{syncMsg}</p> : null}
+          {ityProgress.phase !== "idle" ? (
+            <div className="mt-4 rounded-2xl border border-[var(--line)] bg-[var(--panel)]/80 p-4 text-sm">
+              <div className="font-medium">
+                ITY 10 ngày ·{" "}
+                {ityProgress.phase === "metadata"
+                  ? "quét metadata"
+                  : ityProgress.phase === "downloads"
+                    ? "tải ghi âm"
+                    : ityProgress.phase === "done"
+                      ? "hoàn tất"
+                      : "lỗi"}
+              </div>
+              <p className="mt-1 text-[var(--muted)]">{ityProgress.message}</p>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                <div>
+                  <div className="text-[var(--muted)]">Phát hiện</div>
+                  <div className="text-base font-medium">{ityProgress.discovered}</div>
+                </div>
+                <div>
+                  <div className="text-[var(--muted)]">Nhập mới</div>
+                  <div className="text-base font-medium">{ityProgress.imported}</div>
+                </div>
+                <div>
+                  <div className="text-[var(--muted)]">Remote total</div>
+                  <div className="text-base font-medium">{ityProgress.remoteTotal}</div>
+                </div>
+                <div>
+                  <div className="text-[var(--muted)]">Pending audio</div>
+                  <div className="text-base font-medium">
+                    {ityProgress.pendingCount ||
+                      ityStatus?.download?.pendingCount ||
+                      "—"}
+                  </div>
+                </div>
+              </div>
+              {ityStatus?.settings?.enabledAccounts?.length ? (
+                <p className="mt-2 text-xs text-[var(--muted)]">
+                  Tài khoản ITY: {ityStatus.settings.enabledAccounts.join(", ")}
+                </p>
+              ) : null}
+            </div>
+          ) : ityStatus?.download ? (
+            <p className="mt-3 text-xs text-[var(--muted)]">
+              ITY sẵn sàng · pending ghi âm ~{ityStatus.download.pendingCount ?? "?"}
+              {ityStatus.settings?.enabledAccounts?.length
+                ? ` · TK ${ityStatus.settings.enabledAccounts.join(", ")}`
+                : ""}
+            </p>
+          ) : null}
         </div>
         <div className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-6">
           <div className="mb-3 flex items-center justify-between gap-3">

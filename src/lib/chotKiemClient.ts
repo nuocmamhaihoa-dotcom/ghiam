@@ -56,7 +56,8 @@ function authHeader(user: string, password: string) {
   return "Basic " + Buffer.from(`${user}:${password}`).toString("base64");
 }
 
-async function ckFetch<T>(path: string, init?: RequestInit): Promise<T> {
+/** Shared authenticated fetch against ChốtKiểm (also used by ITY sync). */
+export async function ckFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const { baseUrl, user, password } = config();
   const res = await fetch(`${baseUrl}${path}`, {
     ...init,
