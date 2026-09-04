@@ -1,3 +1,5 @@
+import { scoreChotKiemTranscript, type ChotKiemScorecard } from "./chotKiemCriteria";
+
 /**
  * Vietnamese telesales call analyzer.
  * Works on transcripts; audio metrics estimated from text + duration.
@@ -36,6 +38,8 @@ export type CallAnalysis = {
     objection: string;
     close: string;
   };
+  /** Rubric ChốtKiểm — 9 tiêu chí QA (6 bắt buộc) */
+  chotKiem: ChotKiemScorecard;
 };
 
 export type IndustryPlaybook = {
@@ -358,6 +362,7 @@ export function analyzeCallTranscript(input: {
             : "Xử lý yếu",
       close: closingScore >= 70 ? "Có CTA" : "Thiếu chốt",
     },
+    chotKiem: scoreChotKiemTranscript(full),
   };
 }
 
@@ -568,6 +573,30 @@ export function buildTeamInsights(
       avgScore: Math.round(s.avgScore / s.total),
       total: s.total,
     })),
+    criteriaPassRate: (() => {
+      const cards = calls.map((c) => c.analysis.chotKiem);
+      if (!cards.length) return 0;
+      return Math.round(cards.reduce((s, c) => s + c.passRate, 0) / cards.length);
+    })(),
+    criteriaCompleteRate: (() => {
+      const cards = calls.map((c) => c.analysis.chotKiem);
+      if (!cards.length) return 0;
+      return Math.round((cards.filter((c) => c.complete).length / cards.length) * 100);
+    })(),
+    criteriaGaps: (() => {
+      const gap = new Map<string, number>();
+      for (const call of calls) {
+        for (const c of call.analysis.chotKiem.criteria) {
+          if (c.required && !c.passed) {
+            gap.set(c.shortLabel, (gap.get(c.shortLabel) ?? 0) + 1);
+          }
+        }
+      }
+      return [...gap.entries()]
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 6);
+    })(),
     realismNote:
       "Phân tích transcript hiện đạt ~75–85% độ gần coach người. Ngữ điệu từ text là ước lượng; gắn file audio + model prosody để nâng lên ~85–90%.",
   };

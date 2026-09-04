@@ -19,7 +19,7 @@ export type StoredCall = {
   analysis: CallAnalysis;
 };
 
-const KEY = "telesale-coach-calls-v1";
+const KEY = "telesale-coach-calls-v2";
 
 function uid() {
   return `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;

@@ -47,14 +47,37 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Metric label="Win rate" value={`${insights.winRate}%`} hint={`${calls.length} cuộc gọi`} />
         <Metric label="Điểm TB" value={`${insights.avgOverall}`} />
         <Metric label="Opening TB" value={`${insights.avgOpening}`} />
         <Metric label="Tốc độ nói" value={`${insights.avgWpm}`} hint="từ/phút" />
+        <Metric
+          label="ChốtKiểm QA"
+          value={`${insights.criteriaPassRate}%`}
+          hint={`${insights.criteriaCompleteRate}% đủ tiêu chí`}
+        />
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
+      <section className="grid gap-6 lg:grid-cols-3">
+        <div className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-5">
+          <SectionTitle
+            title="Tiêu chí ChốtKiểm hay thiếu"
+            subtitle="Các mục bắt buộc sale hay bỏ sót (port từ 222.255.215.55)"
+          />
+          <div className="space-y-3">
+            {insights.criteriaGaps.length === 0 ? (
+              <p className="text-sm text-[var(--muted)]">Demo calls đạt khá đều — chưa thấy gap rõ.</p>
+            ) : (
+              insights.criteriaGaps.map((g) => (
+                <div key={g.label} className="flex items-center justify-between rounded-xl bg-[var(--chip)]/70 px-3 py-2">
+                  <div className="text-sm font-medium">{g.label}</div>
+                  <div className="text-sm text-[var(--bad)]">{g.count} cuộc thiếu</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
         <div className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-5">
           <SectionTitle title="Từ khóa khiến khách đồng ý" subtitle="Tỉ lệ xuất hiện trong cuộc thắng" />
           <div className="space-y-3">

@@ -79,6 +79,46 @@ export default function CallDetailPage() {
       </div>
 
       <div className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-5">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <SectionTitle
+            title="Tiêu chí ChốtKiểm"
+            subtitle={`${a.chotKiem.requiredPassed}/${a.chotKiem.requiredCount} bắt buộc · ${a.chotKiem.closeOutcomeLabel}`}
+          />
+          <div className="text-right text-sm">
+            <div className={a.chotKiem.complete ? "text-[var(--good)]" : "text-[var(--bad)]"}>
+              {a.chotKiem.complete ? "Đủ tiêu chí" : "Thiếu tiêu chí"}
+            </div>
+            <div className="text-[var(--muted)]">Pass rate {a.chotKiem.passRate}%</div>
+          </div>
+        </div>
+        <p className="mb-4 text-sm text-[var(--muted)]">{a.chotKiem.summary}</p>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {a.chotKiem.criteria.map((c) => (
+            <div
+              key={c.key}
+              className={`rounded-2xl border p-3 ${
+                c.passed
+                  ? "border-[var(--good)]/30 bg-[var(--good)]/5"
+                  : "border-[var(--bad)]/30 bg-[var(--bad)]/5"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-sm font-medium">{c.shortLabel}</div>
+                <span className={`text-xs ${c.passed ? "text-[var(--good)]" : "text-[var(--bad)]"}`}>
+                  {c.passed ? "Đạt" : "Thiếu"}
+                  {c.required ? "" : " · optional"}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-[var(--muted)]">{c.value}</p>
+              {c.evidence ? (
+                <p className="mt-2 line-clamp-2 text-xs text-[var(--accent)]">{c.evidence}</p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-5">
         <SectionTitle title="Xử lý từ chối" />
         {a.objections.length === 0 ? (
           <p className="text-sm text-[var(--muted)]">Không phát hiện từ chối rõ.</p>
