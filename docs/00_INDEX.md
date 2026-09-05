@@ -80,7 +80,7 @@ Thiếu dữ liệu → **`Insufficient Evidence`**.
 | 19 | [19_Conversation_DNA.md](./19_Conversation_DNA.md) | Agent skill genome / radar |
 | 20 | [20_Dataset_Builder.md](./20_Dataset_Builder.md) | VECD factory, gates, export |
 
-Related: [VECD.md](./VECD.md) · [sprints/](./sprints/)
+Related: [VECD.md](./VECD.md) · [Self_Learning_Lab.md](./Self_Learning_Lab.md) · [Sales_OS.md](./Sales_OS.md) · [sprints/](./sprints/)
 
 ---
 
@@ -93,7 +93,8 @@ Related: [VECD.md](./VECD.md) · [sprints/](./sprints/)
 5. Add modules 07→08→16→19 on top of scorecards.  
 6. Use `20` + `17` + `18` for regression and release gates.  
 7. Deploy per `13`, harden per `14`, observe per `15`.  
-8. Every Sprint: **Review → Refactor → Quality Gate**.
+8. Wire **Self-Learning Lab** (`Self_Learning_Lab.md`) so every call becomes QA-gated proposals — never auto-mutate production rules.  
+9. Every Sprint: **Review → Refactor → Quality Gate**.
 
 ---
 

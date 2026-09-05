@@ -23,6 +23,7 @@ from app.interfaces.api.routers import (
     rules,
     scoring,
     sales_os,
+    self_learning,
     simulator,
 )
 
@@ -49,5 +50,6 @@ __all__ = [
     "rules",
     "scoring",
     "sales_os",
+    "self_learning",
     "simulator",
 ]

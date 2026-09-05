@@ -44,3 +44,9 @@ yarn-error.log*
 /data/
 next-env.d.ts
 __pycache__/
+
+# Self-learning runtime artifacts
+datasets/self_learning/memory_graph_links.jsonl
+datasets/self_learning/raw_calls.jsonl
+datasets/self_learning/**/*.jsonl
+!datasets/self_learning/.gitkeep

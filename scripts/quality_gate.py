@@ -2,8 +2,9 @@
 """Enterprise Quality Gate runner — 20 mandatory gates.
 
 Usage:
-  PYTHONPATH=backend python scripts/quality_gate.py --sprint 1
-  PYTHONPATH=backend python scripts/quality_gate.py --sprint all
+  PYTHONPATH=backend:. python scripts/quality_gate.py --sprint 1
+  PYTHONPATH=backend:. python scripts/quality_gate.py --sprint 11
+  PYTHONPATH=backend:. python scripts/quality_gate.py --sprint all
 """
 
 from __future__ import annotations
@@ -22,6 +23,11 @@ DOCS = ROOT / "docs"
 DATASETS = ROOT / "datasets"
 REPORTS = DOCS / "sprints"
 QG_OUT = DATASETS / "reports"
+
+# Ensure backend + repo root are importable (sales_os → automation, self_learning, …)
+for _p in (str(BACKEND), str(ROOT)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 REQUIRED_DOC_FILES = [
     "00_INDEX.md",
@@ -1208,6 +1214,135 @@ def gate_memory_rag() -> GateResult:
     return g
 
 
+def gate_self_learning() -> GateResult:
+    """AI Self-Learning Lab — propose-only pipeline with mandatory QA before production."""
+    g = GateResult("Self-Learning Lab")
+    required = [
+        BACKEND / "self_learning" / "lab.py",
+        BACKEND / "self_learning" / "store.py",
+        BACKEND / "self_learning" / "types.py",
+        BACKEND / "approval" / "center.py",
+        BACKEND / "research" / "patterns.py",
+        BACKEND / "research" / "clusters.py",
+        BACKEND / "research" / "intents.py",
+        BACKEND / "research" / "objections.py",
+        BACKEND / "research" / "golden.py",
+        BACKEND / "research" / "failures.py",
+        BACKEND / "research" / "revenue.py",
+        BACKEND / "research" / "coaching.py",
+        BACKEND / "app" / "application" / "services" / "self_learning.py",
+        BACKEND / "app" / "interfaces" / "api" / "routers" / "self_learning.py",
+        ROOT / "docs" / "Self_Learning_Lab.md",
+        ROOT / "enterprise-web" / "src" / "app" / "self-learning" / "page.tsx",
+        ROOT / "enterprise-web" / "src" / "app" / "qa-approval" / "page.tsx",
+        ROOT / "tests" / "self_learning" / "test_self_learning.py",
+        ROOT / "tests" / "self_learning" / "fixtures_5000.jsonl",
+        ROOT / "datasets" / "self_learning",
+    ]
+    for path in required:
+        if not path.exists():
+            g.fail(f"missing {path.relative_to(ROOT)}")
+
+    fixtures = ROOT / "tests" / "self_learning" / "fixtures_5000.jsonl"
+    if fixtures.exists():
+        n = sum(1 for _ in fixtures.open(encoding="utf-8"))
+        if n < 5000:
+            g.fail(f"expected >=5000 self-learning fixtures, got {n}")
+        g.meta["fixture_count"] = n
+
+    shell = ROOT / "enterprise-web" / "src" / "components" / "AppShell.tsx"
+    if shell.exists():
+        txt = shell.read_text(encoding="utf-8")
+        if "/self-learning" not in txt:
+            g.fail("AppShell missing /self-learning nav")
+        if "/qa-approval" not in txt:
+            g.fail("AppShell missing /qa-approval nav")
+
+    api = ROOT / "enterprise-web" / "src" / "lib" / "api.ts"
+    if api.exists():
+        api_txt = api.read_text(encoding="utf-8")
+        for key in (
+            "selfLearningDashboard",
+            "selfLearningQaQueue",
+            "selfLearningIngest",
+            "selfLearningApprove",
+            "selfLearningReject",
+            "selfLearningPromote",
+            "selfLearningQuality",
+        ):
+            if key not in api_txt:
+                g.fail(f"api.ts missing {key}")
+
+    try:
+        import tempfile
+        from pathlib import Path as P
+
+        from self_learning.lab import SelfLearningLab
+        from self_learning.store import LearningStore
+
+        td = P(tempfile.mkdtemp())
+        lab = SelfLearningLab(store=LearningStore(root=td))
+        ingested = lab.ingest_call(
+            {
+                "call_id": "qg-sl-1",
+                "turns": [
+                    {"speaker": "customer", "text": "Để em coi đã"},
+                    {"speaker": "customer", "text": "Để em xem thêm"},
+                    {"speaker": "customer", "text": "Để em cân nhắc"},
+                    {"speaker": "customer", "text": "Chờ hết tháng cô hồn"},
+                    {"speaker": "customer", "text": "Để em chuyển khoản tối"},
+                ],
+            }
+        )
+        if ingested.get("auto_applied_to_production") is not False:
+            g.fail("ingest must never auto-apply to production")
+        if ingested.get("pending_qa") is not True:
+            g.fail("ingest must mark pending_qa")
+
+        queue = lab.qa_queue()
+        if not queue:
+            g.fail("expected QA queue items after ingest")
+        else:
+            pid = str(queue[0].get("proposal_id") or "")
+            approved = lab.approve(pid, "quality-gate")
+            if approved.get("promoted_to_production") is True:
+                g.fail("approve must not promote to production")
+            promoted = lab.promote(pid, "quality-gate")
+            if not (promoted.get("promoted") or promoted.get("ok")):
+                g.fail(f"promote after approve failed: {promoted}")
+
+        snap = lab.quality_snapshot()
+        if int(snap.get("pending_leaked_into_production") or 0) != 0:
+            g.fail("pending proposals leaked into production")
+        if snap.get("requires_qa") is not True:
+            g.fail("quality snapshot must require QA")
+
+        clusters = lab.clusters.aggregate_corpus(
+            ["Để em coi", "Để em xem", "Để em cân nhắc", "Để em nghĩ"]
+        )
+        if not clusters:
+            g.fail("cluster engine returned no clusters for synonym family")
+
+        dash = lab.dashboard()
+        widgets = dash.get("widgets") or {}
+        for key in (
+            "new_patterns",
+            "new_intents",
+            "new_objections",
+            "qa_queue",
+            "approved_rules",
+            "learning_velocity",
+            "knowledge_growth",
+        ):
+            if key not in widgets:
+                g.fail(f"dashboard missing widget {key}")
+        if dash.get("auto_apply_blocked") is not True:
+            g.fail("dashboard must advertise auto_apply_blocked")
+    except Exception as exc:  # noqa: BLE001
+        g.fail(f"self-learning smoke failed: {exc}")
+    return g
+
+
 SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
     1: [gate_architecture, gate_docs, gate_database, gate_docker, gate_security, gate_api],
     2: [lambda: gate_rule_consistency(2), gate_evidence, gate_json],
@@ -1261,6 +1396,13 @@ SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
         gate_memory_rag,
         gate_tests,
         gate_api,
+        gate_docs,
+        gate_final,
+    ],
+    11: [
+        gate_self_learning,
+        gate_api,
+        gate_tests,
         gate_docs,
         gate_final,
     ],
@@ -1323,7 +1465,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sprint", default="all")
     args = parser.parse_args()
-    sprints = list(range(1, 11)) if args.sprint == "all" else [int(args.sprint)]
+    sprints = list(range(1, 12)) if args.sprint == "all" else [int(args.sprint)]
     summary = []
     hard_fail = False
     for sprint in sprints:
@@ -1364,8 +1506,9 @@ def main() -> None:
                 "## Commands",
                 "",
                 "```bash",
-                "PYTHONPATH=backend python scripts/quality_gate.py --sprint all",
-                "cd backend && PYTHONPATH=. pytest -q",
+                "PYTHONPATH=backend:. python scripts/quality_gate.py --sprint all",
+                "PYTHONPATH=backend:. pytest tests/self_learning -q",
+                "cd backend && PYTHONPATH=..:. pytest -q",
                 "```",
                 "",
             ]

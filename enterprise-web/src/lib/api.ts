@@ -899,4 +899,166 @@ export const api = {
       })
     );
   },
+
+  async selfLearningDashboard() {
+    return withDemoFallback(
+      () => request<Record<string, unknown>>("/v1/self-learning/dashboard"),
+      () => ({
+        status: "ok",
+        widgets: {
+          new_patterns: 12,
+          new_intents: 4,
+          new_objections: 6,
+          qa_queue: 8,
+          approved_rules: 3,
+          rejected_rules: 1,
+          learning_velocity: 1.5,
+          revenue_impact: 18000000,
+          confidence_trend: 0.84,
+          knowledge_growth: 27,
+        },
+        layers: {
+          layer_1_raw_calls: 120,
+          layer_2_verified_knowledge: 40,
+          layer_3_approved_rules: 12,
+          layer_4_production_knowledge: 9,
+        },
+        auto_apply_blocked: true,
+      })
+    );
+  },
+
+  async selfLearningQaQueue() {
+    return withDemoFallback(
+      () => request<Record<string, unknown>>("/v1/self-learning/qa-queue"),
+      () => ({
+        status: "ok",
+        count: 2,
+        items: [
+          {
+            proposal_id: "prop_demo_1",
+            kind: "objection",
+            title: "New Objection: wait_until_ghost_month_ends",
+            summary: "Khách dùng lý do tháng cô hồn để trì hoãn.",
+            confidence: 0.88,
+            novelty: 0.82,
+            evidence_count: 14,
+            quality_score: 0.79,
+            status: "pending_qa",
+            suggested_rule: "OBJECTION::wait_until_ghost_month_ends",
+            suggested_coaching: "Thừa nhận tín ngưỡng → giữ chỗ/giá → chốt nhẹ.",
+          },
+          {
+            proposal_id: "prop_demo_2",
+            kind: "intent",
+            title: "New Intent: deferred_payment_tonight",
+            summary: "Khách báo sẽ chuyển khoản tối.",
+            confidence: 0.91,
+            novelty: 0.71,
+            evidence_count: 22,
+            quality_score: 0.81,
+            status: "pending_qa",
+            suggested_rule: "INTENT::deferred_payment_tonight",
+            suggested_coaching: "Chốt giờ cụ thể + gửi STK + reminder.",
+          },
+        ],
+      })
+    );
+  },
+
+  async selfLearningIngest(call: Record<string, unknown>) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/self-learning/ingest", {
+          method: "POST",
+          body: { call },
+        }),
+      () => ({
+        status: "ok",
+        call_id: call.call_id || "demo-call",
+        patterns: [{ text: "Để em chuyển khoản tối", kind: "buying_signal", novelty: 0.7 }],
+        clusters: [{ name: "Pay Tonight Intent", size: 3 }],
+        proposals: [{ proposal_id: "prop_demo_new", status: "pending_qa" }],
+        pending_qa: true,
+        auto_applied_to_production: false,
+      })
+    );
+  },
+
+  async selfLearningApprove(proposalId: string, reviewer = "qa") {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>(
+          `/v1/self-learning/proposals/${proposalId}/approve`,
+          { method: "POST", body: { reviewer } }
+        ),
+      () => ({
+        status: "ok",
+        proposal: { proposal_id: proposalId, status: "approved", reviewer },
+        promoted_to_production: false,
+      })
+    );
+  },
+
+  async selfLearningReject(proposalId: string, reviewer = "qa", reason = "") {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>(
+          `/v1/self-learning/proposals/${proposalId}/reject`,
+          { method: "POST", body: { reviewer, reason } }
+        ),
+      () => ({
+        status: "ok",
+        proposal: { proposal_id: proposalId, status: "rejected", reviewer },
+      })
+    );
+  },
+
+  async selfLearningPromote(proposalId: string, reviewer = "qa") {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>(
+          `/v1/self-learning/proposals/${proposalId}/promote`,
+          { method: "POST", body: { reviewer } }
+        ),
+      () => ({
+        status: "ok",
+        ok: true,
+        promoted: true,
+        gate: { ok: true, errors: [] },
+      })
+    );
+  },
+
+  async selfLearningEdit(
+    proposalId: string,
+    patch: Record<string, unknown>,
+    reviewer = "qa"
+  ) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>(
+          `/v1/self-learning/proposals/${proposalId}/edit`,
+          { method: "POST", body: { reviewer, patch } }
+        ),
+      () => ({
+        status: "ok",
+        proposal: { proposal_id: proposalId, status: "edited", ...patch },
+      })
+    );
+  },
+
+  async selfLearningQuality() {
+    return withDemoFallback(
+      () => request<Record<string, unknown>>("/v1/self-learning/quality"),
+      () => ({
+        status: "ok",
+        ok: true,
+        production_count: 9,
+        pending_leaked_into_production: 0,
+        quality_threshold: 0.55,
+        requires_qa: true,
+      })
+    );
+  },
 };
