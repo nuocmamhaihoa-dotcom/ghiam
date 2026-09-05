@@ -55,7 +55,7 @@ def test_memory_graph_service() -> None:
     )
     assert graph["stats"]["node_count"] >= 2
     assert graph["stats"]["edge_count"] >= 1
-    hits = MemoryGraphService().search(graph, node_type="rule")
+    hits = MemoryGraphService().search(graph, node_type="rulebook")
     assert hits["count"] >= 1
 
 

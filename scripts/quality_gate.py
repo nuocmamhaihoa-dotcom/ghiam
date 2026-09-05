@@ -962,6 +962,82 @@ def gate_vpe2() -> GateResult:
     return g
 
 
+
+def gate_memory_rag() -> GateResult:
+    """Enterprise Memory Graph + evidence RAG."""
+    g = GateResult("Memory Graph + RAG")
+    required = [
+        BACKEND / "memory_graph" / "graph.py",
+        BACKEND / "memory_graph" / "store.py",
+        BACKEND / "memory_graph" / "sync.py",
+        BACKEND / "memory_graph" / "types.py",
+        BACKEND / "rag" / "pipeline.py",
+        BACKEND / "rag" / "retriever.py",
+        BACKEND / "rag" / "vector_index.py",
+        BACKEND / "rag" / "embeddings.py",
+        ROOT / "docs" / "Memory_Graph_RAG.md",
+        ROOT / "enterprise-web" / "src" / "app" / "memory-graph" / "page.tsx",
+        ROOT / "tests" / "memory_graph" / "fixtures_3200.jsonl",
+        ROOT / "tests" / "memory_graph" / "test_memory_graph_rag.py",
+    ]
+    for path in required:
+        if not path.exists():
+            g.fail(f"missing {path.relative_to(ROOT)}")
+    try:
+        from memory_graph.graph import EnterpriseMemoryGraph
+        from memory_graph.store import GraphStore
+        from memory_graph.sync import sync_all
+        from memory_graph.types import NO_DATA
+        from rag.pipeline import EvidenceRAG
+        from rag.vector_index import VectorIndex
+        import tempfile
+        from pathlib import Path as P
+
+        td = P(tempfile.mkdtemp())
+        graph = EnterpriseMemoryGraph(GraphStore(graph_path=td / "g.json", history_path=td / "h.jsonl"))
+        sync = sync_all(graph, reset=True)
+        if not sync.get("ok"):
+            g.fail(f"sync integrity failed: {sync.get('integrity_errors')}")
+        rag = EvidenceRAG(graph=graph, index=VectorIndex(path=td / "idx.json"))
+        rag.reindex()
+        hit = rag.ask("Phí thường niên thẻ tín dụng")
+        if hit.get("status") != "ok" or not hit.get("citations"):
+            g.fail("RAG failed to cite pricing evidence")
+        for c in hit.get("citations") or []:
+            if graph.get_node(c.get("id")) is None:
+                g.fail(f"citation missing node {c.get('id')}")
+        miss = rag.ask("xyzzy quantum unicorn policy 424242")
+        if miss.get("answer") != NO_DATA:
+            g.fail("RAG must return exact no-data string when evidence missing")
+        report = graph.quality_report()
+        if not report.get("ok"):
+            g.fail(f"graph integrity errors: {report.get('integrity_errors')}")
+        # required relations present
+        rels = {e.relation for e in graph.store.list_edges()}
+        for rel in (
+            "product_has_sop",
+            "product_has_objection",
+            "objection_maps_rule",
+            "customer_has_intent",
+            "golden_call_has_coaching",
+            "root_cause_causes_revenue_leak",
+        ):
+            if rel not in rels:
+                g.fail(f"missing relation {rel}")
+    except Exception as exc:  # noqa: BLE001
+        g.fail(f"memory/rag smoke failed: {exc}")
+    shell = ROOT / "enterprise-web" / "src" / "components" / "AppShell.tsx"
+    if shell.exists() and "/memory-graph" not in shell.read_text(encoding="utf-8"):
+        g.fail("AppShell missing /memory-graph nav")
+    api = ROOT / "enterprise-web" / "src" / "lib" / "api.ts"
+    if api.exists():
+        api_txt = api.read_text(encoding="utf-8")
+        for key in ("exploreMemoryGraph", "askMemoryRag", "searchKnowledge"):
+            if key not in api_txt:
+                g.fail(f"api.ts missing {key}")
+    return g
+
+
 SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
     1: [gate_architecture, gate_docs, gate_database, gate_docker, gate_security, gate_api],
     2: [lambda: gate_rule_consistency(2), gate_evidence, gate_json],
@@ -992,12 +1068,13 @@ SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
         gate_final,
     ],
     8: [gate_sales_os_modules,
-        gate_vpe2, gate_sales_os_frontend, gate_api, gate_tests],
+        gate_vpe2, gate_memory_rag, gate_sales_os_frontend, gate_api, gate_tests],
     9: [gate_sales_os_modules, gate_revenue_leak, gate_api, gate_sales_os_frontend],
     10: [
         gate_sales_os_modules,
         gate_sales_os_frontend,
         gate_sales_os_tests,
+        gate_memory_rag,
         gate_tests,
         gate_api,
         gate_docs,

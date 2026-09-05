@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from app.application.services.pragmatics import PragmaticsEngine, _load_library
+from app.application.services.pragmatics import PragmaticsEngine
 
 
 def test_price_and_buying_signal_resolution() -> None:
-    _load_library.cache_clear()
     engine = PragmaticsEngine()
     result = engine.analyze_transcript(
         [
@@ -21,7 +20,7 @@ def test_price_and_buying_signal_resolution() -> None:
     assert payload["summary"]["matched_turns"] >= 2
     assert any(t["matched_pattern_id"] for t in payload["turns"] if t["status"] == "ok")
     buying_turn = next(
-        t for t in payload["turns"] if t.get("matched_pattern_id") == "PRAG-BUYING-SIGNAL"
+        t for t in payload["turns"] if t.get("matched_pattern_id") == "VPE-BUY-SIGNAL"
     )
     assert buying_turn["buying_probability"] is not None
     assert buying_turn["buying_probability"] >= 0.5
@@ -29,7 +28,6 @@ def test_price_and_buying_signal_resolution() -> None:
 
 
 def test_insufficient_evidence_when_no_match() -> None:
-    _load_library.cache_clear()
     engine = PragmaticsEngine()
     result = engine.analyze_transcript(
         [{"speaker": "customer", "text": "Trời hôm nay đẹp quá"}]

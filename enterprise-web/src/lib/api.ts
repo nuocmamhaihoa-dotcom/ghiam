@@ -516,17 +516,137 @@ export const api = {
       () =>
         request<Record<string, unknown>>("/v1/memory-graph/build", {
           method: "POST",
-          body: payload,
+          body: {
+            call_id: payload.call_id ?? payload.callId ?? "demo-call",
+            violations: payload.violations ?? [],
+            root_cause: payload.root_cause ?? {},
+            coaching: payload.coaching ?? {},
+            intents: payload.intents ?? [],
+            objections: payload.objections ?? [],
+            products: payload.products ?? [],
+          },
         }),
       () => ({
         status: "ok",
         nodes: [
           { id: "call:demo", type: "call", label: "Demo call" },
-          { id: "rule:R1", type: "rule", label: "R1" },
+          { id: "rulebook:R1", type: "rulebook", label: "R1" },
+          { id: "product:PKG-HEALTH", type: "product", label: "PKG-HEALTH" },
         ],
-        edges: [{ source: "call:demo", target: "rule:R1", relation: "violates" }],
-        stats: { node_count: 2, edge_count: 1 },
+        edges: [
+          { source: "call:demo", target: "rulebook:R1", relation: "call_violates_rule" },
+          { source: "call:demo", target: "product:PKG-HEALTH", relation: "call_discusses_product" },
+        ],
+        stats: { node_count: 3, edge_count: 2, types: ["call", "product", "rulebook"] },
       })
+    );
+  },
+
+  async exploreMemoryGraph(limit = 200) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/memory-graph/explore", {
+          method: "POST",
+          body: { limit },
+        }),
+      () => ({
+        nodes: [
+          { id: "product:the_tin_dung", type: "product", label: "Thẻ tín dụng" },
+          { id: "objection:dat", type: "objection", label: "Phản đối giá" },
+          { id: "sop:mo_dau", type: "sop", label: "SOP mở đầu" },
+        ],
+        edges: [
+          {
+            source: "product:the_tin_dung",
+            target: "objection:dat",
+            relation: "product_has_objection",
+          },
+          {
+            source: "product:the_tin_dung",
+            target: "sop:mo_dau",
+            relation: "product_has_sop",
+          },
+        ],
+        stats: { node_count: 3, edge_count: 2 },
+        ok: true,
+      })
+    );
+  },
+
+  async searchKnowledge(query: string, nodeType?: string) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/memory-graph/knowledge/search", {
+          method: "POST",
+          body: { query, node_type: nodeType, limit: 20 },
+        }),
+      () => ({
+        matches: [
+          {
+            id: "pricing:the_tin_dung_base",
+            type: "pricing",
+            label: "Giá thẻ tín dụng",
+            content: "Phí thường niên 500.000đ",
+            source: "pricing/card",
+          },
+        ],
+        count: 1,
+      })
+    );
+  },
+
+  async askMemoryRag(question: string) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/memory-graph/ask", {
+          method: "POST",
+          body: { question, limit: 6 },
+        }),
+      () => ({
+        status: "ok",
+        answer:
+          "Dựa trên dữ liệu Memory Graph:\n[1] Thẻ tín dụng: phí thường niên 500.000đ",
+        citations: [
+          {
+            id: "pricing:the_tin_dung_base",
+            source: "pricing/card",
+            node_type: "pricing",
+            score: 0.91,
+          },
+        ],
+        evidence: [],
+      })
+    );
+  },
+
+  async memoryVersionHistory(entityId: string) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/memory-graph/versions", {
+          method: "POST",
+          body: { entity_id: entityId, limit: 50 },
+        }),
+      () => ({
+        history: [
+          {
+            event: "node_upsert",
+            timestamp: Date.now() / 1000,
+            payload: { id: entityId, version: "1.0.0" },
+          },
+        ],
+        count: 1,
+      })
+    );
+  },
+
+  async syncMemoryKnowledge(kind?: string) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/memory-graph/sync", {
+          method: "POST",
+          body: { kind: kind ?? null, reset: false },
+        }),
+      () => ({ ok: true, synced_nodes: 28, synced_edges: 22 })
     );
   },
 
