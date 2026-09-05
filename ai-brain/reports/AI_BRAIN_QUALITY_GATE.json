@@ -1,5 +1,6 @@
 {
-  "generated_at": "2026-09-05T14:33:25.375386+00:00",
+  "generated_at": "2026-09-05T15:47:36.117263+00:00",
+  "seed": 20260905,
   "rulebook": {
     "count": 1000,
     "allocation": {
@@ -14,211 +15,170 @@
       "Voice": 60,
       "Compliance": 50
     },
+    "unique_ids": 1000,
+    "unique_names": 1000,
+    "unique_good_examples": 1000,
     "dedupe_gates": [
       {
         "checked_at_count": 50,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 100,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 150,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 200,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 250,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 300,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 350,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 400,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 450,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 500,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 550,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 600,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 650,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 700,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 750,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 800,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 850,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 900,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 950,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       },
       {
         "checked_at_count": 1000,
         "unique_ids": true,
-        "unique_names_in_category": true,
-        "json_ok": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
         "required_fields_ok": true
       }
     ],
-    "all_gates_passed": true,
-    "files": [
-      "ai-brain/rulebook/rulebook_1000.jsonl",
-      "ai-brain/rulebook/rules_1000.jsonl"
-    ]
-  },
-  "vcie_counts": {
-    "utterances": 20000,
-    "intents": 500,
-    "objection_handlers": 1000,
-    "buying_signals": 300,
-    "emotion_timelines": 500,
-    "silence_patterns": 300,
-    "interrupt_patterns": 300,
-    "context_inference": 200
-  },
-  "dialect_distribution": {
-    "nam": 8939,
-    "bac": 7034,
-    "trung": 4027
+    "dedupe_gates_pass": true
   },
   "root_cause_graphs": 500,
-  "sop_industries": 50,
-  "link_repairs": [
-    {
-      "path": "ai-brain/vcie/utterances/utterances_20000.jsonl",
-      "rows": 20000,
-      "fixed_links": 0
+  "vcie": {
+    "utterances": 20000,
+    "dialect": {
+      "trung": 4000,
+      "bac": 7000,
+      "nam": 9000
     },
-    {
-      "path": "ai-brain/vcie/intents/intents_500.jsonl",
-      "rows": 500,
-      "fixed_links": 0
-    },
-    {
-      "path": "ai-brain/vcie/objections/objection_handlers_1000.jsonl",
-      "rows": 1000,
-      "fixed_links": 0
-    },
-    {
-      "path": "ai-brain/vcie/buying_signals/buying_signals_300.jsonl",
-      "rows": 300,
-      "fixed_links": 0
-    },
-    {
-      "path": "ai-brain/vcie/emotions/emotion_timelines_500.jsonl",
-      "rows": 500,
-      "fixed_links": 0
-    },
-    {
-      "path": "ai-brain/vcie/silence/silence_patterns_300.jsonl",
-      "rows": 300,
-      "fixed_links": 0
-    },
-    {
-      "path": "ai-brain/vcie/interrupts/interrupt_patterns_300.jsonl",
-      "rows": 300,
-      "fixed_links": 0
-    },
-    {
-      "path": "ai-brain/vcie/context/context_inference_200.jsonl",
-      "rows": 200,
-      "fixed_links": 0
-    }
-  ]
+    "intents": 500,
+    "objections": 1000,
+    "buying_signals": 300,
+    "emotions": 500,
+    "silence": 300,
+    "interrupts": 300,
+    "context": 200
+  },
+  "sop": 50,
+  "broken_rule_links": {},
+  "all_links_valid": true
 }

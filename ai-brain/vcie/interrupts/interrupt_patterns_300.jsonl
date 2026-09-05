@@ -1,300 +1,300 @@
-{"id": "VCIE-X-000001", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0892"]}
-{"id": "VCIE-X-000002", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0893"]}
-{"id": "VCIE-X-000003", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0894"]}
-{"id": "VCIE-X-000004", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0895"]}
-{"id": "VCIE-X-000005", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0896"]}
-{"id": "VCIE-X-000006", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0897"]}
-{"id": "VCIE-X-000007", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0898"]}
-{"id": "VCIE-X-000008", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0899"]}
-{"id": "VCIE-X-000009", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0900"]}
-{"id": "VCIE-X-000010", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0901"]}
-{"id": "VCIE-X-000011", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0902"]}
-{"id": "VCIE-X-000012", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0903"]}
-{"id": "VCIE-X-000013", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0904"]}
-{"id": "VCIE-X-000014", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0905"]}
-{"id": "VCIE-X-000015", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0906"]}
-{"id": "VCIE-X-000016", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0907"]}
-{"id": "VCIE-X-000017", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0908"]}
-{"id": "VCIE-X-000018", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0909"]}
-{"id": "VCIE-X-000019", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0910"]}
-{"id": "VCIE-X-000020", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0911"]}
-{"id": "VCIE-X-000021", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0912"]}
-{"id": "VCIE-X-000022", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0913"]}
-{"id": "VCIE-X-000023", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0914"]}
-{"id": "VCIE-X-000024", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0915"]}
-{"id": "VCIE-X-000025", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0916"]}
-{"id": "VCIE-X-000026", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0917"]}
-{"id": "VCIE-X-000027", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0918"]}
-{"id": "VCIE-X-000028", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0919"]}
-{"id": "VCIE-X-000029", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0920"]}
-{"id": "VCIE-X-000030", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0921"]}
-{"id": "VCIE-X-000031", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0922"]}
-{"id": "VCIE-X-000032", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0923"]}
-{"id": "VCIE-X-000033", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0924"]}
-{"id": "VCIE-X-000034", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0925"]}
-{"id": "VCIE-X-000035", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0926"]}
-{"id": "VCIE-X-000036", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0927"]}
-{"id": "VCIE-X-000037", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0928"]}
-{"id": "VCIE-X-000038", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0929"]}
-{"id": "VCIE-X-000039", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0930"]}
-{"id": "VCIE-X-000040", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0931"]}
-{"id": "VCIE-X-000041", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0932"]}
-{"id": "VCIE-X-000042", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0933"]}
-{"id": "VCIE-X-000043", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0934"]}
-{"id": "VCIE-X-000044", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0935"]}
-{"id": "VCIE-X-000045", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0936"]}
-{"id": "VCIE-X-000046", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0937"]}
-{"id": "VCIE-X-000047", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0938"]}
-{"id": "VCIE-X-000048", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0939"]}
-{"id": "VCIE-X-000049", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0940"]}
-{"id": "VCIE-X-000050", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0941"]}
-{"id": "VCIE-X-000051", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0942"]}
-{"id": "VCIE-X-000052", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0943"]}
-{"id": "VCIE-X-000053", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0944"]}
-{"id": "VCIE-X-000054", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0945"]}
-{"id": "VCIE-X-000055", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0946"]}
-{"id": "VCIE-X-000056", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0947"]}
-{"id": "VCIE-X-000057", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0948"]}
-{"id": "VCIE-X-000058", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0949"]}
-{"id": "VCIE-X-000059", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0950"]}
-{"id": "VCIE-X-000060", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0891"]}
-{"id": "VCIE-X-000061", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0892"]}
-{"id": "VCIE-X-000062", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0893"]}
-{"id": "VCIE-X-000063", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0894"]}
-{"id": "VCIE-X-000064", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0895"]}
-{"id": "VCIE-X-000065", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0896"]}
-{"id": "VCIE-X-000066", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0897"]}
-{"id": "VCIE-X-000067", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0898"]}
-{"id": "VCIE-X-000068", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0899"]}
-{"id": "VCIE-X-000069", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0900"]}
-{"id": "VCIE-X-000070", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0901"]}
-{"id": "VCIE-X-000071", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0902"]}
-{"id": "VCIE-X-000072", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0903"]}
-{"id": "VCIE-X-000073", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0904"]}
-{"id": "VCIE-X-000074", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0905"]}
-{"id": "VCIE-X-000075", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0906"]}
-{"id": "VCIE-X-000076", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0907"]}
-{"id": "VCIE-X-000077", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0908"]}
-{"id": "VCIE-X-000078", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0909"]}
-{"id": "VCIE-X-000079", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0910"]}
-{"id": "VCIE-X-000080", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0911"]}
-{"id": "VCIE-X-000081", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0912"]}
-{"id": "VCIE-X-000082", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0913"]}
-{"id": "VCIE-X-000083", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0914"]}
-{"id": "VCIE-X-000084", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0915"]}
-{"id": "VCIE-X-000085", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0916"]}
-{"id": "VCIE-X-000086", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0917"]}
-{"id": "VCIE-X-000087", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0918"]}
-{"id": "VCIE-X-000088", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0919"]}
-{"id": "VCIE-X-000089", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0920"]}
-{"id": "VCIE-X-000090", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0921"]}
-{"id": "VCIE-X-000091", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0922"]}
-{"id": "VCIE-X-000092", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0923"]}
-{"id": "VCIE-X-000093", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0924"]}
-{"id": "VCIE-X-000094", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0925"]}
-{"id": "VCIE-X-000095", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0926"]}
-{"id": "VCIE-X-000096", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0927"]}
-{"id": "VCIE-X-000097", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0928"]}
-{"id": "VCIE-X-000098", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0929"]}
-{"id": "VCIE-X-000099", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0930"]}
-{"id": "VCIE-X-000100", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0931"]}
-{"id": "VCIE-X-000101", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0932"]}
-{"id": "VCIE-X-000102", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0933"]}
-{"id": "VCIE-X-000103", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0934"]}
-{"id": "VCIE-X-000104", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0935"]}
-{"id": "VCIE-X-000105", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0936"]}
-{"id": "VCIE-X-000106", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0937"]}
-{"id": "VCIE-X-000107", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0938"]}
-{"id": "VCIE-X-000108", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0939"]}
-{"id": "VCIE-X-000109", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0940"]}
-{"id": "VCIE-X-000110", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0941"]}
-{"id": "VCIE-X-000111", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0942"]}
-{"id": "VCIE-X-000112", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0943"]}
-{"id": "VCIE-X-000113", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0944"]}
-{"id": "VCIE-X-000114", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0945"]}
-{"id": "VCIE-X-000115", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0946"]}
-{"id": "VCIE-X-000116", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0947"]}
-{"id": "VCIE-X-000117", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0948"]}
-{"id": "VCIE-X-000118", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0949"]}
-{"id": "VCIE-X-000119", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0950"]}
-{"id": "VCIE-X-000120", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0891"]}
-{"id": "VCIE-X-000121", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0892"]}
-{"id": "VCIE-X-000122", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0893"]}
-{"id": "VCIE-X-000123", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0894"]}
-{"id": "VCIE-X-000124", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0895"]}
-{"id": "VCIE-X-000125", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0896"]}
-{"id": "VCIE-X-000126", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0897"]}
-{"id": "VCIE-X-000127", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0898"]}
-{"id": "VCIE-X-000128", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0899"]}
-{"id": "VCIE-X-000129", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0900"]}
-{"id": "VCIE-X-000130", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0901"]}
-{"id": "VCIE-X-000131", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0902"]}
-{"id": "VCIE-X-000132", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0903"]}
-{"id": "VCIE-X-000133", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0904"]}
-{"id": "VCIE-X-000134", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0905"]}
-{"id": "VCIE-X-000135", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0906"]}
-{"id": "VCIE-X-000136", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0907"]}
-{"id": "VCIE-X-000137", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0908"]}
-{"id": "VCIE-X-000138", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0909"]}
-{"id": "VCIE-X-000139", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0910"]}
-{"id": "VCIE-X-000140", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0911"]}
-{"id": "VCIE-X-000141", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0912"]}
-{"id": "VCIE-X-000142", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0913"]}
-{"id": "VCIE-X-000143", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0914"]}
-{"id": "VCIE-X-000144", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0915"]}
-{"id": "VCIE-X-000145", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0916"]}
-{"id": "VCIE-X-000146", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0917"]}
-{"id": "VCIE-X-000147", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0918"]}
-{"id": "VCIE-X-000148", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0919"]}
-{"id": "VCIE-X-000149", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0920"]}
-{"id": "VCIE-X-000150", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0921"]}
-{"id": "VCIE-X-000151", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0922"]}
-{"id": "VCIE-X-000152", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0923"]}
-{"id": "VCIE-X-000153", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0924"]}
-{"id": "VCIE-X-000154", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0925"]}
-{"id": "VCIE-X-000155", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0926"]}
-{"id": "VCIE-X-000156", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0927"]}
-{"id": "VCIE-X-000157", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0928"]}
-{"id": "VCIE-X-000158", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0929"]}
-{"id": "VCIE-X-000159", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0930"]}
-{"id": "VCIE-X-000160", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0931"]}
-{"id": "VCIE-X-000161", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0932"]}
-{"id": "VCIE-X-000162", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0933"]}
-{"id": "VCIE-X-000163", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0934"]}
-{"id": "VCIE-X-000164", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0935"]}
-{"id": "VCIE-X-000165", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0936"]}
-{"id": "VCIE-X-000166", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0937"]}
-{"id": "VCIE-X-000167", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0938"]}
-{"id": "VCIE-X-000168", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0939"]}
-{"id": "VCIE-X-000169", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0940"]}
-{"id": "VCIE-X-000170", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0941"]}
-{"id": "VCIE-X-000171", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0942"]}
-{"id": "VCIE-X-000172", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0943"]}
-{"id": "VCIE-X-000173", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0944"]}
-{"id": "VCIE-X-000174", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0945"]}
-{"id": "VCIE-X-000175", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0946"]}
-{"id": "VCIE-X-000176", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0947"]}
-{"id": "VCIE-X-000177", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0948"]}
-{"id": "VCIE-X-000178", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0949"]}
-{"id": "VCIE-X-000179", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0950"]}
-{"id": "VCIE-X-000180", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0891"]}
-{"id": "VCIE-X-000181", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0892"]}
-{"id": "VCIE-X-000182", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0893"]}
-{"id": "VCIE-X-000183", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0894"]}
-{"id": "VCIE-X-000184", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0895"]}
-{"id": "VCIE-X-000185", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0896"]}
-{"id": "VCIE-X-000186", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0897"]}
-{"id": "VCIE-X-000187", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0898"]}
-{"id": "VCIE-X-000188", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0899"]}
-{"id": "VCIE-X-000189", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0900"]}
-{"id": "VCIE-X-000190", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0901"]}
-{"id": "VCIE-X-000191", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0902"]}
-{"id": "VCIE-X-000192", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0903"]}
-{"id": "VCIE-X-000193", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0904"]}
-{"id": "VCIE-X-000194", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0905"]}
-{"id": "VCIE-X-000195", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0906"]}
-{"id": "VCIE-X-000196", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0907"]}
-{"id": "VCIE-X-000197", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0908"]}
-{"id": "VCIE-X-000198", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0909"]}
-{"id": "VCIE-X-000199", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0910"]}
-{"id": "VCIE-X-000200", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0911"]}
-{"id": "VCIE-X-000201", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0912"]}
-{"id": "VCIE-X-000202", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0913"]}
-{"id": "VCIE-X-000203", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0914"]}
-{"id": "VCIE-X-000204", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0915"]}
-{"id": "VCIE-X-000205", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0916"]}
-{"id": "VCIE-X-000206", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0917"]}
-{"id": "VCIE-X-000207", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0918"]}
-{"id": "VCIE-X-000208", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0919"]}
-{"id": "VCIE-X-000209", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0920"]}
-{"id": "VCIE-X-000210", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0921"]}
-{"id": "VCIE-X-000211", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0922"]}
-{"id": "VCIE-X-000212", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0923"]}
-{"id": "VCIE-X-000213", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0924"]}
-{"id": "VCIE-X-000214", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0925"]}
-{"id": "VCIE-X-000215", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0926"]}
-{"id": "VCIE-X-000216", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0927"]}
-{"id": "VCIE-X-000217", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0928"]}
-{"id": "VCIE-X-000218", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0929"]}
-{"id": "VCIE-X-000219", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0930"]}
-{"id": "VCIE-X-000220", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0931"]}
-{"id": "VCIE-X-000221", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0932"]}
-{"id": "VCIE-X-000222", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0933"]}
-{"id": "VCIE-X-000223", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0934"]}
-{"id": "VCIE-X-000224", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0935"]}
-{"id": "VCIE-X-000225", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0936"]}
-{"id": "VCIE-X-000226", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0937"]}
-{"id": "VCIE-X-000227", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0938"]}
-{"id": "VCIE-X-000228", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0939"]}
-{"id": "VCIE-X-000229", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0940"]}
-{"id": "VCIE-X-000230", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0941"]}
-{"id": "VCIE-X-000231", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0942"]}
-{"id": "VCIE-X-000232", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0943"]}
-{"id": "VCIE-X-000233", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0944"]}
-{"id": "VCIE-X-000234", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0945"]}
-{"id": "VCIE-X-000235", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0946"]}
-{"id": "VCIE-X-000236", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0947"]}
-{"id": "VCIE-X-000237", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0948"]}
-{"id": "VCIE-X-000238", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0949"]}
-{"id": "VCIE-X-000239", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0950"]}
-{"id": "VCIE-X-000240", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0891"]}
-{"id": "VCIE-X-000241", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0892"]}
-{"id": "VCIE-X-000242", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0893"]}
-{"id": "VCIE-X-000243", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0894"]}
-{"id": "VCIE-X-000244", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0895"]}
-{"id": "VCIE-X-000245", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0896"]}
-{"id": "VCIE-X-000246", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0897"]}
-{"id": "VCIE-X-000247", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0898"]}
-{"id": "VCIE-X-000248", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0899"]}
-{"id": "VCIE-X-000249", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0900"]}
-{"id": "VCIE-X-000250", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0901"]}
-{"id": "VCIE-X-000251", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0902"]}
-{"id": "VCIE-X-000252", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0903"]}
-{"id": "VCIE-X-000253", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0904"]}
-{"id": "VCIE-X-000254", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0905"]}
-{"id": "VCIE-X-000255", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0906"]}
-{"id": "VCIE-X-000256", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0907"]}
-{"id": "VCIE-X-000257", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0908"]}
-{"id": "VCIE-X-000258", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0909"]}
-{"id": "VCIE-X-000259", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0910"]}
-{"id": "VCIE-X-000260", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0911"]}
-{"id": "VCIE-X-000261", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0912"]}
-{"id": "VCIE-X-000262", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0913"]}
-{"id": "VCIE-X-000263", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0914"]}
-{"id": "VCIE-X-000264", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0915"]}
-{"id": "VCIE-X-000265", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0916"]}
-{"id": "VCIE-X-000266", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0917"]}
-{"id": "VCIE-X-000267", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0918"]}
-{"id": "VCIE-X-000268", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0919"]}
-{"id": "VCIE-X-000269", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0920"]}
-{"id": "VCIE-X-000270", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0921"]}
-{"id": "VCIE-X-000271", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0922"]}
-{"id": "VCIE-X-000272", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0923"]}
-{"id": "VCIE-X-000273", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0924"]}
-{"id": "VCIE-X-000274", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0925"]}
-{"id": "VCIE-X-000275", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0926"]}
-{"id": "VCIE-X-000276", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0927"]}
-{"id": "VCIE-X-000277", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0928"]}
-{"id": "VCIE-X-000278", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0929"]}
-{"id": "VCIE-X-000279", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0930"]}
-{"id": "VCIE-X-000280", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0931"]}
-{"id": "VCIE-X-000281", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0932"]}
-{"id": "VCIE-X-000282", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0933"]}
-{"id": "VCIE-X-000283", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0934"]}
-{"id": "VCIE-X-000284", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0935"]}
-{"id": "VCIE-X-000285", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0936"]}
-{"id": "VCIE-X-000286", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0937"]}
-{"id": "VCIE-X-000287", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0938"]}
-{"id": "VCIE-X-000288", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0939"]}
-{"id": "VCIE-X-000289", "who_interrupted": "customer", "stage": "discovery", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0940"]}
-{"id": "VCIE-X-000290", "who_interrupted": "agent", "stage": "presentation", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0941"]}
-{"id": "VCIE-X-000291", "who_interrupted": "customer", "stage": "objection", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0942"]}
-{"id": "VCIE-X-000292", "who_interrupted": "agent", "stage": "opening", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0943"]}
-{"id": "VCIE-X-000293", "who_interrupted": "customer", "stage": "discovery", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0944"]}
-{"id": "VCIE-X-000294", "who_interrupted": "agent", "stage": "presentation", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0945"]}
-{"id": "VCIE-X-000295", "who_interrupted": "customer", "stage": "objection", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0946"]}
-{"id": "VCIE-X-000296", "who_interrupted": "agent", "stage": "opening", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0947"]}
-{"id": "VCIE-X-000297", "who_interrupted": "customer", "stage": "discovery", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0948"]}
-{"id": "VCIE-X-000298", "who_interrupted": "agent", "stage": "presentation", "severity": "medium", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0949"]}
-{"id": "VCIE-X-000299", "who_interrupted": "customer", "stage": "objection", "severity": "high", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0950"]}
-{"id": "VCIE-X-000300", "who_interrupted": "agent", "stage": "opening", "severity": "low", "recovery_script": "Xin lỗi anh chị, em nghe lại ạ — ...", "linked_rule_ids": ["R-0891"]}
+{"id": "INTP-0001", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0141"]}
+{"id": "INTP-0002", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0142"]}
+{"id": "INTP-0003", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0143"]}
+{"id": "INTP-0004", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0144"]}
+{"id": "INTP-0005", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0145"]}
+{"id": "INTP-0006", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0146"]}
+{"id": "INTP-0007", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0147"]}
+{"id": "INTP-0008", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0148"]}
+{"id": "INTP-0009", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0149"]}
+{"id": "INTP-0010", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0150"]}
+{"id": "INTP-0011", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0151"]}
+{"id": "INTP-0012", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0152"]}
+{"id": "INTP-0013", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0153"]}
+{"id": "INTP-0014", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0154"]}
+{"id": "INTP-0015", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0155"]}
+{"id": "INTP-0016", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0156"]}
+{"id": "INTP-0017", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0157"]}
+{"id": "INTP-0018", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0158"]}
+{"id": "INTP-0019", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0159"]}
+{"id": "INTP-0020", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0160"]}
+{"id": "INTP-0021", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0161"]}
+{"id": "INTP-0022", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0162"]}
+{"id": "INTP-0023", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0163"]}
+{"id": "INTP-0024", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0164"]}
+{"id": "INTP-0025", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0165"]}
+{"id": "INTP-0026", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0166"]}
+{"id": "INTP-0027", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0167"]}
+{"id": "INTP-0028", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0168"]}
+{"id": "INTP-0029", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0169"]}
+{"id": "INTP-0030", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0170"]}
+{"id": "INTP-0031", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0171"]}
+{"id": "INTP-0032", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0172"]}
+{"id": "INTP-0033", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0173"]}
+{"id": "INTP-0034", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0174"]}
+{"id": "INTP-0035", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0175"]}
+{"id": "INTP-0036", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0176"]}
+{"id": "INTP-0037", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0177"]}
+{"id": "INTP-0038", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0178"]}
+{"id": "INTP-0039", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0179"]}
+{"id": "INTP-0040", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0180"]}
+{"id": "INTP-0041", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0181"]}
+{"id": "INTP-0042", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0182"]}
+{"id": "INTP-0043", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0183"]}
+{"id": "INTP-0044", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0184"]}
+{"id": "INTP-0045", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0185"]}
+{"id": "INTP-0046", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0186"]}
+{"id": "INTP-0047", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0187"]}
+{"id": "INTP-0048", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0188"]}
+{"id": "INTP-0049", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0189"]}
+{"id": "INTP-0050", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0190"]}
+{"id": "INTP-0051", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0191"]}
+{"id": "INTP-0052", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0192"]}
+{"id": "INTP-0053", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0193"]}
+{"id": "INTP-0054", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0194"]}
+{"id": "INTP-0055", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0195"]}
+{"id": "INTP-0056", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0196"]}
+{"id": "INTP-0057", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0197"]}
+{"id": "INTP-0058", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0198"]}
+{"id": "INTP-0059", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0199"]}
+{"id": "INTP-0060", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0200"]}
+{"id": "INTP-0061", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0201"]}
+{"id": "INTP-0062", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0202"]}
+{"id": "INTP-0063", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0203"]}
+{"id": "INTP-0064", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0204"]}
+{"id": "INTP-0065", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0205"]}
+{"id": "INTP-0066", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0206"]}
+{"id": "INTP-0067", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0207"]}
+{"id": "INTP-0068", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0208"]}
+{"id": "INTP-0069", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0209"]}
+{"id": "INTP-0070", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0210"]}
+{"id": "INTP-0071", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0141"]}
+{"id": "INTP-0072", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0142"]}
+{"id": "INTP-0073", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0143"]}
+{"id": "INTP-0074", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0144"]}
+{"id": "INTP-0075", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0145"]}
+{"id": "INTP-0076", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0146"]}
+{"id": "INTP-0077", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0147"]}
+{"id": "INTP-0078", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0148"]}
+{"id": "INTP-0079", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0149"]}
+{"id": "INTP-0080", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0150"]}
+{"id": "INTP-0081", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0151"]}
+{"id": "INTP-0082", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0152"]}
+{"id": "INTP-0083", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0153"]}
+{"id": "INTP-0084", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0154"]}
+{"id": "INTP-0085", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0155"]}
+{"id": "INTP-0086", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0156"]}
+{"id": "INTP-0087", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0157"]}
+{"id": "INTP-0088", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0158"]}
+{"id": "INTP-0089", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0159"]}
+{"id": "INTP-0090", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0160"]}
+{"id": "INTP-0091", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0161"]}
+{"id": "INTP-0092", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0162"]}
+{"id": "INTP-0093", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0163"]}
+{"id": "INTP-0094", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0164"]}
+{"id": "INTP-0095", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0165"]}
+{"id": "INTP-0096", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0166"]}
+{"id": "INTP-0097", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0167"]}
+{"id": "INTP-0098", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0168"]}
+{"id": "INTP-0099", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0169"]}
+{"id": "INTP-0100", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0170"]}
+{"id": "INTP-0101", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0171"]}
+{"id": "INTP-0102", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0172"]}
+{"id": "INTP-0103", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0173"]}
+{"id": "INTP-0104", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0174"]}
+{"id": "INTP-0105", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0175"]}
+{"id": "INTP-0106", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0176"]}
+{"id": "INTP-0107", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0177"]}
+{"id": "INTP-0108", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0178"]}
+{"id": "INTP-0109", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0179"]}
+{"id": "INTP-0110", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0180"]}
+{"id": "INTP-0111", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0181"]}
+{"id": "INTP-0112", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0182"]}
+{"id": "INTP-0113", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0183"]}
+{"id": "INTP-0114", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0184"]}
+{"id": "INTP-0115", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0185"]}
+{"id": "INTP-0116", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0186"]}
+{"id": "INTP-0117", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0187"]}
+{"id": "INTP-0118", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0188"]}
+{"id": "INTP-0119", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0189"]}
+{"id": "INTP-0120", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0190"]}
+{"id": "INTP-0121", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0191"]}
+{"id": "INTP-0122", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0192"]}
+{"id": "INTP-0123", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0193"]}
+{"id": "INTP-0124", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0194"]}
+{"id": "INTP-0125", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0195"]}
+{"id": "INTP-0126", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0196"]}
+{"id": "INTP-0127", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0197"]}
+{"id": "INTP-0128", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0198"]}
+{"id": "INTP-0129", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0199"]}
+{"id": "INTP-0130", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0200"]}
+{"id": "INTP-0131", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0201"]}
+{"id": "INTP-0132", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0202"]}
+{"id": "INTP-0133", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0203"]}
+{"id": "INTP-0134", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0204"]}
+{"id": "INTP-0135", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0205"]}
+{"id": "INTP-0136", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0206"]}
+{"id": "INTP-0137", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0207"]}
+{"id": "INTP-0138", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0208"]}
+{"id": "INTP-0139", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0209"]}
+{"id": "INTP-0140", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0210"]}
+{"id": "INTP-0141", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0141"]}
+{"id": "INTP-0142", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0142"]}
+{"id": "INTP-0143", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0143"]}
+{"id": "INTP-0144", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0144"]}
+{"id": "INTP-0145", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0145"]}
+{"id": "INTP-0146", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0146"]}
+{"id": "INTP-0147", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0147"]}
+{"id": "INTP-0148", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0148"]}
+{"id": "INTP-0149", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0149"]}
+{"id": "INTP-0150", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0150"]}
+{"id": "INTP-0151", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0151"]}
+{"id": "INTP-0152", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0152"]}
+{"id": "INTP-0153", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0153"]}
+{"id": "INTP-0154", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0154"]}
+{"id": "INTP-0155", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0155"]}
+{"id": "INTP-0156", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0156"]}
+{"id": "INTP-0157", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0157"]}
+{"id": "INTP-0158", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0158"]}
+{"id": "INTP-0159", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0159"]}
+{"id": "INTP-0160", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0160"]}
+{"id": "INTP-0161", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0161"]}
+{"id": "INTP-0162", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0162"]}
+{"id": "INTP-0163", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0163"]}
+{"id": "INTP-0164", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0164"]}
+{"id": "INTP-0165", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0165"]}
+{"id": "INTP-0166", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0166"]}
+{"id": "INTP-0167", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0167"]}
+{"id": "INTP-0168", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0168"]}
+{"id": "INTP-0169", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0169"]}
+{"id": "INTP-0170", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0170"]}
+{"id": "INTP-0171", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0171"]}
+{"id": "INTP-0172", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0172"]}
+{"id": "INTP-0173", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0173"]}
+{"id": "INTP-0174", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0174"]}
+{"id": "INTP-0175", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0175"]}
+{"id": "INTP-0176", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0176"]}
+{"id": "INTP-0177", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0177"]}
+{"id": "INTP-0178", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0178"]}
+{"id": "INTP-0179", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0179"]}
+{"id": "INTP-0180", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0180"]}
+{"id": "INTP-0181", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0181"]}
+{"id": "INTP-0182", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0182"]}
+{"id": "INTP-0183", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0183"]}
+{"id": "INTP-0184", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0184"]}
+{"id": "INTP-0185", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0185"]}
+{"id": "INTP-0186", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0186"]}
+{"id": "INTP-0187", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0187"]}
+{"id": "INTP-0188", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0188"]}
+{"id": "INTP-0189", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0189"]}
+{"id": "INTP-0190", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0190"]}
+{"id": "INTP-0191", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0191"]}
+{"id": "INTP-0192", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0192"]}
+{"id": "INTP-0193", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0193"]}
+{"id": "INTP-0194", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0194"]}
+{"id": "INTP-0195", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0195"]}
+{"id": "INTP-0196", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0196"]}
+{"id": "INTP-0197", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0197"]}
+{"id": "INTP-0198", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0198"]}
+{"id": "INTP-0199", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0199"]}
+{"id": "INTP-0200", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0200"]}
+{"id": "INTP-0201", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0201"]}
+{"id": "INTP-0202", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0202"]}
+{"id": "INTP-0203", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0203"]}
+{"id": "INTP-0204", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0204"]}
+{"id": "INTP-0205", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0205"]}
+{"id": "INTP-0206", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0206"]}
+{"id": "INTP-0207", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0207"]}
+{"id": "INTP-0208", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0208"]}
+{"id": "INTP-0209", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0209"]}
+{"id": "INTP-0210", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0210"]}
+{"id": "INTP-0211", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0141"]}
+{"id": "INTP-0212", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0142"]}
+{"id": "INTP-0213", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0143"]}
+{"id": "INTP-0214", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0144"]}
+{"id": "INTP-0215", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0145"]}
+{"id": "INTP-0216", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0146"]}
+{"id": "INTP-0217", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0147"]}
+{"id": "INTP-0218", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0148"]}
+{"id": "INTP-0219", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0149"]}
+{"id": "INTP-0220", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0150"]}
+{"id": "INTP-0221", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0151"]}
+{"id": "INTP-0222", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0152"]}
+{"id": "INTP-0223", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0153"]}
+{"id": "INTP-0224", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0154"]}
+{"id": "INTP-0225", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0155"]}
+{"id": "INTP-0226", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0156"]}
+{"id": "INTP-0227", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0157"]}
+{"id": "INTP-0228", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0158"]}
+{"id": "INTP-0229", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0159"]}
+{"id": "INTP-0230", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0160"]}
+{"id": "INTP-0231", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0161"]}
+{"id": "INTP-0232", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0162"]}
+{"id": "INTP-0233", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0163"]}
+{"id": "INTP-0234", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0164"]}
+{"id": "INTP-0235", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0165"]}
+{"id": "INTP-0236", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0166"]}
+{"id": "INTP-0237", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0167"]}
+{"id": "INTP-0238", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0168"]}
+{"id": "INTP-0239", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0169"]}
+{"id": "INTP-0240", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0170"]}
+{"id": "INTP-0241", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0171"]}
+{"id": "INTP-0242", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0172"]}
+{"id": "INTP-0243", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0173"]}
+{"id": "INTP-0244", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0174"]}
+{"id": "INTP-0245", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0175"]}
+{"id": "INTP-0246", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0176"]}
+{"id": "INTP-0247", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0177"]}
+{"id": "INTP-0248", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0178"]}
+{"id": "INTP-0249", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0179"]}
+{"id": "INTP-0250", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0180"]}
+{"id": "INTP-0251", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0181"]}
+{"id": "INTP-0252", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0182"]}
+{"id": "INTP-0253", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0183"]}
+{"id": "INTP-0254", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0184"]}
+{"id": "INTP-0255", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0185"]}
+{"id": "INTP-0256", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0186"]}
+{"id": "INTP-0257", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0187"]}
+{"id": "INTP-0258", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0188"]}
+{"id": "INTP-0259", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0189"]}
+{"id": "INTP-0260", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0190"]}
+{"id": "INTP-0261", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0191"]}
+{"id": "INTP-0262", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0192"]}
+{"id": "INTP-0263", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0193"]}
+{"id": "INTP-0264", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0194"]}
+{"id": "INTP-0265", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0195"]}
+{"id": "INTP-0266", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0196"]}
+{"id": "INTP-0267", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0197"]}
+{"id": "INTP-0268", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0198"]}
+{"id": "INTP-0269", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0199"]}
+{"id": "INTP-0270", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0200"]}
+{"id": "INTP-0271", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0201"]}
+{"id": "INTP-0272", "pattern": "customer_cuts_agent", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0202"]}
+{"id": "INTP-0273", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0203"]}
+{"id": "INTP-0274", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0204"]}
+{"id": "INTP-0275", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0205"]}
+{"id": "INTP-0276", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0206"]}
+{"id": "INTP-0277", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0207"]}
+{"id": "INTP-0278", "pattern": "agent_cuts_customer", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0208"]}
+{"id": "INTP-0279", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0209"]}
+{"id": "INTP-0280", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0210"]}
+{"id": "INTP-0281", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0141"]}
+{"id": "INTP-0282", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0142"]}
+{"id": "INTP-0283", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0143"]}
+{"id": "INTP-0284", "pattern": "overlap_both", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0144"]}
+{"id": "INTP-0285", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0145"]}
+{"id": "INTP-0286", "pattern": "agent_cuts_customer", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0146"]}
+{"id": "INTP-0287", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0147"]}
+{"id": "INTP-0288", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0148"]}
+{"id": "INTP-0289", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0149"]}
+{"id": "INTP-0290", "pattern": "customer_cuts_agent", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0150"]}
+{"id": "INTP-0291", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0151"]}
+{"id": "INTP-0292", "pattern": "agent_cuts_customer", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0152"]}
+{"id": "INTP-0293", "pattern": "barge_in_price", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0153"]}
+{"id": "INTP-0294", "pattern": "customer_cuts_agent", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0154"]}
+{"id": "INTP-0295", "pattern": "barge_in_price", "severity": "medium", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0155"]}
+{"id": "INTP-0296", "pattern": "overlap_both", "severity": "high", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0156"]}
+{"id": "INTP-0297", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0157"]}
+{"id": "INTP-0298", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0158"]}
+{"id": "INTP-0299", "pattern": "overlap_both", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0159"]}
+{"id": "INTP-0300", "pattern": "barge_in_price", "severity": "low", "coaching": "Nhường lượt; tóm tắt ý khách trước khi tiếp", "linked_rule_ids": ["R-0160"]}

@@ -1,300 +1,300 @@
-{"id": "VCIE-B-000001", "text": "Bao giờ giao?", "strength_score": 0.41, "confidence": 0.51, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0004"], "dialect": "bac"}
-{"id": "VCIE-B-000002", "text": "Có bảo hành không?", "strength_score": 0.42, "confidence": 0.52, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0007"], "dialect": "bac"}
-{"id": "VCIE-B-000003", "text": "Thanh toán sao?", "strength_score": 0.43, "confidence": 0.53, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0010"], "dialect": "bac"}
-{"id": "VCIE-B-000004", "text": "Có hóa đơn không?", "strength_score": 0.44, "confidence": 0.54, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0013"], "dialect": "nam"}
-{"id": "VCIE-B-000005", "text": "Có trả góp không?", "strength_score": 0.45, "confidence": 0.55, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0016"], "dialect": "nam"}
-{"id": "VCIE-B-000006", "text": "Ship tận nơi?", "strength_score": 0.46, "confidence": 0.56, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0019"], "dialect": "nam"}
-{"id": "VCIE-B-000007", "text": "Còn màu nào?", "strength_score": 0.47, "confidence": 0.57, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0022"], "dialect": "trung"}
-{"id": "VCIE-B-000008", "text": "Giảm nếu chốt hôm nay?", "strength_score": 0.48, "confidence": 0.58, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0025"], "dialect": "bac"}
-{"id": "VCIE-B-000009", "text": "Gửi HĐ mẫu?", "strength_score": 0.49, "confidence": 0.59, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0028"], "dialect": "nam"}
-{"id": "VCIE-B-000010", "text": "Ai lắp đặt?", "strength_score": 0.5, "confidence": 0.6, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0031"], "dialect": "nam"}
-{"id": "VCIE-B-000011", "text": "Bao giờ giao? (bv 11)", "strength_score": 0.51, "confidence": 0.61, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0034"], "dialect": "bac"}
-{"id": "VCIE-B-000012", "text": "Có bảo hành không? (bv 12)", "strength_score": 0.52, "confidence": 0.62, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0037"], "dialect": "nam"}
-{"id": "VCIE-B-000013", "text": "Thanh toán sao? (bv 13)", "strength_score": 0.53, "confidence": 0.63, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0040"], "dialect": "trung"}
-{"id": "VCIE-B-000014", "text": "Có hóa đơn không? (bv 14)", "strength_score": 0.54, "confidence": 0.64, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0043"], "dialect": "trung"}
-{"id": "VCIE-B-000015", "text": "Có trả góp không? (bv 15)", "strength_score": 0.55, "confidence": 0.65, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0046"], "dialect": "trung"}
-{"id": "VCIE-B-000016", "text": "Ship tận nơi? (bv 16)", "strength_score": 0.56, "confidence": 0.66, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0049"], "dialect": "nam"}
-{"id": "VCIE-B-000017", "text": "Còn màu nào? (bv 17)", "strength_score": 0.57, "confidence": 0.67, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0052"], "dialect": "nam"}
-{"id": "VCIE-B-000018", "text": "Giảm nếu chốt hôm nay? (bv 18)", "strength_score": 0.58, "confidence": 0.68, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0055"], "dialect": "bac"}
-{"id": "VCIE-B-000019", "text": "Gửi HĐ mẫu? (bv 19)", "strength_score": 0.59, "confidence": 0.69, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0058"], "dialect": "nam"}
-{"id": "VCIE-B-000020", "text": "Ai lắp đặt? (bv 20)", "strength_score": 0.6, "confidence": 0.7, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0061"], "dialect": "nam"}
-{"id": "VCIE-B-000021", "text": "Bao giờ giao? (bv 21)", "strength_score": 0.61, "confidence": 0.71, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0064"], "dialect": "nam"}
-{"id": "VCIE-B-000022", "text": "Có bảo hành không? (bv 22)", "strength_score": 0.62, "confidence": 0.72, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0067"], "dialect": "bac"}
-{"id": "VCIE-B-000023", "text": "Thanh toán sao? (bv 23)", "strength_score": 0.63, "confidence": 0.73, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0070"], "dialect": "bac"}
-{"id": "VCIE-B-000024", "text": "Có hóa đơn không? (bv 24)", "strength_score": 0.64, "confidence": 0.74, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0073"], "dialect": "trung"}
-{"id": "VCIE-B-000025", "text": "Có trả góp không? (bv 25)", "strength_score": 0.65, "confidence": 0.75, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0076"], "dialect": "bac"}
-{"id": "VCIE-B-000026", "text": "Ship tận nơi? (bv 26)", "strength_score": 0.66, "confidence": 0.76, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0079"], "dialect": "nam"}
-{"id": "VCIE-B-000027", "text": "Còn màu nào? (bv 27)", "strength_score": 0.67, "confidence": 0.77, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0082"], "dialect": "trung"}
-{"id": "VCIE-B-000028", "text": "Giảm nếu chốt hôm nay? (bv 28)", "strength_score": 0.68, "confidence": 0.78, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0085"], "dialect": "bac"}
-{"id": "VCIE-B-000029", "text": "Gửi HĐ mẫu? (bv 29)", "strength_score": 0.69, "confidence": 0.79, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0088"], "dialect": "nam"}
-{"id": "VCIE-B-000030", "text": "Ai lắp đặt? (bv 30)", "strength_score": 0.7, "confidence": 0.8, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0091"], "dialect": "nam"}
-{"id": "VCIE-B-000031", "text": "Bao giờ giao? (bv 31)", "strength_score": 0.71, "confidence": 0.81, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0094"], "dialect": "bac"}
-{"id": "VCIE-B-000032", "text": "Có bảo hành không? (bv 32)", "strength_score": 0.72, "confidence": 0.82, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0097"], "dialect": "trung"}
-{"id": "VCIE-B-000033", "text": "Thanh toán sao? (bv 33)", "strength_score": 0.73, "confidence": 0.83, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0100"], "dialect": "bac"}
-{"id": "VCIE-B-000034", "text": "Có hóa đơn không? (bv 34)", "strength_score": 0.74, "confidence": 0.84, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0103"], "dialect": "trung"}
-{"id": "VCIE-B-000035", "text": "Có trả góp không? (bv 35)", "strength_score": 0.75, "confidence": 0.85, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0106"], "dialect": "trung"}
-{"id": "VCIE-B-000036", "text": "Ship tận nơi? (bv 36)", "strength_score": 0.76, "confidence": 0.86, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0109"], "dialect": "nam"}
-{"id": "VCIE-B-000037", "text": "Còn màu nào? (bv 37)", "strength_score": 0.77, "confidence": 0.87, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0112"], "dialect": "bac"}
-{"id": "VCIE-B-000038", "text": "Giảm nếu chốt hôm nay? (bv 38)", "strength_score": 0.78, "confidence": 0.88, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0115"], "dialect": "trung"}
-{"id": "VCIE-B-000039", "text": "Gửi HĐ mẫu? (bv 39)", "strength_score": 0.79, "confidence": 0.89, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0118"], "dialect": "nam"}
-{"id": "VCIE-B-000040", "text": "Ai lắp đặt? (bv 40)", "strength_score": 0.8, "confidence": 0.9, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0121"], "dialect": "trung"}
-{"id": "VCIE-B-000041", "text": "Bao giờ giao? (bv 41)", "strength_score": 0.81, "confidence": 0.91, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0124"], "dialect": "bac"}
-{"id": "VCIE-B-000042", "text": "Có bảo hành không? (bv 42)", "strength_score": 0.82, "confidence": 0.92, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0127"], "dialect": "bac"}
-{"id": "VCIE-B-000043", "text": "Thanh toán sao? (bv 43)", "strength_score": 0.83, "confidence": 0.93, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0130"], "dialect": "nam"}
-{"id": "VCIE-B-000044", "text": "Có hóa đơn không? (bv 44)", "strength_score": 0.84, "confidence": 0.94, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0133"], "dialect": "nam"}
-{"id": "VCIE-B-000045", "text": "Có trả góp không? (bv 45)", "strength_score": 0.85, "confidence": 0.5, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0136"], "dialect": "trung"}
-{"id": "VCIE-B-000046", "text": "Ship tận nơi? (bv 46)", "strength_score": 0.86, "confidence": 0.51, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0139"], "dialect": "trung"}
-{"id": "VCIE-B-000047", "text": "Còn màu nào? (bv 47)", "strength_score": 0.87, "confidence": 0.52, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0142"], "dialect": "bac"}
-{"id": "VCIE-B-000048", "text": "Giảm nếu chốt hôm nay? (bv 48)", "strength_score": 0.88, "confidence": 0.53, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0145"], "dialect": "trung"}
-{"id": "VCIE-B-000049", "text": "Gửi HĐ mẫu? (bv 49)", "strength_score": 0.89, "confidence": 0.54, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0148"], "dialect": "trung"}
-{"id": "VCIE-B-000050", "text": "Ai lắp đặt? (bv 50)", "strength_score": 0.9, "confidence": 0.55, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0151"], "dialect": "bac"}
-{"id": "VCIE-B-000051", "text": "Bao giờ giao? (bv 51)", "strength_score": 0.91, "confidence": 0.56, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0154"], "dialect": "bac"}
-{"id": "VCIE-B-000052", "text": "Có bảo hành không? (bv 52)", "strength_score": 0.92, "confidence": 0.57, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0157"], "dialect": "bac"}
-{"id": "VCIE-B-000053", "text": "Thanh toán sao? (bv 53)", "strength_score": 0.93, "confidence": 0.58, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0160"], "dialect": "nam"}
-{"id": "VCIE-B-000054", "text": "Có hóa đơn không? (bv 54)", "strength_score": 0.94, "confidence": 0.59, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0163"], "dialect": "bac"}
-{"id": "VCIE-B-000055", "text": "Có trả góp không? (bv 55)", "strength_score": 0.95, "confidence": 0.6, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0166"], "dialect": "bac"}
-{"id": "VCIE-B-000056", "text": "Ship tận nơi? (bv 56)", "strength_score": 0.96, "confidence": 0.61, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0169"], "dialect": "bac"}
-{"id": "VCIE-B-000057", "text": "Còn màu nào? (bv 57)", "strength_score": 0.97, "confidence": 0.62, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0172"], "dialect": "nam"}
-{"id": "VCIE-B-000058", "text": "Giảm nếu chốt hôm nay? (bv 58)", "strength_score": 0.98, "confidence": 0.63, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0175"], "dialect": "nam"}
-{"id": "VCIE-B-000059", "text": "Gửi HĐ mẫu? (bv 59)", "strength_score": 0.99, "confidence": 0.64, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0178"], "dialect": "nam"}
-{"id": "VCIE-B-000060", "text": "Ai lắp đặt? (bv 60)", "strength_score": 0.4, "confidence": 0.65, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0181"], "dialect": "nam"}
-{"id": "VCIE-B-000061", "text": "Bao giờ giao? (bv 61)", "strength_score": 0.41, "confidence": 0.66, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0184"], "dialect": "bac"}
-{"id": "VCIE-B-000062", "text": "Có bảo hành không? (bv 62)", "strength_score": 0.42, "confidence": 0.67, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0187"], "dialect": "nam"}
-{"id": "VCIE-B-000063", "text": "Thanh toán sao? (bv 63)", "strength_score": 0.43, "confidence": 0.68, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0190"], "dialect": "trung"}
-{"id": "VCIE-B-000064", "text": "Có hóa đơn không? (bv 64)", "strength_score": 0.44, "confidence": 0.69, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0193"], "dialect": "nam"}
-{"id": "VCIE-B-000065", "text": "Có trả góp không? (bv 65)", "strength_score": 0.45, "confidence": 0.7, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0196"], "dialect": "nam"}
-{"id": "VCIE-B-000066", "text": "Ship tận nơi? (bv 66)", "strength_score": 0.46, "confidence": 0.71, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0199"], "dialect": "bac"}
-{"id": "VCIE-B-000067", "text": "Còn màu nào? (bv 67)", "strength_score": 0.47, "confidence": 0.72, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0202"], "dialect": "nam"}
-{"id": "VCIE-B-000068", "text": "Giảm nếu chốt hôm nay? (bv 68)", "strength_score": 0.48, "confidence": 0.73, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0205"], "dialect": "nam"}
-{"id": "VCIE-B-000069", "text": "Gửi HĐ mẫu? (bv 69)", "strength_score": 0.49, "confidence": 0.74, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0208"], "dialect": "nam"}
-{"id": "VCIE-B-000070", "text": "Ai lắp đặt? (bv 70)", "strength_score": 0.5, "confidence": 0.75, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0211"], "dialect": "nam"}
-{"id": "VCIE-B-000071", "text": "Bao giờ giao? (bv 71)", "strength_score": 0.51, "confidence": 0.76, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0214"], "dialect": "bac"}
-{"id": "VCIE-B-000072", "text": "Có bảo hành không? (bv 72)", "strength_score": 0.52, "confidence": 0.77, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0217"], "dialect": "trung"}
-{"id": "VCIE-B-000073", "text": "Thanh toán sao? (bv 73)", "strength_score": 0.53, "confidence": 0.78, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0220"], "dialect": "nam"}
-{"id": "VCIE-B-000074", "text": "Có hóa đơn không? (bv 74)", "strength_score": 0.54, "confidence": 0.79, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0223"], "dialect": "bac"}
-{"id": "VCIE-B-000075", "text": "Có trả góp không? (bv 75)", "strength_score": 0.55, "confidence": 0.8, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0226"], "dialect": "bac"}
-{"id": "VCIE-B-000076", "text": "Ship tận nơi? (bv 76)", "strength_score": 0.56, "confidence": 0.81, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0229"], "dialect": "bac"}
-{"id": "VCIE-B-000077", "text": "Còn màu nào? (bv 77)", "strength_score": 0.57, "confidence": 0.82, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0232"], "dialect": "bac"}
-{"id": "VCIE-B-000078", "text": "Giảm nếu chốt hôm nay? (bv 78)", "strength_score": 0.58, "confidence": 0.83, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0235"], "dialect": "bac"}
-{"id": "VCIE-B-000079", "text": "Gửi HĐ mẫu? (bv 79)", "strength_score": 0.59, "confidence": 0.84, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0238"], "dialect": "trung"}
-{"id": "VCIE-B-000080", "text": "Ai lắp đặt? (bv 80)", "strength_score": 0.6, "confidence": 0.85, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0241"], "dialect": "nam"}
-{"id": "VCIE-B-000081", "text": "Bao giờ giao? (bv 81)", "strength_score": 0.61, "confidence": 0.86, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0244"], "dialect": "nam"}
-{"id": "VCIE-B-000082", "text": "Có bảo hành không? (bv 82)", "strength_score": 0.62, "confidence": 0.87, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0247"], "dialect": "nam"}
-{"id": "VCIE-B-000083", "text": "Thanh toán sao? (bv 83)", "strength_score": 0.63, "confidence": 0.88, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0250"], "dialect": "bac"}
-{"id": "VCIE-B-000084", "text": "Có hóa đơn không? (bv 84)", "strength_score": 0.64, "confidence": 0.89, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0253"], "dialect": "bac"}
-{"id": "VCIE-B-000085", "text": "Có trả góp không? (bv 85)", "strength_score": 0.65, "confidence": 0.9, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0256"], "dialect": "nam"}
-{"id": "VCIE-B-000086", "text": "Ship tận nơi? (bv 86)", "strength_score": 0.66, "confidence": 0.91, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0259"], "dialect": "bac"}
-{"id": "VCIE-B-000087", "text": "Còn màu nào? (bv 87)", "strength_score": 0.67, "confidence": 0.92, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0262"], "dialect": "bac"}
-{"id": "VCIE-B-000088", "text": "Giảm nếu chốt hôm nay? (bv 88)", "strength_score": 0.68, "confidence": 0.93, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0265"], "dialect": "bac"}
-{"id": "VCIE-B-000089", "text": "Gửi HĐ mẫu? (bv 89)", "strength_score": 0.69, "confidence": 0.94, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0268"], "dialect": "bac"}
-{"id": "VCIE-B-000090", "text": "Ai lắp đặt? (bv 90)", "strength_score": 0.7, "confidence": 0.5, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0271"], "dialect": "bac"}
-{"id": "VCIE-B-000091", "text": "Bao giờ giao? (bv 91)", "strength_score": 0.71, "confidence": 0.51, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0274"], "dialect": "bac"}
-{"id": "VCIE-B-000092", "text": "Có bảo hành không? (bv 92)", "strength_score": 0.72, "confidence": 0.52, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0277"], "dialect": "nam"}
-{"id": "VCIE-B-000093", "text": "Thanh toán sao? (bv 93)", "strength_score": 0.73, "confidence": 0.53, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0280"], "dialect": "trung"}
-{"id": "VCIE-B-000094", "text": "Có hóa đơn không? (bv 94)", "strength_score": 0.74, "confidence": 0.54, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0283"], "dialect": "trung"}
-{"id": "VCIE-B-000095", "text": "Có trả góp không? (bv 95)", "strength_score": 0.75, "confidence": 0.55, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0286"], "dialect": "trung"}
-{"id": "VCIE-B-000096", "text": "Ship tận nơi? (bv 96)", "strength_score": 0.76, "confidence": 0.56, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0289"], "dialect": "trung"}
-{"id": "VCIE-B-000097", "text": "Còn màu nào? (bv 97)", "strength_score": 0.77, "confidence": 0.57, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0292"], "dialect": "bac"}
-{"id": "VCIE-B-000098", "text": "Giảm nếu chốt hôm nay? (bv 98)", "strength_score": 0.78, "confidence": 0.58, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0295"], "dialect": "bac"}
-{"id": "VCIE-B-000099", "text": "Gửi HĐ mẫu? (bv 99)", "strength_score": 0.79, "confidence": 0.59, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0298"], "dialect": "nam"}
-{"id": "VCIE-B-000100", "text": "Ai lắp đặt? (bv 100)", "strength_score": 0.8, "confidence": 0.6, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0301"], "dialect": "bac"}
-{"id": "VCIE-B-000101", "text": "Bao giờ giao? (bv 101)", "strength_score": 0.81, "confidence": 0.61, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0304"], "dialect": "nam"}
-{"id": "VCIE-B-000102", "text": "Có bảo hành không? (bv 102)", "strength_score": 0.82, "confidence": 0.62, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0307"], "dialect": "nam"}
-{"id": "VCIE-B-000103", "text": "Thanh toán sao? (bv 103)", "strength_score": 0.83, "confidence": 0.63, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0310"], "dialect": "nam"}
-{"id": "VCIE-B-000104", "text": "Có hóa đơn không? (bv 104)", "strength_score": 0.84, "confidence": 0.64, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0313"], "dialect": "trung"}
-{"id": "VCIE-B-000105", "text": "Có trả góp không? (bv 105)", "strength_score": 0.85, "confidence": 0.65, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0316"], "dialect": "nam"}
-{"id": "VCIE-B-000106", "text": "Ship tận nơi? (bv 106)", "strength_score": 0.86, "confidence": 0.66, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0319"], "dialect": "nam"}
-{"id": "VCIE-B-000107", "text": "Còn màu nào? (bv 107)", "strength_score": 0.87, "confidence": 0.67, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0322"], "dialect": "nam"}
-{"id": "VCIE-B-000108", "text": "Giảm nếu chốt hôm nay? (bv 108)", "strength_score": 0.88, "confidence": 0.68, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0325"], "dialect": "bac"}
-{"id": "VCIE-B-000109", "text": "Gửi HĐ mẫu? (bv 109)", "strength_score": 0.89, "confidence": 0.69, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0328"], "dialect": "bac"}
-{"id": "VCIE-B-000110", "text": "Ai lắp đặt? (bv 110)", "strength_score": 0.9, "confidence": 0.7, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0331"], "dialect": "bac"}
-{"id": "VCIE-B-000111", "text": "Bao giờ giao? (bv 111)", "strength_score": 0.91, "confidence": 0.71, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0334"], "dialect": "bac"}
-{"id": "VCIE-B-000112", "text": "Có bảo hành không? (bv 112)", "strength_score": 0.92, "confidence": 0.72, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0337"], "dialect": "bac"}
-{"id": "VCIE-B-000113", "text": "Thanh toán sao? (bv 113)", "strength_score": 0.93, "confidence": 0.73, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0340"], "dialect": "bac"}
-{"id": "VCIE-B-000114", "text": "Có hóa đơn không? (bv 114)", "strength_score": 0.94, "confidence": 0.74, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0343"], "dialect": "bac"}
-{"id": "VCIE-B-000115", "text": "Có trả góp không? (bv 115)", "strength_score": 0.95, "confidence": 0.75, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0346"], "dialect": "bac"}
-{"id": "VCIE-B-000116", "text": "Ship tận nơi? (bv 116)", "strength_score": 0.96, "confidence": 0.76, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0349"], "dialect": "bac"}
-{"id": "VCIE-B-000117", "text": "Còn màu nào? (bv 117)", "strength_score": 0.97, "confidence": 0.77, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0352"], "dialect": "nam"}
-{"id": "VCIE-B-000118", "text": "Giảm nếu chốt hôm nay? (bv 118)", "strength_score": 0.98, "confidence": 0.78, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0355"], "dialect": "nam"}
-{"id": "VCIE-B-000119", "text": "Gửi HĐ mẫu? (bv 119)", "strength_score": 0.99, "confidence": 0.79, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0358"], "dialect": "bac"}
-{"id": "VCIE-B-000120", "text": "Ai lắp đặt? (bv 120)", "strength_score": 0.4, "confidence": 0.8, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0361"], "dialect": "bac"}
-{"id": "VCIE-B-000121", "text": "Bao giờ giao? (bv 121)", "strength_score": 0.41, "confidence": 0.81, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0364"], "dialect": "nam"}
-{"id": "VCIE-B-000122", "text": "Có bảo hành không? (bv 122)", "strength_score": 0.42, "confidence": 0.82, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0367"], "dialect": "bac"}
-{"id": "VCIE-B-000123", "text": "Thanh toán sao? (bv 123)", "strength_score": 0.43, "confidence": 0.83, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0370"], "dialect": "nam"}
-{"id": "VCIE-B-000124", "text": "Có hóa đơn không? (bv 124)", "strength_score": 0.44, "confidence": 0.84, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0373"], "dialect": "nam"}
-{"id": "VCIE-B-000125", "text": "Có trả góp không? (bv 125)", "strength_score": 0.45, "confidence": 0.85, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0376"], "dialect": "bac"}
-{"id": "VCIE-B-000126", "text": "Ship tận nơi? (bv 126)", "strength_score": 0.46, "confidence": 0.86, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0379"], "dialect": "bac"}
-{"id": "VCIE-B-000127", "text": "Còn màu nào? (bv 127)", "strength_score": 0.47, "confidence": 0.87, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0382"], "dialect": "trung"}
-{"id": "VCIE-B-000128", "text": "Giảm nếu chốt hôm nay? (bv 128)", "strength_score": 0.48, "confidence": 0.88, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0385"], "dialect": "bac"}
-{"id": "VCIE-B-000129", "text": "Gửi HĐ mẫu? (bv 129)", "strength_score": 0.49, "confidence": 0.89, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0388"], "dialect": "nam"}
-{"id": "VCIE-B-000130", "text": "Ai lắp đặt? (bv 130)", "strength_score": 0.5, "confidence": 0.9, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0391"], "dialect": "trung"}
-{"id": "VCIE-B-000131", "text": "Bao giờ giao? (bv 131)", "strength_score": 0.51, "confidence": 0.91, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0394"], "dialect": "nam"}
-{"id": "VCIE-B-000132", "text": "Có bảo hành không? (bv 132)", "strength_score": 0.52, "confidence": 0.92, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0397"], "dialect": "bac"}
-{"id": "VCIE-B-000133", "text": "Thanh toán sao? (bv 133)", "strength_score": 0.53, "confidence": 0.93, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0400"], "dialect": "trung"}
-{"id": "VCIE-B-000134", "text": "Có hóa đơn không? (bv 134)", "strength_score": 0.54, "confidence": 0.94, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0403"], "dialect": "bac"}
-{"id": "VCIE-B-000135", "text": "Có trả góp không? (bv 135)", "strength_score": 0.55, "confidence": 0.5, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0406"], "dialect": "nam"}
-{"id": "VCIE-B-000136", "text": "Ship tận nơi? (bv 136)", "strength_score": 0.56, "confidence": 0.51, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0409"], "dialect": "trung"}
-{"id": "VCIE-B-000137", "text": "Còn màu nào? (bv 137)", "strength_score": 0.57, "confidence": 0.52, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0412"], "dialect": "bac"}
-{"id": "VCIE-B-000138", "text": "Giảm nếu chốt hôm nay? (bv 138)", "strength_score": 0.58, "confidence": 0.53, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0415"], "dialect": "bac"}
-{"id": "VCIE-B-000139", "text": "Gửi HĐ mẫu? (bv 139)", "strength_score": 0.59, "confidence": 0.54, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0418"], "dialect": "nam"}
-{"id": "VCIE-B-000140", "text": "Ai lắp đặt? (bv 140)", "strength_score": 0.6, "confidence": 0.55, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0421"], "dialect": "bac"}
-{"id": "VCIE-B-000141", "text": "Bao giờ giao? (bv 141)", "strength_score": 0.61, "confidence": 0.56, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0424"], "dialect": "bac"}
-{"id": "VCIE-B-000142", "text": "Có bảo hành không? (bv 142)", "strength_score": 0.62, "confidence": 0.57, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0427"], "dialect": "nam"}
-{"id": "VCIE-B-000143", "text": "Thanh toán sao? (bv 143)", "strength_score": 0.63, "confidence": 0.58, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0430"], "dialect": "nam"}
-{"id": "VCIE-B-000144", "text": "Có hóa đơn không? (bv 144)", "strength_score": 0.64, "confidence": 0.59, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0433"], "dialect": "trung"}
-{"id": "VCIE-B-000145", "text": "Có trả góp không? (bv 145)", "strength_score": 0.65, "confidence": 0.6, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0436"], "dialect": "bac"}
-{"id": "VCIE-B-000146", "text": "Ship tận nơi? (bv 146)", "strength_score": 0.66, "confidence": 0.61, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0439"], "dialect": "trung"}
-{"id": "VCIE-B-000147", "text": "Còn màu nào? (bv 147)", "strength_score": 0.67, "confidence": 0.62, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0442"], "dialect": "nam"}
-{"id": "VCIE-B-000148", "text": "Giảm nếu chốt hôm nay? (bv 148)", "strength_score": 0.68, "confidence": 0.63, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0445"], "dialect": "bac"}
-{"id": "VCIE-B-000149", "text": "Gửi HĐ mẫu? (bv 149)", "strength_score": 0.69, "confidence": 0.64, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0448"], "dialect": "nam"}
-{"id": "VCIE-B-000150", "text": "Ai lắp đặt? (bv 150)", "strength_score": 0.7, "confidence": 0.65, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0451"], "dialect": "bac"}
-{"id": "VCIE-B-000151", "text": "Bao giờ giao? (bv 151)", "strength_score": 0.71, "confidence": 0.66, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0454"], "dialect": "bac"}
-{"id": "VCIE-B-000152", "text": "Có bảo hành không? (bv 152)", "strength_score": 0.72, "confidence": 0.67, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0457"], "dialect": "bac"}
-{"id": "VCIE-B-000153", "text": "Thanh toán sao? (bv 153)", "strength_score": 0.73, "confidence": 0.68, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0460"], "dialect": "bac"}
-{"id": "VCIE-B-000154", "text": "Có hóa đơn không? (bv 154)", "strength_score": 0.74, "confidence": 0.69, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0463"], "dialect": "nam"}
-{"id": "VCIE-B-000155", "text": "Có trả góp không? (bv 155)", "strength_score": 0.75, "confidence": 0.7, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0466"], "dialect": "trung"}
-{"id": "VCIE-B-000156", "text": "Ship tận nơi? (bv 156)", "strength_score": 0.76, "confidence": 0.71, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0469"], "dialect": "nam"}
-{"id": "VCIE-B-000157", "text": "Còn màu nào? (bv 157)", "strength_score": 0.77, "confidence": 0.72, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0472"], "dialect": "bac"}
-{"id": "VCIE-B-000158", "text": "Giảm nếu chốt hôm nay? (bv 158)", "strength_score": 0.78, "confidence": 0.73, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0475"], "dialect": "bac"}
-{"id": "VCIE-B-000159", "text": "Gửi HĐ mẫu? (bv 159)", "strength_score": 0.79, "confidence": 0.74, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0478"], "dialect": "nam"}
-{"id": "VCIE-B-000160", "text": "Ai lắp đặt? (bv 160)", "strength_score": 0.8, "confidence": 0.75, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0481"], "dialect": "trung"}
-{"id": "VCIE-B-000161", "text": "Bao giờ giao? (bv 161)", "strength_score": 0.81, "confidence": 0.76, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0484"], "dialect": "bac"}
-{"id": "VCIE-B-000162", "text": "Có bảo hành không? (bv 162)", "strength_score": 0.82, "confidence": 0.77, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0487"], "dialect": "nam"}
-{"id": "VCIE-B-000163", "text": "Thanh toán sao? (bv 163)", "strength_score": 0.83, "confidence": 0.78, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0490"], "dialect": "trung"}
-{"id": "VCIE-B-000164", "text": "Có hóa đơn không? (bv 164)", "strength_score": 0.84, "confidence": 0.79, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0493"], "dialect": "bac"}
-{"id": "VCIE-B-000165", "text": "Có trả góp không? (bv 165)", "strength_score": 0.85, "confidence": 0.8, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0496"], "dialect": "nam"}
-{"id": "VCIE-B-000166", "text": "Ship tận nơi? (bv 166)", "strength_score": 0.86, "confidence": 0.81, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0499"], "dialect": "nam"}
-{"id": "VCIE-B-000167", "text": "Còn màu nào? (bv 167)", "strength_score": 0.87, "confidence": 0.82, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0502"], "dialect": "bac"}
-{"id": "VCIE-B-000168", "text": "Giảm nếu chốt hôm nay? (bv 168)", "strength_score": 0.88, "confidence": 0.83, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0505"], "dialect": "nam"}
-{"id": "VCIE-B-000169", "text": "Gửi HĐ mẫu? (bv 169)", "strength_score": 0.89, "confidence": 0.84, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0508"], "dialect": "bac"}
-{"id": "VCIE-B-000170", "text": "Ai lắp đặt? (bv 170)", "strength_score": 0.9, "confidence": 0.85, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0511"], "dialect": "trung"}
-{"id": "VCIE-B-000171", "text": "Bao giờ giao? (bv 171)", "strength_score": 0.91, "confidence": 0.86, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0514"], "dialect": "nam"}
-{"id": "VCIE-B-000172", "text": "Có bảo hành không? (bv 172)", "strength_score": 0.92, "confidence": 0.87, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0517"], "dialect": "nam"}
-{"id": "VCIE-B-000173", "text": "Thanh toán sao? (bv 173)", "strength_score": 0.93, "confidence": 0.88, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0520"], "dialect": "bac"}
-{"id": "VCIE-B-000174", "text": "Có hóa đơn không? (bv 174)", "strength_score": 0.94, "confidence": 0.89, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0523"], "dialect": "nam"}
-{"id": "VCIE-B-000175", "text": "Có trả góp không? (bv 175)", "strength_score": 0.95, "confidence": 0.9, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0526"], "dialect": "nam"}
-{"id": "VCIE-B-000176", "text": "Ship tận nơi? (bv 176)", "strength_score": 0.96, "confidence": 0.91, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0529"], "dialect": "trung"}
-{"id": "VCIE-B-000177", "text": "Còn màu nào? (bv 177)", "strength_score": 0.97, "confidence": 0.92, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0532"], "dialect": "bac"}
-{"id": "VCIE-B-000178", "text": "Giảm nếu chốt hôm nay? (bv 178)", "strength_score": 0.98, "confidence": 0.93, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0535"], "dialect": "nam"}
-{"id": "VCIE-B-000179", "text": "Gửi HĐ mẫu? (bv 179)", "strength_score": 0.99, "confidence": 0.94, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0538"], "dialect": "nam"}
-{"id": "VCIE-B-000180", "text": "Ai lắp đặt? (bv 180)", "strength_score": 0.4, "confidence": 0.5, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0541"], "dialect": "nam"}
-{"id": "VCIE-B-000181", "text": "Bao giờ giao? (bv 181)", "strength_score": 0.41, "confidence": 0.51, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0544"], "dialect": "bac"}
-{"id": "VCIE-B-000182", "text": "Có bảo hành không? (bv 182)", "strength_score": 0.42, "confidence": 0.52, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0547"], "dialect": "nam"}
-{"id": "VCIE-B-000183", "text": "Thanh toán sao? (bv 183)", "strength_score": 0.43, "confidence": 0.53, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0550"], "dialect": "bac"}
-{"id": "VCIE-B-000184", "text": "Có hóa đơn không? (bv 184)", "strength_score": 0.44, "confidence": 0.54, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0553"], "dialect": "bac"}
-{"id": "VCIE-B-000185", "text": "Có trả góp không? (bv 185)", "strength_score": 0.45, "confidence": 0.55, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0556"], "dialect": "trung"}
-{"id": "VCIE-B-000186", "text": "Ship tận nơi? (bv 186)", "strength_score": 0.46, "confidence": 0.56, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0559"], "dialect": "nam"}
-{"id": "VCIE-B-000187", "text": "Còn màu nào? (bv 187)", "strength_score": 0.47, "confidence": 0.57, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0562"], "dialect": "bac"}
-{"id": "VCIE-B-000188", "text": "Giảm nếu chốt hôm nay? (bv 188)", "strength_score": 0.48, "confidence": 0.58, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0565"], "dialect": "bac"}
-{"id": "VCIE-B-000189", "text": "Gửi HĐ mẫu? (bv 189)", "strength_score": 0.49, "confidence": 0.59, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0568"], "dialect": "trung"}
-{"id": "VCIE-B-000190", "text": "Ai lắp đặt? (bv 190)", "strength_score": 0.5, "confidence": 0.6, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0571"], "dialect": "nam"}
-{"id": "VCIE-B-000191", "text": "Bao giờ giao? (bv 191)", "strength_score": 0.51, "confidence": 0.61, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0574"], "dialect": "nam"}
-{"id": "VCIE-B-000192", "text": "Có bảo hành không? (bv 192)", "strength_score": 0.52, "confidence": 0.62, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0577"], "dialect": "bac"}
-{"id": "VCIE-B-000193", "text": "Thanh toán sao? (bv 193)", "strength_score": 0.53, "confidence": 0.63, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0580"], "dialect": "nam"}
-{"id": "VCIE-B-000194", "text": "Có hóa đơn không? (bv 194)", "strength_score": 0.54, "confidence": 0.64, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0583"], "dialect": "trung"}
-{"id": "VCIE-B-000195", "text": "Có trả góp không? (bv 195)", "strength_score": 0.55, "confidence": 0.65, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0586"], "dialect": "bac"}
-{"id": "VCIE-B-000196", "text": "Ship tận nơi? (bv 196)", "strength_score": 0.56, "confidence": 0.66, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0589"], "dialect": "bac"}
-{"id": "VCIE-B-000197", "text": "Còn màu nào? (bv 197)", "strength_score": 0.57, "confidence": 0.67, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0592"], "dialect": "nam"}
-{"id": "VCIE-B-000198", "text": "Giảm nếu chốt hôm nay? (bv 198)", "strength_score": 0.58, "confidence": 0.68, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0595"], "dialect": "bac"}
-{"id": "VCIE-B-000199", "text": "Gửi HĐ mẫu? (bv 199)", "strength_score": 0.59, "confidence": 0.69, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0598"], "dialect": "nam"}
-{"id": "VCIE-B-000200", "text": "Ai lắp đặt? (bv 200)", "strength_score": 0.6, "confidence": 0.7, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0601"], "dialect": "bac"}
-{"id": "VCIE-B-000201", "text": "Bao giờ giao? (bv 201)", "strength_score": 0.61, "confidence": 0.71, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0604"], "dialect": "bac"}
-{"id": "VCIE-B-000202", "text": "Có bảo hành không? (bv 202)", "strength_score": 0.62, "confidence": 0.72, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0607"], "dialect": "bac"}
-{"id": "VCIE-B-000203", "text": "Thanh toán sao? (bv 203)", "strength_score": 0.63, "confidence": 0.73, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0610"], "dialect": "nam"}
-{"id": "VCIE-B-000204", "text": "Có hóa đơn không? (bv 204)", "strength_score": 0.64, "confidence": 0.74, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0613"], "dialect": "bac"}
-{"id": "VCIE-B-000205", "text": "Có trả góp không? (bv 205)", "strength_score": 0.65, "confidence": 0.75, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0616"], "dialect": "trung"}
-{"id": "VCIE-B-000206", "text": "Ship tận nơi? (bv 206)", "strength_score": 0.66, "confidence": 0.76, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0619"], "dialect": "trung"}
-{"id": "VCIE-B-000207", "text": "Còn màu nào? (bv 207)", "strength_score": 0.67, "confidence": 0.77, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0622"], "dialect": "trung"}
-{"id": "VCIE-B-000208", "text": "Giảm nếu chốt hôm nay? (bv 208)", "strength_score": 0.68, "confidence": 0.78, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0625"], "dialect": "trung"}
-{"id": "VCIE-B-000209", "text": "Gửi HĐ mẫu? (bv 209)", "strength_score": 0.69, "confidence": 0.79, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0628"], "dialect": "nam"}
-{"id": "VCIE-B-000210", "text": "Ai lắp đặt? (bv 210)", "strength_score": 0.7, "confidence": 0.8, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0631"], "dialect": "nam"}
-{"id": "VCIE-B-000211", "text": "Bao giờ giao? (bv 211)", "strength_score": 0.71, "confidence": 0.81, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0634"], "dialect": "bac"}
-{"id": "VCIE-B-000212", "text": "Có bảo hành không? (bv 212)", "strength_score": 0.72, "confidence": 0.82, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0637"], "dialect": "nam"}
-{"id": "VCIE-B-000213", "text": "Thanh toán sao? (bv 213)", "strength_score": 0.73, "confidence": 0.83, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0640"], "dialect": "bac"}
-{"id": "VCIE-B-000214", "text": "Có hóa đơn không? (bv 214)", "strength_score": 0.74, "confidence": 0.84, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0643"], "dialect": "trung"}
-{"id": "VCIE-B-000215", "text": "Có trả góp không? (bv 215)", "strength_score": 0.75, "confidence": 0.85, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0646"], "dialect": "nam"}
-{"id": "VCIE-B-000216", "text": "Ship tận nơi? (bv 216)", "strength_score": 0.76, "confidence": 0.86, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0649"], "dialect": "bac"}
-{"id": "VCIE-B-000217", "text": "Còn màu nào? (bv 217)", "strength_score": 0.77, "confidence": 0.87, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0652"], "dialect": "trung"}
-{"id": "VCIE-B-000218", "text": "Giảm nếu chốt hôm nay? (bv 218)", "strength_score": 0.78, "confidence": 0.88, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0655"], "dialect": "bac"}
-{"id": "VCIE-B-000219", "text": "Gửi HĐ mẫu? (bv 219)", "strength_score": 0.79, "confidence": 0.89, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0658"], "dialect": "nam"}
-{"id": "VCIE-B-000220", "text": "Ai lắp đặt? (bv 220)", "strength_score": 0.8, "confidence": 0.9, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0661"], "dialect": "nam"}
-{"id": "VCIE-B-000221", "text": "Bao giờ giao? (bv 221)", "strength_score": 0.81, "confidence": 0.91, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0664"], "dialect": "trung"}
-{"id": "VCIE-B-000222", "text": "Có bảo hành không? (bv 222)", "strength_score": 0.82, "confidence": 0.92, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0667"], "dialect": "nam"}
-{"id": "VCIE-B-000223", "text": "Thanh toán sao? (bv 223)", "strength_score": 0.83, "confidence": 0.93, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0670"], "dialect": "bac"}
-{"id": "VCIE-B-000224", "text": "Có hóa đơn không? (bv 224)", "strength_score": 0.84, "confidence": 0.94, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0673"], "dialect": "trung"}
-{"id": "VCIE-B-000225", "text": "Có trả góp không? (bv 225)", "strength_score": 0.85, "confidence": 0.5, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0676"], "dialect": "nam"}
-{"id": "VCIE-B-000226", "text": "Ship tận nơi? (bv 226)", "strength_score": 0.86, "confidence": 0.51, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0679"], "dialect": "bac"}
-{"id": "VCIE-B-000227", "text": "Còn màu nào? (bv 227)", "strength_score": 0.87, "confidence": 0.52, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0682"], "dialect": "nam"}
-{"id": "VCIE-B-000228", "text": "Giảm nếu chốt hôm nay? (bv 228)", "strength_score": 0.88, "confidence": 0.53, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0685"], "dialect": "bac"}
-{"id": "VCIE-B-000229", "text": "Gửi HĐ mẫu? (bv 229)", "strength_score": 0.89, "confidence": 0.54, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0688"], "dialect": "bac"}
-{"id": "VCIE-B-000230", "text": "Ai lắp đặt? (bv 230)", "strength_score": 0.9, "confidence": 0.55, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0691"], "dialect": "trung"}
-{"id": "VCIE-B-000231", "text": "Bao giờ giao? (bv 231)", "strength_score": 0.91, "confidence": 0.56, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0694"], "dialect": "nam"}
-{"id": "VCIE-B-000232", "text": "Có bảo hành không? (bv 232)", "strength_score": 0.92, "confidence": 0.57, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0697"], "dialect": "trung"}
-{"id": "VCIE-B-000233", "text": "Thanh toán sao? (bv 233)", "strength_score": 0.93, "confidence": 0.58, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0700"], "dialect": "bac"}
-{"id": "VCIE-B-000234", "text": "Có hóa đơn không? (bv 234)", "strength_score": 0.94, "confidence": 0.59, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0703"], "dialect": "nam"}
-{"id": "VCIE-B-000235", "text": "Có trả góp không? (bv 235)", "strength_score": 0.95, "confidence": 0.6, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0706"], "dialect": "nam"}
-{"id": "VCIE-B-000236", "text": "Ship tận nơi? (bv 236)", "strength_score": 0.96, "confidence": 0.61, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0709"], "dialect": "nam"}
-{"id": "VCIE-B-000237", "text": "Còn màu nào? (bv 237)", "strength_score": 0.97, "confidence": 0.62, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0712"], "dialect": "nam"}
-{"id": "VCIE-B-000238", "text": "Giảm nếu chốt hôm nay? (bv 238)", "strength_score": 0.98, "confidence": 0.63, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0715"], "dialect": "bac"}
-{"id": "VCIE-B-000239", "text": "Gửi HĐ mẫu? (bv 239)", "strength_score": 0.99, "confidence": 0.64, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0718"], "dialect": "trung"}
-{"id": "VCIE-B-000240", "text": "Ai lắp đặt? (bv 240)", "strength_score": 0.4, "confidence": 0.65, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0721"], "dialect": "bac"}
-{"id": "VCIE-B-000241", "text": "Bao giờ giao? (bv 241)", "strength_score": 0.41, "confidence": 0.66, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0724"], "dialect": "nam"}
-{"id": "VCIE-B-000242", "text": "Có bảo hành không? (bv 242)", "strength_score": 0.42, "confidence": 0.67, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0727"], "dialect": "nam"}
-{"id": "VCIE-B-000243", "text": "Thanh toán sao? (bv 243)", "strength_score": 0.43, "confidence": 0.68, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0730"], "dialect": "nam"}
-{"id": "VCIE-B-000244", "text": "Có hóa đơn không? (bv 244)", "strength_score": 0.44, "confidence": 0.69, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0733"], "dialect": "trung"}
-{"id": "VCIE-B-000245", "text": "Có trả góp không? (bv 245)", "strength_score": 0.45, "confidence": 0.7, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0736"], "dialect": "nam"}
-{"id": "VCIE-B-000246", "text": "Ship tận nơi? (bv 246)", "strength_score": 0.46, "confidence": 0.71, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0739"], "dialect": "nam"}
-{"id": "VCIE-B-000247", "text": "Còn màu nào? (bv 247)", "strength_score": 0.47, "confidence": 0.72, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0742"], "dialect": "bac"}
-{"id": "VCIE-B-000248", "text": "Giảm nếu chốt hôm nay? (bv 248)", "strength_score": 0.48, "confidence": 0.73, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0745"], "dialect": "trung"}
-{"id": "VCIE-B-000249", "text": "Gửi HĐ mẫu? (bv 249)", "strength_score": 0.49, "confidence": 0.74, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0748"], "dialect": "nam"}
-{"id": "VCIE-B-000250", "text": "Ai lắp đặt? (bv 250)", "strength_score": 0.5, "confidence": 0.75, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0751"], "dialect": "nam"}
-{"id": "VCIE-B-000251", "text": "Bao giờ giao? (bv 251)", "strength_score": 0.51, "confidence": 0.76, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0754"], "dialect": "nam"}
-{"id": "VCIE-B-000252", "text": "Có bảo hành không? (bv 252)", "strength_score": 0.52, "confidence": 0.77, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0757"], "dialect": "nam"}
-{"id": "VCIE-B-000253", "text": "Thanh toán sao? (bv 253)", "strength_score": 0.53, "confidence": 0.78, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0760"], "dialect": "nam"}
-{"id": "VCIE-B-000254", "text": "Có hóa đơn không? (bv 254)", "strength_score": 0.54, "confidence": 0.79, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0763"], "dialect": "nam"}
-{"id": "VCIE-B-000255", "text": "Có trả góp không? (bv 255)", "strength_score": 0.55, "confidence": 0.8, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0766"], "dialect": "bac"}
-{"id": "VCIE-B-000256", "text": "Ship tận nơi? (bv 256)", "strength_score": 0.56, "confidence": 0.81, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0769"], "dialect": "nam"}
-{"id": "VCIE-B-000257", "text": "Còn màu nào? (bv 257)", "strength_score": 0.57, "confidence": 0.82, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0772"], "dialect": "bac"}
-{"id": "VCIE-B-000258", "text": "Giảm nếu chốt hôm nay? (bv 258)", "strength_score": 0.58, "confidence": 0.83, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0775"], "dialect": "nam"}
-{"id": "VCIE-B-000259", "text": "Gửi HĐ mẫu? (bv 259)", "strength_score": 0.59, "confidence": 0.84, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0778"], "dialect": "nam"}
-{"id": "VCIE-B-000260", "text": "Ai lắp đặt? (bv 260)", "strength_score": 0.6, "confidence": 0.85, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0781"], "dialect": "trung"}
-{"id": "VCIE-B-000261", "text": "Bao giờ giao? (bv 261)", "strength_score": 0.61, "confidence": 0.86, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0784"], "dialect": "nam"}
-{"id": "VCIE-B-000262", "text": "Có bảo hành không? (bv 262)", "strength_score": 0.62, "confidence": 0.87, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0787"], "dialect": "bac"}
-{"id": "VCIE-B-000263", "text": "Thanh toán sao? (bv 263)", "strength_score": 0.63, "confidence": 0.88, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0790"], "dialect": "bac"}
-{"id": "VCIE-B-000264", "text": "Có hóa đơn không? (bv 264)", "strength_score": 0.64, "confidence": 0.89, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0793"], "dialect": "nam"}
-{"id": "VCIE-B-000265", "text": "Có trả góp không? (bv 265)", "strength_score": 0.65, "confidence": 0.9, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0796"], "dialect": "nam"}
-{"id": "VCIE-B-000266", "text": "Ship tận nơi? (bv 266)", "strength_score": 0.66, "confidence": 0.91, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0799"], "dialect": "nam"}
-{"id": "VCIE-B-000267", "text": "Còn màu nào? (bv 267)", "strength_score": 0.67, "confidence": 0.92, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0802"], "dialect": "nam"}
-{"id": "VCIE-B-000268", "text": "Giảm nếu chốt hôm nay? (bv 268)", "strength_score": 0.68, "confidence": 0.93, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0805"], "dialect": "bac"}
-{"id": "VCIE-B-000269", "text": "Gửi HĐ mẫu? (bv 269)", "strength_score": 0.69, "confidence": 0.94, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0808"], "dialect": "bac"}
-{"id": "VCIE-B-000270", "text": "Ai lắp đặt? (bv 270)", "strength_score": 0.7, "confidence": 0.5, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0811"], "dialect": "bac"}
-{"id": "VCIE-B-000271", "text": "Bao giờ giao? (bv 271)", "strength_score": 0.71, "confidence": 0.51, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0814"], "dialect": "trung"}
-{"id": "VCIE-B-000272", "text": "Có bảo hành không? (bv 272)", "strength_score": 0.72, "confidence": 0.52, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0817"], "dialect": "bac"}
-{"id": "VCIE-B-000273", "text": "Thanh toán sao? (bv 273)", "strength_score": 0.73, "confidence": 0.53, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0820"], "dialect": "trung"}
-{"id": "VCIE-B-000274", "text": "Có hóa đơn không? (bv 274)", "strength_score": 0.74, "confidence": 0.54, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0823"], "dialect": "bac"}
-{"id": "VCIE-B-000275", "text": "Có trả góp không? (bv 275)", "strength_score": 0.75, "confidence": 0.55, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0826"], "dialect": "bac"}
-{"id": "VCIE-B-000276", "text": "Ship tận nơi? (bv 276)", "strength_score": 0.76, "confidence": 0.56, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0829"], "dialect": "trung"}
-{"id": "VCIE-B-000277", "text": "Còn màu nào? (bv 277)", "strength_score": 0.77, "confidence": 0.57, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0832"], "dialect": "bac"}
-{"id": "VCIE-B-000278", "text": "Giảm nếu chốt hôm nay? (bv 278)", "strength_score": 0.78, "confidence": 0.58, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0835"], "dialect": "trung"}
-{"id": "VCIE-B-000279", "text": "Gửi HĐ mẫu? (bv 279)", "strength_score": 0.79, "confidence": 0.59, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0838"], "dialect": "nam"}
-{"id": "VCIE-B-000280", "text": "Ai lắp đặt? (bv 280)", "strength_score": 0.8, "confidence": 0.6, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0841"], "dialect": "trung"}
-{"id": "VCIE-B-000281", "text": "Bao giờ giao? (bv 281)", "strength_score": 0.81, "confidence": 0.61, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0844"], "dialect": "nam"}
-{"id": "VCIE-B-000282", "text": "Có bảo hành không? (bv 282)", "strength_score": 0.82, "confidence": 0.62, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0847"], "dialect": "bac"}
-{"id": "VCIE-B-000283", "text": "Thanh toán sao? (bv 283)", "strength_score": 0.83, "confidence": 0.63, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0850"], "dialect": "nam"}
-{"id": "VCIE-B-000284", "text": "Có hóa đơn không? (bv 284)", "strength_score": 0.84, "confidence": 0.64, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0853"], "dialect": "nam"}
-{"id": "VCIE-B-000285", "text": "Có trả góp không? (bv 285)", "strength_score": 0.85, "confidence": 0.65, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0856"], "dialect": "trung"}
-{"id": "VCIE-B-000286", "text": "Ship tận nơi? (bv 286)", "strength_score": 0.86, "confidence": 0.66, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0859"], "dialect": "bac"}
-{"id": "VCIE-B-000287", "text": "Còn màu nào? (bv 287)", "strength_score": 0.87, "confidence": 0.67, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0862"], "dialect": "nam"}
-{"id": "VCIE-B-000288", "text": "Giảm nếu chốt hôm nay? (bv 288)", "strength_score": 0.88, "confidence": 0.68, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0865"], "dialect": "nam"}
-{"id": "VCIE-B-000289", "text": "Gửi HĐ mẫu? (bv 289)", "strength_score": 0.89, "confidence": 0.69, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0868"], "dialect": "bac"}
-{"id": "VCIE-B-000290", "text": "Ai lắp đặt? (bv 290)", "strength_score": 0.9, "confidence": 0.7, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0871"], "dialect": "bac"}
-{"id": "VCIE-B-000291", "text": "Bao giờ giao? (bv 291)", "strength_score": 0.91, "confidence": 0.71, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0874"], "dialect": "trung"}
-{"id": "VCIE-B-000292", "text": "Có bảo hành không? (bv 292)", "strength_score": 0.92, "confidence": 0.72, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0877"], "dialect": "nam"}
-{"id": "VCIE-B-000293", "text": "Thanh toán sao? (bv 293)", "strength_score": 0.93, "confidence": 0.73, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0880"], "dialect": "nam"}
-{"id": "VCIE-B-000294", "text": "Có hóa đơn không? (bv 294)", "strength_score": 0.94, "confidence": 0.74, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0883"], "dialect": "bac"}
-{"id": "VCIE-B-000295", "text": "Có trả góp không? (bv 295)", "strength_score": 0.95, "confidence": 0.75, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0886"], "dialect": "nam"}
-{"id": "VCIE-B-000296", "text": "Ship tận nơi? (bv 296)", "strength_score": 0.96, "confidence": 0.76, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0889"], "dialect": "nam"}
-{"id": "VCIE-B-000297", "text": "Còn màu nào? (bv 297)", "strength_score": 0.97, "confidence": 0.77, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0892"], "dialect": "nam"}
-{"id": "VCIE-B-000298", "text": "Giảm nếu chốt hôm nay? (bv 298)", "strength_score": 0.98, "confidence": 0.78, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0895"], "dialect": "trung"}
-{"id": "VCIE-B-000299", "text": "Gửi HĐ mẫu? (bv 299)", "strength_score": 0.99, "confidence": 0.79, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0898"], "dialect": "nam"}
-{"id": "VCIE-B-000300", "text": "Ai lắp đặt? (bv 300)", "strength_score": 0.4, "confidence": 0.8, "next_step": "Chốt lịch/điều kiện giao dịch", "linked_rule_ids": ["R-0901"], "dialect": "nam"}
+{"id": "BUY-0001", "text": "Bao giờ giao? (#1)", "strength_score": 0.4, "confidence": 0.7, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0701"]}
+{"id": "BUY-0002", "text": "Có bảo hành không? (#2)", "strength_score": 0.41, "confidence": 0.71, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0702"]}
+{"id": "BUY-0003", "text": "Thanh toán sao? (#3)", "strength_score": 0.42, "confidence": 0.72, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0703"]}
+{"id": "BUY-0004", "text": "Có hóa đơn không? (#4)", "strength_score": 0.43, "confidence": 0.73, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0704"]}
+{"id": "BUY-0005", "text": "Gói nào phù hợp? (#5)", "strength_score": 0.44, "confidence": 0.74, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0705"]}
+{"id": "BUY-0006", "text": "Xem demo được không? (#6)", "strength_score": 0.45, "confidence": 0.75, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0706"]}
+{"id": "BUY-0007", "text": "Giảm được nếu chốt hôm nay? (#7)", "strength_score": 0.46, "confidence": 0.76, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0707"]}
+{"id": "BUY-0008", "text": "Gửi hợp đồng trước? (#8)", "strength_score": 0.47, "confidence": 0.77, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0708"]}
+{"id": "BUY-0009", "text": "Có trả góp không? (#9)", "strength_score": 0.48, "confidence": 0.78, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0709"]}
+{"id": "BUY-0010", "text": "Ai lắp đặt? (#10)", "strength_score": 0.49, "confidence": 0.79, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0710"]}
+{"id": "BUY-0011", "text": "Bao giờ giao? (#11)", "strength_score": 0.5, "confidence": 0.8, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0711"]}
+{"id": "BUY-0012", "text": "Có bảo hành không? (#12)", "strength_score": 0.51, "confidence": 0.81, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0712"]}
+{"id": "BUY-0013", "text": "Thanh toán sao? (#13)", "strength_score": 0.52, "confidence": 0.82, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0713"]}
+{"id": "BUY-0014", "text": "Có hóa đơn không? (#14)", "strength_score": 0.53, "confidence": 0.83, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0714"]}
+{"id": "BUY-0015", "text": "Gói nào phù hợp? (#15)", "strength_score": 0.54, "confidence": 0.84, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0715"]}
+{"id": "BUY-0016", "text": "Xem demo được không? (#16)", "strength_score": 0.55, "confidence": 0.85, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0716"]}
+{"id": "BUY-0017", "text": "Giảm được nếu chốt hôm nay? (#17)", "strength_score": 0.56, "confidence": 0.86, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0717"]}
+{"id": "BUY-0018", "text": "Gửi hợp đồng trước? (#18)", "strength_score": 0.57, "confidence": 0.87, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0718"]}
+{"id": "BUY-0019", "text": "Có trả góp không? (#19)", "strength_score": 0.58, "confidence": 0.88, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0719"]}
+{"id": "BUY-0020", "text": "Ai lắp đặt? (#20)", "strength_score": 0.59, "confidence": 0.89, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0720"]}
+{"id": "BUY-0021", "text": "Bao giờ giao? (#21)", "strength_score": 0.6, "confidence": 0.9, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0721"]}
+{"id": "BUY-0022", "text": "Có bảo hành không? (#22)", "strength_score": 0.61, "confidence": 0.91, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0722"]}
+{"id": "BUY-0023", "text": "Thanh toán sao? (#23)", "strength_score": 0.62, "confidence": 0.92, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0723"]}
+{"id": "BUY-0024", "text": "Có hóa đơn không? (#24)", "strength_score": 0.63, "confidence": 0.93, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0724"]}
+{"id": "BUY-0025", "text": "Gói nào phù hợp? (#25)", "strength_score": 0.64, "confidence": 0.94, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0725"]}
+{"id": "BUY-0026", "text": "Xem demo được không? (#26)", "strength_score": 0.65, "confidence": 0.7, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0726"]}
+{"id": "BUY-0027", "text": "Giảm được nếu chốt hôm nay? (#27)", "strength_score": 0.66, "confidence": 0.71, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0727"]}
+{"id": "BUY-0028", "text": "Gửi hợp đồng trước? (#28)", "strength_score": 0.67, "confidence": 0.72, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0728"]}
+{"id": "BUY-0029", "text": "Có trả góp không? (#29)", "strength_score": 0.68, "confidence": 0.73, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0729"]}
+{"id": "BUY-0030", "text": "Ai lắp đặt? (#30)", "strength_score": 0.69, "confidence": 0.74, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0730"]}
+{"id": "BUY-0031", "text": "Bao giờ giao? (#31)", "strength_score": 0.7, "confidence": 0.75, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0731"]}
+{"id": "BUY-0032", "text": "Có bảo hành không? (#32)", "strength_score": 0.71, "confidence": 0.76, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0732"]}
+{"id": "BUY-0033", "text": "Thanh toán sao? (#33)", "strength_score": 0.72, "confidence": 0.77, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0733"]}
+{"id": "BUY-0034", "text": "Có hóa đơn không? (#34)", "strength_score": 0.73, "confidence": 0.78, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0734"]}
+{"id": "BUY-0035", "text": "Gói nào phù hợp? (#35)", "strength_score": 0.74, "confidence": 0.79, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0735"]}
+{"id": "BUY-0036", "text": "Xem demo được không? (#36)", "strength_score": 0.75, "confidence": 0.8, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0736"]}
+{"id": "BUY-0037", "text": "Giảm được nếu chốt hôm nay? (#37)", "strength_score": 0.76, "confidence": 0.81, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0737"]}
+{"id": "BUY-0038", "text": "Gửi hợp đồng trước? (#38)", "strength_score": 0.77, "confidence": 0.82, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0738"]}
+{"id": "BUY-0039", "text": "Có trả góp không? (#39)", "strength_score": 0.78, "confidence": 0.83, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0739"]}
+{"id": "BUY-0040", "text": "Ai lắp đặt? (#40)", "strength_score": 0.79, "confidence": 0.84, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0740"]}
+{"id": "BUY-0041", "text": "Bao giờ giao? (#41)", "strength_score": 0.8, "confidence": 0.85, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0741"]}
+{"id": "BUY-0042", "text": "Có bảo hành không? (#42)", "strength_score": 0.81, "confidence": 0.86, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0742"]}
+{"id": "BUY-0043", "text": "Thanh toán sao? (#43)", "strength_score": 0.82, "confidence": 0.87, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0743"]}
+{"id": "BUY-0044", "text": "Có hóa đơn không? (#44)", "strength_score": 0.83, "confidence": 0.88, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0744"]}
+{"id": "BUY-0045", "text": "Gói nào phù hợp? (#45)", "strength_score": 0.84, "confidence": 0.89, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0745"]}
+{"id": "BUY-0046", "text": "Xem demo được không? (#46)", "strength_score": 0.85, "confidence": 0.9, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0746"]}
+{"id": "BUY-0047", "text": "Giảm được nếu chốt hôm nay? (#47)", "strength_score": 0.86, "confidence": 0.91, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0747"]}
+{"id": "BUY-0048", "text": "Gửi hợp đồng trước? (#48)", "strength_score": 0.87, "confidence": 0.92, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0748"]}
+{"id": "BUY-0049", "text": "Có trả góp không? (#49)", "strength_score": 0.88, "confidence": 0.93, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0749"]}
+{"id": "BUY-0050", "text": "Ai lắp đặt? (#50)", "strength_score": 0.89, "confidence": 0.94, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0750"]}
+{"id": "BUY-0051", "text": "Bao giờ giao? (#51)", "strength_score": 0.9, "confidence": 0.7, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0751"]}
+{"id": "BUY-0052", "text": "Có bảo hành không? (#52)", "strength_score": 0.91, "confidence": 0.71, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0752"]}
+{"id": "BUY-0053", "text": "Thanh toán sao? (#53)", "strength_score": 0.92, "confidence": 0.72, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0753"]}
+{"id": "BUY-0054", "text": "Có hóa đơn không? (#54)", "strength_score": 0.93, "confidence": 0.73, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0754"]}
+{"id": "BUY-0055", "text": "Gói nào phù hợp? (#55)", "strength_score": 0.94, "confidence": 0.74, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0755"]}
+{"id": "BUY-0056", "text": "Xem demo được không? (#56)", "strength_score": 0.95, "confidence": 0.75, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0756"]}
+{"id": "BUY-0057", "text": "Giảm được nếu chốt hôm nay? (#57)", "strength_score": 0.96, "confidence": 0.76, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0757"]}
+{"id": "BUY-0058", "text": "Gửi hợp đồng trước? (#58)", "strength_score": 0.97, "confidence": 0.77, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0758"]}
+{"id": "BUY-0059", "text": "Có trả góp không? (#59)", "strength_score": 0.98, "confidence": 0.78, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0759"]}
+{"id": "BUY-0060", "text": "Ai lắp đặt? (#60)", "strength_score": 0.99, "confidence": 0.79, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0760"]}
+{"id": "BUY-0061", "text": "Bao giờ giao? (#61)", "strength_score": 0.4, "confidence": 0.8, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0761"]}
+{"id": "BUY-0062", "text": "Có bảo hành không? (#62)", "strength_score": 0.41, "confidence": 0.81, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0762"]}
+{"id": "BUY-0063", "text": "Thanh toán sao? (#63)", "strength_score": 0.42, "confidence": 0.82, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0763"]}
+{"id": "BUY-0064", "text": "Có hóa đơn không? (#64)", "strength_score": 0.43, "confidence": 0.83, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0764"]}
+{"id": "BUY-0065", "text": "Gói nào phù hợp? (#65)", "strength_score": 0.44, "confidence": 0.84, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0765"]}
+{"id": "BUY-0066", "text": "Xem demo được không? (#66)", "strength_score": 0.45, "confidence": 0.85, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0766"]}
+{"id": "BUY-0067", "text": "Giảm được nếu chốt hôm nay? (#67)", "strength_score": 0.46, "confidence": 0.86, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0767"]}
+{"id": "BUY-0068", "text": "Gửi hợp đồng trước? (#68)", "strength_score": 0.47, "confidence": 0.87, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0768"]}
+{"id": "BUY-0069", "text": "Có trả góp không? (#69)", "strength_score": 0.48, "confidence": 0.88, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0769"]}
+{"id": "BUY-0070", "text": "Ai lắp đặt? (#70)", "strength_score": 0.49, "confidence": 0.89, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0770"]}
+{"id": "BUY-0071", "text": "Bao giờ giao? (#71)", "strength_score": 0.5, "confidence": 0.9, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0771"]}
+{"id": "BUY-0072", "text": "Có bảo hành không? (#72)", "strength_score": 0.51, "confidence": 0.91, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0772"]}
+{"id": "BUY-0073", "text": "Thanh toán sao? (#73)", "strength_score": 0.52, "confidence": 0.92, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0773"]}
+{"id": "BUY-0074", "text": "Có hóa đơn không? (#74)", "strength_score": 0.53, "confidence": 0.93, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0774"]}
+{"id": "BUY-0075", "text": "Gói nào phù hợp? (#75)", "strength_score": 0.54, "confidence": 0.94, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0775"]}
+{"id": "BUY-0076", "text": "Xem demo được không? (#76)", "strength_score": 0.55, "confidence": 0.7, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0776"]}
+{"id": "BUY-0077", "text": "Giảm được nếu chốt hôm nay? (#77)", "strength_score": 0.56, "confidence": 0.71, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0777"]}
+{"id": "BUY-0078", "text": "Gửi hợp đồng trước? (#78)", "strength_score": 0.57, "confidence": 0.72, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0778"]}
+{"id": "BUY-0079", "text": "Có trả góp không? (#79)", "strength_score": 0.58, "confidence": 0.73, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0779"]}
+{"id": "BUY-0080", "text": "Ai lắp đặt? (#80)", "strength_score": 0.59, "confidence": 0.74, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0780"]}
+{"id": "BUY-0081", "text": "Bao giờ giao? (#81)", "strength_score": 0.6, "confidence": 0.75, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0701"]}
+{"id": "BUY-0082", "text": "Có bảo hành không? (#82)", "strength_score": 0.61, "confidence": 0.76, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0702"]}
+{"id": "BUY-0083", "text": "Thanh toán sao? (#83)", "strength_score": 0.62, "confidence": 0.77, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0703"]}
+{"id": "BUY-0084", "text": "Có hóa đơn không? (#84)", "strength_score": 0.63, "confidence": 0.78, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0704"]}
+{"id": "BUY-0085", "text": "Gói nào phù hợp? (#85)", "strength_score": 0.64, "confidence": 0.79, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0705"]}
+{"id": "BUY-0086", "text": "Xem demo được không? (#86)", "strength_score": 0.65, "confidence": 0.8, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0706"]}
+{"id": "BUY-0087", "text": "Giảm được nếu chốt hôm nay? (#87)", "strength_score": 0.66, "confidence": 0.81, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0707"]}
+{"id": "BUY-0088", "text": "Gửi hợp đồng trước? (#88)", "strength_score": 0.67, "confidence": 0.82, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0708"]}
+{"id": "BUY-0089", "text": "Có trả góp không? (#89)", "strength_score": 0.68, "confidence": 0.83, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0709"]}
+{"id": "BUY-0090", "text": "Ai lắp đặt? (#90)", "strength_score": 0.69, "confidence": 0.84, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0710"]}
+{"id": "BUY-0091", "text": "Bao giờ giao? (#91)", "strength_score": 0.7, "confidence": 0.85, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0711"]}
+{"id": "BUY-0092", "text": "Có bảo hành không? (#92)", "strength_score": 0.71, "confidence": 0.86, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0712"]}
+{"id": "BUY-0093", "text": "Thanh toán sao? (#93)", "strength_score": 0.72, "confidence": 0.87, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0713"]}
+{"id": "BUY-0094", "text": "Có hóa đơn không? (#94)", "strength_score": 0.73, "confidence": 0.88, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0714"]}
+{"id": "BUY-0095", "text": "Gói nào phù hợp? (#95)", "strength_score": 0.74, "confidence": 0.89, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0715"]}
+{"id": "BUY-0096", "text": "Xem demo được không? (#96)", "strength_score": 0.75, "confidence": 0.9, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0716"]}
+{"id": "BUY-0097", "text": "Giảm được nếu chốt hôm nay? (#97)", "strength_score": 0.76, "confidence": 0.91, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0717"]}
+{"id": "BUY-0098", "text": "Gửi hợp đồng trước? (#98)", "strength_score": 0.77, "confidence": 0.92, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0718"]}
+{"id": "BUY-0099", "text": "Có trả góp không? (#99)", "strength_score": 0.78, "confidence": 0.93, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0719"]}
+{"id": "BUY-0100", "text": "Ai lắp đặt? (#100)", "strength_score": 0.79, "confidence": 0.94, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0720"]}
+{"id": "BUY-0101", "text": "Bao giờ giao? (#101)", "strength_score": 0.8, "confidence": 0.7, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0721"]}
+{"id": "BUY-0102", "text": "Có bảo hành không? (#102)", "strength_score": 0.81, "confidence": 0.71, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0722"]}
+{"id": "BUY-0103", "text": "Thanh toán sao? (#103)", "strength_score": 0.82, "confidence": 0.72, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0723"]}
+{"id": "BUY-0104", "text": "Có hóa đơn không? (#104)", "strength_score": 0.83, "confidence": 0.73, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0724"]}
+{"id": "BUY-0105", "text": "Gói nào phù hợp? (#105)", "strength_score": 0.84, "confidence": 0.74, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0725"]}
+{"id": "BUY-0106", "text": "Xem demo được không? (#106)", "strength_score": 0.85, "confidence": 0.75, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0726"]}
+{"id": "BUY-0107", "text": "Giảm được nếu chốt hôm nay? (#107)", "strength_score": 0.86, "confidence": 0.76, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0727"]}
+{"id": "BUY-0108", "text": "Gửi hợp đồng trước? (#108)", "strength_score": 0.87, "confidence": 0.77, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0728"]}
+{"id": "BUY-0109", "text": "Có trả góp không? (#109)", "strength_score": 0.88, "confidence": 0.78, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0729"]}
+{"id": "BUY-0110", "text": "Ai lắp đặt? (#110)", "strength_score": 0.89, "confidence": 0.79, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0730"]}
+{"id": "BUY-0111", "text": "Bao giờ giao? (#111)", "strength_score": 0.9, "confidence": 0.8, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0731"]}
+{"id": "BUY-0112", "text": "Có bảo hành không? (#112)", "strength_score": 0.91, "confidence": 0.81, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0732"]}
+{"id": "BUY-0113", "text": "Thanh toán sao? (#113)", "strength_score": 0.92, "confidence": 0.82, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0733"]}
+{"id": "BUY-0114", "text": "Có hóa đơn không? (#114)", "strength_score": 0.93, "confidence": 0.83, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0734"]}
+{"id": "BUY-0115", "text": "Gói nào phù hợp? (#115)", "strength_score": 0.94, "confidence": 0.84, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0735"]}
+{"id": "BUY-0116", "text": "Xem demo được không? (#116)", "strength_score": 0.95, "confidence": 0.85, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0736"]}
+{"id": "BUY-0117", "text": "Giảm được nếu chốt hôm nay? (#117)", "strength_score": 0.96, "confidence": 0.86, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0737"]}
+{"id": "BUY-0118", "text": "Gửi hợp đồng trước? (#118)", "strength_score": 0.97, "confidence": 0.87, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0738"]}
+{"id": "BUY-0119", "text": "Có trả góp không? (#119)", "strength_score": 0.98, "confidence": 0.88, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0739"]}
+{"id": "BUY-0120", "text": "Ai lắp đặt? (#120)", "strength_score": 0.99, "confidence": 0.89, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0740"]}
+{"id": "BUY-0121", "text": "Bao giờ giao? (#121)", "strength_score": 0.4, "confidence": 0.9, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0741"]}
+{"id": "BUY-0122", "text": "Có bảo hành không? (#122)", "strength_score": 0.41, "confidence": 0.91, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0742"]}
+{"id": "BUY-0123", "text": "Thanh toán sao? (#123)", "strength_score": 0.42, "confidence": 0.92, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0743"]}
+{"id": "BUY-0124", "text": "Có hóa đơn không? (#124)", "strength_score": 0.43, "confidence": 0.93, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0744"]}
+{"id": "BUY-0125", "text": "Gói nào phù hợp? (#125)", "strength_score": 0.44, "confidence": 0.94, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0745"]}
+{"id": "BUY-0126", "text": "Xem demo được không? (#126)", "strength_score": 0.45, "confidence": 0.7, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0746"]}
+{"id": "BUY-0127", "text": "Giảm được nếu chốt hôm nay? (#127)", "strength_score": 0.46, "confidence": 0.71, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0747"]}
+{"id": "BUY-0128", "text": "Gửi hợp đồng trước? (#128)", "strength_score": 0.47, "confidence": 0.72, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0748"]}
+{"id": "BUY-0129", "text": "Có trả góp không? (#129)", "strength_score": 0.48, "confidence": 0.73, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0749"]}
+{"id": "BUY-0130", "text": "Ai lắp đặt? (#130)", "strength_score": 0.49, "confidence": 0.74, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0750"]}
+{"id": "BUY-0131", "text": "Bao giờ giao? (#131)", "strength_score": 0.5, "confidence": 0.75, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0751"]}
+{"id": "BUY-0132", "text": "Có bảo hành không? (#132)", "strength_score": 0.51, "confidence": 0.76, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0752"]}
+{"id": "BUY-0133", "text": "Thanh toán sao? (#133)", "strength_score": 0.52, "confidence": 0.77, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0753"]}
+{"id": "BUY-0134", "text": "Có hóa đơn không? (#134)", "strength_score": 0.53, "confidence": 0.78, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0754"]}
+{"id": "BUY-0135", "text": "Gói nào phù hợp? (#135)", "strength_score": 0.54, "confidence": 0.79, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0755"]}
+{"id": "BUY-0136", "text": "Xem demo được không? (#136)", "strength_score": 0.55, "confidence": 0.8, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0756"]}
+{"id": "BUY-0137", "text": "Giảm được nếu chốt hôm nay? (#137)", "strength_score": 0.56, "confidence": 0.81, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0757"]}
+{"id": "BUY-0138", "text": "Gửi hợp đồng trước? (#138)", "strength_score": 0.57, "confidence": 0.82, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0758"]}
+{"id": "BUY-0139", "text": "Có trả góp không? (#139)", "strength_score": 0.58, "confidence": 0.83, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0759"]}
+{"id": "BUY-0140", "text": "Ai lắp đặt? (#140)", "strength_score": 0.59, "confidence": 0.84, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0760"]}
+{"id": "BUY-0141", "text": "Bao giờ giao? (#141)", "strength_score": 0.6, "confidence": 0.85, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0761"]}
+{"id": "BUY-0142", "text": "Có bảo hành không? (#142)", "strength_score": 0.61, "confidence": 0.86, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0762"]}
+{"id": "BUY-0143", "text": "Thanh toán sao? (#143)", "strength_score": 0.62, "confidence": 0.87, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0763"]}
+{"id": "BUY-0144", "text": "Có hóa đơn không? (#144)", "strength_score": 0.63, "confidence": 0.88, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0764"]}
+{"id": "BUY-0145", "text": "Gói nào phù hợp? (#145)", "strength_score": 0.64, "confidence": 0.89, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0765"]}
+{"id": "BUY-0146", "text": "Xem demo được không? (#146)", "strength_score": 0.65, "confidence": 0.9, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0766"]}
+{"id": "BUY-0147", "text": "Giảm được nếu chốt hôm nay? (#147)", "strength_score": 0.66, "confidence": 0.91, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0767"]}
+{"id": "BUY-0148", "text": "Gửi hợp đồng trước? (#148)", "strength_score": 0.67, "confidence": 0.92, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0768"]}
+{"id": "BUY-0149", "text": "Có trả góp không? (#149)", "strength_score": 0.68, "confidence": 0.93, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0769"]}
+{"id": "BUY-0150", "text": "Ai lắp đặt? (#150)", "strength_score": 0.69, "confidence": 0.94, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0770"]}
+{"id": "BUY-0151", "text": "Bao giờ giao? (#151)", "strength_score": 0.7, "confidence": 0.7, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0771"]}
+{"id": "BUY-0152", "text": "Có bảo hành không? (#152)", "strength_score": 0.71, "confidence": 0.71, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0772"]}
+{"id": "BUY-0153", "text": "Thanh toán sao? (#153)", "strength_score": 0.72, "confidence": 0.72, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0773"]}
+{"id": "BUY-0154", "text": "Có hóa đơn không? (#154)", "strength_score": 0.73, "confidence": 0.73, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0774"]}
+{"id": "BUY-0155", "text": "Gói nào phù hợp? (#155)", "strength_score": 0.74, "confidence": 0.74, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0775"]}
+{"id": "BUY-0156", "text": "Xem demo được không? (#156)", "strength_score": 0.75, "confidence": 0.75, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0776"]}
+{"id": "BUY-0157", "text": "Giảm được nếu chốt hôm nay? (#157)", "strength_score": 0.76, "confidence": 0.76, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0777"]}
+{"id": "BUY-0158", "text": "Gửi hợp đồng trước? (#158)", "strength_score": 0.77, "confidence": 0.77, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0778"]}
+{"id": "BUY-0159", "text": "Có trả góp không? (#159)", "strength_score": 0.78, "confidence": 0.78, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0779"]}
+{"id": "BUY-0160", "text": "Ai lắp đặt? (#160)", "strength_score": 0.79, "confidence": 0.79, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0780"]}
+{"id": "BUY-0161", "text": "Bao giờ giao? (#161)", "strength_score": 0.8, "confidence": 0.8, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0701"]}
+{"id": "BUY-0162", "text": "Có bảo hành không? (#162)", "strength_score": 0.81, "confidence": 0.81, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0702"]}
+{"id": "BUY-0163", "text": "Thanh toán sao? (#163)", "strength_score": 0.82, "confidence": 0.82, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0703"]}
+{"id": "BUY-0164", "text": "Có hóa đơn không? (#164)", "strength_score": 0.83, "confidence": 0.83, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0704"]}
+{"id": "BUY-0165", "text": "Gói nào phù hợp? (#165)", "strength_score": 0.84, "confidence": 0.84, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0705"]}
+{"id": "BUY-0166", "text": "Xem demo được không? (#166)", "strength_score": 0.85, "confidence": 0.85, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0706"]}
+{"id": "BUY-0167", "text": "Giảm được nếu chốt hôm nay? (#167)", "strength_score": 0.86, "confidence": 0.86, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0707"]}
+{"id": "BUY-0168", "text": "Gửi hợp đồng trước? (#168)", "strength_score": 0.87, "confidence": 0.87, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0708"]}
+{"id": "BUY-0169", "text": "Có trả góp không? (#169)", "strength_score": 0.88, "confidence": 0.88, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0709"]}
+{"id": "BUY-0170", "text": "Ai lắp đặt? (#170)", "strength_score": 0.89, "confidence": 0.89, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0710"]}
+{"id": "BUY-0171", "text": "Bao giờ giao? (#171)", "strength_score": 0.9, "confidence": 0.9, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0711"]}
+{"id": "BUY-0172", "text": "Có bảo hành không? (#172)", "strength_score": 0.91, "confidence": 0.91, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0712"]}
+{"id": "BUY-0173", "text": "Thanh toán sao? (#173)", "strength_score": 0.92, "confidence": 0.92, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0713"]}
+{"id": "BUY-0174", "text": "Có hóa đơn không? (#174)", "strength_score": 0.93, "confidence": 0.93, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0714"]}
+{"id": "BUY-0175", "text": "Gói nào phù hợp? (#175)", "strength_score": 0.94, "confidence": 0.94, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0715"]}
+{"id": "BUY-0176", "text": "Xem demo được không? (#176)", "strength_score": 0.95, "confidence": 0.7, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0716"]}
+{"id": "BUY-0177", "text": "Giảm được nếu chốt hôm nay? (#177)", "strength_score": 0.96, "confidence": 0.71, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0717"]}
+{"id": "BUY-0178", "text": "Gửi hợp đồng trước? (#178)", "strength_score": 0.97, "confidence": 0.72, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0718"]}
+{"id": "BUY-0179", "text": "Có trả góp không? (#179)", "strength_score": 0.98, "confidence": 0.73, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0719"]}
+{"id": "BUY-0180", "text": "Ai lắp đặt? (#180)", "strength_score": 0.99, "confidence": 0.74, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0720"]}
+{"id": "BUY-0181", "text": "Bao giờ giao? (#181)", "strength_score": 0.4, "confidence": 0.75, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0721"]}
+{"id": "BUY-0182", "text": "Có bảo hành không? (#182)", "strength_score": 0.41, "confidence": 0.76, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0722"]}
+{"id": "BUY-0183", "text": "Thanh toán sao? (#183)", "strength_score": 0.42, "confidence": 0.77, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0723"]}
+{"id": "BUY-0184", "text": "Có hóa đơn không? (#184)", "strength_score": 0.43, "confidence": 0.78, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0724"]}
+{"id": "BUY-0185", "text": "Gói nào phù hợp? (#185)", "strength_score": 0.44, "confidence": 0.79, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0725"]}
+{"id": "BUY-0186", "text": "Xem demo được không? (#186)", "strength_score": 0.45, "confidence": 0.8, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0726"]}
+{"id": "BUY-0187", "text": "Giảm được nếu chốt hôm nay? (#187)", "strength_score": 0.46, "confidence": 0.81, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0727"]}
+{"id": "BUY-0188", "text": "Gửi hợp đồng trước? (#188)", "strength_score": 0.47, "confidence": 0.82, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0728"]}
+{"id": "BUY-0189", "text": "Có trả góp không? (#189)", "strength_score": 0.48, "confidence": 0.83, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0729"]}
+{"id": "BUY-0190", "text": "Ai lắp đặt? (#190)", "strength_score": 0.49, "confidence": 0.84, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0730"]}
+{"id": "BUY-0191", "text": "Bao giờ giao? (#191)", "strength_score": 0.5, "confidence": 0.85, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0731"]}
+{"id": "BUY-0192", "text": "Có bảo hành không? (#192)", "strength_score": 0.51, "confidence": 0.86, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0732"]}
+{"id": "BUY-0193", "text": "Thanh toán sao? (#193)", "strength_score": 0.52, "confidence": 0.87, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0733"]}
+{"id": "BUY-0194", "text": "Có hóa đơn không? (#194)", "strength_score": 0.53, "confidence": 0.88, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0734"]}
+{"id": "BUY-0195", "text": "Gói nào phù hợp? (#195)", "strength_score": 0.54, "confidence": 0.89, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0735"]}
+{"id": "BUY-0196", "text": "Xem demo được không? (#196)", "strength_score": 0.55, "confidence": 0.9, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0736"]}
+{"id": "BUY-0197", "text": "Giảm được nếu chốt hôm nay? (#197)", "strength_score": 0.56, "confidence": 0.91, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0737"]}
+{"id": "BUY-0198", "text": "Gửi hợp đồng trước? (#198)", "strength_score": 0.57, "confidence": 0.92, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0738"]}
+{"id": "BUY-0199", "text": "Có trả góp không? (#199)", "strength_score": 0.58, "confidence": 0.93, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0739"]}
+{"id": "BUY-0200", "text": "Ai lắp đặt? (#200)", "strength_score": 0.59, "confidence": 0.94, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0740"]}
+{"id": "BUY-0201", "text": "Bao giờ giao? (#201)", "strength_score": 0.6, "confidence": 0.7, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0741"]}
+{"id": "BUY-0202", "text": "Có bảo hành không? (#202)", "strength_score": 0.61, "confidence": 0.71, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0742"]}
+{"id": "BUY-0203", "text": "Thanh toán sao? (#203)", "strength_score": 0.62, "confidence": 0.72, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0743"]}
+{"id": "BUY-0204", "text": "Có hóa đơn không? (#204)", "strength_score": 0.63, "confidence": 0.73, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0744"]}
+{"id": "BUY-0205", "text": "Gói nào phù hợp? (#205)", "strength_score": 0.64, "confidence": 0.74, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0745"]}
+{"id": "BUY-0206", "text": "Xem demo được không? (#206)", "strength_score": 0.65, "confidence": 0.75, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0746"]}
+{"id": "BUY-0207", "text": "Giảm được nếu chốt hôm nay? (#207)", "strength_score": 0.66, "confidence": 0.76, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0747"]}
+{"id": "BUY-0208", "text": "Gửi hợp đồng trước? (#208)", "strength_score": 0.67, "confidence": 0.77, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0748"]}
+{"id": "BUY-0209", "text": "Có trả góp không? (#209)", "strength_score": 0.68, "confidence": 0.78, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0749"]}
+{"id": "BUY-0210", "text": "Ai lắp đặt? (#210)", "strength_score": 0.69, "confidence": 0.79, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0750"]}
+{"id": "BUY-0211", "text": "Bao giờ giao? (#211)", "strength_score": 0.7, "confidence": 0.8, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0751"]}
+{"id": "BUY-0212", "text": "Có bảo hành không? (#212)", "strength_score": 0.71, "confidence": 0.81, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0752"]}
+{"id": "BUY-0213", "text": "Thanh toán sao? (#213)", "strength_score": 0.72, "confidence": 0.82, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0753"]}
+{"id": "BUY-0214", "text": "Có hóa đơn không? (#214)", "strength_score": 0.73, "confidence": 0.83, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0754"]}
+{"id": "BUY-0215", "text": "Gói nào phù hợp? (#215)", "strength_score": 0.74, "confidence": 0.84, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0755"]}
+{"id": "BUY-0216", "text": "Xem demo được không? (#216)", "strength_score": 0.75, "confidence": 0.85, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0756"]}
+{"id": "BUY-0217", "text": "Giảm được nếu chốt hôm nay? (#217)", "strength_score": 0.76, "confidence": 0.86, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0757"]}
+{"id": "BUY-0218", "text": "Gửi hợp đồng trước? (#218)", "strength_score": 0.77, "confidence": 0.87, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0758"]}
+{"id": "BUY-0219", "text": "Có trả góp không? (#219)", "strength_score": 0.78, "confidence": 0.88, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0759"]}
+{"id": "BUY-0220", "text": "Ai lắp đặt? (#220)", "strength_score": 0.79, "confidence": 0.89, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0760"]}
+{"id": "BUY-0221", "text": "Bao giờ giao? (#221)", "strength_score": 0.8, "confidence": 0.9, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0761"]}
+{"id": "BUY-0222", "text": "Có bảo hành không? (#222)", "strength_score": 0.81, "confidence": 0.91, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0762"]}
+{"id": "BUY-0223", "text": "Thanh toán sao? (#223)", "strength_score": 0.82, "confidence": 0.92, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0763"]}
+{"id": "BUY-0224", "text": "Có hóa đơn không? (#224)", "strength_score": 0.83, "confidence": 0.93, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0764"]}
+{"id": "BUY-0225", "text": "Gói nào phù hợp? (#225)", "strength_score": 0.84, "confidence": 0.94, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0765"]}
+{"id": "BUY-0226", "text": "Xem demo được không? (#226)", "strength_score": 0.85, "confidence": 0.7, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0766"]}
+{"id": "BUY-0227", "text": "Giảm được nếu chốt hôm nay? (#227)", "strength_score": 0.86, "confidence": 0.71, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0767"]}
+{"id": "BUY-0228", "text": "Gửi hợp đồng trước? (#228)", "strength_score": 0.87, "confidence": 0.72, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0768"]}
+{"id": "BUY-0229", "text": "Có trả góp không? (#229)", "strength_score": 0.88, "confidence": 0.73, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0769"]}
+{"id": "BUY-0230", "text": "Ai lắp đặt? (#230)", "strength_score": 0.89, "confidence": 0.74, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0770"]}
+{"id": "BUY-0231", "text": "Bao giờ giao? (#231)", "strength_score": 0.9, "confidence": 0.75, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0771"]}
+{"id": "BUY-0232", "text": "Có bảo hành không? (#232)", "strength_score": 0.91, "confidence": 0.76, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0772"]}
+{"id": "BUY-0233", "text": "Thanh toán sao? (#233)", "strength_score": 0.92, "confidence": 0.77, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0773"]}
+{"id": "BUY-0234", "text": "Có hóa đơn không? (#234)", "strength_score": 0.93, "confidence": 0.78, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0774"]}
+{"id": "BUY-0235", "text": "Gói nào phù hợp? (#235)", "strength_score": 0.94, "confidence": 0.79, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0775"]}
+{"id": "BUY-0236", "text": "Xem demo được không? (#236)", "strength_score": 0.95, "confidence": 0.8, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0776"]}
+{"id": "BUY-0237", "text": "Giảm được nếu chốt hôm nay? (#237)", "strength_score": 0.96, "confidence": 0.81, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0777"]}
+{"id": "BUY-0238", "text": "Gửi hợp đồng trước? (#238)", "strength_score": 0.97, "confidence": 0.82, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0778"]}
+{"id": "BUY-0239", "text": "Có trả góp không? (#239)", "strength_score": 0.98, "confidence": 0.83, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0779"]}
+{"id": "BUY-0240", "text": "Ai lắp đặt? (#240)", "strength_score": 0.99, "confidence": 0.84, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0780"]}
+{"id": "BUY-0241", "text": "Bao giờ giao? (#241)", "strength_score": 0.4, "confidence": 0.85, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0701"]}
+{"id": "BUY-0242", "text": "Có bảo hành không? (#242)", "strength_score": 0.41, "confidence": 0.86, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0702"]}
+{"id": "BUY-0243", "text": "Thanh toán sao? (#243)", "strength_score": 0.42, "confidence": 0.87, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0703"]}
+{"id": "BUY-0244", "text": "Có hóa đơn không? (#244)", "strength_score": 0.43, "confidence": 0.88, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0704"]}
+{"id": "BUY-0245", "text": "Gói nào phù hợp? (#245)", "strength_score": 0.44, "confidence": 0.89, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0705"]}
+{"id": "BUY-0246", "text": "Xem demo được không? (#246)", "strength_score": 0.45, "confidence": 0.9, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0706"]}
+{"id": "BUY-0247", "text": "Giảm được nếu chốt hôm nay? (#247)", "strength_score": 0.46, "confidence": 0.91, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0707"]}
+{"id": "BUY-0248", "text": "Gửi hợp đồng trước? (#248)", "strength_score": 0.47, "confidence": 0.92, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0708"]}
+{"id": "BUY-0249", "text": "Có trả góp không? (#249)", "strength_score": 0.48, "confidence": 0.93, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0709"]}
+{"id": "BUY-0250", "text": "Ai lắp đặt? (#250)", "strength_score": 0.49, "confidence": 0.94, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0710"]}
+{"id": "BUY-0251", "text": "Bao giờ giao? (#251)", "strength_score": 0.5, "confidence": 0.7, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0711"]}
+{"id": "BUY-0252", "text": "Có bảo hành không? (#252)", "strength_score": 0.51, "confidence": 0.71, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0712"]}
+{"id": "BUY-0253", "text": "Thanh toán sao? (#253)", "strength_score": 0.52, "confidence": 0.72, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0713"]}
+{"id": "BUY-0254", "text": "Có hóa đơn không? (#254)", "strength_score": 0.53, "confidence": 0.73, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0714"]}
+{"id": "BUY-0255", "text": "Gói nào phù hợp? (#255)", "strength_score": 0.54, "confidence": 0.74, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0715"]}
+{"id": "BUY-0256", "text": "Xem demo được không? (#256)", "strength_score": 0.55, "confidence": 0.75, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0716"]}
+{"id": "BUY-0257", "text": "Giảm được nếu chốt hôm nay? (#257)", "strength_score": 0.56, "confidence": 0.76, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0717"]}
+{"id": "BUY-0258", "text": "Gửi hợp đồng trước? (#258)", "strength_score": 0.57, "confidence": 0.77, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0718"]}
+{"id": "BUY-0259", "text": "Có trả góp không? (#259)", "strength_score": 0.58, "confidence": 0.78, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0719"]}
+{"id": "BUY-0260", "text": "Ai lắp đặt? (#260)", "strength_score": 0.59, "confidence": 0.79, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0720"]}
+{"id": "BUY-0261", "text": "Bao giờ giao? (#261)", "strength_score": 0.6, "confidence": 0.8, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0721"]}
+{"id": "BUY-0262", "text": "Có bảo hành không? (#262)", "strength_score": 0.61, "confidence": 0.81, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0722"]}
+{"id": "BUY-0263", "text": "Thanh toán sao? (#263)", "strength_score": 0.62, "confidence": 0.82, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0723"]}
+{"id": "BUY-0264", "text": "Có hóa đơn không? (#264)", "strength_score": 0.63, "confidence": 0.83, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0724"]}
+{"id": "BUY-0265", "text": "Gói nào phù hợp? (#265)", "strength_score": 0.64, "confidence": 0.84, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0725"]}
+{"id": "BUY-0266", "text": "Xem demo được không? (#266)", "strength_score": 0.65, "confidence": 0.85, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0726"]}
+{"id": "BUY-0267", "text": "Giảm được nếu chốt hôm nay? (#267)", "strength_score": 0.66, "confidence": 0.86, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0727"]}
+{"id": "BUY-0268", "text": "Gửi hợp đồng trước? (#268)", "strength_score": 0.67, "confidence": 0.87, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0728"]}
+{"id": "BUY-0269", "text": "Có trả góp không? (#269)", "strength_score": 0.68, "confidence": 0.88, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0729"]}
+{"id": "BUY-0270", "text": "Ai lắp đặt? (#270)", "strength_score": 0.69, "confidence": 0.89, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0730"]}
+{"id": "BUY-0271", "text": "Bao giờ giao? (#271)", "strength_score": 0.7, "confidence": 0.9, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0731"]}
+{"id": "BUY-0272", "text": "Có bảo hành không? (#272)", "strength_score": 0.71, "confidence": 0.91, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0732"]}
+{"id": "BUY-0273", "text": "Thanh toán sao? (#273)", "strength_score": 0.72, "confidence": 0.92, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0733"]}
+{"id": "BUY-0274", "text": "Có hóa đơn không? (#274)", "strength_score": 0.73, "confidence": 0.93, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0734"]}
+{"id": "BUY-0275", "text": "Gói nào phù hợp? (#275)", "strength_score": 0.74, "confidence": 0.94, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0735"]}
+{"id": "BUY-0276", "text": "Xem demo được không? (#276)", "strength_score": 0.75, "confidence": 0.7, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0736"]}
+{"id": "BUY-0277", "text": "Giảm được nếu chốt hôm nay? (#277)", "strength_score": 0.76, "confidence": 0.71, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0737"]}
+{"id": "BUY-0278", "text": "Gửi hợp đồng trước? (#278)", "strength_score": 0.77, "confidence": 0.72, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0738"]}
+{"id": "BUY-0279", "text": "Có trả góp không? (#279)", "strength_score": 0.78, "confidence": 0.73, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0739"]}
+{"id": "BUY-0280", "text": "Ai lắp đặt? (#280)", "strength_score": 0.79, "confidence": 0.74, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0740"]}
+{"id": "BUY-0281", "text": "Bao giờ giao? (#281)", "strength_score": 0.8, "confidence": 0.75, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0741"]}
+{"id": "BUY-0282", "text": "Có bảo hành không? (#282)", "strength_score": 0.81, "confidence": 0.76, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0742"]}
+{"id": "BUY-0283", "text": "Thanh toán sao? (#283)", "strength_score": 0.82, "confidence": 0.77, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0743"]}
+{"id": "BUY-0284", "text": "Có hóa đơn không? (#284)", "strength_score": 0.83, "confidence": 0.78, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0744"]}
+{"id": "BUY-0285", "text": "Gói nào phù hợp? (#285)", "strength_score": 0.84, "confidence": 0.79, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0745"]}
+{"id": "BUY-0286", "text": "Xem demo được không? (#286)", "strength_score": 0.85, "confidence": 0.8, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0746"]}
+{"id": "BUY-0287", "text": "Giảm được nếu chốt hôm nay? (#287)", "strength_score": 0.86, "confidence": 0.81, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0747"]}
+{"id": "BUY-0288", "text": "Gửi hợp đồng trước? (#288)", "strength_score": 0.87, "confidence": 0.82, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0748"]}
+{"id": "BUY-0289", "text": "Có trả góp không? (#289)", "strength_score": 0.88, "confidence": 0.83, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0749"]}
+{"id": "BUY-0290", "text": "Ai lắp đặt? (#290)", "strength_score": 0.89, "confidence": 0.84, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0750"]}
+{"id": "BUY-0291", "text": "Bao giờ giao? (#291)", "strength_score": 0.9, "confidence": 0.85, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0751"]}
+{"id": "BUY-0292", "text": "Có bảo hành không? (#292)", "strength_score": 0.91, "confidence": 0.86, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0752"]}
+{"id": "BUY-0293", "text": "Thanh toán sao? (#293)", "strength_score": 0.92, "confidence": 0.87, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0753"]}
+{"id": "BUY-0294", "text": "Có hóa đơn không? (#294)", "strength_score": 0.93, "confidence": 0.88, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0754"]}
+{"id": "BUY-0295", "text": "Gói nào phù hợp? (#295)", "strength_score": 0.94, "confidence": 0.89, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0755"]}
+{"id": "BUY-0296", "text": "Xem demo được không? (#296)", "strength_score": 0.95, "confidence": 0.9, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0756"]}
+{"id": "BUY-0297", "text": "Giảm được nếu chốt hôm nay? (#297)", "strength_score": 0.96, "confidence": 0.91, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0757"]}
+{"id": "BUY-0298", "text": "Gửi hợp đồng trước? (#298)", "strength_score": 0.97, "confidence": 0.92, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "bac", "linked_rule_ids": ["R-0758"]}
+{"id": "BUY-0299", "text": "Có trả góp không? (#299)", "strength_score": 0.98, "confidence": 0.93, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "nam", "linked_rule_ids": ["R-0759"]}
+{"id": "BUY-0300", "text": "Ai lắp đặt? (#300)", "strength_score": 0.99, "confidence": 0.94, "next_step": "Chốt next-step cụ thể trong 60s", "dialect": "trung", "linked_rule_ids": ["R-0760"]}
