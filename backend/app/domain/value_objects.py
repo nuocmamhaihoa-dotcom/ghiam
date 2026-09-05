@@ -67,6 +67,7 @@ class ScoringResponse:
     auto_fail_triggered: bool = False
     items: list[ScoreItemResult] = field(default_factory=list)
     schema_version: str = "1.0.0"
+    pipeline: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -81,6 +82,7 @@ class ScoringResponse:
             "explanation": self.explanation,
             "auto_fail_triggered": self.auto_fail_triggered,
             "schema_version": self.schema_version,
+            "pipeline": self.pipeline,
         }
 
 

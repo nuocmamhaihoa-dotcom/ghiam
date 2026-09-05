@@ -1,10 +1,10 @@
 {
-  "checked_at": "2026-09-05T17:12:12.392237+00:00",
+  "checked_at": "2026-09-05T18:03:55.864261+00:00",
   "all_ok": true,
   "sprints": [
     {
       "sprint": 1,
-      "checked_at": "2026-09-05T17:12:11.857077+00:00",
+      "checked_at": "2026-09-05T18:03:55.304414+00:00",
       "all_ok": true,
       "gates": [
         {
@@ -71,7 +71,7 @@
     },
     {
       "sprint": 2,
-      "checked_at": "2026-09-05T17:12:11.879507+00:00",
+      "checked_at": "2026-09-05T18:03:55.323711+00:00",
       "all_ok": true,
       "gates": [
         {
@@ -113,7 +113,7 @@
           "errors": [],
           "warnings": [],
           "meta": {
-            "sample_bytes": 1040
+            "sample_bytes": 1058
           }
         }
       ],
@@ -123,7 +123,7 @@
     },
     {
       "sprint": 3,
-      "checked_at": "2026-09-05T17:12:11.908320+00:00",
+      "checked_at": "2026-09-05T18:03:55.349268+00:00",
       "all_ok": true,
       "gates": [
         {
@@ -149,7 +149,7 @@
           "errors": [],
           "warnings": [],
           "meta": {
-            "sample_bytes": 1040
+            "sample_bytes": 1058
           }
         },
         {
@@ -180,7 +180,7 @@
     },
     {
       "sprint": 4,
-      "checked_at": "2026-09-05T17:12:11.924222+00:00",
+      "checked_at": "2026-09-05T18:03:55.368103+00:00",
       "all_ok": true,
       "gates": [
         {
@@ -236,7 +236,7 @@
     },
     {
       "sprint": 5,
-      "checked_at": "2026-09-05T17:12:12.009211+00:00",
+      "checked_at": "2026-09-05T18:03:55.456974+00:00",
       "all_ok": true,
       "gates": [
         {
@@ -289,7 +289,7 @@
     },
     {
       "sprint": 6,
-      "checked_at": "2026-09-05T17:12:12.069565+00:00",
+      "checked_at": "2026-09-05T18:03:55.517441+00:00",
       "all_ok": true,
       "gates": [
         {
@@ -325,7 +325,7 @@
     },
     {
       "sprint": 7,
-      "checked_at": "2026-09-05T17:12:12.391879+00:00",
+      "checked_at": "2026-09-05T18:03:55.863879+00:00",
       "all_ok": true,
       "gates": [
         {
@@ -429,7 +429,7 @@
           "errors": [],
           "warnings": [],
           "meta": {
-            "sample_bytes": 1040
+            "sample_bytes": 1058
           }
         },
         {
@@ -510,7 +510,7 @@
           "warnings": [],
           "meta": {
             "pytest_returncode": 0,
-            "pytest_tail": "...........                                                              [100%]\n11 passed in 0.02s\n"
+            "pytest_tail": ".............                                                            [100%]\n13 passed in 0.04s\n"
           }
         },
         {

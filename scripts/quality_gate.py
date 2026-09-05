@@ -160,6 +160,48 @@ def gate_logic() -> GateResult:
     return g
 
 
+
+def _normalize_rule(row: dict[str, Any]) -> dict[str, Any]:
+    """Accept legacy short keys and constitution/QG canonical keys."""
+    cat = str(row.get("category") or "")
+    cat_map = {
+        "opening": "Opening",
+        "rapport": "Rapport",
+        "discovery": "Discovery",
+        "qualification": "Qualification",
+        "presentation": "Presentation",
+        "pricing": "Pricing",
+        "objection": "Objection",
+        "closing": "Closing",
+        "voice": "Voice",
+        "compliance": "Compliance",
+    }
+    category = cat_map.get(cat.lower(), cat)
+    evidence = row.get("evidence_requirement", row.get("evidence"))
+    if isinstance(evidence, list):
+        evidence_requirement = "; ".join(str(x) for x in evidence)
+    else:
+        evidence_requirement = str(evidence or "")
+    return {
+        **row,
+        "rule_id": str(row.get("rule_id") or row.get("id") or ""),
+        "rule_name": str(row.get("rule_name") or row.get("name") or ""),
+        "category": category,
+        "pass_condition": str(row.get("pass_condition") or row.get("pass") or ""),
+        "fail_condition": str(row.get("fail_condition") or row.get("fail") or ""),
+        "evidence_requirement": evidence_requirement,
+        "root_cause": row.get("root_cause") or "",
+        "coaching": row.get("coaching") or "",
+        "good_example": row.get("good_example") or "",
+        "bad_example": row.get("bad_example") or "",
+        "edge_cases": row.get("edge_cases") or [],
+        "confidence_logic": row.get("confidence_logic") or "",
+        "json_mapping": row.get("json_mapping") or {},
+        "description": row.get("description") or "",
+        "weight": row.get("weight"),
+    }
+
+
 def _load_rules() -> list[dict[str, Any]]:
     path = ROOT / "ai-brain" / "rulebook" / "rules_1000.jsonl"
     if not path.exists():
@@ -169,7 +211,7 @@ def _load_rules() -> list[dict[str, Any]]:
         for line in handle:
             line = line.strip()
             if line:
-                rows.append(json.loads(line))
+                rows.append(_normalize_rule(json.loads(line)))
     return rows
 
 

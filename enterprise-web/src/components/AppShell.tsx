@@ -12,6 +12,7 @@ const NAV = [
   { href: "/calls", label: "Cuộc gọi" },
   { href: "/qa", label: "QA Review" },
   { href: "/coaching", label: "Coaching" },
+  { href: "/revenue", label: "Revenue Leak" },
   { href: "/portal", label: "Employee Portal" },
   { href: "/rules", label: "Rulebook" },
   { href: "/dna", label: "Conv. DNA" },

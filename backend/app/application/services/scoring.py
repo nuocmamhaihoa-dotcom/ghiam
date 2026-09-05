@@ -11,6 +11,7 @@ from app.application.services.judge_ensemble import (
     DeterministicJudgeEnsemble,
     PassthroughLlmJudge,
 )
+from app.application.services.pipeline_orchestrator import PipelineOrchestrator
 from app.application.services.revenue_leak import RevenueLeakService
 from app.application.services.root_cause import RootCauseService
 from app.application.services.rule_engine import RuleEngine
@@ -60,6 +61,7 @@ class ScoringService:
         self._revenue_repo = revenue
         self._audit = audit
         self._stt_min = settings.stt_min_avg_confidence
+        self._pipeline = PipelineOrchestrator()
 
     async def score_call(
         self,
@@ -78,10 +80,56 @@ class ScoringService:
         transcript = await self._calls.get_transcript(call_id)
         rules = await self._rules.list_active()
 
-        if not evidence:
+        # Constitution §3 — run immutable pre-scoring pipeline first.
+        transcript_turns = list(getattr(transcript, "turns", None) or [])
+        existing_evidence_payload = [
+            {
+                "quote": e.quote,
+                "speaker": e.speaker,
+                "stage_key": e.stage_key,
+                "confidence": e.confidence,
+                "audio_ts_start": e.audio_ts_start,
+                "audio_ts_end": e.audio_ts_end,
+                "turn_index": e.turn_index,
+                "slot": e.slot,
+            }
+            for e in evidence
+        ]
+        pipeline_pre = self._pipeline.run_pre_scoring(
+            call_id=call_id,
+            audio_bytes=None,
+            audio_s3_key=getattr(call, "audio_s3_key", None),
+            transcript_turns=transcript_turns,
+            existing_evidence=existing_evidence_payload,
+            industry=getattr(call, "campaign_code", None),
+        )
+        if not pipeline_pre.get("ok"):
+            response = insufficient_evidence_response(
+                explanation=str(
+                    pipeline_pre.get("error")
+                    or "Insufficient Evidence: pipeline pre-scoring aborted."
+                )
+            )
+            response.pipeline = {
+                "order": pipeline_pre.get("pipeline_order"),
+                "stages": pipeline_pre.get("stages"),
+                "complete": False,
+            }
+            await self._persist(call_id, call.agent_user_id, response, actor_user_id, request_id)
+            await self._calls.update_status(
+                call_id, CallStatus.INSUFFICIENT_EVIDENCE.value
+            )
+            return response
+
+        if not evidence and not pipeline_pre.get("verified_evidence"):
             response = insufficient_evidence_response(
                 explanation="Insufficient Evidence: no evidence spans for this call."
             )
+            response.pipeline = {
+                "order": pipeline_pre.get("pipeline_order"),
+                "stages": pipeline_pre.get("stages"),
+                "complete": False,
+            }
             await self._persist(call_id, call.agent_user_id, response, actor_user_id, request_id)
             await self._calls.update_status(
                 call_id, CallStatus.INSUFFICIENT_EVIDENCE.value
@@ -103,6 +151,9 @@ class ScoringService:
             # Evidence without transcript turns still allowed if evidence exists,
             # but STT gate uses 0 → IE for required rules handled inside engine.
             avg_conf = min((e.confidence for e in evidence), default=0.0)
+        whisper = pipeline_pre.get("whisper") or {}
+        if whisper.get("avg_confidence") is not None:
+            avg_conf = float(whisper["avg_confidence"])
 
         items = await self._engine.evaluate_all(
             rules=rules,
@@ -118,6 +169,35 @@ class ScoringService:
         coaching = self._coaching.generate_call_tips(items, rules_by_code, root_cause)
         revenue_leak = self._revenue.estimate(
             call=call, items=items, rules_by_code=rules_by_code
+        )
+        # Judge ensemble summary for pipeline stage artifact (deterministic path).
+        judge_summary = {
+            "path": "deterministic_ensemble",
+            "item_count": len(items),
+            "pass_count": sum(1 for i in items if i.verdict == Verdict.PASS),
+            "fail_count": sum(1 for i in items if i.verdict == Verdict.FAIL),
+            "ie_count": sum(
+                1 for i in items if i.verdict == Verdict.INSUFFICIENT_EVIDENCE
+            ),
+        }
+        dashboard_json = {
+            "score": aggregated["score"],
+            "result": aggregated["result"].value
+            if hasattr(aggregated["result"], "value")
+            else aggregated["result"],
+            "stage_scores": aggregated["stage_scores"],
+            "root_cause": root_cause,
+            "coaching": coaching,
+            "revenue_leak": revenue_leak,
+        }
+        pipeline_full = self._pipeline.attach_post_scoring(
+            pipeline_pre,
+            rule_engine={"evaluated_rules": len(items), "active_rules": len(rules)},
+            judge_ensemble=judge_summary,
+            root_cause=root_cause if isinstance(root_cause, dict) else {"data": root_cause},
+            coaching=coaching if isinstance(coaching, dict) else {"data": coaching},
+            revenue_leak=revenue_leak if isinstance(revenue_leak, dict) else {"data": revenue_leak},
+            dashboard_json=dashboard_json,
         )
 
         evidence_payload = [
@@ -161,6 +241,11 @@ class ScoringService:
             explanation=aggregated["explanation"],
             auto_fail_triggered=aggregated["auto_fail_triggered"],
             items=items,
+            pipeline={
+                "order": pipeline_full.get("pipeline_order"),
+                "stages": pipeline_full.get("stages"),
+                "complete": bool(pipeline_full.get("pipeline_complete")),
+            },
         )
 
         await self._persist(call_id, call.agent_user_id, response, actor_user_id, request_id)
