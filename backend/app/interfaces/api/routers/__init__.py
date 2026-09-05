@@ -28,6 +28,7 @@ from app.interfaces.api.routers import (
     negotiation,
     cltv,
     war_room,
+    autonomous,
     simulator,
 )
 
@@ -59,5 +60,6 @@ __all__ = [
     "negotiation",
     "cltv",
     "war_room",
+    "autonomous",
     "simulator",
 ]

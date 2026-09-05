@@ -1,21 +1,20 @@
 {
-  "checked_at": "2026-09-05T21:58:41.734167+00:00",
+  "checked_at": "2026-09-05T22:39:24.875794+00:00",
   "all_ok": true,
   "sprints": [
     {
-      "sprint": 14,
-      "checked_at": "2026-09-05T21:58:41.733897+00:00",
+      "sprint": 16,
+      "checked_at": "2026-09-05T22:39:24.875538+00:00",
       "all_ok": true,
       "gates": [
         {
-          "gate": "CLTV Engine",
+          "gate": "Autonomous Sales AI",
           "ok": true,
           "errors": [],
           "warnings": [],
           "meta": {
-            "high_cltv": 0.9299,
-            "low_cltv": 0.0796,
-            "high_ltv": 7579607.47
+            "recommendation_action": "send_proposal",
+            "automations_run": 2
           }
         },
         {
@@ -24,8 +23,8 @@
           "errors": [],
           "warnings": [],
           "meta": {
-            "route_count": 106,
-            "openapi_paths": 102
+            "route_count": 122,
+            "openapi_paths": 117
           }
         },
         {
@@ -35,7 +34,7 @@
           "warnings": [],
           "meta": {
             "pytest_returncode": 0,
-            "pytest_tail": "......................                                                   [100%]\n22 passed in 0.06s\n"
+            "pytest_tail": "......................                                                   [100%]\n22 passed in 0.05s\n"
           }
         },
         {

@@ -26,6 +26,7 @@ const NAV = [
   { href: "/negotiation", label: "Negotiation" },
   { href: "/cltv", label: "CLTV" },
   { href: "/war-room", label: "War Room" },
+  { href: "/autonomous", label: "Autonomous AI" },
   { href: "/qa-approval", label: "QA Approval" },
   { href: "/forecast", label: "Forecast" },
   { href: "/multi-product", label: "Multi-Product" },

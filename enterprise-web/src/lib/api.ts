@@ -1429,4 +1429,67 @@ export const api = {
   },
 
 
+
+  async autonomousDashboard() {
+    return withDemoFallback(
+      () => request<Record<string, unknown>>("/v1/autonomous/dashboard"),
+      () => ({
+        status: "ok",
+        ok: true,
+        widgets: {
+          recommendation_count: 18,
+          automations_run: 12,
+          automations_blocked: 2,
+          approvals_pending: 1,
+          approvals_decided: 4,
+          rule_changes_applied: 3,
+          avg_confidence: 0.78,
+          nba_mix: { send_proposal: 5, callback: 7, escalate_leader: 6 },
+        },
+        pending_approvals: [
+          { approval_id: "apr1", change_type: "pricing_change", title: "Promo 10%", status: "pending" },
+        ],
+        approval_only_rule_changes: true,
+      })
+    );
+  },
+
+  async autonomousNba(body: Record<string, unknown>) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/autonomous/nba", {
+          method: "POST",
+          body,
+        }),
+      () => ({
+        status: "ok",
+        ok: true,
+        recommendation: {
+          action: "send_proposal",
+          confidence: 0.9,
+          rationale: "Strong buying signal",
+        },
+        automation: { kind: "create_task", status: "completed" },
+        blocked: false,
+      })
+    );
+  },
+
+  async autonomousQuality() {
+    return withDemoFallback(
+      () => request<Record<string, unknown>>("/v1/autonomous/quality"),
+      () => ({
+        status: "ok",
+        ok: true,
+        checks: {
+          recommendation_precision: { ok: true, value: 0.88 },
+          automation_safety: { ok: true, value: 1.0 },
+          approval_enforcement: { ok: true, value: 1.0 },
+          evidence_validation: { ok: true, value: 0.91 },
+        },
+        approval_only_rule_changes: true,
+      })
+    );
+  },
+
 };

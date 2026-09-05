@@ -1793,6 +1793,116 @@ def gate_war_room() -> GateResult:
     return g
 
 
+
+
+def gate_autonomous() -> GateResult:
+    """Autonomous Sales AI — NBA + safe automation + approval-gated changes."""
+    g = GateResult("Autonomous Sales AI")
+    required = [
+        BACKEND / "autonomous" / "engine.py",
+        BACKEND / "autonomous" / "recommender.py",
+        BACKEND / "autonomous" / "automation.py",
+        BACKEND / "autonomous" / "approvals.py",
+        BACKEND / "autonomous" / "store.py",
+        BACKEND / "autonomous" / "types.py",
+        BACKEND / "autonomous" / "quality.py",
+        BACKEND / "app" / "application" / "services" / "autonomous.py",
+        BACKEND / "app" / "interfaces" / "api" / "routers" / "autonomous.py",
+        ROOT / "docs" / "Autonomous_Sales.md",
+        ROOT / "models" / "autonomous" / "schema.json",
+        ROOT / "enterprise-web" / "src" / "app" / "autonomous" / "page.tsx",
+        ROOT / "tests" / "autonomous" / "test_autonomous.py",
+        ROOT / "datasets" / "autonomous",
+    ]
+    for path_item in required:
+        if not path_item.exists():
+            g.fail(f"missing {path_item.relative_to(ROOT)}")
+
+    shell = ROOT / "enterprise-web" / "src" / "components" / "AppShell.tsx"
+    if shell.exists():
+        txt = shell.read_text(encoding="utf-8")
+        if "/autonomous" not in txt:
+            g.fail("AppShell missing /autonomous nav")
+
+    api = ROOT / "enterprise-web" / "src" / "lib" / "api.ts"
+    if api.exists():
+        api_txt = api.read_text(encoding="utf-8")
+        for key in ("autonomousDashboard", "autonomousNba", "autonomousQuality"):
+            if key not in api_txt:
+                g.fail(f"api.ts missing {key}")
+
+    try:
+        import tempfile
+        from pathlib import Path as P
+
+        from autonomous.engine import AutonomousEngine
+        from autonomous.store import AutonomousStore
+        from autonomous.types import RESTRICTED_CHANGES, SAFE_AUTOMATIONS
+
+        td = P(tempfile.mkdtemp())
+        eng = AutonomousEngine(store=AutonomousStore(root=td))
+        rec = eng.recommend({"buy_signal": 0.9, "sentiment": "positive", "intent": "ready"})
+        if not rec.get("ok"):
+            g.fail("recommend failed")
+        pipe = eng.run_nba_pipeline(
+            {"buy_signal": 0.2, "sentiment": "negative", "objection": "price", "lead_id": "L1"},
+            auto_execute=True,
+        )
+        if not pipe.get("ok"):
+            g.fail("nba pipeline failed")
+        safe = eng.trigger_automation(SAFE_AUTOMATIONS[0], {"lead_id": "L1"})
+        if not safe.get("ok") or safe.get("blocked"):
+            g.fail("safe automation must execute")
+        blocked = eng.trigger_automation(RESTRICTED_CHANGES[0], {"x": 1})
+        if not blocked.get("blocked"):
+            g.fail("restricted change must be blocked from auto-run")
+        proposed = eng.propose_rule_change(
+            change_type=RESTRICTED_CHANGES[2],
+            title="promo",
+            proposal={"discount": 0.1},
+            evidence=["test"],
+        )
+        if proposed.get("applied") is not False:
+            g.fail("rule changes must not auto-apply")
+        approval_id = proposed["approval"]["approval_id"]
+        decided = eng.decide_rule_change(approval_id, approve=True, decided_by="mgr")
+        if not decided.get("applied"):
+            g.fail("approved rule change must apply after decision")
+        dash = eng.dashboard()
+        for key in (
+            "recommendation_count",
+            "automations_run",
+            "automations_blocked",
+            "approvals_pending",
+            "approvals_decided",
+            "rule_changes_applied",
+            "avg_confidence",
+            "nba_mix",
+        ):
+            if key not in (dash.get("widgets") or {}):
+                g.fail(f"dashboard missing widget {key}")
+        if dash.get("approval_only_rule_changes") is not True:
+            g.fail("dashboard must enforce approval-only rule changes")
+        snap = eng.quality_snapshot()
+        if not snap.get("ok"):
+            g.fail(f"quality gate failed: {snap.get('errors')}")
+        if snap.get("approval_only_rule_changes") is not True:
+            g.fail("quality snapshot must confirm approval-only rule changes")
+        for key in (
+            "recommendation_precision",
+            "automation_safety",
+            "approval_enforcement",
+            "evidence_validation",
+        ):
+            if key not in (snap.get("checks") or {}):
+                g.fail(f"quality missing check {key}")
+        g.meta["recommendation_action"] = rec["recommendation"]["action"]
+        g.meta["automations_run"] = dash["widgets"]["automations_run"]
+    except Exception as exc:  # noqa: BLE001
+        g.fail(f"autonomous smoke failed: {exc}")
+    return g
+
+
 SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
     1: [gate_architecture, gate_docs, gate_database, gate_docker, gate_security, gate_api],
     2: [lambda: gate_rule_consistency(2), gate_evidence, gate_json],
@@ -1879,6 +1989,13 @@ SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
     ],
     15: [
         gate_war_room,
+        gate_api,
+        gate_tests,
+        gate_docs,
+        gate_final,
+    ],
+    16: [
+        gate_autonomous,
         gate_api,
         gate_tests,
         gate_docs,
