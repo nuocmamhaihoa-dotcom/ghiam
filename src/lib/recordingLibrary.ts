@@ -96,7 +96,14 @@ const INDEX_PATH = path.join(ROOT, "index.json");
 const SYNC_CURSOR_PATH = path.join(ROOT, "sync-cursor.json");
 
 type SyncCursor = {
+  /** @deprecated kept for backward compatibility */
   criteriaOffset: number;
+  /** Offset into /api/calls?analysisStatus=analyzed */
+  analyzedOffset: number;
+  /** Offset into /api/calls?hasAudio=true (downloaded, maybe chưa STT) */
+  audioOffset: number;
+  remoteAnalyzedTotal: number;
+  remoteWithAudioTotal: number;
   updatedAt: string;
 };
 
@@ -104,12 +111,27 @@ async function readSyncCursor(): Promise<SyncCursor> {
   try {
     const raw = await fs.readFile(SYNC_CURSOR_PATH, "utf8");
     const parsed = JSON.parse(raw) as Partial<SyncCursor>;
+    const criteriaOffset = Math.max(0, Number(parsed.criteriaOffset) || 0);
     return {
-      criteriaOffset: Math.max(0, Number(parsed.criteriaOffset) || 0),
+      criteriaOffset,
+      analyzedOffset: Math.max(
+        0,
+        Number(parsed.analyzedOffset ?? criteriaOffset) || 0,
+      ),
+      audioOffset: Math.max(0, Number(parsed.audioOffset) || 0),
+      remoteAnalyzedTotal: Math.max(0, Number(parsed.remoteAnalyzedTotal) || 0),
+      remoteWithAudioTotal: Math.max(0, Number(parsed.remoteWithAudioTotal) || 0),
       updatedAt: parsed.updatedAt || new Date(0).toISOString(),
     };
   } catch {
-    return { criteriaOffset: 0, updatedAt: new Date(0).toISOString() };
+    return {
+      criteriaOffset: 0,
+      analyzedOffset: 0,
+      audioOffset: 0,
+      remoteAnalyzedTotal: 0,
+      remoteWithAudioTotal: 0,
+      updatedAt: new Date(0).toISOString(),
+    };
   }
 }
 
@@ -117,6 +139,10 @@ async function writeSyncCursor(cursor: SyncCursor) {
   await ensureDirs();
   const payload: SyncCursor = {
     criteriaOffset: Math.max(0, cursor.criteriaOffset || 0),
+    analyzedOffset: Math.max(0, cursor.analyzedOffset || 0),
+    audioOffset: Math.max(0, cursor.audioOffset || 0),
+    remoteAnalyzedTotal: Math.max(0, cursor.remoteAnalyzedTotal || 0),
+    remoteWithAudioTotal: Math.max(0, cursor.remoteWithAudioTotal || 0),
     updatedAt: new Date().toISOString(),
   };
   await fs.writeFile(SYNC_CURSOR_PATH, JSON.stringify(payload, null, 2), "utf8");
@@ -257,12 +283,15 @@ export async function getRecordingAudioPath(
 
 export async function getLibraryStats() {
   const items = await listRecordings();
+  const cursor = await readSyncCursor();
   let pendingAnalysis = 0;
   for (const item of items) {
     if (!item.hasTranscript && !item.callSummary) continue;
     const version = item.analysisVersion ?? 0;
     if (version < ANALYSIS_VERSION) pendingAnalysis += 1;
   }
+  const remoteAnalyzedTotal = cursor.remoteAnalyzedTotal;
+  const remoteWithAudioTotal = cursor.remoteWithAudioTotal;
   return {
     total: items.length,
     withAudio: items.filter((i) => i.hasAudio).length,
@@ -277,6 +306,12 @@ export async function getLibraryStats() {
             items.reduce((s, i) => s + i.readinessScore, 0) / items.length,
           ),
     won: items.filter((i) => i.outcome === "won").length,
+    remoteAnalyzedTotal,
+    remoteWithAudioTotal,
+    syncCoveragePct:
+      remoteAnalyzedTotal > 0
+        ? Math.min(100, Math.round((items.length / remoteAnalyzedTotal) * 100))
+        : 0,
   };
 }
 
@@ -295,8 +330,11 @@ export async function syncRecordingsFromChotKiem(options?: {
   totalRemote: number;
   nextOffset: number;
   scannedRemote: number;
+  remoteAnalyzedTotal: number;
+  remoteWithAudioTotal: number;
+  localTotal: number;
 }> {
-  const limit = Math.max(1, Math.min(options?.limit ?? 40, 120));
+  const limit = Math.max(1, Math.min(options?.limit ?? 80, 200));
   const downloadAudio = options?.downloadAudio !== false;
   const newOnly = options?.newOnly !== false;
   await ensureDirs();
@@ -306,57 +344,91 @@ export async function syncRecordingsFromChotKiem(options?: {
   const known = new Set(byId.keys());
 
   const syncCursor = await readSyncCursor();
-  let offset = syncCursor.criteriaOffset;
-  let totalRemote = 0;
+  let analyzedOffset = syncCursor.analyzedOffset;
+  let audioOffset = syncCursor.audioOffset;
+  let totalRemote = Math.max(
+    syncCursor.remoteAnalyzedTotal,
+    syncCursor.remoteWithAudioTotal,
+  );
+  let remoteAnalyzedTotal = syncCursor.remoteAnalyzedTotal;
+  let remoteWithAudioTotal = syncCursor.remoteWithAudioTotal;
   let scannedRemote = 0;
-  const pageSize = 80;
-  const maxPages = 12;
+  const pageSize = 100;
+  const maxPages = 15;
   const newIds: string[] = [];
   const oldIds: string[] = [];
   const seen = new Set<string>();
-  let wrapped = false;
 
-  for (let page = 0; page < maxPages; page += 1) {
-    const report = await ckFetch<{
-      rows?: Array<{ id: string; hasAudio?: boolean; audioUrl?: string | null }>;
-      totalCalls?: number;
-      hasMore?: boolean;
-      nextOffset?: number | null;
-    }>(`/api/calls/criteria-report?limit=${pageSize}&offset=${offset}`);
+  async function collectFromCalls(pathBase: string, startOffset: number) {
+    let offset = startOffset;
+    let wrapped = false;
+    for (let page = 0; page < maxPages; page += 1) {
+      if (newIds.length >= limit) break;
+      const listed = await ckFetch<{
+        calls?: Array<{
+          id: string;
+          hasAudio?: boolean;
+          audioUrl?: string | null;
+          analysisStatus?: string;
+        }>;
+        total?: number;
+        hasMore?: boolean;
+      }>(`${pathBase}&offset=${offset}`);
 
-    totalRemote = Math.max(totalRemote, num(report.totalCalls));
-    const rows = report.rows || [];
-    scannedRemote += rows.length;
-
-    for (const row of rows) {
-      if (!row?.id || seen.has(row.id)) continue;
-      if (!(row.hasAudio || row.audioUrl)) continue;
-      seen.add(row.id);
-      if (known.has(row.id)) oldIds.push(row.id);
-      else newIds.push(row.id);
-    }
-
-    const next =
-      typeof report.nextOffset === "number"
-        ? report.nextOffset
-        : offset + rows.length;
-    const hasMore = Boolean(report.hasMore) && rows.length > 0;
-
-    if (newIds.length >= limit) {
-      offset = next;
-      break;
-    }
-
-    if (!hasMore) {
-      if (!wrapped) {
-        wrapped = true;
-        offset = 0;
-        continue;
+      if (typeof listed.total === "number") {
+        totalRemote = Math.max(totalRemote, listed.total);
+        if (pathBase.includes("analysisStatus=analyzed")) {
+          remoteAnalyzedTotal = Math.max(remoteAnalyzedTotal, listed.total);
+        }
+        if (pathBase.includes("hasAudio=true")) {
+          remoteWithAudioTotal = Math.max(remoteWithAudioTotal, listed.total);
+        }
       }
-      offset = 0;
-      break;
+
+      const calls = listed.calls || [];
+      scannedRemote += calls.length;
+      for (const call of calls) {
+        if (!call?.id || seen.has(call.id)) continue;
+        if (!(call.hasAudio || call.audioUrl)) continue;
+        seen.add(call.id);
+        if (known.has(call.id)) oldIds.push(call.id);
+        else newIds.push(call.id);
+      }
+
+      const next = offset + calls.length;
+      const hasMore =
+        (listed.hasMore ?? calls.length >= pageSize) && calls.length > 0;
+
+      if (newIds.length >= limit) {
+        offset = next;
+        break;
+      }
+      if (!hasMore) {
+        if (!wrapped) {
+          wrapped = true;
+          offset = 0;
+          continue;
+        }
+        offset = 0;
+        break;
+      }
+      offset = next;
     }
-    offset = next;
+    return offset;
+  }
+
+  // 1) Drain analyzed+downloaded calls first (have transcript for deep analysis).
+  analyzedOffset = await collectFromCalls(
+    `/api/calls?analysisStatus=analyzed&limit=${pageSize}`,
+    analyzedOffset,
+  );
+
+  // 2) Also pull any downloaded audio not yet analyzed on ChốtKiểm.
+  if (newIds.length < limit) {
+    audioOffset = await collectFromCalls(
+      `/api/calls?hasAudio=true&limit=${pageSize}`,
+      audioOffset,
+    );
   }
 
   const ids: string[] = newIds.slice(0, limit);
@@ -366,16 +438,6 @@ export async function syncRecordingsFromChotKiem(options?: {
       if (!ids.includes(id)) ids.push(id);
     }
   }
-  if (ids.length === 0) {
-    const listed = await ckFetch<{ calls?: Array<{ id: string }> }>(
-      `/api/calls?limit=${limit}&offset=0`,
-    );
-    for (const c of listed.calls || []) {
-      if (!c?.id || known.has(c.id) || ids.includes(c.id)) continue;
-      ids.push(c.id);
-      if (ids.length >= limit) break;
-    }
-  }
 
   let imported = 0;
   let updated = 0;
@@ -383,7 +445,7 @@ export async function syncRecordingsFromChotKiem(options?: {
   let withAudio = 0;
   const errors: string[] = [];
   const queue = ids.slice(0, limit);
-  const workers = Math.max(1, Math.min(3, queue.length));
+  const workers = Math.max(1, Math.min(5, queue.length));
 
   async function importOne(id: string) {
     const call = await ckFetch<RemoteCall>(`/api/calls/${id}`);
@@ -546,7 +608,14 @@ export async function syncRecordingsFromChotKiem(options?: {
 
   index.items = [...byId.values()].sort((a, b) => b.createdAt - a.createdAt);
   await writeIndex(index);
-  await writeSyncCursor({ criteriaOffset: offset, updatedAt: new Date().toISOString() });
+  await writeSyncCursor({
+    criteriaOffset: analyzedOffset,
+    analyzedOffset,
+    audioOffset,
+    remoteAnalyzedTotal,
+    remoteWithAudioTotal,
+    updatedAt: new Date().toISOString(),
+  });
 
   return {
     imported,
@@ -554,9 +623,12 @@ export async function syncRecordingsFromChotKiem(options?: {
     skipped,
     withAudio,
     errors: errors.slice(0, 20),
-    totalRemote,
-    nextOffset: offset,
+    totalRemote: Math.max(totalRemote, remoteAnalyzedTotal, remoteWithAudioTotal),
+    nextOffset: analyzedOffset,
     scannedRemote,
+    remoteAnalyzedTotal,
+    remoteWithAudioTotal,
+    localTotal: index.items.length,
   };
 }
 

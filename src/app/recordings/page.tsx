@@ -28,6 +28,9 @@ type Stats = {
   analysisVersion: number;
   avgReadiness: number;
   won: number;
+  remoteAnalyzedTotal?: number;
+  remoteWithAudioTotal?: number;
+  syncCoveragePct?: number;
 };
 
 export default function RecordingsPage() {
@@ -47,17 +50,26 @@ export default function RecordingsPage() {
 
   useEffect(() => {
     load().catch((e) => setError(e instanceof Error ? e.message : "Lỗi tải"));
+    const timer = setInterval(() => {
+      load().catch(() => null);
+    }, 20_000);
+    return () => clearInterval(timer);
   }, [load]);
 
   async function syncNow() {
     setBusy(true);
     setError("");
-    setMsg("Đang đồng bộ + phân tích sâu…");
+    setMsg("Đang đồng bộ + phân tích toàn bộ file mới…");
     try {
       const res = await fetch("/api/recordings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "sync", limit: 20, downloadAudio: true }),
+        body: JSON.stringify({
+          action: "sync",
+          limit: 120,
+          downloadAudio: true,
+          newOnly: true,
+        }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Sync failed");
@@ -65,7 +77,10 @@ export default function RecordingsPage() {
       await load();
       const r = data.result;
       setMsg(
-        `Import +${r.imported}, cập nhật ${r.updated}, audio ${r.withAudio}, bỏ qua ${r.skipped}` +
+        `Import +${r.imported}, cập nhật ${r.updated}, audio ${r.withAudio}` +
+          (r.remoteAnalyzedTotal
+            ? ` · cover ${data.stats?.syncCoveragePct ?? "?"}% (${data.stats?.total ?? "?"}/${r.remoteAnalyzedTotal})`
+            : "") +
           (r.errors?.length ? ` · lỗi ${r.errors.length}` : ""),
       );
     } catch (e) {
@@ -108,8 +123,8 @@ export default function RecordingsPage() {
             Thư viện ghi âm
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-[var(--muted)]">
-            Lưu toàn bộ file ghi âm đã tải, phân tích sâu chỉ số chốt sale và
-            dựng kịch bản tái tạo cuộc gọi.
+            Tự động đồng bộ + phân tích mọi file đã tải từ ChốtKiểm. Pipeline
+            chạy nền liên tục — số liệu tự làm mới mỗi 20s.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -145,7 +160,15 @@ export default function RecordingsPage() {
           value={String(stats?.pendingAnalysis ?? 0)}
           hint={`schema v${stats?.analysisVersion ?? "-"}`}
         />
-        <Metric label="Đã chốt" value={String(stats?.won ?? 0)} />
+        <Metric
+          label="Độ phủ kho remote"
+          value={`${stats?.syncCoveragePct ?? 0}%`}
+          hint={
+            stats?.remoteAnalyzedTotal
+              ? `${stats.total}/${stats.remoteAnalyzedTotal} đã phân tích trên ChốtKiểm`
+              : "Đang đo từ ChốtKiểm…"
+          }
+        />
       </div>
 
       {msg ? <p className="text-sm text-[var(--muted)]">{msg}</p> : null}

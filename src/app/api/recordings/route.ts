@@ -42,12 +42,13 @@ export async function POST(req: NextRequest) {
       downloadAudio?: boolean;
       force?: boolean;
       pendingOnly?: boolean;
+      newOnly?: boolean;
     };
     const action = body.action || "sync";
 
     if (action === "analyze-pending") {
       const result = await analyzePendingRecordings({
-        limit: body.limit ?? 100,
+        limit: body.limit ?? 200,
       });
       const stats = await getLibraryStats();
       return NextResponse.json({ ok: true, action, result, stats });
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
 
     if (action === "reanalyze") {
       const result = await reanalyzeRecordings({
-        limit: body.limit ?? 100,
+        limit: body.limit ?? 200,
         force: body.force === true,
         pendingOnly: body.force === true ? false : body.pendingOnly !== false,
       });
@@ -64,8 +65,9 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await syncRecordingsFromChotKiem({
-      limit: body.limit ?? 20,
+      limit: body.limit ?? 120,
       downloadAudio: body.downloadAudio !== false,
+      newOnly: body.newOnly !== false,
     });
     const stats = await getLibraryStats();
     return NextResponse.json({ ok: true, action: "sync", result, stats });

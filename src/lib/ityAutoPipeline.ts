@@ -30,6 +30,8 @@ export type AutoPipelineConfig = {
   /** Process-pending rounds inside one tick. */
   processRounds: number;
   importLimit: number;
+  /** How many import batches to run inside one tick. */
+  importPasses: number;
   minLivingProxies: number;
   syncEveryTicks: number;
   importEveryTicks: number;
@@ -57,14 +59,15 @@ export type AutoPipelineState = {
 };
 
 const DEFAULT_CONFIG: AutoPipelineConfig = {
-  intervalSec: 45,
+  intervalSec: 30,
   processBatchSize: 8,
-  processRounds: 5,
-  importLimit: 80,
+  processRounds: 4,
+  importLimit: 120,
+  importPasses: 3,
   minLivingProxies: 40,
-  syncEveryTicks: 8,
+  syncEveryTicks: 6,
   importEveryTicks: 1,
-  reanalyzeEveryTicks: 5,
+  reanalyzeEveryTicks: 8,
 };
 
 const DEFAULT_STATE: AutoPipelineState = {
@@ -164,7 +167,8 @@ export async function updateAutoPipelineConfig(
       1,
       8,
     ),
-    importLimit: clamp(Number(patch.importLimit ?? state.config.importLimit), 10, 150),
+    importLimit: clamp(Number(patch.importLimit ?? state.config.importLimit), 10, 200),
+    importPasses: clamp(Number(patch.importPasses ?? state.config.importPasses ?? 3), 1, 8),
     minLivingProxies: clamp(
       Number(patch.minLivingProxies ?? state.config.minLivingProxies),
       10,
@@ -303,18 +307,36 @@ export async function runAutoPipelineTick(force = false): Promise<{
       state.tickCount === 0 ||
       state.tickCount % state.config.importEveryTicks === 0;
     if (dueImport) {
-      const imported = await syncRecordingsFromChotKiem({
-        limit: state.config.importLimit,
-        downloadAudio: true,
-        newOnly: true,
-      });
-      state.stats.importRuns += 1;
-      state.stats.imported += imported.imported + imported.updated;
+      const passes = Math.max(1, state.config.importPasses || 3);
+      let importedSum = 0;
+      let updatedSum = 0;
+      let withAudioSum = 0;
+      let lastImport: Record<string, unknown> | null = null;
+      for (let pass = 0; pass < passes; pass += 1) {
+        const imported = await syncRecordingsFromChotKiem({
+          limit: state.config.importLimit,
+          downloadAudio: true,
+          newOnly: true,
+        });
+        importedSum += imported.imported;
+        updatedSum += imported.updated;
+        withAudioSum += imported.withAudio;
+        lastImport = imported as unknown as Record<string, unknown>;
+        state.stats.importRuns += 1;
+        if (imported.imported === 0) break;
+      }
+      state.stats.imported += importedSum + updatedSum;
       await noteDownloadEvent(
         "auto-import",
-        `Auto import: +${imported.imported} mới, ${imported.updated} cập nhật, audio ${imported.withAudio}`,
+        `Auto import: +${importedSum} mới / ${passes} lượt, audio ${withAudioSum}`,
       ).catch(() => null);
-      result.import = imported;
+      result.import = {
+        ...(lastImport || {}),
+        imported: importedSum,
+        updated: updatedSum,
+        withAudio: withAudioSum,
+        passes,
+      };
     }
 
     const dueReanalyze =
@@ -356,7 +378,15 @@ export async function runAutoPipelineTick(force = false): Promise<{
     state.lastTickAt = new Date().toISOString();
     state.lastError = null;
     state.consecutiveErrors = 0;
-    const message = `Tick #${state.tickCount}: proxy ${proxySnap.livingCount}, process ${processed}, thư viện ${library.withAudio}/${library.total} (ready ${library.readyForRecreation}), tốc độ ${progress.filesPerMinute.toFixed(1)} file/phút (${Date.now() - tickStarted}ms)`;
+    const coverage =
+      "syncCoveragePct" in library && typeof (library as { syncCoveragePct?: number }).syncCoveragePct === "number"
+        ? (library as { syncCoveragePct: number; remoteAnalyzedTotal?: number }).syncCoveragePct
+        : null;
+    const remote =
+      "remoteAnalyzedTotal" in library
+        ? (library as { remoteAnalyzedTotal?: number }).remoteAnalyzedTotal
+        : null;
+    const message = `Tick #${state.tickCount}: proxy ${proxySnap.livingCount}, process ${processed}, thư viện ${library.withAudio}/${library.total}${remote ? `~${remote}` : ""} (ready ${library.readyForRecreation}${coverage != null ? `, cover ${coverage}%` : ""}), tốc độ ${progress.filesPerMinute.toFixed(1)} file/phút (${Date.now() - tickStarted}ms)`;
     state.lastSummary = message;
     result.message = message;
     await saveState(state);
