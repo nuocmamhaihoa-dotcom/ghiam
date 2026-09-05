@@ -61,13 +61,29 @@ NEED_Q = [
 BENEFITS = ["tiết kiệm thời gian", "giảm rủi ro", "bảo hành rõ", "hỗ trợ tận nơi", "minh bạch chi phí"]
 PRICES = ["1.9 triệu", "3.5 triệu", "5.9 triệu", "9.9 triệu", "12 triệu"]
 OBJ_CUST = ["Đắt quá", "Để hôm khác", "Hỏi vợ/chồng đã", "Bên kia rẻ hơn", "Có lừa không", "Đang bận", "Chưa cần"]
-OBJ_GOOD = [
-    "Em hiểu lo về giá; em tách giá trị và chi phí giúp nhé",
-    "Em tôn trọng thời gian; mình chốt lịch gọi lại cụ thể được không ạ",
-    "Em hỗ trợ tài liệu để anh/chị trao đổi người quyết định",
-    "Em so đúng tiêu chí anh/chị quan tâm, không chỉ giá",
-]
-OBJ_BAD = ["Rẻ vậy không tốt đâu", "Không nghe là mất ưu đãi", "Không mua thì thôi", "Bên kia kém"]
+OBJ_BY_GROUP: dict[str, list[str]] = {
+    "Giá": ["Đắt quá", "Giá cao quá", "Ngân sách không đủ", "Giảm được không"],
+    "Thời gian": ["Để hôm khác", "Đang bận", "Chưa cần", "Gọi lại sau nhé"],
+    "Niềm tin": ["Có lừa không", "Có uy tín không", "Sợ rủi ro", "Chưa tin sản phẩm"],
+    "Quyền quyết định": ["Hỏi vợ/chồng đã", "Phải hỏi sếp", "Không phải người quyết định", "Cần bàn gia đình"],
+    "Đối thủ": ["Bên kia rẻ hơn", "Đang dùng bên khác", "Đối thủ khuyến mãi", "So với chỗ khác"],
+}
+OBJ_GOOD_BY_GROUP: dict[str, str] = {
+    "Giá": "Em hiểu lo về giá; em tách giá trị và chi phí giúp nhé",
+    "Thời gian": "Em tôn trọng thời gian; mình chốt lịch gọi lại cụ thể được không ạ",
+    "Niềm tin": "Em chia sẻ bằng chứng/uy tín rõ ràng để anh/chị yên tâm",
+    "Quyền quyết định": "Em hỗ trợ tài liệu để anh/chị trao đổi người quyết định",
+    "Đối thủ": "Em so đúng tiêu chí anh/chị quan tâm, không chỉ giá",
+}
+OBJ_BAD_BY_GROUP: dict[str, str] = {
+    "Giá": "Rẻ vậy không tốt đâu",
+    "Thời gian": "Không nghe là mất ưu đãi",
+    "Niềm tin": "Không tin thì thôi",
+    "Quyền quyết định": "Không cần hỏi ai hết",
+    "Đối thủ": "Bên kia kém",
+}
+OBJ_GOOD = list(OBJ_GOOD_BY_GROUP.values())
+OBJ_BAD = list(OBJ_BAD_BY_GROUP.values())
 CLOSE_G = [
     "Nếu phù hợp, mình chốt lịch {next} trong tuần này ạ",
     "Em giữ suất {next} cho anh/chị nhé",
@@ -358,12 +374,14 @@ def generate_vcie(rules, rng):
     objections = []
     for i in range(1000):
         g = groups[i % 5]
+        line = OBJ_BY_GROUP[g][(i // 5) % len(OBJ_BY_GROUP[g])]
         rule_ids = [rules[600 + (i % 200)]["rule_id"], rules[601 + (i % 199)]["rule_id"]]
         objections.append({
-            "id": f"OBJ-{i+1:04d}", "group": g, "customer_line": f"{pick(rng, OBJ_CUST)} [{g}/{i}]",
+            "id": f"OBJ-{i+1:04d}", "group": g, "customer_line": f"{line} [{g}/{i}]",
             "hidden_meaning": f"Ẩn ý nhóm {g}: thiếu giá trị cảm nhận hoặc rủi ro quyết định",
-            "root_cause_code": f"RC_OBJ_{g}_{i % 50:02d}", "good_response": pick(rng, OBJ_GOOD),
-            "forbidden_response": pick(rng, OBJ_BAD),
+            "root_cause_code": f"RC_OBJ_{g}_{i % 50:02d}",
+            "good_response": OBJ_GOOD_BY_GROUP[g],
+            "forbidden_response": OBJ_BAD_BY_GROUP[g],
             "practice": f"Role-play objection {g} 5 phút; chấm theo {rule_ids[0]}",
             "dialect": dialect_cycle[i % len(dialect_cycle)], "industry": INDUSTRIES[i % len(INDUSTRIES)][0],
             "linked_rule_ids": rule_ids,

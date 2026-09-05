@@ -1,4 +1,10 @@
 # Sprint 2 Quality Report
 
-- Gate: PASS — 100000 rows, dialect gate OK
-- Validation all_ok: True
+- Checked at: `2026-09-05T17:12:11.879507+00:00`
+- Result: **PASS** (3/3)
+
+| # | Gate | Status | Errors |
+|---|------|--------|--------|
+| 1 | 3_Rule_Consistency_1_500 | PASS |  |
+| 2 | 4_Evidence_Verification | PASS |  |
+| 3 | 9_JSON_Validation | PASS |  |

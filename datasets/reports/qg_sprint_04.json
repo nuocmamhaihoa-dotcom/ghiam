@@ -1,0 +1,56 @@
+{
+  "sprint": 4,
+  "checked_at": "2026-09-05T17:12:11.924222+00:00",
+  "all_ok": true,
+  "gates": [
+    {
+      "gate": "17_VCIE_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "price_objection_labels": [
+          "Giá"
+        ]
+      }
+    },
+    {
+      "gate": "4_Evidence_Verification",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "canonical_keys": [
+          "coaching",
+          "evidence",
+          "revenue_leak",
+          "root_cause",
+          "score",
+          "stage_scores",
+          "violations"
+        ]
+      }
+    },
+    {
+      "gate": "13_Golden_Call_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "golden_count": 500
+      }
+    },
+    {
+      "gate": "14_Calibration_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "qa_benchmark_count": 10000
+      }
+    }
+  ],
+  "passed": 4,
+  "failed": 0,
+  "total": 4
+}

@@ -1,0 +1,536 @@
+{
+  "checked_at": "2026-09-05T17:12:12.392237+00:00",
+  "all_ok": true,
+  "sprints": [
+    {
+      "sprint": 1,
+      "checked_at": "2026-09-05T17:12:11.857077+00:00",
+      "all_ok": true,
+      "gates": [
+        {
+          "gate": "1_Architecture_Review",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "layers": [
+              "domain",
+              "application",
+              "infrastructure",
+              "interfaces"
+            ]
+          }
+        },
+        {
+          "gate": "19_Documentation_Review",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        },
+        {
+          "gate": "10_Database_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "migration_files": [
+              "0001_initial.py",
+              "0002_enterprise_modules.py"
+            ]
+          }
+        },
+        {
+          "gate": "11_Docker_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        },
+        {
+          "gate": "6_Security_Review",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        },
+        {
+          "gate": "8_API_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "route_count": 40,
+            "openapi_paths": 36
+          }
+        }
+      ],
+      "passed": 6,
+      "failed": 0,
+      "total": 6
+    },
+    {
+      "sprint": 2,
+      "checked_at": "2026-09-05T17:12:11.879507+00:00",
+      "all_ok": true,
+      "gates": [
+        {
+          "gate": "3_Rule_Consistency_1_500",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "count": 1000,
+            "categories": {
+              "Opening": 100,
+              "Rapport": 80,
+              "Discovery": 150,
+              "Qualification": 80,
+              "Presentation": 90
+            }
+          }
+        },
+        {
+          "gate": "4_Evidence_Verification",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "canonical_keys": [
+              "coaching",
+              "evidence",
+              "revenue_leak",
+              "root_cause",
+              "score",
+              "stage_scores",
+              "violations"
+            ]
+          }
+        },
+        {
+          "gate": "9_JSON_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "sample_bytes": 1040
+          }
+        }
+      ],
+      "passed": 3,
+      "failed": 0,
+      "total": 3
+    },
+    {
+      "sprint": 3,
+      "checked_at": "2026-09-05T17:12:11.908320+00:00",
+      "all_ok": true,
+      "gates": [
+        {
+          "gate": "3_Rule_Consistency_501_1000",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "count": 1000,
+            "categories": {
+              "Presentation": 30,
+              "Pricing": 80,
+              "Objection": 200,
+              "Closing": 80,
+              "Voice": 60,
+              "Compliance": 50
+            }
+          }
+        },
+        {
+          "gate": "9_JSON_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "sample_bytes": 1040
+          }
+        },
+        {
+          "gate": "3_Rule_Consistency",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "count": 1000,
+            "categories": {
+              "Opening": 100,
+              "Rapport": 80,
+              "Discovery": 150,
+              "Qualification": 80,
+              "Presentation": 120,
+              "Pricing": 80,
+              "Objection": 200,
+              "Closing": 80,
+              "Voice": 60,
+              "Compliance": 50
+            }
+          }
+        }
+      ],
+      "passed": 3,
+      "failed": 0,
+      "total": 3
+    },
+    {
+      "sprint": 4,
+      "checked_at": "2026-09-05T17:12:11.924222+00:00",
+      "all_ok": true,
+      "gates": [
+        {
+          "gate": "17_VCIE_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "price_objection_labels": [
+              "Giá"
+            ]
+          }
+        },
+        {
+          "gate": "4_Evidence_Verification",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "canonical_keys": [
+              "coaching",
+              "evidence",
+              "revenue_leak",
+              "root_cause",
+              "score",
+              "stage_scores",
+              "violations"
+            ]
+          }
+        },
+        {
+          "gate": "13_Golden_Call_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "golden_count": 500
+          }
+        },
+        {
+          "gate": "14_Calibration_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "qa_benchmark_count": 10000
+          }
+        }
+      ],
+      "passed": 4,
+      "failed": 0,
+      "total": 4
+    },
+    {
+      "sprint": 5,
+      "checked_at": "2026-09-05T17:12:12.009211+00:00",
+      "all_ok": true,
+      "gates": [
+        {
+          "gate": "2_Logic_Review",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        },
+        {
+          "gate": "5_Root_Cause_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "sample_primary": "RC-OBJ-PRICE-UNHANDLED"
+          }
+        },
+        {
+          "gate": "4_Evidence_Verification",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "canonical_keys": [
+              "coaching",
+              "evidence",
+              "revenue_leak",
+              "root_cause",
+              "score",
+              "stage_scores",
+              "violations"
+            ]
+          }
+        },
+        {
+          "gate": "8_API_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "route_count": 40,
+            "openapi_paths": 36
+          }
+        }
+      ],
+      "passed": 4,
+      "failed": 0,
+      "total": 4
+    },
+    {
+      "sprint": 6,
+      "checked_at": "2026-09-05T17:12:12.069565+00:00",
+      "all_ok": true,
+      "gates": [
+        {
+          "gate": "16_Revenue_Leak_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "sample_amount": 150000.0
+          }
+        },
+        {
+          "gate": "8_API_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "route_count": 40,
+            "openapi_paths": 36
+          }
+        },
+        {
+          "gate": "20_Final_Self_Review",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        }
+      ],
+      "passed": 3,
+      "failed": 0,
+      "total": 3
+    },
+    {
+      "sprint": 7,
+      "checked_at": "2026-09-05T17:12:12.391879+00:00",
+      "all_ok": true,
+      "gates": [
+        {
+          "gate": "1_Architecture_Review",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "layers": [
+              "domain",
+              "application",
+              "infrastructure",
+              "interfaces"
+            ]
+          }
+        },
+        {
+          "gate": "2_Logic_Review",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        },
+        {
+          "gate": "3_Rule_Consistency",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "count": 1000,
+            "categories": {
+              "Opening": 100,
+              "Rapport": 80,
+              "Discovery": 150,
+              "Qualification": 80,
+              "Presentation": 120,
+              "Pricing": 80,
+              "Objection": 200,
+              "Closing": 80,
+              "Voice": 60,
+              "Compliance": 50
+            }
+          }
+        },
+        {
+          "gate": "4_Evidence_Verification",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "canonical_keys": [
+              "coaching",
+              "evidence",
+              "revenue_leak",
+              "root_cause",
+              "score",
+              "stage_scores",
+              "violations"
+            ]
+          }
+        },
+        {
+          "gate": "5_Root_Cause_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "sample_primary": "RC-OBJ-PRICE-UNHANDLED"
+          }
+        },
+        {
+          "gate": "6_Security_Review",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        },
+        {
+          "gate": "7_Performance_Review",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "migrations": 2,
+            "index_mentions": 54
+          }
+        },
+        {
+          "gate": "8_API_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "route_count": 40,
+            "openapi_paths": 36
+          }
+        },
+        {
+          "gate": "9_JSON_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "sample_bytes": 1040
+          }
+        },
+        {
+          "gate": "10_Database_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "migration_files": [
+              "0001_initial.py",
+              "0002_enterprise_modules.py"
+            ]
+          }
+        },
+        {
+          "gate": "11_Docker_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        },
+        {
+          "gate": "12_Audit_Log_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        },
+        {
+          "gate": "13_Golden_Call_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "golden_count": 500
+          }
+        },
+        {
+          "gate": "14_Calibration_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "qa_benchmark_count": 10000
+          }
+        },
+        {
+          "gate": "15_Appeal_Mode_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        },
+        {
+          "gate": "16_Revenue_Leak_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "sample_amount": 150000.0
+          }
+        },
+        {
+          "gate": "17_VCIE_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "price_objection_labels": [
+              "Giá"
+            ]
+          }
+        },
+        {
+          "gate": "18_Test_Coverage_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "pytest_returncode": 0,
+            "pytest_tail": "...........                                                              [100%]\n11 passed in 0.02s\n"
+          }
+        },
+        {
+          "gate": "19_Documentation_Review",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        },
+        {
+          "gate": "20_Final_Self_Review",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        }
+      ],
+      "passed": 20,
+      "failed": 0,
+      "total": 20
+    }
+  ]
+}

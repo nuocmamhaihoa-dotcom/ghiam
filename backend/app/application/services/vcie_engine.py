@@ -68,6 +68,45 @@ def _libraries() -> dict[str, list[dict[str, Any]]]:
     }
 
 
+GROUP_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "Giá": ("đắt", "giá", "rẻ", "phí", "tiền", "ngân sách", "chi phí"),
+    "Thời gian": ("hôm khác", "bận", "sau", "chưa cần", "để", "gọi lại"),
+    "Niềm tin": ("lừa", "uy tín", "tin", "rủi ro", "lừa đảo"),
+    "Quyền quyết định": ("vợ", "chồng", "sếp", "hỏi", "quyết định", "gia đình"),
+    "Đối thủ": ("bên kia", "đối thủ", "chỗ khác", "bên khác", "đang dùng"),
+}
+
+
+def _best_objection_match(text_low: str, objections: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Score library rows so price lines map to Giá, not the first prefix hit."""
+    best: dict[str, Any] | None = None
+    best_score = 0.0
+    for obj in objections:
+        line = str(obj.get("customer_line") or "").split("[")[0].strip().lower()
+        if not line:
+            continue
+        score = 0.0
+        if line in text_low or text_low in line:
+            score += 20.0 + len(line)
+        else:
+            tokens = [t for t in line.replace("/", " ").split() if len(t) > 1]
+            hits = sum(1 for t in tokens if t in text_low)
+            if not hits:
+                continue
+            score += hits * 4.0
+        group = str(obj.get("group") or "")
+        for kw in GROUP_KEYWORDS.get(group, ()):
+            if kw in text_low:
+                score += 12.0
+        # Penalize mismatched groups when strong price cues exist.
+        if any(k in text_low for k in GROUP_KEYWORDS["Giá"]) and group != "Giá":
+            score -= 15.0
+        if score > best_score:
+            best_score = score
+            best = obj
+    return best if best_score > 0 else None
+
+
 class VCIEEngine:
     """Rulebook-linked Vietnamese conversation intelligence."""
 
@@ -122,26 +161,24 @@ class VCIEEngine:
                     break
 
             if speaker == "customer":
-                for obj in libs["objections"]:
-                    line = str(obj.get("customer_line") or "").split("[")[0].strip().lower()
-                    if line and line[:12] in low:
-                        annotations.append(
-                            VCIEAnnotation(
-                                kind="objection",
-                                label=obj.get("group") or obj.get("id") or "",
-                                confidence=0.8,
-                                linked_rule_ids=list(obj.get("linked_rule_ids") or []),
-                                evidence_quote=text,
-                                start_ms=start_ms,
-                                end_ms=end_ms,
-                                meta={
-                                    "hidden_meaning": obj.get("hidden_meaning"),
-                                    "good_response": obj.get("good_response"),
-                                    "forbidden_response": obj.get("forbidden_response"),
-                                },
-                            )
+                best_obj = _best_objection_match(low, libs["objections"])
+                if best_obj is not None:
+                    annotations.append(
+                        VCIEAnnotation(
+                            kind="objection",
+                            label=best_obj.get("group") or best_obj.get("id") or "",
+                            confidence=0.8,
+                            linked_rule_ids=list(best_obj.get("linked_rule_ids") or []),
+                            evidence_quote=text,
+                            start_ms=start_ms,
+                            end_ms=end_ms,
+                            meta={
+                                "hidden_meaning": best_obj.get("hidden_meaning"),
+                                "good_response": best_obj.get("good_response"),
+                                "forbidden_response": best_obj.get("forbidden_response"),
+                            },
                         )
-                        break
+                    )
 
                 for buy in libs["buying"]:
                     sig = str(buy.get("text") or "").split("(")[0].strip().lower()

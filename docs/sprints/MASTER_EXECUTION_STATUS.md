@@ -1,37 +1,23 @@
 # Master Execution Status
 
-**Updated:** 2026-09-05T15:27:12.500995+00:00  
-**Constitution:** `.cursor/rules/project-rules.mdc` (alwaysApply=true)  
-**VECD docs:** `docs/VECD.md`  
-**Validation:** all_ok=True files=None
+**Updated:** 2026-09-05T17:12:12.392237+00:00
+**Overall:** PASS
 
-## Counts
+## Sprint Results
 
-```json
-{
-  "customers": 100000,
-  "agents": 50000,
-  "conversations": 10000,
-  "intents": 1000,
-  "objections": 5000,
-  "emotions": 500,
-  "buying_signals": 500,
-  "root_causes": 500,
-  "golden_calls": 500,
-  "qa_benchmark": 10000,
-  "rules": 1000,
-  "sops": 50
-}
-```
-
-## Sprint Mode
-
-All Sprint 1–9 reports generated under `docs/sprints/`.
+| Sprint | Result | Passed | Total |
+|--------|--------|--------|-------|
+| 1 | PASS | 6 | 6 |
+| 2 | PASS | 3 | 3 |
+| 3 | PASS | 3 | 3 |
+| 4 | PASS | 4 | 4 |
+| 5 | PASS | 4 | 4 |
+| 6 | PASS | 3 | 3 |
+| 7 | PASS | 20 | 20 |
 
 ## Commands
 
 ```bash
-python datasets/scripts/generate_dataset.py
-python datasets/scripts/validate_dataset.py
-python datasets/scripts/export_postgres.py
+PYTHONPATH=backend python scripts/quality_gate.py --sprint all
+cd backend && PYTHONPATH=. pytest -q
 ```

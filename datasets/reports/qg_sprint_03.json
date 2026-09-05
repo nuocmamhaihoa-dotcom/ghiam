@@ -1,0 +1,57 @@
+{
+  "sprint": 3,
+  "checked_at": "2026-09-05T17:12:11.908320+00:00",
+  "all_ok": true,
+  "gates": [
+    {
+      "gate": "3_Rule_Consistency_501_1000",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "count": 1000,
+        "categories": {
+          "Presentation": 30,
+          "Pricing": 80,
+          "Objection": 200,
+          "Closing": 80,
+          "Voice": 60,
+          "Compliance": 50
+        }
+      }
+    },
+    {
+      "gate": "9_JSON_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "sample_bytes": 1040
+      }
+    },
+    {
+      "gate": "3_Rule_Consistency",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "count": 1000,
+        "categories": {
+          "Opening": 100,
+          "Rapport": 80,
+          "Discovery": 150,
+          "Qualification": 80,
+          "Presentation": 120,
+          "Pricing": 80,
+          "Objection": 200,
+          "Closing": 80,
+          "Voice": 60,
+          "Compliance": 50
+        }
+      }
+    }
+  ],
+  "passed": 3,
+  "failed": 0,
+  "total": 3
+}

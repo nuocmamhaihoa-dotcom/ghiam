@@ -1,0 +1,36 @@
+{
+  "sprint": 6,
+  "checked_at": "2026-09-05T17:12:12.069565+00:00",
+  "all_ok": true,
+  "gates": [
+    {
+      "gate": "16_Revenue_Leak_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "sample_amount": 150000.0
+      }
+    },
+    {
+      "gate": "8_API_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "route_count": 40,
+        "openapi_paths": 36
+      }
+    },
+    {
+      "gate": "20_Final_Self_Review",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {}
+    }
+  ],
+  "passed": 3,
+  "failed": 0,
+  "total": 3
+}
