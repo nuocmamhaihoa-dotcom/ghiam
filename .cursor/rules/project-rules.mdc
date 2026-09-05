@@ -32,6 +32,37 @@ alwaysApply: true
 
 Không thay stack cốt lõi trừ khi có quyết định kiến trúc có audit log và phê duyệt rõ ràng.
 
+## 2b. Pipeline AI cố định (không đổi thứ tự)
+
+```
+Audio → Whisper → Speaker Diarization → Transcript Normalization
+→ Semantic Segmentation → Evidence Extraction → Evidence Verification
+→ Rule Engine → AI Judge Ensemble → Root Cause Graph
+→ Coaching Engine → Revenue Leak AI → Dashboard → JSON Output
+```
+
+## 2c. AI Judge Ensemble (5 agent bắt buộc)
+
+1. **Evidence AI** — chỉ tìm bằng chứng
+2. **SOP Judge** — chỉ chấm Rulebook từ Database
+3. **Psychology AI** — tâm lý khách
+4. **Sales Expert AI** — kỹ năng bán
+5. **Consensus AI** — tổng hợp điểm cuối; chỉ kết luận khi đủ dữ liệu
+
+## 2d. JSON Output chuẩn (mọi scoring API)
+
+```json
+{
+  "score": 0,
+  "stage_scores": {},
+  "violations": [],
+  "evidence": [],
+  "root_cause": {},
+  "coaching": {},
+  "revenue_leak": {}
+}
+```
+
 ## 3. Observability & vận hành
 
 - **Structured Logging**: JSON logs có `timestamp`, `level`, `service`, `trace_id`, `actor_id`, `action`.

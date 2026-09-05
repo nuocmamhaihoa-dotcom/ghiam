@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg: #0b1220;
+  --color-surface: #111827;
+  --color-ink: #e2e8f0;
+  --color-accent: #2dd4bf;
+  --color-danger: #fb7185;
+  --color-warning-ie: #f59e0b;
+  --color-success: #34d399;
+  --font-sans: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-display: "Source Serif 4", Georgia, serif;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  color: var(--color-ink);
+  background: var(--color-bg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(45, 212, 191, 0.28);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.45s ease-out both;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2.4s ease-in-out infinite;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}

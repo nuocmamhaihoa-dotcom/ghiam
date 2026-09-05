@@ -1,0 +1,58 @@
+{
+  "utterance_required_fields": [
+    "id",
+    "conversation_id",
+    "speaker",
+    "text",
+    "dialect",
+    "industry",
+    "stage",
+    "intent",
+    "emotion",
+    "objection_type",
+    "buying_signal",
+    "confidence",
+    "recommended_response",
+    "root_cause_if_failed"
+  ],
+  "dialect_mix": {
+    "bac": 0.35,
+    "trung": 0.2,
+    "nam": 0.45
+  },
+  "industries": [
+    "bds",
+    "spa",
+    "nha_khoa",
+    "giao_duc",
+    "bao_hiem",
+    "o_to",
+    "my_pham",
+    "gia_dung",
+    "thuc_pham",
+    "dien_may",
+    "noi_that",
+    "logistics",
+    "du_lich",
+    "tai_chinh",
+    "fitness",
+    "camera",
+    "dien_nuoc",
+    "thiet_bi_y_te",
+    "dich_vu_dn"
+  ],
+  "stages": [
+    "opening",
+    "rapport",
+    "discovery",
+    "qualification",
+    "presentation",
+    "pricing",
+    "objection",
+    "closing",
+    "voice",
+    "compliance"
+  ],
+  "generated_at": "2026-09-05T14:23:53.291224+00:00",
+  "seed": 20260905
+}

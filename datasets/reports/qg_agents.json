@@ -1,0 +1,35 @@
+{
+  "gate": "agents",
+  "count": 50000,
+  "ok": true,
+  "errors": [],
+  "balances": {
+    "dialect": {
+      "bac": 17572,
+      "nam": 22549,
+      "trung": 9879
+    },
+    "industry": {
+      "bds": 2632,
+      "spa": 2632,
+      "nha_khoa": 2632,
+      "giao_duc": 2632,
+      "bao_hiem": 2632,
+      "o_to": 2632,
+      "my_pham": 2632,
+      "gia_dung": 2632,
+      "thuc_pham": 2632,
+      "dien_may": 2632,
+      "noi_that": 2632,
+      "logistics": 2631,
+      "du_lich": 2631,
+      "tai_chinh": 2631,
+      "fitness": 2631,
+      "camera": 2631,
+      "dien_nuoc": 2631,
+      "thiet_bi_y_te": 2631,
+      "dich_vu_dn": 2631
+    }
+  },
+  "checked_at": "2026-09-05T14:23:54.450660+00:00"
+}

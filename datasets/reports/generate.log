@@ -1,0 +1,13 @@
+=== VECD Factory start 2026-09-05T14:23:53.291191+00:00
+[QG PASS] intents: 1000 rows; errors=0
+[QG PASS] emotions: 500 rows; errors=0
+[QG PASS] buying_signals: 500 rows; errors=0
+[QG PASS] objections: 5000 rows; errors=0
+[QG PASS] root_causes: 500 rows; errors=0
+[QG PASS] customers: 100000 rows; errors=0
+[QG PASS] agents: 50000 rows; errors=0
+[QG PASS] conversations: 10000 rows; errors=0
+[QG PASS] golden_calls: 500 rows; errors=0
+[QG PASS] qa_benchmark: 10000 rows; errors=0
+[QG PASS] rules_1000: 1000 rows; errors=0
+=== VECD Factory done {"customers": 100000, "agents": 50000, "conversations": 10000, "intents": 1000, "objections": 5000, "emotions": 500, "buying_signals": 500, "root_causes": 500, "golden_calls": 500, "qa_benchmark": 10000, "rules": 1000, "sops": 50}
