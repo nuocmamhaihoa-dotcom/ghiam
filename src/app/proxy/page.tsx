@@ -72,13 +72,39 @@ function formatEta(minutes: number | null): string {
   return `~${h}g ${m}p`;
 }
 
+type AutoState = {
+  enabled: boolean;
+  tickCount: number;
+  lastTickAt: string | null;
+  lastError: string | null;
+  lastSummary: string | null;
+  consecutiveErrors: number;
+  config?: { intervalSec?: number };
+  stats?: {
+    filesProcessed?: number;
+    imported?: number;
+    reanalyzed?: number;
+  };
+};
+
 export default function ProxyPage() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [progress, setProgress] = useState<Progress | null>(null);
+  const [autoState, setAutoState] = useState<AutoState | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+
+  const refreshAuto = useCallback(async () => {
+    try {
+      const res = await fetch("/api/ity/auto", { cache: "no-store" });
+      const data = await res.json();
+      if (data.ok && data.state) setAutoState(data.state as AutoState);
+    } catch {
+      // non-fatal — board still works without auto status
+    }
+  }, []);
 
   const refresh = useCallback(async (forceHunt = false) => {
     setBusy(true);
@@ -95,6 +121,7 @@ export default function ProxyPage() {
       setSnapshot(data.snapshot);
       if (Array.isArray(data.history)) setHistory(data.history);
       if (data.progress) setProgress(data.progress);
+      await refreshAuto();
       setMsg(
         forceHunt
           ? `Đã kích săn proxy · living=${data.snapshot?.livingCount ?? "?"}`
@@ -105,7 +132,33 @@ export default function ProxyPage() {
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [refreshAuto]);
+
+  const toggleAuto = useCallback(async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const enable = !autoState?.enabled;
+      const res = await fetch("/api/ity/auto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: enable ? "enable" : "disable" }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Auto API error");
+      if (data.state) setAutoState(data.state as AutoState);
+      setMsg(
+        enable
+          ? data.result?.message || "Đã bật tự động tải + phân tích liên tục"
+          : "Đã tắt pipeline tự động",
+      );
+      await refresh(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Lỗi bật/tắt auto");
+    } finally {
+      setBusy(false);
+    }
+  }, [autoState?.enabled, refresh]);
 
   const runProgressAction = useCallback(
     async (action: "boost-downloads" | "import-library" | "sample") => {
@@ -204,8 +257,56 @@ export default function ProxyPage() {
           >
             Lưu & phân tích
           </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void toggleAuto()}
+            className={`rounded-md px-3 py-2 text-sm disabled:opacity-50 ${
+              autoState?.enabled
+                ? "bg-emerald-700 text-white"
+                : "border border-[var(--line)] bg-[var(--panel)]"
+            }`}
+          >
+            {autoState?.enabled ? "Đang tự động · Tắt" : "Bật tự động liên tục"}
+          </button>
         </div>
       </div>
+
+      <section className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--panel)] px-4 py-4">
+        <SectionTitle
+          title="Pipeline tự động"
+          subtitle="Tải ITY → lưu thư viện → phân tích chuyên sâu, chạy liên tục qua worker"
+        />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric
+            label="Trạng thái"
+            value={autoState?.enabled ? "BẬT" : "TẮT"}
+            hint={`chu kỳ ${autoState?.config?.intervalSec ?? 45}s · tick #${autoState?.tickCount ?? 0}`}
+          />
+          <Metric
+            label="Đã xử lý"
+            value={String(autoState?.stats?.filesProcessed ?? 0)}
+            hint="file qua process-pending"
+          />
+          <Metric
+            label="Đã import"
+            value={String(autoState?.stats?.imported ?? 0)}
+            hint={`reanalyze ${autoState?.stats?.reanalyzed ?? 0}`}
+          />
+          <Metric
+            label="Lần gần nhất"
+            value={
+              autoState?.lastTickAt
+                ? new Date(autoState.lastTickAt).toLocaleTimeString("vi-VN")
+                : "—"
+            }
+            hint={autoState?.lastError || autoState?.lastSummary || "Chưa chạy tick"}
+          />
+        </div>
+        {autoState?.lastSummary ? (
+          <p className="text-sm text-[var(--muted)]">{autoState.lastSummary}</p>
+        ) : null}
+      </section>
 
       <section className="space-y-4">
         <SectionTitle

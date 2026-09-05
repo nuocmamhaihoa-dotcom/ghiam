@@ -12,5 +12,20 @@ module.exports = {
         PORT: "3000",
       },
     },
+    {
+      name: "ity-auto",
+      cwd: "/var/www/callcraft",
+      script: "scripts/ity-auto-worker.mjs",
+      instances: 1,
+      exec_mode: "fork",
+      autorestart: true,
+      max_restarts: 50,
+      restart_delay: 5000,
+      env: {
+        NODE_ENV: "production",
+        CALLCRAFT_BASE_URL: "http://127.0.0.1:3000",
+        ITY_AUTO_INTERVAL_SEC: "45",
+      },
+    },
   ],
 };
