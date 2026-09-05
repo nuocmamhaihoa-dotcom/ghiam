@@ -24,7 +24,9 @@ class SqlAlchemyCoachingRepository:
                 id=row_id,
                 call_id=call_id,
                 agent_user_id=agent_user_id,
-                call_tips=list(payload.get("call_tips") or []),
+                call_tips=list(
+                    payload.get("call_tips") or payload.get("tips") or []
+                ),
                 explanation=str(payload.get("explanation", "")),
                 payload=payload,
                 status="active",

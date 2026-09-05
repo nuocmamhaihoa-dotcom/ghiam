@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.infrastructure.db.models import (
     CallModel,
     CoachingPlanModel,
+    ConversationDnaModel,
     RevenueLeakModel,
     RootCauseModel,
     ScoreModel,
@@ -21,6 +22,14 @@ from app.infrastructure.db.models import (
 )
 
 STAGE_KEYS = ("opening", "discovery", "pitch", "objection", "close", "outro")
+FUNNEL_STAGES = (
+    ("opening", "Mở đầu"),
+    ("discovery", "Khám phá"),
+    ("pitch", "Giới thiệu"),
+    ("objection", "Xử lý từ chối"),
+    ("close", "Chốt sale"),
+    ("outro", "Kết thúc"),
+)
 
 
 def _is_insufficient_evidence(result: str | None) -> bool:
@@ -278,6 +287,109 @@ class DashboardService:
             },
         ]
 
+        # Conversion funnel: share of scored calls with stage score >= 60
+        funnel: list[dict[str, Any]] = []
+        if scored_rows:
+            for stage_key, stage_label in FUNNEL_STAGES:
+                passed = 0
+                for score in scored_rows:
+                    raw = (score.stage_scores or {}).get(stage_key)
+                    try:
+                        if raw is not None and float(raw) >= 60.0:
+                            passed += 1
+                    except (TypeError, ValueError):
+                        continue
+                funnel.append(
+                    {
+                        "stage": stage_key,
+                        "label": stage_label,
+                        "count": passed,
+                        "rate": round(passed / scored, 4) if scored else 0.0,
+                    }
+                )
+        else:
+            funnel = [
+                {"stage": key, "label": label, "count": 0, "rate": 0.0}
+                for key, label in FUNNEL_STAGES
+            ]
+
+        # Pareto of root causes with cumulative percentage
+        total_causes = sum(int(item["count"]) for item in top_root_causes) or 1
+        running = 0
+        pareto: list[dict[str, Any]] = []
+        for item in top_root_causes:
+            running += int(item["count"])
+            pareto.append(
+                {
+                    **item,
+                    "share": round(int(item["count"]) / total_causes, 4),
+                    "cumulative_share": round(running / total_causes, 4),
+                }
+            )
+
+        # Org-level emotion timeline: average valence buckets across DNA rows
+        emotion_buckets: dict[int, list[float]] = defaultdict(list)
+        if call_ids:
+            for dna in (
+                await self._session.execute(
+                    select(ConversationDnaModel).where(
+                        ConversationDnaModel.call_id.in_(call_ids)
+                    )
+                )
+            ).scalars():
+                for point in dna.emotion_timeline or []:
+                    if not isinstance(point, dict):
+                        continue
+                    try:
+                        progress = float(
+                            point.get("progress_pct")
+                            or point.get("t_sec")
+                            or 0.0
+                        )
+                        valence = float(point.get("valence") or 0.0)
+                    except (TypeError, ValueError):
+                        continue
+                    bucket = int(min(95, max(0, progress)) // 5 * 5)
+                    emotion_buckets[bucket].append(valence)
+        emotion_timeline = [
+            {
+                "progress_pct": bucket,
+                "avg_valence": round(sum(vals) / len(vals), 3),
+                "samples": len(vals),
+                "label": (
+                    "positive"
+                    if (sum(vals) / len(vals)) > 0.25
+                    else "negative"
+                    if (sum(vals) / len(vals)) < -0.25
+                    else "neutral"
+                ),
+            }
+            for bucket, vals in sorted(emotion_buckets.items())
+            if vals
+        ]
+
+        coaching_highlights: list[dict[str, Any]] = []
+        for plan in (
+            await self._session.execute(
+                select(CoachingPlanModel)
+                .where(CoachingPlanModel.status.in_(["active", "open", "in_progress"]))
+                .limit(20)
+            )
+        ).scalars():
+            tips = plan.call_tips or []
+            if not tips:
+                continue
+            tip = tips[0] if isinstance(tips[0], dict) else {"title": str(tips[0])}
+            coaching_highlights.append(
+                {
+                    "plan_id": str(plan.id),
+                    "agent_user_id": str(plan.agent_user_id) if plan.agent_user_id else None,
+                    "title": tip.get("title") or tip.get("rule_code") or "Coaching tip",
+                    "priority": tip.get("priority") or "major",
+                    "status": plan.status,
+                }
+            )
+
         return {
             "window": {"from": window_from.isoformat(), "to": window_to.isoformat()},
             "calls_total": calls_total,
@@ -293,6 +405,10 @@ class DashboardService:
             "employee_scores": employee_scores,
             "kpis": kpis,
             "stage_heatmap": stage_heatmap,
+            "funnel": funnel,
+            "pareto": pareto,
+            "emotion_timeline": emotion_timeline,
+            "coaching_highlights": coaching_highlights[:10],
         }
 
     async def revenue_leak_summary(

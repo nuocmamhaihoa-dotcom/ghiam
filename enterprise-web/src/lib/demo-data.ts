@@ -425,6 +425,31 @@ export const DEMO_DASHBOARD: DashboardOverview = {
       stages: { opening: 80, discovery: 72, pitch: 68, objection: 60, close: 58, outro: null },
     },
   ],
+  funnel: [
+    { stage: "opening", label: "Mở đầu", count: 11800, rate: 0.94 },
+    { stage: "discovery", label: "Khám phá", count: 9800, rate: 0.78 },
+    { stage: "pitch", label: "Giới thiệu", count: 8600, rate: 0.68 },
+    { stage: "objection", label: "Xử lý từ chối", count: 6100, rate: 0.49 },
+    { stage: "close", label: "Chốt sale", count: 4200, rate: 0.33 },
+    { stage: "outro", label: "Kết thúc", count: 3900, rate: 0.31 },
+  ],
+  pareto: [
+    { cause_code: "RC-CLOSE-NO-ASK", label: "Không hỏi chốt", count: 1100, share: 0.46, cumulative_share: 0.46 },
+    { cause_code: "RC-OBJ-PRICE-UNHANDLED", label: "Bỏ qua objection giá", count: 860, share: 0.36, cumulative_share: 0.82 },
+    { cause_code: "RC-DISC-SHALLOW", label: "Discovery nông", count: 420, share: 0.18, cumulative_share: 1.0 },
+  ],
+  emotion_timeline: [
+    { progress_pct: 0, avg_valence: 0.15, samples: 220, label: "neutral" },
+    { progress_pct: 20, avg_valence: 0.35, samples: 210, label: "positive" },
+    { progress_pct: 40, avg_valence: -0.05, samples: 205, label: "neutral" },
+    { progress_pct: 60, avg_valence: -0.32, samples: 198, label: "negative" },
+    { progress_pct: 80, avg_valence: 0.12, samples: 180, label: "neutral" },
+    { progress_pct: 95, avg_valence: 0.28, samples: 160, label: "positive" },
+  ],
+  coaching_highlights: [
+    { plan_id: "cp_01", agent_user_id: "us_a01", title: "Luyện hỏi chốt 3 câu", priority: "critical", status: "active" },
+    { plan_id: "cp_02", agent_user_id: "us_a03", title: "Xử lý objection giá bằng value stack", priority: "major", status: "open" },
+  ],
 };
 
 export const DEMO_RULES: RulebookRule[] = [

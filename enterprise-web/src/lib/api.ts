@@ -123,6 +123,108 @@ async function withDemoFallback<T>(
   }
 }
 
+/** Normalize backend scoring payload → AnalysisResult field names. */
+function normalizeAnalysis(
+  raw: AnalysisResult | Record<string, unknown>,
+  callId: string
+): AnalysisResult {
+  const r = raw as Record<string, unknown>;
+  const root = (r.root_cause || {}) as Record<string, unknown>;
+  const coaching = (r.coaching || {}) as Record<string, unknown>;
+  const leak = (r.revenue_leak || {}) as Record<string, unknown>;
+  const metaIn = (r.meta || {}) as Record<string, unknown>;
+  const tipsRaw = (coaching.tips || coaching.call_tips || []) as Record<
+    string,
+    unknown
+  >[];
+
+  return {
+    ...(raw as AnalysisResult),
+    meta: {
+      call_id: String(metaIn.call_id || callId),
+      tenant_id: String(metaIn.tenant_id || "default"),
+      analyzed_at: String(metaIn.analyzed_at || new Date().toISOString()),
+      pipeline_version: String(metaIn.pipeline_version || "1.0.0"),
+      rulebook_version: String(metaIn.rulebook_version || "1.0.0"),
+      status: (metaIn.status as AnalysisResult["meta"]["status"]) || "scored",
+      trace_id: String(metaIn.trace_id || `trace_${callId}`),
+      sop_id: metaIn.sop_id as string | undefined,
+      industry_code: metaIn.industry_code as string | undefined,
+    },
+    score: (r.score as number | null) ?? null,
+    stage_scores: (r.stage_scores as AnalysisResult["stage_scores"]) || {
+      opening: null,
+      discovery: null,
+      pitch: null,
+      objection: null,
+      close: null,
+      outro: null,
+    },
+    violations: (r.violations as AnalysisResult["violations"]) || [],
+    evidence: (r.evidence as AnalysisResult["evidence"]) || [],
+    root_cause: {
+      primary_code:
+        (root.primary_code as string | null) ??
+        (root.primary_cause_code as string | null) ??
+        null,
+      label: (root.label as string | null) ?? null,
+      confidence: (root.confidence as number | null) ?? null,
+      contributing_factors:
+        (root.contributing_factors as string[]) ||
+        (root.contributing_factors as string[]) ||
+        [],
+      evidence_refs: (root.evidence_refs as string[]) || [],
+      status:
+        (root.status as AnalysisResult["root_cause"]["status"]) ||
+        (root.verdict === "Insufficient Evidence"
+          ? "Insufficient Evidence"
+          : "ok"),
+      reason:
+        (root.reason as string | undefined) ||
+        (root.explanation as string | undefined),
+      children:
+        (root.children as AnalysisResult["root_cause"]["children"]) ||
+        undefined,
+    },
+    coaching: {
+      priority:
+        (coaching.priority as AnalysisResult["coaching"]["priority"]) || "medium",
+      tips: tipsRaw.map((tip, idx) => ({
+        tip_id: String(tip.tip_id || tip.cause_code || `tip_${idx}`),
+        title: String(tip.title || "Coaching tip"),
+        script_suggestion: String(
+          tip.script_suggestion || tip.action_markdown || tip.explanation || ""
+        ),
+        linked_rule_ids: (tip.linked_rule_ids as string[]) ||
+          (tip.rule_code ? [String(tip.rule_code)] : []),
+        evidence_refs: (tip.evidence_refs as string[]) || [],
+      })),
+      drill_ids:
+        (coaching.drill_ids as string[]) ||
+        (coaching.drill_ids as string[]) ||
+        [],
+    },
+    revenue_leak: {
+      estimated_loss_vnd:
+        (leak.estimated_loss_vnd as number | null) ??
+        (leak.estimated_amount as number | null) ??
+        null,
+      leak_codes:
+        (leak.leak_codes as string[]) ||
+        (leak.leak_codes as string[]) ||
+        [],
+      probability: (leak.probability as number | null) ?? null,
+      explanation: String(leak.explanation || ""),
+      evidence_refs: (leak.evidence_refs as string[]) || [],
+      status:
+        (leak.status as AnalysisResult["revenue_leak"]["status"]) ||
+        (leak.verdict === "Insufficient Evidence"
+          ? "Insufficient Evidence"
+          : "ok"),
+    },
+  };
+}
+
 export const api = {
   async login(input: {
     tenant_code: string;
@@ -188,13 +290,22 @@ export const api = {
   async getCallAnalysis(
     callId: string
   ): Promise<{ data: AnalysisResult; source: "api" | "demo" }> {
-    return withDemoFallback(
-      () => request<AnalysisResult>(`/v1/calls/${callId}/analysis`),
-      () => ({
-        ...DEMO_ANALYSIS,
-        meta: { ...DEMO_ANALYSIS.meta, call_id: callId },
-      })
+    const res = await withDemoFallback(
+      async () =>
+        normalizeAnalysis(
+          await request<AnalysisResult>(`/v1/calls/${callId}/analysis`),
+          callId
+        ),
+      () =>
+        normalizeAnalysis(
+          {
+            ...DEMO_ANALYSIS,
+            meta: { ...DEMO_ANALYSIS.meta, call_id: callId },
+          },
+          callId
+        )
     );
+    return res;
   },
 
   async listRules(query?: {

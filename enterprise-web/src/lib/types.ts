@@ -210,6 +210,32 @@ export interface DashboardOverview {
     agent_name: string;
     stages: Partial<Record<StageKey, number | null>>;
   }[];
+  funnel: {
+    stage: string;
+    label: string;
+    count: number;
+    rate: number;
+  }[];
+  pareto: {
+    cause_code: string;
+    label: string;
+    count: number;
+    share: number;
+    cumulative_share: number;
+  }[];
+  emotion_timeline: {
+    progress_pct: number;
+    avg_valence: number;
+    samples: number;
+    label: string;
+  }[];
+  coaching_highlights: {
+    plan_id: string;
+    agent_user_id: string | null;
+    title: string;
+    priority: string;
+    status: string;
+  }[];
 }
 
 export interface RulebookRule {

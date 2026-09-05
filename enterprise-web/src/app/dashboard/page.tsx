@@ -1,12 +1,14 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { DataTable } from "@/components/DataTable";
+import { FunnelChart } from "@/components/FunnelChart";
+import { OrgEmotionTimeline } from "@/components/OrgEmotionTimeline";
+import { ParetoChart } from "@/components/ParetoChart";
 import { RevenueLeakChart } from "@/components/RevenueLeakChart";
 import { StageHeatmap } from "@/components/StageHeatmap";
-import { KpiCard, PageHeader, Panel, SourcePill } from "@/components/ui";
+import { Badge, KpiCard, PageHeader, Panel, SourcePill } from "@/components/ui";
 import { api } from "@/lib/api";
 import {
   formatNumber,
@@ -14,150 +16,209 @@ import {
   formatVnd,
   scoreTone,
 } from "@/lib/format";
-import type { DashboardOverview } from "@/lib/types";
+import type { CallSummary, DashboardOverview } from "@/lib/types";
+
+type RevenueRollup = {
+  estimated_total: number;
+  currency: string;
+  insufficient_evidence_calls: number;
+  top_components: {
+    cause_code: string;
+    amount: number;
+    call_count: number;
+  }[];
+};
+
+function badgeTone(
+  score: number
+): "slate" | "teal" | "amber" | "rose" | "emerald" | "sky" {
+  if (score >= 80) return "emerald";
+  if (score >= 60) return "sky";
+  if (score >= 40) return "amber";
+  return "rose";
+}
 
 export default function DashboardPage() {
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
+  const [calls, setCalls] = useState<CallSummary[]>([]);
+  const [leak, setLeak] = useState<RevenueRollup | null>(null);
   const [source, setSource] = useState<"api" | "demo">("demo");
-  const [leak, setLeak] = useState<{
-    estimated_total: number;
-    currency: string;
-    insufficient_evidence_calls: number;
-    top_components: { cause_code: string; amount: number; call_count: number }[];
-  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
-      const [dash, rev] = await Promise.all([
-        api.getDashboardOverview(),
-        api.getRevenueLeakSummary(),
-      ]);
-      setOverview(dash.data);
-      setSource(dash.source);
-      setLeak(rev.data);
+      try {
+        const [ov, callPack, leakPack] = await Promise.all([
+          api.getDashboardOverview(),
+          api.listCalls({ limit: 12 }),
+          api.getRevenueLeakSummary(),
+        ]);
+        if (cancelled) return;
+        setOverview(ov.data);
+        setCalls(callPack.data.data);
+        setLeak(leakPack.data);
+        setSource(
+          ov.source === "api" ||
+            callPack.source === "api" ||
+            leakPack.source === "api"
+            ? "api"
+            : "demo"
+        );
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Không tải được dashboard");
+        }
+      }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  if (!overview) {
-    return (
-      <AppShell>
-        <div className="animate-pulse-soft text-slate-400">Đang tải dashboard…</div>
-      </AppShell>
-    );
-  }
+  const employees = useMemo(
+    () => overview?.employee_scores ?? [],
+    [overview]
+  );
 
   return (
     <AppShell>
       <PageHeader
-        title="Tổng quan chất lượng telesale"
-        description="Điểm nhân viên, KPI vận hành và ước tính rò rỉ doanh thu trong cửa sổ đã chọn."
+        title="Operations Dashboard"
+        description="Điểm nhân viên · Heatmap · Emotion · Root Cause · Revenue Leak · Coaching · KPI · Pareto · Funnel"
         actions={<SourcePill source={source} />}
       />
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        {overview.kpis.map((k) => (
+      {error ? (
+        <div className="mb-4 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {(overview?.kpis ?? []).map((kpi) => (
           <KpiCard
-            key={k.key}
-            label={k.label}
+            key={kpi.key}
+            label={kpi.label}
             value={
-              k.unit === "%"
-                ? formatPercentDisplay(k.value)
-                : k.unit === "điểm"
-                  ? formatNumber(k.value, 1)
-                  : formatNumber(k.value)
+              kpi.unit === "VND" || kpi.unit === "vnd"
+                ? formatVnd(Number(kpi.value))
+                : kpi.unit === "%"
+                  ? formatPercentDisplay(Number(kpi.value))
+                  : formatNumber(Number(kpi.value))
             }
-            delta={k.delta_pct}
-            hint={k.unit === "case" ? "case mở" : undefined}
+            delta={kpi.delta_pct}
+            hint={kpi.unit}
           />
         ))}
       </div>
 
-      <div className="mb-6 grid gap-4 xl:grid-cols-3">
-        <Panel title="Tóm tắt cửa sổ" className="animate-fade-up">
-          <dl className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <dt className="text-slate-500">Tổng cuộc gọi</dt>
-              <dd className="mt-1 text-lg font-semibold text-slate-100">
-                {formatNumber(overview.calls_total)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Đã chấm</dt>
-              <dd className="mt-1 text-lg font-semibold text-slate-100">
-                {formatNumber(overview.scored)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Fail</dt>
-              <dd className="mt-1 text-lg font-semibold text-rose-300">
-                {formatNumber(overview.failed)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Thiếu bằng chứng</dt>
-              <dd className="mt-1 text-lg font-semibold text-amber-300">
-                {formatNumber(overview.insufficient_evidence)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Điểm TB</dt>
-              <dd className={`mt-1 text-lg font-semibold ${scoreTone(overview.avg_score)}`}>
-                {formatNumber(overview.avg_score, 1)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Auto-fail rate</dt>
-              <dd className="mt-1 text-lg font-semibold text-slate-100">
-                {formatPercentDisplay(overview.auto_fail_rate)}
-              </dd>
-            </div>
-          </dl>
+      <div className="mb-4 grid gap-4 xl:grid-cols-2">
+        <Panel title="Stage Heatmap">
+          <StageHeatmap rows={overview?.stage_heatmap ?? []} />
         </Panel>
+        <Panel title="Conversion Funnel">
+          <FunnelChart items={overview?.funnel ?? []} />
+        </Panel>
+      </div>
 
-        <Panel title="Rò rỉ doanh thu (org)" className="xl:col-span-2 animate-fade-up">
-          {leak ? <RevenueLeakChart rollup={leak} /> : null}
-          <div className="mt-3 text-xs text-slate-500">
-            Ước tính org: {formatVnd(overview.estimated_revenue_leak_vnd)} · IE không cộng tiền:{" "}
-            {overview.ie_leak_calls} cuộc
+      <div className="mb-4 grid gap-4 xl:grid-cols-2">
+        <Panel title="Root Cause Pareto">
+          <ParetoChart items={overview?.pareto ?? []} />
+        </Panel>
+        <Panel title="Org Emotion Timeline">
+          <OrgEmotionTimeline points={overview?.emotion_timeline ?? []} />
+        </Panel>
+      </div>
+
+      <div className="mb-4 grid gap-4 xl:grid-cols-2">
+        <Panel title="Revenue Leak">
+          <RevenueLeakChart rollup={leak ?? undefined} />
+          <p className="mt-3 text-xs text-slate-500">
+            IE leak calls: {formatNumber(overview?.ie_leak_calls ?? 0)} · Window{" "}
+            {overview?.window.from?.slice(0, 10)} → {overview?.window.to?.slice(0, 10)}
+          </p>
+        </Panel>
+        <Panel title="Coaching Highlights">
+          <div className="space-y-2">
+            {(overview?.coaching_highlights ?? []).map((item) => (
+              <div
+                key={item.plan_id}
+                className="flex items-start justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2"
+              >
+                <div>
+                  <div className="text-sm font-medium text-slate-100">{item.title}</div>
+                  <div className="text-xs text-slate-500">
+                    Plan {item.plan_id}
+                    {item.agent_user_id ? ` · agent ${item.agent_user_id}` : ""}
+                  </div>
+                </div>
+                <Badge tone={item.priority === "critical" ? "rose" : "amber"}>
+                  {item.status}
+                </Badge>
+              </div>
+            ))}
+            {!overview?.coaching_highlights?.length ? (
+              <p className="text-sm text-slate-500">Chưa có coaching highlight.</p>
+            ) : null}
           </div>
         </Panel>
       </div>
 
-      <div className="mb-6 grid gap-4 xl:grid-cols-2">
-        <Panel title="Bảng điểm nhân viên">
+      <div className="mb-4 grid gap-4 xl:grid-cols-2">
+        <Panel title="Top Failed Rules">
+          <div className="space-y-2">
+            {(overview?.top_failed_rules ?? []).map((row) => (
+              <div
+                key={row.rule_code}
+                className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 px-3 py-2"
+              >
+                <div>
+                  <div className="font-mono text-xs text-teal-300">{row.rule_code}</div>
+                  <div className="text-sm text-slate-200">{row.title}</div>
+                </div>
+                <Badge tone="rose">{row.fail_count}</Badge>
+              </div>
+            ))}
+          </div>
+        </Panel>
+        <Panel title="Top Root Causes">
+          <div className="space-y-2">
+            {(overview?.top_root_causes ?? []).map((row) => (
+              <div
+                key={row.cause_code}
+                className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 px-3 py-2"
+              >
+                <div>
+                  <div className="font-mono text-xs text-amber-300">{row.cause_code}</div>
+                  <div className="text-sm text-slate-200">{row.label}</div>
+                </div>
+                <Badge tone="amber">{row.count}</Badge>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <div className="mb-4">
+        <Panel title="Điểm theo nhân viên">
           <DataTable
-            rows={overview.employee_scores}
-            rowKey={(r) => r.user_id}
+            rows={employees}
+            rowKey={(row) => row.user_id}
             columns={[
-              {
-                key: "name",
-                header: "Nhân viên",
-                render: (r) => (
-                  <div>
-                    <div className="font-medium">{r.full_name}</div>
-                    <div className="text-xs text-slate-500">{r.team_name}</div>
-                  </div>
-                ),
-              },
+              { key: "name", header: "Nhân viên", render: (r) => r.full_name },
+              { key: "team", header: "Team", render: (r) => r.team_name || "—" },
               {
                 key: "score",
-                header: "Điểm TB",
+                header: "Avg score",
                 render: (r) => (
-                  <span className={scoreTone(r.avg_score)}>
-                    {formatNumber(r.avg_score, 1)}
-                  </span>
+                  <Badge tone={badgeTone(r.avg_score)}>
+                    <span className={scoreTone(r.avg_score)}>{r.avg_score.toFixed(1)}</span>
+                  </Badge>
                 ),
               },
-              {
-                key: "calls",
-                header: "Cuộc gọi",
-                render: (r) => formatNumber(r.calls),
-              },
-              {
-                key: "leak",
-                header: "Leak",
-                render: (r) => formatVnd(r.leak_vnd),
-              },
+              { key: "calls", header: "Calls", render: (r) => formatNumber(r.calls) },
+              { key: "leak", header: "Leak", render: (r) => formatVnd(r.leak_vnd) },
               {
                 key: "ie",
                 header: "IE rate",
@@ -166,52 +227,48 @@ export default function DashboardPage() {
             ]}
           />
         </Panel>
+      </div>
 
-        <Panel>
-          <StageHeatmap rows={overview.stage_heatmap} />
+      <div className="mb-4">
+        <Panel title="Recent Calls">
+          <DataTable
+            rows={calls}
+            rowKey={(row) => row.id}
+            columns={[
+              { key: "code", header: "Call", render: (r) => r.external_call_id },
+              { key: "agent", header: "Agent", render: (r) => r.agent_name },
+              { key: "campaign", header: "Campaign", render: (r) => r.campaign_code },
+              {
+                key: "score",
+                header: "Score",
+                render: (r) =>
+                  r.overall_score == null ? (
+                    "—"
+                  ) : (
+                    <Badge tone={badgeTone(r.overall_score)}>{r.overall_score}</Badge>
+                  ),
+              },
+              {
+                key: "status",
+                header: "Status",
+                render: (r) => <Badge>{r.status}</Badge>,
+              },
+            ]}
+          />
         </Panel>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Panel title="Rule fail nhiều nhất">
-          <ul className="space-y-2 text-sm">
-            {overview.top_failed_rules.map((r) => (
-              <li
-                key={r.rule_code}
-                className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 px-3 py-2"
-              >
-                <div>
-                  <div className="font-mono text-xs text-teal-300">{r.rule_code}</div>
-                  <div className="text-slate-200">{r.title}</div>
-                </div>
-                <div className="text-rose-300">{formatNumber(r.fail_count)}</div>
-              </li>
-            ))}
-          </ul>
-          <Link href="/rules" className="mt-3 inline-block text-xs text-teal-300 hover:underline">
-            Mở rulebook →
-          </Link>
-        </Panel>
-        <Panel title="Nguyên nhân gốc (Pareto)">
-          <ul className="space-y-2 text-sm">
-            {overview.top_root_causes.map((r) => (
-              <li
-                key={r.cause_code}
-                className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 px-3 py-2"
-              >
-                <div>
-                  <div className="font-mono text-xs text-teal-300">{r.cause_code}</div>
-                  <div className="text-slate-200">{r.label}</div>
-                </div>
-                <div className="text-slate-300">{formatNumber(r.count)}</div>
-              </li>
-            ))}
-          </ul>
-          <Link href="/calls" className="mt-3 inline-block text-xs text-teal-300 hover:underline">
-            Xem danh sách cuộc gọi →
-          </Link>
-        </Panel>
-      </div>
+      <Panel title="Snapshot">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <KpiCard label="Calls" value={formatNumber(overview?.calls_total ?? 0)} />
+          <KpiCard label="Scored" value={formatNumber(overview?.scored ?? 0)} />
+          <KpiCard label="Avg score" value={(overview?.avg_score ?? 0).toFixed(1)} />
+          <KpiCard
+            label="Auto-fail rate"
+            value={formatPercentDisplay(overview?.auto_fail_rate ?? 0)}
+          />
+        </div>
+      </Panel>
     </AppShell>
   );
 }

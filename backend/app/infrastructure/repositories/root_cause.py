@@ -24,10 +24,17 @@ class SqlAlchemyRootCauseRepository:
                 id=row_id,
                 call_id=call_id,
                 score_id=score_id,
-                verdict=str(payload.get("verdict", "Insufficient Evidence")),
-                primary_cause_code=payload.get("primary_cause_code"),
-                causes=list(payload.get("causes") or []),
-                explanation=str(payload.get("explanation", "")),
+                verdict=str(
+                    payload.get("verdict")
+                    or payload.get("status")
+                    or "Insufficient Evidence"
+                ),
+                primary_cause_code=payload.get("primary_cause_code")
+                or payload.get("primary_code"),
+                causes=list(payload.get("causes") or payload.get("children") or []),
+                explanation=str(
+                    payload.get("explanation") or payload.get("reason") or ""
+                ),
                 payload=payload,
             )
         )

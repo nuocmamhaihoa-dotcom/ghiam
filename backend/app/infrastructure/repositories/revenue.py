@@ -20,12 +20,18 @@ class SqlAlchemyRevenueLeakRepository:
     ) -> UUID:
         row_id = uuid4()
         amount = payload.get("estimated_amount")
+        if amount is None:
+            amount = payload.get("estimated_loss_vnd")
         self._session.add(
             RevenueLeakModel(
                 id=row_id,
                 call_id=call_id,
                 score_id=score_id,
-                verdict=str(payload.get("verdict", "Insufficient Evidence")),
+                verdict=str(
+                    payload.get("verdict")
+                    or payload.get("status")
+                    or "Insufficient Evidence"
+                ),
                 estimated_amount=float(amount) if amount is not None else None,
                 currency=str(payload.get("currency", "VND")),
                 explanation=str(payload.get("explanation", "")),
