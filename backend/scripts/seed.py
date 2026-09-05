@@ -151,7 +151,9 @@ DEFAULT_RULES = [
 
 def find_rules_jsonl() -> Path | None:
     candidates = [
+        REPO_ROOT / "ai-brain" / "rulebook" / "rulebook_1000.jsonl",
         REPO_ROOT / "ai-brain" / "rulebook" / "rules_1000.jsonl",
+        Path("/ai-brain/rulebook/rulebook_1000.jsonl"),
         Path("/ai-brain/rulebook/rules_1000.jsonl"),
         BACKEND_ROOT / "seed_data" / "rules_1000.jsonl",
     ]
@@ -161,10 +163,50 @@ def find_rules_jsonl() -> Path | None:
     return None
 
 
+def normalize_rule_payload(raw: dict) -> dict:
+    """Map AI Brain canonical schema → DB seed payload (no business logic hardcoded)."""
+    if "rule_code" in raw and "title" in raw:
+        return raw
+    rule_id = str(raw.get("rule_id") or raw.get("id") or "")
+    category = str(raw.get("category") or "other")
+    mapping = raw.get("json_mapping") if isinstance(raw.get("json_mapping"), dict) else {}
+    severity = str(mapping.get("severity") or ("critical" if category.lower() == "compliance" else "major"))
+    return {
+        "rule_code": rule_id,
+        "category": category.lower(),
+        "title": str(raw.get("rule_name") or raw.get("name") or rule_id),
+        "description": str(raw.get("description") or ""),
+        "severity": severity,
+        "weight": float(raw.get("weight") or 1.0),
+        "auto_fail": category.lower() == "compliance",
+        "status": "active",
+        "evaluator_type": "evidence_match",
+        "evidence_requirements": {
+            "requirement_text": raw.get("evidence_requirement") or raw.get("evidence"),
+            "timestamp_required": bool(
+                raw.get("timestamp_requirement", raw.get("timestamp_required", True))
+            ),
+            "min_spans": 1,
+            "min_confidence": 0.7,
+        },
+        "evaluator_config": {
+            "pass_condition": raw.get("pass_condition") or raw.get("pass"),
+            "fail_condition": raw.get("fail_condition") or raw.get("fail"),
+            "confidence_logic": raw.get("confidence_logic"),
+            "edge_cases": raw.get("edge_cases") or [],
+            "good_example": raw.get("good_example"),
+            "bad_example": raw.get("bad_example"),
+            "json_mapping": mapping,
+        },
+        "cause_code_on_fail": raw.get("root_cause"),
+        "coaching_template_code": raw.get("coaching"),
+    }
+
+
 def load_rule_payloads() -> list[dict]:
     path = find_rules_jsonl()
     if path is None:
-        print("No rules_1000.jsonl found — seeding DEFAULT_RULES sample set.")
+        print("No rulebook_1000.jsonl found — seeding DEFAULT_RULES sample set.")
         return DEFAULT_RULES
     rows: list[dict] = []
     with path.open(encoding="utf-8") as fh:
@@ -172,7 +214,7 @@ def load_rule_payloads() -> list[dict]:
             line = line.strip()
             if not line:
                 continue
-            rows.append(json.loads(line))
+            rows.append(normalize_rule_payload(json.loads(line)))
     print(f"Loaded {len(rows)} rules from {path}")
     return rows or DEFAULT_RULES
 
