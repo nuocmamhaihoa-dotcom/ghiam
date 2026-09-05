@@ -1,19 +1,20 @@
 {
-  "checked_at": "2026-09-05T20:43:09.003853+00:00",
+  "checked_at": "2026-09-05T21:17:37.916901+00:00",
   "all_ok": true,
   "sprints": [
     {
-      "sprint": 11,
-      "checked_at": "2026-09-05T20:43:09.003591+00:00",
+      "sprint": 12,
+      "checked_at": "2026-09-05T21:17:37.916653+00:00",
       "all_ok": true,
       "gates": [
         {
-          "gate": "Self-Learning Lab",
+          "gate": "Digital Twin Salesperson",
           "ok": true,
           "errors": [],
           "warnings": [],
           "meta": {
-            "fixture_count": 5500
+            "twin_id": "twin_3897ac972593",
+            "similarity": 0.4178
           }
         },
         {
@@ -22,8 +23,8 @@
           "errors": [],
           "warnings": [],
           "meta": {
-            "route_count": 89,
-            "openapi_paths": 85
+            "route_count": 97,
+            "openapi_paths": 93
           }
         },
         {

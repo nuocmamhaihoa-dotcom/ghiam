@@ -22,6 +22,7 @@ const NAV = [
   { href: "/auto-sop", label: "Auto SOP" },
   { href: "/sales-os", label: "Sales OS" },
   { href: "/self-learning", label: "Self-Learning Lab" },
+  { href: "/digital-twin", label: "Digital Twin" },
   { href: "/qa-approval", label: "QA Approval" },
   { href: "/forecast", label: "Forecast" },
   { href: "/multi-product", label: "Multi-Product" },

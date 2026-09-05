@@ -37,6 +37,7 @@ from app.interfaces.api.routers import (
     scoring,
     sales_os,
     self_learning,
+    digital_twin,
     simulator,
 )
 
@@ -116,6 +117,7 @@ def create_app() -> FastAPI:
     application.include_router(multi_product.router, prefix=settings.api_prefix)
     application.include_router(sales_os.router, prefix=settings.api_prefix)
     application.include_router(self_learning.router, prefix=settings.api_prefix)
+    application.include_router(digital_twin.router, prefix=settings.api_prefix)
 
     return application
 

@@ -1,0 +1,54 @@
+{
+  "sprint": 12,
+  "checked_at": "2026-09-05T21:17:37.916653+00:00",
+  "all_ok": true,
+  "gates": [
+    {
+      "gate": "Digital Twin Salesperson",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "twin_id": "twin_3897ac972593",
+        "similarity": 0.4178
+      }
+    },
+    {
+      "gate": "8_API_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "route_count": 97,
+        "openapi_paths": 93
+      }
+    },
+    {
+      "gate": "18_Test_Coverage_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "pytest_returncode": 0,
+        "pytest_tail": "......................                                                   [100%]\n22 passed in 0.06s\n"
+      }
+    },
+    {
+      "gate": "19_Documentation_Review",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {}
+    },
+    {
+      "gate": "20_Final_Self_Review",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {}
+    }
+  ],
+  "passed": 5,
+  "failed": 0,
+  "total": 5
+}

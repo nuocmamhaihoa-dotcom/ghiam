@@ -1343,6 +1343,112 @@ def gate_self_learning() -> GateResult:
     return g
 
 
+
+def gate_digital_twin() -> GateResult:
+    """AI Digital Twin Salesperson — style twins from golden/QA/high-conversion only."""
+    g = GateResult("Digital Twin Salesperson")
+    required = [
+        BACKEND / "digital_twin" / "engine.py",
+        BACKEND / "digital_twin" / "trainer.py",
+        BACKEND / "digital_twin" / "roleplay.py",
+        BACKEND / "digital_twin" / "store.py",
+        BACKEND / "digital_twin" / "types.py",
+        BACKEND / "digital_twin" / "quality.py",
+        BACKEND / "app" / "application" / "services" / "digital_twin.py",
+        BACKEND / "app" / "interfaces" / "api" / "routers" / "digital_twin.py",
+        ROOT / "docs" / "Digital_Twin.md",
+        ROOT / "models" / "digital_twin" / "schema.json",
+        ROOT / "enterprise-web" / "src" / "app" / "digital-twin" / "page.tsx",
+        ROOT / "tests" / "digital_twin" / "test_digital_twin.py",
+        ROOT / "datasets" / "digital_twin",
+    ]
+    for path in required:
+        if not path.exists():
+            g.fail(f"missing {path.relative_to(ROOT)}")
+
+    shell = ROOT / "enterprise-web" / "src" / "components" / "AppShell.tsx"
+    if shell.exists():
+        txt = shell.read_text(encoding="utf-8")
+        if "/digital-twin" not in txt:
+            g.fail("AppShell missing /digital-twin nav")
+
+    api = ROOT / "enterprise-web" / "src" / "lib" / "api.ts"
+    if api.exists():
+        api_txt = api.read_text(encoding="utf-8")
+        for key in ("digitalTwinDashboard", "digitalTwinTrain", "digitalTwinRoleplay", "digitalTwinQuality"):
+            if key not in api_txt:
+                g.fail(f"api.ts missing {key}")
+
+    try:
+        import tempfile
+        from pathlib import Path as P
+
+        from digital_twin.engine import DigitalTwinEngine
+        from digital_twin.store import TwinStore
+
+        td = P(tempfile.mkdtemp())
+        eng = DigitalTwinEngine(store=TwinStore(root=td))
+        calls = []
+        for i, label in enumerate(["golden", "qa_approved", "high_conversion", "failed"]):
+            calls.append(
+                {
+                    "call_id": f"qg-dt-{i}",
+                    "label": label,
+                    "qa_score": 90 if label != "failed" else 40,
+                    "turns": [
+                        {"speaker": "agent", "text": "Dạ anh/chị đang quan tâm sản phẩm nào ạ?"},
+                        {"speaker": "customer", "text": "Giá hơi cao."},
+                        {"speaker": "agent", "text": "Em hiểu. Lợi ích chính là tiết kiệm dài hạn."},
+                        {"speaker": "agent", "text": "Nếu ổn, mình xác nhận và chốt luôn ạ."},
+                    ],
+                }
+            )
+        trained = eng.train_twin(agent_id="qg", display_name="QG Twin", calls=calls, activate=True)
+        if not trained.get("ok"):
+            g.fail(f"train failed: {trained}")
+        if trained.get("accepted_calls") != 3:
+            g.fail(f"expected 3 eligible calls, got {trained.get('accepted_calls')}")
+        if trained.get("rejected_calls") != 1:
+            g.fail("failed call must be rejected from training")
+        if trained.get("verbatim_cloning") is not False:
+            g.fail("verbatim cloning must be blocked")
+        twin = trained["twin"]
+        twin_id = twin["twin_id"]
+        act = eng.act_as_twin(twin_id, "Giá cao quá")
+        if not act.get("ok") or not act.get("reply"):
+            g.fail("act_as_twin failed")
+        rp = eng.roleplay(
+            twin_id,
+            trainee_id="qg-trainee",
+            scenario="price",
+            trainee_turns=[
+                "Dạ em hiểu anh lo về giá. Anh ưu tiên gì nhất ạ?",
+                "Lợi ích dài hạn sẽ tiết kiệm hơn. Anh xem mình chốt nhé?",
+            ],
+        )
+        if not rp.get("ok"):
+            g.fail(f"roleplay failed: {rp}")
+        session = rp.get("session") or {}
+        if not session.get("coaching"):
+            g.fail("roleplay must return coaching")
+        dash = eng.dashboard()
+        for key in ("twin_count", "avg_similarity", "skill_gap_index", "progress"):
+            if key not in (dash.get("widgets") or {}):
+                g.fail(f"dashboard missing widget {key}")
+        if dash.get("verbatim_cloning_blocked") is not True:
+            g.fail("dashboard must advertise verbatim_cloning_blocked")
+        snap = eng.quality_snapshot()
+        if not snap.get("ok"):
+            g.fail(f"quality gate failed: {snap.get('errors')}")
+        if snap.get("verbatim_cloning_blocked") is not True:
+            g.fail("quality snapshot must block verbatim cloning")
+        g.meta["twin_id"] = twin_id
+        g.meta["similarity"] = session.get("similarity_score")
+    except Exception as exc:  # noqa: BLE001
+        g.fail(f"digital-twin smoke failed: {exc}")
+    return g
+
+
 SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
     1: [gate_architecture, gate_docs, gate_database, gate_docker, gate_security, gate_api],
     2: [lambda: gate_rule_consistency(2), gate_evidence, gate_json],
@@ -1401,6 +1507,13 @@ SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
     ],
     11: [
         gate_self_learning,
+        gate_api,
+        gate_tests,
+        gate_docs,
+        gate_final,
+    ],
+    12: [
+        gate_digital_twin,
         gate_api,
         gate_tests,
         gate_docs,
@@ -1465,7 +1578,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sprint", default="all")
     args = parser.parse_args()
-    sprints = list(range(1, 12)) if args.sprint == "all" else [int(args.sprint)]
+    sprints = list(range(1, 13)) if args.sprint == "all" else [int(args.sprint)]
     summary = []
     hard_fail = False
     for sprint in sprints:

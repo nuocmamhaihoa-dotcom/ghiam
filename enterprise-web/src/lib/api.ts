@@ -1048,6 +1048,98 @@ export const api = {
     );
   },
 
+  async digitalTwinDashboard() {
+    return withDemoFallback(
+      () => request<Record<string, unknown>>("/v1/digital-twin/dashboard"),
+      () => ({
+        status: "ok",
+        widgets: {
+          twin_count: 1,
+          avg_similarity: 0.72,
+          avg_improvement: 0.61,
+          roleplay_sessions: 12,
+          skill_gap_index: 0.22,
+          progress: 0.61,
+        },
+        top_differences: [{ skill: "closing", gap: 0.28 }],
+        verbatim_cloning_blocked: true,
+      })
+    );
+  },
+
+  async digitalTwinTrain(body: {
+    agent_id: string;
+    display_name: string;
+    calls: Record<string, unknown>[];
+    activate?: boolean;
+  }) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/digital-twin/train", {
+          method: "POST",
+          body,
+        }),
+      () => ({
+        status: "ok",
+        ok: true,
+        twin: {
+          twin_id: "twin_demo",
+          display_name: body.display_name,
+          confidence: 0.86,
+          status: "active",
+        },
+        accepted_calls: body.calls.length,
+        rejected_calls: 0,
+        verbatim_cloning: false,
+      })
+    );
+  },
+
+  async digitalTwinRoleplay(
+    twinId: string,
+    body: {
+      trainee_id: string;
+      scenario: string;
+      trainee_turns: string[];
+      customer_turns?: string[];
+    }
+  ) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>(`/v1/digital-twin/twins/${twinId}/roleplay`, {
+          method: "POST",
+          body,
+        }),
+      () => ({
+        status: "ok",
+        ok: true,
+        session: {
+          similarity_score: 0.71,
+          improvement_score: 0.64,
+          coaching: ["Bám nhịp Twin: đồng cảm → hỏi nhu cầu → giá trị → chốt mềm."],
+          top_differences: ["closing: gap=0.24"],
+        },
+      })
+    );
+  },
+
+  async digitalTwinQuality() {
+    return withDemoFallback(
+      () => request<Record<string, unknown>>("/v1/digital-twin/quality"),
+      () => ({
+        status: "ok",
+        ok: true,
+        checks: {
+          twin_accuracy: { ok: true, value: 0.86 },
+          style_consistency: { ok: true, value: 0.9 },
+          coaching_quality: { ok: true, value: 0.8 },
+          similarity_stability: { ok: true, value: 0.85 },
+        },
+        verbatim_cloning_blocked: true,
+      })
+    );
+  },
+
   async selfLearningQuality() {
     return withDemoFallback(
       () => request<Record<string, unknown>>("/v1/self-learning/quality"),

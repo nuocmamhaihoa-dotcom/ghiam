@@ -80,7 +80,7 @@ Thiếu dữ liệu → **`Insufficient Evidence`**.
 | 19 | [19_Conversation_DNA.md](./19_Conversation_DNA.md) | Agent skill genome / radar |
 | 20 | [20_Dataset_Builder.md](./20_Dataset_Builder.md) | VECD factory, gates, export |
 
-Related: [VECD.md](./VECD.md) · [Self_Learning_Lab.md](./Self_Learning_Lab.md) · [Sales_OS.md](./Sales_OS.md) · [sprints/](./sprints/)
+Related: [VECD.md](./VECD.md) · [Self_Learning_Lab.md](./Self_Learning_Lab.md) · [Digital_Twin.md](./Digital_Twin.md) · [Sales_OS.md](./Sales_OS.md) · [sprints/](./sprints/)
 
 ---
 
@@ -116,3 +116,5 @@ Related: [VECD.md](./VECD.md) · [Self_Learning_Lab.md](./Self_Learning_Lab.md) 
 - Missing data → **`Insufficient Evidence`**  
 - Structured logging · Audit log · Health check · Monitoring  
 - Audit log on every mutation  
+
+9. Wire **Digital Twin Salesperson** (`Digital_Twin.md`) — học từ golden/QA/high-conversion, roleplay + coaching, no verbatim clone.
