@@ -18,16 +18,24 @@ from app.interfaces.api.routers import (
     analytics,
     appeals,
     auth,
+    auto_sop,
     calls,
     coaching,
     dashboard,
     datasets,
+    forecast,
+    fraud,
     health,
+    live_assistant,
+    memory_graph,
+    multi_product,
+    personality,
     pragmatics,
     qa,
     revenue_leak,
     rules,
     scoring,
+    simulator,
 )
 
 
@@ -41,8 +49,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     settings = get_settings()
     application = FastAPI(
-        title="AI QA TELESALE ENTERPRISE API",
-        description="Evidence-first QA scoring, rulebook, coaching, and revenue leak APIs.",
+        title="AI SALES OPERATING SYSTEM ENTERPRISE API",
+        description="Evidence-first AI Sales OS: QA, pragmatics, live assist, personality, memory graph, revenue leak, fraud, SOP.",
         version=__version__,
         lifespan=lifespan,
         openapi_tags=[
@@ -96,6 +104,14 @@ def create_app() -> FastAPI:
     application.include_router(analytics.router, prefix=settings.api_prefix)
     application.include_router(admin.router, prefix=settings.api_prefix)
     application.include_router(pragmatics.router, prefix=settings.api_prefix)
+    application.include_router(live_assistant.router, prefix=settings.api_prefix)
+    application.include_router(personality.router, prefix=settings.api_prefix)
+    application.include_router(memory_graph.router, prefix=settings.api_prefix)
+    application.include_router(simulator.router, prefix=settings.api_prefix)
+    application.include_router(fraud.router, prefix=settings.api_prefix)
+    application.include_router(auto_sop.router, prefix=settings.api_prefix)
+    application.include_router(forecast.router, prefix=settings.api_prefix)
+    application.include_router(multi_product.router, prefix=settings.api_prefix)
 
     return application
 

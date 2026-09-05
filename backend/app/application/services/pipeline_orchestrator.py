@@ -193,18 +193,22 @@ class PipelineOrchestrator:
         *,
         rule_engine: dict[str, Any],
         judge_ensemble: dict[str, Any],
+        pragmatics: dict[str, Any],
         root_cause: dict[str, Any],
         coaching: dict[str, Any],
         revenue_leak: dict[str, Any],
+        memory_graph: dict[str, Any],
         dashboard_json: dict[str, Any],
     ) -> dict[str, Any]:
         stages = list(pre.get("stages") or [])
         for name, artifact in (
             ("rule_engine", rule_engine),
             ("judge_ensemble", judge_ensemble),
+            ("pragmatics", pragmatics),
             ("root_cause", root_cause),
             ("coaching", coaching),
             ("revenue_leak", revenue_leak),
+            ("memory_graph", memory_graph),
             ("dashboard_json", dashboard_json),
         ):
             stages.append(

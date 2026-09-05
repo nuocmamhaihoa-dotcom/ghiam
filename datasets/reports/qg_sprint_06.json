@@ -1,6 +1,6 @@
 {
   "sprint": 6,
-  "checked_at": "2026-09-05T18:03:55.517441+00:00",
+  "checked_at": "2026-09-05T18:26:36.587735+00:00",
   "all_ok": true,
   "gates": [
     {
@@ -18,8 +18,8 @@
       "errors": [],
       "warnings": [],
       "meta": {
-        "route_count": 40,
-        "openapi_paths": 36
+        "route_count": 51,
+        "openapi_paths": 47
       }
     },
     {

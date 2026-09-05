@@ -1,6 +1,6 @@
 {
   "sprint": 7,
-  "checked_at": "2026-09-05T18:03:55.863879+00:00",
+  "checked_at": "2026-09-05T18:26:36.962094+00:00",
   "all_ok": true,
   "gates": [
     {
@@ -94,8 +94,8 @@
       "errors": [],
       "warnings": [],
       "meta": {
-        "route_count": 40,
-        "openapi_paths": 36
+        "route_count": 51,
+        "openapi_paths": 47
       }
     },
     {
@@ -185,7 +185,7 @@
       "warnings": [],
       "meta": {
         "pytest_returncode": 0,
-        "pytest_tail": ".............                                                            [100%]\n13 passed in 0.04s\n"
+        "pytest_tail": "......................                                                   [100%]\n22 passed in 0.05s\n"
       }
     },
     {

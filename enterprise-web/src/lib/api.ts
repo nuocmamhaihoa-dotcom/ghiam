@@ -428,4 +428,180 @@ export const api = {
       })
     );
   },
+
+  async liveAssistantSuggest(turns: Record<string, unknown>[], nowTs?: number) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/live-assistant/suggest", {
+          method: "POST",
+          body: { turns, now_ts: nowTs },
+        }),
+      () => ({
+        status: "ok",
+        next_best_question: "Anh/chị đang quan tâm điều gì nhất ạ?",
+        next_best_response: "Em hiểu. Em đề xuất phương án phù hợp nhu cầu.",
+        alerts: [{ type: "buying_signal", severity: "high" }],
+        closing_opportunity: true,
+        latency_ms: 12,
+        sla_ok: true,
+      })
+    );
+  },
+
+  async analyzePersonality(turns: Record<string, unknown>[]) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/personality/analyze", {
+          method: "POST",
+          body: { turns },
+        }),
+      () => ({
+        status: "ok",
+        disc: "C",
+        buyer_type: "technical",
+        personality_card: {
+          style: "Chi tiết, cần số liệu",
+          suggested_script: "Em gửi bảng so sánh thông số và bảo hành ạ.",
+          forbidden_script: "Chốt luôn đi anh/chị!",
+        },
+      })
+    );
+  },
+
+  async buildMemoryGraph(payload: Record<string, unknown>) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/memory-graph/build", {
+          method: "POST",
+          body: payload,
+        }),
+      () => ({
+        status: "ok",
+        nodes: [
+          { id: "call:demo", type: "call", label: "Demo call" },
+          { id: "rule:R1", type: "rule", label: "R1" },
+        ],
+        edges: [{ source: "call:demo", target: "rule:R1", relation: "violates" }],
+        stats: { node_count: 2, edge_count: 1 },
+      })
+    );
+  },
+
+  async listSimulatorScenarios(group?: string) {
+    return withDemoFallback(
+      () =>
+        request<{ data: Record<string, unknown>[] }>("/v1/simulator/scenarios", {
+          query: { group },
+        }),
+      () => ({
+        data: [
+          { id: "price_too_high", group: "price", prompt: "Giá đắt quá" },
+          { id: "need_think", group: "delay", prompt: "Để em suy nghĩ đã" },
+        ],
+      })
+    );
+  },
+
+  async startSimulator(group?: string, seed?: number) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/simulator/start", {
+          method: "POST",
+          body: { group, seed },
+        }),
+      () => ({
+        status: "ok",
+        scenario: { id: "price_too_high", customer_line: "Giá bên này hơi cao." },
+        instruction: "Hãy xử lý phản đối giá bằng value reframe.",
+      })
+    );
+  },
+
+  async gradeSimulator(scenarioId: string, agentReply: string) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/simulator/grade", {
+          method: "POST",
+          body: { scenario_id: scenarioId, agent_reply: agentReply },
+        }),
+      () => ({
+        status: "ok",
+        score: 78,
+        feedback: "Có empathy nhưng thiếu close ask.",
+      })
+    );
+  },
+
+  async scanFraud(turns: Record<string, unknown>[]) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/fraud/scan", {
+          method: "POST",
+          body: { turns },
+        }),
+      () => ({
+        status: "ok",
+        findings: [],
+        risk_level: "low",
+      })
+    );
+  },
+
+  async generateAutoSop(
+    goldenCalls: Record<string, unknown>[],
+    version?: string
+  ) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/auto-sop/generate", {
+          method: "POST",
+          body: { golden_calls: goldenCalls, version },
+        }),
+      () => ({
+        status: "ok",
+        version: version || "v1",
+        sop: { title: "SOP Demo", steps: ["Mở đầu", "Khám phá", "Chốt"] },
+        checklist: ["Xác nhận nhu cầu", "Xử lý giá"],
+      })
+    );
+  },
+
+  async forecastKpi(
+    historical: Record<string, unknown>[],
+    horizonDays = 30
+  ) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/forecast/kpi", {
+          method: "POST",
+          body: { historical, horizon_days: horizonDays },
+        }),
+      () => ({
+        status: "ok",
+        projected_conversion_rate: 0.24,
+        projected_revenue: 125000000,
+        trend: 0.02,
+        confidence: 0.7,
+      })
+    );
+  },
+
+  async suggestMultiProduct(
+    turns: Record<string, unknown>[],
+    currentSku?: string
+  ) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/multi-product/suggest", {
+          method: "POST",
+          body: { turns, current_sku: currentSku },
+        }),
+      () => ({
+        status: "ok",
+        suggestions: [
+          { sku: "PKG-PLUS", action: "upsell", reason: "Quan tâm bảo hành" },
+        ],
+      })
+    );
+  },
 };

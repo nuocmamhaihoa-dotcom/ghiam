@@ -420,6 +420,14 @@ def gate_api() -> GateResult:
         "/v1/calls",
         "/v1/calls/{call_id}/analysis",
         "/v1/calls/{call_id}/score",
+        "/v1/live-assistant/suggest",
+        "/v1/personality/analyze",
+        "/v1/memory-graph/build",
+        "/v1/simulator/scenarios",
+        "/v1/fraud/scan",
+        "/v1/auto-sop/generate",
+        "/v1/forecast/kpi",
+        "/v1/multi-product/suggest",
     ]
     for path in required:
         if path not in paths and not any(path in p for p in paths):
@@ -430,6 +438,160 @@ def gate_api() -> GateResult:
     if "paths" not in schema:
         g.fail("OpenAPI schema missing paths")
     g.meta["openapi_paths"] = len(schema.get("paths", {}))
+    return g
+
+
+def gate_sales_os_modules() -> GateResult:
+    g = GateResult("21_Sales_OS_Modules")
+    sys.path.insert(0, str(BACKEND))
+    turns = [
+        {
+            "speaker": "customer",
+            "text": "Giá đắt quá. Bao giờ giao? Có bảo hành không?",
+            "start": 0,
+            "end": 4,
+        },
+        {
+            "speaker": "agent",
+            "text": "Em hiểu. Gói này gồm bảo hành 12 tháng.",
+            "start": 4,
+            "end": 8,
+        },
+    ]
+    try:
+        from app.application.services.live_assistant import LiveCallAssistant
+        from app.application.services.personality_engine import PersonalityEngine
+        from app.application.services.memory_graph import MemoryGraphService
+        from app.application.services.objection_simulator import ObjectionSimulator
+        from app.application.services.fraud_compliance import FraudComplianceService
+        from app.application.services.auto_sop import AutoSOPGenerator
+        from app.application.services.sales_forecast import SalesForecastService
+        from app.application.services.multi_product import MultiProductIntelligence
+        from app.application.services.pipeline_stages import PIPELINE_ORDER
+        from app.application.services.pragmatics import PragmaticsEngine
+
+        live = LiveCallAssistant().suggest(turns, now_ts=20.0)
+        if live.get("status") not in {"ok", "Insufficient Evidence"}:
+            g.fail(f"Live assistant bad status: {live.get('status')}")
+        if "latency_ms" in live and int(live["latency_ms"]) >= 2000:
+            g.fail(f"Live assistant latency SLA breached: {live['latency_ms']}ms")
+
+        pers = PersonalityEngine().analyze(turns)
+        if pers.get("status") not in {"ok", "Insufficient Evidence"}:
+            g.fail(f"Personality bad status: {pers.get('status')}")
+
+        graph = MemoryGraphService().build_from_analysis(
+            call_id="qg-call",
+            violations=[{"rule_id": "R1"}],
+            root_cause={"primary_cause_code": "RC-PRICE"},
+            coaching={"tips": [{"title": "reframe"}]},
+            intents=[{"name": "price"}],
+            objections=[{"type": "price"}],
+        )
+        if int((graph.get("stats") or {}).get("node_count") or 0) < 1:
+            g.fail("Memory graph produced no nodes")
+
+        sim = ObjectionSimulator()
+        started = sim.start(group="price", seed=1)
+        if started.get("status") != "ok":
+            g.fail(f"Simulator start failed: {started}")
+        scenario_id = str((started.get("scenario") or {}).get("id") or "")
+        graded = sim.grade(scenario_id=scenario_id, agent_reply="Em giảm giá và tặng bảo hành")
+        if graded.get("status") not in {"ok", "Insufficient Evidence"}:
+            g.fail(f"Simulator grade failed: {graded}")
+
+        fraud = FraudComplianceService().scan(turns)
+        if fraud.get("status") not in {"ok", "Insufficient Evidence"}:
+            g.fail(f"Fraud scan failed: {fraud.get('status')}")
+
+        sop = AutoSOPGenerator().generate(
+            [{"id": "g1", "score": 90, "transcript": turns}],
+            version="qg-v1",
+        )
+        if sop.get("status") not in {"ok", "Insufficient Evidence"}:
+            g.fail(f"Auto SOP failed: {sop.get('status')}")
+
+        forecast = SalesForecastService().forecast(
+            historical=[
+                {"conversion_rate": 0.2, "revenue": 100000000},
+                {"conversion_rate": 0.22, "revenue": 110000000},
+            ],
+            horizon_days=30,
+        )
+        if forecast.get("status") not in {"ok", "Insufficient Evidence"}:
+            g.fail(f"Forecast failed: {forecast.get('status')}")
+
+        multi = MultiProductIntelligence().suggest(turns, current_sku="PKG-A")
+        if multi.get("status") not in {"ok", "Insufficient Evidence"}:
+            g.fail(f"Multi-product failed: {multi.get('status')}")
+
+        prag = PragmaticsEngine().analyze_transcript(turns)
+        if getattr(prag, "status", None) not in {"ok", "Insufficient Evidence"} and not hasattr(prag, "turns"):
+            g.fail("Pragmatics engine failed")
+
+        required_tail = ("pragmatics", "memory_graph")
+        for stage in required_tail:
+            if stage not in PIPELINE_ORDER:
+                g.fail(f"PIPELINE_ORDER missing stage: {stage}")
+        g.meta["pipeline_order"] = list(PIPELINE_ORDER)
+    except Exception as exc:  # noqa: BLE001 — gate must surface import/runtime errors
+        g.fail(f"Sales OS module gate error: {exc}")
+    return g
+
+
+def gate_sales_os_frontend() -> GateResult:
+    g = GateResult("22_Sales_OS_Frontend")
+    web = ROOT / "enterprise-web" / "src" / "app"
+    required_pages = [
+        "live-assistant/page.tsx",
+        "personality/page.tsx",
+        "memory-graph/page.tsx",
+        "simulator/page.tsx",
+        "fraud/page.tsx",
+        "auto-sop/page.tsx",
+        "forecast/page.tsx",
+        "multi-product/page.tsx",
+    ]
+    for rel in required_pages:
+        path = web / rel
+        if not path.exists():
+            g.fail(f"Missing frontend page: {rel}")
+    shell = ROOT / "enterprise-web" / "src" / "components" / "AppShell.tsx"
+    text = shell.read_text(encoding="utf-8") if shell.exists() else ""
+    for href in (
+        "/live-assistant",
+        "/personality",
+        "/memory-graph",
+        "/simulator",
+        "/fraud",
+        "/auto-sop",
+        "/forecast",
+        "/multi-product",
+    ):
+        if href not in text:
+            g.fail(f"AppShell missing nav href {href}")
+    return g
+
+
+def gate_sales_os_tests() -> GateResult:
+    g = GateResult("23_Sales_OS_Tests")
+    test_file = BACKEND / "tests" / "test_sales_os_modules.py"
+    if not test_file.exists():
+        g.fail("Missing backend/tests/test_sales_os_modules.py")
+        return g
+    text = test_file.read_text(encoding="utf-8")
+    for needle in (
+        "LiveCallAssistant",
+        "PersonalityEngine",
+        "MemoryGraphService",
+        "ObjectionSimulator",
+        "FraudComplianceService",
+        "AutoSOPGenerator",
+        "SalesForecastService",
+        "MultiProductIntelligence",
+    ):
+        if needle not in text:
+            g.fail(f"Sales OS tests missing coverage marker: {needle}")
     return g
 
 
@@ -770,6 +932,17 @@ SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
         gate_docs,
         gate_final,
     ],
+    8: [gate_sales_os_modules, gate_sales_os_frontend, gate_api, gate_tests],
+    9: [gate_sales_os_modules, gate_revenue_leak, gate_api, gate_sales_os_frontend],
+    10: [
+        gate_sales_os_modules,
+        gate_sales_os_frontend,
+        gate_sales_os_tests,
+        gate_tests,
+        gate_api,
+        gate_docs,
+        gate_final,
+    ],
 }
 
 
@@ -829,7 +1002,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sprint", default="all")
     args = parser.parse_args()
-    sprints = list(range(1, 8)) if args.sprint == "all" else [int(args.sprint)]
+    sprints = list(range(1, 11)) if args.sprint == "all" else [int(args.sprint)]
     summary = []
     hard_fail = False
     for sprint in sprints:

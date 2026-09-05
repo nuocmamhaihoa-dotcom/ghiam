@@ -1,8 +1,8 @@
 """Immutable AI pipeline stages — Constitution §3.
 
 Audio → Whisper → Diarization → Normalize → Segment → Evidence Extract →
-Evidence Verify → Rule Engine → Judge Ensemble → Root Cause → Coaching →
-Revenue Leak → Dashboard/JSON
+Evidence Verify → Rule Engine → Judge Ensemble → Pragmatics → Root Cause → Coaching →
+Revenue Leak → Memory Graph → Dashboard/JSON
 """
 
 from __future__ import annotations
@@ -25,9 +25,11 @@ PIPELINE_ORDER = (
     "evidence_verify",
     "rule_engine",
     "judge_ensemble",
+    "pragmatics",
     "root_cause",
     "coaching",
     "revenue_leak",
+    "memory_graph",
     "dashboard_json",
 )
 

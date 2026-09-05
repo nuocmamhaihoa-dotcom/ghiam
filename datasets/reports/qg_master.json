@@ -1,10 +1,10 @@
 {
-  "checked_at": "2026-09-05T18:03:55.864261+00:00",
+  "checked_at": "2026-09-05T18:26:37.690041+00:00",
   "all_ok": true,
   "sprints": [
     {
       "sprint": 1,
-      "checked_at": "2026-09-05T18:03:55.304414+00:00",
+      "checked_at": "2026-09-05T18:26:36.343271+00:00",
       "all_ok": true,
       "gates": [
         {
@@ -60,8 +60,8 @@
           "errors": [],
           "warnings": [],
           "meta": {
-            "route_count": 40,
-            "openapi_paths": 36
+            "route_count": 51,
+            "openapi_paths": 47
           }
         }
       ],
@@ -71,7 +71,7 @@
     },
     {
       "sprint": 2,
-      "checked_at": "2026-09-05T18:03:55.323711+00:00",
+      "checked_at": "2026-09-05T18:26:36.363152+00:00",
       "all_ok": true,
       "gates": [
         {
@@ -123,7 +123,7 @@
     },
     {
       "sprint": 3,
-      "checked_at": "2026-09-05T18:03:55.349268+00:00",
+      "checked_at": "2026-09-05T18:26:36.388968+00:00",
       "all_ok": true,
       "gates": [
         {
@@ -180,7 +180,7 @@
     },
     {
       "sprint": 4,
-      "checked_at": "2026-09-05T18:03:55.368103+00:00",
+      "checked_at": "2026-09-05T18:26:36.409877+00:00",
       "all_ok": true,
       "gates": [
         {
@@ -236,7 +236,7 @@
     },
     {
       "sprint": 5,
-      "checked_at": "2026-09-05T18:03:55.456974+00:00",
+      "checked_at": "2026-09-05T18:26:36.514079+00:00",
       "all_ok": true,
       "gates": [
         {
@@ -278,8 +278,8 @@
           "errors": [],
           "warnings": [],
           "meta": {
-            "route_count": 40,
-            "openapi_paths": 36
+            "route_count": 51,
+            "openapi_paths": 47
           }
         }
       ],
@@ -289,7 +289,7 @@
     },
     {
       "sprint": 6,
-      "checked_at": "2026-09-05T18:03:55.517441+00:00",
+      "checked_at": "2026-09-05T18:26:36.587735+00:00",
       "all_ok": true,
       "gates": [
         {
@@ -307,8 +307,8 @@
           "errors": [],
           "warnings": [],
           "meta": {
-            "route_count": 40,
-            "openapi_paths": 36
+            "route_count": 51,
+            "openapi_paths": 47
           }
         },
         {
@@ -325,7 +325,7 @@
     },
     {
       "sprint": 7,
-      "checked_at": "2026-09-05T18:03:55.863879+00:00",
+      "checked_at": "2026-09-05T18:26:36.962094+00:00",
       "all_ok": true,
       "gates": [
         {
@@ -419,8 +419,8 @@
           "errors": [],
           "warnings": [],
           "meta": {
-            "route_count": 40,
-            "openapi_paths": 36
+            "route_count": 51,
+            "openapi_paths": 47
           }
         },
         {
@@ -510,7 +510,7 @@
           "warnings": [],
           "meta": {
             "pytest_returncode": 0,
-            "pytest_tail": ".............                                                            [100%]\n13 passed in 0.04s\n"
+            "pytest_tail": "......................                                                   [100%]\n22 passed in 0.05s\n"
           }
         },
         {
@@ -531,6 +531,212 @@
       "passed": 20,
       "failed": 0,
       "total": 20
+    },
+    {
+      "sprint": 8,
+      "checked_at": "2026-09-05T18:26:37.313591+00:00",
+      "all_ok": true,
+      "gates": [
+        {
+          "gate": "21_Sales_OS_Modules",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "pipeline_order": [
+              "audio",
+              "whisper",
+              "diarization",
+              "normalize",
+              "segment",
+              "evidence_extract",
+              "evidence_verify",
+              "rule_engine",
+              "judge_ensemble",
+              "pragmatics",
+              "root_cause",
+              "coaching",
+              "revenue_leak",
+              "memory_graph",
+              "dashboard_json"
+            ]
+          }
+        },
+        {
+          "gate": "22_Sales_OS_Frontend",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        },
+        {
+          "gate": "8_API_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "route_count": 51,
+            "openapi_paths": 47
+          }
+        },
+        {
+          "gate": "18_Test_Coverage_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "pytest_returncode": 0,
+            "pytest_tail": "......................                                                   [100%]\n22 passed in 0.04s\n"
+          }
+        }
+      ],
+      "passed": 4,
+      "failed": 0,
+      "total": 4
+    },
+    {
+      "sprint": 9,
+      "checked_at": "2026-09-05T18:26:37.387454+00:00",
+      "all_ok": true,
+      "gates": [
+        {
+          "gate": "21_Sales_OS_Modules",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "pipeline_order": [
+              "audio",
+              "whisper",
+              "diarization",
+              "normalize",
+              "segment",
+              "evidence_extract",
+              "evidence_verify",
+              "rule_engine",
+              "judge_ensemble",
+              "pragmatics",
+              "root_cause",
+              "coaching",
+              "revenue_leak",
+              "memory_graph",
+              "dashboard_json"
+            ]
+          }
+        },
+        {
+          "gate": "16_Revenue_Leak_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "sample_amount": 150000.0
+          }
+        },
+        {
+          "gate": "8_API_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "route_count": 51,
+            "openapi_paths": 47
+          }
+        },
+        {
+          "gate": "22_Sales_OS_Frontend",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        }
+      ],
+      "passed": 4,
+      "failed": 0,
+      "total": 4
+    },
+    {
+      "sprint": 10,
+      "checked_at": "2026-09-05T18:26:37.689759+00:00",
+      "all_ok": true,
+      "gates": [
+        {
+          "gate": "21_Sales_OS_Modules",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "pipeline_order": [
+              "audio",
+              "whisper",
+              "diarization",
+              "normalize",
+              "segment",
+              "evidence_extract",
+              "evidence_verify",
+              "rule_engine",
+              "judge_ensemble",
+              "pragmatics",
+              "root_cause",
+              "coaching",
+              "revenue_leak",
+              "memory_graph",
+              "dashboard_json"
+            ]
+          }
+        },
+        {
+          "gate": "22_Sales_OS_Frontend",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        },
+        {
+          "gate": "23_Sales_OS_Tests",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        },
+        {
+          "gate": "18_Test_Coverage_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "pytest_returncode": 0,
+            "pytest_tail": "......................                                                   [100%]\n22 passed in 0.04s\n"
+          }
+        },
+        {
+          "gate": "8_API_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "route_count": 51,
+            "openapi_paths": 47
+          }
+        },
+        {
+          "gate": "19_Documentation_Review",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        },
+        {
+          "gate": "20_Final_Self_Review",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        }
+      ],
+      "passed": 7,
+      "failed": 0,
+      "total": 7
     }
   ]
 }

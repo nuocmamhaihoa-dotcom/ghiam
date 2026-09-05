@@ -1,85 +1,92 @@
 ---
-description: Hiến pháp vĩnh viễn của repository AI QA TELESALE ENTERPRISE — bắt buộc mọi phiên.
+description: Hiến pháp vĩnh viễn — AI SALES OPERATING SYSTEM ENTERPRISE 2026. Bắt buộc mọi phiên.
 alwaysApply: true
 ---
 
-# Hiến pháp vĩnh viễn — AI QA TELESALE ENTERPRISE
+# Hiến pháp — AI SALES OPERATING SYSTEM ENTERPRISE 2026
 
-Đây là **Hiến pháp / Constitution** của repository.
+Đây là **Project Constitution** của toàn bộ repository.
 
-Mọi agent, contributor và phiên làm việc **PHẢI** tuân thủ toàn bộ nguyên tắc dưới đây.
+Mọi agent, contributor và phiên làm việc **PHẢI** tuân thủ.
 Không được suy diễn để nới lỏng, bỏ qua, hoặc thay bằng “cách làm nhanh hơn”.
 
 **Hiệu lực:** `alwaysApply: true`  
-**Phạm vi:** toàn bộ repository, mọi phiên sau khi file này tồn tại.  
-**Vai trò vận hành:** CTO · Chief Software Architect · QA Director · Conversation Intelligence Researcher · ML Engineer · Data Engineer · Backend Lead · Frontend Lead · DevOps Lead.
+**Phạm vi:** toàn repository, mọi phiên sau khi file này tồn tại.  
+**Vai trò vận hành:** CTO · Chief Software Architect · QA Director · Conversation Intelligence Researcher · ML Engineer · Data Engineer · Backend Lead · Frontend Lead · DevOps Lead · Security Lead · Product Manager.
 
 **Sản phẩm:** thương mại Enterprise — **không phải MVP**.
 
 ---
 
-## 0. Điều khoản tối cao (không thương lượng)
+## 0. Điều khoản tối cao
 
-1. **Không TODO / Placeholder / Stub “làm sau”** trong code production, schema, API, UI, rule, dataset.
-2. **Không hardcode Business Rule** trong backend, frontend, prompt tĩnh, hoặc config không versioned qua Database.
-3. **Không suy diễn khi thiếu bằng chứng.** Thiếu data → trả `Insufficient Evidence`.
-4. Nếu xung đột giữa tốc độ giao hàng và Hiến pháp → **Hiến pháp thắng**.
-5. Sprint chỉ kết thúc khi **Quality Gate đạt** + có Sprint Report đầy đủ.
-6. Không đổi **thứ tự AI Pipeline** cố định.
-7. Rulebook đọc từ **PostgreSQL (versioned)**; seed/migration phải có audit + version.
+1. **Không TODO / Placeholder / Stub** trong code production, schema, API, UI, rule, dataset.
+2. **Không Hardcode Business Rule** trong backend, frontend, prompt tĩnh, hoặc config không versioned qua Database.
+3. **Không suy diễn khi thiếu bằng chứng.** Thiếu data → `Insufficient Evidence`.
+4. **Evidence First** · **Timestamp First** · mọi kết luận QA/Revenue/Fraud phải gắn evidence + timestamp.
+5. **Rulebook From Database** (versioned + audit). Seed/migration bắt buộc có version.
+6. **Quality Gate Mandatory** — Sprint chỉ kết thúc khi gate PASS + đủ Sprint Report.
+7. Không đổi **thứ tự AI Pipeline** cố định bên dưới.
+8. Nếu xung đột tốc độ vs Hiến pháp → **Hiến pháp thắng**.
 
 ---
 
-## 1. Mục tiêu sản phẩm (Definition of Done cấp hệ thống)
+## 1. Mục tiêu sản phẩm (DoD hệ thống)
 
-Nền tảng phải có khả năng:
+Nền tảng phải có:
 
-- Chấm điểm cuộc gọi (evidence-based)
-- Hiểu ngữ cảnh tiếng Việt (VCIE / pragmatics)
-- Phân tích tâm lý khách
-- Tìm Root Cause (graph)
-- Sinh Coaching
-- Phân tích Revenue Leak
-- Học từ QA trưởng nhóm (calibration)
-- Benchmark với Golden Call (immutable)
-- Hỗ trợ nhiều ngành
+- AI QA Call Scoring
+- Vietnamese Conversation Intelligence
+- Live Call Assistant
+- Customer Personality Detection
+- Root Cause Analysis
+- Coaching AI
+- Revenue Leak Detection
+- Golden Call Benchmark
+- QA Calibration
+- Appeal Mode
+- Conversation DNA
+- Memory Graph
+- Sales Forecast
+- Multi Product Intelligence
+- Fraud Detection
+- Auto SOP Generation
+- Enterprise Dashboard
 - Mở rộng hàng triệu cuộc gọi
 
 ---
 
-## 2. Kiến trúc phần mềm bất biến
+## 2. Kiến trúc bất biến
 
 ### 2.1 Clean Architecture + SOLID
 
-- Tầng: **Domain / Application / Infrastructure / Interface**
-- Domain không phụ thuộc framework, UI, DB driver, HTTP library
-- Dependency chỉ hướng vào trong (toward Domain)
-- SOLID bắt buộc cho mọi module mới và refactor
+- Domain / Application / Infrastructure / Interface
+- Domain không phụ thuộc framework, UI, DB driver, HTTP
+- Dependency chỉ hướng vào trong
 
 ### 2.2 Patterns bắt buộc
 
-- **Repository Pattern** — cấm ORM/SQL trực tiếp từ use-case / handler
-- **Service Layer** — orchestration nghiệp vụ; controller chỉ validate → service → response
-- **Dependency Injection** — wiring tại composition root; cấm singleton ẩn trạng thái
+- Repository Pattern
+- Service Layer
+- Dependency Injection tại composition root
 
 ### 2.3 Tech stack bắt buộc
 
 | Tầng | Stack |
 |------|--------|
-| Frontend | Next.js + TypeScript + TailwindCSS |
+| Frontend | Next.js + TypeScript + Tailwind |
 | Backend | FastAPI + Python |
 | Database | PostgreSQL |
 | Queue / Cache | Redis |
 | Storage | S3 Compatible |
 | Deploy | Docker + Docker Compose |
 | Auth | JWT + RBAC |
-| API contract | OpenAPI (từ FastAPI) |
-
-Không thay stack cốt lõi trừ quyết định kiến trúc có audit log + phê duyệt.
+| API | OpenAPI |
+| Ops | Structured Logging · Audit Log · Health Check · Monitoring |
 
 ---
 
-## 3. AI Pipeline cố định (thứ tự bất biến)
+## 3. AI Pipeline cố định (không đổi thứ tự)
 
 ```
 Audio
@@ -91,222 +98,98 @@ Audio
 → Evidence Verification
 → Rule Engine
 → AI Judge Ensemble
+→ Vietnamese Pragmatics Engine
 → Root Cause Graph
-→ Coaching Engine
+→ Coaching AI
 → Revenue Leak AI
+→ Memory Graph
 → Dashboard
 → JSON Output
 ```
 
-**Cấm** đổi thứ tự, bỏ bước, hoặc gộp bước làm mất evidence chain.
+### AI Judge Ensemble (5 agents)
+
+1. Evidence AI  
+2. SOP Judge  
+3. Psychology AI  
+4. Sales Expert AI  
+5. Consensus AI — chỉ kết luận khi đủ dữ liệu
 
 ---
 
-## 4. AI Judge Ensemble (bắt buộc 5 Agent)
+## 4. Evidence & Rule Governance
 
-Không dùng một AI duy nhất. Luôn có:
-
-1. **Evidence AI** — chỉ tìm bằng chứng  
-2. **SOP Judge** — chỉ chấm Rulebook  
-3. **Psychology AI** — đọc tâm lý khách  
-4. **Sales Expert AI** — đánh giá kỹ năng bán  
-5. **Consensus AI** — tổng hợp điểm cuối  
-
-**Consensus chỉ được kết luận khi đủ dữ liệu.** Thiếu evidence → `Insufficient Evidence`.
-
-Mỗi kết luận bắt buộc kèm: `evidence` / `evidence_spans`, `timestamp` (hoặc audio ts), `rule_id` (nếu có), `confidence`.
+- Mọi PASS/FAIL/WARN phải có evidence span + timestamp
+- Soft language tiếng Việt phải qua Pragmatics Engine (context ±3–5 turns)
+- `"Để em coi"` **không** mặc định = từ chối
+- Phân biệt: Delay · Soft Rejection · Need Information · Real Refusal
+- Golden Calls bất biến sau freeze
+- Calibration bắt buộc trước khi tin AI score ở mức production
 
 ---
 
-## 5. Rulebook Enterprise (đúng 1000 Rule)
+## 5. Module bắt buộc
 
-Phân bổ bắt buộc:
-
-| Category | Count |
-|----------|------:|
-| Opening | 100 |
-| Rapport | 80 |
-| Discovery | 150 |
-| Qualification | 80 |
-| Presentation | 120 |
-| Pricing | 80 |
-| Objection | 200 |
-| Closing | 80 |
-| Voice | 60 |
-| Compliance | 50 |
-| **Total** | **1000** |
-
-Mỗi Rule **bắt buộc** có: Rule ID, Category, Name, Description, Weight, Pass, Fail, Evidence, Timestamp, Root Cause, Coaching, Good Example, Bad Example, Edge Cases, Confidence, JSON Mapping.
-
-Sau mỗi **50 Rule**: kiểm tra trùng · kiểm tra logic · kiểm tra JSON.
-
-Business rule **chỉ** sống trong DB Rulebook (versioned). Code chỉ đọc và áp dụng.
+- Live Call Assistant (latency mục tiêu < 2s)
+- Customer Personality Engine (DISC / Big Five / Buyer Type)
+- Objection Simulator
+- Conversation DNA
+- Memory Graph (+ visualization)
+- Multi Product Intelligence (cross-sell / upsell / bundle)
+- Fraud & Compliance AI (mọi cảnh báo có evidence)
+- Auto SOP Generator (version history)
+- Revenue Leak AI (heatmap / pareto / funnel / trend)
+- Enterprise Dashboard (CEO / Sales Director / TL / QA / Agent) — drill-down tới utterance
 
 ---
 
-## 6. VECD — Vietnamese Enterprise Conversation Dataset
+## 6. Dataset Factory (VECD)
 
-Tài sản dữ liệu cốt lõi. **Không sinh ngẫu nhiên.** Phải qua Dataset Factory + Quality Gate.
+Mục tiêu tối thiểu:
 
-### 6.1 Mục tiêu số lượng
+- 100000 câu khách
+- 50000 câu nhân viên
+- 10000 cuộc hội thoại
+- 5000 phản đối
+- 1000 Intent
+- 500 Buying Signal
+- 500 Emotion Pattern
+- 500 Root Cause
+- 500 Golden Calls
+- 10000 QA Benchmark Calls
 
-| Asset | Target |
-|-------|-------:|
-| Customer utterances | 100,000 |
-| Agent utterances | 50,000 |
-| Conversations | 10,000 |
-| Objections | 5,000 |
-| Intents | 1,000 |
-| Buying Signals | 500 |
-| Emotion Patterns | 500 |
-| Root Cause Graphs | 500 |
-| Golden Calls | 500 |
-| QA Benchmark Calls | 10,000 |
-
-### 6.2 Thư mục chuẩn
-
-```
-datasets/
-  customers/
-  agents/
-  conversations/
-  intents/
-  objections/
-  emotions/
-  buying_signals/
-  root_causes/
-  golden_calls/
-  qa_benchmark/
-  synthetic/
-  validation/
-  scripts/
-    generate_dataset.py
-    validate_dataset.py
-    export_postgres.py
-docs/
-  VECD.md
-```
-
-### 6.3 Schema utterance bắt buộc (không thiếu trường)
-
-- `id`
-- `conversation_id`
-- `speaker`
-- `text`
-- `dialect`
-- `industry`
-- `stage`
-- `intent`
-- `emotion`
-- `objection_type`
-- `buying_signal`
-- `confidence`
-- `recommended_response`
-- `root_cause_if_failed`
-
-### 6.4 Phân bổ
-
-- Dialect: Bắc/north **35%** · Trung/central **20%** · Nam/south **45%** (±3pp)
-- ≥ 20 ngành (BĐS, Spa, Nha khoa, Giáo dục, Bảo hiểm, Ô tô, Mỹ phẩm, Gia dụng, Thực phẩm, Điện máy, Nội thất, Logistics, Du lịch, Tài chính, Fitness, Camera, Điện nước, Thiết bị y tế, Dịch vụ DN, + vertical bổ sung nếu có trong factory)
-- Stages: Opening → Rapport → Discovery → Qualification → Presentation → Pricing → Objection → Closing → Follow-up
-
-### 6.5 Thư viện bắt buộc
-
-- **Intent (1000):** Trigger, Counter Example, Confidence, Coaching  
-- **Emotion (500):** Trigger, Voice Pattern, Text Pattern, Coaching  
-- **Buying Signal (500):** Strength Score, Confidence, Next Step  
-- **Objection (5000):** Hidden Meaning, Root Cause, Good Response, Forbidden Response, Practice Exercise  
-- **Root Cause Graph (500):** Trigger, Confidence, Evidence, Coaching + edges  
-- **Golden Calls (500):** immutable benchmark — **không được thay đổi** checksum/payload chuẩn  
-- **QA Benchmark (10000):** AI Score, Human Score, Difference, Reviewer, Reason  
+Sinh theo lô · không sinh ngẫu nhiên · có Quality Gate từng batch.
 
 ---
 
-## 7. Product engines bắt buộc
+## 7. Rulebook Enterprise (1000)
 
-### 7.1 Revenue Leak AI
+Opening 100 · Rapport 80 · Discovery 150 · Qualification 80 · Presentation 120 · Pricing 80 · Objection 200 · Closing 80 · Voice 60 · Compliance 50
 
-Phát hiện: Top Revenue Leak · Leader Gap · Product Bottleneck · Hourly Conversion · Recoverable Revenue.  
-UI: Heatmap · Funnel · Pareto · Trend.
+Mỗi rule bắt buộc đủ field constitution (ID, Category, Name, Description, Weight, Pass, Fail, Evidence, Timestamp, Root Cause, Coaching, Good/Bad Example, Edge Cases, Confidence, JSON Mapping).
 
-### 7.2 Coaching Engine
-
-Sau mỗi cuộc gọi: Top 3 lỗi · Top 3 điểm mạnh · hội thoại chuẩn/sai · bài luyện · Role Play · chấm lại.
-
-### 7.3 Conversation DNA
-
-Mỗi agent: Strength · Weakness · Repeat Mistake · Progress · Radar Chart.
+Sau mỗi 50 rule: Duplicate Check · Logic Check · JSON Validation.
 
 ---
 
-## 8. Quality Gate (bắt buộc)
+## 8. Quality Gate (bắt buộc sau mỗi Sprint)
 
-Sau mỗi **1000 mẫu dữ liệu** và trước khi đóng Sprint:
+Architecture · Logic · Rule Consistency · Evidence · Root Cause · Security · Performance · API · JSON · Database · Docker · Audit · Golden Call · Calibration · Revenue Leak · Memory Graph · Personality · Live Assistant · Test Coverage · Documentation
 
-1. Duplicate Check  
-2. Intent Balance  
-3. Emotion Balance  
-4. Dialect Balance  
-5. Industry Balance  
-6. Rule Consistency  
-7. JSON Validation  
-
-**Nếu lỗi → tự sửa**, không chuyển Sprint.
+Còn lỗi → **không dừng** · tự sửa đến khi PASS.
 
 ---
 
-## 9. Sprint Mode (tự điều hành)
+## 9. Sprint Mode
 
-| Sprint | Deliverable |
-|-------:|-------------|
-| 1 | Schema · Scripts · Validation |
-| 2 | Customer Dataset |
-| 3 | Agent Dataset |
-| 4 | Intent · Emotion · Buying Signals |
-| 5 | Objection · Root Cause |
-| 6 | Conversation Library |
-| 7 | QA Benchmark |
-| 8 | Golden Calls |
-| 9 | Revenue Leak · Coaching · Conversation DNA |
+1 Constitution/Docs/Architecture → 2 Rulebook 1–500 → 3 Rulebook 501–1000 → 4 Dataset Factory → 5 AI Judge + Pragmatics → 6 Root Cause + Coaching → 7 Memory Graph + Personality → 8 Live Assistant + Simulator → 9 Revenue Leak + Dashboard → 10 Testing + Refactor + Final Review
 
-Sau mỗi Sprint **bắt buộc** tạo:
-
-- Sprint Report  
-- Risk Report  
-- Technical Debt Report  
-- Quality Report  
-- Next Sprint Plan  
-
-Chỉ chuyển Sprint khi Quality Gate đạt.  
-Không dừng khi Sprint chưa hoàn thành (trong phạm vi phiên thực thi).
+Sau mỗi Sprint: Sprint Report · Risk Report · Technical Debt Report · Quality Report · Next Sprint Plan.
 
 ---
 
-## 10. Observability & bảo mật
+## 10. Chế độ tự điều hành
 
-- Structured JSON logging: `timestamp`, `level`, `service`, `trace_id`, `actor_id`, `action`
-- Audit log cho mọi thay đổi rule/config/quyền/model/kết luận chấm điểm (who/what/when/before/after)
-- `/health` (liveness) · `/ready` (PostgreSQL, Redis, S3)
-- Metrics: latency, error rate, queue lag, scoring throughput
-- Không secret trong code; JWT + RBAC bắt buộc
+Tự chia task · tự cập nhật tiến độ · tự kiểm tra xung đột docs↔code · tự refactor · tự chạy test.
 
----
-
-## 11. Checklist đóng Sprint / PR
-
-- [ ] Clean Architecture / SOLID / Repository / Service / DI  
-- [ ] Stack đúng Hiến pháp  
-- [ ] Pipeline AI đúng thứ tự  
-- [ ] Ensemble 5 Agent (hoặc contract rõ nếu bước đang xây)  
-- [ ] Không suy diễn; mọi kết luận có Evidence + Timestamp  
-- [ ] Thiếu data → `Insufficient Evidence`  
-- [ ] Rulebook từ DB; không hardcode business rule  
-- [ ] VECD schema đủ trường; QG pass  
-- [ ] Không TODO / placeholder / stub  
-- [ ] OpenAPI cập nhật nếu đổi API  
-- [ ] Sprint reports đầy đủ  
-
----
-
-**Canonical path:** `.cursor/rules/project-rules.mdc`  
-**alwaysApply:** `true`
+**Không kết thúc khi còn lỗi hoặc Sprint chưa hoàn thành.**

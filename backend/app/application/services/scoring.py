@@ -12,6 +12,8 @@ from app.application.services.judge_ensemble import (
     PassthroughLlmJudge,
 )
 from app.application.services.pipeline_orchestrator import PipelineOrchestrator
+from app.application.services.pragmatics import PragmaticsEngine
+from app.application.services.memory_graph import MemoryGraphService
 from app.application.services.revenue_leak import RevenueLeakService
 from app.application.services.root_cause import RootCauseService
 from app.application.services.rule_engine import RuleEngine
@@ -62,6 +64,8 @@ class ScoringService:
         self._audit = audit
         self._stt_min = settings.stt_min_avg_confidence
         self._pipeline = PipelineOrchestrator()
+        self._pragmatics = PragmaticsEngine()
+        self._memory_graph = MemoryGraphService()
 
     async def score_call(
         self,
@@ -190,13 +194,32 @@ class ScoringService:
             "coaching": coaching,
             "revenue_leak": revenue_leak,
         }
+        transcript_turns = list(getattr(transcript, "turns", None) or [])
+        if not transcript_turns:
+            transcript_turns = list(pipeline_pre.get("normalized_turns") or [])
+        pragmatics_result = self._pragmatics.analyze_transcript(transcript_turns)
+        pragmatics_payload = (
+            self._pragmatics.to_dict(pragmatics_result)
+            if hasattr(self._pragmatics, "to_dict")
+            else (pragmatics_result if isinstance(pragmatics_result, dict) else {"data": pragmatics_result})
+        )
+        memory_graph_payload = self._memory_graph.build_from_analysis(
+            call_id=str(call_id),
+            violations=violations if isinstance(violations, list) else [],
+            root_cause=root_cause if isinstance(root_cause, dict) else {"data": root_cause},
+            coaching=coaching if isinstance(coaching, dict) else {"data": coaching},
+            intents=list((pragmatics_payload or {}).get("intents") or []),
+            objections=list((pragmatics_payload or {}).get("objections") or []),
+        )
         pipeline_full = self._pipeline.attach_post_scoring(
             pipeline_pre,
             rule_engine={"evaluated_rules": len(items), "active_rules": len(rules)},
             judge_ensemble=judge_summary,
+            pragmatics=pragmatics_payload if isinstance(pragmatics_payload, dict) else {"data": pragmatics_payload},
             root_cause=root_cause if isinstance(root_cause, dict) else {"data": root_cause},
             coaching=coaching if isinstance(coaching, dict) else {"data": coaching},
             revenue_leak=revenue_leak if isinstance(revenue_leak, dict) else {"data": revenue_leak},
+            memory_graph=memory_graph_payload,
             dashboard_json=dashboard_json,
         )
 
