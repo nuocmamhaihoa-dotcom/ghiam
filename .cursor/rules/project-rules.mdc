@@ -1,0 +1,91 @@
+---
+description: Hiến pháp vĩnh viễn của repository AI QA Telesale Enterprise — nguyên tắc bất biến bắt buộc mọi phiên làm việc.
+alwaysApply: true
+---
+
+# Project Constitution — AI QA Telesale Enterprise
+
+Đây là **Hiến pháp vĩnh viễn** của repository. Mọi agent, contributor và phiên làm việc **PHẢI** tuân thủ toàn bộ nguyên tắc dưới đây. Không được suy diễn để nới lỏng hoặc bỏ qua.
+
+---
+
+## 1. Architecture bất biến
+
+- **Clean Architecture**: tách rõ Domain / Application / Infrastructure / Interface. Domain không phụ thuộc framework.
+- **SOLID**: Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion — bắt buộc với mọi module mới.
+- **Repository Pattern**: truy cập dữ liệu chỉ qua repository interface; không gọi ORM/SQL trực tiếp từ use-case hoặc API handler.
+- **Service Layer**: business orchestration nằm ở service/use-case; controller/route chỉ validate input và map response.
+- **Dependency Injection**: mọi dependency injectable; cấm singleton ẩn trạng thái; wiring tập trung ở composition root.
+
+## 2. Tech stack bắt buộc
+
+| Tầng | Stack |
+|------|--------|
+| Frontend | **Next.js + TypeScript + TailwindCSS** |
+| Backend | **FastAPI + Python** |
+| Database | **PostgreSQL** |
+| Cache / Queue support | **Redis** |
+| Object storage | **S3 Compatible Storage** |
+| Runtime packaging | **Docker + Docker Compose** |
+| AuthZ/AuthN | **JWT + RBAC** |
+| API contract | **OpenAPI** (sinh/đồng bộ từ FastAPI) |
+
+Không thay stack cốt lõi trừ khi có quyết định kiến trúc có audit log và phê duyệt rõ ràng.
+
+## 3. Observability & vận hành
+
+- **Structured Logging**: JSON logs có `timestamp`, `level`, `service`, `trace_id`, `actor_id`, `action`.
+- **Audit Log**: mọi thay đổi dữ liệu, rule, config, quyền, hoặc kết luận chấm điểm **PHẢI** ghi audit log (who/what/when/before/after).
+- **Health Check**: `/health` (liveness) và `/ready` (readiness kèm dependency checks: DB, Redis, S3).
+- **Monitoring**: metrics + alerts cho latency, error rate, queue lag, scoring throughput, storage failures.
+
+## 4. Evidence & Anti-hallucination (bất biến QA/AI)
+
+- **Không được suy diễn.** Chỉ kết luận từ evidence có trong transcript/audio/metadata.
+- **Không được hardcode business rule** trong code frontend/backend/prompt. Rule chỉ đến từ **Rulebook trong Database**.
+- **Mọi kết luận phải có bằng chứng và timestamp** (`evidence_spans`, `audio_ts_start`, `audio_ts_end`, `rule_id`, `confidence`).
+- **Mọi điểm phải giải thích được** (explainability: rule hit, evidence quote, scoring path).
+- **Thiếu dữ liệu phải trả về đúng chuỗi:** `Insufficient Evidence` — không đoán, không bịa, không điền mặc định “đạt”.
+
+## 5. Rulebook & thay đổi
+
+- **Rulebook phải đọc từ Database** (versioned). Cấm nhúng rule tĩnh trong source trừ seed/migration có kiểm soát.
+- **Mọi thay đổi phải có Audit Log** (rule CRUD, weight change, SOP change, model/prompt version change, deploy).
+- Rule evaluation phải gắn `rule_version`, `evaluated_at`, `evidence_ref`.
+
+## 6. Cách làm việc (Delivery)
+
+- **Luôn làm theo Sprint**: mục tiêu sprint rõ; không phình scope ngoài sprint goal trừ khi được ghi nhận.
+- **Luôn tự Review, Refactor và chạy Checklist trước khi kết thúc** mọi task/PR:
+  - [ ] Đúng Clean Architecture / SOLID / DI
+  - [ ] Không hardcode business rule
+  - [ ] Có evidence + timestamp cho mọi kết luận AI/QA
+  - [ ] Thiếu data → `Insufficient Evidence`
+  - [ ] Rulebook lấy từ DB
+  - [ ] Có Audit Log cho mutation
+  - [ ] OpenAPI cập nhật (nếu đổi API)
+  - [ ] Health/logging/monitoring không bị phá
+  - [ ] Tests/lint/typecheck liên quan đã chạy
+  - [ ] Không secret trong code
+
+## 7. Vai trò vận hành Hiến pháp
+
+Khi làm việc trong repo này, agent phải đóng đúng tinh thần:
+
+- Chief Software Architect — bảo vệ boundary & stack
+- QA Director — evidence, không suy diễn, Insufficient Evidence
+- Senior Prompt Engineer — prompt không chứa business rule hardcode
+- Machine Learning Engineer — model outputs phải explainable + timestamped
+- Backend Lead — FastAPI, DI, Repository, OpenAPI, Audit Log
+- Frontend Lead — Next.js + TS + Tailwind, không nhúng rule nghiệp vụ
+- DevOps Lead — Docker Compose, health, monitoring, an toàn secret
+
+## 8. Điều khoản tối cao
+
+Nếu xung đột giữa tốc độ giao hàng và Hiến pháp này → **Hiến pháp thắng**.  
+Nếu thiếu evidence → trả `Insufficient Evidence`.  
+Nếu thiếu rule trong DB → không tự bịa rule; escalate / tạo rule qua quy trình có audit.
+
+---
+
+**Hiệu lực:** áp dụng cho mọi phiên làm việc kể từ khi file này tồn tại (`alwaysApply: true`).
