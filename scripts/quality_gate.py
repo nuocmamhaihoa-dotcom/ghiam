@@ -1560,6 +1560,129 @@ def gate_negotiation() -> GateResult:
     return g
 
 
+
+
+def gate_cltv() -> GateResult:
+    """CLTV Engine — lifetime value forecast + prioritization."""
+    g = GateResult("CLTV Engine")
+    required = [
+        BACKEND / "cltv" / "engine.py",
+        BACKEND / "cltv" / "scorer.py",
+        BACKEND / "cltv" / "store.py",
+        BACKEND / "cltv" / "types.py",
+        BACKEND / "cltv" / "quality.py",
+        BACKEND / "app" / "application" / "services" / "cltv.py",
+        BACKEND / "app" / "interfaces" / "api" / "routers" / "cltv.py",
+        ROOT / "docs" / "CLTV_Engine.md",
+        ROOT / "models" / "cltv" / "schema.json",
+        ROOT / "enterprise-web" / "src" / "app" / "cltv" / "page.tsx",
+        ROOT / "tests" / "cltv" / "test_cltv.py",
+        ROOT / "datasets" / "cltv",
+    ]
+    for path_item in required:
+        if not path_item.exists():
+            g.fail(f"missing {path_item.relative_to(ROOT)}")
+
+    shell = ROOT / "enterprise-web" / "src" / "components" / "AppShell.tsx"
+    if shell.exists():
+        txt = shell.read_text(encoding="utf-8")
+        if "/cltv" not in txt:
+            g.fail("AppShell missing /cltv nav")
+
+    api = ROOT / "enterprise-web" / "src" / "lib" / "api.ts"
+    if api.exists():
+        api_txt = api.read_text(encoding="utf-8")
+        for key in (
+            "cltvDashboard",
+            "cltvPredict",
+            "cltvPrioritize",
+            "cltvQuality",
+        ):
+            if key not in api_txt:
+                g.fail(f"api.ts missing {key}")
+
+    try:
+        import tempfile
+        from pathlib import Path as P
+
+        from cltv.engine import CLTVEngine
+        from cltv.store import CLTVStore
+
+        td = P(tempfile.mkdtemp())
+        eng = CLTVEngine(store=CLTVStore(root=td))
+        high = eng.predict(
+            lead_id="hv",
+            call_history=[{"connected": True, "converted": True, "qa_score": 92, "duration": 240}],
+            conversation_dna={"rapport": 0.9, "value_building": 0.85, "closing": 0.8},
+            intent={"label": "buy", "confidence": 0.95},
+            emotion="positive",
+            buying_signal=0.9,
+            crm={"past_revenue": 4_000_000, "segment": "vip", "aov": 900_000},
+            follow_up={"completed": 4, "missed": 0},
+        )
+        low = eng.predict(
+            lead_id="lv",
+            call_history=[{"connected": False, "converted": False, "qa_score": 35}],
+            conversation_dna={"rapport": 0.15, "value_building": 0.1, "closing": 0.05},
+            intent={"label": "reject", "confidence": 0.9},
+            emotion="frustrated",
+            buying_signal=0.05,
+            crm={"past_revenue": 0, "segment": "standard", "aov": 300_000},
+            follow_up={"completed": 0, "missed": 4},
+        )
+        if not high.get("ok") or not low.get("ok"):
+            g.fail("predict failed")
+        if float(high["scores"]["cltv_score"]) <= float(low["scores"]["cltv_score"]):
+            g.fail("high-value lead must outscore low-value lead")
+        if float(high["lifetime_value"]) <= float(low["lifetime_value"]):
+            g.fail("high-value LTV must exceed low-value LTV")
+        for key in (
+            "cltv_score",
+            "retention_score",
+            "upsell_score",
+            "cross_sell_score",
+            "referral_score",
+            "lifetime_value",
+            "churn_risk",
+            "priority",
+            "evidence",
+            "explanations",
+        ):
+            if key not in high["scores"]:
+                g.fail(f"scores missing {key}")
+        if len(high["scores"]["evidence"]) < 5 or len(high["scores"]["explanations"]) < 3:
+            g.fail("prediction must include evidence + explanations")
+        prio = eng.prioritize([
+            {"lead_id": "A", "buying_signal": 0.9, "crm": {"segment": "vip", "past_revenue": 3_000_000}, "call_history": [{"connected": True, "converted": True}]},
+            {"lead_id": "B", "buying_signal": 0.1, "emotion": "frustrated", "call_history": [{"connected": False}]},
+        ])
+        if not prio.get("ok") or not prio.get("ranked"):
+            g.fail("prioritize failed")
+        dash = eng.dashboard()
+        for key in (
+            "cltv_forecast",
+            "churn_forecast",
+            "avg_lifetime_value",
+            "upsell_opportunity",
+            "referral_opportunity",
+            "prediction_count",
+            "priority_counts",
+        ):
+            if key not in (dash.get("widgets") or {}):
+                g.fail(f"dashboard missing widget {key}")
+        snap = eng.quality_snapshot()
+        if not snap.get("ok"):
+            g.fail(f"quality gate failed: {snap.get('errors')}")
+        if snap.get("separation_ok") is not True:
+            g.fail("quality snapshot must confirm high/low separation")
+        g.meta["high_cltv"] = high["scores"]["cltv_score"]
+        g.meta["low_cltv"] = low["scores"]["cltv_score"]
+        g.meta["high_ltv"] = high["lifetime_value"]
+    except Exception as exc:  # noqa: BLE001
+        g.fail(f"cltv smoke failed: {exc}")
+    return g
+
+
 SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
     1: [gate_architecture, gate_docs, gate_database, gate_docker, gate_security, gate_api],
     2: [lambda: gate_rule_consistency(2), gate_evidence, gate_json],
@@ -1632,6 +1755,13 @@ SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
     ],
     13: [
         gate_negotiation,
+        gate_api,
+        gate_tests,
+        gate_docs,
+        gate_final,
+    ],
+    14: [
+        gate_cltv,
         gate_api,
         gate_tests,
         gate_docs,

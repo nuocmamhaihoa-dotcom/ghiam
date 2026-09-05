@@ -80,7 +80,7 @@ Thiếu dữ liệu → **`Insufficient Evidence`**.
 | 19 | [19_Conversation_DNA.md](./19_Conversation_DNA.md) | Agent skill genome / radar |
 | 20 | [20_Dataset_Builder.md](./20_Dataset_Builder.md) | VECD factory, gates, export |
 
-Related: [VECD.md](./VECD.md) · [Self_Learning_Lab.md](./Self_Learning_Lab.md) · [Digital_Twin.md](./Digital_Twin.md) · [Negotiation_Strategy.md](./Negotiation_Strategy.md) · [Sales_OS.md](./Sales_OS.md) · [sprints/](./sprints/)
+Related: [VECD.md](./VECD.md) · [Self_Learning_Lab.md](./Self_Learning_Lab.md) · [Digital_Twin.md](./Digital_Twin.md) · [Negotiation_Strategy.md](./Negotiation_Strategy.md) · [CLTV_Engine.md](./CLTV_Engine.md) · [Sales_OS.md](./Sales_OS.md) · [sprints/](./sprints/)
 
 ---
 
@@ -119,3 +119,5 @@ Related: [VECD.md](./VECD.md) · [Self_Learning_Lab.md](./Self_Learning_Lab.md) 
 
 9. Wire **Digital Twin Salesperson** (`Digital_Twin.md`) — học từ golden/QA/high-conversion, roleplay + coaching, no verbatim clone.
 10. Wire **Negotiation Strategy Engine** (`Negotiation_Strategy.md`) — dự đoán 3–5 bước tiếp theo + Strategy Graph đa phương án.
+
+11. Wire **CLTV Engine** (`CLTV_Engine.md`) — lifetime value, churn, upsell/cross-sell, lead prioritization.

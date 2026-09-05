@@ -1,21 +1,21 @@
 {
-  "checked_at": "2026-09-05T21:39:52.684457+00:00",
+  "checked_at": "2026-09-05T21:58:41.734167+00:00",
   "all_ok": true,
   "sprints": [
     {
-      "sprint": 13,
-      "checked_at": "2026-09-05T21:39:52.684190+00:00",
+      "sprint": 14,
+      "checked_at": "2026-09-05T21:58:41.733897+00:00",
       "all_ok": true,
       "gates": [
         {
-          "gate": "Negotiation Strategy Engine",
+          "gate": "CLTV Engine",
           "ok": true,
           "errors": [],
           "warnings": [],
           "meta": {
-            "strategies": 5,
-            "horizon": 3,
-            "win_probability": 0.655
+            "high_cltv": 0.9299,
+            "low_cltv": 0.0796,
+            "high_ltv": 7579607.47
           }
         },
         {
@@ -24,8 +24,8 @@
           "errors": [],
           "warnings": [],
           "meta": {
-            "route_count": 102,
-            "openapi_paths": 98
+            "route_count": 106,
+            "openapi_paths": 102
           }
         },
         {

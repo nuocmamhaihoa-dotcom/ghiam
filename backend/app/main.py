@@ -39,6 +39,7 @@ from app.interfaces.api.routers import (
     self_learning,
     digital_twin,
     negotiation,
+    cltv,
     simulator,
 )
 
@@ -120,6 +121,7 @@ def create_app() -> FastAPI:
     application.include_router(self_learning.router, prefix=settings.api_prefix)
     application.include_router(digital_twin.router, prefix=settings.api_prefix)
     application.include_router(negotiation.router, prefix=settings.api_prefix)
+    application.include_router(cltv.router, prefix=settings.api_prefix)
 
     return application
 

@@ -1274,5 +1274,101 @@ export const api = {
       })
     );
   },
+,
+
+  async cltvDashboard() {
+    return withDemoFallback(
+      () => request<Record<string, unknown>>("/v1/cltv/dashboard"),
+      () => ({
+        status: "ok",
+        widgets: {
+          cltv_forecast: 0.71,
+          churn_forecast: 0.28,
+          avg_lifetime_value: 2_450_000,
+          upsell_opportunity: [{ lead_id: "L1", upsell_score: 0.72 }],
+          referral_opportunity: [{ lead_id: "L2", referral_score: 0.61 }],
+          prediction_count: 12,
+          priority_counts: { high_value: 4, medium: 5, low: 3 },
+        },
+      })
+    );
+  },
+
+  async cltvPredict(body: {
+    lead_id?: string;
+    call_history?: Record<string, unknown>[];
+    conversation_dna?: Record<string, unknown>;
+    intent?: string | Record<string, unknown>;
+    emotion?: string | Record<string, unknown>;
+    buying_signal?: number | Record<string, unknown>;
+    crm?: Record<string, unknown>;
+    follow_up?: Record<string, unknown>;
+  }) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/cltv/predict", {
+          method: "POST",
+          body,
+        }),
+      () => ({
+        status: "ok",
+        ok: true,
+        priority: "high_value",
+        lifetime_value: 3_200_000,
+        churn_risk: 0.22,
+        scores: {
+          cltv_score: 0.78,
+          retention_score: 0.74,
+          upsell_score: 0.7,
+          cross_sell_score: 0.62,
+          referral_score: 0.58,
+          lifetime_value: 3_200_000,
+          priority: "high_value",
+          confidence: 0.8,
+        },
+      })
+    );
+  },
+
+  async cltvPrioritize(body: { leads: Record<string, unknown>[] }) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/cltv/prioritize", {
+          method: "POST",
+          body,
+        }),
+      () => ({
+        status: "ok",
+        ok: true,
+        ranked: (body.leads || []).map((lead, idx) => ({
+          lead_id: lead.lead_id || `lead-${idx}`,
+          scores: {
+            priority: idx === 0 ? "high_value" : idx === 1 ? "low" : "medium",
+            cltv_score: Math.max(0.2, 0.85 - idx * 0.25),
+            lifetime_value: Math.max(200_000, 3_000_000 - idx * 1_000_000),
+          },
+        })),
+        counts: { high_value: 1, medium: 1, low: 1 },
+      })
+    );
+  },
+
+  async cltvQuality() {
+    return withDemoFallback(
+      () => request<Record<string, unknown>>("/v1/cltv/quality"),
+      () => ({
+        status: "ok",
+        ok: true,
+        checks: {
+          forecast_accuracy: { ok: true, value: 0.88 },
+          stability: { ok: true, value: 0.8 },
+          explainability: { ok: true, value: 0.9 },
+          evidence_validation: { ok: true, value: 0.9 },
+        },
+        separation_ok: true,
+      })
+    );
+  },
+
 
 };

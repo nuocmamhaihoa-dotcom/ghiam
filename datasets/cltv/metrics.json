@@ -1,0 +1,12 @@
+{
+  "predictions": 3,
+  "avg_cltv_score": 0.8938,
+  "avg_lifetime_value": 5921433.98,
+  "avg_churn_risk": 0.238,
+  "avg_confidence": 0.8117,
+  "priority_counts": {
+    "high_value": 3,
+    "medium": 0,
+    "low": 0
+  }
+}
