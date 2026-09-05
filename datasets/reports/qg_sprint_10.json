@@ -1,6 +1,6 @@
 {
   "sprint": 10,
-  "checked_at": "2026-09-05T18:26:37.689759+00:00",
+  "checked_at": "2026-09-05T19:44:33.673936+00:00",
   "all_ok": true,
   "gates": [
     {
@@ -29,6 +29,13 @@
       }
     },
     {
+      "gate": "Sales OS",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {}
+    },
+    {
       "gate": "22_Sales_OS_Frontend",
       "ok": true,
       "errors": [],
@@ -43,13 +50,20 @@
       "meta": {}
     },
     {
+      "gate": "Memory Graph + RAG",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {}
+    },
+    {
       "gate": "18_Test_Coverage_Validation",
       "ok": true,
       "errors": [],
       "warnings": [],
       "meta": {
         "pytest_returncode": 0,
-        "pytest_tail": "......................                                                   [100%]\n22 passed in 0.04s\n"
+        "pytest_tail": "......................                                                   [100%]\n22 passed in 0.05s\n"
       }
     },
     {
@@ -58,8 +72,8 @@
       "errors": [],
       "warnings": [],
       "meta": {
-        "route_count": 51,
-        "openapi_paths": 47
+        "route_count": 73,
+        "openapi_paths": 69
       }
     },
     {
@@ -77,7 +91,7 @@
       "meta": {}
     }
   ],
-  "passed": 7,
+  "passed": 9,
   "failed": 0,
-  "total": 7
+  "total": 9
 }

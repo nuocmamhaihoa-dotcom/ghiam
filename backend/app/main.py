@@ -35,6 +35,7 @@ from app.interfaces.api.routers import (
     revenue_leak,
     rules,
     scoring,
+    sales_os,
     simulator,
 )
 
@@ -112,6 +113,7 @@ def create_app() -> FastAPI:
     application.include_router(auto_sop.router, prefix=settings.api_prefix)
     application.include_router(forecast.router, prefix=settings.api_prefix)
     application.include_router(multi_product.router, prefix=settings.api_prefix)
+    application.include_router(sales_os.router, prefix=settings.api_prefix)
 
     return application
 

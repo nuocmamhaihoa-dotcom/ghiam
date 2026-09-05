@@ -20,6 +20,7 @@ const NAV = [
   { href: "/revenue", label: "Revenue Leak" },
   { href: "/fraud", label: "Fraud / Compliance" },
   { href: "/auto-sop", label: "Auto SOP" },
+  { href: "/sales-os", label: "Sales OS" },
   { href: "/forecast", label: "Forecast" },
   { href: "/multi-product", label: "Multi-Product" },
   { href: "/portal", label: "Employee Portal" },

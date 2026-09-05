@@ -963,6 +963,176 @@ def gate_vpe2() -> GateResult:
 
 
 
+def gate_sales_os() -> GateResult:
+    """AI Sales Operating System — connectors, routing, NBA, forecast, automation, dashboard."""
+    g = GateResult("Sales OS")
+    required = [
+        ROOT / "integrations" / "base.py",
+        ROOT / "integrations" / "registry.py",
+        ROOT / "routing" / "router.py",
+        ROOT / "routing" / "nba.py",
+        ROOT / "forecast" / "engine.py",
+        ROOT / "automation" / "engine.py",
+        BACKEND / "sales_os" / "os.py",
+        BACKEND / "sales_os" / "dashboard.py",
+        BACKEND / "app" / "interfaces" / "api" / "routers" / "sales_os.py",
+        ROOT / "docs" / "Sales_OS.md",
+        ROOT / "enterprise-web" / "src" / "app" / "sales-os" / "page.tsx",
+        ROOT / "tests" / "sales_os" / "fixtures_5000.jsonl",
+        ROOT / "tests" / "sales_os" / "test_sales_os.py",
+    ]
+    for path in required:
+        if not path.exists():
+            g.fail(f"missing {path.relative_to(ROOT)}")
+
+    connector_files = [
+        "hubspot",
+        "salesforce",
+        "bitrix24",
+        "zoho",
+        "asterisk",
+        "threecx",
+        "callio",
+        "stringee",
+        "twilio",
+        "facebook_lead_ads",
+        "zalo_oa",
+        "google_sheets",
+        "google_calendar",
+    ]
+    for name in connector_files:
+        path = ROOT / "integrations" / "connectors" / f"{name}.py"
+        if not path.exists():
+            g.fail(f"missing connector {path.relative_to(ROOT)}")
+
+    try:
+        from sales_os import SalesOS
+
+        sos = SalesOS()
+        connectors = sos.list_connectors()
+        if len(connectors) < 13:
+            g.fail(f"expected >=13 connectors, got {len(connectors)}")
+
+        sync = sos.sync_all({"records": 3, "dry_run": True})
+        if not sync.get("ok"):
+            g.fail("CRM sync_all failed")
+        for result in sync.get("results") or []:
+            if result.get("records_in") != result.get("records_out"):
+                g.fail(f"data loss on {result.get('connector')}")
+
+        agents = [
+            {
+                "agent_id": "A1",
+                "name": "An",
+                "telesale_skill": 0.92,
+                "conversation_dna": "consultative",
+                "close_rate": 0.31,
+                "industry_experience": ["banking"],
+                "peak_hours": list(range(9, 18)),
+                "workload": 2,
+                "active": True,
+            },
+            {
+                "agent_id": "A2",
+                "name": "Binh",
+                "telesale_skill": 0.55,
+                "conversation_dna": "assertive",
+                "close_rate": 0.18,
+                "industry_experience": ["telecom"],
+                "peak_hours": [10, 11],
+                "workload": 9,
+                "active": True,
+            },
+        ]
+        route = sos.route_lead(
+            {
+                "lead_id": "QG-1",
+                "industry": "banking",
+                "urgency": 0.9,
+                "value": 100_000_000,
+                "dna_preference": "consultative",
+                "preferred_hour": 10,
+                "source": "hubspot",
+            },
+            agents,
+            hour=10,
+        )
+        if route.get("agent_id") != "A1":
+            g.fail("routing rule failed: banking+consultative should assign A1")
+        if not route.get("assignment_reason") or not route.get("evidence"):
+            g.fail("routing missing explainability fields")
+
+        nba = sos.next_best_action(
+            {
+                "lead_id": "QG-1",
+                "outcome": "interested",
+                "buy_signals": 3,
+                "sentiment": 0.8,
+                "score": 40,
+                "agent_id": "A1",
+            },
+            automate=True,
+        )
+        for key in ("action", "confidence", "evidence", "expected_impact"):
+            if key not in nba:
+                g.fail(f"NBA missing {key}")
+        if not nba.get("automation_jobs"):
+            g.fail("NBA automate did not create automation jobs")
+
+        fc = sos.forecast(
+            [{"conversion_rate": 0.2, "revenue": 100_000_000}] * 6,
+            [{"value": 50_000_000, "stage": "proposal", "days_in_stage": 4}],
+        )
+        if fc.get("status") != "ok":
+            g.fail("forecast not ok")
+        for key in (
+            "close_rate",
+            "weekly_revenue",
+            "monthly_revenue",
+            "quarterly_revenue",
+            "pipeline_risk",
+        ):
+            if key not in fc:
+                g.fail(f"forecast missing {key}")
+
+        for role in ("CEO", "Sales Director", "Team Leader", "QA", "Telesale"):
+            dash = sos.dashboard(role)
+            if dash.get("status") != "ok" or not dash.get("widgets"):
+                g.fail(f"dashboard failed for role {role}")
+
+        quality = sos.quality_snapshot()
+        if not quality.get("crm_sync_ok") or not quality.get("no_data_loss"):
+            g.fail(f"quality snapshot failed: {quality}")
+        if int(quality.get("audit_entries") or 0) < 1:
+            g.fail("audit log empty")
+    except Exception as exc:  # noqa: BLE001
+        g.fail(f"sales os smoke failed: {exc}")
+
+    shell = ROOT / "enterprise-web" / "src" / "components" / "AppShell.tsx"
+    if shell.exists() and "/sales-os" not in shell.read_text(encoding="utf-8"):
+        g.fail("AppShell missing /sales-os nav")
+    api = ROOT / "enterprise-web" / "src" / "lib" / "api.ts"
+    if api.exists():
+        api_txt = api.read_text(encoding="utf-8")
+        for key in (
+            "salesOsDashboard",
+            "salesOsRoute",
+            "salesOsNextBestAction",
+            "salesOsForecast",
+            "salesOsSyncAll",
+            "salesOsQuality",
+        ):
+            if key not in api_txt:
+                g.fail(f"api.ts missing {key}")
+
+    fixtures = ROOT / "tests" / "sales_os" / "fixtures_5000.jsonl"
+    if fixtures.exists():
+        n = sum(1 for _ in fixtures.open(encoding="utf-8"))
+        if n < 5000:
+            g.fail(f"expected >=5000 fixtures, got {n}")
+    return g
+
+
 def gate_memory_rag() -> GateResult:
     """Enterprise Memory Graph + evidence RAG."""
     g = GateResult("Memory Graph + RAG")
@@ -1067,11 +1237,25 @@ SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
         gate_docs,
         gate_final,
     ],
-    8: [gate_sales_os_modules,
-        gate_vpe2, gate_memory_rag, gate_sales_os_frontend, gate_api, gate_tests],
-    9: [gate_sales_os_modules, gate_revenue_leak, gate_api, gate_sales_os_frontend],
+    8: [
+        gate_sales_os_modules,
+        gate_sales_os,
+        gate_vpe2,
+        gate_memory_rag,
+        gate_sales_os_frontend,
+        gate_api,
+        gate_tests,
+    ],
+    9: [
+        gate_sales_os_modules,
+        gate_sales_os,
+        gate_revenue_leak,
+        gate_api,
+        gate_sales_os_frontend,
+    ],
     10: [
         gate_sales_os_modules,
+        gate_sales_os,
         gate_sales_os_frontend,
         gate_sales_os_tests,
         gate_memory_rag,

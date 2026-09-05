@@ -749,6 +749,138 @@ export const api = {
     );
   },
 
+  async salesOsDashboard(role = "CEO", extras: Record<string, unknown> = {}) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/sales-os/dashboard", {
+          method: "POST",
+          body: { role, extras },
+        }),
+      () => ({
+        status: "ok",
+        role,
+        widget_names: [
+          "Revenue Forecast",
+          "Lead Health",
+          "Revenue Leak",
+          "Conversion Funnel",
+          "Personality Distribution",
+          "Coaching Progress",
+          "Team Ranking",
+          "AI Confidence",
+          "Golden Call Gap",
+          "Repeat Mistake",
+        ],
+        widgets: {
+          "Revenue Forecast": { weekly: 25000000, monthly: 100000000, quarterly: 300000000, close_rate: 0.22, pipeline_risk: 0.28, confidence: 0.74 },
+          "Lead Health": { avg_lead_score: 72, assigned: 12, unassigned: 0, stale: 2 },
+          "Revenue Leak": { leak_amount: 8500000, top_causes: ["missed_callback", "weak_close"] },
+          "Conversion Funnel": { leads: 1000, contacted: 700, qualified: 320, proposal: 180, won: 90 },
+          "Personality Distribution": { consultative: 0.34, assertive: 0.28, empathic: 0.22, analytical: 0.16 },
+          "Coaching Progress": { plans_open: 4, completed: 11, avg_improvement: 0.08 },
+          "Team Ranking": [{ agent_id: "A1", close_rate: 0.31 }],
+          "AI Confidence": { routing: 0.78, nba: 0.74, forecast: 0.7 },
+          "Golden Call Gap": { gap_score: 0.22, top_gaps: ["discovery_depth", "value_stack"] },
+          "Repeat Mistake": { top_mistakes: [{ code: "RM-OBJ-01", count: 12 }] },
+        },
+      })
+    );
+  },
+
+  async salesOsRoute(
+    lead: Record<string, unknown>,
+    agents: Record<string, unknown>[],
+    hour?: number
+  ) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/sales-os/route", {
+          method: "POST",
+          body: { lead, agents, hour },
+        }),
+      () => ({
+        lead_id: lead.lead_id,
+        agent_id: "A1",
+        lead_score: 78,
+        assignment_reason: "Assigned to An (A1): skill/dna/close/industry/peak match",
+        success_probability: 0.81,
+        evidence: [{ factor: "telesale_skill", value: 0.92 }],
+      })
+    );
+  },
+
+  async salesOsNextBestAction(call: Record<string, unknown>, automate = false) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/sales-os/next-best-action", {
+          method: "POST",
+          body: { call, automate },
+        }),
+      () => ({
+        action: "callback",
+        confidence: 0.86,
+        evidence: [{ field: "buy_signals", value: 3 }],
+        expected_impact: "Timely callback captures warm intent.",
+        schedule_at: "+2h",
+        automation_jobs: automate ? [{ job_type: "callback_reminder", status: "completed" }] : [],
+      })
+    );
+  },
+
+  async salesOsForecast(
+    historical: Record<string, unknown>[],
+    pipeline: Record<string, unknown>[] = [],
+    horizonDays = 30
+  ) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/sales-os/forecast", {
+          method: "POST",
+          body: { historical, pipeline, horizon_days: horizonDays },
+        }),
+      () => ({
+        status: "ok",
+        close_rate: 0.22,
+        weekly_revenue: 27500000,
+        monthly_revenue: 110000000,
+        quarterly_revenue: 330000000,
+        pipeline_risk: 0.31,
+        confidence: 0.76,
+      })
+    );
+  },
+
+  async salesOsSyncAll(payload: Record<string, unknown> = {}) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/sales-os/sync-all", {
+          method: "POST",
+          body: { payload },
+        }),
+      () => ({
+        ok: true,
+        results: [
+          { connector: "hubspot", ok: true, records_in: 5, records_out: 5 },
+          { connector: "twilio", ok: true, records_in: 5, records_out: 5 },
+        ],
+      })
+    );
+  },
+
+  async salesOsQuality() {
+    return withDemoFallback(
+      () => request<Record<string, unknown>>("/v1/sales-os/quality"),
+      () => ({
+        crm_sync_ok: true,
+        no_data_loss: true,
+        connectors: 13,
+        audit_entries: 12,
+        automation_jobs: 4,
+        routing_decisions: 3,
+      })
+    );
+  },
+
   async suggestMultiProduct(
     turns: Record<string, unknown>[],
     currentSku?: string

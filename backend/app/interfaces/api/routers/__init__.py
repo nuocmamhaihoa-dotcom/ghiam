@@ -22,6 +22,7 @@ from app.interfaces.api.routers import (
     revenue_leak,
     rules,
     scoring,
+    sales_os,
     simulator,
 )
 
@@ -47,5 +48,6 @@ __all__ = [
     "revenue_leak",
     "rules",
     "scoring",
+    "sales_os",
     "simulator",
 ]

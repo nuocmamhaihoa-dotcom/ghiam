@@ -1,10 +1,10 @@
 {
-  "checked_at": "2026-09-05T19:17:15.400325+00:00",
+  "checked_at": "2026-09-05T19:44:33.674233+00:00",
   "all_ok": true,
   "sprints": [
     {
-      "sprint": 8,
-      "checked_at": "2026-09-05T19:17:15.399926+00:00",
+      "sprint": 10,
+      "checked_at": "2026-09-05T19:44:33.673936+00:00",
       "all_ok": true,
       "gates": [
         {
@@ -33,14 +33,7 @@
           }
         },
         {
-          "gate": "VPE 2.0",
-          "ok": true,
-          "errors": [],
-          "warnings": [],
-          "meta": {}
-        },
-        {
-          "gate": "Memory Graph + RAG",
+          "gate": "Sales OS",
           "ok": true,
           "errors": [],
           "warnings": [],
@@ -54,14 +47,18 @@
           "meta": {}
         },
         {
-          "gate": "8_API_Validation",
+          "gate": "23_Sales_OS_Tests",
           "ok": true,
           "errors": [],
           "warnings": [],
-          "meta": {
-            "route_count": 60,
-            "openapi_paths": 56
-          }
+          "meta": {}
+        },
+        {
+          "gate": "Memory Graph + RAG",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
         },
         {
           "gate": "18_Test_Coverage_Validation",
@@ -72,11 +69,35 @@
             "pytest_returncode": 0,
             "pytest_tail": "......................                                                   [100%]\n22 passed in 0.05s\n"
           }
+        },
+        {
+          "gate": "8_API_Validation",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {
+            "route_count": 73,
+            "openapi_paths": 69
+          }
+        },
+        {
+          "gate": "19_Documentation_Review",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
+        },
+        {
+          "gate": "20_Final_Self_Review",
+          "ok": true,
+          "errors": [],
+          "warnings": [],
+          "meta": {}
         }
       ],
-      "passed": 6,
+      "passed": 9,
       "failed": 0,
-      "total": 6
+      "total": 9
     }
   ]
 }
