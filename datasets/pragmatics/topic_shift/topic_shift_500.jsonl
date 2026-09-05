@@ -1,0 +1,500 @@
+{"id": "UTT-3ff6372f45df", "text": "À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 0}
+{"id": "UTT-969745e50b7c", "text": "Ờ À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 0}
+{"id": "UTT-708dab694573", "text": "À À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 0}
+{"id": "UTT-2da8256a4bb4", "text": "Ừ thì À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 0}
+{"id": "UTT-302beca8f315", "text": "Thôi À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 0}
+{"id": "UTT-16ed1f105ffb", "text": "Vậy À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 0}
+{"id": "UTT-9a46a3444045", "text": "Nói thật À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 0}
+{"id": "UTT-5f5f80bb3a9d", "text": "À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 0}
+{"id": "UTT-995f2d0f5c74", "text": "Ờ À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 0}
+{"id": "UTT-0560cfae5729", "text": "À À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 0}
+{"id": "UTT-9b5e87af9b8b", "text": "Ừ thì À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 0}
+{"id": "UTT-150501961833", "text": "Thôi À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 0}
+{"id": "UTT-60e00849889c", "text": "Vậy À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 0}
+{"id": "UTT-f2ea7919454b", "text": "Nói thật À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 0}
+{"id": "UTT-4913afaa2373", "text": "À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 0}
+{"id": "UTT-99d8829a4b50", "text": "Ờ À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 0}
+{"id": "UTT-9d5bb475e7a1", "text": "À À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-62f1c516ff1d", "text": "Ừ thì À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-6e8215c9a96f", "text": "Thôi À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-d05b22841ad6", "text": "Vậy À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-49a77ab49cd0", "text": "Nói thật À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-9098a0a8bdb6", "text": "À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-0a6ef72c0ac8", "text": "Ờ À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-9a7d16cc5859", "text": "À À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-9eb6cee1cdda", "text": "Ừ thì À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-ca13c00ceb24", "text": "Thôi À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-107ea0faa334", "text": "Vậy À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-6b836643c82e", "text": "Nói thật À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-80575bdd5b65", "text": "À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-5e574de9f474", "text": "Ờ À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-6e4b42764daf", "text": "À À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-3c70fc287449", "text": "Ừ thì À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-54bd27f7810e", "text": "Thôi À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 1}
+{"id": "UTT-4c1eb07e3e22", "text": "Vậy À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-3d7f4e6571b3", "text": "Nói thật À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-269b03575e98", "text": "À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-d835a2730888", "text": "Ờ À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-376af9838823", "text": "À À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-b71f2497afa5", "text": "Ừ thì À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-da61205d9ebb", "text": "Thôi À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-a91a7bdaaa9c", "text": "Vậy À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-65fe85c3a93f", "text": "Nói thật À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-e3fe9203634f", "text": "À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-fd0c16054ec9", "text": "Ờ À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-d7cb5371e39e", "text": "À À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-1ea40ff40253", "text": "Ừ thì À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-405c0d88f035", "text": "Thôi À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-d0f703b6265d", "text": "Vậy À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-3f04ee95f2e2", "text": "Nói thật À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-96f3c6f06dd6", "text": "À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 2}
+{"id": "UTT-d4051c1f287a", "text": "Ờ À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 3}
+{"id": "UTT-01a477c67654", "text": "À À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 3}
+{"id": "UTT-ac69ac3d1f2f", "text": "Ừ thì À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 3}
+{"id": "UTT-b90692f692dd", "text": "Thôi À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 3}
+{"id": "UTT-0203a4cb30b9", "text": "Vậy À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 3}
+{"id": "UTT-ecb5cc926d3b", "text": "Nói thật À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 3}
+{"id": "UTT-1c389e6e1fa5", "text": "À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 3}
+{"id": "UTT-a5e6c4e2083b", "text": "Ờ À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 3}
+{"id": "UTT-98dc7f0c4617", "text": "À À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 3}
+{"id": "UTT-3707b10b50d1", "text": "Ừ thì À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 3}
+{"id": "UTT-4163ce11aca0", "text": "Thôi À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 3}
+{"id": "UTT-88a04426d2e2", "text": "Vậy À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 3}
+{"id": "UTT-757a2f06388e", "text": "Nói thật À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 3}
+{"id": "UTT-df731b6c4386", "text": "À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 3}
+{"id": "UTT-0906e9a39ab1", "text": "Ờ À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 3}
+{"id": "UTT-58763e5e5d2d", "text": "À À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 3}
+{"id": "UTT-96a33e97b31e", "text": "Ừ thì À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-5c13940d68e5", "text": "Thôi À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-b9e21ef26433", "text": "Vậy À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-ae122b666ad4", "text": "Nói thật À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-3ce5f4ff7f89", "text": "À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-b74934ec4037", "text": "Ờ À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-417a7fe37298", "text": "À À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-c3458892b7f5", "text": "Ừ thì À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-d87c94582b69", "text": "Thôi À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-8c87d5029b3c", "text": "Vậy À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-f6eda16fd8bb", "text": "Nói thật À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-6c20c0af6092", "text": "À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-8819e4632a3e", "text": "Ờ À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-28359de9f3d0", "text": "À À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-2f7727667894", "text": "Ừ thì À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-043d0e936d28", "text": "Thôi À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-6ddd2d0bf013", "text": "Vậy À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 4}
+{"id": "UTT-8a138f1550a8", "text": "Nói thật À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-136c0c6d8f5f", "text": "À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-b6e3d3948c61", "text": "Ờ À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-2d0e6cd91557", "text": "À À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-2b8d077d40e7", "text": "Ừ thì À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-92aac5057447", "text": "Thôi À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-2ae881e927a3", "text": "Vậy À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-482778c75715", "text": "Nói thật À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-e99b21fb45b0", "text": "À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-d9df74e872f9", "text": "Ờ À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-51f1a9e658d5", "text": "À À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-454dc16757f1", "text": "Ừ thì À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-138148d891d4", "text": "Thôi À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-0d7f79dde8d9", "text": "Vậy À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-35f8cde9d82c", "text": "Nói thật À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-11f167305656", "text": "À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-35fda9e01b70", "text": "Ờ À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 5}
+{"id": "UTT-a93c5ca40096", "text": "À À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 6}
+{"id": "UTT-a6e4be0768d5", "text": "Ừ thì À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 6}
+{"id": "UTT-faab884f797a", "text": "Thôi À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 6}
+{"id": "UTT-2ac4edd9c2ac", "text": "Vậy À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 6}
+{"id": "UTT-1311599483c6", "text": "Nói thật À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 6}
+{"id": "UTT-33a21f0694a5", "text": "À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 6}
+{"id": "UTT-92b4ddd993fc", "text": "Ờ À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 6}
+{"id": "UTT-4e0d32f545aa", "text": "À À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 6}
+{"id": "UTT-48614a6d0a6a", "text": "Ừ thì À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 6}
+{"id": "UTT-2040b73166f3", "text": "Thôi À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 6}
+{"id": "UTT-f3cd479a66cb", "text": "Vậy À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 6}
+{"id": "UTT-21db6177cf9d", "text": "Nói thật À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 6}
+{"id": "UTT-916affbfd488", "text": "À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 6}
+{"id": "UTT-4543e0398717", "text": "Ờ À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 6}
+{"id": "UTT-1aaf54fe5014", "text": "À À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 6}
+{"id": "UTT-d5fad8653a1d", "text": "Ừ thì À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 6}
+{"id": "UTT-6c98b2ab0a46", "text": "Thôi À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-7ea1901e0760", "text": "Vậy À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-d89e79089256", "text": "Nói thật À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-7d72bd918b4b", "text": "À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-944b38309f80", "text": "Ờ À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-e7f59f8812ca", "text": "À À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-f44179c6648b", "text": "Ừ thì À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-1503ea6c5213", "text": "Thôi À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-ff1b1a1fa1c4", "text": "Vậy À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-3c98621a2273", "text": "Nói thật À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-b143b375afb0", "text": "À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-9869a5dd5f8e", "text": "Ờ À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-02f377930932", "text": "À À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-b2394f12c34a", "text": "Ừ thì À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-99027fef30d3", "text": "Thôi À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-a2cd973c0c7c", "text": "Vậy À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-c65a0a052a2e", "text": "Nói thật À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 7}
+{"id": "UTT-8c1af2d41b9c", "text": "À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-cff1858fd98e", "text": "Ờ À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-6cfaca46bd78", "text": "À À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-a827ae5a57c1", "text": "Ừ thì À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-96be5d22388a", "text": "Thôi À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-c012a12fdda6", "text": "Vậy À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-6677efa5c8af", "text": "Nói thật À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-bd45c920bc1e", "text": "À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-93735dce8c5a", "text": "Ờ À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-20194fe9e933", "text": "À À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-4772c9dea30b", "text": "Ừ thì À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-d8f7ba924ec1", "text": "Thôi À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-56927f01c3eb", "text": "Vậy À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-ddbf2339b8e0", "text": "Nói thật À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-341420ee774f", "text": "À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-d3278c6afd03", "text": "Ờ À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-2188fc54e5d3", "text": "À À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 8}
+{"id": "UTT-65a95d965387", "text": "Ừ thì À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 9}
+{"id": "UTT-321a714f98b4", "text": "Thôi À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 9}
+{"id": "UTT-4dbd4a961a82", "text": "Vậy À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 9}
+{"id": "UTT-c4df75c12830", "text": "Nói thật À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 9}
+{"id": "UTT-56dd59ca8622", "text": "À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 9}
+{"id": "UTT-1dbcfa327229", "text": "Ờ À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 9}
+{"id": "UTT-be9a55548046", "text": "À À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 9}
+{"id": "UTT-d479bbf8800f", "text": "Ừ thì À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 9}
+{"id": "UTT-4862651f0f6d", "text": "Thôi À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 9}
+{"id": "UTT-9c8c9887dbb5", "text": "Vậy À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 9}
+{"id": "UTT-7957e44a9cac", "text": "Nói thật À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 9}
+{"id": "UTT-9b228b8425da", "text": "À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 9}
+{"id": "UTT-1b33ebb20c85", "text": "Ờ À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 9}
+{"id": "UTT-81e0e9472b3e", "text": "À À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 9}
+{"id": "UTT-d538b8964c98", "text": "Ừ thì À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 9}
+{"id": "UTT-f7eb5e35a653", "text": "Thôi À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 9}
+{"id": "UTT-f599ebb576f5", "text": "Vậy À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-99310bbbc6c3", "text": "Nói thật À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-76af2bc4c206", "text": "À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-d013ca9aaf2e", "text": "Ờ À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-2e5f5a098e6f", "text": "À À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-fce5252ad5f7", "text": "Ừ thì À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-8be739b366ba", "text": "Thôi À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-6a4b9e8cb795", "text": "Vậy À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-b6d88bcb4e7f", "text": "Nói thật À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-cd0f936e8e6e", "text": "À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-9da6453aae09", "text": "Ờ À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-a09dd453a654", "text": "À À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-eeda1a2140be", "text": "Ừ thì À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-bd1697fd7c36", "text": "Thôi À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-63054a7eac07", "text": "Vậy À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-cae1268549d6", "text": "Nói thật À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-ae1433b2e248", "text": "À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 10}
+{"id": "UTT-90fab8743e38", "text": "Ờ À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-d5be96dfba65", "text": "À À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-dc571cad7479", "text": "Ừ thì À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-e4ccf37b3bd0", "text": "Thôi À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-9e136ed6b5d5", "text": "Vậy À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-d1a05b56a87e", "text": "Nói thật À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-7c9c597460a5", "text": "À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-05f4b365ad0e", "text": "Ờ À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-f60096ff1039", "text": "À À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-2f55bea4d56c", "text": "Ừ thì À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-718f02916d37", "text": "Thôi À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-d58a2cf31635", "text": "Vậy À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-1cf14660907b", "text": "Nói thật À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-db696ad4d3b5", "text": "À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-2281b9f789b5", "text": "Ờ À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-7ec3b0fa8bf9", "text": "À À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-42085735f4a3", "text": "Ừ thì À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 11}
+{"id": "UTT-a32bb35115d2", "text": "Thôi À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 12}
+{"id": "UTT-7d15954b3abb", "text": "Vậy À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 12}
+{"id": "UTT-2b24083ef05d", "text": "Nói thật À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 12}
+{"id": "UTT-bd408257163c", "text": "À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 12}
+{"id": "UTT-0ea732ce4267", "text": "Ờ À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 12}
+{"id": "UTT-6d103a90da9d", "text": "À À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 12}
+{"id": "UTT-da8c1f264a22", "text": "Ừ thì À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 12}
+{"id": "UTT-0e94814db2ff", "text": "Thôi À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 12}
+{"id": "UTT-0399f7e80d9f", "text": "Vậy À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 12}
+{"id": "UTT-f90c9be8aafc", "text": "Nói thật À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 12}
+{"id": "UTT-f6248e1e7146", "text": "À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 12}
+{"id": "UTT-c21b029ad7cb", "text": "Ờ À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 12}
+{"id": "UTT-0457425099c7", "text": "À À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 12}
+{"id": "UTT-dd389365aca0", "text": "Ừ thì À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 12}
+{"id": "UTT-1db81c588ed1", "text": "Thôi À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 12}
+{"id": "UTT-36e6a97a8185", "text": "Vậy À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 12}
+{"id": "UTT-c5b7175bf1fa", "text": "Nói thật À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-9d7162712b66", "text": "À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-511fcd0f481e", "text": "Ờ À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-7736cd1227a2", "text": "À À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-dea1763c2611", "text": "Ừ thì À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-bc251bb9b116", "text": "Thôi À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-d06f624beb8b", "text": "Vậy À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-e4c417f3368f", "text": "Nói thật À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-4c386f14ec44", "text": "À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-0a0083673ae6", "text": "Ờ À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-af42b0e732e4", "text": "À À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-b8c7284cad87", "text": "Ừ thì À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-3226a6e8ede9", "text": "Thôi À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-881af8cb0479", "text": "Vậy À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-ac0f584b4fa4", "text": "Nói thật À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-f9ec79b09b19", "text": "À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-73adae06a86f", "text": "Ờ À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 13}
+{"id": "UTT-b31f9943861e", "text": "À À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-48d9b0c61b87", "text": "Ừ thì À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-61e54d0513d7", "text": "Thôi À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-2e7222224e2b", "text": "Vậy À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-1e5739bbdcf0", "text": "Nói thật À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-2505adb95f3d", "text": "À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-d7265919a5d8", "text": "Ờ À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-b1618377e4db", "text": "À À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-99d487742432", "text": "Ừ thì À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-3263d92355f8", "text": "Thôi À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-8fa7b181fc31", "text": "Vậy À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-1a800edaaf35", "text": "Nói thật À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-9fe56932e4ba", "text": "À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-c31cf2ace4b8", "text": "Ờ À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-2fbfde6a2d85", "text": "À À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-dd3450e2a61a", "text": "Ừ thì À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-3e0233fe3374", "text": "Thôi À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 14}
+{"id": "UTT-96055a25b3d2", "text": "Vậy À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 15}
+{"id": "UTT-5ff88a8363ba", "text": "Nói thật À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 15}
+{"id": "UTT-3d7b8e40b81f", "text": "À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 15}
+{"id": "UTT-7b3da3b1af16", "text": "Ờ À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 15}
+{"id": "UTT-c4d934adc34c", "text": "À À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 15}
+{"id": "UTT-752d481c49ab", "text": "Ừ thì À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 15}
+{"id": "UTT-c4b4a17cc3c1", "text": "Thôi À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 15}
+{"id": "UTT-212c67fd1106", "text": "Vậy À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 15}
+{"id": "UTT-88800ac09ec6", "text": "Nói thật À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 15}
+{"id": "UTT-92612f354308", "text": "À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 15}
+{"id": "UTT-1c59fb41a9dd", "text": "Ờ À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 15}
+{"id": "UTT-40237816d120", "text": "À À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 15}
+{"id": "UTT-85756e29dff1", "text": "Ừ thì À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 15}
+{"id": "UTT-2db1b84d4928", "text": "Thôi À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 15}
+{"id": "UTT-6013d77c686d", "text": "Vậy À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 15}
+{"id": "UTT-b1d006116dec", "text": "Nói thật À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 15}
+{"id": "UTT-1c99820dd4d8", "text": "À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-f3ca9c90b3c5", "text": "Ờ À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-9b29a66634a9", "text": "À À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-0ae2ec6864d5", "text": "Ừ thì À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-9960b53c290f", "text": "Thôi À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-00e7706a4579", "text": "Vậy À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-c80d9da34f2d", "text": "Nói thật À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-783cc1bf6e04", "text": "À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-7d9b1efe0c24", "text": "Ờ À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-c8e1085736e2", "text": "À À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-e547d7035d55", "text": "Ừ thì À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-067730296e81", "text": "Thôi À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-50a85b4d931d", "text": "Vậy À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-d9f7d3471165", "text": "Nói thật À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-ceb9e2b6a3f1", "text": "À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-74bf4abeab93", "text": "Ờ À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-d5814c3b21e3", "text": "À À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 16}
+{"id": "UTT-d13bb7ba4ea2", "text": "Ừ thì À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-8c1774a5d9d4", "text": "Thôi À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-0dcb7c318139", "text": "Vậy À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-b6368af5b1a0", "text": "Nói thật À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-0bd10c322108", "text": "À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-51159324d515", "text": "Ờ À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-a0f52c07816c", "text": "À À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-527c535b34cd", "text": "Ừ thì À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-c39086282897", "text": "Thôi À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-2bcf9aa3caf2", "text": "Vậy À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-1ce0e96570ab", "text": "Nói thật À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-a404652afaf7", "text": "À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-14953c69d589", "text": "Ờ À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-bebe9693a4c8", "text": "À À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-f90702a809bd", "text": "Ừ thì À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-9484c8acac46", "text": "Thôi À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-4862b1101e4d", "text": "Vậy À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 17}
+{"id": "UTT-1f8c76397a37", "text": "Nói thật À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 18}
+{"id": "UTT-e22aecae614d", "text": "À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 18}
+{"id": "UTT-893d1278f48f", "text": "Ờ À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 18}
+{"id": "UTT-2ceb20c99ade", "text": "À À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 18}
+{"id": "UTT-b46f0ca93239", "text": "Ừ thì À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 18}
+{"id": "UTT-05d23e69f2e1", "text": "Thôi À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 18}
+{"id": "UTT-488b4e13ff7e", "text": "Vậy À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 18}
+{"id": "UTT-98c4452c000a", "text": "Nói thật À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 18}
+{"id": "UTT-23d79f451580", "text": "À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 18}
+{"id": "UTT-c4aae66d301e", "text": "Ờ À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 18}
+{"id": "UTT-604651e3dae6", "text": "À À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 18}
+{"id": "UTT-3372a7f0bf6d", "text": "Ừ thì À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 18}
+{"id": "UTT-d4b6dae1fd9a", "text": "Thôi À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 18}
+{"id": "UTT-f8479446b6c2", "text": "Vậy À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 18}
+{"id": "UTT-86b5a1c362ba", "text": "Nói thật À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 18}
+{"id": "UTT-8b335f14673a", "text": "À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 18}
+{"id": "UTT-6aa2fe6c435e", "text": "Ờ À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-d57a0038ee2b", "text": "À À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-99df16686e29", "text": "Ừ thì À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-c9be181798ae", "text": "Thôi À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-dfdb9a6248f8", "text": "Vậy À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-ffd8bfe6e2a0", "text": "Nói thật À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-d93771f735a0", "text": "À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-78f887e5045a", "text": "Ờ À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-8693fa07052b", "text": "À À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-d588e269a875", "text": "Ừ thì À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-478fac9f1966", "text": "Thôi À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-b6325b292df0", "text": "Vậy À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-1cbd416fd51a", "text": "Nói thật À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-9504c623b590", "text": "À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-18faa4079fcd", "text": "Ờ À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-07bf1649b4de", "text": "À À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-0c22a37dd045", "text": "Ừ thì À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 19}
+{"id": "UTT-41cd38f38b28", "text": "Thôi À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-f9f2a6e69c82", "text": "Vậy À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-9d834319be9c", "text": "Nói thật À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-d06e31ae63be", "text": "À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-ffcfd1f1f90f", "text": "Ờ À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-d38f2ad4639d", "text": "À À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-0b6968a693f5", "text": "Ừ thì À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-43ab72d1db88", "text": "Thôi À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-f89b9e520987", "text": "Vậy À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-f618ec0428dc", "text": "Nói thật À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-6dbaeb215544", "text": "À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-8851cd8c85ec", "text": "Ờ À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-cefda7568499", "text": "À À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-10b06d691e23", "text": "Ừ thì À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-110d76ba8566", "text": "Thôi À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-a2643d530f43", "text": "Vậy À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-77bfe5ac43c4", "text": "Nói thật À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 20}
+{"id": "UTT-3939095d99f9", "text": "À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 21}
+{"id": "UTT-28e02aef9294", "text": "Ờ À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 21}
+{"id": "UTT-60f4f56777bc", "text": "À À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 21}
+{"id": "UTT-26af21a3d544", "text": "Ừ thì À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 21}
+{"id": "UTT-0c1b830073f1", "text": "Thôi À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 21}
+{"id": "UTT-da8d828306c7", "text": "Vậy À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 21}
+{"id": "UTT-07a34996735d", "text": "Nói thật À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 21}
+{"id": "UTT-b892382b551a", "text": "À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 21}
+{"id": "UTT-4bda053350ac", "text": "Ờ À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 21}
+{"id": "UTT-7300370792d5", "text": "À À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 21}
+{"id": "UTT-7b0482d66b78", "text": "Ừ thì À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 21}
+{"id": "UTT-58fdaf12685b", "text": "Thôi À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 21}
+{"id": "UTT-a72e978250a5", "text": "Vậy À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 21}
+{"id": "UTT-2ac4d90021c9", "text": "Nói thật À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 21}
+{"id": "UTT-e87569dd8e18", "text": "À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 21}
+{"id": "UTT-ff0d620b3230", "text": "Ờ À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 21}
+{"id": "UTT-d3ce0a73f22a", "text": "À À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-aab363f6248e", "text": "Ừ thì À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-cd18f6f07a2a", "text": "Thôi À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-9f8ff1c45f5a", "text": "Vậy À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-df9c74dd34bd", "text": "Nói thật À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-30f620c39d10", "text": "À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-d4009e8a3252", "text": "Ờ À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-d463ed715a53", "text": "À À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-e399e5d6bd5b", "text": "Ừ thì À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-0f321f4f52e5", "text": "Thôi À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-81a2722686bd", "text": "Vậy À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-682881c78f1f", "text": "Nói thật À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-19473118a15b", "text": "À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-e2799c40bf58", "text": "Ờ À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-88de43da6ef3", "text": "À À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-e44cb4acd747", "text": "Ừ thì À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-1fb6988d0ecb", "text": "Thôi À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 22}
+{"id": "UTT-d5a1aa760201", "text": "Vậy À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-a908cbfbca8b", "text": "Nói thật À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-006444667227", "text": "À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-e8dcf5b460d0", "text": "Ờ À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-dd094ef80554", "text": "À À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-7a3c6a88affa", "text": "Ừ thì À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-6d652ba1c047", "text": "Thôi À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-01cbec372abe", "text": "Vậy À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-2cd1df9e62e2", "text": "Nói thật À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-01691565f4c2", "text": "À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-37dac4c61bec", "text": "Ờ À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-1cb277c776ee", "text": "À À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-5c86386ed3a6", "text": "Ừ thì À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-54b503d35367", "text": "Thôi À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-eafd36d038bc", "text": "Vậy À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-852d30847f00", "text": "Nói thật À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-2eead2096231", "text": "À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 23}
+{"id": "UTT-709e0e3207ca", "text": "Ờ À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 24}
+{"id": "UTT-2445d0258668", "text": "À À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 24}
+{"id": "UTT-f745da7d4dc4", "text": "Ừ thì À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 24}
+{"id": "UTT-0f1a4fdd9ca4", "text": "Thôi À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 24}
+{"id": "UTT-5b88c394d229", "text": "Vậy À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 24}
+{"id": "UTT-8eb6f13a3241", "text": "Nói thật À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 24}
+{"id": "UTT-0e3154223a58", "text": "À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 24}
+{"id": "UTT-9a7685e9faae", "text": "Ờ À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 24}
+{"id": "UTT-01488e37e705", "text": "À À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 24}
+{"id": "UTT-f3430cb59906", "text": "Ừ thì À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 24}
+{"id": "UTT-bbb5633428dd", "text": "Thôi À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 24}
+{"id": "UTT-fe34a96f76f4", "text": "Vậy À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 24}
+{"id": "UTT-105edcca0b5c", "text": "Nói thật À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 24}
+{"id": "UTT-4c97eab10279", "text": "À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 24}
+{"id": "UTT-bb91e3f1fd17", "text": "Ờ À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 24}
+{"id": "UTT-981ff3ccf077", "text": "À À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 24}
+{"id": "UTT-d3a7733fe430", "text": "Ừ thì À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-4fb3eecbcab1", "text": "Thôi À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-30624978c62b", "text": "Vậy À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-acc49ec5cc74", "text": "Nói thật À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-d71b2694bcab", "text": "À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-7237ec9e921f", "text": "Ờ À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-ad9cf9f0a851", "text": "À À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-4064c19838a4", "text": "Ừ thì À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-adbd9a297312", "text": "Thôi À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-3e7b151a7d51", "text": "Vậy À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-307e19bde6ef", "text": "Nói thật À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-700bfc4b1beb", "text": "À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-d5042210837d", "text": "Ờ À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-e1e4ba1ab997", "text": "À À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-678ed9f99efb", "text": "Ừ thì À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-44f6c0a305a3", "text": "Thôi À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-c4a9689de313", "text": "Vậy À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 25}
+{"id": "UTT-e28112062dd5", "text": "Nói thật À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-cfd709497ff7", "text": "À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-4471141d8e8f", "text": "Ờ À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-aa7a881cb729", "text": "À À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-cfe57393b4c2", "text": "Ừ thì À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-b3019600a94b", "text": "Thôi À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-4b3181e87de2", "text": "Vậy À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-0bb735efb856", "text": "Nói thật À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-66b92373b4db", "text": "À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-daa644d49342", "text": "Ờ À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-7a7bd0a3414b", "text": "À À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-ba8ae4ee885a", "text": "Ừ thì À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-bdae30c0c14c", "text": "Thôi À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-2ae028bfa5b3", "text": "Vậy À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-e7e6f3a862dd", "text": "Nói thật À nhân tiện hỏi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-70137c1a7387", "text": "À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-34b62868319c", "text": "Ờ À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 26}
+{"id": "UTT-35e0f698ef99", "text": "À À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 27}
+{"id": "UTT-610dd7a46e4f", "text": "Ừ thì À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 27}
+{"id": "UTT-fe66295c6c80", "text": "Thôi À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 27}
+{"id": "UTT-530f52b7398b", "text": "Vậy À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 27}
+{"id": "UTT-d01a8e8105d9", "text": "Nói thật À nhân tiện hỏi ạ", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 27}
+{"id": "UTT-7ff1dd2b28e2", "text": "À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 27}
+{"id": "UTT-e04d248b9c3b", "text": "Ờ À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 27}
+{"id": "UTT-10aba00e62f7", "text": "À À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 27}
+{"id": "UTT-15d5019ce2fd", "text": "Ừ thì À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 27}
+{"id": "UTT-3f41ba9ad8b2", "text": "Thôi À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 27}
+{"id": "UTT-24b9e638ec03", "text": "Vậy À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 27}
+{"id": "UTT-23e3de3468d2", "text": "Nói thật À nhân tiện hỏi nhé", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 27}
+{"id": "UTT-e286b4088527", "text": "À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 27}
+{"id": "UTT-bc6936cd105f", "text": "Ờ À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 27}
+{"id": "UTT-0fd29c66c997", "text": "À À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 27}
+{"id": "UTT-70a1a9da8696", "text": "Ừ thì À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 27}
+{"id": "UTT-c1e5882fdddd", "text": "Thôi À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-f490cd5a50ea", "text": "Vậy À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-5ca05308b936", "text": "Nói thật À nhân tiện hỏi nha", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-825de452e0c4", "text": "À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-20bde38840a0", "text": "Ờ À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-1692f5e5dfe6", "text": "À À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-46b21a2b2cdc", "text": "Ừ thì À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-882e890f1872", "text": "Thôi À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-1d015faeb68a", "text": "Vậy À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-3deb188ad037", "text": "Nói thật À nhân tiện hỏi đó", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-d980b10b7039", "text": "À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-1566dda55562", "text": "Ờ À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-1236dbb4b046", "text": "À À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-22743a0268bb", "text": "Ừ thì À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-8266865869a7", "text": "Thôi À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-1491032eb4e5", "text": "Vậy À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-eced0ee0aff6", "text": "Nói thật À nhân tiện hỏi rồi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 28}
+{"id": "UTT-716883ef1eca", "text": "À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}
+{"id": "UTT-3a6a2cbf7baf", "text": "Ờ À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}
+{"id": "UTT-6d5332945e89", "text": "À À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}
+{"id": "UTT-7fd848c23ec7", "text": "Ừ thì À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}
+{"id": "UTT-875c31274007", "text": "Thôi À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}
+{"id": "UTT-56f361377799", "text": "Vậy À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}
+{"id": "UTT-b230bdc0922e", "text": "Nói thật À nhân tiện hỏi á", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}
+{"id": "UTT-68d101f58f51", "text": "À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}
+{"id": "UTT-22c332d11dd0", "text": "Ờ À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}
+{"id": "UTT-b1caace10327", "text": "À À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}
+{"id": "UTT-c7bd23901d86", "text": "Ừ thì À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}
+{"id": "UTT-91139c654963", "text": "Thôi À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}
+{"id": "UTT-ee6f08623d0d", "text": "Vậy À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}
+{"id": "UTT-c27c53569980", "text": "Nói thật À nhân tiện hỏi hen", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}
+{"id": "UTT-264ff9ba0ba0", "text": "À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}
+{"id": "UTT-7091d081b66a", "text": "Ờ À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}
+{"id": "UTT-8683243795e3", "text": "À À nhân tiện hỏi đi", "dialect": "central", "expected_top_intent": "topic_shift", "bucket": "shift", "batch": 29}

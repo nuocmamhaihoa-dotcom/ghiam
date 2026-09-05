@@ -1,0 +1,1000 @@
+{"id": "UTT-1c72cba856dd", "text": "Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-7bfbca3885a6", "text": "Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-50820c884ad1", "text": "Ờ Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-78632ddf3806", "text": "Ờ Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-6092792d09ac", "text": "À Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-26367ccc5cd2", "text": "À Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-5e44f86b30ce", "text": "Ừ thì Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-ad922e788517", "text": "Ừ thì Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-9695c485bdd4", "text": "Thôi Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-af63ee9c90f8", "text": "Thôi Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-99b2785bcac3", "text": "Vậy Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-442818e32bf1", "text": "Vậy Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-6c74c83ce89d", "text": "Nói thật Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-483a633e939b", "text": "Nói thật Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-2a6b45afa235", "text": "Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-72b6aa4effda", "text": "Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-03934ddb3335", "text": "Ờ Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-d488890c4deb", "text": "Ờ Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-1e6a67bf0d54", "text": "À Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-a814787d13e5", "text": "À Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-d961707bc23c", "text": "Ừ thì Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-3ac1c06c6c81", "text": "Ừ thì Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-0eb933972703", "text": "Thôi Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-4e36ca1e836b", "text": "Thôi Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-dcaa3045e105", "text": "Vậy Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-2d523bf510e5", "text": "Vậy Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-13dbd4887782", "text": "Nói thật Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-8605671cef18", "text": "Nói thật Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-d2aeb36623b3", "text": "Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-4e3508a4ff29", "text": "Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-8f2733d1736e", "text": "Ờ Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-5c673fe2f2c5", "text": "Ờ Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-b0b2a7afe889", "text": "À Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-87c615297d09", "text": "À Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 0}
+{"id": "UTT-412e3b048de7", "text": "Ừ thì Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-fc8d5fae4483", "text": "Ừ thì Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-469a255efbfb", "text": "Thôi Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-e1cee3f76442", "text": "Thôi Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-933a0d2b6090", "text": "Vậy Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-273917e49110", "text": "Vậy Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-9b079d23f99e", "text": "Nói thật Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-b7f4de27f526", "text": "Nói thật Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-b5654cf4d3af", "text": "Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-40e661d7d2fd", "text": "Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-8974fa6463c2", "text": "Ờ Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-5cd1b97a03b2", "text": "Ờ Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-e35a955da931", "text": "À Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-404aed9a63f8", "text": "À Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-b00b112265ce", "text": "Ừ thì Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-cdfaee2a4f86", "text": "Ừ thì Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-5675d7f0dbc9", "text": "Thôi Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-b28269c064a8", "text": "Thôi Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-1acbbfe4bd70", "text": "Vậy Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-2dc58f1a8501", "text": "Vậy Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-cbe706bb2e94", "text": "Nói thật Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-616f7c029ba6", "text": "Nói thật Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-802cca08d696", "text": "Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-dcc0cb33beb1", "text": "Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-a7f54bbc6dae", "text": "Ờ Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-926c934b918c", "text": "Ờ Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-93b106c06fd5", "text": "À Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-73f2aacb268c", "text": "À Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-cfbf2dd5aa38", "text": "Ừ thì Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-42f5cbd1e12d", "text": "Ừ thì Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-711d126a2d57", "text": "Thôi Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-c0a42729d84a", "text": "Thôi Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 1}
+{"id": "UTT-c5601fd19e87", "text": "Vậy Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-829d1bd402cd", "text": "Vậy Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-684e35bddf97", "text": "Nói thật Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-a651151702eb", "text": "Nói thật Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-39b61e73f158", "text": "Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-055cf1fe11db", "text": "Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-88ef65717c3a", "text": "Ờ Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-dadb641e7c37", "text": "Ờ Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-c7164477dd6f", "text": "À Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-81b8d8a096ce", "text": "À Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-ca41b3220894", "text": "Ừ thì Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-0cc1aff2c041", "text": "Ừ thì Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-87892102180c", "text": "Thôi Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-f1cc82179223", "text": "Thôi Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-b4be2965d66a", "text": "Vậy Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-955fd83f5837", "text": "Vậy Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-8c4348c5977d", "text": "Nói thật Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-1bceb7d53f01", "text": "Nói thật Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-9038ad8e8887", "text": "Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-111ab21a1787", "text": "Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-43437286f04b", "text": "Ờ Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-fbb9263a0bd6", "text": "Ờ Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-134061420ae9", "text": "À Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-fba49ff58375", "text": "À Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-cfa5913355f8", "text": "Ừ thì Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-6d18690327b4", "text": "Ừ thì Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-b9ee7b5f4328", "text": "Thôi Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-61fabcc7729a", "text": "Thôi Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-dc1103466830", "text": "Vậy Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-172600ff17b4", "text": "Vậy Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-ee658f29de5c", "text": "Nói thật Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-2e67303c500b", "text": "Nói thật Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-6b59f007da4f", "text": "Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-177dccf1b83f", "text": "Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 2}
+{"id": "UTT-8891754a1cb2", "text": "Ờ Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-aa9980c2b212", "text": "Ờ Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-af5b82a7b8e5", "text": "À Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-e011902b656d", "text": "À Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-6d9aaa1d47c9", "text": "Ừ thì Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-77ba0e7cc156", "text": "Ừ thì Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-5f57fce0c91b", "text": "Thôi Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-738f0440ab2c", "text": "Thôi Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-953ce19319f4", "text": "Vậy Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-405c21c19e2c", "text": "Vậy Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-1e40b48e437c", "text": "Nói thật Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-b719b5511d94", "text": "Nói thật Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-29bbf47e0c3c", "text": "Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-37516e53e707", "text": "Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-810e4fd0335f", "text": "Ờ Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-9b656d15fe95", "text": "Ờ Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-174d2163b1c8", "text": "À Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-0da5c21651cf", "text": "À Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-118d91c411ed", "text": "Ừ thì Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-7ea8d1b21f6e", "text": "Ừ thì Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-3acc9a61dced", "text": "Thôi Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-c2ae6a7153f2", "text": "Thôi Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-df31b60c20d5", "text": "Vậy Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-916b72e5e232", "text": "Vậy Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-452dfe320b1b", "text": "Nói thật Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-68f9bcc6247d", "text": "Nói thật Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-27dddc671e2c", "text": "Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-90f1d6193c74", "text": "Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-389f67b8d63c", "text": "Ờ Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-0555926c3b7e", "text": "Ờ Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-65753984e828", "text": "À Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-77e1f06431b0", "text": "À Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-7905f5e21f08", "text": "Ừ thì Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-2a84b221f861", "text": "Ừ thì Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 3}
+{"id": "UTT-ee99533cea64", "text": "Thôi Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-450e6a997b40", "text": "Thôi Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-8190055307f3", "text": "Vậy Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-e962e6ae8728", "text": "Vậy Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-98cabd83c8d9", "text": "Nói thật Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-5efa2d28186e", "text": "Nói thật Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-821570344705", "text": "Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-fb5c5f154c4d", "text": "Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-4563bdd4a058", "text": "Ờ Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-16d7a87d7761", "text": "Ờ Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-a47424323478", "text": "À Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-13c953f63d9a", "text": "À Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-029488ba1d7e", "text": "Ừ thì Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-2a7fe5ace5d4", "text": "Ừ thì Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-f0f318b2a0a6", "text": "Thôi Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-9e68dbdcf973", "text": "Thôi Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-485088ef37a1", "text": "Vậy Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-9dcad0409455", "text": "Vậy Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-88f6a42be52e", "text": "Nói thật Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-7f8213e4475a", "text": "Nói thật Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-485f01d9093c", "text": "Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-7c49bd337619", "text": "Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-ed4fbc7d0e05", "text": "Ờ Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-d631c796a4d2", "text": "Ờ Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-f1d0d3d6d666", "text": "À Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-14fb6e3e1941", "text": "À Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-c52df9fb5024", "text": "Ừ thì Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-b6789f33861c", "text": "Ừ thì Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-21e47527f533", "text": "Thôi Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-d032ca2e5225", "text": "Thôi Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-4e205167681c", "text": "Vậy Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-2a31258c5b91", "text": "Vậy Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 4}
+{"id": "UTT-60d2c4ae69b0", "text": "Nói thật Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-84ff6a0c2fba", "text": "Nói thật Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-9d038e96cb1d", "text": "Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-c3b8e5bd5fb9", "text": "Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-dea86b5ba2d0", "text": "Ờ Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-600badbeb1ad", "text": "Ờ Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-1052612c03bc", "text": "À Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-542b181d383b", "text": "À Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-691f0ad45495", "text": "Ừ thì Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-1510608b3895", "text": "Ừ thì Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-2e9ee9d47cbf", "text": "Thôi Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-3170be4a0050", "text": "Thôi Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-8022a85cf823", "text": "Vậy Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-b2e2ca6fd33f", "text": "Vậy Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-9f80050d7a66", "text": "Nói thật Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-90a1d6dc0680", "text": "Nói thật Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-670b3b6db6e5", "text": "Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-ef886f6333e8", "text": "Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-2b320a4035bd", "text": "Ờ Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-201c2a1c1206", "text": "Ờ Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-36d0e2a489fb", "text": "À Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-4d0a309f5c5b", "text": "À Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-8d7f153fcbf4", "text": "Ừ thì Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-93b1ced045fd", "text": "Ừ thì Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-504fa6b47f8c", "text": "Thôi Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-7c045a18ef6f", "text": "Thôi Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-5dc2e5eaaaef", "text": "Vậy Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-6aeb65f240e8", "text": "Vậy Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-eb491b01fa8f", "text": "Nói thật Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-31e5adb635d2", "text": "Nói thật Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-f7e4bd570221", "text": "Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-b84df103101b", "text": "Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-3f34c0f111fc", "text": "Ờ Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-d571c6727c69", "text": "Ờ Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 5}
+{"id": "UTT-1dc115f609ef", "text": "À Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-01b300bc3653", "text": "À Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-9641611d9e0a", "text": "Ừ thì Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-b9c5f47939cc", "text": "Ừ thì Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-040b251fde8e", "text": "Thôi Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-bea68db703cf", "text": "Thôi Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-18e95dea05c8", "text": "Vậy Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-ce959a276b97", "text": "Vậy Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-d4b76a8bfd9f", "text": "Nói thật Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-1685c0e15b13", "text": "Nói thật Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-1bfb9de79c14", "text": "Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-f777f1514f8a", "text": "Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-6995ced9245b", "text": "Ờ Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-70c1d1e01c80", "text": "Ờ Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-ab1a0592f74b", "text": "À Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-1bcb0f127fe9", "text": "À Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-a71893753fea", "text": "Ừ thì Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-582402df3b19", "text": "Ừ thì Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-62a6851cbb5f", "text": "Thôi Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-ae1304701929", "text": "Thôi Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-d214a8fd1a3b", "text": "Vậy Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-012db7abae91", "text": "Vậy Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-1a605088d10c", "text": "Nói thật Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-f899886e476d", "text": "Nói thật Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-e36bc15a6208", "text": "Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-e73ffddf2538", "text": "Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-582336724fed", "text": "Ờ Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-5ced6fc4043a", "text": "Ờ Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-4ce5587fe351", "text": "À Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-43efb1ee2fe7", "text": "À Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-831135295693", "text": "Ừ thì Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-647925857052", "text": "Ừ thì Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-daba7d670d8a", "text": "Thôi Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-c0e97fddbd41", "text": "Thôi Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 6}
+{"id": "UTT-3b77fff95a10", "text": "Vậy Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-dba0f9afa877", "text": "Vậy Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-ea370f5755a1", "text": "Nói thật Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-c1998c8be56a", "text": "Nói thật Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-032dba35eaa9", "text": "Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-7fde48f5dfbe", "text": "Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-ee973bb29827", "text": "Ờ Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-67547aa9636b", "text": "Ờ Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-9989d488df34", "text": "À Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-14ffc82efa23", "text": "À Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-c10acab03d5e", "text": "Ừ thì Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-52b976a87e89", "text": "Ừ thì Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-727f6fc6eaa2", "text": "Thôi Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-0df1ad30319f", "text": "Thôi Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-a4d4c4483f91", "text": "Vậy Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-37d2d7727988", "text": "Vậy Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-144d4c0df46b", "text": "Nói thật Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-9df9c5b8cdad", "text": "Nói thật Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-d0005dd8abf3", "text": "Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-b6aeae3c9210", "text": "Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-b11cf7a2cdc6", "text": "Ờ Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-e8e1fd8f1a66", "text": "Ờ Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-5e6e7b330465", "text": "À Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-28a424930117", "text": "À Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-d19f16effedb", "text": "Ừ thì Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-bd2dabc65a64", "text": "Ừ thì Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-3e407b99f837", "text": "Thôi Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-48ab540051fb", "text": "Thôi Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-331f4d858881", "text": "Vậy Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-327510ae471a", "text": "Vậy Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-d51cde3b1553", "text": "Nói thật Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-a6c2dafc78fe", "text": "Nói thật Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 7}
+{"id": "UTT-99c783d9d2c0", "text": "Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-c59952a835cb", "text": "Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-6b1c0cc5487d", "text": "Ờ Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-4cb6ae0720ae", "text": "Ờ Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-c9da3c1d5b57", "text": "À Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-0d3ea2eb0313", "text": "À Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-2aa64f666199", "text": "Ừ thì Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-fd59428621f8", "text": "Ừ thì Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-b80e5ceedfae", "text": "Thôi Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-ae1c47241071", "text": "Thôi Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-67ad501e4117", "text": "Vậy Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-09b6d17cb2a4", "text": "Vậy Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-c2c560ca2754", "text": "Nói thật Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-1a2d42b4c06e", "text": "Nói thật Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-5759837c5b73", "text": "Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-949e54b5e211", "text": "Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-ec7f8b8c3e6f", "text": "Ờ Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-97c431bba6a4", "text": "Ờ Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-b92700a57296", "text": "À Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-de477802aae7", "text": "À Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-4e1ab6de87c5", "text": "Ừ thì Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-9312c60a4e4c", "text": "Ừ thì Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-04eb4cd44473", "text": "Thôi Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-e8467d517895", "text": "Thôi Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-94c1390b2b5b", "text": "Vậy Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-e4d8221df472", "text": "Vậy Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-8cdbb4589352", "text": "Nói thật Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-54e699b53934", "text": "Nói thật Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-1ba0159eafdd", "text": "Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-00bbb316d024", "text": "Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-bafe82770977", "text": "Ờ Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-3b43ac0aefa6", "text": "Ờ Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-0e91b9f3e481", "text": "À Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-5863589ced5c", "text": "À Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 8}
+{"id": "UTT-26043817fb05", "text": "Ừ thì Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-0e7140447c3d", "text": "Ừ thì Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-b3abc00d6113", "text": "Thôi Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-165bd4770325", "text": "Thôi Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-82f3167b0a44", "text": "Vậy Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-58c3c10ae631", "text": "Vậy Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-dc6a8f15d773", "text": "Nói thật Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-5e0f69c05d47", "text": "Nói thật Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-621046f4e700", "text": "Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-1fbd7c1dd3c7", "text": "Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-483a232c9378", "text": "Ờ Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-e1003a578129", "text": "Ờ Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-9865cf7a120c", "text": "À Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-2bb6ac72a692", "text": "À Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-c01b0de1a5d3", "text": "Ừ thì Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-caa90aa532c3", "text": "Ừ thì Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-3d0eb04ff122", "text": "Thôi Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-095335bdfe1e", "text": "Thôi Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-dbd4c2411ae1", "text": "Vậy Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-2f055ab99cd6", "text": "Vậy Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-86d9418edd36", "text": "Nói thật Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-97adba98a4ef", "text": "Nói thật Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-0fe331b4fe81", "text": "Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-593d54bb51a0", "text": "Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-65a36feaaa07", "text": "Ờ Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-0d4967ae9960", "text": "Ờ Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-2f40fe33a1a5", "text": "À Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-b6303f1c328d", "text": "À Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-9e13ffe77ad5", "text": "Ừ thì Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-34601a99bf15", "text": "Ừ thì Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-fc1a37ca2b1d", "text": "Thôi Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-fe23d20efb0f", "text": "Thôi Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-51dba19d3901", "text": "Vậy Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-709786854c60", "text": "Vậy Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 9}
+{"id": "UTT-5db17107cbd0", "text": "Nói thật Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-e2a0d1f7585f", "text": "Nói thật Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-e0aaef59f618", "text": "Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-4f90790742ec", "text": "Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-d2d0b3bef9a1", "text": "Ờ Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-39a48ddd8d41", "text": "Ờ Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-5be53e74e71e", "text": "À Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-52907c417d6e", "text": "À Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-25f6f17248e0", "text": "Ừ thì Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-68b6d02569c2", "text": "Ừ thì Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-7ef5bd109304", "text": "Thôi Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-624b5edb6b9a", "text": "Thôi Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-c3535b842d34", "text": "Vậy Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-65c44c797ee9", "text": "Vậy Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-1dfd0a49c597", "text": "Nói thật Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-c1bacfcea42b", "text": "Nói thật Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-b1ee8ee97182", "text": "Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-df0d251355b9", "text": "Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-91df5d2243ac", "text": "Ờ Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-dd452969027a", "text": "Ờ Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-ba1e4f39bf99", "text": "À Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-c8d07ab405c4", "text": "À Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-7526d3480348", "text": "Ừ thì Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-d7587ff1accd", "text": "Ừ thì Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-d60a5a6170a1", "text": "Thôi Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-a956d0b31640", "text": "Thôi Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-79e5ece37bbc", "text": "Vậy Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-a555d5ac3613", "text": "Vậy Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-88546d537bc6", "text": "Nói thật Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-9b9ff7b554e7", "text": "Nói thật Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-748d4882db07", "text": "Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-aa2375d9e848", "text": "Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 10}
+{"id": "UTT-af6ad2e8ea22", "text": "Ờ Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-23e1a998a235", "text": "Ờ Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-1e576c8fe6ce", "text": "À Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-f03f3b5aee56", "text": "À Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-ff39fceef384", "text": "Ừ thì Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-c9a42de39842", "text": "Ừ thì Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-9dea4016ab69", "text": "Thôi Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-46e706915e7a", "text": "Thôi Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-8e5311dddaf2", "text": "Vậy Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-9a445ee70c4a", "text": "Vậy Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-24639dc3f452", "text": "Nói thật Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-e1116a5a48bd", "text": "Nói thật Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-e088b63b897e", "text": "Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-9856f93e7da3", "text": "Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-af685cddcd47", "text": "Ờ Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-a53ffd3d5b97", "text": "Ờ Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-6f55cd2556ea", "text": "À Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-113a8610b0d9", "text": "À Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-3470bd1497b2", "text": "Ừ thì Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-21faf3371bf9", "text": "Ừ thì Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-3eb63486a38c", "text": "Thôi Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-0066204b0fcd", "text": "Thôi Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-480b0e5fb89d", "text": "Vậy Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-8c57b22c9701", "text": "Vậy Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-7ee29ad8de31", "text": "Nói thật Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-5e19f637f83b", "text": "Nói thật Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-d06de03b24cc", "text": "Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-5f6ca90efac1", "text": "Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-ccba8a59214e", "text": "Ờ Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-bab8a14be651", "text": "Ờ Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-2e1cd5c46641", "text": "À Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-d625d619ed86", "text": "À Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-5286f3d1f382", "text": "Ừ thì Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-f6015a06c8ca", "text": "Ừ thì Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 11}
+{"id": "UTT-554cf74c6c58", "text": "Thôi Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-1b71094339d4", "text": "Thôi Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-34e53e8c8db6", "text": "Vậy Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-984430023ce7", "text": "Vậy Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-ed08d1613154", "text": "Nói thật Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-fd75ec64321b", "text": "Nói thật Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-979f9db80179", "text": "Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-6f7044aacab6", "text": "Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-2ed954ad15e0", "text": "Ờ Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-1caf81198b8c", "text": "Ờ Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-98af44054de0", "text": "À Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-4a1db0ad340b", "text": "À Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-db0cdf82de81", "text": "Ừ thì Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-893593e0bd0c", "text": "Ừ thì Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-584536ce1821", "text": "Thôi Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-b045881ca2c6", "text": "Thôi Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-4a873b891b0f", "text": "Vậy Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-950a16dd0999", "text": "Vậy Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-f60b14ef911a", "text": "Nói thật Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-6218f4aee6b0", "text": "Nói thật Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-bd1da52884e1", "text": "Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-ce9477772ccb", "text": "Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-39f2f64386e9", "text": "Ờ Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-2d1ca56229f2", "text": "Ờ Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-4903f7e3f9b0", "text": "À Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-02d14a0f0fd7", "text": "À Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-bf95d60fa68a", "text": "Ừ thì Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-e593a3a32d52", "text": "Ừ thì Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-212206de2b37", "text": "Thôi Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-36c44ff4e510", "text": "Thôi Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-3c392beedcc4", "text": "Vậy Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-e815faff9789", "text": "Vậy Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-3624af9d8c7a", "text": "Nói thật Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-bd28736da8ac", "text": "Nói thật Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 12}
+{"id": "UTT-8de79d5be357", "text": "Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-f980bf3486d3", "text": "Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-a7f8079fda30", "text": "Ờ Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-ac03d22d2961", "text": "Ờ Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-9c1af9f15270", "text": "À Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-34c4476b9041", "text": "À Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-68377c9b4dfd", "text": "Ừ thì Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-324757ff15c5", "text": "Ừ thì Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-c35b10bcef8e", "text": "Thôi Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-cf8deb739410", "text": "Thôi Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-e5b9b10015b3", "text": "Vậy Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-ca8e7441d67f", "text": "Vậy Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-e7d9e826348b", "text": "Nói thật Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-e0abc2afd64f", "text": "Nói thật Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-3dac0df0e632", "text": "Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-674c42f4bf1c", "text": "Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-b0e5ddd2b5e8", "text": "Ờ Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-58c17ccc114d", "text": "Ờ Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-263f4139fb34", "text": "À Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-cece5a436064", "text": "À Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-7ddfeef52021", "text": "Ừ thì Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-a46a1f02fbd6", "text": "Ừ thì Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-b1f6191f8b06", "text": "Thôi Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-b104982d26bc", "text": "Thôi Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-565010356177", "text": "Vậy Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-363d3ec1f5f7", "text": "Vậy Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-76dc22bc0685", "text": "Nói thật Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-d250b9348627", "text": "Nói thật Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-9efd7741e025", "text": "Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-be08c2c97ae4", "text": "Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-b3c8c82c0f0d", "text": "Ờ Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-f781402da348", "text": "Ờ Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 13}
+{"id": "UTT-25e36af70a8b", "text": "À Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-699437c47597", "text": "À Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-8c1d574a93fe", "text": "Ừ thì Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-9533061eace7", "text": "Ừ thì Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-74f3f6862ba2", "text": "Thôi Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-40fb3e3ca46c", "text": "Thôi Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-5edb131d9462", "text": "Vậy Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-ef44f2594518", "text": "Vậy Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-3476fbab53ee", "text": "Nói thật Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-e8e2018b0b6a", "text": "Nói thật Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-402041864c43", "text": "Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-724d8f0abf82", "text": "Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-dd8df7276987", "text": "Ờ Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-472071b1d26b", "text": "Ờ Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-2c484318b445", "text": "À Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-0e7b99a16f45", "text": "À Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-16662d82f4ad", "text": "Ừ thì Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-5e573b46db9c", "text": "Ừ thì Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-42eb67fdd3f4", "text": "Thôi Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-62ee1ac91d81", "text": "Thôi Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-cce0b8411b37", "text": "Vậy Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-13fee7030233", "text": "Vậy Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-7e2bd3e2cf41", "text": "Nói thật Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-93f593731be1", "text": "Nói thật Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-967a579b1e2f", "text": "Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-abcdafa3cbd9", "text": "Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-bb5433b20f18", "text": "Ờ Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-dbf450becfa2", "text": "Ờ Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-1c6c82afb568", "text": "À Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-a41af3e0d81f", "text": "À Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-634fec9c04bf", "text": "Ừ thì Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-1fae19ce619e", "text": "Ừ thì Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-f5ce1479490f", "text": "Thôi Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-cb84fd5067f2", "text": "Thôi Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 14}
+{"id": "UTT-227895e0a582", "text": "Vậy Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-c30aca3ed2fd", "text": "Vậy Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-cd9d5d93d6c7", "text": "Nói thật Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-fed8f1c3420a", "text": "Nói thật Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-f8755d2743e5", "text": "Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-e63cc13b255a", "text": "Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-827defbdad3e", "text": "Ờ Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-7c4bfb2c089d", "text": "Ờ Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-d50b7375e3dc", "text": "À Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-4f164bc0268d", "text": "À Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-439319b6efc1", "text": "Ừ thì Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-b7f6fa82e406", "text": "Ừ thì Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-0aebb9bec5d0", "text": "Thôi Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-b1f2d7956ec4", "text": "Thôi Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-5c887ec4a933", "text": "Vậy Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-0fb3bf82f1f8", "text": "Vậy Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-5c2f4d5ec693", "text": "Nói thật Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-ed99b1460e1f", "text": "Nói thật Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-607b9c1bbd31", "text": "Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-e0d69cc54113", "text": "Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-ff0c5e6f740e", "text": "Ờ Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-77b46a5053fd", "text": "Ờ Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-b2ebe98d47f4", "text": "À Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-1747a69d0388", "text": "À Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-726f51c69311", "text": "Ừ thì Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-04197027da49", "text": "Ừ thì Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-8d76352ee75b", "text": "Thôi Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-06655a4a7adf", "text": "Thôi Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-80b3ed927a46", "text": "Vậy Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-da1c0af5bf1b", "text": "Vậy Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-499725717af9", "text": "Nói thật Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-7a3692c76461", "text": "Nói thật Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-f9ef9538736f", "text": "Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-dc7f6bb777bd", "text": "Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 15}
+{"id": "UTT-98e2a31d691a", "text": "Ờ Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-60a019cce0ba", "text": "Ờ Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-58b41977c71a", "text": "À Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-3de6ff1b5c8a", "text": "À Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-0c728f98c992", "text": "Ừ thì Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-3663c9637e8a", "text": "Ừ thì Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-400c700922bf", "text": "Thôi Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-3e72e06b3101", "text": "Thôi Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-89bf5a07495a", "text": "Vậy Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-e3f8a7c6e86e", "text": "Vậy Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-ee11b192c84a", "text": "Nói thật Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-53d4c3d84fb9", "text": "Nói thật Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-0d99124e1051", "text": "Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-b292e3b648e4", "text": "Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-60ffdeb37727", "text": "Ờ Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-d9f531f90d10", "text": "Ờ Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-b70a4505cf01", "text": "À Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-0dbe93e4d169", "text": "À Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-982e73615fd4", "text": "Ừ thì Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-e371cc4d5498", "text": "Ừ thì Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-dcf6b7804caa", "text": "Thôi Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-9faa1d6939b6", "text": "Thôi Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-e62db9e10fdc", "text": "Vậy Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-f0bf6135b99e", "text": "Vậy Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-11742edf4f5d", "text": "Nói thật Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-b0c7b5569343", "text": "Nói thật Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-a561ae6e4a3b", "text": "Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-4f78930e455d", "text": "Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-5329e5ecdd3e", "text": "Ờ Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-6ed32036b618", "text": "Ờ Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-ef351c90d616", "text": "À Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-295c40765ba4", "text": "À Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 16}
+{"id": "UTT-7dbacae8d17a", "text": "Ừ thì Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-fed6c8ebc3e4", "text": "Ừ thì Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-874a6fafe691", "text": "Thôi Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-3322cdfad5ae", "text": "Thôi Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-f01e35346a38", "text": "Vậy Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-c5eec393f418", "text": "Vậy Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-8b8d95ebaa49", "text": "Nói thật Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-04ee8a9c1dca", "text": "Nói thật Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-ccec350261ca", "text": "Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-2de90bcea1b6", "text": "Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-8c4587cf4103", "text": "Ờ Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-5cb7c1409ef5", "text": "Ờ Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-89ceca016090", "text": "À Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-2e34bc5c93f7", "text": "À Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-bcd9c3a0ae9a", "text": "Ừ thì Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-207c5705b93e", "text": "Ừ thì Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-c32ba7101a24", "text": "Thôi Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-f24b7dd691a6", "text": "Thôi Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-3a4ee1f4cb42", "text": "Vậy Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-34c8179d782d", "text": "Vậy Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-a077f9357707", "text": "Nói thật Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-2846c9e2edb2", "text": "Nói thật Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-c8bcc4d28276", "text": "Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-b2e8a6e8d0ba", "text": "Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-6a04d69b1006", "text": "Ờ Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-874ec368d8ab", "text": "Ờ Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-48bf2918cd91", "text": "À Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-7ca1a2f55256", "text": "À Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-4a8de67e5ec8", "text": "Ừ thì Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-a3116d4ec6bc", "text": "Ừ thì Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-37d0bc498012", "text": "Thôi Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-f84b7a91137a", "text": "Thôi Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-dc5f1862ced5", "text": "Vậy Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-afce7907347a", "text": "Vậy Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 17}
+{"id": "UTT-1dc166da2b62", "text": "Nói thật Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-396ba94fe01a", "text": "Nói thật Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-dfaf536ac7de", "text": "Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-ad7a788e3947", "text": "Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-ff2a10623ff5", "text": "Ờ Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-d3c1a1661157", "text": "Ờ Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-698b1ff1bd66", "text": "À Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-68b4cd42f083", "text": "À Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-a6d29e8c2d34", "text": "Ừ thì Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-e311dea945e2", "text": "Ừ thì Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-3f1a1d360805", "text": "Thôi Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-4fc4068302ac", "text": "Thôi Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-146535229da6", "text": "Vậy Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-119e69ab58f0", "text": "Vậy Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-60f801feebc5", "text": "Nói thật Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-fc71916ae97a", "text": "Nói thật Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-75aab8794677", "text": "Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-e897faa7347f", "text": "Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-b8550b269778", "text": "Ờ Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-1c9f4ba6eabc", "text": "Ờ Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-110351ee4e27", "text": "À Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-dcae99a2469e", "text": "À Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-20de5498f203", "text": "Ừ thì Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-3c063c959c65", "text": "Ừ thì Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-c18d2af0df08", "text": "Thôi Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-92ffbf1865ee", "text": "Thôi Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-2da83410ca39", "text": "Vậy Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-9c260e55219c", "text": "Vậy Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-86b149fdc6dd", "text": "Nói thật Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-ccf0571f022f", "text": "Nói thật Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-07310075b2c9", "text": "Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-12431b856382", "text": "Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-f272b7491bff", "text": "Ờ Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-48bd6151be00", "text": "Ờ Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 18}
+{"id": "UTT-20536ab57b09", "text": "À Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-c810396f08c2", "text": "À Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-b0e2380fb1c2", "text": "Ừ thì Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-555a267ff35c", "text": "Ừ thì Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-0878fecf3da1", "text": "Thôi Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-dd52356614e3", "text": "Thôi Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-678590da03df", "text": "Vậy Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-7bbfd183d5eb", "text": "Vậy Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-36250e41bb76", "text": "Nói thật Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-6920d9de6d89", "text": "Nói thật Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-91969270dd4a", "text": "Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-b37966e58240", "text": "Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-4d11ef009d41", "text": "Ờ Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-20188bd46fe6", "text": "Ờ Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-b4165baf85cc", "text": "À Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-09c35c9f7eb4", "text": "À Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-c47ff75a1dcb", "text": "Ừ thì Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-ab9d184ab6cf", "text": "Ừ thì Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-28bb03c33a36", "text": "Thôi Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-c1d92c4a1d88", "text": "Thôi Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-53b4d651816c", "text": "Vậy Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-09b6f99d2eef", "text": "Vậy Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-8acae463b1ea", "text": "Nói thật Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-5e42efae8122", "text": "Nói thật Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-d64f354d2afb", "text": "Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-dab773645e84", "text": "Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-cf166c94dd0c", "text": "Ờ Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-679fd0fefd3b", "text": "Ờ Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-6e2b326bdc42", "text": "À Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-bf868c8a6415", "text": "À Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-76d07872f960", "text": "Ừ thì Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-78ec74246309", "text": "Ừ thì Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 19}
+{"id": "UTT-0fdb03dc60ac", "text": "Thôi Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-8f631a7acd85", "text": "Thôi Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-63cf3d460719", "text": "Vậy Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-d838946d8785", "text": "Vậy Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-6db5af2899f5", "text": "Nói thật Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-cc6e3b8eaccf", "text": "Nói thật Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-3952d0e2bc57", "text": "Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-8567e23b112e", "text": "Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-7d3849b2dd1a", "text": "Ờ Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-894f28b48543", "text": "Ờ Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-f866815ebd78", "text": "À Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-e46a43d13c74", "text": "À Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-64baf811d406", "text": "Ừ thì Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-f034ec7141b7", "text": "Ừ thì Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-a55a60bc4b50", "text": "Thôi Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-debac098aa2b", "text": "Thôi Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-30943ab43eea", "text": "Vậy Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-f578eb26baf1", "text": "Vậy Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-bd3690785153", "text": "Nói thật Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-fa4b9a886997", "text": "Nói thật Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-8c1c1147adf4", "text": "Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-559378c06114", "text": "Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-4e560592c640", "text": "Ờ Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-78e5e5612a30", "text": "Ờ Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-740dc900de22", "text": "À Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-f769d0c88a16", "text": "À Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-dfc072bdcbf0", "text": "Ừ thì Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-e24dbf3323f4", "text": "Ừ thì Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-065b8febc4c4", "text": "Thôi Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-438cd3a74bb6", "text": "Thôi Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-1224411f8cb4", "text": "Vậy Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-7fd4deda43c1", "text": "Vậy Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-6c0c49f71384", "text": "Nói thật Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-de433741a97e", "text": "Nói thật Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 20}
+{"id": "UTT-720617b8c4e6", "text": "Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-32c6e318036a", "text": "Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-d6ef61844e10", "text": "Ờ Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-8efcd5c02207", "text": "Ờ Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-23f0855e5414", "text": "À Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-98366ea378d7", "text": "À Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-71e72ac4ca20", "text": "Ừ thì Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-7d014e925bbf", "text": "Ừ thì Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-c415efd7f03d", "text": "Thôi Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-bfbd4cc23b11", "text": "Thôi Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-a49f05e5aef1", "text": "Vậy Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-964533d7f69e", "text": "Vậy Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-fc35befdc812", "text": "Nói thật Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-dc802eb6276b", "text": "Nói thật Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-ffa737eb0784", "text": "Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-33d072c71f0f", "text": "Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-aa928e07b7ce", "text": "Ờ Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-392155f1415a", "text": "Ờ Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-a2b09c70aff8", "text": "À Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-8d2c7e412e69", "text": "À Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-0983c6356b50", "text": "Ừ thì Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-5a3ee10cd4da", "text": "Ừ thì Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-f7ae693cb90c", "text": "Thôi Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-f52edb2db8c9", "text": "Thôi Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-41202444ad32", "text": "Vậy Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-97722a1a0d4b", "text": "Vậy Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-d350cbcb3c69", "text": "Nói thật Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-dc7e2e0c99d0", "text": "Nói thật Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-12dd7aae3680", "text": "Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-8c9be04716d9", "text": "Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-106c067269f4", "text": "Ờ Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-9d77e62455f6", "text": "Ờ Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-6a3e4e546c9d", "text": "À Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-7dbf4824c61c", "text": "À Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 21}
+{"id": "UTT-bcb91f9b8b56", "text": "Ừ thì Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-278c11f8941d", "text": "Ừ thì Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-5c4ef317fcba", "text": "Thôi Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-096f08c331fa", "text": "Thôi Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-56eb80e929e2", "text": "Vậy Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-c9bc68f55576", "text": "Vậy Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-f94ae4d36e1f", "text": "Nói thật Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-ed9ba650d673", "text": "Nói thật Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-fc5a0d9f3102", "text": "Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-4fc15a97c854", "text": "Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-0288877013b6", "text": "Ờ Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-883368a68201", "text": "Ờ Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-7310213d207a", "text": "À Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-6cdf3e5517c9", "text": "À Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-9cfe1cd3e8cb", "text": "Ừ thì Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-398a2fb677ae", "text": "Ừ thì Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-4101f5df2d4e", "text": "Thôi Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-75045193c6ed", "text": "Thôi Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-b513523ad56b", "text": "Vậy Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-71e928e44011", "text": "Vậy Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-5c15b31c6543", "text": "Nói thật Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-c86448370a46", "text": "Nói thật Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-7fb6ce327fea", "text": "Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-bc2f458b4073", "text": "Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-3abaf7c711ce", "text": "Ờ Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-b8cabccd5d91", "text": "Ờ Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-666a92a28af2", "text": "À Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-fffc791ba55c", "text": "À Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-facf0e8bdd11", "text": "Ừ thì Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-669f44c8ffb6", "text": "Ừ thì Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-433f6b0e9a55", "text": "Thôi Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-9004d5da89f4", "text": "Thôi Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 22}
+{"id": "UTT-a4973296c7c9", "text": "Vậy Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-1f3dc1e52a28", "text": "Vậy Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-1429da40b88f", "text": "Nói thật Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-a865d426ea46", "text": "Nói thật Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-2881bcd8e17f", "text": "Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-53f0aba04ff3", "text": "Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-b5476773b78d", "text": "Ờ Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-86eda6ff0e1a", "text": "Ờ Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-7283bfc2fdea", "text": "À Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-28ccc8b6f1e1", "text": "À Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-fec8105e2b4d", "text": "Ừ thì Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-a2399152ea53", "text": "Ừ thì Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-726656b6d299", "text": "Thôi Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-3a0f1b4f856d", "text": "Thôi Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-71cc29dc497f", "text": "Vậy Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-917f45024996", "text": "Vậy Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-8a2fc43174fe", "text": "Nói thật Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-92bcc580923a", "text": "Nói thật Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-e0bab314a03e", "text": "Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-f7c9ef674cf0", "text": "Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-cc9bf9a1710e", "text": "Ờ Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-e303bd9615f6", "text": "Ờ Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-d3a470d3ace3", "text": "À Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-788c78076708", "text": "À Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-f18aef9a16de", "text": "Ừ thì Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-29cc4f52c023", "text": "Ừ thì Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-6c786af3641e", "text": "Thôi Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-efa7517aafa6", "text": "Thôi Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-13449fc21aa3", "text": "Vậy Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-a1866aac9594", "text": "Vậy Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-f6fac3da29a3", "text": "Nói thật Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-1760317d2235", "text": "Nói thật Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-22ec4b90117d", "text": "Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-c730367f6aae", "text": "Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 23}
+{"id": "UTT-13df7f769979", "text": "Ờ Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-64099f1be31d", "text": "Ờ Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-b631a48b4add", "text": "À Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-bdccc1a68a0a", "text": "À Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-07161aaa9f0b", "text": "Ừ thì Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-e476c1c72c36", "text": "Ừ thì Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-14285ce72bc9", "text": "Thôi Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-8607fa61ba6f", "text": "Thôi Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-78ebc6b6a588", "text": "Vậy Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-6bc8f71c8efa", "text": "Vậy Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-a16ae6c864fe", "text": "Nói thật Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-6f9db30da438", "text": "Nói thật Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-090bfcf2764e", "text": "Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-db5a11192c59", "text": "Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-21c45875093d", "text": "Ờ Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-d0e51ebda8c8", "text": "Ờ Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-f043e730ad1b", "text": "À Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-b4c0c30bad61", "text": "À Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-1137ddf787e3", "text": "Ừ thì Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-cf4241011983", "text": "Ừ thì Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-416ce9b9f687", "text": "Thôi Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-92ee4e89583b", "text": "Thôi Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-fe9658a0e37c", "text": "Vậy Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-336c2f08c493", "text": "Vậy Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-cc1819e84b31", "text": "Nói thật Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-41ea2c41cf3f", "text": "Nói thật Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-46a1b88a3734", "text": "Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-a6a4595c3f9f", "text": "Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-38d7511e09fd", "text": "Ờ Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-27072d4246a9", "text": "Ờ Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-c454c4381ef0", "text": "À Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-a1df71580c6a", "text": "À Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-8e71824a8b94", "text": "Ừ thì Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-69576ba0107e", "text": "Ừ thì Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 24}
+{"id": "UTT-c7a488ae6775", "text": "Thôi Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-a07635b66d57", "text": "Thôi Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-dd7ee44366d7", "text": "Vậy Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-e87930e9cb03", "text": "Vậy Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-7400ce2305b9", "text": "Nói thật Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-6bcd6367d68e", "text": "Nói thật Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-04c3ab2e1a9d", "text": "Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-b9e771513da1", "text": "Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-aec3a013696c", "text": "Ờ Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-e9a98051a8d1", "text": "Ờ Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-fd62329241db", "text": "À Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-d76f6a3305a5", "text": "À Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-5ece03b6ef3f", "text": "Ừ thì Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-dfa018872005", "text": "Ừ thì Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-06a5485492f8", "text": "Thôi Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-a4d1eaeaa9ff", "text": "Thôi Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-79f586d12d29", "text": "Vậy Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-a64c70444e19", "text": "Vậy Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-a085d9a344f3", "text": "Nói thật Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-5da32430fdee", "text": "Nói thật Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-181b0d3fd6a0", "text": "Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-a032bb157fa6", "text": "Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-5d0d7c794f07", "text": "Ờ Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-e2c96045883a", "text": "Ờ Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-003067d80978", "text": "À Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-e386e2d0fa30", "text": "À Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-b07952d74c69", "text": "Ừ thì Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-542ba19e895c", "text": "Ừ thì Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-339469fed26b", "text": "Thôi Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-0d69f601ce2b", "text": "Thôi Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-2f3fa0d3f4d8", "text": "Vậy Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-1602be5493e0", "text": "Vậy Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 25}
+{"id": "UTT-66af98b19d0b", "text": "Nói thật Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-7a332d3c06b8", "text": "Nói thật Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-b5c0d251868c", "text": "Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-cb6e29f2cc21", "text": "Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-5a8e175148cc", "text": "Ờ Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-15d4dcce9f41", "text": "Ờ Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-7b21d3d3e757", "text": "À Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-6fcb536c45db", "text": "À Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-0ff7c974c227", "text": "Ừ thì Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-7eb115866d44", "text": "Ừ thì Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-faabb6c6cdb7", "text": "Thôi Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-549f672ae6c4", "text": "Thôi Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-877a751b63d8", "text": "Vậy Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-f6152c7ff8b9", "text": "Vậy Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-4248d977b5ae", "text": "Nói thật Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-fed5b4c393a0", "text": "Nói thật Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-f254a5e867d0", "text": "Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-0f627f4ca33d", "text": "Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-a53236b7e565", "text": "Ờ Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-2fd17c63b99c", "text": "Ờ Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-575ca9be37f6", "text": "À Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-a2ebfdee708e", "text": "À Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-b53db1943d77", "text": "Ừ thì Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-f609384b785b", "text": "Ừ thì Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-d6daaed55293", "text": "Thôi Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-7423d8e3efbe", "text": "Thôi Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-052a16ffa541", "text": "Vậy Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-50ce6cdcc3c5", "text": "Vậy Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-511f96949a23", "text": "Nói thật Thôi để sau", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-f8948747897b", "text": "Nói thật Em xin phép không", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-6b9d3a2c305f", "text": "Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-964e5df6928b", "text": "Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-b50e9163a783", "text": "Ờ Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-589a88328768", "text": "Ờ Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 26}
+{"id": "UTT-98c45a31639b", "text": "À Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-22cf31b41c0a", "text": "À Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-b700ccca7e33", "text": "Ừ thì Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-33105ea5d61e", "text": "Ừ thì Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-cf73e3cf143c", "text": "Thôi Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-a76e1269415f", "text": "Thôi Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-b4ab3df8b24b", "text": "Vậy Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-ddfdd916168a", "text": "Vậy Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-35799ddbf5e3", "text": "Nói thật Thôi để sau ạ", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-bfd7a13838d6", "text": "Nói thật Em xin phép không ạ", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-d7dae82f2cee", "text": "Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-904c8963c620", "text": "Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-d6f5f222bd49", "text": "Ờ Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-fef532bd7318", "text": "Ờ Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-75867fae2326", "text": "À Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-02d3e6ec22fd", "text": "À Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-e4f89e180372", "text": "Ừ thì Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-6150afc39ead", "text": "Ừ thì Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-ff45eb3c1f62", "text": "Thôi Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-ff781f7f1453", "text": "Thôi Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-0691373df195", "text": "Vậy Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-631baef2c6be", "text": "Vậy Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-f7d9416fe9d0", "text": "Nói thật Thôi để sau nhé", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-826655520ad8", "text": "Nói thật Em xin phép không nhé", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-3058dbef376d", "text": "Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-270018272dbb", "text": "Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-b52723dc8a24", "text": "Ờ Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-7ce6fa8c3edb", "text": "Ờ Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-0d7238854a19", "text": "À Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-8b251670e6cf", "text": "À Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-f460103746d2", "text": "Ừ thì Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-a55cfa5f6f32", "text": "Ừ thì Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-feec67e44bae", "text": "Thôi Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-e737a11b747e", "text": "Thôi Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 27}
+{"id": "UTT-ec4521eb31ec", "text": "Vậy Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-9372aad79b06", "text": "Vậy Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-e7b6f1447446", "text": "Nói thật Thôi để sau nha", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-343a5063669a", "text": "Nói thật Em xin phép không nha", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-e51350c8aaf0", "text": "Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-9d81ca8fcc46", "text": "Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-fdae728062f9", "text": "Ờ Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-dca40e6522ab", "text": "Ờ Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-8256e816aaef", "text": "À Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-1cfd7fd96b0f", "text": "À Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-e7ac4b3176ff", "text": "Ừ thì Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-4c20b97a9532", "text": "Ừ thì Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-27da7e8f2f29", "text": "Thôi Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-a2a935255b1e", "text": "Thôi Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-6130208c5992", "text": "Vậy Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-72b17b983927", "text": "Vậy Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-2e280c4c42e2", "text": "Nói thật Thôi để sau đó", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-aca88570587d", "text": "Nói thật Em xin phép không đó", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-266b2075d27c", "text": "Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-b05e0de9ba29", "text": "Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-4c30cfefdf3f", "text": "Ờ Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-f485a8a8ab67", "text": "Ờ Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-5ed5b4fbdec4", "text": "À Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-45cab16cd126", "text": "À Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-ca0797c7598e", "text": "Ừ thì Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-237c02a11f2f", "text": "Ừ thì Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-9660ff3ed4a8", "text": "Thôi Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-16cbedfe6ddc", "text": "Thôi Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-91cea9e2386a", "text": "Vậy Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-6eab1d0e58f8", "text": "Vậy Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-85d694537599", "text": "Nói thật Thôi để sau rồi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-65c679cf9848", "text": "Nói thật Em xin phép không rồi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 28}
+{"id": "UTT-11fe12d6653a", "text": "Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-c0d375b41df2", "text": "Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-0da5a8461f66", "text": "Ờ Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-50aa1755230c", "text": "Ờ Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-7f1a291d93a8", "text": "À Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-f22694d6f125", "text": "À Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-d79847ffb048", "text": "Ừ thì Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-4652b0ad2375", "text": "Ừ thì Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-259d546b19ef", "text": "Thôi Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-ecbdac396081", "text": "Thôi Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-68c3d7161379", "text": "Vậy Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-1f6638c96703", "text": "Vậy Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-450c1217af9e", "text": "Nói thật Thôi để sau á", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-14c622dfb477", "text": "Nói thật Em xin phép không á", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-9ca036619b34", "text": "Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-9e2f39b9b8b4", "text": "Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-1b583db1438f", "text": "Ờ Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-72f65450808e", "text": "Ờ Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-ecca4287b15d", "text": "À Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-0b3ef4c9151c", "text": "À Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-43bb2826c1c4", "text": "Ừ thì Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-6dc77bf80b81", "text": "Ừ thì Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-854f7a918ec6", "text": "Thôi Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-6432177a8ec0", "text": "Thôi Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-8f9d24b9ecb0", "text": "Vậy Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-d468901d8008", "text": "Vậy Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-25cabd987a6c", "text": "Nói thật Thôi để sau hen", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-c4a6fa012676", "text": "Nói thật Em xin phép không hen", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-67bac3182a3d", "text": "Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-dd9578650a5a", "text": "Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-a32799a4526b", "text": "Ờ Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-7808a1072be7", "text": "Ờ Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-721754e03624", "text": "À Thôi để sau đi", "dialect": "north", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}
+{"id": "UTT-3134f8bed6e5", "text": "À Em xin phép không đi", "dialect": "central", "expected_top_intent": "soft_rejection", "bucket": "soft_no", "batch": 29}

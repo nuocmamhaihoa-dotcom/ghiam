@@ -1,64 +1,90 @@
-# Vietnamese Pragmatics Engine (VPE)
+# Vietnamese Pragmatics Engine 2.0 (VPE)
 
-## Purpose
+## Mục tiêu
 
-Interpret Vietnamese telesale utterances beyond keywords:
+Hiểu cách nói thật của người Việt trong telesale: nói giảm nói tránh, tiếng lóng, vùng miền, và ý nghĩa ẩn — **không kết luận theo keyword đơn lẻ**. Mỗi lượt thoại trả về phân phối xác suất multi-intent kèm evidence.
 
-- Soft refusal vs delay vs real refusal
-- Dialect variants (north / central / south)
-- Hidden meaning with evidence quotes
-- Buying probability and exit risk
-
-## Pipeline position
+## Vị trí pipeline
 
 ```
-Transcript → Semantic Segmentation → Evidence Extraction
-→ VCIE → Pragmatics Engine → Rule Engine → Judge Ensemble
-→ Root Cause → Coaching → Revenue Leak
+Audio → Whisper → Diarization → Normalize → Segment
+→ Evidence Extract → Evidence Verify → Rule Engine
+→ Judge Ensemble → Pragmatics (VPE 2.0) → Root Cause
+→ Coaching → Revenue Leak → Memory Graph → Dashboard → JSON
 ```
+
+## Kiến trúc
+
+```
+backend/pragmatics/
+  context_memory.py      # ±5..10 turns
+  dialect.py             # north / central / south
+  pattern_library.py     # priors đa intent
+  intent_resolver.py     # blend pattern + context
+  detectors.py           # hidden meaning / buying / exit / emotion
+  engine.py              # VietnamesePragmaticsEngine
+  factory.py             # dataset factory + quality gate mỗi 500 mẫu
+models/pragmatics/       # vpe2_pattern_prior.json
+datasets/pragmatics/     # 100k utterances + specials
+tests/pragmatics/        # >2000 corpus tests
+```
+
+## Output bắt buộc
+
+- Hidden Meaning
+- Intent Probability (multi-intent)
+- Emotion Probability
+- Buying Probability
+- Exit Risk
+- Confidence Score
+- Evidence (quote + pattern_id + context window)
+
+Khi không match được pattern có evidence → `Insufficient Evidence`.
 
 ## API
 
 `POST /v1/pragmatics/analyze`
 
-Request:
-
 ```json
 {
   "turns": [
-    {"speaker": "customer", "text": "Để em xem đã"},
-    {"speaker": "customer", "text": "Bao giờ giao?"}
+    {"speaker": "agent", "text": "Em chào anh"},
+    {"speaker": "customer", "text": "Để em coi đã"}
   ],
   "dialect_hint": "south"
 }
 ```
 
-Response includes:
+Response gồm `status`, `dialect`, `summary`, `timeline`, `intent_evolution`, `emotion_evolution`, `turns[]`, `intents`, `objections`.
 
-- `status` (`ok` | `Insufficient Evidence`)
-- `dialect`
-- `summary` (top intent, avg buying/exit)
-- `timeline`
-- `turns[]` with intent/emotion probabilities, hidden meanings, evidence
+## Dataset factory
 
-## Evidence rule
+```bash
+PYTHONPATH=backend python -m pragmatics.factory           # full
+PYTHONPATH=backend python -m pragmatics.factory --quick   # smoke
+```
 
-If no pattern matches customer turns, return **Insufficient Evidence**. Do not invent intent.
+Targets:
 
-## Dataset
+| Artifact | Count |
+|----------|------:|
+| Utterances | 100,000 |
+| Situations | 5,000 |
+| Fake agreement | 1,000 |
+| Soft refusal | 1,000 |
+| Topic shift | 500 |
+| Exit imminent | 500 |
 
-`datasets/pragmatics/`
+Quality gate **mỗi 500 mẫu**: duplicate check, dialect balance (≥20% north/central/south), intent balance, pragmatics accuracy (≥70% top-3), JSON validation.
 
-- `patterns.jsonl` — extensible pattern library
-- `situations_500.jsonl` — labeled situations
-- `generate_pragmatics.py` — batch factory (`--batch-size`, `--seed`, `--output`)
+## Dashboard
 
-## Quality gate
+`/pragmatics` — Pragmatics Timeline, Hidden Meaning, Intent Evolution, Emotion Evolution.
 
-After each batch:
+## Tests
 
-1. Duplicate text check
-2. Dialect balance
-3. Intent balance
-4. JSON schema validation
-5. Engine smoke on 20 samples
+```bash
+PYTHONPATH=backend pytest tests/pragmatics -q
+```
+
+>2000 case thực tế (fixtures_2100.jsonl) + factory gate tests.

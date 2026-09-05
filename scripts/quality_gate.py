@@ -903,6 +903,65 @@ def gate_final() -> GateResult:
     return g
 
 
+
+
+def gate_vpe2() -> GateResult:
+    """Vietnamese Pragmatics Engine 2.0 package + datasets + UI + tests."""
+    g = GateResult("VPE 2.0")
+    required = [
+        BACKEND / "pragmatics" / "engine.py",
+        BACKEND / "pragmatics" / "factory.py",
+        BACKEND / "pragmatics" / "pattern_library.py",
+        BACKEND / "pragmatics" / "context_memory.py",
+        BACKEND / "pragmatics" / "intent_resolver.py",
+        BACKEND / "pragmatics" / "detectors.py",
+        ROOT / "models" / "pragmatics" / "vpe2_pattern_prior.json",
+        ROOT / "datasets" / "pragmatics" / "utterances" / "utterances_100k.jsonl",
+        ROOT / "datasets" / "pragmatics" / "situations" / "situations_5000.jsonl",
+        ROOT / "docs" / "Pragmatics_Engine.md",
+        ROOT / "enterprise-web" / "src" / "app" / "pragmatics" / "page.tsx",
+        ROOT / "tests" / "pragmatics" / "fixtures_2100.jsonl",
+    ]
+    for path in required:
+        if not path.exists():
+            g.fail(f"missing {path.relative_to(ROOT)}")
+    # smoke engine
+    try:
+        from pragmatics import VietnamesePragmaticsEngine
+        engine = VietnamesePragmaticsEngine(context_radius=5)
+        result = engine.analyze(
+            [
+                {"speaker": "customer", "text": "Để em coi đã"},
+                {"speaker": "customer", "text": "Bao giờ giao?"},
+            ],
+            dialect_hint="south",
+        )
+        if result.status != "ok":
+            g.fail(f"VPE analyze status={result.status}")
+    except Exception as exc:  # noqa: BLE001
+        g.fail(f"VPE import/analyze failed: {exc}")
+    # app wrapper
+    try:
+        from app.application.services.pragmatics import PragmaticsEngine
+        payload = PragmaticsEngine().to_dict(
+            PragmaticsEngine().analyze_transcript(
+                [{"speaker": "customer", "text": "Đắt quá"}]
+            )
+        )
+        for key in ("timeline", "intent_evolution", "emotion_evolution", "turns"):
+            if key not in payload:
+                g.fail(f"app pragmatics payload missing {key}")
+    except Exception as exc:  # noqa: BLE001
+        g.fail(f"app wrapper failed: {exc}")
+    shell = ROOT / "enterprise-web" / "src" / "components" / "AppShell.tsx"
+    if shell.exists() and "/pragmatics" not in shell.read_text(encoding="utf-8"):
+        g.fail("AppShell missing /pragmatics nav")
+    api = ROOT / "enterprise-web" / "src" / "lib" / "api.ts"
+    if api.exists() and "analyzePragmatics" not in api.read_text(encoding="utf-8"):
+        g.fail("api.ts missing analyzePragmatics")
+    return g
+
+
 SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
     1: [gate_architecture, gate_docs, gate_database, gate_docker, gate_security, gate_api],
     2: [lambda: gate_rule_consistency(2), gate_evidence, gate_json],
@@ -932,7 +991,8 @@ SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
         gate_docs,
         gate_final,
     ],
-    8: [gate_sales_os_modules, gate_sales_os_frontend, gate_api, gate_tests],
+    8: [gate_sales_os_modules,
+        gate_vpe2, gate_sales_os_frontend, gate_api, gate_tests],
     9: [gate_sales_os_modules, gate_revenue_leak, gate_api, gate_sales_os_frontend],
     10: [
         gate_sales_os_modules,

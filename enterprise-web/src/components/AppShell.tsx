@@ -12,6 +12,7 @@ const NAV = [
   { href: "/calls", label: "Cuộc gọi" },
   { href: "/qa", label: "QA Review" },
   { href: "/live-assistant", label: "Live Assistant" },
+  { href: "/pragmatics", label: "Pragmatics" },
   { href: "/personality", label: "Personality" },
   { href: "/memory-graph", label: "Memory Graph" },
   { href: "/simulator", label: "Objection Sim" },

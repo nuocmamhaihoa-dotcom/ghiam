@@ -448,6 +448,49 @@ export const api = {
     );
   },
 
+  
+  async analyzePragmatics(turns: Record<string, unknown>[], dialectHint?: string) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/pragmatics/analyze", {
+          method: "POST",
+          body: { turns, dialect_hint: dialectHint },
+        }),
+      () => ({
+        status: "ok",
+        dialect: dialectHint || "south",
+        explanation: "Demo pragmatics timeline",
+        summary: { top_intent: "delay", avg_buying_probability: 0.28, avg_exit_risk: 0.22 },
+        intents: ["delay", "decision_maker_missing"],
+        objections: ["decision_maker_missing"],
+        timeline: turns
+          .filter((t) => String(t.speaker || "").includes("customer") || String(t.speaker || "") === "customer")
+          .map((t, i) => ({
+            turn_index: i,
+            text: t.text,
+            top_intent: "delay",
+            hidden_meaning: ["Cần thêm ngữ cảnh trước khi kết luận."],
+          })),
+        intent_evolution: [{ turn_index: 0, intent: "delay", probability: 0.42 }],
+        emotion_evolution: [{ turn_index: 0, emotion: "hesitant", probability: 0.4 }],
+        turns: [
+          {
+            turn_index: 0,
+            text: "Để em coi đã",
+            intent_probability: { delay: 0.42, need_information: 0.22, soft_rejection: 0.18 },
+            emotion_probability: { hesitant: 0.4, neutral: 0.4 },
+            hidden_meaning: ["Muốn có thời gian xem lại; chưa phải từ chối cứng."],
+            buying_probability: 0.28,
+            exit_risk: 0.32,
+            confidence: 0.42,
+            evidence_quote: "Để em coi đã",
+            status: "ok",
+          },
+        ],
+      })
+    );
+  },
+
   async analyzePersonality(turns: Record<string, unknown>[]) {
     return withDemoFallback(
       () =>

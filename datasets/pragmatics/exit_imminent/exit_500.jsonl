@@ -1,0 +1,500 @@
+{"id": "UTT-c6aeee61a3d7", "text": "Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-c6bf20d9e69d", "text": "Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-23cdcbef1662", "text": "Ờ Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-3488128d30ce", "text": "Ờ Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-59b53e8549b0", "text": "À Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-11f7a5caaf2e", "text": "À Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-f3360a0a078c", "text": "Ừ thì Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-1730a065fc7d", "text": "Ừ thì Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-5ae8ac19e035", "text": "Thôi Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-d6b138f4c367", "text": "Thôi Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-054c4a46ba3b", "text": "Vậy Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-91150e112b8f", "text": "Vậy Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-1fb7ebff1ddc", "text": "Nói thật Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-ddc63cf62d0e", "text": "Nói thật Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-d10a5ab65e81", "text": "Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-528c62f67093", "text": "Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-10abbd3d8749", "text": "Ờ Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-25e797d90243", "text": "Ờ Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-b39b23301e23", "text": "À Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-2491a2ddc1b8", "text": "À Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-74bbb1fdb469", "text": "Ừ thì Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-3b700f2e281d", "text": "Ừ thì Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-221bc53b42bf", "text": "Thôi Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-9044d95ee011", "text": "Thôi Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-8368d32fdc19", "text": "Vậy Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-4903beebfa41", "text": "Vậy Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-917569da68a9", "text": "Nói thật Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-5cb2c05bb2a5", "text": "Nói thật Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-5ac1fb22d709", "text": "Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-ee87fadf7a44", "text": "Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-3f3aadc89b13", "text": "Ờ Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-c226447d2a3c", "text": "Ờ Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-bc25c55207b6", "text": "À Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-da7ba312b1b2", "text": "À Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 0}
+{"id": "UTT-90dddf8111bc", "text": "Ừ thì Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-1119206c7735", "text": "Ừ thì Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-cdd90fb51b14", "text": "Thôi Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-9634d80b4197", "text": "Thôi Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-45478b40531a", "text": "Vậy Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-0e90b88e6d71", "text": "Vậy Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-d2237ed7a9bd", "text": "Nói thật Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-f52d34370d04", "text": "Nói thật Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-5386b5d88008", "text": "Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-aa5aa72d0686", "text": "Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-62ba2b7ecbcb", "text": "Ờ Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-516f7ffff719", "text": "Ờ Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-8452fa0b1815", "text": "À Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-61dd414aa02f", "text": "À Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-410cf944e07c", "text": "Ừ thì Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-5871ad09d74c", "text": "Ừ thì Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-6ed2db1bb01d", "text": "Thôi Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-956a774d919d", "text": "Thôi Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-0a073835b2ad", "text": "Vậy Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-254f55125b79", "text": "Vậy Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-07543d559ca4", "text": "Nói thật Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-a89b0a7ea89c", "text": "Nói thật Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-beeeb86b4564", "text": "Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-281c652d9220", "text": "Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-f6659f27336d", "text": "Ờ Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-b0b956973131", "text": "Ờ Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-65ece3e4dc32", "text": "À Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-2e8f717cf603", "text": "À Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-f5a3fd992a1c", "text": "Ừ thì Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-e80628996b0f", "text": "Ừ thì Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-0c53a34e148c", "text": "Thôi Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-bcb870dcf121", "text": "Thôi Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 1}
+{"id": "UTT-66b1beb493c4", "text": "Vậy Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-f181ad83bace", "text": "Vậy Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-e502777a43e2", "text": "Nói thật Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-bd4d911a1b37", "text": "Nói thật Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-accf392134b3", "text": "Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-3d153b0dad78", "text": "Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-6d3a9db86004", "text": "Ờ Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-e858c161973f", "text": "Ờ Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-a2fe6afc5d86", "text": "À Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-d99324057f4d", "text": "À Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-a05471b7bdd1", "text": "Ừ thì Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-55277d5f34af", "text": "Ừ thì Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-a0312753fef0", "text": "Thôi Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-24fc526d4991", "text": "Thôi Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-3413b6f27d51", "text": "Vậy Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-75faf66c0309", "text": "Vậy Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-5855ab018868", "text": "Nói thật Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-dd6acd3c1d0e", "text": "Nói thật Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-8d283e43e3e3", "text": "Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-6d43e494d178", "text": "Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-fdf90e17bd51", "text": "Ờ Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-e58f996a73c6", "text": "Ờ Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-011b8419fbe7", "text": "À Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-e2c669b63877", "text": "À Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-376605e1616e", "text": "Ừ thì Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-a7797a3669e5", "text": "Ừ thì Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-6a95c7e34e7f", "text": "Thôi Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-e67aed0df276", "text": "Thôi Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-20eed8c2f6a4", "text": "Vậy Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-40d92135518c", "text": "Vậy Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-46f2e8974b46", "text": "Nói thật Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-30db691b497f", "text": "Nói thật Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-a5e47a75d338", "text": "Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-f57847c9faf8", "text": "Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 2}
+{"id": "UTT-73a2d7a08089", "text": "Ờ Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-3ea7274fa933", "text": "Ờ Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-7624577911d0", "text": "À Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-af073fc1a2fb", "text": "À Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-6c398e0eb32c", "text": "Ừ thì Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-898d0d5754a1", "text": "Ừ thì Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-ed51f9221698", "text": "Thôi Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-33daa5f1c3c6", "text": "Thôi Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-dbaa9897cc2c", "text": "Vậy Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-d8442a547405", "text": "Vậy Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-83c009d0b970", "text": "Nói thật Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-ce346d207479", "text": "Nói thật Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-a9b7378ead2a", "text": "Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-29059fff4123", "text": "Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-beff74424311", "text": "Ờ Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-c8d7d8dc03c9", "text": "Ờ Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-d8a4f484395f", "text": "À Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-12c9808f9318", "text": "À Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-9b561ab29fb9", "text": "Ừ thì Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-c8e9ab397211", "text": "Ừ thì Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-59b955fbb452", "text": "Thôi Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-7fd4537f3249", "text": "Thôi Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-eb88ca05f3b2", "text": "Vậy Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-61177a088252", "text": "Vậy Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-cd866a9ac06e", "text": "Nói thật Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-de6673414ab3", "text": "Nói thật Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-ecbff242c3b2", "text": "Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-ff312318f051", "text": "Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-6f2068832a9e", "text": "Ờ Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-70b6512c5c79", "text": "Ờ Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-4d97a2d86c6c", "text": "À Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-d8d1dbac69e4", "text": "À Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-12e31d7b8ba2", "text": "Ừ thì Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-04aa6c0999ca", "text": "Ừ thì Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 3}
+{"id": "UTT-cb9401f46ecc", "text": "Thôi Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-f72efb3a3f00", "text": "Thôi Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-11a0fc4d7d5d", "text": "Vậy Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-fb429f50bcaf", "text": "Vậy Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-5b013ca7940f", "text": "Nói thật Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-03087391c9f7", "text": "Nói thật Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-1bcc68efae87", "text": "Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-1ef9ae0a4c0d", "text": "Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-02e80b1e5f9e", "text": "Ờ Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-008bae33372f", "text": "Ờ Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-752d244c2894", "text": "À Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-b4b30e3c7c23", "text": "À Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-fc13bdde6d4d", "text": "Ừ thì Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-ae6aff9bb70b", "text": "Ừ thì Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-8ac587af77b8", "text": "Thôi Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-428c94a39f52", "text": "Thôi Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-ea90e2a923ae", "text": "Vậy Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-25d04c200767", "text": "Vậy Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-731cbc7e7784", "text": "Nói thật Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-f8f3f7b6a575", "text": "Nói thật Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-126614d24c4a", "text": "Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-d5b2ed9daa56", "text": "Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-40a4d71756e5", "text": "Ờ Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-3b7daffef68f", "text": "Ờ Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-f184dc7a1ca7", "text": "À Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-f7e59cde1a9d", "text": "À Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-c6a80019cdd9", "text": "Ừ thì Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-f8691af371b7", "text": "Ừ thì Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-c8efb661b3b7", "text": "Thôi Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-8b402050d14f", "text": "Thôi Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-4242bed78711", "text": "Vậy Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-cf0c0fbab7d9", "text": "Vậy Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 4}
+{"id": "UTT-50999cd7ff63", "text": "Nói thật Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-15d9d40a22f4", "text": "Nói thật Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-fbe4df214737", "text": "Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-6f4b6a6146fc", "text": "Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-21462fda467d", "text": "Ờ Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-1f0734449627", "text": "Ờ Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-c6d108e7b083", "text": "À Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-659a330038ec", "text": "À Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-e6870916eb8f", "text": "Ừ thì Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-37bce8709978", "text": "Ừ thì Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-ab6ea63add5d", "text": "Thôi Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-a5b4e1da2309", "text": "Thôi Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-1d9037082535", "text": "Vậy Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-3f2f7a0ee617", "text": "Vậy Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-a6203fdd305e", "text": "Nói thật Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-96e925bb57f2", "text": "Nói thật Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-6e6e427a8592", "text": "Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-bb380619e95a", "text": "Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-6d9da1680bd4", "text": "Ờ Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-0165a9cd22e1", "text": "Ờ Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-4a8c3e980029", "text": "À Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-5321ac8365fb", "text": "À Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-afb6db2367c6", "text": "Ừ thì Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-5322b3ab3abb", "text": "Ừ thì Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-d52169cf5b1a", "text": "Thôi Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-407d1577850a", "text": "Thôi Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-d8135ef71da7", "text": "Vậy Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-8dc3596e34fb", "text": "Vậy Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-6cc348bfcacc", "text": "Nói thật Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-021ca48df6ce", "text": "Nói thật Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-7c36e08bac5d", "text": "Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-11bb8546e8f6", "text": "Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-54ce532e85b4", "text": "Ờ Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-0664d4d7333c", "text": "Ờ Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 5}
+{"id": "UTT-f98ff49ef937", "text": "À Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-b994483a0924", "text": "À Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-7a27c54c496b", "text": "Ừ thì Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-5df12551a6e4", "text": "Ừ thì Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-9b5205f3d435", "text": "Thôi Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-071c8147ef50", "text": "Thôi Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-d9ea4a6396b1", "text": "Vậy Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-6371f04179a4", "text": "Vậy Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-3530c30d0c64", "text": "Nói thật Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-67ce426adc91", "text": "Nói thật Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-b3d33a0e3b81", "text": "Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-fd7e33a7a6fd", "text": "Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-c907ddf8d4fb", "text": "Ờ Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-db5359f0afb5", "text": "Ờ Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-e3189d89a1cc", "text": "À Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-737199ccaafa", "text": "À Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-7f5c5710ab73", "text": "Ừ thì Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-9217fde6ad6b", "text": "Ừ thì Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-cd1cc2e5a591", "text": "Thôi Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-dde61d625c46", "text": "Thôi Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-694d1ff0c2de", "text": "Vậy Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-a9d76bc90a80", "text": "Vậy Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-f543ffba6e67", "text": "Nói thật Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-04c3a1fb2bc2", "text": "Nói thật Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-13fa8c79abcd", "text": "Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-f0cc86bb86bf", "text": "Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-5980cd92616e", "text": "Ờ Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-36c9220e52f9", "text": "Ờ Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-e137934766ec", "text": "À Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-743fd11692bd", "text": "À Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-01f9616342a7", "text": "Ừ thì Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-a08d9bd7b753", "text": "Ừ thì Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-9b684c1916d9", "text": "Thôi Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-58c5b8cf778b", "text": "Thôi Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 6}
+{"id": "UTT-3e017efeb03c", "text": "Vậy Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-5bbfde000bb1", "text": "Vậy Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-736789ac4338", "text": "Nói thật Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-f537513a45c1", "text": "Nói thật Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-3f0491c3a836", "text": "Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-e9aca6d44127", "text": "Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-11704e479afb", "text": "Ờ Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-03e207755ec5", "text": "Ờ Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-1ea3cc0cb75b", "text": "À Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-f28978e272c7", "text": "À Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-9462a600d0fb", "text": "Ừ thì Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-c4a93b8ebffe", "text": "Ừ thì Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-53743d5d9ca3", "text": "Thôi Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-ee6cc2b925a2", "text": "Thôi Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-91ecc9a89d99", "text": "Vậy Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-772733d13a7f", "text": "Vậy Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-939bda986d15", "text": "Nói thật Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-069a11248ab2", "text": "Nói thật Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-69ae32f23e66", "text": "Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-550694b8db23", "text": "Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-8e188b4e9288", "text": "Ờ Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-bafdcd03e38d", "text": "Ờ Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-64c097224b14", "text": "À Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-5c2e1816d373", "text": "À Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-500988a65686", "text": "Ừ thì Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-326f6551d5a1", "text": "Ừ thì Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-d6ef7c596ae8", "text": "Thôi Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-101332fb29bb", "text": "Thôi Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-bafe1602c5c7", "text": "Vậy Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-c50d7e12f63a", "text": "Vậy Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-989c1d1dfe3f", "text": "Nói thật Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-72e58fe5bf91", "text": "Nói thật Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 7}
+{"id": "UTT-f0dd3ab300e5", "text": "Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-4cd11e5bbe1e", "text": "Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-53cb9a24eac0", "text": "Ờ Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-38374f0af3f7", "text": "Ờ Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-e3bc1f13dfb6", "text": "À Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-115245e471cf", "text": "À Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-185ed50078da", "text": "Ừ thì Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-78c3d5ab6672", "text": "Ừ thì Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-a26d825be700", "text": "Thôi Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-63e4a2401640", "text": "Thôi Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-327276d3ef9d", "text": "Vậy Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-5a8c653271fb", "text": "Vậy Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-7637a3f493c0", "text": "Nói thật Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-c4badc19c7b5", "text": "Nói thật Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-773b8ebc5a89", "text": "Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-e538a53d7915", "text": "Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-52f5cb39623f", "text": "Ờ Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-74d715a1c896", "text": "Ờ Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-9c9451aec5dc", "text": "À Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-2566174180bf", "text": "À Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-d83cdae1d0e9", "text": "Ừ thì Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-e51771a4dbb6", "text": "Ừ thì Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-54457eb21b21", "text": "Thôi Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-a8c835dec0ed", "text": "Thôi Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-7d2320969106", "text": "Vậy Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-c457c2f38b4a", "text": "Vậy Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-2d0af9fd3b80", "text": "Nói thật Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-9a3e07688f9e", "text": "Nói thật Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-c62a2e5db7e5", "text": "Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-e016a135be97", "text": "Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-5b635d3285b6", "text": "Ờ Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-5e0dc1a54544", "text": "Ờ Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-2810dd072216", "text": "À Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-8e083ebf7145", "text": "À Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 8}
+{"id": "UTT-a6d70ae3edae", "text": "Ừ thì Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-42b91546857b", "text": "Ừ thì Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-d41c6787b656", "text": "Thôi Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-683746ff5c80", "text": "Thôi Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-237def8eeb28", "text": "Vậy Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-b868023a9887", "text": "Vậy Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-489ca52f2888", "text": "Nói thật Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-22ce244a2b67", "text": "Nói thật Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-37c226e547d5", "text": "Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-f3a55e5eb519", "text": "Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-7cf44d013864", "text": "Ờ Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-940f008e0c7f", "text": "Ờ Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-d4a0cf9540a2", "text": "À Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-8795820dd7a5", "text": "À Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-581548f2b3f2", "text": "Ừ thì Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-ef52fb93b53c", "text": "Ừ thì Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-2fd3db8ccfbc", "text": "Thôi Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-e29211e22068", "text": "Thôi Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-438d41254355", "text": "Vậy Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-e961509b9c92", "text": "Vậy Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-2931811cd447", "text": "Nói thật Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-6e0698738f8b", "text": "Nói thật Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-6b9dfe5134af", "text": "Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-5a0bd11d9c45", "text": "Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-fdc92896f51d", "text": "Ờ Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-a93351922450", "text": "Ờ Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-b24bf8a8a645", "text": "À Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-b8e6cd899ef9", "text": "À Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-de7c792dd899", "text": "Ừ thì Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-d432cfe52769", "text": "Ừ thì Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-f74caf09cb7a", "text": "Thôi Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-c6e4eb473169", "text": "Thôi Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-3ff18fb7cd46", "text": "Vậy Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-27a5c0dc2021", "text": "Vậy Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 9}
+{"id": "UTT-845e46c3fda6", "text": "Nói thật Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-685731311a63", "text": "Nói thật Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-41ab23325b59", "text": "Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-3a5eb8fbab28", "text": "Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-5e38d7cfe97c", "text": "Ờ Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-41028378ce6a", "text": "Ờ Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-35dd6307493d", "text": "À Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-d3be8d6879b4", "text": "À Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-15f74f5004bc", "text": "Ừ thì Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-35f1731ac126", "text": "Ừ thì Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-0de554793d74", "text": "Thôi Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-30f40e4fd393", "text": "Thôi Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-e34ca16062d9", "text": "Vậy Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-b75d369c358f", "text": "Vậy Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-fc9806b50bff", "text": "Nói thật Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-147bf6d725df", "text": "Nói thật Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-02de6242c751", "text": "Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-688da645a297", "text": "Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-faf2c2f47458", "text": "Ờ Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-ea9cf7dcf579", "text": "Ờ Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-dfefb9e13670", "text": "À Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-9202d0ce8884", "text": "À Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-65b21eb2c2fd", "text": "Ừ thì Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-0a6a23a2ced3", "text": "Ừ thì Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-d3940e2c9d23", "text": "Thôi Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-9484646cd709", "text": "Thôi Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-18037a3ab7ce", "text": "Vậy Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-59f0ac7c8136", "text": "Vậy Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-217326ec43a3", "text": "Nói thật Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-47b82358d51c", "text": "Nói thật Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-bc65a4c8ecc4", "text": "Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-45d1bc3d9bad", "text": "Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 10}
+{"id": "UTT-fe16336b0b9e", "text": "Ờ Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-294f815b11a9", "text": "Ờ Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-28959bd1e6ba", "text": "À Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-04285913c43a", "text": "À Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-bc5efbc95e31", "text": "Ừ thì Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-77e79c6ad1ad", "text": "Ừ thì Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-15eb8fd1454f", "text": "Thôi Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-7f599ebe7235", "text": "Thôi Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-fa2e0c5b9079", "text": "Vậy Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-ea6b1a295e35", "text": "Vậy Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-68ba6f020154", "text": "Nói thật Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-62314f1ee9a2", "text": "Nói thật Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-1788cf1c270b", "text": "Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-bdc45462876a", "text": "Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-b354da038c89", "text": "Ờ Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-d37587d1321f", "text": "Ờ Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-a1433785a4f8", "text": "À Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-5d0989d7e801", "text": "À Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-3bfa2786b536", "text": "Ừ thì Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-fc1a00419696", "text": "Ừ thì Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-e23e885255d4", "text": "Thôi Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-faa8025ec4d1", "text": "Thôi Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-fb51d534e758", "text": "Vậy Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-d045bed5a39a", "text": "Vậy Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-7f8f7300f1c3", "text": "Nói thật Đừng gọi nữa", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-2e1f86d24bbb", "text": "Nói thật Gác máy đây", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-7704e785d64c", "text": "Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-457248409647", "text": "Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-bed875635da7", "text": "Ờ Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-3a28abf283f6", "text": "Ờ Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-71559e75edb9", "text": "À Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-6d9b336ba68d", "text": "À Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-19398aaa2940", "text": "Ừ thì Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-b21e4a228d35", "text": "Ừ thì Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 11}
+{"id": "UTT-54608fa1f9a1", "text": "Thôi Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-947c0e727965", "text": "Thôi Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-a9970dc2f464", "text": "Vậy Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-da12b551c366", "text": "Vậy Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-04744eb83f9c", "text": "Nói thật Đừng gọi nữa ạ", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-c79d2f135e4d", "text": "Nói thật Gác máy đây ạ", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-7d0a4f7c8dc3", "text": "Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-cc699b4b3571", "text": "Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-de9ec3ed7da8", "text": "Ờ Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-bcfdfe2b9264", "text": "Ờ Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-abc083d511c6", "text": "À Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-1fbcd5a74c75", "text": "À Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-1d5bdbbc9036", "text": "Ừ thì Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-ee8cc6edf01b", "text": "Ừ thì Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-690a358ace7d", "text": "Thôi Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-a38b68f6d0fa", "text": "Thôi Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-e9ba1a62688c", "text": "Vậy Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-6547ae3bfec9", "text": "Vậy Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-68873007eafb", "text": "Nói thật Đừng gọi nữa nhé", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-04225eed4a6b", "text": "Nói thật Gác máy đây nhé", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-d73c37d3c8f4", "text": "Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-6009fe639153", "text": "Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-ab6a8e51af65", "text": "Ờ Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-9ad32e896e51", "text": "Ờ Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-81bcd77f7f5b", "text": "À Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-a824d0fb58f3", "text": "À Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-d26fd97334bd", "text": "Ừ thì Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-c6cd629c21b8", "text": "Ừ thì Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-9e58a1cb5b57", "text": "Thôi Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-c1fe9e6237c3", "text": "Thôi Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-7c274908cec2", "text": "Vậy Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-ae1ff6fe7e06", "text": "Vậy Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-da478237e034", "text": "Nói thật Đừng gọi nữa nha", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-d9930607fb31", "text": "Nói thật Gác máy đây nha", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 12}
+{"id": "UTT-b0223fd15a96", "text": "Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-0b6962c5c56d", "text": "Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-39ffb8a1d434", "text": "Ờ Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-4825a434a93a", "text": "Ờ Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-aa844906d63e", "text": "À Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-789757866422", "text": "À Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-15a215869909", "text": "Ừ thì Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-581ebf4ac193", "text": "Ừ thì Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-6b98b404bd06", "text": "Thôi Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-b12c3f730195", "text": "Thôi Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-b739d52fab98", "text": "Vậy Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-18d7cd1d98ea", "text": "Vậy Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-933928d0f33e", "text": "Nói thật Đừng gọi nữa đó", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-245581022ef4", "text": "Nói thật Gác máy đây đó", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-658ee8b5dfce", "text": "Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-bd9cae43efc2", "text": "Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-61f8c891cd1b", "text": "Ờ Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-af739c851f9b", "text": "Ờ Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-3ecfd09d50e1", "text": "À Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-dc968e044bfc", "text": "À Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-a2757ecd3e89", "text": "Ừ thì Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-cdcc04fe5048", "text": "Ừ thì Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-1672010fcf00", "text": "Thôi Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-eb89756d4cc8", "text": "Thôi Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-a821b8f95379", "text": "Vậy Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-b05d4c462fd2", "text": "Vậy Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-d08ada49cfca", "text": "Nói thật Đừng gọi nữa rồi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-9036883dfd2d", "text": "Nói thật Gác máy đây rồi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-85e344eae298", "text": "Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-94506c9e0ee0", "text": "Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-43ed4b30c909", "text": "Ờ Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-3b14e778de53", "text": "Ờ Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 13}
+{"id": "UTT-d3366854ba9b", "text": "À Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-68deefe7c2d8", "text": "À Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-d85fa25bc5c7", "text": "Ừ thì Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-1e66e6f7f018", "text": "Ừ thì Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-c09d0e23434c", "text": "Thôi Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-b8060df2612c", "text": "Thôi Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-69918de7c556", "text": "Vậy Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-f7cbf6f84ae2", "text": "Vậy Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-479dca679e29", "text": "Nói thật Đừng gọi nữa á", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-41c096db104e", "text": "Nói thật Gác máy đây á", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-f3d0f14d8093", "text": "Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-2f1e9d47e22e", "text": "Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-65fba9b89d98", "text": "Ờ Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-33526d7b5f85", "text": "Ờ Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-48a7aefe0d86", "text": "À Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-f2930b82c008", "text": "À Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-e3ee6f1246f3", "text": "Ừ thì Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-b3b0435cbb9e", "text": "Ừ thì Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-feeee506af13", "text": "Thôi Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-f1c6bf248982", "text": "Thôi Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-5380be3d86dc", "text": "Vậy Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-2d9b94f8b20a", "text": "Vậy Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-1618a0122cfa", "text": "Nói thật Đừng gọi nữa hen", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-d685d598c0c1", "text": "Nói thật Gác máy đây hen", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-113f9fe72363", "text": "Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-02aa844f635a", "text": "Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-af123aaf128d", "text": "Ờ Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-af99a1dcc604", "text": "Ờ Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-01b2215210f1", "text": "À Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-147398c5d82b", "text": "À Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-e3df1e7503aa", "text": "Ừ thì Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-21e795338145", "text": "Ừ thì Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-63d5ea2cd7bf", "text": "Thôi Đừng gọi nữa đi", "dialect": "north", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
+{"id": "UTT-64cf5d595cfb", "text": "Thôi Gác máy đây đi", "dialect": "central", "expected_top_intent": "exit_imminent", "bucket": "exit", "batch": 14}
