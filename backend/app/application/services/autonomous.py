@@ -16,6 +16,15 @@ class AutonomousService:
     def run_nba_pipeline(self, context: dict[str, Any], *, auto_execute: bool = True) -> dict[str, Any]:
         return self._engine.run_nba_pipeline(context, auto_execute=auto_execute)
 
+    def assign_lead(self, context: dict[str, Any]) -> dict[str, Any]:
+        return self._engine.assign_lead(context)
+
+    def schedule_follow_up(self, context: dict[str, Any]) -> dict[str, Any]:
+        return self._engine.schedule_follow_up(context)
+
+    def run_workflow(self, context: dict[str, Any]) -> dict[str, Any]:
+        return self._engine.run_workflow(context)
+
     def trigger_automation(self, kind: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         return self._engine.trigger_automation(kind, payload)
 
@@ -38,6 +47,9 @@ class AutonomousService:
 
     def decide_rule_change(self, approval_id: str, *, approve: bool, decided_by: str) -> dict[str, Any]:
         return self._engine.decide_rule_change(approval_id, approve=approve, decided_by=decided_by)
+
+    def propose_learning(self, context: dict[str, Any]) -> dict[str, Any]:
+        return self._engine.propose_learning(context)
 
     def dashboard(self) -> dict[str, Any]:
         return self._engine.dashboard()

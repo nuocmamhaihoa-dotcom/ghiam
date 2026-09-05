@@ -3,13 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from autonomous.types import (
-    RESTRICTED_CHANGES,
-    SAFE_AUTOMATIONS,
-    AutomationJob,
-    new_id,
-    now_iso,
-)
+from autonomous.types import RESTRICTED_CHANGES, SAFE_AUTOMATIONS, AutomationJob, new_id, now_iso
 
 
 def is_safe_automation(kind: str) -> bool:

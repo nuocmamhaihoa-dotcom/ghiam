@@ -1,6 +1,6 @@
 {
   "sprint": 16,
-  "checked_at": "2026-09-05T22:39:24.875538+00:00",
+  "checked_at": "2026-09-05T23:23:25.658220+00:00",
   "all_ok": true,
   "gates": [
     {
@@ -9,7 +9,7 @@
       "errors": [],
       "warnings": [],
       "meta": {
-        "recommendation_action": "send_proposal",
+        "recommendation_action": "call_now",
         "automations_run": 2
       }
     },
@@ -19,8 +19,8 @@
       "errors": [],
       "warnings": [],
       "meta": {
-        "route_count": 122,
-        "openapi_paths": 117
+        "route_count": 126,
+        "openapi_paths": 121
       }
     },
     {
@@ -30,7 +30,7 @@
       "warnings": [],
       "meta": {
         "pytest_returncode": 0,
-        "pytest_tail": "......................                                                   [100%]\n22 passed in 0.05s\n"
+        "pytest_tail": "......................                                                   [100%]\n22 passed in 0.06s\n"
       }
     },
     {

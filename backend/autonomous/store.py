@@ -14,6 +14,8 @@ class AutonomousStore:
         self.recommendations_path = self.root / "recommendations.jsonl"
         self.jobs_path = self.root / "jobs.jsonl"
         self.approvals_path = self.root / "approvals.jsonl"
+        self.workflows_path = self.root / "workflows.jsonl"
+        self.memory_path = self.root / "memory_proposals.jsonl"
         self.metrics_path = self.root / "metrics.json"
         if not self.metrics_path.exists():
             self.save_metrics(
@@ -24,6 +26,9 @@ class AutonomousStore:
                     "approvals_pending": 0,
                     "approvals_decided": 0,
                     "rule_changes_applied": 0,
+                    "workflows_completed": 0,
+                    "knowledge_proposals": 0,
+                    "revenue_impact_total": 0.0,
                 }
             )
 
@@ -36,6 +41,12 @@ class AutonomousStore:
     def append_approval(self, row: dict[str, Any]) -> None:
         self._append(self.approvals_path, row)
 
+    def append_workflow(self, row: dict[str, Any]) -> None:
+        self._append(self.workflows_path, row)
+
+    def append_memory_proposal(self, row: dict[str, Any]) -> None:
+        self._append(self.memory_path, row)
+
     def list_recommendations(self, limit: int = 500) -> list[dict[str, Any]]:
         return self._tail(self.recommendations_path, limit)
 
@@ -44,6 +55,12 @@ class AutonomousStore:
 
     def list_approvals(self, limit: int = 500) -> list[dict[str, Any]]:
         return self._tail(self.approvals_path, limit)
+
+    def list_workflows(self, limit: int = 500) -> list[dict[str, Any]]:
+        return self._tail(self.workflows_path, limit)
+
+    def list_memory_proposals(self, limit: int = 500) -> list[dict[str, Any]]:
+        return self._tail(self.memory_path, limit)
 
     def get_metrics(self) -> dict[str, Any]:
         if not self.metrics_path.exists():

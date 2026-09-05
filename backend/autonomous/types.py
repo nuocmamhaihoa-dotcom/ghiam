@@ -20,14 +20,20 @@ QUALITY_THRESHOLDS: dict[str, float] = {
     "automation_safety": 0.85,
     "approval_enforcement": 0.95,
     "evidence_validation": 0.70,
+    "workflow_integrity": 0.90,
+    "revenue_forecast": 0.70,
+    "memory_consistency": 0.90,
+    "rule_safety": 0.95,
 }
 
+# User-facing NBA decisions + compatible aliases used by legacy tests/gate
 NBA_ACTIONS = (
+    "call_now",
     "callback",
     "zalo_message",
     "email",
-    "escalate_leader",
     "reassign_sale",
+    "escalate_leader",
     "close_lead",
     "send_proposal",
     "coaching_nudge",
@@ -39,6 +45,8 @@ SAFE_AUTOMATIONS = (
     "crm_note",
     "create_task",
     "coaching_nudge",
+    "lead_assignment",
+    "follow_up_schedule",
 )
 
 RESTRICTED_CHANGES = (
@@ -46,6 +54,19 @@ RESTRICTED_CHANGES = (
     "sop_change",
     "pricing_change",
     "routing_policy_change",
+)
+
+WORKFLOW_STAGES = (
+    "lead_intake",
+    "lead_score",
+    "sales_assignment",
+    "call_strategy",
+    "live_coaching",
+    "follow_up",
+    "revenue_analysis",
+    "self_learning",
+    "qa_approval",
+    "knowledge_update",
 )
 
 
@@ -57,6 +78,7 @@ class Recommendation:
     rationale: str
     evidence: list[str] = field(default_factory=list)
     expected_impact: float = 0.0
+    expected_revenue_impact: float = 0.0
     requires_approval: bool = False
     created_at: str = field(default_factory=now_iso)
 
@@ -91,6 +113,19 @@ class ApprovalRequest:
     created_at: str = field(default_factory=now_iso)
     decided_at: str | None = None
     decided_by: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class WorkflowRun:
+    workflow_id: str
+    lead_id: str
+    stages: list[dict[str, Any]] = field(default_factory=list)
+    status: str = "running"
+    created_at: str = field(default_factory=now_iso)
+    completed_at: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

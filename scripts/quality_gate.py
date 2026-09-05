@@ -1809,6 +1809,9 @@ def gate_autonomous() -> GateResult:
         BACKEND / "app" / "application" / "services" / "autonomous.py",
         BACKEND / "app" / "interfaces" / "api" / "routers" / "autonomous.py",
         ROOT / "docs" / "Autonomous_Sales.md",
+        ROOT / "docs" / "Autonomous_Sales_AI.md",
+        BACKEND / "automation" / "executor.py",
+        BACKEND / "recommendation" / "nba.py",
         ROOT / "models" / "autonomous" / "schema.json",
         ROOT / "enterprise-web" / "src" / "app" / "autonomous" / "page.tsx",
         ROOT / "tests" / "autonomous" / "test_autonomous.py",
@@ -1893,9 +1896,32 @@ def gate_autonomous() -> GateResult:
             "automation_safety",
             "approval_enforcement",
             "evidence_validation",
+            "workflow_integrity",
+            "revenue_forecast",
+            "memory_consistency",
+            "rule_safety",
         ):
             if key not in (snap.get("checks") or {}):
                 g.fail(f"quality missing check {key}")
+        # CEO widgets
+        for key in (
+            "autonomous_actions",
+            "revenue_impact",
+            "ai_accuracy",
+            "approval_queue",
+            "knowledge_growth",
+            "forecast",
+            "risk",
+        ):
+            if key not in (dash.get("widgets") or {}):
+                g.fail(f"dashboard missing CEO widget {key}")
+        # Workflow + learning smoke
+        wf = eng.run_workflow({"lead_id": "Lgate", "buy_signal": 0.7, "deal_value": 5_000_000})
+        if not wf.get("ok"):
+            g.fail("workflow failed")
+        learn = eng.propose_learning({"lead_id": "Lgate", "pattern_strength": 0.8, "evidence": ["gate"]})
+        if learn.get("applied") is not False:
+            g.fail("learning must not auto-apply")
         g.meta["recommendation_action"] = rec["recommendation"]["action"]
         g.meta["automations_run"] = dash["widgets"]["automations_run"]
     except Exception as exc:  # noqa: BLE001

@@ -52,3 +52,5 @@ Must pass:
 - approval_enforcement ≥ 0.95
 - evidence_validation ≥ 0.70
 - approval-only rule changes confirmed
+
+See also: [Autonomous_Sales_AI.md](./Autonomous_Sales_AI.md) for the full Sales OS workflow.

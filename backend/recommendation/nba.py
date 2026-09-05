@@ -1,22 +1,63 @@
-"""Next Best Action recommender."""
+"""Next Best Action engine with confidence, evidence, and revenue impact."""
 from __future__ import annotations
 
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
-from autonomous.types import NBA_ACTIONS, Recommendation, new_id
+NBA_DECISIONS = (
+    "call_now",
+    "callback",
+    "zalo_message",
+    "email",
+    "reassign_sale",
+    "escalate_leader",
+    "close_lead",
+    "send_proposal",
+    "coaching_nudge",
+)
 
-try:
-    from recommendation.nba import recommend_next_best_action as _pkg_recommend
-except Exception:  # pragma: no cover
-    _pkg_recommend = None
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
-def _local_recommend(context: dict[str, Any]) -> Recommendation:
+def _id(prefix: str) -> str:
+    return f"{prefix}_{uuid4().hex[:12]}"
+
+
+@dataclass
+class NextBestAction:
+    action: str
+    confidence: float
+    evidence: list[str] = field(default_factory=list)
+    expected_revenue_impact: float = 0.0
+    rationale: str = ""
+    recommendation_id: str = field(default_factory=lambda: _id("nba"))
+    created_at: str = field(default_factory=_now)
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        payload["expected_impact"] = self.expected_revenue_impact
+        return payload
+
+
+class NextBestActionEngine:
+    def recommend(self, context: dict[str, Any]) -> NextBestAction:
+        return recommend_next_best_action(context)
+
+
+def recommend_next_best_action(context: dict[str, Any]) -> NextBestAction:
     buy = float(context.get("buy_signal") or context.get("buying_signal") or 0)
     sentiment = str(context.get("sentiment") or context.get("emotion") or "neutral").lower()
     objection = context.get("objection")
     intent = str(context.get("intent") or "").lower()
-    missed = int((context.get("follow_up") or {}).get("missed") or context.get("missed_followups") or 0)
+    missed = int(
+        (context.get("follow_up") or {}).get("missed")
+        or context.get("missed_followups")
+        or 0
+    )
     qa = float(context.get("qa_score") or 0)
     churn = float(context.get("churn_risk") or 0)
     cltv = float(context.get("cltv_score") or 0)
@@ -80,56 +121,16 @@ def _local_recommend(context: dict[str, Any]) -> Recommendation:
         rationale = "Low urgency — nurture via email."
         evidence.append(f"buy_signal={buy}")
 
-    if action not in NBA_ACTIONS:
+    if action not in NBA_DECISIONS:
         action = "callback"
     if not evidence:
         evidence.append("context_default")
 
     expected_revenue_impact = round(deal * impact_ratio * confidence, 2)
-    return Recommendation(
-        recommendation_id=new_id("nba"),
+    return NextBestAction(
         action=action,
         confidence=round(confidence, 4),
-        rationale=rationale,
         evidence=evidence,
-        expected_impact=round(impact_ratio, 4),
         expected_revenue_impact=expected_revenue_impact,
-        requires_approval=False,
+        rationale=rationale,
     )
-
-
-def recommend_nba(context: dict[str, Any]) -> Recommendation:
-    if _pkg_recommend is not None:
-        try:
-            nba = _pkg_recommend(context)
-            action = nba.action if nba.action in NBA_ACTIONS else "callback"
-            deal = float(context.get("deal_value") or context.get("expected_value") or 5_000_000)
-            return Recommendation(
-                recommendation_id=nba.recommendation_id or new_id("nba"),
-                action=action,
-                confidence=float(nba.confidence),
-                rationale=nba.rationale,
-                evidence=list(nba.evidence),
-                expected_impact=round(float(nba.expected_revenue_impact) / max(1.0, deal), 4),
-                expected_revenue_impact=float(nba.expected_revenue_impact),
-                requires_approval=False,
-                created_at=nba.created_at,
-            )
-        except Exception:
-            pass
-    return _local_recommend(context)
-
-
-def map_action_to_automation(action: str) -> str | None:
-    mapping = {
-        "call_now": "callback_reminder",
-        "callback": "callback_reminder",
-        "zalo_message": "follow_up_message",
-        "email": "follow_up_message",
-        "coaching_nudge": "coaching_nudge",
-        "close_lead": "crm_note",
-        "send_proposal": "create_task",
-        "reassign_sale": "lead_assignment",
-        "escalate_leader": "create_task",
-    }
-    return mapping.get(action)

@@ -23,6 +23,9 @@ class ContextRequest(BaseModel):
     churn_risk: float = 0.0
     cltv_score: float = 0.0
     missed_followups: int = 0
+    deal_value: float = 5_000_000
+    hot_lead: bool = False
+    lead_score: float | None = None
     auto_execute: bool = True
 
 
@@ -45,6 +48,17 @@ class DecideChangeRequest(BaseModel):
     decided_by: str
 
 
+class LearningRequest(BaseModel):
+    lead_id: str | None = None
+    pattern_strength: float = 0.7
+    pattern: str = "follow_up_window"
+    evidence: list[str] = Field(default_factory=list)
+    memory_refs: list[str] = Field(default_factory=list)
+    change_type: str = "rule_change"
+    title: str | None = None
+    suggested_value: dict[str, Any] = Field(default_factory=dict)
+
+
 @router.post("/recommend")
 async def recommend(
     body: ContextRequest,
@@ -61,6 +75,30 @@ async def run_nba(
     data = body.model_dump()
     auto = bool(data.pop("auto_execute", True))
     return {"status": "ok", **AutonomousService().run_nba_pipeline(data, auto_execute=auto)}
+
+
+@router.post("/assign")
+async def assign_lead(
+    body: ContextRequest,
+    user: CurrentUser = Depends(require_permissions("dashboard:read")),
+) -> dict[str, Any]:
+    return {"status": "ok", **AutonomousService().assign_lead(body.model_dump())}
+
+
+@router.post("/follow-up")
+async def follow_up(
+    body: ContextRequest,
+    user: CurrentUser = Depends(require_permissions("dashboard:read")),
+) -> dict[str, Any]:
+    return {"status": "ok", **AutonomousService().schedule_follow_up(body.model_dump())}
+
+
+@router.post("/workflow")
+async def workflow(
+    body: ContextRequest,
+    user: CurrentUser = Depends(require_permissions("dashboard:read")),
+) -> dict[str, Any]:
+    return {"status": "ok", **AutonomousService().run_workflow(body.model_dump())}
 
 
 @router.post("/automations/trigger")
@@ -101,6 +139,14 @@ async def decide_change(
             decided_by=body.decided_by,
         ),
     }
+
+
+@router.post("/learning/propose")
+async def propose_learning(
+    body: LearningRequest,
+    user: CurrentUser = Depends(require_permissions("dashboard:read")),
+) -> dict[str, Any]:
+    return {"status": "ok", **AutonomousService().propose_learning(body.model_dump())}
 
 
 @router.get("/dashboard")

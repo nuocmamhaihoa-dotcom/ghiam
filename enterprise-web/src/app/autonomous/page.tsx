@@ -64,10 +64,14 @@ export default function AutonomousPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Panel title="Recommendations"><p className="text-2xl font-semibold">{String(widgets.recommendation_count ?? "—")}</p></Panel>
+        <Panel title="Autonomous Actions"><p className="text-2xl font-semibold">{String(widgets.autonomous_actions ?? widgets.recommendation_count ?? "—")}</p></Panel>
+        <Panel title="Revenue Impact"><p className="text-2xl font-semibold">{String(widgets.revenue_impact ?? "—")}</p></Panel>
+        <Panel title="AI Accuracy"><p className="text-2xl font-semibold">{String(widgets.ai_accuracy ?? widgets.avg_confidence ?? "—")}</p></Panel>
+        <Panel title="Approval Queue"><p className="text-2xl font-semibold">{String(widgets.approval_queue ?? widgets.approvals_pending ?? "—")}</p></Panel>
+        <Panel title="Knowledge Growth"><p className="text-2xl font-semibold">{String(widgets.knowledge_growth ?? "—")}</p></Panel>
+        <Panel title="Forecast"><p className="text-2xl font-semibold">{String(widgets.forecast ?? "—")}</p></Panel>
+        <Panel title="Risk"><p className="text-2xl font-semibold">{String(widgets.risk ?? "—")}</p></Panel>
         <Panel title="Automations Run"><p className="text-2xl font-semibold">{String(widgets.automations_run ?? "—")}</p></Panel>
-        <Panel title="Blocked"><p className="text-2xl font-semibold">{String(widgets.automations_blocked ?? "—")}</p></Panel>
-        <Panel title="Pending Approvals"><p className="text-2xl font-semibold">{String(widgets.approvals_pending ?? "—")}</p></Panel>
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
