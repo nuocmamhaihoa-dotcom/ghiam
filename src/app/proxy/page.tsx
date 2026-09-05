@@ -44,6 +44,7 @@ type Progress = {
   drainRunning: boolean;
   hunterRunning: boolean;
   filesPerMinute: number;
+  lifetimeFilesPerMinute?: number;
   etaMinutes: number | null;
   completedSinceStart: number;
   windowMinutes: number;
@@ -215,7 +216,7 @@ export default function ProxyPage() {
           <Metric
             label="Tốc độ tải"
             value={`${progress?.filesPerMinute ?? 0}`}
-            hint={`file/phút · cửa sổ ${progress?.windowMinutes ?? 0} phút`}
+            hint={`file/phút · cửa sổ ${progress?.windowMinutes ?? 0}p · TB cả phiên ${progress?.lifetimeFilesPerMinute ?? 0}`}
           />
           <Metric
             label="Pending còn lại"

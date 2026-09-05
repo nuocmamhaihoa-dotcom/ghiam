@@ -47,6 +47,19 @@ type ItyProgress = {
   message: string;
 };
 
+type SpeedBoard = {
+  filesPerMinute: number;
+  lifetimeFilesPerMinute?: number;
+  pendingCount: number;
+  etaMinutes: number | null;
+  completedSinceStart: number;
+  libraryTotal: number;
+  libraryWithAudio: number;
+  phase: string;
+  message: string;
+  livingCount: number;
+};
+
 export default function HomePage() {
   const [calls, setCalls] = useState<StoredCall[]>([]);
   const [live, setLive] = useState<LiveStats | null>(null);
@@ -54,6 +67,7 @@ export default function HomePage() {
   const [syncing, setSyncing] = useState(false);
   const [ityBusy, setItyBusy] = useState(false);
   const [ityStatus, setItyStatus] = useState<ItyStatus | null>(null);
+  const [speedBoard, setSpeedBoard] = useState<SpeedBoard | null>(null);
   const [ityProgress, setItyProgress] = useState<ItyProgress>({
     phase: "idle",
     round: 0,
@@ -80,6 +94,18 @@ export default function HomePage() {
         if (d.ok) setItyStatus(d);
       })
       .catch(() => undefined);
+
+    const pullSpeed = () => {
+      fetch("/api/ity/progress", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.ok && d.progress) setSpeedBoard(d.progress as SpeedBoard);
+        })
+        .catch(() => undefined);
+    };
+    pullSpeed();
+    const timer = setInterval(pullSpeed, 15_000);
+    return () => clearInterval(timer);
   }, []);
 
   const insights = getInsights(calls);
@@ -337,6 +363,59 @@ export default function HomePage() {
             </Link>
           </div>
           {syncMsg ? <p className="mt-3 text-sm text-[var(--muted)]">{syncMsg}</p> : null}
+          {speedBoard ? (
+            <div className="mt-4 rounded-2xl border border-[var(--line)] bg-[var(--panel)]/80 p-4 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="font-medium">
+                  Tốc độ tải ITY · pha {speedBoard.phase || "idle"}
+                </div>
+                <Link
+                  href="/proxy"
+                  className="text-xs text-[var(--accent)] underline-offset-2 hover:underline"
+                >
+                  Chi tiết proxy / boost →
+                </Link>
+              </div>
+              <p className="mt-1 text-[var(--muted)]">{speedBoard.message}</p>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                <div>
+                  <div className="text-[var(--muted)]">Tốc độ</div>
+                  <div className="text-base font-medium">
+                    {speedBoard.filesPerMinute} file/phút
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[var(--muted)]">Pending</div>
+                  <div className="text-base font-medium">
+                    {speedBoard.pendingCount}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[var(--muted)]">ETA</div>
+                  <div className="text-base font-medium">
+                    {speedBoard.etaMinutes == null
+                      ? "—"
+                      : speedBoard.etaMinutes < 60
+                        ? `~${speedBoard.etaMinutes}p`
+                        : `~${Math.floor(speedBoard.etaMinutes / 60)}g ${speedBoard.etaMinutes % 60}p`}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[var(--muted)]">Thư viện</div>
+                  <div className="text-base font-medium">
+                    {speedBoard.libraryWithAudio}/{speedBoard.libraryTotal}
+                  </div>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-[var(--muted)]">
+                Đã xong ~{speedBoard.completedSinceStart} file · proxy sống{" "}
+                {speedBoard.livingCount}
+                {speedBoard.lifetimeFilesPerMinute
+                  ? ` · TB phiên ${speedBoard.lifetimeFilesPerMinute} file/phút`
+                  : ""}
+              </p>
+            </div>
+          ) : null}
           {ityProgress.phase !== "idle" ? (
             <div className="mt-4 rounded-2xl border border-[var(--line)] bg-[var(--panel)]/80 p-4 text-sm">
               <div className="font-medium">

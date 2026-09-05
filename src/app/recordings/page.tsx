@@ -55,7 +55,7 @@ export default function RecordingsPage() {
       const res = await fetch("/api/recordings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ limit: 20, downloadAudio: true }),
+        body: JSON.stringify({ action: "sync", limit: 20, downloadAudio: true }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Sync failed");
@@ -73,6 +73,31 @@ export default function RecordingsPage() {
     }
   }
 
+  async function reanalyzeNow() {
+    setBusy(true);
+    setError("");
+    setMsg("Đang chấm lại readiness toàn thư viện…");
+    try {
+      const res = await fetch("/api/recordings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reanalyze", limit: 100 }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Reanalyze failed");
+      setStats(data.stats || null);
+      await load();
+      const r = data.result || {};
+      setMsg(
+        `Đã chấm lại ${r.updated ?? 0} cuộc · sẵn sàng tái tạo ${r.readyForRecreation ?? 0} · TB ${r.avgReadiness ?? 0}`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Reanalyze error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -85,14 +110,24 @@ export default function RecordingsPage() {
             dựng kịch bản tái tạo cuộc gọi.
           </p>
         </div>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void syncNow()}
-          className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-white disabled:opacity-50"
-        >
-          {busy ? "Đang đồng bộ…" : "Đồng bộ + phân tích"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void syncNow()}
+            className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-white disabled:opacity-50"
+          >
+            {busy ? "Đang xử lý…" : "Đồng bộ + phân tích"}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void reanalyzeNow()}
+            className="rounded-md border border-[var(--line)] bg-[var(--panel)] px-4 py-2 text-sm disabled:opacity-50"
+          >
+            Chấm lại readiness
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

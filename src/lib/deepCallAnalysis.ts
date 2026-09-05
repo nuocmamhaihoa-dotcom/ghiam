@@ -587,12 +587,29 @@ export function analyzeCallDeep(input: {
     uniqObjections.length === 0
       ? 65
       : clamp((handled / uniqObjections.length) * 100);
+
+  // Recreation readiness: favor won + high QA score + usable transcript structure.
+  // Short won calls with grade A should still clear the 70 threshold.
+  const structureScore =
+    timeline.length >= 8 ? 85 : timeline.length >= 4 ? 70 : timeline.length >= 2 ? 55 : 35;
+  const outcomeBoost =
+    outcome === "won" ? 18 : outcome === "callback" ? 6 : outcome === "lost" ? -8 : 0;
+  const gradeBoost =
+    (input.grade || "").toUpperCase() === "A"
+      ? 10
+      : (input.grade || "").toUpperCase() === "B"
+        ? 4
+        : 0;
+  const completeBoost = input.isComplete ? 8 : 0;
+  const baseReadinessScore = clamp(
+    opening.score * 0.18 +
+      objectionScore * 0.18 +
+      (closeAttempts.length ? 80 : 40) * 0.18 +
+      (input.overallScore ?? 60) * 0.22 +
+      structureScore * 0.24,
+  );
   const readinessScore = clamp(
-    opening.score * 0.2 +
-      objectionScore * 0.2 +
-      (closeAttempts.length ? 75 : 35) * 0.2 +
-      (input.overallScore ?? 60) * 0.2 +
-      (timeline.length >= 6 ? 80 : 40) * 0.2,
+    baseReadinessScore + outcomeBoost + gradeBoost + completeBoost,
   );
 
   return {

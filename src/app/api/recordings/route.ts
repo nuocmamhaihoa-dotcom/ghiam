@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getLibraryStats,
   listRecordings,
+  reanalyzeRecordings,
   syncRecordingsFromChotKiem,
 } from "@/lib/recordingLibrary";
 
@@ -31,19 +32,28 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/** POST: sync/import recordings from ChốtKiểm + deep analysis. */
+/** POST: sync/import from ChốtKiểm, or reanalyze existing library. */
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json().catch(() => ({}))) as {
+      action?: "sync" | "reanalyze";
       limit?: number;
       downloadAudio?: boolean;
     };
+    const action = body.action || "sync";
+
+    if (action === "reanalyze") {
+      const result = await reanalyzeRecordings({ limit: body.limit ?? 100 });
+      const stats = await getLibraryStats();
+      return NextResponse.json({ ok: true, action, result, stats });
+    }
+
     const result = await syncRecordingsFromChotKiem({
       limit: body.limit ?? 20,
       downloadAudio: body.downloadAudio !== false,
     });
     const stats = await getLibraryStats();
-    return NextResponse.json({ ok: true, result, stats });
+    return NextResponse.json({ ok: true, action: "sync", result, stats });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ ok: false, error: message }, { status: 502 });

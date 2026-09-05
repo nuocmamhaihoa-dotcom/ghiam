@@ -430,3 +430,54 @@ export async function syncRecordingsFromChotKiem(options?: {
     totalRemote: num(report.totalCalls),
   };
 }
+
+/** Re-run deep analysis on already-imported recordings (no remote fetch). */
+export async function reanalyzeRecordings(options?: {
+  limit?: number;
+}): Promise<{ updated: number; readyForRecreation: number; avgReadiness: number }> {
+  const limit = Math.max(1, Math.min(options?.limit ?? 100, 200));
+  const index = await readIndex();
+  let updated = 0;
+  const items = index.items.slice(0, limit);
+
+  for (const item of items) {
+    const dir = recordDir(item.id);
+    const transcript = await fs
+      .readFile(path.join(dir, "transcript.txt"), "utf8")
+      .catch(() => "");
+    if (!transcript.trim() && !item.callSummary) continue;
+
+    const analysis = analyzeCallDeep({
+      transcript: transcript || item.callSummary || "",
+      durationSec: item.durationSec,
+      outcome: item.outcome,
+      callSummary: item.callSummary || undefined,
+      grade: item.grade || undefined,
+      overallScore: item.overallScore ?? undefined,
+      isComplete: item.isComplete ?? undefined,
+    });
+
+    await fs.writeFile(
+      path.join(dir, "analysis.json"),
+      JSON.stringify(analysis, null, 2),
+      "utf8",
+    );
+
+    item.readinessScore = analysis.readinessScore;
+    item.updatedAt = new Date().toISOString();
+    await fs.writeFile(
+      path.join(dir, "meta.json"),
+      JSON.stringify(item, null, 2),
+      "utf8",
+    );
+    updated += 1;
+  }
+
+  await writeIndex(index);
+  const stats = await getLibraryStats();
+  return {
+    updated,
+    readyForRecreation: stats.readyForRecreation,
+    avgReadiness: stats.avgReadiness,
+  };
+}
