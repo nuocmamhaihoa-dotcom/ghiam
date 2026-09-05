@@ -1152,5 +1152,127 @@ export const api = {
         requires_qa: true,
       })
     );
+  },,
+
+  async negotiationDashboard() {
+    return withDemoFallback(
+      () => request<Record<string, unknown>>("/v1/negotiation/dashboard"),
+      () => ({
+        status: "ok",
+        widgets: {
+          win_probability: 0.62,
+          next_best_action: {
+            event: "next_best_action",
+            kind: "value",
+            script: "Nhấn mạnh giá trị theo tháng và lợi ích dài hạn.",
+          },
+          negotiation_timeline: [],
+          strategy_evolution: [],
+          session_count: 3,
+          avg_exit_risk: 0.28,
+          avg_buy_probability: 0.55,
+        },
+        strategy_picks: { value: 2, empathy: 1 },
+        static_tree_forbidden: true,
+      })
+    );
   },
+
+  async negotiationAnalyze(body: {
+    customer_utterance: string;
+    history?: Record<string, unknown>[];
+    context?: Record<string, unknown>;
+  }) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/negotiation/analyze", {
+          method: "POST",
+          body,
+        }),
+      () => ({
+        status: "ok",
+        ok: true,
+        prediction: {
+          next_question: "Có gói nào rẻ hơn không?",
+          next_objection: "Vẫn thấy đắt.",
+          next_emotion: "curious",
+          exit_risk: 0.32,
+          buy_probability: 0.48,
+          horizon: [
+            { step: 1, predicted_emotion: "curious" },
+            { step: 2, predicted_emotion: "cautious" },
+            { step: 3, predicted_emotion: "positive" },
+          ],
+          confidence: 0.72,
+          evidence: ["objection_family=price"],
+        },
+        strategies: [
+          {
+            kind: "empathy",
+            label: "Chiến lược đồng cảm",
+            win_probability: 0.58,
+            risk_score: 0.22,
+            recommended_script: "Em hiểu anh/chị đang cân nhắc ngân sách.",
+            forbidden_script: "Rẻ thế này không mua là tiếc.",
+          },
+          {
+            kind: "value",
+            label: "Chiến lược giá trị",
+            win_probability: 0.64,
+            risk_score: 0.25,
+            recommended_script: "Nhìn theo tháng thì chi phí hợp lý hơn nhiều.",
+            forbidden_script: "Đắt thì đắt, không giảm đâu.",
+          },
+        ],
+        best_strategy: {
+          kind: "value",
+          win_probability: 0.64,
+          recommended_script: "Nhìn theo tháng thì chi phí hợp lý hơn nhiều.",
+        },
+        next_best_action: "Nhìn theo tháng thì chi phí hợp lý hơn nhiều.",
+        static_tree: false,
+      })
+    );
+  },
+
+  async negotiationCompare(body: {
+    customer_utterance: string;
+    context?: Record<string, unknown>;
+  }) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/negotiation/compare", {
+          method: "POST",
+          body,
+        }),
+      () => ({
+        status: "ok",
+        ok: true,
+        comparisons: [
+          { rank: 1, kind: "value", win_probability: 0.64, risk_score: 0.25, utility: 0.53 },
+          { rank: 2, kind: "empathy", win_probability: 0.58, risk_score: 0.22, utility: 0.48 },
+        ],
+        best: { kind: "value", win_probability: 0.64 },
+      })
+    );
+  },
+
+  async negotiationQuality() {
+    return withDemoFallback(
+      () => request<Record<string, unknown>>("/v1/negotiation/quality"),
+      () => ({
+        status: "ok",
+        ok: true,
+        checks: {
+          prediction_accuracy: { ok: true, value: 0.86 },
+          strategy_consistency: { ok: true, value: 0.9 },
+          evidence_validation: { ok: true, value: 0.88 },
+          confidence_stability: { ok: true, value: 0.8 },
+        },
+        static_tree_forbidden: true,
+        strategy_graph_enabled: true,
+      })
+    );
+  },
+
 };

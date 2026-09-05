@@ -1449,6 +1449,117 @@ def gate_digital_twin() -> GateResult:
     return g
 
 
+def gate_negotiation() -> GateResult:
+    """Negotiation Strategy Engine — multi-step prediction + strategy graph."""
+    g = GateResult("Negotiation Strategy Engine")
+    required = [
+        BACKEND / "negotiation" / "engine.py",
+        BACKEND / "negotiation" / "predictor.py",
+        BACKEND / "negotiation" / "strategy.py",
+        BACKEND / "negotiation" / "store.py",
+        BACKEND / "negotiation" / "types.py",
+        BACKEND / "negotiation" / "quality.py",
+        BACKEND / "app" / "application" / "services" / "negotiation.py",
+        BACKEND / "app" / "interfaces" / "api" / "routers" / "negotiation.py",
+        ROOT / "docs" / "Negotiation_Strategy.md",
+        ROOT / "models" / "negotiation" / "schema.json",
+        ROOT / "enterprise-web" / "src" / "app" / "negotiation" / "page.tsx",
+        ROOT / "tests" / "negotiation" / "test_negotiation.py",
+        ROOT / "datasets" / "negotiation",
+    ]
+    for path in required:
+        if not path.exists():
+            g.fail(f"missing {path.relative_to(ROOT)}")
+
+    shell = ROOT / "enterprise-web" / "src" / "components" / "AppShell.tsx"
+    if shell.exists():
+        txt = shell.read_text(encoding="utf-8")
+        if "/negotiation" not in txt:
+            g.fail("AppShell missing /negotiation nav")
+
+    api = ROOT / "enterprise-web" / "src" / "lib" / "api.ts"
+    if api.exists():
+        api_txt = api.read_text(encoding="utf-8")
+        for key in (
+            "negotiationDashboard",
+            "negotiationAnalyze",
+            "negotiationCompare",
+            "negotiationQuality",
+        ):
+            if key not in api_txt:
+                g.fail(f"api.ts missing {key}")
+
+    try:
+        import tempfile
+        from pathlib import Path as P
+
+        from negotiation.engine import NegotiationEngine
+        from negotiation.store import NegotiationStore
+
+        td = P(tempfile.mkdtemp())
+        eng = NegotiationEngine(store=NegotiationStore(root=td))
+        out = eng.analyze(
+            "Đắt quá",
+            context={"product": "Pro", "benefit": "tiết kiệm dài hạn", "monthly": "199k"},
+        )
+        if not out.get("ok"):
+            g.fail(f"analyze failed: {out}")
+        if out.get("static_tree") is not False:
+            g.fail("static decision tree must be forbidden")
+        pred = out.get("prediction") or {}
+        horizon = pred.get("horizon") or []
+        if not (3 <= len(horizon) <= 5):
+            g.fail(f"horizon must be 3-5 steps, got {len(horizon)}")
+        for key in ("next_question", "next_objection", "next_emotion", "exit_risk", "buy_probability"):
+            if key not in pred:
+                g.fail(f"prediction missing {key}")
+        strategies = out.get("strategies") or []
+        if len(strategies) < 4:
+            g.fail("expected >=4 strategies")
+        kinds = {s.get("kind") for s in strategies}
+        for required_kind in ("empathy", "value", "comparison", "urgency"):
+            if required_kind not in kinds:
+                g.fail(f"missing strategy kind {required_kind}")
+        best = out.get("best_strategy") or {}
+        if not best.get("recommended_script") or not best.get("forbidden_script"):
+            g.fail("best strategy must include recommended + forbidden scripts")
+        if best.get("recommended_script") == best.get("forbidden_script"):
+            g.fail("recommended and forbidden scripts must differ")
+        if not best.get("evidence"):
+            g.fail("strategy must carry evidence")
+        graph = out.get("graph") or {}
+        if not graph.get("nodes") or not graph.get("evolution"):
+            g.fail("strategy graph must include nodes + evolution")
+        cmp_out = eng.compare_strategies("Để suy nghĩ đã")
+        if not cmp_out.get("ok") or not cmp_out.get("comparisons"):
+            g.fail("compare_strategies failed")
+        dash = eng.dashboard()
+        for key in (
+            "win_probability",
+            "next_best_action",
+            "negotiation_timeline",
+            "strategy_evolution",
+            "session_count",
+        ):
+            if key not in (dash.get("widgets") or {}):
+                g.fail(f"dashboard missing widget {key}")
+        if dash.get("static_tree_forbidden") is not True:
+            g.fail("dashboard must advertise static_tree_forbidden")
+        snap = eng.quality_snapshot()
+        if not snap.get("ok"):
+            g.fail(f"quality gate failed: {snap.get('errors')}")
+        if snap.get("static_tree_forbidden") is not True:
+            g.fail("quality snapshot must forbid static tree")
+        if snap.get("strategy_graph_enabled") is not True:
+            g.fail("quality snapshot must enable strategy graph")
+        g.meta["strategies"] = len(strategies)
+        g.meta["horizon"] = len(horizon)
+        g.meta["win_probability"] = best.get("win_probability")
+    except Exception as exc:  # noqa: BLE001
+        g.fail(f"negotiation smoke failed: {exc}")
+    return g
+
+
 SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
     1: [gate_architecture, gate_docs, gate_database, gate_docker, gate_security, gate_api],
     2: [lambda: gate_rule_consistency(2), gate_evidence, gate_json],
@@ -1514,6 +1625,13 @@ SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
     ],
     12: [
         gate_digital_twin,
+        gate_api,
+        gate_tests,
+        gate_docs,
+        gate_final,
+    ],
+    13: [
+        gate_negotiation,
         gate_api,
         gate_tests,
         gate_docs,

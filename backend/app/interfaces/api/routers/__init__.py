@@ -25,6 +25,7 @@ from app.interfaces.api.routers import (
     sales_os,
     self_learning,
     digital_twin,
+    negotiation,
     simulator,
 )
 
@@ -53,5 +54,6 @@ __all__ = [
     "sales_os",
     "self_learning",
     "digital_twin",
+    "negotiation",
     "simulator",
 ]

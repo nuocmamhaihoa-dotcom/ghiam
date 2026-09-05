@@ -1,20 +1,21 @@
 {
-  "checked_at": "2026-09-05T21:17:37.916901+00:00",
+  "checked_at": "2026-09-05T21:39:52.684457+00:00",
   "all_ok": true,
   "sprints": [
     {
-      "sprint": 12,
-      "checked_at": "2026-09-05T21:17:37.916653+00:00",
+      "sprint": 13,
+      "checked_at": "2026-09-05T21:39:52.684190+00:00",
       "all_ok": true,
       "gates": [
         {
-          "gate": "Digital Twin Salesperson",
+          "gate": "Negotiation Strategy Engine",
           "ok": true,
           "errors": [],
           "warnings": [],
           "meta": {
-            "twin_id": "twin_3897ac972593",
-            "similarity": 0.4178
+            "strategies": 5,
+            "horizon": 3,
+            "win_probability": 0.655
           }
         },
         {
@@ -23,8 +24,8 @@
           "errors": [],
           "warnings": [],
           "meta": {
-            "route_count": 97,
-            "openapi_paths": 93
+            "route_count": 102,
+            "openapi_paths": 98
           }
         },
         {

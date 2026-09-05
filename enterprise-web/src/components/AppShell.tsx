@@ -23,6 +23,7 @@ const NAV = [
   { href: "/sales-os", label: "Sales OS" },
   { href: "/self-learning", label: "Self-Learning Lab" },
   { href: "/digital-twin", label: "Digital Twin" },
+  { href: "/negotiation", label: "Negotiation" },
   { href: "/qa-approval", label: "QA Approval" },
   { href: "/forecast", label: "Forecast" },
   { href: "/multi-product", label: "Multi-Product" },
