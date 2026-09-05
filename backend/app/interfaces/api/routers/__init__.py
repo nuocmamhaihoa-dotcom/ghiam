@@ -27,6 +27,7 @@ from app.interfaces.api.routers import (
     digital_twin,
     negotiation,
     cltv,
+    war_room,
     simulator,
 )
 
@@ -57,5 +58,6 @@ __all__ = [
     "digital_twin",
     "negotiation",
     "cltv",
+    "war_room",
     "simulator",
 ]

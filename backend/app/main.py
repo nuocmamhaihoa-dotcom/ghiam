@@ -40,6 +40,7 @@ from app.interfaces.api.routers import (
     digital_twin,
     negotiation,
     cltv,
+    war_room,
     simulator,
 )
 
@@ -122,6 +123,7 @@ def create_app() -> FastAPI:
     application.include_router(digital_twin.router, prefix=settings.api_prefix)
     application.include_router(negotiation.router, prefix=settings.api_prefix)
     application.include_router(cltv.router, prefix=settings.api_prefix)
+    application.include_router(war_room.router, prefix=settings.api_prefix)
 
     return application
 

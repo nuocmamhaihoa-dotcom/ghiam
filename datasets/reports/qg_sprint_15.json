@@ -1,0 +1,54 @@
+{
+  "sprint": 15,
+  "checked_at": "2026-09-05T22:24:29.786478+00:00",
+  "all_ok": true,
+  "gates": [
+    {
+      "gate": "War Room AI",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "alert_count": 8,
+        "open_alerts": 8
+      }
+    },
+    {
+      "gate": "8_API_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "route_count": 115,
+        "openapi_paths": 110
+      }
+    },
+    {
+      "gate": "18_Test_Coverage_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "pytest_returncode": 0,
+        "pytest_tail": "......................                                                   [100%]\n22 passed in 0.06s\n"
+      }
+    },
+    {
+      "gate": "19_Documentation_Review",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {}
+    },
+    {
+      "gate": "20_Final_Self_Review",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {}
+    }
+  ],
+  "passed": 5,
+  "failed": 0,
+  "total": 5
+}

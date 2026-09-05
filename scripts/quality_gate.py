@@ -1683,6 +1683,116 @@ def gate_cltv() -> GateResult:
     return g
 
 
+def gate_war_room() -> GateResult:
+    """War Room AI — live ops alerts + realtime dashboard."""
+    g = GateResult("War Room AI")
+    required = [
+        BACKEND / "war_room" / "engine.py",
+        BACKEND / "war_room" / "alerts.py",
+        BACKEND / "war_room" / "store.py",
+        BACKEND / "war_room" / "realtime.py",
+        BACKEND / "war_room" / "types.py",
+        BACKEND / "war_room" / "quality.py",
+        BACKEND / "app" / "application" / "services" / "war_room.py",
+        BACKEND / "app" / "interfaces" / "api" / "routers" / "war_room.py",
+        ROOT / "docs" / "War_Room.md",
+        ROOT / "models" / "war_room" / "schema.json",
+        ROOT / "enterprise-web" / "src" / "app" / "war-room" / "page.tsx",
+        ROOT / "tests" / "war_room" / "test_war_room.py",
+        ROOT / "datasets" / "war_room",
+    ]
+    for path_item in required:
+        if not path_item.exists():
+            g.fail(f"missing {path_item.relative_to(ROOT)}")
+
+    shell = ROOT / "enterprise-web" / "src" / "components" / "AppShell.tsx"
+    if shell.exists():
+        txt = shell.read_text(encoding="utf-8")
+        if "/war-room" not in txt:
+            g.fail("AppShell missing /war-room nav")
+
+    api = ROOT / "enterprise-web" / "src" / "lib" / "api.ts"
+    if api.exists():
+        api_txt = api.read_text(encoding="utf-8")
+        for key in ("warRoomDashboard", "warRoomScanAlerts", "warRoomQuality"):
+            if key not in api_txt:
+                g.fail(f"api.ts missing {key}")
+
+    try:
+        import tempfile
+        from pathlib import Path as P
+
+        from war_room.engine import WarRoomEngine
+        from war_room.store import WarRoomStore
+
+        td = P(tempfile.mkdtemp())
+        eng = WarRoomEngine(store=WarRoomStore(root=td))
+        eng.upsert_agent(
+            {
+                "agent_id": "a1",
+                "name": "Ann",
+                "status": "available",
+                "active_calls": 0,
+                "idle_sec": 400,
+            }
+        )
+        for i in range(5):
+            eng.upsert_call(
+                {
+                    "call_id": f"c{i}",
+                    "agent_id": "a1",
+                    "lead_id": f"l{i}",
+                    "status": "live",
+                    "buy_signal": 0.1 if i < 3 else 0.7,
+                    "sentiment": "frustrated" if i < 3 else "positive",
+                    "objection": "price" if i < 3 else None,
+                }
+            )
+        eng.update_kpi(
+            {
+                "conversion_rate": 0.10,
+                "baseline_conversion": 0.30,
+                "queue_size": 25,
+                "avg_wait_sec": 80,
+            }
+        )
+        scanned = eng.scan_alerts()
+        if not scanned.get("ok") or not scanned.get("alerts"):
+            g.fail("scan_alerts must raise floor alerts")
+        kinds = {a.get("kind") for a in scanned["alerts"]}
+        for kind in ("conversion_drop", "sla_breach", "queue_overflow"):
+            if kind not in kinds:
+                g.fail(f"expected alert kind {kind}")
+        dash = eng.dashboard()
+        for key in (
+            "active_calls",
+            "online_agents",
+            "queue_size",
+            "avg_wait_sec",
+            "conversion_rate",
+            "open_alerts",
+            "critical_alerts",
+            "avg_buy_signal",
+        ):
+            if key not in (dash.get("widgets") or {}):
+                g.fail(f"dashboard missing widget {key}")
+        if dash.get("realtime_enabled") is not True:
+            g.fail("dashboard must enable realtime")
+        snap = eng.quality_snapshot()
+        if not snap.get("ok"):
+            g.fail(f"quality gate failed: {snap.get('errors')}")
+        if snap.get("realtime_enabled") is not True:
+            g.fail("quality snapshot must confirm realtime")
+        for key in ("alert_precision", "freshness", "coverage", "evidence_validation"):
+            if key not in (snap.get("checks") or {}):
+                g.fail(f"quality missing check {key}")
+        g.meta["alert_count"] = scanned.get("count")
+        g.meta["open_alerts"] = dash["widgets"]["open_alerts"]
+    except Exception as exc:  # noqa: BLE001
+        g.fail(f"war-room smoke failed: {exc}")
+    return g
+
+
 SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
     1: [gate_architecture, gate_docs, gate_database, gate_docker, gate_security, gate_api],
     2: [lambda: gate_rule_consistency(2), gate_evidence, gate_json],
@@ -1762,6 +1872,13 @@ SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
     ],
     14: [
         gate_cltv,
+        gate_api,
+        gate_tests,
+        gate_docs,
+        gate_final,
+    ],
+    15: [
+        gate_war_room,
         gate_api,
         gate_tests,
         gate_docs,

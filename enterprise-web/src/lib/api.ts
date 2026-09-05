@@ -1274,7 +1274,6 @@ export const api = {
       })
     );
   },
-,
 
   async cltvDashboard() {
     return withDemoFallback(
@@ -1366,6 +1365,65 @@ export const api = {
           evidence_validation: { ok: true, value: 0.9 },
         },
         separation_ok: true,
+      })
+    );
+  },
+
+  async warRoomDashboard() {
+    return withDemoFallback(
+      () => request<Record<string, unknown>>("/v1/war-room/dashboard"),
+      () => ({
+        status: "ok",
+        widgets: {
+          active_calls: 12,
+          online_agents: 18,
+          queue_size: 9,
+          avg_wait_sec: 22,
+          conversion_rate: 0.21,
+          open_alerts: 3,
+          critical_alerts: 1,
+          avg_buy_signal: 0.48,
+        },
+        recent_alerts: [
+          { alert_id: "a1", kind: "conversion_drop", severity: "high", title: "Conversion drop", message: "Floor conversion below baseline" },
+        ],
+        realtime_enabled: true,
+      })
+    );
+  },
+
+  async warRoomScanAlerts() {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/war-room/alerts/scan", {
+          method: "POST",
+          body: {},
+        }),
+      () => ({
+        status: "ok",
+        ok: true,
+        count: 2,
+        alerts: [
+          { alert_id: "a1", kind: "sla_breach", severity: "critical", title: "SLA breach", message: "Wait > 60s" },
+          { alert_id: "a2", kind: "objection_spike", severity: "medium", title: "Objection spike", message: "Price objections rising" },
+        ],
+      })
+    );
+  },
+
+  async warRoomQuality() {
+    return withDemoFallback(
+      () => request<Record<string, unknown>>("/v1/war-room/quality"),
+      () => ({
+        status: "ok",
+        ok: true,
+        realtime_enabled: true,
+        checks: {
+          alert_precision: { ok: true, value: 0.9 },
+          freshness: { ok: true, value: 0.88 },
+          coverage: { ok: true, value: 0.8 },
+          evidence_validation: { ok: true, value: 0.92 },
+        },
       })
     );
   },
