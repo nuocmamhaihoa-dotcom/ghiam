@@ -14,12 +14,17 @@ from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.interfaces.api.middleware import AuditMiddleware
 from app.interfaces.api.routers import (
+    admin,
+    analytics,
+    appeals,
     auth,
     calls,
     coaching,
     dashboard,
     datasets,
     health,
+    qa,
+    revenue_leak,
     rules,
     scoring,
 )
@@ -83,6 +88,11 @@ def create_app() -> FastAPI:
     application.include_router(coaching.router, prefix=settings.api_prefix)
     application.include_router(dashboard.router, prefix=settings.api_prefix)
     application.include_router(datasets.router, prefix=settings.api_prefix)
+    application.include_router(revenue_leak.router, prefix=settings.api_prefix)
+    application.include_router(appeals.router, prefix=settings.api_prefix)
+    application.include_router(qa.router, prefix=settings.api_prefix)
+    application.include_router(analytics.router, prefix=settings.api_prefix)
+    application.include_router(admin.router, prefix=settings.api_prefix)
 
     return application
 

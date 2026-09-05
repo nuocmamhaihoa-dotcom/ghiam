@@ -371,3 +371,106 @@ class GoldenCallModel(Base, TimestampMixin):
     expected_score: Mapped[float | None] = mapped_column(Float)
     notes: Mapped[str | None] = mapped_column(Text)
     transcript_text: Mapped[str | None] = mapped_column(Text)
+
+
+class AppealModel(Base, TimestampMixin):
+    __tablename__ = "appeals"
+    __table_args__ = (Index("idx_appeals_status", "status"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    call_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("calls.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    agent_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    rule_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    rule_title: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    current_verdict: Mapped[str] = mapped_column(String(64), nullable=False)
+    proposed_verdict: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(64), nullable=False, default="other")
+    reason_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    evidence_quote: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    reviewer_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    resolution_note: Mapped[str | None] = mapped_column(Text)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+
+
+class CalibrationSessionModel(Base, TimestampMixin):
+    __tablename__ = "calibration_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    notes: Mapped[str | None] = mapped_column(Text)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+
+
+class CalibrationItemModel(Base, TimestampMixin):
+    __tablename__ = "calibration_items"
+    __table_args__ = (
+        UniqueConstraint("session_id", "call_id", "reviewer_user_id", name="uq_calibration_item"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("calibration_sessions.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    call_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("calls.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    reviewer_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    human_score: Mapped[float | None] = mapped_column(Float)
+    ai_score: Mapped[float | None] = mapped_column(Float)
+    agreement: Mapped[bool | None] = mapped_column(Boolean)
+    notes: Mapped[str | None] = mapped_column(Text)
+    stage_scores: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+
+
+class ConversationDnaModel(Base, TimestampMixin):
+    __tablename__ = "conversation_dna"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    call_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("calls.id", ondelete="CASCADE"),
+        nullable=False, unique=True, index=True,
+    )
+    dimensions: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    emotion_timeline: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+
+
+class DatasetExportModel(Base, TimestampMixin):
+    __tablename__ = "dataset_exports"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    dataset_type: Mapped[str] = mapped_column(String(64), nullable=False, default="scoring")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="ready")
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    filters: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    sample_rows: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))

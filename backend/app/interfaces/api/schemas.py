@@ -116,6 +116,9 @@ class ScoringResponseSchema(BaseModel):
     auto_fail_triggered: bool | None = None
     schema_version: str | None = None
     call_id: str | None = None
+    emotion_timeline: list[dict[str, Any]] | None = None
+    conversation_dna: dict[str, Any] | None = None
+    meta: dict[str, Any] | None = None
 
 
 class RuleCreateRequest(BaseModel):

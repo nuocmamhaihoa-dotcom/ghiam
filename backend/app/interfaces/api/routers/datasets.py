@@ -1,18 +1,33 @@
-"""Datasets / golden calls router."""
+"""Datasets / golden calls / dataset builder router."""
 
 from __future__ import annotations
 
 from typing import Annotated, Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 
-from app.core.deps import CurrentUser, get_golden_repo, require_permissions
+from app.application.services.dataset_builder import DatasetBuilderService
+from app.application.services.golden_benchmark import GoldenBenchmarkService
+from app.core.deps import CurrentUser, DbSession, get_golden_repo, require_permissions
 from app.domain.entities import GoldenCallEntity
 from app.infrastructure.repositories.golden import SqlAlchemyGoldenCallRepository
 from app.interfaces.api.schemas import GoldenCallCreateRequest
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
+
+
+class DatasetBuildRequest(BaseModel):
+    name: str
+    dataset_type: str = "scoring"
+    filters: dict[str, Any] = Field(default_factory=dict)
+    limit: int = Field(default=100, ge=1, le=1000)
+
+
+class GoldenCompareRequest(BaseModel):
+    golden_id: UUID
+    call_id: UUID | None = None
 
 
 @router.get("/golden-calls")
@@ -61,15 +76,28 @@ async def create_golden(
     }
 
 
+@router.post("/golden-calls/compare")
+async def compare_golden_call(
+    body: GoldenCompareRequest,
+    user: Annotated[CurrentUser, Depends(require_permissions("datasets:read"))],
+    session: DbSession,
+) -> dict[str, Any]:
+    try:
+        return await GoldenBenchmarkService(session).compare(
+            golden_id=body.golden_id,
+            call_id=body.call_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.get("/golden-calls/{golden_id}")
 async def get_golden(
-    golden_id: str,
+    golden_id: UUID,
     user: Annotated[CurrentUser, Depends(require_permissions("datasets:read"))],
     golden: Annotated[SqlAlchemyGoldenCallRepository, Depends(get_golden_repo)],
 ) -> dict[str, Any]:
-    from uuid import UUID
-
-    row = await golden.get(UUID(golden_id))
+    row = await golden.get(golden_id)
     if not row:
         raise HTTPException(status_code=404, detail="Golden call not found")
     return {
@@ -81,3 +109,28 @@ async def get_golden(
         "notes": row.notes,
         "transcript_text": row.transcript_text,
     }
+
+
+@router.post("/exports")
+async def build_dataset_export(
+    body: DatasetBuildRequest,
+    user: Annotated[CurrentUser, Depends(require_permissions("datasets:write"))],
+    session: DbSession,
+) -> dict[str, Any]:
+    return await DatasetBuilderService(session).build(
+        name=body.name,
+        dataset_type=body.dataset_type,
+        created_by=user.id,
+        filters=body.filters,
+        limit=body.limit,
+    )
+
+
+@router.get("/exports")
+async def list_dataset_exports(
+    user: Annotated[CurrentUser, Depends(require_permissions("datasets:read"))],
+    session: DbSession,
+    limit: int = 50,
+) -> dict[str, Any]:
+    rows = await DatasetBuilderService(session).list_exports(limit=limit)
+    return {"data": rows}
