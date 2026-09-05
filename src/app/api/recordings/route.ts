@@ -4,6 +4,7 @@ import {
   getLibraryStats,
   listRecordings,
   reanalyzeRecordings,
+  rebuildIndexFromDisk,
   syncRecordingsFromChotKiem,
 } from "@/lib/recordingLibrary";
 
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json().catch(() => ({}))) as {
-      action?: "sync" | "reanalyze" | "analyze-pending";
+      action?: "sync" | "reanalyze" | "analyze-pending" | "rebuild-index";
       limit?: number;
       downloadAudio?: boolean;
       force?: boolean;
@@ -45,6 +46,13 @@ export async function POST(req: NextRequest) {
       newOnly?: boolean;
     };
     const action = body.action || "sync";
+
+    
+    if (action === "rebuild-index") {
+      const result = await rebuildIndexFromDisk();
+      const stats = await getLibraryStats();
+      return NextResponse.json({ ok: true, action, result, stats });
+    }
 
     if (action === "analyze-pending") {
       const result = await analyzePendingRecordings({

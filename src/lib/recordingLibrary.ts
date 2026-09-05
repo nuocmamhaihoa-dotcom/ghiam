@@ -193,6 +193,89 @@ async function writeIndex(index: IndexFile) {
   await fs.writeFile(INDEX_PATH, JSON.stringify(index, null, 2), "utf8");
 }
 
+const SYNC_LOCK_PATH = path.join(ROOT, ".sync.lock");
+
+async function acquireSyncLock(timeoutMs = 120_000): Promise<() => Promise<void>> {
+  const started = Date.now();
+  while (true) {
+    try {
+      const handle = await fs.open(SYNC_LOCK_PATH, "wx");
+      await handle.writeFile(
+        JSON.stringify({ pid: process.pid, at: new Date().toISOString() }),
+        "utf8",
+      );
+      await handle.close();
+      return async () => {
+        await fs.unlink(SYNC_LOCK_PATH).catch(() => null);
+      };
+    } catch {
+      try {
+        const raw = await fs.readFile(SYNC_LOCK_PATH, "utf8");
+        const parsed = JSON.parse(raw) as { at?: string };
+        const age = Date.now() - new Date(parsed.at || 0).getTime();
+        if (age > timeoutMs) {
+          await fs.unlink(SYNC_LOCK_PATH).catch(() => null);
+          continue;
+        }
+      } catch {
+        await fs.unlink(SYNC_LOCK_PATH).catch(() => null);
+        continue;
+      }
+      if (Date.now() - started > timeoutMs) {
+        throw new Error("Sync lock timeout — thử lại sau");
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+}
+
+/** Rebuild index.json from meta.json files on disk (recovery after races). */
+export async function rebuildIndexFromDisk(): Promise<{
+  indexed: number;
+  dirs: number;
+}> {
+  await ensureDirs();
+  const entries = await fs.readdir(ROOT, { withFileTypes: true });
+  const items: RecordingMeta[] = [];
+  let dirs = 0;
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    dirs += 1;
+    try {
+      const raw = await fs.readFile(
+        path.join(ROOT, entry.name, "meta.json"),
+        "utf8",
+      );
+      const meta = normalizeMeta(JSON.parse(raw) as RecordingMeta);
+      if (meta.id) items.push(meta);
+    } catch {
+      // skip broken folders
+    }
+  }
+  items.sort((a, b) => b.createdAt - a.createdAt);
+  await writeIndex({ updatedAt: new Date().toISOString(), items });
+  return { indexed: items.length, dirs };
+}
+
+async function ensureIndexHealthy(): Promise<IndexFile> {
+  let index = await readIndex();
+  try {
+    const entries = await fs.readdir(ROOT, { withFileTypes: true });
+    const dirCount = entries.filter((e) => e.isDirectory()).length;
+    if (dirCount > index.items.length + 25) {
+      const rebuilt = await rebuildIndexFromDisk();
+      index = await readIndex();
+      console.warn(
+        `[recordings] rebuilt index ${rebuilt.indexed}/${rebuilt.dirs} (was ${index.items.length} before repair pass)`,
+      );
+    }
+  } catch {
+    // ignore health check errors
+  }
+  return index;
+}
+
+
 function recordDir(id: string) {
   return path.join(ROOT, id);
 }
@@ -338,8 +421,10 @@ export async function syncRecordingsFromChotKiem(options?: {
   const downloadAudio = options?.downloadAudio !== false;
   const newOnly = options?.newOnly !== false;
   await ensureDirs();
+  const releaseLock = await acquireSyncLock();
 
-  const index = await readIndex();
+  try {
+  const index = await ensureIndexHealthy();
   const byId = new Map(index.items.map((i) => [i.id, i] as const));
   const known = new Set(byId.keys());
 
@@ -630,6 +715,9 @@ export async function syncRecordingsFromChotKiem(options?: {
     remoteWithAudioTotal,
     localTotal: index.items.length,
   };
+  } finally {
+    await releaseLock();
+  }
 }
 
 /** Re-run deep analysis on imported recordings. Default: only pending/outdated. */
