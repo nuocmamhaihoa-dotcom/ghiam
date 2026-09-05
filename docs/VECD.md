@@ -1,7 +1,7 @@
 # VECD — Vietnamese Enterprise Conversation Dataset
 
 > Canonical documentation for the enterprise conversation intelligence corpus.
-> Generated/updated: `2026-09-05T15:27:12.500995+00:00`
+> Updated: `2026-09-05`
 
 ## Purpose
 
@@ -22,8 +22,6 @@ It must never be random noise. All samples are produced by the Dataset Factory a
 | Root cause graphs | 500 | 500 |
 | Golden calls | 500 | 500 |
 | QA benchmark calls | 10,000 | 10000 |
-| Rules | 1,000 | 1000 |
-| SOPs | 50 | 50 |
 
 ## Directory layout
 
@@ -42,61 +40,120 @@ datasets/
   synthetic/
   validation/
   scripts/
-    generate_dataset.py   # Master entrypoint
-    generate_vecd.py      # Factory implementation
+    generate_dataset.py
+    generate_vecd.py
     validate_dataset.py
     export_postgres.py
-  reports/
-docs/VECD.md              # this file
+  reports/sprints/
+  sql/
+docs/VECD.md
+scripts/                  # repo-root wrappers
+  generate_dataset.py
+  validate_dataset.py
+  export_postgres.py
 ```
 
 ## Utterance schema (required)
 
-- `id`
-- `conversation_id`
-- `speaker` (`customer` | `agent`)
-- `text`
-- `dialect` (`bac` | `trung` | `nam`)
-- `industry`
-- `stage`
-- `intent`
-- `emotion`
-- `objection_type`
-- `buying_signal`
-- `confidence`
-- `recommended_response`
-- `root_cause_if_failed`
+```json
+{
+  "id": "VECD-C-000001",
+  "conversation_id": "CONV-000001",
+  "speaker": "customer",
+  "text": "Để em coi đã.",
+  "dialect": "south",
+  "industry": "real_estate",
+  "stage": "objection",
+  "intent": "delay",
+  "emotion": "hesitation",
+  "objection_type": "need_time",
+  "buying_signal": false,
+  "confidence": 0.93,
+  "recommended_response": "Dạ, điều anh còn phân vân nhất là giá hay tính năng ạ?",
+  "root_cause_if_failed": "Agent did not explore delay."
+}
+```
 
 ## Distribution constraints
 
-- Dialect: Bắc 35% / Trung 20% / Nam 45% (±2%)
-- Industries: 19 enterprise verticals (BĐS, Spa, Nha khoa, Giáo dục, Bảo hiểm, Ô tô, Mỹ phẩm, Gia dụng, Thực phẩm, Điện máy, Nội thất, Logistics, Du lịch, Tài chính, Fitness, Camera, Điện nước, Thiết bị y tế, Dịch vụ DN)
-- Rulebook categories: Opening 100, Rapport 80, Discovery 150, Qualification 80, Presentation 120, Pricing 80, Objection 200, Closing 80, Voice 60, Compliance 50
+- Dialect: north 35% / central 20% / south 45% (±3%)
+- Industries: **20** verticals — real_estate, spa, dental, insurance, education, automotive, cosmetics, home_appliances, food, electronics, furniture, logistics, travel, finance, fitness, plumbing, repair, camera, medical_devices, b2b_services
+- Stages: opening → rapport → discovery → qualification → presentation → pricing → objection → closing → follow_up
 
-## Quality Gates
+## Dataset strategy
 
-After every 1,000 samples and at sprint end:
+1. Factory generates deterministic corpora via `--seed`
+2. Batch mode via `--batch-size` / `--only <collection>`
+3. Dual output: JSONL + CSV per collection
+4. SQL seed sample in `datasets/sql/vecd_seed.sql`
+5. Sprint reports after each gate in `datasets/reports/sprints/`
 
-1. Duplicate Check
-2. Intent Balance
-3. Emotion Balance
-4. Dialect Balance
-5. Industry Balance
-6. Rule Consistency
-7. JSON Validation
+## Validation strategy
 
-Reports live in `datasets/reports/` (`qg_*.json`, `validation_report.json`, `vecd_summary.json`).
+After generation (and after every ~1000 utterance samples in QG):
 
-Latest validation: `all_ok=True`, files=None
+1. Duplicate ID / text check
+2. Required schema fields
+3. Dialect balance
+4. Industry coverage (≥20)
+5. Intent / emotion / objection library integrity
+6. Golden call immutability (`immutable=true` + checksum)
+7. QA calibration fields (ai_score, human_score, difference)
+
+```bash
+python datasets/scripts/validate_dataset.py
+# or
+python scripts/validate_dataset.py
+```
+
+## Expansion strategy
+
+- Grow utterance banks per dialect×stage before increasing N
+- Keep salt tags `[industry/stage/n]` only as uniqueness fallback
+- Re-run QG after each batch; never merge failing batches into canonical counts
+- Prefer regenerating a full collection over patching partial files
+
+## Import guide (PostgreSQL)
+
+```bash
+python datasets/scripts/export_postgres.py
+# writes datasets/sql/vecd_seed.sql
+# if DATABASE_URL is set, loads full JSONL into vecd_* tables
+```
+
+Tables: `vecd_utterances`, `vecd_conversations`, `vecd_intents`, `vecd_objections`, `vecd_emotions`, `vecd_buying_signals`, `vecd_root_causes`, `vecd_qa_scores`, `vecd_golden_calls`.
+
+## Versioning
+
+- File naming: `{collection}_{count}.jsonl` / `.csv`
+- Loaders always pick the **largest line-count** file for a prefix
+- Golden calls are immutable benchmarks — do not rewrite checksummed payloads
+
+## Quality metrics
+
+- Dialect ratios within ±3pp of targets
+- Zero duplicate IDs
+- Customer/agent text duplicate rate ≤ 0.5%
+- All sprint gates PASS (`datasets/reports/sprints/SPRINT_0{1-8}_VECD.json`)
 
 ## Commands
 
 ```bash
-python datasets/scripts/generate_dataset.py
+python datasets/scripts/generate_dataset.py --seed 20260905
+python datasets/scripts/generate_dataset.py --only customers --batch-size 1000 --industry real_estate --dialect south
 python datasets/scripts/validate_dataset.py
 python datasets/scripts/export_postgres.py
 ```
 
-## Governance
+## Sprint map
 
-See `.cursor/rules/project-rules.mdc` (alwaysApply constitution).
+| Sprint | Deliverable |
+|-------:|-------------|
+| 1 | Schema + scripts + validation |
+| 2 | 100k customer utterances |
+| 3 | 50k agent utterances |
+| 4 | Intents + emotions + buying signals |
+| 5 | Objections + root causes |
+| 6 | 10k conversations |
+| 7 | 10k QA benchmark |
+| 8 | 500 golden calls |

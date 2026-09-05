@@ -1,5 +1,5 @@
 {
-  "utterance_required_fields": [
+  "utterance_fields": [
     "id",
     "conversation_id",
     "speaker",
@@ -15,31 +15,101 @@
     "recommended_response",
     "root_cause_if_failed"
   ],
-  "dialect_mix": {
-    "bac": 0.35,
-    "trung": 0.2,
-    "nam": 0.45
-  },
+  "dialects": [
+    [
+      "north",
+      0.35
+    ],
+    [
+      "central",
+      0.2
+    ],
+    [
+      "south",
+      0.45
+    ]
+  ],
   "industries": [
-    "bds",
-    "spa",
-    "nha_khoa",
-    "giao_duc",
-    "bao_hiem",
-    "o_to",
-    "my_pham",
-    "gia_dung",
-    "thuc_pham",
-    "dien_may",
-    "noi_that",
-    "logistics",
-    "du_lich",
-    "tai_chinh",
-    "fitness",
-    "camera",
-    "dien_nuoc",
-    "thiet_bi_y_te",
-    "dich_vu_dn"
+    [
+      "real_estate",
+      "Bất động sản"
+    ],
+    [
+      "spa",
+      "Spa"
+    ],
+    [
+      "dental",
+      "Nha khoa"
+    ],
+    [
+      "insurance",
+      "Bảo hiểm"
+    ],
+    [
+      "education",
+      "Giáo dục"
+    ],
+    [
+      "automotive",
+      "Ô tô"
+    ],
+    [
+      "cosmetics",
+      "Mỹ phẩm"
+    ],
+    [
+      "home_appliances",
+      "Gia dụng"
+    ],
+    [
+      "food",
+      "Thực phẩm"
+    ],
+    [
+      "electronics",
+      "Điện máy"
+    ],
+    [
+      "furniture",
+      "Nội thất"
+    ],
+    [
+      "logistics",
+      "Logistics"
+    ],
+    [
+      "travel",
+      "Du lịch"
+    ],
+    [
+      "finance",
+      "Tài chính"
+    ],
+    [
+      "fitness",
+      "Fitness"
+    ],
+    [
+      "plumbing",
+      "Điện nước"
+    ],
+    [
+      "repair",
+      "Sửa chữa"
+    ],
+    [
+      "camera",
+      "Camera"
+    ],
+    [
+      "medical_devices",
+      "Thiết bị y tế"
+    ],
+    [
+      "b2b_services",
+      "Dịch vụ doanh nghiệp"
+    ]
   ],
   "stages": [
     "opening",
@@ -50,9 +120,18 @@
     "pricing",
     "objection",
     "closing",
-    "voice",
-    "compliance"
+    "follow_up"
   ],
-  "generated_at": "2026-09-05T15:27:39.621011+00:00",
-  "seed": 20260905
+  "targets": {
+    "customers": 100000,
+    "agents": 50000,
+    "conversations": 10000,
+    "objections": 5000,
+    "intents": 1000,
+    "buying_signals": 500,
+    "emotions": 500,
+    "root_causes": 500,
+    "golden_calls": 500,
+    "qa_benchmark": 10000
+  }
 }

@@ -3,33 +3,10 @@
   "count": 100000,
   "ok": true,
   "errors": [],
-  "balances": {
-    "dialect": {
-      "nam": 44866,
-      "bac": 35040,
-      "trung": 20094
-    },
-    "industry": {
-      "bds": 5264,
-      "spa": 5264,
-      "nha_khoa": 5264,
-      "giao_duc": 5263,
-      "bao_hiem": 5263,
-      "o_to": 5263,
-      "my_pham": 5263,
-      "gia_dung": 5263,
-      "thuc_pham": 5263,
-      "dien_may": 5263,
-      "noi_that": 5263,
-      "logistics": 5263,
-      "du_lich": 5263,
-      "tai_chinh": 5263,
-      "fitness": 5263,
-      "camera": 5263,
-      "dien_nuoc": 5263,
-      "thiet_bi_y_te": 5263,
-      "dich_vu_dn": 5263
-    }
+  "dialect_ratios": {
+    "north": 0.35,
+    "central": 0.2,
+    "south": 0.45
   },
-  "checked_at": "2026-09-05T15:27:40.517888+00:00"
+  "checked_at": "2026-09-05T17:27:45.500174+00:00"
 }

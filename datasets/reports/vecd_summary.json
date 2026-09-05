@@ -1,5 +1,4 @@
 {
-  "generated_at": "2026-09-05T15:27:41.387950+00:00",
   "counts": {
     "customers": 100000,
     "agents": 50000,
@@ -9,12 +8,8 @@
     "emotions": 500,
     "buying_signals": 500,
     "root_causes": 500,
-    "golden_calls": 500,
     "qa_benchmark": 10000,
-    "rules": 1000,
-    "sops": 50
+    "golden_calls": 500
   },
-  "quality_gates_dir": "/agent/telesale-coach/datasets/reports",
-  "dialect_customer_ok": true,
-  "dialect_agent_ok": true
+  "all_ok": true
 }

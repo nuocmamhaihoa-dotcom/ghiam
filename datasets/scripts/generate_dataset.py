@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Master Command entrypoint — delegates to VECD factory."""
+"""Master entrypoint — delegates to generate_vecd.py"""
 from __future__ import annotations
 
 import runpy

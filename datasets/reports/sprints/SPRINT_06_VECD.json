@@ -1,0 +1,22 @@
+{
+  "sprint": 6,
+  "title": "Conversation Library",
+  "ok": true,
+  "checked_at": "2026-09-05T17:27:47.737200+00:00",
+  "gates": [
+    {
+      "gate": "conversations",
+      "count": 10000,
+      "ok": true,
+      "errors": [],
+      "dialect_ratios": {},
+      "checked_at": "2026-09-05T17:27:47.736165+00:00",
+      "extras": {
+        "conversations_with_missing_stages": 2000
+      }
+    }
+  ],
+  "extras": {
+    "missing_stage_tagged": 2000
+  }
+}
