@@ -492,3 +492,17 @@ Mỗi PR qua constitution checklist trước merge.
 | Evidence | PRD goals G1–G8; Constitution §§1–5 |
 
 **Hết System Architecture v1.0.0**
+
+---
+
+## Related modules (16–20)
+
+| Module | Doc | Pipeline coupling |
+|--------|-----|-------------------|
+| Revenue Leak AI | `16_Revenue_Leak_AI.md` | After Coaching; before Dashboard JSON |
+| Golden Call | `17_Golden_Call.md` | Benchmark corpus; regression of Scoring/Judge |
+| Calibration | `18_Calibration.md` | Release gate for Rulebook & models |
+| Conversation DNA | `19_Conversation_DNA.md` | Built from scorecards + root causes |
+| Dataset Builder | `20_Dataset_Builder.md` | VECD factory feeding all AI modules |
+
+All modules obey Constitution: Evidence + Timestamp, DB Rulebook, Insufficient Evidence, DI/Repository.
