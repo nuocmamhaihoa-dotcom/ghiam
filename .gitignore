@@ -43,3 +43,4 @@ yarn-error.log*
 # local recording library + proxy pool snapshots
 /data/
 next-env.d.ts
+__pycache__/
