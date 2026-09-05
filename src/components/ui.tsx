@@ -9,7 +9,7 @@ const LINKS = [
   { href: "/calls", label: "Cuộc gọi" },
   { href: "/recordings", label: "Thư viện ghi âm" },
   { href: "/proxy", label: "Tải & Proxy" },
-  { href: "/analyze", label: "Phân tích mới" },
+  { href: "/analyze", label: "Phân tích kho" },
   { href: "/playbooks", label: "Kịch bản ngành" },
 ];
 

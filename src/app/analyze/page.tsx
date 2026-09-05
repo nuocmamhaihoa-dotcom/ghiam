@@ -1,98 +1,193 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { SectionTitle } from "@/components/ui";
-import type { CallOutcome } from "@/lib/analyzeCall";
-import { addCall } from "@/lib/store";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import { Metric, SectionTitle } from "@/components/ui";
 
-const SAMPLE = `Sale: Em chào anh Minh, em Lan bên Bảo Việt. Anh đang tiện nói chuyện khoảng 30 giây không ạ?
-Khách: Ừ, nói nhanh đi.
-Sale: Em gọi vì chương trình chăm sóc sức khỏe đang có ưu đãi khám miễn phí. Anh đang có bảo hiểm sức khỏe chưa ạ?
-Khách: Có của công ty rồi.
-Sale: Bảo hiểm công ty thường có trần nằm viện. Em đối chiếu giúp điểm trống — nếu trùng em không tư vấn thêm.
-Khách: Để xem giá nào.
-Sale: Gói cơ bản khoảng 15 nghìn/ngày, chi trả nằm viện đến 200 triệu, kèm ưu đãi khám miễn phí tháng này.
-Khách: Nghe cũng được.
-Sale: Anh cho em mã CCCD để giữ chỗ ưu đãi hôm nay, em gửi link đăng ký luôn nhé?
-Khách: Ok em, gửi đi.`;
+type Stats = {
+  total: number;
+  withAudio: number;
+  withTranscript: number;
+  readyForRecreation: number;
+  pendingAnalysis: number;
+  analysisVersion: number;
+  avgReadiness: number;
+  won: number;
+};
+
+type RunResult = {
+  updated?: number;
+  scanned?: number;
+  pendingLeft?: number;
+  readyForRecreation?: number;
+  avgReadiness?: number;
+  analysisVersion?: number;
+};
 
 export default function AnalyzePage() {
-  const router = useRouter();
-  const [title, setTitle] = useState("Cuộc gọi mới");
-  const [industry, setIndustry] = useState("Bảo hiểm");
-  const [product, setProduct] = useState("");
-  const [agentName, setAgentName] = useState("Sale A");
-  const [outcome, setOutcome] = useState<CallOutcome>("unknown");
-  const [durationSec, setDurationSec] = useState(300);
-  const [transcript, setTranscript] = useState(SAMPLE);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
+  const [lastResult, setLastResult] = useState<RunResult | null>(null);
+  const [autoLoop, setAutoLoop] = useState(false);
 
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const call = addCall({
-      title,
-      industry,
-      product: product || "Chưa đặt tên sản phẩm",
-      agentName,
-      outcome,
-      durationSec,
-      transcript,
-    });
-    router.push(`/calls/${call.id}`);
-  }
+  const load = useCallback(async () => {
+    const res = await fetch("/api/recordings?limit=1", { cache: "no-store" });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || "Không tải được kho ghi âm");
+    setStats(data.stats || null);
+  }, []);
+
+  useEffect(() => {
+    load().catch((e) => setError(e instanceof Error ? e.message : "Lỗi tải"));
+  }, [load]);
+
+  const runAnalyze = useCallback(
+    async (mode: "pending" | "force") => {
+      setBusy(true);
+      setError("");
+      setMsg(
+        mode === "pending"
+          ? "Đang phân tích các cuộc gọi chưa chấm / schema cũ…"
+          : "Đang chấm lại toàn bộ kho với bộ tiêu chí mở rộng…",
+      );
+      try {
+        const res = await fetch("/api/recordings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: mode === "pending" ? "analyze-pending" : "reanalyze",
+            limit: 200,
+            force: mode === "force",
+          }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "Phân tích thất bại");
+        setStats(data.stats || null);
+        setLastResult(data.result || null);
+        const r = data.result || {};
+        setMsg(
+          `Đã phân tích ${r.updated ?? 0}/${r.scanned ?? 0} cuộc gọi · còn chờ ${r.pendingLeft ?? data.stats?.pendingAnalysis ?? 0} · sẵn sàng tái tạo ${r.readyForRecreation ?? data.stats?.readyForRecreation ?? 0}`,
+        );
+        await load();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Lỗi phân tích");
+        setAutoLoop(false);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [load],
+  );
+
+  useEffect(() => {
+    if (!autoLoop || busy) return;
+    if ((stats?.pendingAnalysis ?? 0) <= 0) {
+      setAutoLoop(false);
+      setMsg((m) => m || "Hết cuộc gọi chờ phân tích — dừng vòng lặp tự động.");
+      return;
+    }
+    const t = setTimeout(() => {
+      void runAnalyze("pending");
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [autoLoop, busy, stats?.pendingAnalysis, runAnalyze]);
 
   return (
     <div className="space-y-6">
       <SectionTitle
-        title="Phân tích cuộc gọi mới"
-        subtitle="Dán transcript (Sale:/Khách:). Sau này gắn Whisper STT từ file ghi âm."
+        title="Phân tích cuộc gọi tự động"
+        subtitle="Chấm toàn bộ kho ghi âm chưa phân tích: tiêu chí chất lượng ChốtKiểm + coaching, và gói dữ liệu để AI tái tạo cuộc gọi."
       />
-      <form onSubmit={onSubmit} className="space-y-4 rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-5">
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="block text-sm">
-            <span className="text-[var(--muted)]">Tiêu đề</span>
-            <input className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2" value={title} onChange={(e) => setTitle(e.target.value)} required />
-          </label>
-          <label className="block text-sm">
-            <span className="text-[var(--muted)]">Ngành</span>
-            <select className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2" value={industry} onChange={(e) => setIndustry(e.target.value)}>
-              <option>Bảo hiểm</option>
-              <option>Thực phẩm chức năng</option>
-              <option>Điện máy / gia dụng</option>
-              <option>Giáo dục / khóa học</option>
-              <option>Bất động sản</option>
-            </select>
-          </label>
-          <label className="block text-sm">
-            <span className="text-[var(--muted)]">Sản phẩm</span>
-            <input className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2" value={product} onChange={(e) => setProduct(e.target.value)} />
-          </label>
-          <label className="block text-sm">
-            <span className="text-[var(--muted)]">Tên sale</span>
-            <input className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2" value={agentName} onChange={(e) => setAgentName(e.target.value)} />
-          </label>
-          <label className="block text-sm">
-            <span className="text-[var(--muted)]">Kết quả</span>
-            <select className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2" value={outcome} onChange={(e) => setOutcome(e.target.value as CallOutcome)}>
-              <option value="won">Chốt được</option>
-              <option value="lost">Mất đơn</option>
-              <option value="callback">Gọi lại</option>
-              <option value="unknown">Chưa rõ</option>
-            </select>
-          </label>
-          <label className="block text-sm">
-            <span className="text-[var(--muted)]">Thời lượng (giây)</span>
-            <input type="number" min={30} className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2" value={durationSec} onChange={(e) => setDurationSec(Number(e.target.value) || 60)} />
-          </label>
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <Metric label="Tổng trong kho" value={`${stats?.total ?? "—"}`} />
+        <Metric
+          label="Chờ phân tích"
+          value={`${stats?.pendingAnalysis ?? "—"}`}
+          hint={`schema v${stats?.analysisVersion ?? "—"}`}
+        />
+        <Metric
+          label="Sẵn sàng tái tạo AI"
+          value={`${stats?.readyForRecreation ?? "—"}`}
+        />
+        <Metric label="Readiness TB" value={`${stats?.avgReadiness ?? "—"}`} />
+      </div>
+
+      <div className="space-y-4 rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-5">
+        <p className="text-sm text-[var(--muted)]">
+          Hệ thống lấy transcript trong Thư viện ghi âm, chấm 9 tiêu chí ChốtKiểm
+          + chỉ số coaching (opening, discovery, pitch, objection, close,
+          talk-balance…), rồi sinh gói AI Clone (slot biến, kịch bản thay biến,
+          nhánh xử lý từ chối) để gọi lại khách khác.
+        </p>
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void runAnalyze("pending")}
+            className="rounded-full bg-[var(--accent)] px-5 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+          >
+            {busy ? "Đang chạy…" : "Phân tích tất cả chưa chấm"}
+          </button>
+          <button
+            type="button"
+            disabled={busy || (stats?.pendingAnalysis ?? 0) <= 0}
+            onClick={() => setAutoLoop(true)}
+            className="rounded-full border border-[var(--line)] bg-white px-5 py-2.5 text-sm disabled:opacity-60"
+          >
+            {autoLoop ? "Đang lặp tự động…" : "Lặp đến hết hàng chờ"}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setAutoLoop(false);
+              void runAnalyze("force");
+            }}
+            className="rounded-full border border-[var(--line)] bg-white px-5 py-2.5 text-sm disabled:opacity-60"
+          >
+            Chấm lại toàn bộ (schema mới)
+          </button>
+          <Link
+            href="/recordings"
+            className="rounded-full border border-[var(--line)] px-5 py-2.5 text-sm text-[var(--accent)]"
+          >
+            Mở thư viện ghi âm
+          </Link>
         </div>
-        <label className="block text-sm">
-          <span className="text-[var(--muted)]">Transcript</span>
-          <textarea className="mt-1 min-h-[280px] w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2 font-mono text-sm" value={transcript} onChange={(e) => setTranscript(e.target.value)} required />
-        </label>
-        <button type="submit" className="rounded-full bg-[var(--accent)] px-5 py-2.5 text-sm font-medium text-white">
-          Phân tích ngay
-        </button>
-      </form>
+
+        {msg ? <p className="text-sm text-emerald-700">{msg}</p> : null}
+        {error ? <p className="text-sm text-rose-700">{error}</p> : null}
+
+        {lastResult ? (
+          <div className="grid gap-2 rounded-2xl bg-white/70 p-4 text-sm md:grid-cols-3">
+            <div>Đã cập nhật: {lastResult.updated ?? 0}</div>
+            <div>Đã quét: {lastResult.scanned ?? 0}</div>
+            <div>Còn chờ: {lastResult.pendingLeft ?? "—"}</div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="space-y-3 rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-5 text-sm">
+        <h2 className="font-medium">Bộ tiêu chí mở rộng</h2>
+        <ul className="list-disc space-y-1 pl-5 text-[var(--muted)]">
+          <li>
+            Chất lượng QA: chào hỏi, tên SP, số lượng, giá, địa chỉ, đồng ý /
+            từ chối, thái độ KH & TVV (chuẩn ChốtKiểm).
+          </li>
+          <li>
+            Coaching: opening, discovery, pitch, xử lý từ chối, chốt, cân bằng
+            nói, lịch sự, đồng cảm.
+          </li>
+          <li>
+            AI tái tạo: persona giọng nói, slot điền ([product], [price],
+            [address]…), kịch bản thay biến, nhánh objection, câu mở/chốt.
+          </li>
+        </ul>
+      </div>
     </div>
   );
 }

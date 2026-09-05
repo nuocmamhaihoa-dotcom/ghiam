@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  analyzePendingRecordings,
   getLibraryStats,
   listRecordings,
   reanalyzeRecordings,
@@ -32,18 +33,32 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/** POST: sync/import from ChốtKiểm, or reanalyze existing library. */
+/** POST: sync/import, analyze pending, or force-reanalyze library. */
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json().catch(() => ({}))) as {
-      action?: "sync" | "reanalyze";
+      action?: "sync" | "reanalyze" | "analyze-pending";
       limit?: number;
       downloadAudio?: boolean;
+      force?: boolean;
+      pendingOnly?: boolean;
     };
     const action = body.action || "sync";
 
+    if (action === "analyze-pending") {
+      const result = await analyzePendingRecordings({
+        limit: body.limit ?? 100,
+      });
+      const stats = await getLibraryStats();
+      return NextResponse.json({ ok: true, action, result, stats });
+    }
+
     if (action === "reanalyze") {
-      const result = await reanalyzeRecordings({ limit: body.limit ?? 100 });
+      const result = await reanalyzeRecordings({
+        limit: body.limit ?? 100,
+        force: body.force === true,
+        pendingOnly: body.force === true ? false : body.pendingOnly !== false,
+      });
       const stats = await getLibraryStats();
       return NextResponse.json({ ok: true, action, result, stats });
     }

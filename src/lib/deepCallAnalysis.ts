@@ -3,6 +3,10 @@
  * Input: transcript (+ optional ChốtKiểm scorecard / summary).
  */
 
+import { scoreChotKiemTranscript } from "./chotKiemCriteria";
+
+export const ANALYSIS_VERSION = 2 as const;
+
 export type StageKey =
   | "opening"
   | "discovery"
@@ -57,8 +61,74 @@ export type RecreationStep = {
   alternatives: string[];
 };
 
+
+export type QualityMetric = {
+  key: string;
+  label: string;
+  score: number;
+  passed: boolean;
+  weight: number;
+  evidence: string;
+  tip: string;
+};
+
+export type QualityScorecard = {
+  overallScore: number;
+  passRate: number;
+  grade: "A" | "B" | "C" | "D";
+  chotKiemComplete: boolean;
+  closeOutcome: string;
+  closeOutcomeLabel: string;
+  metrics: QualityMetric[];
+  requiredFailed: string[];
+  strengths: string[];
+  gaps: string[];
+};
+
+export type AiCloneSlot = {
+  key: string;
+  label: string;
+  value: string | null;
+  required: boolean;
+  example: string;
+};
+
+export type AiCloneBranch = {
+  trigger: string;
+  customerLine: string;
+  reply: string;
+  tip: string;
+};
+
+export type AiClonePack = {
+  cloneReady: boolean;
+  cloneScore: number;
+  persona: {
+    tone: string;
+    paceWpm: number;
+    politeness: number;
+    empathy: number;
+    assertiveness: number;
+    styleNotes: string;
+  };
+  slots: AiCloneSlot[];
+  mustSay: string[];
+  avoidSay: string[];
+  variableScript: Array<{
+    stage: string;
+    goal: string;
+    template: string;
+    fillHints: string[];
+  }>;
+  objectionBranches: AiCloneBranch[];
+  openers: string[];
+  closers: string[];
+  targetCustomerProfile: string;
+  recreationNotes: string[];
+};
+
 export type DeepCallAnalysis = {
-  version: 1;
+  version: typeof ANALYSIS_VERSION;
   analyzedAt: string;
   durationSec: number;
   outcome: "won" | "lost" | "callback" | "unknown";
@@ -114,6 +184,8 @@ export type DeepCallAnalysis = {
     phoneMention: string | null;
   };
   recreationScript: RecreationStep[];
+  qualityScorecard: QualityScorecard;
+  aiClonePack: AiClonePack;
   chotKiem?: {
     grade?: string;
     overallScore?: number;
@@ -612,8 +684,312 @@ export function analyzeCallDeep(input: {
     baseReadinessScore + outcomeBoost + gradeBoost + completeBoost,
   );
 
+
+  const agentTalkRatio = clamp((agentChars / totalChars) * 100) / 100;
+  const ck = scoreChotKiemTranscript(full);
+  const stageScore = (key: StageKey) =>
+    stages.find((s) => s.key === key)?.score ?? 0;
+
+  const qualityMetrics: QualityMetric[] = [
+    ...ck.criteria.map((c) => ({
+      key: `ck_${c.key}`,
+      label: c.label,
+      score: c.passed ? 100 : 0,
+      passed: c.passed,
+      weight: c.required ? 1.2 : 0.8,
+      evidence: c.evidence || c.value,
+      tip: c.passed
+        ? "Đạt tiêu chí ChốtKiểm."
+        : `Bổ sung: ${c.label.replace(/^\d+\.\s*/, "")}.`,
+    })),
+    {
+      key: "opening_quality",
+      label: "Chất lượng mở đầu",
+      score: opening.score,
+      passed: opening.score >= 70,
+      weight: 1,
+      evidence: [opening.greeting, opening.permissionAsk, opening.valueHook]
+        .filter(Boolean)
+        .join(" | "),
+      tip: "Chào + xin phép + hook giá trị trong 20 giây đầu.",
+    },
+    {
+      key: "discovery_quality",
+      label: "Khai thác nhu cầu",
+      score: clamp(
+        discoveryQuestions.length * 25 + (stageScore("discovery") > 0 ? 20 : 0),
+      ),
+      passed: discoveryQuestions.length >= 2,
+      weight: 1,
+      evidence: discoveryQuestions.slice(0, 2).join(" | "),
+      tip: "Hỏi ít nhất 2 câu discovery trước khi pitch.",
+    },
+    {
+      key: "pitch_quality",
+      label: "Pitch giá trị",
+      score: clamp(pitchPoints.length * 20 + stageScore("pitch") * 0.4),
+      passed: pitchPoints.length >= 2,
+      weight: 1,
+      evidence: pitchPoints.slice(0, 2).join(" | "),
+      tip: "Pitch = 1 lợi ích + 1 bằng chứng + 1 ưu đãi.",
+    },
+    {
+      key: "objection_handling",
+      label: "Xử lý từ chối",
+      score: objectionScore,
+      passed: objectionScore >= 65,
+      weight: 1.1,
+      evidence: uniqObjections
+        .slice(0, 2)
+        .map((o) => `${o.type}: ${o.handledWell ? "OK" : "Yếu"}`)
+        .join(" | "),
+      tip: "Xác nhận cảm xúc → bằng chứng → hỏi chốt mềm.",
+    },
+    {
+      key: "close_quality",
+      label: "Chốt đơn",
+      score: clamp(
+        (closeAttempts.length ? 55 : 20) +
+          (buyingSignals.length ? 20 : 0) +
+          (outcome === "won" ? 25 : 0),
+      ),
+      passed: closeAttempts.length > 0,
+      weight: 1.2,
+      evidence: closeAttempts[0]?.line || "",
+      tip: "Chốt cụ thể: số lượng + địa chỉ + xác nhận nhận hàng.",
+    },
+    {
+      key: "talk_balance",
+      label: "Cân bằng nói chuyện",
+      score: clamp(100 - Math.abs(50 - agentTalkRatio * 100) * 1.6),
+      passed: agentTalkRatio >= 0.4 && agentTalkRatio <= 0.7,
+      weight: 0.7,
+      evidence: `TVV ${Math.round(agentTalkRatio * 100)}% / KH ${Math.round((1 - agentTalkRatio) * 100)}%`,
+      tip: "Giữ talk-ratio TVV khoảng 45–65%.",
+    },
+    {
+      key: "politeness",
+      label: "Lịch sự / chuyên nghiệp",
+      score: politenessScore,
+      passed: politenessScore >= 70,
+      weight: 0.8,
+      evidence: toneLabel,
+      tip: "Dùng dạ/ạ, tránh áp lực hoặc xen ngang.",
+    },
+    {
+      key: "empathy",
+      label: "Đồng cảm",
+      score: empathyScore,
+      passed: empathyScore >= 60,
+      weight: 0.8,
+      evidence: "",
+      tip: "Phản hồi cảm xúc khách trước khi bán tiếp.",
+    },
+  ];
+
+  const weightSum = qualityMetrics.reduce((s, m) => s + m.weight, 0) || 1;
+  const qualityOverall = clamp(
+    qualityMetrics.reduce((s, m) => s + m.score * m.weight, 0) / weightSum,
+  );
+  const qualityGrade: QualityScorecard["grade"] =
+    qualityOverall >= 85 ? "A" : qualityOverall >= 70 ? "B" : qualityOverall >= 55 ? "C" : "D";
+  const requiredFailed = qualityMetrics
+    .filter((m) => m.key.startsWith("ck_") && !m.passed && m.weight >= 1.2)
+    .map((m) => m.label);
+  const qualityScorecard: QualityScorecard = {
+    overallScore: qualityOverall,
+    passRate: clamp(
+      (qualityMetrics.filter((m) => m.passed).length / qualityMetrics.length) * 100,
+    ),
+    grade: qualityGrade,
+    chotKiemComplete: ck.complete,
+    closeOutcome: ck.closeOutcome,
+    closeOutcomeLabel: ck.closeOutcomeLabel,
+    metrics: qualityMetrics,
+    requiredFailed,
+    strengths: qualityMetrics
+      .filter((m) => m.passed && m.score >= 70)
+      .slice(0, 5)
+      .map((m) => m.label),
+    gaps: qualityMetrics
+      .filter((m) => !m.passed)
+      .slice(0, 6)
+      .map((m) => m.label),
+  };
+
+  const slots: AiCloneSlot[] = [
+    {
+      key: "agent_name",
+      label: "Tên sale",
+      value: null,
+      required: true,
+      example: "Lan",
+    },
+    {
+      key: "company",
+      label: "Công ty / thương hiệu",
+      value: opening.companyIntro,
+      required: true,
+      example: "Bảo Việt",
+    },
+    {
+      key: "customer_name",
+      label: "Tên khách",
+      value: extracted.customerName,
+      required: false,
+      example: "anh Minh",
+    },
+    {
+      key: "product",
+      label: "Sản phẩm",
+      value: extracted.product,
+      required: true,
+      example: "gói bảo hiểm sức khỏe",
+    },
+    {
+      key: "quantity",
+      label: "Số lượng",
+      value: extracted.quantity,
+      required: true,
+      example: "1 hộp",
+    },
+    {
+      key: "price",
+      label: "Giá",
+      value: extracted.price,
+      required: true,
+      example: "299k",
+    },
+    {
+      key: "offer",
+      label: "Ưu đãi",
+      value: opening.valueHook || pitchPoints.find((p) => /ưu đãi|tặng|giảm/i.test(p)) || null,
+      required: false,
+      example: "tặng kèm khám miễn phí",
+    },
+    {
+      key: "address",
+      label: "Địa chỉ giao",
+      value: extracted.address,
+      required: true,
+      example: "xã A, huyện B",
+    },
+    {
+      key: "delivery",
+      label: "Cam kết giao",
+      value: extracted.deliveryPromise,
+      required: false,
+      example: "2-3 ngày nhận hàng",
+    },
+    {
+      key: "phone",
+      label: "SĐT xác nhận",
+      value: extracted.phoneMention,
+      required: false,
+      example: "09xx...",
+    },
+  ];
+
+  const filledRequired = slots.filter((s) => s.required && s.value).length;
+  const requiredSlots = slots.filter((s) => s.required).length || 1;
+  const cloneScore = clamp(
+    readinessScore * 0.45 +
+      qualityOverall * 0.35 +
+      (filledRequired / requiredSlots) * 100 * 0.2,
+  );
+  const aiClonePack: AiClonePack = {
+    cloneReady: cloneScore >= 70 && outcome !== "lost",
+    cloneScore,
+    persona: {
+      tone: toneLabel,
+      paceWpm: speakingRateWpm,
+      politeness: politenessScore,
+      empathy: empathyScore,
+      assertiveness: confidenceScore,
+      styleNotes: toneNotes,
+    },
+    slots,
+    mustSay: [
+      opening.greeting || "Em chào anh/chị, em [agent_name] bên [company].",
+      opening.permissionAsk || "Anh/chị đang tiện nghe 20–30 giây không ạ?",
+      extracted.product
+        ? `Em xin giới thiệu [product]${extracted.price ? ", giá [price]" : ""}.`
+        : "Em xin giới thiệu [product], giá [price].",
+      closeAttempts[0]?.line ||
+        "Vậy em ghi [quantity] [product], gửi về [address] giúp anh/chị nhé?",
+    ].filter(Boolean),
+    avoidSay: [
+      ...(riskSignals.length ? ["Tránh lặp lại các câu tạo kháng cự đã xuất hiện."] : []),
+      "Không chốt khi chưa xác nhận địa chỉ / số lượng.",
+      "Không đả kích đối thủ hoặc ép giá.",
+      "Không nói quá nhanh khi nêu giá.",
+    ],
+    variableScript: recreationScript.map((step) => ({
+      stage: step.stage,
+      goal: step.goal,
+      template: step.modelLine
+        .replace(extracted.product || "___", "[product]")
+        .replace(extracted.quantity || "___", "[quantity]")
+        .replace(extracted.price || "___", "[price]")
+        .replace(extracted.address || "___", "[address]")
+        .replace(extracted.customerName || "___", "[customer_name]"),
+      fillHints: slots
+        .filter((s) => step.modelLine.toLowerCase().includes((s.value || "").toLowerCase()) && s.value)
+        .map((s) => s.key)
+        .slice(0, 4),
+    })),
+    objectionBranches: uniqObjections.slice(0, 6).map((o) => ({
+      trigger: o.type,
+      customerLine: o.customerLine,
+      reply:
+        o.agentReply ||
+        "Em hiểu anh/chị đang cân nhắc. Nếu em làm rõ điểm này, anh/chị sẵn sàng thử hôm nay không ạ?",
+      tip: o.tip,
+    })),
+    openers: [
+      opening.greeting,
+      opening.permissionAsk,
+      recreationScript[0]?.alternatives[0] || null,
+    ].filter((x): x is string => Boolean(x)),
+    closers: [
+      ...closeAttempts.slice(0, 3).map((c) => c.line),
+      "Anh/chị lấy 1 hay 2 để nhận đúng ưu đãi hôm nay ạ?",
+    ].filter(Boolean),
+    targetCustomerProfile:
+      [
+        extracted.customerName ? `KH: ${extracted.customerName}` : null,
+        extracted.product ? `Quan tâm: ${extracted.product}` : null,
+        outcome === "won" ? "Đã từng đồng ý nhận hàng" : "Cần nurture thêm",
+        uniqObjections[0] ? `Hay phản đối: ${uniqObjections[0].type}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ") || "Khách telesale phổ thông — cần cá nhân hóa slot.",
+    recreationNotes: [
+      `Clone score ${cloneScore}/100 · QA ${qualityOverall}/100 · Readiness ${readinessScore}/100`,
+      ck.summary,
+      requiredFailed.length
+        ? `Thiếu tiêu chí bắt buộc: ${requiredFailed.join(", ")}`
+        : "Đủ tiêu chí bắt buộc ChốtKiểm hoặc không áp dụng đủ.",
+      "Điền slot [product]/[price]/[address]/[customer_name] trước khi TTS/AI gọi lại.",
+    ],
+  };
+
+  const mergedChotKiem = {
+    grade: input.grade || qualityGrade,
+    overallScore: input.overallScore ?? qualityOverall,
+    isComplete: input.isComplete ?? ck.complete,
+    criteria: ck.criteria.map((c) => ({
+      key: c.key,
+      label: c.label,
+      passed: c.passed,
+      required: c.required,
+      value: c.value,
+      evidence: c.evidence,
+    })),
+  };
+
   return {
-    version: 1,
+    version: ANALYSIS_VERSION,
     analyzedAt: new Date().toISOString(),
     durationSec,
     outcome,
@@ -667,11 +1043,13 @@ export function analyzeCallDeep(input: {
     persuasionTechniques,
     extracted,
     recreationScript,
-    chotKiem:
-      input.scorecard || {
-        grade: input.grade,
-        overallScore: input.overallScore,
-        isComplete: input.isComplete,
-      },
+    qualityScorecard,
+    aiClonePack,
+    chotKiem: {
+      ...mergedChotKiem,
+      ...(input.scorecard || {}),
+      criteria: mergedChotKiem.criteria,
+    },
   };
 }
+

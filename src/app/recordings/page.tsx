@@ -24,6 +24,8 @@ type Stats = {
   withAudio: number;
   withTranscript: number;
   readyForRecreation: number;
+  pendingAnalysis: number;
+  analysisVersion: number;
   avgReadiness: number;
   won: number;
 };
@@ -76,12 +78,12 @@ export default function RecordingsPage() {
   async function reanalyzeNow() {
     setBusy(true);
     setError("");
-    setMsg("Đang chấm lại readiness toàn thư viện…");
+    setMsg("Đang phân tích các cuộc gọi chưa chấm / schema cũ…");
     try {
       const res = await fetch("/api/recordings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reanalyze", limit: 100 }),
+        body: JSON.stringify({ action: "analyze-pending", limit: 200 }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Reanalyze failed");
@@ -137,6 +139,11 @@ export default function RecordingsPage() {
           label="Sẵn sàng tái tạo"
           value={String(stats?.readyForRecreation ?? 0)}
           hint={`TB readiness ${stats?.avgReadiness ?? 0}`}
+        />
+        <Metric
+          label="Chờ phân tích"
+          value={String(stats?.pendingAnalysis ?? 0)}
+          hint={`schema v${stats?.analysisVersion ?? "-"}`}
         />
         <Metric label="Đã chốt" value={String(stats?.won ?? 0)} />
       </div>

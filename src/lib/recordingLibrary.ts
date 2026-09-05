@@ -8,7 +8,11 @@ import path from "path";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 import { ckFetch, maskPhone } from "./chotKiemClient";
-import { analyzeCallDeep, type DeepCallAnalysis } from "./deepCallAnalysis";
+import {
+  ANALYSIS_VERSION,
+  analyzeCallDeep,
+  type DeepCallAnalysis,
+} from "./deepCallAnalysis";
 
 export type RecordingMeta = {
   id: string;
@@ -33,8 +37,18 @@ export type RecordingMeta = {
   callSummary: string | null;
   outcome: "won" | "lost" | "callback" | "unknown";
   readinessScore: number;
+  analysisVersion: number;
   sourceAudioUrl: string | null;
 };
+
+
+function normalizeMeta(raw: RecordingMeta): RecordingMeta {
+  return {
+    ...raw,
+    analysisVersion: raw.analysisVersion ?? 0,
+    readinessScore: raw.readinessScore ?? 0,
+  };
+}
 
 export type RecordingRecord = {
   meta: RecordingMeta;
@@ -171,7 +185,9 @@ async function downloadAudioToDisk(
 
 export async function listRecordings(): Promise<RecordingMeta[]> {
   const index = await readIndex();
-  return [...index.items].sort((a, b) => b.createdAt - a.createdAt);
+  return [...index.items]
+    .map(normalizeMeta)
+    .sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export async function getRecording(id: string): Promise<RecordingRecord | null> {
@@ -212,11 +228,19 @@ export async function getRecordingAudioPath(
 
 export async function getLibraryStats() {
   const items = await listRecordings();
+  let pendingAnalysis = 0;
+  for (const item of items) {
+    if (!item.hasTranscript && !item.callSummary) continue;
+    const version = item.analysisVersion ?? 0;
+    if (version < ANALYSIS_VERSION) pendingAnalysis += 1;
+  }
   return {
     total: items.length,
     withAudio: items.filter((i) => i.hasAudio).length,
     withTranscript: items.filter((i) => i.hasTranscript).length,
     readyForRecreation: items.filter((i) => i.readinessScore >= 70).length,
+    pendingAnalysis,
+    analysisVersion: ANALYSIS_VERSION,
     avgReadiness:
       items.length === 0
         ? 0
@@ -384,6 +408,7 @@ export async function syncRecordingsFromChotKiem(options?: {
       callSummary: call.callSummary || null,
       outcome,
       readinessScore: analysis.readinessScore,
+      analysisVersion: ANALYSIS_VERSION,
       sourceAudioUrl: call.audioUrl || null,
     };
     await fs.writeFile(
@@ -431,21 +456,54 @@ export async function syncRecordingsFromChotKiem(options?: {
   };
 }
 
-/** Re-run deep analysis on already-imported recordings (no remote fetch). */
+/** Re-run deep analysis on imported recordings. Default: only pending/outdated. */
 export async function reanalyzeRecordings(options?: {
   limit?: number;
-}): Promise<{ updated: number; readyForRecreation: number; avgReadiness: number }> {
-  const limit = Math.max(1, Math.min(options?.limit ?? 100, 200));
+  /** Analyze only missing/outdated analyses (default true). */
+  pendingOnly?: boolean;
+  /** Force re-analyze even if already on latest version. */
+  force?: boolean;
+}): Promise<{
+  updated: number;
+  scanned: number;
+  pendingLeft: number;
+  readyForRecreation: number;
+  avgReadiness: number;
+  analysisVersion: number;
+}> {
+  const limit = Math.max(1, Math.min(options?.limit ?? 100, 300));
+  const pendingOnly = options?.force ? false : options?.pendingOnly !== false;
   const index = await readIndex();
   let updated = 0;
-  const items = index.items.slice(0, limit);
+  let scanned = 0;
 
-  for (const item of items) {
+  for (const item of index.items) {
+    if (updated >= limit) break;
+    scanned += 1;
     const dir = recordDir(item.id);
     const transcript = await fs
       .readFile(path.join(dir, "transcript.txt"), "utf8")
       .catch(() => "");
     if (!transcript.trim() && !item.callSummary) continue;
+
+    const currentVersion = item.analysisVersion ?? 0;
+    const analysisPath = path.join(dir, "analysis.json");
+    const hasAnalysis = await fs
+      .access(analysisPath)
+      .then(() => true)
+      .catch(() => false);
+
+    if (pendingOnly && hasAnalysis && currentVersion >= ANALYSIS_VERSION) {
+      continue;
+    }
+
+    let scorecard: DeepCallAnalysis["chotKiem"] | undefined;
+    try {
+      const raw = await fs.readFile(path.join(dir, "scorecard.json"), "utf8");
+      scorecard = JSON.parse(raw) as DeepCallAnalysis["chotKiem"];
+    } catch {
+      scorecard = undefined;
+    }
 
     const analysis = analyzeCallDeep({
       transcript: transcript || item.callSummary || "",
@@ -455,15 +513,17 @@ export async function reanalyzeRecordings(options?: {
       grade: item.grade || undefined,
       overallScore: item.overallScore ?? undefined,
       isComplete: item.isComplete ?? undefined,
+      scorecard,
     });
 
     await fs.writeFile(
-      path.join(dir, "analysis.json"),
+      analysisPath,
       JSON.stringify(analysis, null, 2),
       "utf8",
     );
 
     item.readinessScore = analysis.readinessScore;
+    item.analysisVersion = ANALYSIS_VERSION;
     item.updatedAt = new Date().toISOString();
     await fs.writeFile(
       path.join(dir, "meta.json"),
@@ -477,7 +537,18 @@ export async function reanalyzeRecordings(options?: {
   const stats = await getLibraryStats();
   return {
     updated,
+    scanned,
+    pendingLeft: stats.pendingAnalysis,
     readyForRecreation: stats.readyForRecreation,
     avgReadiness: stats.avgReadiness,
+    analysisVersion: ANALYSIS_VERSION,
   };
+}
+
+/** Alias: analyze all unanalyzed / outdated recordings in the library. */
+export async function analyzePendingRecordings(options?: { limit?: number }) {
+  return reanalyzeRecordings({
+    limit: options?.limit ?? 100,
+    pendingOnly: true,
+  });
 }

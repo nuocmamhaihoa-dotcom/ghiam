@@ -320,6 +320,157 @@ export default function RecordingDetailPage() {
         </div>
       </section>
 
+      {a.qualityScorecard ? (
+        <section className="space-y-4 rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <SectionTitle
+              title="Bảng điểm chất lượng cuộc gọi"
+              subtitle={`${a.qualityScorecard.closeOutcomeLabel} · ChốtKiểm ${a.qualityScorecard.chotKiemComplete ? "đủ tiêu chí" : "thiếu tiêu chí"}`}
+            />
+            <ScoreRing
+              score={a.qualityScorecard.overallScore}
+              label={`QA ${a.qualityScorecard.grade}`}
+            />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {a.qualityScorecard.metrics.map((m) => (
+              <div
+                key={m.key}
+                className="rounded-xl border border-[var(--line)] bg-white/70 p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{m.label}</span>
+                  <span
+                    className={`text-sm ${m.passed ? "text-emerald-700" : "text-rose-700"}`}
+                  >
+                    {m.score}/100
+                  </span>
+                </div>
+                {m.evidence ? (
+                  <p className="mt-1 text-xs text-[var(--muted)]">{m.evidence}</p>
+                ) : null}
+                {!m.passed && m.tip ? (
+                  <p className="mt-1 text-xs text-amber-800">{m.tip}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          {a.qualityScorecard.gaps.length ? (
+            <p className="text-sm text-[var(--muted)]">
+              Khoảng trống: {a.qualityScorecard.gaps.join(" · ")}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {a.aiClonePack ? (
+        <section className="space-y-4 rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <SectionTitle
+              title="Gói dữ liệu tái tạo cuộc gọi (AI Clone)"
+              subtitle={a.aiClonePack.targetCustomerProfile}
+            />
+            <ScoreRing
+              score={a.aiClonePack.cloneScore}
+              label={a.aiClonePack.cloneReady ? "Clone Ready" : "Chưa sẵn sàng"}
+            />
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Metric label="Giọng / tone" value={a.aiClonePack.persona.tone} />
+            <Metric
+              label="Tốc độ mẫu"
+              value={`${a.aiClonePack.persona.paceWpm}`}
+              hint="từ/phút"
+            />
+            <Metric
+              label="Assertiveness"
+              value={`${a.aiClonePack.persona.assertiveness}`}
+            />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium">Slot cần điền khi gọi khách mới</h3>
+            <div className="mt-2 grid gap-2 md:grid-cols-2">
+              {a.aiClonePack.slots.map((s) => (
+                <div
+                  key={s.key}
+                  className="rounded-xl border border-[var(--line)] bg-white/70 p-3 text-sm"
+                >
+                  <div className="font-medium">
+                    [{s.key}] {s.label}
+                    {s.required ? " *" : ""}
+                  </div>
+                  <div className="mt-1 text-[var(--muted)]">
+                    Mẫu: {s.value || s.example}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <h3 className="text-sm font-medium">Must say</h3>
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-sm">
+                {a.aiClonePack.mustSay.map((x) => (
+                  <li key={x}>{x}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-sm font-medium">Avoid say</h3>
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-sm">
+                {a.aiClonePack.avoidSay.map((x) => (
+                  <li key={x}>{x}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <div>
+            <h3 className="text-sm font-medium">Kịch bản thay biến</h3>
+            <div className="mt-2 space-y-2">
+              {a.aiClonePack.variableScript.map((step, i) => (
+                <div
+                  key={`${step.stage}-${i}`}
+                  className="rounded-xl border border-[var(--line)] bg-white/70 p-3"
+                >
+                  <div className="text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
+                    {step.stage} · {step.goal}
+                  </div>
+                  <p className="mt-1 text-sm">“{step.template}”</p>
+                  {step.fillHints.length ? (
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      Điền: {step.fillHints.join(", ")}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+          {a.aiClonePack.objectionBranches.length ? (
+            <div>
+              <h3 className="text-sm font-medium">Nhánh xử lý từ chối</h3>
+              <div className="mt-2 space-y-2">
+                {a.aiClonePack.objectionBranches.map((b, i) => (
+                  <div
+                    key={`${b.trigger}-${i}`}
+                    className="rounded-xl border border-[var(--line)] bg-white/70 p-3 text-sm"
+                  >
+                    <div className="font-medium">{b.trigger}</div>
+                    <p className="mt-1 text-[var(--muted)]">KH: {b.customerLine}</p>
+                    <p className="mt-1">TVV: {b.reply}</p>
+                    <p className="mt-1 text-xs text-amber-800">{b.tip}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {a.aiClonePack.recreationNotes.length ? (
+            <p className="text-xs text-[var(--muted)]">
+              {a.aiClonePack.recreationNotes.join(" · ")}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
       <section>
         <SectionTitle title="Transcript" />
         <pre className="max-h-[28rem] overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4 text-sm leading-relaxed">

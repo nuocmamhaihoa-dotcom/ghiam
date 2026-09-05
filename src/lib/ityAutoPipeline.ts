@@ -14,6 +14,7 @@ import {
 } from "@/lib/ityDownloadProgress";
 import {
   getLibraryStats,
+  analyzePendingRecordings,
   reanalyzeRecordings,
   syncRecordingsFromChotKiem,
 } from "@/lib/recordingLibrary";
@@ -318,8 +319,18 @@ export async function runAutoPipelineTick(force = false): Promise<{
     const dueReanalyze =
       state.tickCount > 0 &&
       state.tickCount % state.config.reanalyzeEveryTicks === 0;
-    if (dueReanalyze) {
-      const reanalyzed = await reanalyzeRecordings({ limit: 80 });
+    // Prefer draining unanalyzed / outdated analyses first.
+    const pending = await analyzePendingRecordings({ limit: 40 });
+    if (pending.updated > 0) {
+      state.stats.reanalyzeRuns += 1;
+      state.stats.reanalyzed += pending.updated;
+      result.reanalyze = pending;
+    } else if (dueReanalyze) {
+      const reanalyzed = await reanalyzeRecordings({
+        limit: 80,
+        force: true,
+        pendingOnly: false,
+      });
       state.stats.reanalyzeRuns += 1;
       state.stats.reanalyzed += reanalyzed.updated;
       result.reanalyze = reanalyzed;
