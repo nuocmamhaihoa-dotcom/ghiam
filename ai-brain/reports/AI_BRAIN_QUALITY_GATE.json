@@ -1,0 +1,224 @@
+{
+  "generated_at": "2026-09-05T14:33:25.375386+00:00",
+  "rulebook": {
+    "count": 1000,
+    "allocation": {
+      "Opening": 100,
+      "Rapport": 80,
+      "Discovery": 150,
+      "Qualification": 80,
+      "Presentation": 120,
+      "Pricing": 80,
+      "Objection": 200,
+      "Closing": 80,
+      "Voice": 60,
+      "Compliance": 50
+    },
+    "dedupe_gates": [
+      {
+        "checked_at_count": 50,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 100,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 150,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 200,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 250,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 300,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 350,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 400,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 450,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 500,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 550,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 600,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 650,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 700,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 750,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 800,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 850,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 900,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 950,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 1000,
+        "unique_ids": true,
+        "unique_names_in_category": true,
+        "json_ok": true,
+        "required_fields_ok": true
+      }
+    ],
+    "all_gates_passed": true,
+    "files": [
+      "ai-brain/rulebook/rulebook_1000.jsonl",
+      "ai-brain/rulebook/rules_1000.jsonl"
+    ]
+  },
+  "vcie_counts": {
+    "utterances": 20000,
+    "intents": 500,
+    "objection_handlers": 1000,
+    "buying_signals": 300,
+    "emotion_timelines": 500,
+    "silence_patterns": 300,
+    "interrupt_patterns": 300,
+    "context_inference": 200
+  },
+  "dialect_distribution": {
+    "nam": 8939,
+    "bac": 7034,
+    "trung": 4027
+  },
+  "root_cause_graphs": 500,
+  "sop_industries": 50,
+  "link_repairs": [
+    {
+      "path": "ai-brain/vcie/utterances/utterances_20000.jsonl",
+      "rows": 20000,
+      "fixed_links": 0
+    },
+    {
+      "path": "ai-brain/vcie/intents/intents_500.jsonl",
+      "rows": 500,
+      "fixed_links": 0
+    },
+    {
+      "path": "ai-brain/vcie/objections/objection_handlers_1000.jsonl",
+      "rows": 1000,
+      "fixed_links": 0
+    },
+    {
+      "path": "ai-brain/vcie/buying_signals/buying_signals_300.jsonl",
+      "rows": 300,
+      "fixed_links": 0
+    },
+    {
+      "path": "ai-brain/vcie/emotions/emotion_timelines_500.jsonl",
+      "rows": 500,
+      "fixed_links": 0
+    },
+    {
+      "path": "ai-brain/vcie/silence/silence_patterns_300.jsonl",
+      "rows": 300,
+      "fixed_links": 0
+    },
+    {
+      "path": "ai-brain/vcie/interrupts/interrupt_patterns_300.jsonl",
+      "rows": 300,
+      "fixed_links": 0
+    },
+    {
+      "path": "ai-brain/vcie/context/context_inference_200.jsonl",
+      "rows": 200,
+      "fixed_links": 0
+    }
+  ]
+}
