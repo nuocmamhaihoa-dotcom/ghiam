@@ -59,11 +59,11 @@ export type AutoPipelineState = {
 const DEFAULT_CONFIG: AutoPipelineConfig = {
   intervalSec: 45,
   processBatchSize: 8,
-  processRounds: 3,
-  importLimit: 40,
+  processRounds: 5,
+  importLimit: 80,
   minLivingProxies: 40,
   syncEveryTicks: 8,
-  importEveryTicks: 2,
+  importEveryTicks: 1,
   reanalyzeEveryTicks: 5,
 };
 
@@ -164,7 +164,7 @@ export async function updateAutoPipelineConfig(
       1,
       8,
     ),
-    importLimit: clamp(Number(patch.importLimit ?? state.config.importLimit), 10, 100),
+    importLimit: clamp(Number(patch.importLimit ?? state.config.importLimit), 10, 150),
     minLivingProxies: clamp(
       Number(patch.minLivingProxies ?? state.config.minLivingProxies),
       10,
@@ -306,6 +306,7 @@ export async function runAutoPipelineTick(force = false): Promise<{
       const imported = await syncRecordingsFromChotKiem({
         limit: state.config.importLimit,
         downloadAudio: true,
+        newOnly: true,
       });
       state.stats.importRuns += 1;
       state.stats.imported += imported.imported + imported.updated;

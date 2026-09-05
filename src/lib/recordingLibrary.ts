@@ -93,6 +93,35 @@ type RemoteCall = {
 
 const ROOT = path.join(process.cwd(), "data", "recordings");
 const INDEX_PATH = path.join(ROOT, "index.json");
+const SYNC_CURSOR_PATH = path.join(ROOT, "sync-cursor.json");
+
+type SyncCursor = {
+  criteriaOffset: number;
+  updatedAt: string;
+};
+
+async function readSyncCursor(): Promise<SyncCursor> {
+  try {
+    const raw = await fs.readFile(SYNC_CURSOR_PATH, "utf8");
+    const parsed = JSON.parse(raw) as Partial<SyncCursor>;
+    return {
+      criteriaOffset: Math.max(0, Number(parsed.criteriaOffset) || 0),
+      updatedAt: parsed.updatedAt || new Date(0).toISOString(),
+    };
+  } catch {
+    return { criteriaOffset: 0, updatedAt: new Date(0).toISOString() };
+  }
+}
+
+async function writeSyncCursor(cursor: SyncCursor) {
+  await ensureDirs();
+  const payload: SyncCursor = {
+    criteriaOffset: Math.max(0, cursor.criteriaOffset || 0),
+    updatedAt: new Date().toISOString(),
+  };
+  await fs.writeFile(SYNC_CURSOR_PATH, JSON.stringify(payload, null, 2), "utf8");
+}
+
 
 function num(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -255,6 +284,8 @@ export async function getLibraryStats() {
 export async function syncRecordingsFromChotKiem(options?: {
   limit?: number;
   downloadAudio?: boolean;
+  /** When true (default), prefer calls not yet in the local library. */
+  newOnly?: boolean;
 }): Promise<{
   imported: number;
   updated: number;
@@ -262,33 +293,90 @@ export async function syncRecordingsFromChotKiem(options?: {
   withAudio: number;
   errors: string[];
   totalRemote: number;
+  nextOffset: number;
+  scannedRemote: number;
 }> {
-  const limit = Math.max(1, Math.min(options?.limit ?? 30, 100));
+  const limit = Math.max(1, Math.min(options?.limit ?? 40, 120));
   const downloadAudio = options?.downloadAudio !== false;
+  const newOnly = options?.newOnly !== false;
   await ensureDirs();
 
-  const report = await ckFetch<{
-    rows?: Array<{ id: string; hasAudio?: boolean; audioUrl?: string | null }>;
-    totalCalls?: number;
-  }>(" /api/calls/criteria-report?limit=80".trim());
+  const index = await readIndex();
+  const byId = new Map(index.items.map((i) => [i.id, i] as const));
+  const known = new Set(byId.keys());
 
-  const ids: string[] = [];
-  for (const row of report.rows || []) {
-    if (row.hasAudio || row.audioUrl) ids.push(row.id);
-    if (ids.length >= limit) break;
+  const syncCursor = await readSyncCursor();
+  let offset = syncCursor.criteriaOffset;
+  let totalRemote = 0;
+  let scannedRemote = 0;
+  const pageSize = 80;
+  const maxPages = 12;
+  const newIds: string[] = [];
+  const oldIds: string[] = [];
+  const seen = new Set<string>();
+  let wrapped = false;
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const report = await ckFetch<{
+      rows?: Array<{ id: string; hasAudio?: boolean; audioUrl?: string | null }>;
+      totalCalls?: number;
+      hasMore?: boolean;
+      nextOffset?: number | null;
+    }>(`/api/calls/criteria-report?limit=${pageSize}&offset=${offset}`);
+
+    totalRemote = Math.max(totalRemote, num(report.totalCalls));
+    const rows = report.rows || [];
+    scannedRemote += rows.length;
+
+    for (const row of rows) {
+      if (!row?.id || seen.has(row.id)) continue;
+      if (!(row.hasAudio || row.audioUrl)) continue;
+      seen.add(row.id);
+      if (known.has(row.id)) oldIds.push(row.id);
+      else newIds.push(row.id);
+    }
+
+    const next =
+      typeof report.nextOffset === "number"
+        ? report.nextOffset
+        : offset + rows.length;
+    const hasMore = Boolean(report.hasMore) && rows.length > 0;
+
+    if (newIds.length >= limit) {
+      offset = next;
+      break;
+    }
+
+    if (!hasMore) {
+      if (!wrapped) {
+        wrapped = true;
+        offset = 0;
+        continue;
+      }
+      offset = 0;
+      break;
+    }
+    offset = next;
   }
-  if (ids.length < Math.min(10, limit)) {
+
+  const ids: string[] = newIds.slice(0, limit);
+  if (!newOnly || ids.length === 0) {
+    for (const id of oldIds) {
+      if (ids.length >= limit) break;
+      if (!ids.includes(id)) ids.push(id);
+    }
+  }
+  if (ids.length === 0) {
     const listed = await ckFetch<{ calls?: Array<{ id: string }> }>(
-      `/api/calls?limit=${limit}`,
+      `/api/calls?limit=${limit}&offset=0`,
     );
     for (const c of listed.calls || []) {
-      if (!ids.includes(c.id)) ids.push(c.id);
+      if (!c?.id || known.has(c.id) || ids.includes(c.id)) continue;
+      ids.push(c.id);
       if (ids.length >= limit) break;
     }
   }
 
-  const index = await readIndex();
-  const byId = new Map(index.items.map((i) => [i.id, i] as const));
   let imported = 0;
   let updated = 0;
   let skipped = 0;
@@ -339,7 +427,18 @@ export async function syncRecordingsFromChotKiem(options?: {
     let audioMime = byId.get(id)?.audioMime ?? call.audioMime ?? null;
     let gotAudio = false;
 
-    if (downloadAudio && (call.audioUrl || call.hasAudio)) {
+    const audioAlreadyOnDisk =
+      Boolean(audioFile) &&
+      (await fs
+        .access(path.join(dir, audioFile!))
+        .then(() => true)
+        .catch(() => false));
+
+    if (
+      downloadAudio &&
+      !audioAlreadyOnDisk &&
+      (call.audioUrl || call.hasAudio)
+    ) {
       const audioUrl = call.audioUrl || `/api/calls/${id}/audio`;
       const ext = (call.fileName || "").toLowerCase().endsWith(".mp3")
         ? "mp3"
@@ -362,6 +461,8 @@ export async function syncRecordingsFromChotKiem(options?: {
           `${id}: audio ${error instanceof Error ? error.message : "fail"}`,
         );
       }
+    } else if (audioAlreadyOnDisk) {
+      gotAudio = true;
     }
 
     if (transcript) {
@@ -424,11 +525,11 @@ export async function syncRecordingsFromChotKiem(options?: {
     };
   }
 
-  let cursor = 0;
+  let queueCursor = 0;
   async function worker() {
-    while (cursor < queue.length) {
-      const id = queue[cursor]!;
-      cursor += 1;
+    while (queueCursor < queue.length) {
+      const id = queue[queueCursor]!;
+      queueCursor += 1;
       try {
         const result = await importOne(id);
         if (result.kind === "skipped") skipped += 1;
@@ -445,6 +546,7 @@ export async function syncRecordingsFromChotKiem(options?: {
 
   index.items = [...byId.values()].sort((a, b) => b.createdAt - a.createdAt);
   await writeIndex(index);
+  await writeSyncCursor({ criteriaOffset: offset, updatedAt: new Date().toISOString() });
 
   return {
     imported,
@@ -452,7 +554,9 @@ export async function syncRecordingsFromChotKiem(options?: {
     skipped,
     withAudio,
     errors: errors.slice(0, 20),
-    totalRemote: num(report.totalCalls),
+    totalRemote,
+    nextOffset: offset,
+    scannedRemote,
   };
 }
 
