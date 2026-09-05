@@ -8,7 +8,7 @@ const LINKS = [
   { href: "/", label: "Tổng quan" },
   { href: "/calls", label: "Cuộc gọi" },
   { href: "/recordings", label: "Thư viện ghi âm" },
-  { href: "/proxy", label: "Proxy" },
+  { href: "/proxy", label: "Tải & Proxy" },
   { href: "/analyze", label: "Phân tích mới" },
   { href: "/playbooks", label: "Kịch bản ngành" },
 ];

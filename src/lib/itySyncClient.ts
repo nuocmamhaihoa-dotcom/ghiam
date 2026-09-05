@@ -156,7 +156,7 @@ export async function startItyProxyHunt(): Promise<Record<string, unknown>> {
   });
 }
 
-/** Process a small pending-download batch (slow — keep tiny, hard-cap wait). */
+/** Process a pending-download batch (raise throughput carefully; hard-cap wait). */
 export async function processItyPendingDownloads(input: {
   callIds: string[];
   autoAnalyze?: boolean;
@@ -170,7 +170,7 @@ export async function processItyPendingDownloads(input: {
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(),
-    input.timeoutMs ?? 25_000,
+    input.timeoutMs ?? 45_000,
   );
   try {
     return await ckFetch<Record<string, unknown>>(
@@ -180,9 +180,9 @@ export async function processItyPendingDownloads(input: {
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
-          callIds: input.callIds.slice(0, 3),
+          callIds: input.callIds.slice(0, 8),
           autoAnalyze: input.autoAnalyze === true,
-          concurrency: input.concurrency ?? 1,
+          concurrency: input.concurrency ?? 3,
         }),
       },
     );

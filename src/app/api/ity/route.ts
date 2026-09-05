@@ -7,6 +7,10 @@ import {
   runItySyncRound,
   startItyProxyHunt,
 } from "@/lib/itySyncClient";
+import {
+  noteDownloadEvent,
+  sampleDownloadProgress,
+} from "@/lib/ityDownloadProgress";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,10 +26,11 @@ function maskPhone(phone?: string): string {
 /** ITY status: accounts + pending recording downloads. */
 export async function GET() {
   try {
-    const [settings, download, pending] = await Promise.all([
+    const [settings, download, pending, progress] = await Promise.all([
       fetchItySettingsSummary(),
       fetchItyDownloadStatus(),
       fetchItyPendingDownloads(5),
+      sampleDownloadProgress().catch(() => null),
     ]);
 
     return NextResponse.json({
@@ -41,6 +46,7 @@ export async function GET() {
           createdAt: i.createdAt,
         })),
       },
+      progress,
       fetchedAt: new Date().toISOString(),
     });
   } catch (error) {
@@ -56,6 +62,7 @@ type ItyActionBody = {
   maxPages?: number;
   pageLimit?: number;
   batchSize?: number;
+  concurrency?: number;
   autoAnalyze?: boolean;
   callIds?: string[];
 };
@@ -97,15 +104,22 @@ export async function POST(req: NextRequest) {
         Math.min(body.batchSize ?? 3, 5),
       ).catch(() => ({ count: download?.pendingCount ?? 0, items: [] }));
 
+      const pendingCount = download?.pendingCount ?? pending.count;
+      const progress = await noteDownloadEvent(
+        "hunting",
+        `Đã kích proxy-hunt/drain · pending ~${pendingCount}`,
+      ).catch(() => null);
+
       return NextResponse.json({
         ok: true,
         action,
         hunt,
         processed: null,
         processError: null,
-        pendingCount: download?.pendingCount ?? pending.count,
+        pendingCount,
         serverCanDownload: download?.serverCanDownload ?? null,
-        hint: "Proxy-hunt/drain đã kích nền trên ChốtKiểm. Dùng process-pending cho lô nhỏ nếu cần.",
+        progress,
+        hint: "Proxy-hunt/drain đã kích nền trên ChốtKiểm. Dùng process-pending / bảng tốc độ để theo dõi.",
       });
     }
 
@@ -115,7 +129,7 @@ export async function POST(req: NextRequest) {
         : [];
 
       if (!callIds.length) {
-        const pending = await fetchItyPendingDownloads(body.batchSize ?? 5);
+        const pending = await fetchItyPendingDownloads(body.batchSize ?? 8);
         callIds = pending.items.map((i) => i.callId);
       }
 
@@ -131,18 +145,26 @@ export async function POST(req: NextRequest) {
       }
 
       try {
+        const concurrency = Math.max(1, Math.min(Number(body.concurrency ?? 3), 4));
         const processed = await processItyPendingDownloads({
-          callIds,
+          callIds: callIds.slice(0, 8),
           autoAnalyze: body.autoAnalyze === true,
-          concurrency: 1,
+          concurrency,
+          timeoutMs: 45_000,
         });
         const download = await fetchItyDownloadStatus().catch(() => null);
+        const progress = await noteDownloadEvent(
+          "downloading",
+          `Process-pending x${callIds.slice(0, 8).length} (concurrency=${concurrency}) · còn ~${download?.pendingCount ?? "?"}`,
+        ).catch(() => null);
         return NextResponse.json({
           ok: true,
           action,
           processed,
           pendingCount: download?.pendingCount ?? null,
-          batchSize: callIds.length,
+          batchSize: Math.min(callIds.length, 8),
+          concurrency,
+          progress,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";

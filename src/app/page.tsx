@@ -196,39 +196,63 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "start-downloads",
-          batchSize: 3,
+          batchSize: 8,
           autoAnalyze: false,
         }),
       });
       const dlData = await dlRes.json();
       if (!dlData.ok) throw new Error(dlData.error || "ITY start-downloads failed");
 
-      // One tiny kick-sample only; mass audio drain continues on ChốtKiểm (proxy-hunt/drain).
+      // Faster kick: several process-pending rounds (drain/proxy-hunt still background).
       let pendingCount = Number(dlData.pendingCount ?? 0);
       setItyProgress((p) => ({
         ...p,
         pendingCount,
-        message: `Đã kích proxy-hunt/drain nền · còn ~${pendingCount} pending — thử 1 lô process-pending nhỏ…`,
+        message: `Đã kích proxy-hunt/drain nền · còn ~${pendingCount} pending — tăng tốc vài lô process-pending…`,
       }));
       try {
-        const batch = await fetch("/api/ity", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "process-pending",
-            batchSize: 1,
-            autoAnalyze: false,
-          }),
-        });
-        const batchData = await batch.json();
-        if (batchData.pendingCount != null) pendingCount = Number(batchData.pendingCount);
-        setItyProgress((p) => ({
-          ...p,
-          pendingCount,
-          message: batchData.timedOut
-            ? `Process-pending timeout — còn ~${pendingCount} pending (drain/proxy-hunt nền vẫn chạy)`
-            : `Đã kích tải mẫu · còn ~${pendingCount} pending (phần còn lại tải nền trên ChốtKiểm)`,
-        }));
+        for (let round = 1; round <= 4; round += 1) {
+          if (pendingCount <= 0) break;
+          const batch = await fetch("/api/ity", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "process-pending",
+              batchSize: 8,
+              concurrency: 3,
+              autoAnalyze: false,
+            }),
+          });
+          const batchData = await batch.json();
+          if (batchData.pendingCount != null) {
+            pendingCount = Number(batchData.pendingCount);
+          }
+          setItyProgress((p) => ({
+            ...p,
+            pendingCount,
+            message: batchData.timedOut
+              ? `Lô ${round}: timeout — còn ~${pendingCount} pending (drain/proxy-hunt nền vẫn chạy)`
+              : `Lô ${round}/4: concurrency=3 · còn ~${pendingCount} pending`,
+          }));
+          if (batchData.timedOut) break;
+        }
+        try {
+          const saveRes = await fetch("/api/ity/progress", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "import-library", importLimit: 20 }),
+          });
+          const saveData = await saveRes.json();
+          if (saveData.ok) {
+            const r = saveData.result || {};
+            setItyProgress((p) => ({
+              ...p,
+              message: `${p.message} · Đã lưu thư viện +${r.imported ?? 0}/${r.withAudio ?? 0} audio`,
+            }));
+          }
+        } catch {
+          // Library import is best-effort after download kick.
+        }
       } catch {
         setItyProgress((p) => ({
           ...p,
@@ -305,6 +329,12 @@ export default function HomePage() {
             >
               Reset data demo
             </button>
+            <Link
+              href="/proxy"
+              className="rounded-full border border-[var(--line)] bg-[var(--panel)] px-5 py-2.5 text-sm"
+            >
+              Bảng tốc độ tải
+            </Link>
           </div>
           {syncMsg ? <p className="mt-3 text-sm text-[var(--muted)]">{syncMsg}</p> : null}
           {ityProgress.phase !== "idle" ? (
@@ -347,6 +377,11 @@ export default function HomePage() {
                   Tài khoản ITY: {ityStatus.settings.enabledAccounts.join(", ")}
                 </p>
               ) : null}
+              <p className="mt-2 text-xs">
+                <Link href="/proxy" className="text-[var(--accent)] underline-offset-2 hover:underline">
+                  Xem tốc độ tải / ETA / lưu thư viện →
+                </Link>
+              </p>
             </div>
           ) : ityStatus?.download ? (
             <p className="mt-3 text-xs text-[var(--muted)]">
@@ -354,6 +389,10 @@ export default function HomePage() {
               {ityStatus.settings?.enabledAccounts?.length
                 ? ` · TK ${ityStatus.settings.enabledAccounts.join(", ")}`
                 : ""}
+              {" · "}
+              <Link href="/proxy" className="text-[var(--accent)] underline-offset-2 hover:underline">
+                bảng tốc độ
+              </Link>
             </p>
           ) : null}
         </div>

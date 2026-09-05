@@ -270,134 +270,153 @@ export async function syncRecordingsFromChotKiem(options?: {
   let skipped = 0;
   let withAudio = 0;
   const errors: string[] = [];
+  const queue = ids.slice(0, limit);
+  const workers = Math.max(1, Math.min(3, queue.length));
 
-  for (const id of ids.slice(0, limit)) {
-    try {
-      const call = await ckFetch<RemoteCall>(`/api/calls/${id}`);
-      const transcript = (call.transcript || "").trim();
-      if (!transcript && !call.hasAudio && !call.audioUrl) {
-        skipped += 1;
-        continue;
-      }
+  async function importOne(id: string) {
+    const call = await ckFetch<RemoteCall>(`/api/calls/${id}`);
+    const transcript = (call.transcript || "").trim();
+    if (!transcript && !call.hasAudio && !call.audioUrl) {
+      return { kind: "skipped" as const };
+    }
 
-      const dir = recordDir(id);
-      await fs.mkdir(dir, { recursive: true });
+    const dir = recordDir(id);
+    await fs.mkdir(dir, { recursive: true });
 
-      const durationSec = estimateDurationSec(
-        transcript || call.callSummary || "",
-      );
-      const outcome = inferOutcome(call);
-      const analysis = analyzeCallDeep({
-        transcript: transcript || call.callSummary || "",
-        durationSec,
-        outcome,
-        callSummary: call.callSummary,
+    const durationSec = estimateDurationSec(
+      transcript || call.callSummary || "",
+    );
+    const outcome = inferOutcome(call);
+    const analysis = analyzeCallDeep({
+      transcript: transcript || call.callSummary || "",
+      durationSec,
+      outcome,
+      callSummary: call.callSummary,
+      grade: call.grade,
+      overallScore: call.overallScore ?? call.weightedScore,
+      isComplete: call.isComplete,
+      scorecard: {
         grade: call.grade,
         overallScore: call.overallScore ?? call.weightedScore,
         isComplete: call.isComplete,
-        scorecard: {
-          grade: call.grade,
-          overallScore: call.overallScore ?? call.weightedScore,
-          isComplete: call.isComplete,
-          criteria: (call.scorecard?.criteria || []).map((c) => ({
-            key: c.key,
-            label: c.label,
-            passed: Boolean(c.passed),
-            required: c.required,
-            value: c.value ?? null,
-            evidence: c.evidence ?? null,
-          })),
-        },
-      });
+        criteria: (call.scorecard?.criteria || []).map((c) => ({
+          key: c.key,
+          label: c.label,
+          passed: Boolean(c.passed),
+          required: c.required,
+          value: c.value ?? null,
+          evidence: c.evidence ?? null,
+        })),
+      },
+    });
 
-      let audioFile = byId.get(id)?.audioFile ?? null;
-      let audioBytes = byId.get(id)?.audioBytes ?? 0;
-      let audioMime = byId.get(id)?.audioMime ?? call.audioMime ?? null;
+    let audioFile = byId.get(id)?.audioFile ?? null;
+    let audioBytes = byId.get(id)?.audioBytes ?? 0;
+    let audioMime = byId.get(id)?.audioMime ?? call.audioMime ?? null;
+    let gotAudio = false;
 
-      if (downloadAudio && (call.audioUrl || call.hasAudio)) {
-        const audioUrl = call.audioUrl || `/api/calls/${id}/audio`;
-        const ext = (call.fileName || "").toLowerCase().endsWith(".mp3")
-          ? "mp3"
-          : "wav";
-        const destName = `audio.${ext}`;
-        try {
-          const dl = await downloadAudioToDisk(
-            audioUrl,
-            path.join(dir, destName),
-          );
-          audioFile = destName;
-          audioBytes = dl.bytes;
-          audioMime =
-            dl.mime ||
-            audioMime ||
-            (ext === "mp3" ? "audio/mpeg" : "audio/wav");
-          withAudio += 1;
-        } catch (error) {
-          errors.push(
-            `${id}: audio ${error instanceof Error ? error.message : "fail"}`,
-          );
-        }
-      }
-
-      if (transcript) {
-        await fs.writeFile(path.join(dir, "transcript.txt"), transcript, "utf8");
-      }
-      await fs.writeFile(
-        path.join(dir, "analysis.json"),
-        JSON.stringify(analysis, null, 2),
-        "utf8",
-      );
-      if (call.scorecard) {
-        await fs.writeFile(
-          path.join(dir, "scorecard.json"),
-          JSON.stringify(call.scorecard, null, 2),
-          "utf8",
+    if (downloadAudio && (call.audioUrl || call.hasAudio)) {
+      const audioUrl = call.audioUrl || `/api/calls/${id}/audio`;
+      const ext = (call.fileName || "").toLowerCase().endsWith(".mp3")
+        ? "mp3"
+        : "wav";
+      const destName = `audio.${ext}`;
+      try {
+        const dl = await downloadAudioToDisk(
+          audioUrl,
+          path.join(dir, destName),
+        );
+        audioFile = destName;
+        audioBytes = dl.bytes;
+        audioMime =
+          dl.mime ||
+          audioMime ||
+          (ext === "mp3" ? "audio/mpeg" : "audio/wav");
+        gotAudio = true;
+      } catch (error) {
+        errors.push(
+          `${id}: audio ${error instanceof Error ? error.message : "fail"}`,
         );
       }
+    }
 
-      const now = new Date().toISOString();
-      const existing = byId.get(id);
-      const meta: RecordingMeta = {
-        id,
-        externalId: call.externalId || id,
-        title:
-          call.callSummary?.split("·")[0]?.trim() ||
-          call.fileName ||
-          `Cuộc gọi ${maskPhone(call.phoneNumber)}`,
-        agentName: call.employeeName || "ITY",
-        phoneMasked: maskPhone(call.phoneNumber),
-        fileName: call.fileName || null,
-        createdAt: num(call.createdAt, Date.now()),
-        importedAt: existing?.importedAt || now,
-        updatedAt: now,
-        hasAudio: Boolean(audioFile),
-        audioFile,
-        audioBytes,
-        audioMime,
-        hasTranscript: Boolean(transcript),
-        transcriptChars: transcript.length,
-        durationSec,
-        grade: call.grade || null,
-        overallScore: call.overallScore ?? call.weightedScore ?? null,
-        isComplete: call.isComplete ?? null,
-        callSummary: call.callSummary || null,
-        outcome,
-        readinessScore: analysis.readinessScore,
-        sourceAudioUrl: call.audioUrl || null,
-      };
+    if (transcript) {
+      await fs.writeFile(path.join(dir, "transcript.txt"), transcript, "utf8");
+    }
+    await fs.writeFile(
+      path.join(dir, "analysis.json"),
+      JSON.stringify(analysis, null, 2),
+      "utf8",
+    );
+    if (call.scorecard) {
       await fs.writeFile(
-        path.join(dir, "meta.json"),
-        JSON.stringify(meta, null, 2),
+        path.join(dir, "scorecard.json"),
+        JSON.stringify(call.scorecard, null, 2),
         "utf8",
       );
+    }
 
-      if (existing) updated += 1;
-      else imported += 1;
-      byId.set(id, meta);
-    } catch (error) {
-      errors.push(`${id}: ${error instanceof Error ? error.message : "error"}`);
+    const now = new Date().toISOString();
+    const existing = byId.get(id);
+    const meta: RecordingMeta = {
+      id,
+      externalId: call.externalId || id,
+      title:
+        call.callSummary?.split("·")[0]?.trim() ||
+        call.fileName ||
+        `Cuộc gọi ${maskPhone(call.phoneNumber)}`,
+      agentName: call.employeeName || "ITY",
+      phoneMasked: maskPhone(call.phoneNumber),
+      fileName: call.fileName || null,
+      createdAt: num(call.createdAt, Date.now()),
+      importedAt: existing?.importedAt || now,
+      updatedAt: now,
+      hasAudio: Boolean(audioFile),
+      audioFile,
+      audioBytes,
+      audioMime,
+      hasTranscript: Boolean(transcript),
+      transcriptChars: transcript.length,
+      durationSec,
+      grade: call.grade || null,
+      overallScore: call.overallScore ?? call.weightedScore ?? null,
+      isComplete: call.isComplete ?? null,
+      callSummary: call.callSummary || null,
+      outcome,
+      readinessScore: analysis.readinessScore,
+      sourceAudioUrl: call.audioUrl || null,
+    };
+    await fs.writeFile(
+      path.join(dir, "meta.json"),
+      JSON.stringify(meta, null, 2),
+      "utf8",
+    );
+
+    byId.set(id, meta);
+    return {
+      kind: existing ? ("updated" as const) : ("imported" as const),
+      gotAudio,
+    };
+  }
+
+  let cursor = 0;
+  async function worker() {
+    while (cursor < queue.length) {
+      const id = queue[cursor]!;
+      cursor += 1;
+      try {
+        const result = await importOne(id);
+        if (result.kind === "skipped") skipped += 1;
+        else if (result.kind === "updated") updated += 1;
+        else imported += 1;
+        if (result.kind !== "skipped" && result.gotAudio) withAudio += 1;
+      } catch (error) {
+        errors.push(`${id}: ${error instanceof Error ? error.message : "error"}`);
+      }
     }
   }
+
+  await Promise.all(Array.from({ length: workers }, () => worker()));
 
   index.items = [...byId.values()].sort((a, b) => b.createdAt - a.createdAt);
   await writeIndex(index);

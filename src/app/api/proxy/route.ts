@@ -4,6 +4,7 @@ import {
   fetchProxyPoolStatus,
   getProxyPoolStore,
 } from "@/lib/proxyPool";
+import { sampleDownloadProgress } from "@/lib/ityDownloadProgress";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,11 +18,13 @@ export async function GET(req: NextRequest) {
       ? await ensureProxyPool({ minLiving: Number.isFinite(minLiving) ? minLiving : 20 })
       : await fetchProxyPoolStatus();
     const store = await getProxyPoolStore();
+    const progress = await sampleDownloadProgress().catch(() => null);
 
     return NextResponse.json({
       ok: true,
       snapshot,
       history: store.history.slice(-60),
+      progress,
       livingCount: snapshot.livingCount,
       poolSize: snapshot.poolSize,
       pendingDownloads: snapshot.pendingDownloads,
