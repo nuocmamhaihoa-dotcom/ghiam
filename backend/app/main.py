@@ -23,6 +23,7 @@ from app.interfaces.api.routers import (
     dashboard,
     datasets,
     health,
+    pragmatics,
     qa,
     revenue_leak,
     rules,
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
             {"name": "coaching", "description": "Coaching plans"},
             {"name": "dashboard", "description": "Ops dashboard aggregates"},
             {"name": "datasets", "description": "Golden calls and calibration datasets"},
+            {"name": "pragmatics", "description": "Vietnamese pragmatics / soft-language AI"},
         ],
     )
 
@@ -93,6 +95,7 @@ def create_app() -> FastAPI:
     application.include_router(qa.router, prefix=settings.api_prefix)
     application.include_router(analytics.router, prefix=settings.api_prefix)
     application.include_router(admin.router, prefix=settings.api_prefix)
+    application.include_router(pragmatics.router, prefix=settings.api_prefix)
 
     return application
 
