@@ -1492,4 +1492,67 @@ export const api = {
     );
   },
 
+  async audioIntelligenceDashboard() {
+    return withDemoFallback(
+      () => request<Record<string, unknown>>("/v1/audio-intelligence/dashboard"),
+      () => ({
+        status: "ok",
+        ok: true,
+        widgets: {
+          uploads: 12,
+          repairs: 4,
+          transcripts: 10,
+          blocked_analysis: 2,
+          completed_pipelines: 8,
+          batch_jobs: 1,
+          live_sessions: 3,
+        },
+        quality_gate_enforced: true,
+      })
+    );
+  },
+
+  async audioIntelligenceProcess(body: Record<string, unknown>) {
+    return withDemoFallback(
+      () =>
+        request<Record<string, unknown>>("/v1/audio-intelligence/process", {
+          method: "POST",
+          body: JSON.stringify(body),
+        }),
+      () => {
+        const hints = (body.quality_hints as Record<string, unknown> | undefined) || {};
+        const low = Number(hints.quality_score ?? 80) < 55;
+        return {
+          status: "ok",
+          ok: !low,
+          blocked: low,
+          block_reason: low ? "audio_quality_below_threshold" : null,
+          scoring_allowed: !low,
+          analysis_allowed: !low,
+          buying_signals: low
+            ? []
+            : [{ kind: "payment", text: "thanh toán sao", confidence: 0.9 }],
+          objections: [],
+          quality_gate: { passed: !low },
+        };
+      }
+    );
+  },
+
+  async audioIntelligenceQuality() {
+    return withDemoFallback(
+      () => request<Record<string, unknown>>("/v1/audio-intelligence/quality/snapshot"),
+      () => ({
+        status: "ok",
+        ok: true,
+        checks: {
+          pipeline_ok: true,
+          blocks_low_quality: true,
+          upload_engine: true,
+          repair_engine: true,
+        },
+      })
+    );
+  },
+
 };

@@ -42,6 +42,7 @@ from app.interfaces.api.routers import (
     cltv,
     war_room,
     autonomous,
+    audio_intelligence,
     simulator,
 )
 
@@ -126,6 +127,7 @@ def create_app() -> FastAPI:
     application.include_router(cltv.router, prefix=settings.api_prefix)
     application.include_router(war_room.router, prefix=settings.api_prefix)
     application.include_router(autonomous.router, prefix=settings.api_prefix)
+    application.include_router(audio_intelligence.router, prefix=settings.api_prefix)
 
     return application
 

@@ -1929,6 +1929,140 @@ def gate_autonomous() -> GateResult:
     return g
 
 
+def gate_audio_intelligence() -> GateResult:
+    """Audio Intelligence Engine — quality gate before scoring."""
+    g = GateResult("Audio Intelligence Engine")
+    required = [
+        BACKEND / "audio_engine" / "engine.py",
+        BACKEND / "audio_engine" / "intelligence.py",
+        BACKEND / "audio_engine" / "store.py",
+        BACKEND / "audio_engine" / "types.py",
+        BACKEND / "audio_pipeline" / "pipeline.py",
+        BACKEND / "audio_repair" / "repair.py",
+        BACKEND / "speaker" / "diarization.py",
+        BACKEND / "speaker" / "separation.py",
+        BACKEND / "transcript" / "engine.py",
+        BACKEND / "transcript" / "normalize.py",
+        BACKEND / "app" / "application" / "services" / "audio_intelligence.py",
+        BACKEND / "app" / "interfaces" / "api" / "routers" / "audio_intelligence.py",
+        ROOT / "docs" / "Audio_Intelligence_Engine.md",
+        ROOT / "models" / "audio_intelligence" / "schema.json",
+        ROOT / "enterprise-web" / "src" / "app" / "audio-intelligence" / "page.tsx",
+        ROOT / "frontend" / "upload" / "UploadQueue.ts",
+        ROOT / "tests" / "audio" / "test_audio_intelligence.py",
+        ROOT / "datasets" / "audio_engine",
+    ]
+    for path_item in required:
+        if not path_item.exists():
+            g.fail(f"missing {path_item.relative_to(ROOT)}")
+
+    shell = ROOT / "enterprise-web" / "src" / "components" / "AppShell.tsx"
+    if shell.exists():
+        txt = shell.read_text(encoding="utf-8")
+        if "/audio-intelligence" not in txt:
+            g.fail("AppShell missing /audio-intelligence nav")
+
+    api = ROOT / "enterprise-web" / "src" / "lib" / "api.ts"
+    if api.exists():
+        api_txt = api.read_text(encoding="utf-8")
+        for key in (
+            "audioIntelligenceDashboard",
+            "audioIntelligenceProcess",
+            "audioIntelligenceQuality",
+        ):
+            if key not in api_txt:
+                g.fail(f"api.ts missing {key}")
+
+    main_py = BACKEND / "app" / "main.py"
+    if main_py.exists() and "audio_intelligence" not in main_py.read_text(encoding="utf-8"):
+        g.fail("main.py missing audio_intelligence router")
+
+    scoring = BACKEND / "app" / "application" / "services" / "scoring.py"
+    if scoring.exists():
+        s_txt = scoring.read_text(encoding="utf-8")
+        if "get_audio_engine" not in s_txt and "audio_engine" not in s_txt:
+            g.fail("scoring.py missing Audio Intelligence quality gate hook")
+
+    try:
+        import tempfile
+        from pathlib import Path as P
+
+        from audio_engine.engine import AudioIntelligenceEngine
+        from audio_engine.store import AudioStore
+        from audio_engine.types import PIPELINE_STAGES, QUALITY_THRESHOLDS
+
+        td = P(tempfile.mkdtemp())
+        eng = AudioIntelligenceEngine(store=AudioStore(root=td))
+        if len(PIPELINE_STAGES) < 10:
+            g.fail("pipeline stages incomplete")
+        good = eng.process(
+            {
+                "file_meta": {
+                    "file_id": "gate_ok",
+                    "extension": ".wav",
+                    "integrity_ok": True,
+                    "duration_sec": 40,
+                    "sample_rate": 16000,
+                    "channels": 1,
+                },
+                "transcript_turns": [
+                    {
+                        "speaker": "agent",
+                        "start_sec": 0,
+                        "end_sec": 2,
+                        "text": "Em chào anh",
+                        "confidence": 0.9,
+                    },
+                    {
+                        "speaker": "customer",
+                        "start_sec": 2.1,
+                        "end_sec": 4,
+                        "text": "Thanh toán sao em?",
+                        "confidence": 0.88,
+                    },
+                ],
+            }
+        )
+        if not good.get("scoring_allowed"):
+            g.fail("good audio must allow scoring")
+        bad = eng.process(
+            {
+                "file_meta": {
+                    "file_id": "gate_bad",
+                    "extension": ".wav",
+                    "integrity_ok": True,
+                    "duration_sec": 20,
+                    "sample_rate": 16000,
+                    "channels": 1,
+                },
+                "quality_hints": {"quality_score": 20, "noise": 0.9},
+                "transcript_turns": [
+                    {
+                        "speaker": "agent",
+                        "start_sec": 0,
+                        "end_sec": 1,
+                        "text": "alo",
+                        "confidence": 0.8,
+                    }
+                ],
+            }
+        )
+        if not bad.get("blocked") or bad.get("scoring_allowed"):
+            g.fail("low quality audio must block scoring")
+        snap = eng.quality_snapshot()
+        if not snap.get("ok") or not snap.get("checks", {}).get("blocks_low_quality"):
+            g.fail("quality snapshot must enforce hard gate")
+        dash = eng.dashboard()
+        if not dash.get("quality_gate_enforced"):
+            g.fail("dashboard must enforce quality gate")
+        g.meta["pipeline_stages"] = len(PIPELINE_STAGES)
+        g.meta["audio_quality_min"] = QUALITY_THRESHOLDS.get("audio_quality_min")
+        g.meta["blocked_reason"] = bad.get("block_reason")
+    except Exception as exc:  # noqa: BLE001
+        g.fail(f"audio intelligence smoke failed: {exc}")
+    return g
+
+
 SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
     1: [gate_architecture, gate_docs, gate_database, gate_docker, gate_security, gate_api],
     2: [lambda: gate_rule_consistency(2), gate_evidence, gate_json],
@@ -2022,6 +2156,13 @@ SPRINT_GATES: dict[int, list[Callable[[], GateResult]]] = {
     ],
     16: [
         gate_autonomous,
+        gate_api,
+        gate_tests,
+        gate_docs,
+        gate_final,
+    ],
+    17: [
+        gate_audio_intelligence,
         gate_api,
         gate_tests,
         gate_docs,

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "audio_intelligence.schema.json",
+  "title": "AudioIntelligenceResult",
+  "type": "object",
+  "required": ["ok", "analysis_allowed", "scoring_allowed"],
+  "properties": {
+    "ok": {"type": "boolean"},
+    "blocked": {"type": "boolean"},
+    "block_reason": {"type": ["string", "null"]},
+    "analysis_allowed": {"type": "boolean"},
+    "scoring_allowed": {"type": "boolean"},
+    "job_id": {"type": "string"},
+    "quality": {"type": "object"},
+    "transcript": {"type": "object"},
+    "diarization": {"type": "object"},
+    "evidence": {"type": "array"},
+    "emotion_timeline": {"type": "object"},
+    "buying_signals": {"type": "array"},
+    "objections": {"type": "array"},
+    "quality_gate": {"type": "object"}
+  }
+}

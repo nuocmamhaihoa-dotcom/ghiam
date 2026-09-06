@@ -29,6 +29,7 @@ from app.interfaces.api.routers import (
     cltv,
     war_room,
     autonomous,
+    audio_intelligence,
     simulator,
 )
 
@@ -61,5 +62,6 @@ __all__ = [
     "cltv",
     "war_room",
     "autonomous",
+    "audio_intelligence",
     "simulator",
 ]

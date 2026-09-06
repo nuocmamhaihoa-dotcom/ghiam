@@ -1,0 +1,55 @@
+{
+  "sprint": 17,
+  "checked_at": "2026-09-06T00:31:28.893053+00:00",
+  "all_ok": true,
+  "gates": [
+    {
+      "gate": "Audio Intelligence Engine",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "pipeline_stages": 10,
+        "audio_quality_min": 55.0,
+        "blocked_reason": "audio_quality_below_threshold"
+      }
+    },
+    {
+      "gate": "8_API_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "route_count": 141,
+        "openapi_paths": 136
+      }
+    },
+    {
+      "gate": "18_Test_Coverage_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "pytest_returncode": 0,
+        "pytest_tail": "......................                                                   [100%]\n22 passed in 0.09s\n"
+      }
+    },
+    {
+      "gate": "19_Documentation_Review",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {}
+    },
+    {
+      "gate": "20_Final_Self_Review",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {}
+    }
+  ],
+  "passed": 5,
+  "failed": 0,
+  "total": 5
+}

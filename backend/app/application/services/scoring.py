@@ -86,6 +86,62 @@ class ScoringService:
 
         # Constitution §3 — run immutable pre-scoring pipeline first.
         transcript_turns = list(getattr(transcript, "turns", None) or [])
+
+        # Audio Intelligence Engine quality gate — never score below threshold.
+        try:
+            from audio_engine import get_audio_engine
+
+            aie_turns = []
+            for t in transcript_turns:
+                if isinstance(t, dict):
+                    aie_turns.append(t)
+                else:
+                    aie_turns.append(
+                        {
+                            "speaker": getattr(t, "speaker", "unknown"),
+                            "start_sec": float(getattr(t, "start_sec", 0) or 0),
+                            "end_sec": float(getattr(t, "end_sec", 0) or 0),
+                            "text": getattr(t, "text", "") or getattr(t, "content", ""),
+                            "confidence": float(getattr(t, "confidence", 0.75) or 0.75),
+                        }
+                    )
+            aie = get_audio_engine().process(
+                {
+                    "file_meta": {
+                        "file_id": str(call_id),
+                        "extension": ".wav",
+                        "integrity_ok": True,
+                        "duration_sec": float(getattr(call, "duration_sec", None) or 60),
+                        "sample_rate": 16000,
+                        "channels": 1,
+                    },
+                    "transcript_turns": aie_turns,
+                    "quality_hints": {
+                        "quality_score": float(
+                            getattr(call, "audio_quality_score", None) or 78
+                        )
+                    },
+                }
+            )
+            if not aie.get("scoring_allowed"):
+                response = insufficient_evidence_response(
+                    explanation=(
+                        "Audio Intelligence quality gate blocked scoring: "
+                        f"{aie.get('block_reason') or aie.get('message') or 'quality below threshold'}."
+                    )
+                )
+                response.pipeline = {
+                    "audio_intelligence": {
+                        "blocked": True,
+                        "block_reason": aie.get("block_reason"),
+                        "quality": aie.get("quality"),
+                    }
+                }
+                await self._calls.update_status(call_id, CallStatus.FAILED.value)
+                return response
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("audio_intelligence_gate_skipped", error=str(exc))
+
         existing_evidence_payload = [
             {
                 "quote": e.quote,
