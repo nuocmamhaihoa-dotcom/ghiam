@@ -4,7 +4,6 @@ import { ensureProxyPool } from "@/lib/proxyPool";
 import {
   fetchItyDownloadStatus,
   fetchItyPendingDownloads,
-  processItyPendingDownloads,
   runItySyncRound,
   startItyProxyHunt,
 } from "@/lib/itySyncClient";
@@ -18,6 +17,7 @@ import {
   reanalyzeRecordings,
   syncRecordingsFromChotKiem,
 } from "@/lib/recordingLibrary";
+import { downloadThenAnalyzeCalls } from "@/lib/ityImmediateAnalyze";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STATE_PATH = path.join(DATA_DIR, "ity-auto-pipeline.json");
@@ -235,6 +235,8 @@ export async function runAutoPipelineTick(force = false): Promise<{
     result.proxyHunt = hunt;
 
     let processed = 0;
+    let analyzedImmediate = 0;
+    let importedImmediate = 0;
     const roundResults: Array<Record<string, unknown>> = [];
     for (let round = 0; round < state.config.processRounds; round += 1) {
       const pending = await fetchItyPendingDownloads(
@@ -244,13 +246,14 @@ export async function runAutoPipelineTick(force = false): Promise<{
       if (!callIds.length) break;
 
       try {
-        const processedPayload = await processItyPendingDownloads({
+        // Download then IMMEDIATELY import + deep-analyze locally.
+        const immediate = await downloadThenAnalyzeCalls({
           callIds,
           concurrency: 3,
           timeoutMs: 45_000,
-          autoAnalyze: false,
+          autoAnalyze: true,
         });
-        const data = asRecord(processedPayload);
+        const data = asRecord(immediate.download);
         const n = pickNumber(
           data.processed,
           data.completed,
@@ -258,7 +261,23 @@ export async function runAutoPipelineTick(force = false): Promise<{
           callIds.length,
         );
         processed += n;
-        roundResults.push({ round: round + 1, ok: true, processed: n });
+        analyzedImmediate += immediate.analyze.analyzed;
+        importedImmediate +=
+          immediate.analyze.imported + immediate.analyze.updated;
+        roundResults.push({
+          round: round + 1,
+          ok: !immediate.downloadError,
+          processed: n,
+          analyzed: immediate.analyze.analyzed,
+          imported:
+            immediate.analyze.imported + immediate.analyze.updated,
+          timedOut: immediate.timedOut,
+          error: immediate.downloadError,
+        });
+        // Hard failure (non-timeout): stop boosting this tick.
+        if (immediate.downloadError && !immediate.timedOut) break;
+        // Timeout: drain continues in background; keep analyzing what we can.
+        if (immediate.timedOut) break;
       } catch (error) {
         roundResults.push({
           round: round + 1,
@@ -266,7 +285,6 @@ export async function runAutoPipelineTick(force = false): Promise<{
           error: error instanceof Error ? error.message : "process failed",
           batch: callIds.length,
         });
-        // Timeouts are expected — ChốtKiểm drain keeps running in background.
         break;
       }
     }
@@ -277,7 +295,18 @@ export async function runAutoPipelineTick(force = false): Promise<{
       "auto-boost",
       `Auto tick: xử lý ${processed} file qua ${roundResults.length} lô`,
     ).catch(() => null);
-    result.process = { processed, rounds: roundResults };
+    result.process = {
+      processed,
+      analyzed: analyzedImmediate,
+      imported: importedImmediate,
+      rounds: roundResults,
+    };
+    if (analyzedImmediate > 0 || importedImmediate > 0) {
+      await noteDownloadEvent(
+        "auto-analyze",
+        `Phân tích ngay sau tải: +${importedImmediate} lưu kho, ${analyzedImmediate} phân tích sâu`,
+      ).catch(() => null);
+    }
 
     const dueSync =
       state.tickCount === 0 || state.tickCount % state.config.syncEveryTicks === 0;
@@ -313,10 +342,11 @@ export async function runAutoPipelineTick(force = false): Promise<{
       let withAudioSum = 0;
       let lastImport: Record<string, unknown> | null = null;
       for (let pass = 0; pass < passes; pass += 1) {
+        // After downloads this tick, first pass refreshes existing shells (STT may have arrived).
         const imported = await syncRecordingsFromChotKiem({
           limit: state.config.importLimit,
           downloadAudio: true,
-          newOnly: true,
+          newOnly: !(processed > 0 && pass === 0),
         });
         importedSum += imported.imported;
         updatedSum += imported.updated;

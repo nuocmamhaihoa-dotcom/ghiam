@@ -176,7 +176,7 @@ export default function HomePage() {
             startPage,
             maxPages: 1,
             pageLimit: 100,
-            autoAnalyze: false,
+            autoAnalyze: true,
           }),
         });
         const data = await res.json();
@@ -223,7 +223,7 @@ export default function HomePage() {
         body: JSON.stringify({
           action: "start-downloads",
           batchSize: 8,
-          autoAnalyze: false,
+          autoAnalyze: true,
         }),
       });
       const dlData = await dlRes.json();
@@ -246,7 +246,7 @@ export default function HomePage() {
               action: "process-pending",
               batchSize: 8,
               concurrency: 3,
-              autoAnalyze: false,
+              autoAnalyze: true,
             }),
           });
           const batchData = await batch.json();
@@ -258,7 +258,7 @@ export default function HomePage() {
             pendingCount,
             message: batchData.timedOut
               ? `Lô ${round}: timeout — còn ~${pendingCount} pending (drain/proxy-hunt nền vẫn chạy)`
-              : `Lô ${round}/4: concurrency=3 · còn ~${pendingCount} pending`,
+              : `Lô ${round}/4: tải+phân tích · sâu ${batchData.analyze?.analyzed ?? 0} · còn ~${pendingCount}`,
           }));
           if (batchData.timedOut) break;
         }
@@ -266,14 +266,14 @@ export default function HomePage() {
           const saveRes = await fetch("/api/ity/progress", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "import-library", importLimit: 20 }),
+            body: JSON.stringify({ action: "import-library", importLimit: 80 }),
           });
           const saveData = await saveRes.json();
           if (saveData.ok) {
             const r = saveData.result || {};
             setItyProgress((p) => ({
               ...p,
-              message: `${p.message} · Đã lưu thư viện +${r.imported ?? 0}/${r.withAudio ?? 0} audio`,
+              message: `${p.message} · Đã lưu+phân tích +${r.imported ?? 0} (audio ${r.withAudio ?? 0}, sâu ${r.analyzed ?? 0})`,
             }));
           }
         } catch {

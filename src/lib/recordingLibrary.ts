@@ -369,8 +369,8 @@ export async function getLibraryStats() {
   const cursor = await readSyncCursor();
   let pendingAnalysis = 0;
   for (const item of items) {
-    if (!item.hasTranscript && !item.callSummary) continue;
     const version = item.analysisVersion ?? 0;
+    // Count anything not yet on latest deep-analysis version (incl. audio waiting for transcript).
     if (version < ANALYSIS_VERSION) pendingAnalysis += 1;
   }
   const remoteAnalyzedTotal = cursor.remoteAnalyzedTotal;
@@ -404,11 +404,14 @@ export async function syncRecordingsFromChotKiem(options?: {
   downloadAudio?: boolean;
   /** When true (default), prefer calls not yet in the local library. */
   newOnly?: boolean;
+  /** When set, import+analyze these callIds immediately (download-success path). */
+  forceIds?: string[];
 }): Promise<{
   imported: number;
   updated: number;
   skipped: number;
   withAudio: number;
+  analyzed: number;
   errors: string[];
   totalRemote: number;
   nextOffset: number;
@@ -417,9 +420,10 @@ export async function syncRecordingsFromChotKiem(options?: {
   remoteWithAudioTotal: number;
   localTotal: number;
 }> {
-  const limit = Math.max(1, Math.min(options?.limit ?? 80, 200));
+  const forceIds = [...new Set((options?.forceIds || []).map(String).filter(Boolean))];
+  const limit = Math.max(1, Math.min(options?.limit ?? (forceIds.length || 80), 200));
   const downloadAudio = options?.downloadAudio !== false;
-  const newOnly = options?.newOnly !== false;
+  const newOnly = forceIds.length ? false : options?.newOnly !== false;
   await ensureDirs();
   const releaseLock = await acquireSyncLock();
 
@@ -516,11 +520,16 @@ export async function syncRecordingsFromChotKiem(options?: {
     );
   }
 
-  const ids: string[] = newIds.slice(0, limit);
-  if (!newOnly || ids.length === 0) {
-    for (const id of oldIds) {
-      if (ids.length >= limit) break;
-      if (!ids.includes(id)) ids.push(id);
+  let ids: string[] = [];
+  if (forceIds.length) {
+    ids = forceIds.slice(0, limit);
+  } else {
+    ids = newIds.slice(0, limit);
+    if (!newOnly || ids.length === 0) {
+      for (const id of oldIds) {
+        if (ids.length >= limit) break;
+        if (!ids.includes(id)) ids.push(id);
+      }
     }
   }
 
@@ -528,6 +537,7 @@ export async function syncRecordingsFromChotKiem(options?: {
   let updated = 0;
   let skipped = 0;
   let withAudio = 0;
+  let analyzed = 0;
   const errors: string[] = [];
   const queue = ids.slice(0, limit);
   const workers = Math.max(1, Math.min(5, queue.length));
@@ -656,7 +666,9 @@ export async function syncRecordingsFromChotKiem(options?: {
       callSummary: call.callSummary || null,
       outcome,
       readinessScore: analysis.readinessScore,
-      analysisVersion: ANALYSIS_VERSION,
+      // Only stamp latest version when we have real transcript text for deep analysis.
+      // Empty-transcript shells stay pending so they re-run when STT arrives.
+      analysisVersion: transcript.length >= 40 ? ANALYSIS_VERSION : 0,
       sourceAudioUrl: call.audioUrl || null,
     };
     await fs.writeFile(
@@ -669,6 +681,7 @@ export async function syncRecordingsFromChotKiem(options?: {
     return {
       kind: existing ? ("updated" as const) : ("imported" as const),
       gotAudio,
+      analyzed: transcript.length >= 40,
     };
   }
 
@@ -683,6 +696,7 @@ export async function syncRecordingsFromChotKiem(options?: {
         else if (result.kind === "updated") updated += 1;
         else imported += 1;
         if (result.kind !== "skipped" && result.gotAudio) withAudio += 1;
+        if (result.kind !== "skipped" && result.analyzed) analyzed += 1;
       } catch (error) {
         errors.push(`${id}: ${error instanceof Error ? error.message : "error"}`);
       }
@@ -707,6 +721,7 @@ export async function syncRecordingsFromChotKiem(options?: {
     updated,
     skipped,
     withAudio,
+    analyzed,
     errors: errors.slice(0, 20),
     totalRemote: Math.max(totalRemote, remoteAnalyzedTotal, remoteWithAudioTotal),
     nextOffset: analyzedOffset,
@@ -757,9 +772,17 @@ export async function reanalyzeRecordings(options?: {
       .then(() => true)
       .catch(() => false);
 
-    if (pendingOnly && hasAnalysis && currentVersion >= ANALYSIS_VERSION) {
+    // Re-open "complete" stamps that never had real transcript text (legacy bug).
+    const hasDeepText = transcript.trim().length >= 40;
+    if (
+      pendingOnly &&
+      hasAnalysis &&
+      currentVersion >= ANALYSIS_VERSION &&
+      hasDeepText
+    ) {
       continue;
     }
+    if (!hasDeepText && !item.callSummary) continue;
 
     let scorecard: DeepCallAnalysis["chotKiem"] | undefined;
     try {
@@ -787,7 +810,8 @@ export async function reanalyzeRecordings(options?: {
     );
 
     item.readinessScore = analysis.readinessScore;
-    item.analysisVersion = ANALYSIS_VERSION;
+    item.analysisVersion =
+      transcript.trim().length >= 40 ? ANALYSIS_VERSION : 0;
     item.updatedAt = new Date().toISOString();
     await fs.writeFile(
       path.join(dir, "meta.json"),
@@ -815,4 +839,52 @@ export async function analyzePendingRecordings(options?: { limit?: number }) {
     limit: options?.limit ?? 100,
     pendingOnly: true,
   });
+}
+
+/**
+ * Immediate path after ITY download success:
+ * import the exact callIds into the local library and persist deep analysis.
+ */
+export async function importAndAnalyzeCallIds(
+  callIds: string[],
+  options?: { downloadAudio?: boolean },
+): Promise<{
+  imported: number;
+  updated: number;
+  skipped: number;
+  withAudio: number;
+  analyzed: number;
+  errors: string[];
+  localTotal: number;
+}> {
+  const ids = [...new Set(callIds.map(String).filter(Boolean))];
+  if (!ids.length) {
+    const stats = await getLibraryStats();
+    return {
+      imported: 0,
+      updated: 0,
+      skipped: 0,
+      withAudio: 0,
+      analyzed: 0,
+      errors: [],
+      localTotal: stats.total,
+    };
+  }
+
+  const result = await syncRecordingsFromChotKiem({
+    limit: Math.min(ids.length, 200),
+    downloadAudio: options?.downloadAudio !== false,
+    newOnly: false,
+    forceIds: ids,
+  });
+
+  return {
+    imported: result.imported,
+    updated: result.updated,
+    skipped: result.skipped,
+    withAudio: result.withAudio,
+    analyzed: result.analyzed,
+    errors: result.errors,
+    localTotal: result.localTotal,
+  };
 }

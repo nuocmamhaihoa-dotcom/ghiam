@@ -172,7 +172,7 @@ export default function ProxyPage() {
             action === "boost-downloads"
               ? { action, rounds: 4, batchSize: 8, concurrency: 3 }
               : action === "import-library"
-                ? { action, importLimit: 30 }
+                ? { action, importLimit: 80 }
                 : { action: "sample" },
           ),
         });
@@ -181,12 +181,12 @@ export default function ProxyPage() {
         if (data.progress) setProgress(data.progress);
         if (action === "boost-downloads") {
           setMsg(
-            `Boost tải: ${data.rounds ?? 0} lô · pending ~${data.pendingCount ?? "?"} · ${data.progress?.filesPerMinute ?? 0} file/phút`,
+            `Boost tải+phân tích: ${data.rounds ?? 0} lô · pending ~${data.pendingCount ?? "?"} · sâu +${data.analyze?.analyzed ?? 0} · ${data.progress?.filesPerMinute ?? 0} file/phút`,
           );
         } else if (action === "import-library") {
           const r = data.result || {};
           setMsg(
-            `Đã lưu thư viện: +${r.imported ?? 0} mới, ${r.updated ?? 0} cập nhật, audio ${r.withAudio ?? 0}`,
+            `Đã lưu+phân tích sâu: +${r.imported ?? 0} mới, ${r.updated ?? 0} cập nhật, audio ${r.withAudio ?? 0}, sâu ${r.analyzed ?? 0}`,
           );
         } else {
           setMsg(data.progress?.message || "Đã làm mới tốc độ");

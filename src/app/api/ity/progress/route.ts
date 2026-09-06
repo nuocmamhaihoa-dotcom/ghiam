@@ -6,6 +6,7 @@ import {
 import { processItyPendingDownloads, fetchItyPendingDownloads, startItyProxyHunt, fetchItyDownloadStatus } from "@/lib/itySyncClient";
 import { ensureProxyPool } from "@/lib/proxyPool";
 import { syncRecordingsFromChotKiem } from "@/lib/recordingLibrary";
+import { downloadThenAnalyzeCalls } from "@/lib/ityImmediateAnalyze";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,13 +68,22 @@ export async function POST(req: NextRequest) {
         const callIds = pending.items.map((item) => item.callId);
         if (!callIds.length) break;
         try {
-          const processed = await processItyPendingDownloads({
+          const immediate = await downloadThenAnalyzeCalls({
             callIds,
             concurrency,
             timeoutMs: 45_000,
-            autoAnalyze: false,
+            autoAnalyze: true,
           });
-          results.push({ round: i + 1, ok: true, processed, batch: callIds.length });
+          results.push({
+            round: i + 1,
+            ok: !immediate.downloadError,
+            processed: immediate.download,
+            analyzed: immediate.analyze,
+            batch: callIds.length,
+            timedOut: immediate.timedOut,
+            error: immediate.downloadError,
+          });
+          if (immediate.timedOut) break;
         } catch (error) {
           results.push({
             round: i + 1,
@@ -86,9 +96,23 @@ export async function POST(req: NextRequest) {
       }
 
       const download = await fetchItyDownloadStatus().catch(() => null);
+      // Safety net: import any newly completed remote calls and deep-analyze.
+      const safetyImport = await syncRecordingsFromChotKiem({
+        limit: Math.max(batchSize * 2, 20),
+        downloadAudio: true,
+        newOnly: false,
+      }).catch((error) => ({
+        imported: 0,
+        updated: 0,
+        skipped: 0,
+        withAudio: 0,
+        analyzed: 0,
+        errors: [error instanceof Error ? error.message : "import failed"],
+        localTotal: 0,
+      }));
       const progress = await noteDownloadEvent(
         "boosting",
-        `Boost ${results.length} lô (batch≤${batchSize}, concurrency=${concurrency}) · pending ~${download?.pendingCount ?? "?"}`,
+        `Boost ${results.length} lô · phân tích ngay · pending ~${download?.pendingCount ?? "?"} · kho +${(safetyImport as { imported?: number }).imported ?? 0}/${(safetyImport as { analyzed?: number }).analyzed ?? 0}`,
       );
 
       return NextResponse.json({
@@ -97,6 +121,7 @@ export async function POST(req: NextRequest) {
         rounds: results.length,
         results,
         pendingCount: download?.pendingCount ?? null,
+        analyze: safetyImport,
         progress,
       });
     }
@@ -108,7 +133,7 @@ export async function POST(req: NextRequest) {
       });
       const progress = await noteDownloadEvent(
         "importing",
-        `Đã lưu thư viện: +${result.imported} mới, ${result.updated} cập nhật, audio ${result.withAudio}`,
+        `Đã lưu+phân tích: +${result.imported} mới, ${result.updated} cập nhật, audio ${result.withAudio}, sâu ${result.analyzed ?? 0}`,
       );
       return NextResponse.json({ ok: true, action, result, progress });
     }

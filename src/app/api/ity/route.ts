@@ -7,6 +7,7 @@ import {
   runItySyncRound,
   startItyProxyHunt,
 } from "@/lib/itySyncClient";
+import { downloadThenAnalyzeCalls } from "@/lib/ityImmediateAnalyze";
 import {
   noteDownloadEvent,
   sampleDownloadProgress,
@@ -146,23 +147,28 @@ export async function POST(req: NextRequest) {
 
       try {
         const concurrency = Math.max(1, Math.min(Number(body.concurrency ?? 3), 4));
-        const processed = await processItyPendingDownloads({
-          callIds: callIds.slice(0, 8),
-          autoAnalyze: body.autoAnalyze === true,
+        const batchIds = callIds.slice(0, 8);
+        // Default ON: download success => immediate local deep analysis persist.
+        const immediate = await downloadThenAnalyzeCalls({
+          callIds: batchIds,
+          autoAnalyze: body.autoAnalyze !== false,
           concurrency,
           timeoutMs: 45_000,
         });
         const download = await fetchItyDownloadStatus().catch(() => null);
         const progress = await noteDownloadEvent(
           "downloading",
-          `Process-pending x${callIds.slice(0, 8).length} (concurrency=${concurrency}) · còn ~${download?.pendingCount ?? "?"}`,
+          `Tải+phân tích x${batchIds.length} · sâu ${immediate.analyze.analyzed} · còn ~${download?.pendingCount ?? "?"}`,
         ).catch(() => null);
         return NextResponse.json({
           ok: true,
           action,
-          processed,
+          processed: immediate.download,
+          analyze: immediate.analyze,
+          timedOut: immediate.timedOut,
+          error: immediate.downloadError,
           pendingCount: download?.pendingCount ?? null,
-          batchSize: Math.min(callIds.length, 8),
+          batchSize: batchIds.length,
           concurrency,
           progress,
         });

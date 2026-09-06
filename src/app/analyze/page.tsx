@@ -68,7 +68,7 @@ export default function AnalyzePage() {
         setLastResult(data.result || null);
         const r = data.result || {};
         setMsg(
-          `Đã phân tích ${r.updated ?? 0}/${r.scanned ?? 0} cuộc gọi · còn chờ ${r.pendingLeft ?? data.stats?.pendingAnalysis ?? 0} · sẵn sàng tái tạo ${r.readyForRecreation ?? data.stats?.readyForRecreation ?? 0}`,
+          `Đã cập nhật phân tích sâu ${r.updated ?? 0}/${r.scanned ?? 0} cuộc gọi · còn chờ ${r.pendingLeft ?? data.stats?.pendingAnalysis ?? 0} · sẵn sàng tái tạo ${r.readyForRecreation ?? data.stats?.readyForRecreation ?? 0}`,
         );
         await load();
       } catch (e) {
