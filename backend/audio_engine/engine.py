@@ -58,6 +58,15 @@ class AudioIntelligenceEngine:
             issues.append("unsupported_extension")
         if size_bytes < 0:
             issues.append("invalid_size")
+        folder = hints.get("folder_path") or hints.get("relative_path")
+        if folder:
+            folder = str(folder)
+            if "/" in folder and not folder.endswith(("/", "\\")):
+                # Keep parent folder only when a full relative file path is passed.
+                if folder.endswith(name):
+                    folder = str(Path(folder).parent)
+            if folder in {".", ""}:
+                folder = None
         meta = FileMeta(
             file_id=new_id("file"),
             filename=name,
@@ -72,6 +81,7 @@ class AudioIntelligenceEngine:
             language=str(hints.get("language") or "vi"),
             integrity_ok=integrity_ok,
             integrity_issues=issues,
+            folder_path=folder,
         )
         return {
             "ok": integrity_ok,
@@ -84,10 +94,15 @@ class AudioIntelligenceEngine:
         job_id = new_id("upload")
         queue: list[dict[str, Any]] = []
         for i, f in enumerate(files):
+            hints = dict(f.get("hints") or {})
+            if f.get("folder_path") and "folder_path" not in hints:
+                hints["folder_path"] = f.get("folder_path")
+            if f.get("relative_path") and "folder_path" not in hints:
+                hints["folder_path"] = f.get("relative_path")
             detected = self.detect_file(
                 str(f.get("filename") or f"file_{i}.wav"),
                 size_bytes=int(f.get("size_bytes") or 0),
-                hints=f.get("hints") or {},
+                hints=hints,
             )
             queue.append(
                 {
@@ -115,12 +130,22 @@ class AudioIntelligenceEngine:
         return {"ok": True, "job_id": job_id, "count": len(queue), "queue": queue}
 
     def process(self, payload: dict[str, Any]) -> dict[str, Any]:
-        # Accept common aliases
+        # Accept common aliases from API / batch clients
         data = dict(payload)
-        if "file_meta" not in data and "file_meta" in data:
-            data["file_meta"] = data["file_meta"]
-        if "transcript_turns" not in data and "turns" in data:
-            data["transcript_turns"] = data["turns"]
+        if "file_meta" not in data:
+            for alt in ("file", "meta", "file_info", "media"):
+                if alt in data and isinstance(data[alt], dict):
+                    data["file_meta"] = data[alt]
+                    break
+        if "transcript_turns" not in data:
+            for alt in ("turns", "utterances", "transcript_lines", "lines"):
+                if alt in data and isinstance(data[alt], list):
+                    data["transcript_turns"] = data[alt]
+                    break
+        if "quality_hints" not in data and "quality" in data and isinstance(
+            data["quality"], dict
+        ):
+            data["quality_hints"] = data["quality"]
 
         pipe = self.pipeline.run(data)
         self.store.append_job(
@@ -229,6 +254,8 @@ class AudioIntelligenceEngine:
                 ],
                 "emotions": [p.get("emotion") for p in (emotions.get("points") or [])],
                 "objections": [o.get("kind") for o in objections],
+                "intents": [b.get("kind") for b in buying],
+                "buying_signals": [b.get("kind") for b in buying],
                 "rules": [e.get("rule_id") for e in valid_evidence[:20]],
                 "agent": next(
                     (
@@ -300,10 +327,13 @@ class AudioIntelligenceEngine:
         }
 
     def search(self, query: dict[str, Any]) -> dict[str, Any]:
+        """Enterprise search: keyword, intent, emotion, objection, rule, agent, customer."""
         rows = self.store.list_search(2000)
-        keyword = str(query.get("keyword") or "").lower().strip()
+        keyword = str(query.get("keyword") or query.get("q") or "").lower().strip()
+        intent = str(query.get("intent") or "").lower().strip()
         emotion = str(query.get("emotion") or "").lower().strip()
         objection = str(query.get("objection") or "").lower().strip()
+        rule = str(query.get("rule") or query.get("rule_id") or "").lower().strip()
         agent = str(query.get("agent") or "").lower().strip()
         customer = str(query.get("customer") or "").lower().strip()
         hits = []
@@ -311,18 +341,37 @@ class AudioIntelligenceEngine:
             blob = " ".join(str(x) for x in (row.get("keywords") or [])).lower()
             emos = [str(x).lower() for x in (row.get("emotions") or [])]
             objs = [str(x).lower() for x in (row.get("objections") or [])]
+            rules = [str(x).lower() for x in (row.get("rules") or [])]
+            intents = [str(x).lower() for x in (row.get("intents") or row.get("buying_signals") or [])]
             if keyword and keyword not in blob:
+                continue
+            if intent and intent not in intents and intent not in blob:
                 continue
             if emotion and emotion not in emos:
                 continue
             if objection and objection not in objs:
+                continue
+            if rule and rule not in rules:
                 continue
             if agent and agent not in str(row.get("agent") or "").lower():
                 continue
             if customer and customer not in str(row.get("customer") or "").lower():
                 continue
             hits.append(row)
-        return {"ok": True, "count": len(hits), "hits": hits[:100]}
+        return {
+            "ok": True,
+            "count": len(hits),
+            "hits": hits[:100],
+            "filters": {
+                "keyword": keyword or None,
+                "intent": intent or None,
+                "emotion": emotion or None,
+                "objection": objection or None,
+                "rule": rule or None,
+                "agent": agent or None,
+                "customer": customer or None,
+            },
+        }
 
     def export(self, job_id: str, *, fmt: str = "json") -> dict[str, Any]:
         jobs = [j for j in self.store.list_jobs(2000) if j.get("job_id") == job_id]

@@ -1,5 +1,4 @@
-
-"""Shared types for Audio Intelligence Engine."""
+"""Shared types for Audio Intelligence Engine V2."""
 from __future__ import annotations
 
 import uuid
@@ -49,19 +48,27 @@ DIALECTS = ("north", "central", "south", "unknown")
 CUSTOMER_EMOTIONS = ("interested", "trust", "hesitation", "frustration", "exit_risk", "neutral")
 AGENT_EMOTIONS = ("confidence", "rush", "calm", "stress", "neutral")
 
+INTERRUPT_KINDS = (
+    "helpful_interruption",
+    "harmful_interruption",
+    "cooperative_overlap",
+    "cutting_off",
+)
+SILENCE_KINDS = ("thinking", "searching", "confusion", "connection_issue")
+
 BUYING_SIGNAL_PATTERNS = (
-    ("delivery", ("bao giờ giao", "giao khi nào", "ship khi nào", "nhận hàng")),
-    ("payment", ("thanh toán sao", "chuyển khoản", "trả góp", "cọc")),
-    ("warranty", ("bảo hành", "bảo hành bao lâu", "đổi trả")),
-    ("invoice", ("hóa đơn", "xuất hóa đơn", "vat", "hđ")),
+    ("delivery", ("bao giờ giao", "giao khi nào", "ship khi nào", "nhận hàng", "bao lâu thì nhận")),
+    ("payment", ("thanh toán sao", "chuyển khoản", "trả góp", "cọc", "thanh toán thế nào")),
+    ("warranty", ("bảo hành", "bảo hành bao lâu", "đổi trả", "bảo hành mấy tháng")),
+    ("invoice", ("hóa đơn", "xuất hóa đơn", "vat", "hđ", "có hóa đơn")),
 )
 
 OBJECTION_CONTEXTS = (
-    ("price", ("đắt", "cao quá", "giảm giá", "rẻ hơn")),
-    ("trust", ("tin được không", "lừa", "uy tín", "review")),
-    ("competitor", ("bên kia", "đối thủ", "so với", "chỗ khác")),
-    ("authority", ("hỏi vợ", "hỏi sếp", "quyết định", "bàn với")),
-    ("delay", ("để sau", "suy nghĩ", "mai tính", "chưa cần")),
+    ("price", ("đắt", "cao quá", "giảm giá", "rẻ hơn", "giá hơi cao", "hơi cao")),
+    ("trust", ("tin được không", "lừa", "uy tín", "review", "có thật không")),
+    ("competitor", ("bên kia", "đối thủ", "so với", "chỗ khác", "bên khác")),
+    ("authority", ("hỏi vợ", "hỏi sếp", "quyết định", "bàn với", "hỏi lại")),
+    ("delay", ("để sau", "suy nghĩ", "mai tính", "chưa cần", "để anh suy nghĩ")),
 )
 
 NEXT_STEPS = {
@@ -95,6 +102,7 @@ class FileMeta:
     language: str = "vi"
     integrity_ok: bool = True
     integrity_issues: list[str] = field(default_factory=list)
+    folder_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

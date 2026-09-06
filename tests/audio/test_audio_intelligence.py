@@ -238,3 +238,119 @@ def test_bulk_process_stability(engine: AudioIntelligenceEngine, i: int) -> None
     payload["file_meta"] = {**payload["file_meta"], "file_id": f"bulk_{i}"}
     out = engine.process(payload)
     assert out.get("scoring_allowed") is True or out.get("blocked") is True
+
+
+def test_v2_emotion_timeline_has_by_second(engine: AudioIntelligenceEngine) -> None:
+    out = engine.process(_good_payload())
+    assert out.get("scoring_allowed") is True
+    timeline = out.get("emotion_timeline") or {}
+    assert timeline.get("ok") is True
+    assert timeline.get("by_second")
+    assert "0" in timeline["by_second"]
+    assert "customer" in timeline["by_second"]["0"]
+    assert "agent" in timeline["by_second"]["0"]
+
+
+def test_v2_silence_thinking_is_not_always_fault(engine: AudioIntelligenceEngine) -> None:
+    payload = _good_payload()
+    payload["transcript_turns"] = [
+        {
+            "speaker": "agent",
+            "start_sec": 0,
+            "end_sec": 2,
+            "text": "Anh đợi em check giá một chút.",
+            "confidence": 0.9,
+        },
+        {
+            "speaker": "agent",
+            "start_sec": 8,
+            "end_sec": 10,
+            "text": "Giá bên em là 5 triệu ạ.",
+            "confidence": 0.9,
+        },
+    ]
+    out = engine.process(payload)
+    silence = out.get("silence") or {}
+    assert silence.get("ok") is True
+    gaps = silence.get("gaps") or []
+    assert gaps
+    thinking = [g for g in gaps if g.get("kind") in {"thinking", "searching"}]
+    assert thinking
+    assert any(g.get("risk_flag") is False for g in thinking)
+
+
+def test_v2_search_filters_intent_and_emotion(engine: AudioIntelligenceEngine) -> None:
+    processed = engine.process(_good_payload())
+    assert processed.get("scoring_allowed") is True
+    by_intent = engine.search({"intent": "payment"})
+    assert by_intent["ok"] is True
+    assert by_intent["count"] >= 1
+    by_emotion = engine.search({"emotion": "hesitation"})
+    assert by_emotion["ok"] is True
+    assert "filters" in by_intent
+
+
+def test_v2_folder_upload_metadata(engine: AudioIntelligenceEngine) -> None:
+    out = engine.upload(
+        [
+            {
+                "filename": "call_a.mp3",
+                "size_bytes": 2048,
+                "folder_path": "team_north/week1",
+                "hints": {"duration_sec": 40},
+            },
+            {
+                "filename": "call_b.wav",
+                "size_bytes": 4096,
+                "relative_path": "team_south/week1/call_b.wav",
+                "hints": {"duration_sec": 55},
+            },
+        ]
+    )
+    assert out["ok"] is True
+    assert out["count"] == 2
+    folders = [q.get("file_meta", {}).get("folder_path") for q in out["queue"]]
+    assert "team_north/week1" in folders
+    assert "team_south/week1" in folders
+
+
+def test_v2_payload_aliases_accepted(engine: AudioIntelligenceEngine) -> None:
+    out = engine.process(
+        {
+            "file_info": {
+                "file_id": "alias_1",
+                "extension": ".mp3",
+                "integrity_ok": True,
+                "duration_sec": 40,
+                "sample_rate": 16000,
+                "channels": 1,
+            },
+            "turns": [
+                {
+                    "speaker": "customer",
+                    "start_sec": 0,
+                    "end_sec": 2,
+                    "text": "Thanh toán sao em?",
+                    "confidence": 0.9,
+                },
+                {
+                    "speaker": "agent",
+                    "start_sec": 2.1,
+                    "end_sec": 4,
+                    "text": "Anh chuyển khoản giúp em.",
+                    "confidence": 0.9,
+                },
+            ],
+        }
+    )
+    assert out.get("scoring_allowed") is True
+    assert out.get("buying_signals")
+
+
+def test_v2_dialect_and_normalization() -> None:
+    assert detect_dialect("hông được hen") in {"south", "unknown"}
+    assert detect_dialect("thế nhỉ chứ") in {"north", "unknown"}
+    assert detect_dialect("mi đi mô răng") in {"central", "unknown"}
+    normalized = normalize_vietnamese("sp này ko dc, bh 12 tháng")
+    assert "sản phẩm" in normalized.lower() or "sp" not in normalized.lower()
+    assert "không" in normalized.lower()

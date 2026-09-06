@@ -1,10 +1,10 @@
-# Audio Intelligence Upload UI
+# Frontend Upload Queue
 
-Enterprise upload surface for Audio Intelligence Engine.
+`UploadQueue.ts` supports:
 
-Features:
-- Drag & drop / multi-file / folder upload
-- Progress, ETA, queue, retry
-- Formats: MP3 WAV M4A AAC OGG FLAC + MP4 MOV AVI MKV WEBM + ZIP RAR
+- Multi-file enqueue
+- Folder enqueue (`webkitRelativePath`)
+- Progress / ETA / retry (max 3)
+- Snapshot for UI progress bars
 
-Primary interactive page: `enterprise-web/src/app/audio-intelligence/page.tsx`
+Use with the enterprise Audio Intelligence page for bulk AIE ingestion (1000+ files).
