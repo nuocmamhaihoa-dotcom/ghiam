@@ -1,0 +1,2 @@
+{"id": "golden_call:gc001", "type": "golden_call", "label": "Golden call GC001", "content": "Golden call: agent xác nhận cảm xúc khi khách nói đắt, so sánh phí năm đầu miễn, hỏi chốt thử thẻ phụ", "source": "calls/golden/gc001", "confidence": 0.93}
+{"id": "golden_call:gc002", "type": "golden_call", "label": "Golden call GC002", "content": "Golden call: xử lý để suy nghĩ bằng tóm tắt lợi ích + đề xuất gọi lại đúng giờ khách chọn", "source": "calls/golden/gc002", "confidence": 0.93}

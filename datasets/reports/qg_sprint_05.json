@@ -1,0 +1,53 @@
+{
+  "sprint": 5,
+  "checked_at": "2026-09-05T18:26:36.514079+00:00",
+  "all_ok": true,
+  "gates": [
+    {
+      "gate": "2_Logic_Review",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {}
+    },
+    {
+      "gate": "5_Root_Cause_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "sample_primary": "RC-OBJ-PRICE-UNHANDLED"
+      }
+    },
+    {
+      "gate": "4_Evidence_Verification",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "canonical_keys": [
+          "coaching",
+          "evidence",
+          "revenue_leak",
+          "root_cause",
+          "score",
+          "stage_scores",
+          "violations"
+        ]
+      }
+    },
+    {
+      "gate": "8_API_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "route_count": 51,
+        "openapi_paths": 47
+      }
+    }
+  ],
+  "passed": 4,
+  "failed": 0,
+  "total": 4
+}

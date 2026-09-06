@@ -1,0 +1,27 @@
+{
+  "name": "cltv_prediction",
+  "version": "1.0.0",
+  "required": ["prediction_id", "lead_id", "scores", "inputs_used"],
+  "score_fields": [
+    "cltv_score",
+    "retention_score",
+    "upsell_score",
+    "cross_sell_score",
+    "referral_score",
+    "lifetime_value",
+    "repeat_purchase_probability",
+    "churn_risk",
+    "referral_probability",
+    "priority",
+    "confidence",
+    "evidence",
+    "explanations"
+  ],
+  "priority_values": ["high_value", "medium", "low"],
+  "quality_checks": [
+    "forecast_accuracy",
+    "stability",
+    "explainability",
+    "evidence_validation"
+  ]
+}

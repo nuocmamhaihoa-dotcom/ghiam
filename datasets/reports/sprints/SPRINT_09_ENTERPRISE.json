@@ -1,0 +1,42 @@
+{
+  "sprint": 9,
+  "name": "Revenue Leak + Coaching + Conversation DNA + Pipeline Wiring",
+  "status": "completed",
+  "completed_at": "2026-09-05T18:00:47.960257+00:00",
+  "deliverables": [
+    "Immutable AI pipeline orchestrator wired into ScoringService (pre + post stages)",
+    "ScoringResponse.pipeline artifact for auditability",
+    "Rulebook 1000 canonicalized to constitution/QG field names + category Title Case",
+    "Quality Gate rule-consistency alias normalization",
+    "Enterprise Revenue Leak page (/revenue) + AppShell nav",
+    "VECD targets already met from prior sprints (100k/50k/10k/...)"
+  ],
+  "quality_gate": "PASS",
+  "risks": [
+    "Live Whisper still requires OPENAI_API_KEY; without key, transcript-bridge path is used",
+    "Heuristic diarization is deterministic fallback — production should swap Speaker Diarization provider via port"
+  ],
+  "tech_debt": [
+    "Replace heuristic diarizer with production diarization adapter behind DiarizationPort",
+    "Persist pipeline stage artifacts to DB table for long-term audit"
+  ],
+  "quality_gate_detail": {
+    "sprint": "all",
+    "status": "PASS",
+    "checked_at": "2026-09-05T18:04:18.089198+00:00",
+    "sprints": {
+      "1": "PASS 6/6",
+      "2": "PASS 3/3",
+      "3": "PASS 3/3",
+      "4": "PASS 4/4",
+      "5": "PASS 4/4",
+      "6": "PASS 3/3",
+      "7": "PASS 20/20"
+    },
+    "notes": [
+      "Rulebook 1000 canonicalized to constitution/QG fields",
+      "ScoringResponse.pipeline wired",
+      "Revenue Leak page added at /revenue"
+    ]
+  }
+}

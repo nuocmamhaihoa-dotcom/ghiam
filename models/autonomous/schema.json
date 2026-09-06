@@ -1,0 +1,44 @@
+{
+  "name": "autonomous_sales",
+  "version": "1.0.0",
+  "required": ["ok", "widgets", "approval_only_rule_changes"],
+  "widgets": [
+    "recommendation_count",
+    "automations_run",
+    "automations_blocked",
+    "approvals_pending",
+    "approvals_decided",
+    "rule_changes_applied",
+    "avg_confidence",
+    "nba_mix"
+  ],
+  "nba_actions": [
+    "callback",
+    "zalo_message",
+    "email",
+    "escalate_leader",
+    "reassign_sale",
+    "close_lead",
+    "send_proposal",
+    "coaching_nudge"
+  ],
+  "safe_automations": [
+    "callback_reminder",
+    "follow_up_message",
+    "crm_note",
+    "create_task",
+    "coaching_nudge"
+  ],
+  "restricted_changes": [
+    "rule_change",
+    "sop_change",
+    "pricing_change",
+    "routing_policy_change"
+  ],
+  "quality_checks": [
+    "recommendation_precision",
+    "automation_safety",
+    "approval_enforcement",
+    "evidence_validation"
+  ]
+}

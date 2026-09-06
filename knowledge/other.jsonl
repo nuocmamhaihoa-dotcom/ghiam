@@ -1,0 +1,15 @@
+{"id": "product:the_tin_dung", "type": "product", "label": "Thẻ tín dụng", "content": "Thẻ tín dụng lãi suất ưu đãi 12 tháng", "source": "catalog/products", "confidence": 0.95}
+{"id": "product:vay_tieu_dung", "type": "product", "label": "Vay tiêu dùng", "content": "Vay tiêu dùng hạn mức đến 500 triệu", "source": "catalog/products", "confidence": 0.95}
+{"id": "intent:can_tu_van", "type": "intent", "label": "Cần tư vấn", "content": "Khách cần tư vấn thêm trước khi quyết định", "source": "taxonomy/intent", "confidence": 0.9}
+{"id": "intent:so_sanh_gia", "type": "intent", "label": "So sánh giá", "content": "Khách đang so sánh giá với đối thủ", "source": "taxonomy/intent", "confidence": 0.9}
+{"id": "objection:dat", "type": "objection", "label": "Phản đối giá", "content": "Phản đối giá cao / lãi suất cao", "source": "taxonomy/objection", "confidence": 0.92}
+{"id": "objection:suy_nghi", "type": "objection", "label": "Để suy nghĩ", "content": "Phản đối để suy nghĩ thêm / gọi lại sau", "source": "taxonomy/objection", "confidence": 0.92}
+{"id": "objection:da_co_the", "type": "objection", "label": "Đã có thẻ", "content": "Khách đã có thẻ/sản phẩm tương tự", "source": "taxonomy/objection", "confidence": 0.9}
+{"id": "promotion:summer2026", "type": "promotion", "label": "KM hè 2026", "content": "Khuyến mãi hè 2026: hoàn 5% chi tiêu siêu thị tối đa 500.000đ/tháng", "source": "promo/summer2026", "confidence": 0.9}
+{"id": "customer_type:mass", "type": "customer_type", "label": "Mass affluent", "content": "Khách mass affluent: ưu tiên lợi ích phí và ưu đãi rõ ràng", "source": "taxonomy/customer", "confidence": 0.88}
+{"id": "customer_type:price_sensitive", "type": "customer_type", "label": "Nhạy giá", "content": "Khách nhạy giá: cần dẫn chứng bảng giá và so sánh công khai", "source": "taxonomy/customer", "confidence": 0.88}
+{"id": "root_cause:weak_discovery", "type": "root_cause", "label": "Discovery yếu", "content": "Root cause: discovery yếu dẫn đến không khớp nhu cầu và mất chốt", "source": "analytics/root_cause", "confidence": 0.85}
+{"id": "root_cause:overpromise", "type": "root_cause", "label": "Overpromise", "content": "Root cause: overpromise lãi suất gây compliance fail và revenue leak", "source": "analytics/root_cause", "confidence": 0.9}
+{"id": "coaching:listen_ack", "type": "coaching", "label": "Lắng nghe xác nhận", "content": "Coaching: lắng nghe phản đối 3 giây, nhắc lại nội dung khách nói trước khi trả lời", "source": "coaching/playbook", "confidence": 0.94}
+{"id": "coaching:evidence_close", "type": "coaching", "label": "Evidence close", "content": "Coaching: mỗi claim phải gắn citation từ pricing/policy rồi mới hỏi chốt", "source": "coaching/playbook", "confidence": 0.94}
+{"id": "revenue_leak:overpromise", "type": "revenue_leak", "label": "Leak overpromise", "content": "Revenue leak từ overpromise lãi suất / cam kết duyệt", "source": "analytics/revenue_leak", "confidence": 0.9}

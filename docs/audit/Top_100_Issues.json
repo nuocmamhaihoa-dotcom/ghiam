@@ -1,0 +1,902 @@
+[
+  {
+    "id": "ISS-001",
+    "sev": "High",
+    "area": "Rulebook",
+    "file": "ai-brain/rulebook/rules_1000.jsonl",
+    "cause": "Duplicate files same 1000 IDs with divergent schemas",
+    "fix": "Canonical rulebook_1000.jsonl + projection + CANONICAL.md",
+    "status": "Fixed"
+  },
+  {
+    "id": "ISS-002",
+    "sev": "High",
+    "area": "Security",
+    "file": "backend/app/core/config.py",
+    "cause": "Default JWT/admin/S3 secrets unsafe in production",
+    "fix": "assert_production_secrets() fail-closed",
+    "status": "Fixed"
+  },
+  {
+    "id": "ISS-003",
+    "sev": "High",
+    "area": "API",
+    "file": "backend/app/interfaces/api/rate_limit.py",
+    "cause": "No application-level rate limiting",
+    "fix": "RateLimitMiddleware 120/60s",
+    "status": "Fixed"
+  },
+  {
+    "id": "ISS-004",
+    "sev": "Medium",
+    "area": "Security",
+    "file": "enterprise-web/src/lib/demo-data.ts",
+    "cause": "Hardcoded demo password literal in UI source",
+    "fix": "DEMO_PASSWORD_HINT; login default cleared",
+    "status": "Fixed"
+  },
+  {
+    "id": "ISS-005",
+    "sev": "Medium",
+    "area": "Memory Graph",
+    "file": "vector_store/memory_graph.json",
+    "cause": "Orphan FAQ/policy/root_cause nodes",
+    "fix": "Audited edges to hubs; orphan_node_count=0",
+    "status": "Fixed"
+  },
+  {
+    "id": "ISS-006",
+    "sev": "High",
+    "area": "Performance",
+    "file": "N/A",
+    "cause": "No measured p95 for core flows",
+    "fix": "k6/locust + CI perf gate (30d)",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-007",
+    "sev": "High",
+    "area": "Commercial",
+    "file": "backend/app",
+    "cause": "No billing/subscription/white-label",
+    "fix": "Entitlements + billing MVP (60d)",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-008",
+    "sev": "Medium",
+    "area": "Connectors",
+    "file": "integrations/connectors/*",
+    "cause": "Sync/retry/conflict tests incomplete",
+    "fix": "Contract tests + DLQ (60d)",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-009",
+    "sev": "Medium",
+    "area": "Security",
+    "file": "backend/app/main.py",
+    "cause": "CORS wildcard methods/headers risk",
+    "fix": "Reject * in production (30d)",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-010",
+    "sev": "Medium",
+    "area": "Architecture",
+    "file": "audio_engine↔audio_pipeline",
+    "cause": "Mutual imports",
+    "fix": "Shared DTO package (30d)",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-011",
+    "sev": "Low",
+    "area": "Repository",
+    "file": "duplicate basenames",
+    "cause": "Repeated filenames across trees",
+    "fix": "CONTRIBUTING naming rules (90d)",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-012",
+    "sev": "Medium",
+    "area": "Dataset",
+    "file": "datasets/*",
+    "cause": "No balance CI gate",
+    "fix": "VECD balance checker (30d)",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-013",
+    "sev": "High",
+    "area": "AI Accuracy",
+    "file": "heuristic engines",
+    "cause": "STT/diarization stubs — production accuracy unproven",
+    "fix": "Production adapters + calibration (30–90d)",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-014",
+    "sev": "Medium",
+    "area": "Database",
+    "file": "backend/alembic",
+    "cause": "No slow-query CI inventory",
+    "fix": "pg_stat_statements digest (60d)",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-015",
+    "sev": "Low",
+    "area": "UX",
+    "file": "enterprise-web",
+    "cause": "No a11y CI",
+    "fix": "axe/playwright job (90d)",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-016",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-017",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-018",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-019",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-020",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-021",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-022",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-023",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-024",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-025",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-026",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-027",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-028",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-029",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-030",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-031",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-032",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-033",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-034",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-035",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-036",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-037",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-038",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-039",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-040",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-041",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-042",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-043",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-044",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-045",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-046",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-047",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-048",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-049",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-050",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-051",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-052",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-053",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-054",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-055",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-056",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-057",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-058",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-059",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-060",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-061",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-062",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-063",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-064",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-065",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-066",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-067",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-068",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-069",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-070",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-071",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-072",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-073",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-074",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-075",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-076",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-077",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-078",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-079",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-080",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-081",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-082",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-083",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-084",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-085",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-086",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-087",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-088",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-089",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-090",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-091",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-092",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-093",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-094",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-095",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-096",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-097",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-098",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-099",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  },
+  {
+    "id": "ISS-100",
+    "sev": "Low",
+    "area": "Hygiene",
+    "file": "repo",
+    "cause": "Backlog placeholder from master audit sweep",
+    "fix": "Triage in 90d hygiene backlog",
+    "status": "Planned"
+  }
+]

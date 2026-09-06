@@ -1,0 +1,22 @@
+wrote datasets/customers/customers_9057.jsonl (+csv)
+[QG FAIL] customers: 9057
+wrote datasets/agents/agents_12299.jsonl (+csv)
+[QG FAIL] agents: 12299
+wrote datasets/intents/intents_1000.jsonl (+csv)
+wrote datasets/emotions/emotions_500.jsonl (+csv)
+wrote datasets/buying_signals/buying_signals_500.jsonl (+csv)
+[QG PASS] intents: 1000
+[QG PASS] emotions: 500
+[QG PASS] buying_signals: 500
+wrote datasets/objections/objections_5000.jsonl (+csv)
+wrote datasets/root_causes/root_causes_500.jsonl (+csv)
+[QG PASS] objections: 5000
+[QG PASS] root_causes: 500
+wrote datasets/conversations/conversations_10000.jsonl (+csv)
+[QG PASS] conversations: 10000
+wrote datasets/qa_benchmark/qa_benchmark_10000.jsonl (+csv)
+[QG PASS] qa_benchmark: 10000
+wrote datasets/golden_calls/golden_calls_500.jsonl (+csv)
+[QG PASS] golden_calls: 500
+wrote SQL seed sample datasets/sql/vecd_seed.sql
+FAILED GATES: ['customers', 'agents']

@@ -1,0 +1,2 @@
+{"id": "sop:mo_dau", "type": "sop", "label": "SOP mở đầu", "content": "SOP mở đầu: chào hỏi, xác minh danh tính, nêu mục đích cuộc gọi trong 30 giây", "source": "sop/opening", "confidence": 0.98}
+{"id": "sop:xu_ly_phan_doi", "type": "sop", "label": "SOP phản đối", "content": "SOP xử lý phản đối: lắng nghe, xác nhận cảm xúc, đưa bằng chứng, hỏi chốt nhẹ", "source": "sop/objection", "confidence": 0.98}

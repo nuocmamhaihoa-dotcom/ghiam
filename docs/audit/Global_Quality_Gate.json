@@ -1,0 +1,104 @@
+{
+  "generated_at": "2026-09-06T01:17:23.409312+00:00",
+  "system_health_score": 77.0,
+  "scores": {
+    "repository_health": 78,
+    "architecture_integrity": 82,
+    "pipeline_integrity": 90,
+    "rulebook_consistency": 86,
+    "dataset_integrity": 74,
+    "memory_graph_integrity": 88,
+    "api_health": 80,
+    "database_health": 76,
+    "performance": 62,
+    "security": 72,
+    "ux": 70,
+    "sales_logic": 84,
+    "self_learning_safety": 88,
+    "connector_stability": 68,
+    "test_coverage": 75,
+    "production_ready": 68,
+    "commercial_ready": 58
+  },
+  "ai_accuracy_score": 71,
+  "critical_open": 0,
+  "high_open": 3,
+  "high_open_ids": [
+    "ISS-006",
+    "ISS-007",
+    "ISS-013"
+  ],
+  "launch_allowed": false,
+  "notes": "Launch blocked until ISS-006/007/013 evidence attached or risk accepted.",
+  "criteria": {
+    "repository_health": {
+      "score": 78,
+      "pass": true
+    },
+    "architecture_integrity": {
+      "score": 82,
+      "pass": true
+    },
+    "pipeline_integrity": {
+      "score": 90,
+      "pass": true
+    },
+    "rulebook_consistency": {
+      "score": 86,
+      "pass": true
+    },
+    "dataset_integrity": {
+      "score": 74,
+      "pass": true
+    },
+    "memory_graph_integrity": {
+      "score": 88,
+      "pass": true
+    },
+    "api_health": {
+      "score": 80,
+      "pass": true
+    },
+    "database_health": {
+      "score": 76,
+      "pass": true
+    },
+    "performance": {
+      "score": 62,
+      "pass": false
+    },
+    "security": {
+      "score": 72,
+      "pass": true
+    },
+    "ux": {
+      "score": 70,
+      "pass": true
+    },
+    "sales_logic": {
+      "score": 84,
+      "pass": true
+    },
+    "self_learning_safety": {
+      "score": 88,
+      "pass": true
+    },
+    "connector_stability": {
+      "score": 68,
+      "pass": false
+    },
+    "test_coverage": {
+      "score": 75,
+      "pass": true
+    },
+    "production_ready": {
+      "score": 68,
+      "pass": false
+    },
+    "commercial_ready": {
+      "score": 58,
+      "pass": false
+    }
+  },
+  "all_criteria_pass": false
+}

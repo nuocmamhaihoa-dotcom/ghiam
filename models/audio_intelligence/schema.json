@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "audio_intelligence.schema.json",
+  "title": "AudioIntelligenceResult",
+  "type": "object",
+  "required": [
+    "ok",
+    "analysis_allowed",
+    "scoring_allowed"
+  ],
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "blocked": {
+      "type": "boolean"
+    },
+    "block_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "analysis_allowed": {
+      "type": "boolean"
+    },
+    "scoring_allowed": {
+      "type": "boolean"
+    },
+    "job_id": {
+      "type": "string"
+    },
+    "pipeline_order": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "quality": {
+      "type": "object"
+    },
+    "quality_gate": {
+      "type": "object"
+    },
+    "repair": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "separation": {
+      "type": "object"
+    },
+    "diarization": {
+      "type": "object"
+    },
+    "transcript": {
+      "type": "object"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "timestamp_start",
+          "speaker",
+          "transcript",
+          "rule_id"
+        ],
+        "properties": {
+          "claim": {
+            "type": "string"
+          },
+          "timestamp_start": {
+            "type": "number"
+          },
+          "timestamp_end": {
+            "type": "number"
+          },
+          "speaker": {
+            "type": "string"
+          },
+          "transcript": {
+            "type": "string"
+          },
+          "rule_id": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "emotion_timeline": {
+      "type": "object"
+    },
+    "buying_signals": {
+      "type": "array"
+    },
+    "objections": {
+      "type": "array"
+    },
+    "interrupts": {
+      "type": "object"
+    },
+    "silence": {
+      "type": "object"
+    },
+    "audio_features": {
+      "type": "object"
+    },
+    "call_stages": {
+      "type": "object"
+    }
+  },
+  "v2_features": {
+    "search_filters": [
+      "keyword",
+      "intent",
+      "emotion",
+      "objection",
+      "rule",
+      "agent",
+      "customer"
+    ],
+    "upload_folder_path": true,
+    "emotion_by_second": true,
+    "silence_risk_flag": true,
+    "quality_gate_blocks_scoring": true
+  }
+}

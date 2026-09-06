@@ -1,0 +1,15 @@
+{
+  "counts": {
+    "customers": 100000,
+    "agents": 50000,
+    "conversations": 10000,
+    "intents": 1000,
+    "objections": 5000,
+    "emotions": 500,
+    "buying_signals": 500,
+    "root_causes": 500,
+    "qa_benchmark": 10000,
+    "golden_calls": 500
+  },
+  "all_ok": true
+}

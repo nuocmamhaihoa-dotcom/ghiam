@@ -1,0 +1,42 @@
+{
+  "name": "war_room_snapshot",
+  "version": "1.0.0",
+  "required": ["ok", "widgets", "realtime_enabled"],
+  "widgets": [
+    "active_calls",
+    "online_agents",
+    "queue_size",
+    "avg_wait_sec",
+    "conversion_rate",
+    "open_alerts",
+    "critical_alerts",
+    "avg_buy_signal"
+  ],
+  "alert_kinds": [
+    "conversion_drop",
+    "sla_breach",
+    "queue_overflow",
+    "objection_spike",
+    "churn_risk",
+    "idle_agent"
+  ],
+  "alert_fields": [
+    "alert_id",
+    "kind",
+    "severity",
+    "title",
+    "message",
+    "entity_type",
+    "entity_id",
+    "evidence",
+    "recommended_action",
+    "created_at",
+    "acknowledged"
+  ],
+  "quality_checks": [
+    "alert_precision",
+    "freshness",
+    "coverage",
+    "evidence_validation"
+  ]
+}

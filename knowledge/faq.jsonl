@@ -1,0 +1,2 @@
+{"id": "faq:phi_thuong_nien", "type": "faq", "label": "FAQ phí", "content": "FAQ: phí thường niên thẻ tín dụng là 500.000đ, miễn năm đầu theo điều kiện chi tiêu", "source": "faq/fees", "confidence": 0.96}
+{"id": "faq:thoi_gian_duyet", "type": "faq", "label": "FAQ duyệt", "content": "FAQ: thời gian duyệt hồ sơ thường 1-3 ngày làm việc, không cam kết duyệt chắc chắn", "source": "faq/sla", "confidence": 0.96}

@@ -1,0 +1,2 @@
+{"id": "pricing:the_tin_dung_base", "type": "pricing", "label": "Giá thẻ tín dụng", "content": "Thẻ tín dụng: phí thường niên 500.000đ, ưu đãi miễn phí năm đầu nếu chi tiêu 20 triệu", "source": "pricing/card", "confidence": 0.97}
+{"id": "pricing:vay_lai_suat", "type": "pricing", "label": "Lãi suất vay", "content": "Vay tiêu dùng: lãi suất từ 1.5%/tháng tùy xếp hạng tín dụng, không cam kết trước thẩm định", "source": "pricing/loan", "confidence": 0.97}

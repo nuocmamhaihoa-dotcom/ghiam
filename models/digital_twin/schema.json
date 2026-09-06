@@ -1,0 +1,30 @@
+{
+  "name": "digital_twin_profile",
+  "version": "1.0.0",
+  "required": [
+    "twin_id",
+    "agent_id",
+    "display_name",
+    "skill_profile",
+    "strength_score",
+    "weakness_score",
+    "voice_pattern",
+    "conversation_dna",
+    "confidence",
+    "status"
+  ],
+  "training_labels_allowed": [
+    "golden",
+    "qa_approved",
+    "high_conversion"
+  ],
+  "verbatim_cloning": false,
+  "quality_thresholds": {
+    "twin_accuracy": 0.7,
+    "style_consistency": 0.65,
+    "coaching_quality": 0.65,
+    "similarity_stability": 0.6,
+    "min_training_calls": 3,
+    "min_confidence": 0.55
+  }
+}

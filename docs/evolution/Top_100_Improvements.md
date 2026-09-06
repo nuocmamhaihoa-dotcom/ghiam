@@ -1,0 +1,102 @@
+# Top 100 Improvements
+
+1. [high] (shadow) Wire shadow mode into live scoring path
+2. [high] (experiments) Add QA agreement labels for experiment KPI
+3. [high] (performance) Reduce AI latency p95 under 2s
+4. [high] (drift) Close open drift alerts weekly
+5. [medium] (scorecard) Expand model scorecard with golden-set eval
+6. [medium] (failures) Automate failure replay triage queue
+7. [high] (rollback) Version every prompt change via rollback engine
+8. [high] (quality) Block production promote without evidence pack
+9. [medium] (observability) Dashboard: CTO executive evolution view
+10. [low] (performance) Cache scorecard aggregations
+11. [low] (platform) Evolution backlog item #11: harden module integration
+12. [low] (platform) Evolution backlog item #12: harden module integration
+13. [low] (platform) Evolution backlog item #13: harden module integration
+14. [low] (platform) Evolution backlog item #14: harden module integration
+15. [low] (platform) Evolution backlog item #15: harden module integration
+16. [low] (platform) Evolution backlog item #16: harden module integration
+17. [low] (platform) Evolution backlog item #17: harden module integration
+18. [low] (platform) Evolution backlog item #18: harden module integration
+19. [low] (platform) Evolution backlog item #19: harden module integration
+20. [low] (platform) Evolution backlog item #20: harden module integration
+21. [low] (platform) Evolution backlog item #21: harden module integration
+22. [low] (platform) Evolution backlog item #22: harden module integration
+23. [low] (platform) Evolution backlog item #23: harden module integration
+24. [low] (platform) Evolution backlog item #24: harden module integration
+25. [low] (platform) Evolution backlog item #25: harden module integration
+26. [low] (platform) Evolution backlog item #26: harden module integration
+27. [low] (platform) Evolution backlog item #27: harden module integration
+28. [low] (platform) Evolution backlog item #28: harden module integration
+29. [low] (platform) Evolution backlog item #29: harden module integration
+30. [low] (platform) Evolution backlog item #30: harden module integration
+31. [low] (platform) Evolution backlog item #31: harden module integration
+32. [low] (platform) Evolution backlog item #32: harden module integration
+33. [low] (platform) Evolution backlog item #33: harden module integration
+34. [low] (platform) Evolution backlog item #34: harden module integration
+35. [low] (platform) Evolution backlog item #35: harden module integration
+36. [low] (platform) Evolution backlog item #36: harden module integration
+37. [low] (platform) Evolution backlog item #37: harden module integration
+38. [low] (platform) Evolution backlog item #38: harden module integration
+39. [low] (platform) Evolution backlog item #39: harden module integration
+40. [low] (platform) Evolution backlog item #40: harden module integration
+41. [low] (platform) Evolution backlog item #41: harden module integration
+42. [low] (platform) Evolution backlog item #42: harden module integration
+43. [low] (platform) Evolution backlog item #43: harden module integration
+44. [low] (platform) Evolution backlog item #44: harden module integration
+45. [low] (platform) Evolution backlog item #45: harden module integration
+46. [low] (platform) Evolution backlog item #46: harden module integration
+47. [low] (platform) Evolution backlog item #47: harden module integration
+48. [low] (platform) Evolution backlog item #48: harden module integration
+49. [low] (platform) Evolution backlog item #49: harden module integration
+50. [low] (platform) Evolution backlog item #50: harden module integration
+51. [low] (platform) Evolution backlog item #51: harden module integration
+52. [low] (platform) Evolution backlog item #52: harden module integration
+53. [low] (platform) Evolution backlog item #53: harden module integration
+54. [low] (platform) Evolution backlog item #54: harden module integration
+55. [low] (platform) Evolution backlog item #55: harden module integration
+56. [low] (platform) Evolution backlog item #56: harden module integration
+57. [low] (platform) Evolution backlog item #57: harden module integration
+58. [low] (platform) Evolution backlog item #58: harden module integration
+59. [low] (platform) Evolution backlog item #59: harden module integration
+60. [low] (platform) Evolution backlog item #60: harden module integration
+61. [low] (platform) Evolution backlog item #61: harden module integration
+62. [low] (platform) Evolution backlog item #62: harden module integration
+63. [low] (platform) Evolution backlog item #63: harden module integration
+64. [low] (platform) Evolution backlog item #64: harden module integration
+65. [low] (platform) Evolution backlog item #65: harden module integration
+66. [low] (platform) Evolution backlog item #66: harden module integration
+67. [low] (platform) Evolution backlog item #67: harden module integration
+68. [low] (platform) Evolution backlog item #68: harden module integration
+69. [low] (platform) Evolution backlog item #69: harden module integration
+70. [low] (platform) Evolution backlog item #70: harden module integration
+71. [low] (platform) Evolution backlog item #71: harden module integration
+72. [low] (platform) Evolution backlog item #72: harden module integration
+73. [low] (platform) Evolution backlog item #73: harden module integration
+74. [low] (platform) Evolution backlog item #74: harden module integration
+75. [low] (platform) Evolution backlog item #75: harden module integration
+76. [low] (platform) Evolution backlog item #76: harden module integration
+77. [low] (platform) Evolution backlog item #77: harden module integration
+78. [low] (platform) Evolution backlog item #78: harden module integration
+79. [low] (platform) Evolution backlog item #79: harden module integration
+80. [low] (platform) Evolution backlog item #80: harden module integration
+81. [low] (platform) Evolution backlog item #81: harden module integration
+82. [low] (platform) Evolution backlog item #82: harden module integration
+83. [low] (platform) Evolution backlog item #83: harden module integration
+84. [low] (platform) Evolution backlog item #84: harden module integration
+85. [low] (platform) Evolution backlog item #85: harden module integration
+86. [low] (platform) Evolution backlog item #86: harden module integration
+87. [low] (platform) Evolution backlog item #87: harden module integration
+88. [low] (platform) Evolution backlog item #88: harden module integration
+89. [low] (platform) Evolution backlog item #89: harden module integration
+90. [low] (platform) Evolution backlog item #90: harden module integration
+91. [low] (platform) Evolution backlog item #91: harden module integration
+92. [low] (platform) Evolution backlog item #92: harden module integration
+93. [low] (platform) Evolution backlog item #93: harden module integration
+94. [low] (platform) Evolution backlog item #94: harden module integration
+95. [low] (platform) Evolution backlog item #95: harden module integration
+96. [low] (platform) Evolution backlog item #96: harden module integration
+97. [low] (platform) Evolution backlog item #97: harden module integration
+98. [low] (platform) Evolution backlog item #98: harden module integration
+99. [low] (platform) Evolution backlog item #99: harden module integration
+100. [low] (platform) Evolution backlog item #100: harden module integration
