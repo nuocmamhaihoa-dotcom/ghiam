@@ -31,6 +31,7 @@ from app.interfaces.api.routers import (
     autonomous,
     audio_intelligence,
     simulator,
+    evolution,
 )
 
 __all__ = [
@@ -64,4 +65,5 @@ __all__ = [
     "autonomous",
     "audio_intelligence",
     "simulator",
+    "evolution",
 ]

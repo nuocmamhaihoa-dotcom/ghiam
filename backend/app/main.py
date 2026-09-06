@@ -45,6 +45,7 @@ from app.interfaces.api.routers import (
     autonomous,
     audio_intelligence,
     simulator,
+    evolution,
 )
 
 
@@ -132,6 +133,7 @@ def create_app() -> FastAPI:
     application.include_router(war_room.router, prefix=settings.api_prefix)
     application.include_router(autonomous.router, prefix=settings.api_prefix)
     application.include_router(audio_intelligence.router, prefix=settings.api_prefix)
+    application.include_router(evolution.router, prefix=settings.api_prefix)
 
     return application
 
