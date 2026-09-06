@@ -1,0 +1,96 @@
+{
+  "audio_engine.engine": {
+    "ok": true
+  },
+  "audio_pipeline.pipeline": {
+    "ok": true
+  },
+  "audio_repair.repair": {
+    "ok": true
+  },
+  "speaker.diarization": {
+    "ok": true
+  },
+  "speaker.separation": {
+    "ok": true
+  },
+  "transcript.engine": {
+    "ok": true
+  },
+  "transcript.normalize": {
+    "ok": true
+  },
+  "pragmatics": {
+    "ok": true
+  },
+  "memory_graph": {
+    "ok": true
+  },
+  "self_learning": {
+    "ok": true
+  },
+  "digital_twin": {
+    "ok": true
+  },
+  "negotiation": {
+    "ok": true
+  },
+  "cltv": {
+    "ok": true
+  },
+  "war_room": {
+    "ok": true
+  },
+  "autonomous": {
+    "ok": true
+  },
+  "sales_os": {
+    "ok": true
+  },
+  "aie_pipeline": {
+    "good_scoring_allowed": true,
+    "bad_blocked": true,
+    "evidence_fields_ok": true,
+    "stages_present": true,
+    "job_id": "aie_f3d9402543e1",
+    "pipeline_order": [
+      "upload",
+      "validation",
+      "audio_repair",
+      "noise_removal",
+      "voice_separation",
+      "speaker_diarization",
+      "transcript",
+      "evidence_extraction",
+      "quality_score",
+      "ai_analysis"
+    ]
+  },
+  "scoring_gate": {
+    "imports_audio": true,
+    "blocks_on_fail": true,
+    "snippet_lines": [
+      134,
+      143
+    ]
+  },
+  "mutual_import_pairs": [
+    [
+      "audio_engine",
+      "audio_pipeline"
+    ],
+    [
+      "audio_engine",
+      "audio_repair"
+    ],
+    [
+      "approval",
+      "self_learning"
+    ],
+    [
+      "research",
+      "self_learning"
+    ]
+  ],
+  "mutual_import_count": 4
+}

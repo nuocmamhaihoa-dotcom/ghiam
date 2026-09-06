@@ -1,0 +1,25 @@
+{
+  "sprint": 1,
+  "title": "Schema + Scripts + Validation",
+  "ok": true,
+  "checked_at": "2026-09-05T17:27:43.697065+00:00",
+  "gates": [
+    {
+      "gate": "schema",
+      "count": 1,
+      "ok": true
+    }
+  ],
+  "extras": {
+    "customers": 100000,
+    "agents": 50000,
+    "conversations": 10000,
+    "objections": 5000,
+    "intents": 1000,
+    "buying_signals": 500,
+    "emotions": 500,
+    "root_causes": 500,
+    "golden_calls": 500,
+    "qa_benchmark": 10000
+  }
+}

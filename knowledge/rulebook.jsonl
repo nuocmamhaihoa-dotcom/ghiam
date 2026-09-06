@@ -1,0 +1,3 @@
+{"id": "rulebook:no_guarantee", "type": "rulebook", "label": "Cấm cam kết duyệt", "content": "Cấm cam kết duyệt hồ sơ 100% hoặc lãi suất ngoài bảng giá công bố", "source": "rulebook/compliance", "confidence": 1.0}
+{"id": "rulebook:disclose_fee", "type": "rulebook", "label": "Công bố phí", "content": "Bắt buộc công bố phí thường niên và điều kiện ưu đãi trước khi chốt", "source": "rulebook/disclosure", "confidence": 1.0}
+{"id": "compliance:no_fake_rate", "type": "compliance", "label": "Cấm lãi giả", "content": "Compliance: cấm nêu lãi suất giả định không có trong bảng giá hiệu lực", "source": "compliance/rules", "confidence": 1.0}

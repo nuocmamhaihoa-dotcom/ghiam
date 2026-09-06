@@ -1,0 +1,501 @@
+id,text,strength_score,confidence,recommended_next_step,dialect,industry
+BUY-000001,Bao giờ giao? (Bất động sản · north · 1),0.46,0.61,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,real_estate
+BUY-000002,Có bảo hành không? (Spa · central · 2),0.47,0.62,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,spa
+BUY-000003,Thanh toán thế nào? (Nha khoa · south · 3),0.48,0.63,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,dental
+BUY-000004,Có xuất hóa đơn không? (Bảo hiểm · north · 4),0.49,0.64,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,insurance
+BUY-000005,Lấy hai cái giảm không? (Giáo dục · central · 5),0.5,0.65,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,education
+BUY-000006,Có trả góp không? (Ô tô · south · 6),0.51,0.66,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,automotive
+BUY-000007,Ship tận nơi không? (Mỹ phẩm · north · 7),0.52,0.67,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,cosmetics
+BUY-000008,Gửi hợp đồng mẫu được không? (Gia dụng · central · 8),0.53,0.68,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,home_appliances
+BUY-000009,Ai lắp đặt vậy? (Thực phẩm · south · 9),0.54,0.69,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,food
+BUY-000010,Demo trực tiếp được không? (Điện máy · north · 10),0.55,0.7,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,electronics
+BUY-000011,Nếu chốt hôm nay còn ưu đãi không? (Nội thất · central · 11),0.56,0.71,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,furniture
+BUY-000012,Có hỗ trợ sau bán không? (Logistics · south · 12),0.57,0.72,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,logistics
+BUY-000013,Có nhận COD không? (Du lịch · north · 13),0.58,0.73,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,travel
+BUY-000014,Thời gian triển khai bao lâu? (Tài chính · central · 14),0.59,0.74,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,finance
+BUY-000015,Có được thử trước không? (Fitness · south · 15),0.6,0.75,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,fitness
+BUY-000016,Bao giờ giao? (Điện nước · north · 16),0.61,0.76,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,plumbing
+BUY-000017,Có bảo hành không? (Sửa chữa · central · 17),0.62,0.77,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,repair
+BUY-000018,Thanh toán thế nào? (Camera · south · 18),0.63,0.78,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,camera
+BUY-000019,Có xuất hóa đơn không? (Thiết bị y tế · north · 19),0.64,0.79,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,medical_devices
+BUY-000020,Lấy hai cái giảm không? (Dịch vụ doanh nghiệp · central · 20),0.65,0.8,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,b2b_services
+BUY-000021,Có trả góp không? (Bất động sản · south · 21),0.66,0.81,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,real_estate
+BUY-000022,Ship tận nơi không? (Spa · north · 22),0.67,0.82,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,spa
+BUY-000023,Gửi hợp đồng mẫu được không? (Nha khoa · central · 23),0.68,0.83,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,dental
+BUY-000024,Ai lắp đặt vậy? (Bảo hiểm · south · 24),0.69,0.84,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,insurance
+BUY-000025,Demo trực tiếp được không? (Giáo dục · north · 25),0.7,0.85,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,education
+BUY-000026,Nếu chốt hôm nay còn ưu đãi không? (Ô tô · central · 26),0.71,0.86,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,automotive
+BUY-000027,Có hỗ trợ sau bán không? (Mỹ phẩm · south · 27),0.72,0.87,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,cosmetics
+BUY-000028,Có nhận COD không? (Gia dụng · north · 28),0.73,0.88,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,home_appliances
+BUY-000029,Thời gian triển khai bao lâu? (Thực phẩm · central · 29),0.74,0.89,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,food
+BUY-000030,Có được thử trước không? (Điện máy · south · 30),0.75,0.9,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,electronics
+BUY-000031,Bao giờ giao? (Nội thất · north · 31),0.76,0.91,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,furniture
+BUY-000032,Có bảo hành không? (Logistics · central · 32),0.77,0.92,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,logistics
+BUY-000033,Thanh toán thế nào? (Du lịch · south · 33),0.78,0.93,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,travel
+BUY-000034,Có xuất hóa đơn không? (Tài chính · north · 34),0.79,0.94,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,finance
+BUY-000035,Lấy hai cái giảm không? (Fitness · central · 35),0.8,0.6,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,fitness
+BUY-000036,Có trả góp không? (Điện nước · south · 36),0.81,0.61,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,plumbing
+BUY-000037,Ship tận nơi không? (Sửa chữa · north · 37),0.82,0.62,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,repair
+BUY-000038,Gửi hợp đồng mẫu được không? (Camera · central · 38),0.83,0.63,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,camera
+BUY-000039,Ai lắp đặt vậy? (Thiết bị y tế · south · 39),0.84,0.64,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,medical_devices
+BUY-000040,Demo trực tiếp được không? (Dịch vụ doanh nghiệp · north · 40),0.85,0.65,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,b2b_services
+BUY-000041,Nếu chốt hôm nay còn ưu đãi không? (Bất động sản · central · 41),0.86,0.66,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,real_estate
+BUY-000042,Có hỗ trợ sau bán không? (Spa · south · 42),0.87,0.67,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,spa
+BUY-000043,Có nhận COD không? (Nha khoa · north · 43),0.88,0.68,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,dental
+BUY-000044,Thời gian triển khai bao lâu? (Bảo hiểm · central · 44),0.89,0.69,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,insurance
+BUY-000045,Có được thử trước không? (Giáo dục · south · 45),0.9,0.7,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,education
+BUY-000046,Bao giờ giao? (Ô tô · north · 46),0.91,0.71,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,automotive
+BUY-000047,Có bảo hành không? (Mỹ phẩm · central · 47),0.92,0.72,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,cosmetics
+BUY-000048,Thanh toán thế nào? (Gia dụng · south · 48),0.93,0.73,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,home_appliances
+BUY-000049,Có xuất hóa đơn không? (Thực phẩm · north · 49),0.94,0.74,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,food
+BUY-000050,Lấy hai cái giảm không? (Điện máy · central · 50),0.45,0.75,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,electronics
+BUY-000051,Có trả góp không? (Nội thất · south · 51),0.46,0.76,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,furniture
+BUY-000052,Ship tận nơi không? (Logistics · north · 52),0.47,0.77,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,logistics
+BUY-000053,Gửi hợp đồng mẫu được không? (Du lịch · central · 53),0.48,0.78,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,travel
+BUY-000054,Ai lắp đặt vậy? (Tài chính · south · 54),0.49,0.79,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,finance
+BUY-000055,Demo trực tiếp được không? (Fitness · north · 55),0.5,0.8,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,fitness
+BUY-000056,Nếu chốt hôm nay còn ưu đãi không? (Điện nước · central · 56),0.51,0.81,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,plumbing
+BUY-000057,Có hỗ trợ sau bán không? (Sửa chữa · south · 57),0.52,0.82,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,repair
+BUY-000058,Có nhận COD không? (Camera · north · 58),0.53,0.83,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,camera
+BUY-000059,Thời gian triển khai bao lâu? (Thiết bị y tế · central · 59),0.54,0.84,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,medical_devices
+BUY-000060,Có được thử trước không? (Dịch vụ doanh nghiệp · south · 60),0.55,0.85,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,b2b_services
+BUY-000061,Bao giờ giao? (Bất động sản · north · 61),0.56,0.86,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,real_estate
+BUY-000062,Có bảo hành không? (Spa · central · 62),0.57,0.87,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,spa
+BUY-000063,Thanh toán thế nào? (Nha khoa · south · 63),0.58,0.88,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,dental
+BUY-000064,Có xuất hóa đơn không? (Bảo hiểm · north · 64),0.59,0.89,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,insurance
+BUY-000065,Lấy hai cái giảm không? (Giáo dục · central · 65),0.6,0.9,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,education
+BUY-000066,Có trả góp không? (Ô tô · south · 66),0.61,0.91,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,automotive
+BUY-000067,Ship tận nơi không? (Mỹ phẩm · north · 67),0.62,0.92,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,cosmetics
+BUY-000068,Gửi hợp đồng mẫu được không? (Gia dụng · central · 68),0.63,0.93,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,home_appliances
+BUY-000069,Ai lắp đặt vậy? (Thực phẩm · south · 69),0.64,0.94,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,food
+BUY-000070,Demo trực tiếp được không? (Điện máy · north · 70),0.65,0.6,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,electronics
+BUY-000071,Nếu chốt hôm nay còn ưu đãi không? (Nội thất · central · 71),0.66,0.61,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,furniture
+BUY-000072,Có hỗ trợ sau bán không? (Logistics · south · 72),0.67,0.62,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,logistics
+BUY-000073,Có nhận COD không? (Du lịch · north · 73),0.68,0.63,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,travel
+BUY-000074,Thời gian triển khai bao lâu? (Tài chính · central · 74),0.69,0.64,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,finance
+BUY-000075,Có được thử trước không? (Fitness · south · 75),0.7,0.65,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,fitness
+BUY-000076,Bao giờ giao? (Điện nước · north · 76),0.71,0.66,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,plumbing
+BUY-000077,Có bảo hành không? (Sửa chữa · central · 77),0.72,0.67,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,repair
+BUY-000078,Thanh toán thế nào? (Camera · south · 78),0.73,0.68,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,camera
+BUY-000079,Có xuất hóa đơn không? (Thiết bị y tế · north · 79),0.74,0.69,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,medical_devices
+BUY-000080,Lấy hai cái giảm không? (Dịch vụ doanh nghiệp · central · 80),0.75,0.7,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,b2b_services
+BUY-000081,Có trả góp không? (Bất động sản · south · 81),0.76,0.71,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,real_estate
+BUY-000082,Ship tận nơi không? (Spa · north · 82),0.77,0.72,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,spa
+BUY-000083,Gửi hợp đồng mẫu được không? (Nha khoa · central · 83),0.78,0.73,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,dental
+BUY-000084,Ai lắp đặt vậy? (Bảo hiểm · south · 84),0.79,0.74,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,insurance
+BUY-000085,Demo trực tiếp được không? (Giáo dục · north · 85),0.8,0.75,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,education
+BUY-000086,Nếu chốt hôm nay còn ưu đãi không? (Ô tô · central · 86),0.81,0.76,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,automotive
+BUY-000087,Có hỗ trợ sau bán không? (Mỹ phẩm · south · 87),0.82,0.77,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,cosmetics
+BUY-000088,Có nhận COD không? (Gia dụng · north · 88),0.83,0.78,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,home_appliances
+BUY-000089,Thời gian triển khai bao lâu? (Thực phẩm · central · 89),0.84,0.79,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,food
+BUY-000090,Có được thử trước không? (Điện máy · south · 90),0.85,0.8,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,electronics
+BUY-000091,Bao giờ giao? (Nội thất · north · 91),0.86,0.81,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,furniture
+BUY-000092,Có bảo hành không? (Logistics · central · 92),0.87,0.82,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,logistics
+BUY-000093,Thanh toán thế nào? (Du lịch · south · 93),0.88,0.83,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,travel
+BUY-000094,Có xuất hóa đơn không? (Tài chính · north · 94),0.89,0.84,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,finance
+BUY-000095,Lấy hai cái giảm không? (Fitness · central · 95),0.9,0.85,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,fitness
+BUY-000096,Có trả góp không? (Điện nước · south · 96),0.91,0.86,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,plumbing
+BUY-000097,Ship tận nơi không? (Sửa chữa · north · 97),0.92,0.87,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,repair
+BUY-000098,Gửi hợp đồng mẫu được không? (Camera · central · 98),0.93,0.88,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,camera
+BUY-000099,Ai lắp đặt vậy? (Thiết bị y tế · south · 99),0.94,0.89,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,medical_devices
+BUY-000100,Demo trực tiếp được không? (Dịch vụ doanh nghiệp · north · 100),0.45,0.9,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,b2b_services
+BUY-000101,Nếu chốt hôm nay còn ưu đãi không? (Bất động sản · central · 101),0.46,0.91,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,real_estate
+BUY-000102,Có hỗ trợ sau bán không? (Spa · south · 102),0.47,0.92,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,spa
+BUY-000103,Có nhận COD không? (Nha khoa · north · 103),0.48,0.93,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,dental
+BUY-000104,Thời gian triển khai bao lâu? (Bảo hiểm · central · 104),0.49,0.94,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,insurance
+BUY-000105,Có được thử trước không? (Giáo dục · south · 105),0.5,0.6,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,education
+BUY-000106,Bao giờ giao? (Ô tô · north · 106),0.51,0.61,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,automotive
+BUY-000107,Có bảo hành không? (Mỹ phẩm · central · 107),0.52,0.62,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,cosmetics
+BUY-000108,Thanh toán thế nào? (Gia dụng · south · 108),0.53,0.63,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,home_appliances
+BUY-000109,Có xuất hóa đơn không? (Thực phẩm · north · 109),0.54,0.64,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,food
+BUY-000110,Lấy hai cái giảm không? (Điện máy · central · 110),0.55,0.65,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,electronics
+BUY-000111,Có trả góp không? (Nội thất · south · 111),0.56,0.66,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,furniture
+BUY-000112,Ship tận nơi không? (Logistics · north · 112),0.57,0.67,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,logistics
+BUY-000113,Gửi hợp đồng mẫu được không? (Du lịch · central · 113),0.58,0.68,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,travel
+BUY-000114,Ai lắp đặt vậy? (Tài chính · south · 114),0.59,0.69,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,finance
+BUY-000115,Demo trực tiếp được không? (Fitness · north · 115),0.6,0.7,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,fitness
+BUY-000116,Nếu chốt hôm nay còn ưu đãi không? (Điện nước · central · 116),0.61,0.71,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,plumbing
+BUY-000117,Có hỗ trợ sau bán không? (Sửa chữa · south · 117),0.62,0.72,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,repair
+BUY-000118,Có nhận COD không? (Camera · north · 118),0.63,0.73,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,camera
+BUY-000119,Thời gian triển khai bao lâu? (Thiết bị y tế · central · 119),0.64,0.74,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,medical_devices
+BUY-000120,Có được thử trước không? (Dịch vụ doanh nghiệp · south · 120),0.65,0.75,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,b2b_services
+BUY-000121,Bao giờ giao? (Bất động sản · north · 121),0.66,0.76,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,real_estate
+BUY-000122,Có bảo hành không? (Spa · central · 122),0.67,0.77,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,spa
+BUY-000123,Thanh toán thế nào? (Nha khoa · south · 123),0.68,0.78,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,dental
+BUY-000124,Có xuất hóa đơn không? (Bảo hiểm · north · 124),0.69,0.79,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,insurance
+BUY-000125,Lấy hai cái giảm không? (Giáo dục · central · 125),0.7,0.8,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,education
+BUY-000126,Có trả góp không? (Ô tô · south · 126),0.71,0.81,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,automotive
+BUY-000127,Ship tận nơi không? (Mỹ phẩm · north · 127),0.72,0.82,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,cosmetics
+BUY-000128,Gửi hợp đồng mẫu được không? (Gia dụng · central · 128),0.73,0.83,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,home_appliances
+BUY-000129,Ai lắp đặt vậy? (Thực phẩm · south · 129),0.74,0.84,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,food
+BUY-000130,Demo trực tiếp được không? (Điện máy · north · 130),0.75,0.85,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,electronics
+BUY-000131,Nếu chốt hôm nay còn ưu đãi không? (Nội thất · central · 131),0.76,0.86,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,furniture
+BUY-000132,Có hỗ trợ sau bán không? (Logistics · south · 132),0.77,0.87,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,logistics
+BUY-000133,Có nhận COD không? (Du lịch · north · 133),0.78,0.88,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,travel
+BUY-000134,Thời gian triển khai bao lâu? (Tài chính · central · 134),0.79,0.89,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,finance
+BUY-000135,Có được thử trước không? (Fitness · south · 135),0.8,0.9,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,fitness
+BUY-000136,Bao giờ giao? (Điện nước · north · 136),0.81,0.91,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,plumbing
+BUY-000137,Có bảo hành không? (Sửa chữa · central · 137),0.82,0.92,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,repair
+BUY-000138,Thanh toán thế nào? (Camera · south · 138),0.83,0.93,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,camera
+BUY-000139,Có xuất hóa đơn không? (Thiết bị y tế · north · 139),0.84,0.94,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,medical_devices
+BUY-000140,Lấy hai cái giảm không? (Dịch vụ doanh nghiệp · central · 140),0.85,0.6,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,b2b_services
+BUY-000141,Có trả góp không? (Bất động sản · south · 141),0.86,0.61,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,real_estate
+BUY-000142,Ship tận nơi không? (Spa · north · 142),0.87,0.62,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,spa
+BUY-000143,Gửi hợp đồng mẫu được không? (Nha khoa · central · 143),0.88,0.63,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,dental
+BUY-000144,Ai lắp đặt vậy? (Bảo hiểm · south · 144),0.89,0.64,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,insurance
+BUY-000145,Demo trực tiếp được không? (Giáo dục · north · 145),0.9,0.65,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,education
+BUY-000146,Nếu chốt hôm nay còn ưu đãi không? (Ô tô · central · 146),0.91,0.66,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,automotive
+BUY-000147,Có hỗ trợ sau bán không? (Mỹ phẩm · south · 147),0.92,0.67,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,cosmetics
+BUY-000148,Có nhận COD không? (Gia dụng · north · 148),0.93,0.68,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,home_appliances
+BUY-000149,Thời gian triển khai bao lâu? (Thực phẩm · central · 149),0.94,0.69,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,food
+BUY-000150,Có được thử trước không? (Điện máy · south · 150),0.45,0.7,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,electronics
+BUY-000151,Bao giờ giao? (Nội thất · north · 151),0.46,0.71,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,furniture
+BUY-000152,Có bảo hành không? (Logistics · central · 152),0.47,0.72,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,logistics
+BUY-000153,Thanh toán thế nào? (Du lịch · south · 153),0.48,0.73,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,travel
+BUY-000154,Có xuất hóa đơn không? (Tài chính · north · 154),0.49,0.74,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,finance
+BUY-000155,Lấy hai cái giảm không? (Fitness · central · 155),0.5,0.75,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,fitness
+BUY-000156,Có trả góp không? (Điện nước · south · 156),0.51,0.76,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,plumbing
+BUY-000157,Ship tận nơi không? (Sửa chữa · north · 157),0.52,0.77,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,repair
+BUY-000158,Gửi hợp đồng mẫu được không? (Camera · central · 158),0.53,0.78,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,camera
+BUY-000159,Ai lắp đặt vậy? (Thiết bị y tế · south · 159),0.54,0.79,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,medical_devices
+BUY-000160,Demo trực tiếp được không? (Dịch vụ doanh nghiệp · north · 160),0.55,0.8,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,b2b_services
+BUY-000161,Nếu chốt hôm nay còn ưu đãi không? (Bất động sản · central · 161),0.56,0.81,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,real_estate
+BUY-000162,Có hỗ trợ sau bán không? (Spa · south · 162),0.57,0.82,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,spa
+BUY-000163,Có nhận COD không? (Nha khoa · north · 163),0.58,0.83,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,dental
+BUY-000164,Thời gian triển khai bao lâu? (Bảo hiểm · central · 164),0.59,0.84,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,insurance
+BUY-000165,Có được thử trước không? (Giáo dục · south · 165),0.6,0.85,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,education
+BUY-000166,Bao giờ giao? (Ô tô · north · 166),0.61,0.86,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,automotive
+BUY-000167,Có bảo hành không? (Mỹ phẩm · central · 167),0.62,0.87,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,cosmetics
+BUY-000168,Thanh toán thế nào? (Gia dụng · south · 168),0.63,0.88,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,home_appliances
+BUY-000169,Có xuất hóa đơn không? (Thực phẩm · north · 169),0.64,0.89,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,food
+BUY-000170,Lấy hai cái giảm không? (Điện máy · central · 170),0.65,0.9,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,electronics
+BUY-000171,Có trả góp không? (Nội thất · south · 171),0.66,0.91,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,furniture
+BUY-000172,Ship tận nơi không? (Logistics · north · 172),0.67,0.92,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,logistics
+BUY-000173,Gửi hợp đồng mẫu được không? (Du lịch · central · 173),0.68,0.93,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,travel
+BUY-000174,Ai lắp đặt vậy? (Tài chính · south · 174),0.69,0.94,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,finance
+BUY-000175,Demo trực tiếp được không? (Fitness · north · 175),0.7,0.6,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,fitness
+BUY-000176,Nếu chốt hôm nay còn ưu đãi không? (Điện nước · central · 176),0.71,0.61,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,plumbing
+BUY-000177,Có hỗ trợ sau bán không? (Sửa chữa · south · 177),0.72,0.62,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,repair
+BUY-000178,Có nhận COD không? (Camera · north · 178),0.73,0.63,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,camera
+BUY-000179,Thời gian triển khai bao lâu? (Thiết bị y tế · central · 179),0.74,0.64,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,medical_devices
+BUY-000180,Có được thử trước không? (Dịch vụ doanh nghiệp · south · 180),0.75,0.65,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,b2b_services
+BUY-000181,Bao giờ giao? (Bất động sản · north · 181),0.76,0.66,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,real_estate
+BUY-000182,Có bảo hành không? (Spa · central · 182),0.77,0.67,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,spa
+BUY-000183,Thanh toán thế nào? (Nha khoa · south · 183),0.78,0.68,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,dental
+BUY-000184,Có xuất hóa đơn không? (Bảo hiểm · north · 184),0.79,0.69,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,insurance
+BUY-000185,Lấy hai cái giảm không? (Giáo dục · central · 185),0.8,0.7,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,education
+BUY-000186,Có trả góp không? (Ô tô · south · 186),0.81,0.71,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,automotive
+BUY-000187,Ship tận nơi không? (Mỹ phẩm · north · 187),0.82,0.72,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,cosmetics
+BUY-000188,Gửi hợp đồng mẫu được không? (Gia dụng · central · 188),0.83,0.73,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,home_appliances
+BUY-000189,Ai lắp đặt vậy? (Thực phẩm · south · 189),0.84,0.74,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,food
+BUY-000190,Demo trực tiếp được không? (Điện máy · north · 190),0.85,0.75,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,electronics
+BUY-000191,Nếu chốt hôm nay còn ưu đãi không? (Nội thất · central · 191),0.86,0.76,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,furniture
+BUY-000192,Có hỗ trợ sau bán không? (Logistics · south · 192),0.87,0.77,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,logistics
+BUY-000193,Có nhận COD không? (Du lịch · north · 193),0.88,0.78,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,travel
+BUY-000194,Thời gian triển khai bao lâu? (Tài chính · central · 194),0.89,0.79,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,finance
+BUY-000195,Có được thử trước không? (Fitness · south · 195),0.9,0.8,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,fitness
+BUY-000196,Bao giờ giao? (Điện nước · north · 196),0.91,0.81,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,plumbing
+BUY-000197,Có bảo hành không? (Sửa chữa · central · 197),0.92,0.82,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,repair
+BUY-000198,Thanh toán thế nào? (Camera · south · 198),0.93,0.83,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,camera
+BUY-000199,Có xuất hóa đơn không? (Thiết bị y tế · north · 199),0.94,0.84,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,medical_devices
+BUY-000200,Lấy hai cái giảm không? (Dịch vụ doanh nghiệp · central · 200),0.45,0.85,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,b2b_services
+BUY-000201,Có trả góp không? (Bất động sản · south · 201),0.46,0.86,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,real_estate
+BUY-000202,Ship tận nơi không? (Spa · north · 202),0.47,0.87,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,spa
+BUY-000203,Gửi hợp đồng mẫu được không? (Nha khoa · central · 203),0.48,0.88,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,dental
+BUY-000204,Ai lắp đặt vậy? (Bảo hiểm · south · 204),0.49,0.89,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,insurance
+BUY-000205,Demo trực tiếp được không? (Giáo dục · north · 205),0.5,0.9,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,education
+BUY-000206,Nếu chốt hôm nay còn ưu đãi không? (Ô tô · central · 206),0.51,0.91,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,automotive
+BUY-000207,Có hỗ trợ sau bán không? (Mỹ phẩm · south · 207),0.52,0.92,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,cosmetics
+BUY-000208,Có nhận COD không? (Gia dụng · north · 208),0.53,0.93,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,home_appliances
+BUY-000209,Thời gian triển khai bao lâu? (Thực phẩm · central · 209),0.54,0.94,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,food
+BUY-000210,Có được thử trước không? (Điện máy · south · 210),0.55,0.6,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,electronics
+BUY-000211,Bao giờ giao? (Nội thất · north · 211),0.56,0.61,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,furniture
+BUY-000212,Có bảo hành không? (Logistics · central · 212),0.57,0.62,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,logistics
+BUY-000213,Thanh toán thế nào? (Du lịch · south · 213),0.58,0.63,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,travel
+BUY-000214,Có xuất hóa đơn không? (Tài chính · north · 214),0.59,0.64,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,finance
+BUY-000215,Lấy hai cái giảm không? (Fitness · central · 215),0.6,0.65,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,fitness
+BUY-000216,Có trả góp không? (Điện nước · south · 216),0.61,0.66,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,plumbing
+BUY-000217,Ship tận nơi không? (Sửa chữa · north · 217),0.62,0.67,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,repair
+BUY-000218,Gửi hợp đồng mẫu được không? (Camera · central · 218),0.63,0.68,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,camera
+BUY-000219,Ai lắp đặt vậy? (Thiết bị y tế · south · 219),0.64,0.69,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,medical_devices
+BUY-000220,Demo trực tiếp được không? (Dịch vụ doanh nghiệp · north · 220),0.65,0.7,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,b2b_services
+BUY-000221,Nếu chốt hôm nay còn ưu đãi không? (Bất động sản · central · 221),0.66,0.71,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,real_estate
+BUY-000222,Có hỗ trợ sau bán không? (Spa · south · 222),0.67,0.72,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,spa
+BUY-000223,Có nhận COD không? (Nha khoa · north · 223),0.68,0.73,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,dental
+BUY-000224,Thời gian triển khai bao lâu? (Bảo hiểm · central · 224),0.69,0.74,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,insurance
+BUY-000225,Có được thử trước không? (Giáo dục · south · 225),0.7,0.75,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,education
+BUY-000226,Bao giờ giao? (Ô tô · north · 226),0.71,0.76,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,automotive
+BUY-000227,Có bảo hành không? (Mỹ phẩm · central · 227),0.72,0.77,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,cosmetics
+BUY-000228,Thanh toán thế nào? (Gia dụng · south · 228),0.73,0.78,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,home_appliances
+BUY-000229,Có xuất hóa đơn không? (Thực phẩm · north · 229),0.74,0.79,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,food
+BUY-000230,Lấy hai cái giảm không? (Điện máy · central · 230),0.75,0.8,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,electronics
+BUY-000231,Có trả góp không? (Nội thất · south · 231),0.76,0.81,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,furniture
+BUY-000232,Ship tận nơi không? (Logistics · north · 232),0.77,0.82,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,logistics
+BUY-000233,Gửi hợp đồng mẫu được không? (Du lịch · central · 233),0.78,0.83,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,travel
+BUY-000234,Ai lắp đặt vậy? (Tài chính · south · 234),0.79,0.84,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,finance
+BUY-000235,Demo trực tiếp được không? (Fitness · north · 235),0.8,0.85,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,fitness
+BUY-000236,Nếu chốt hôm nay còn ưu đãi không? (Điện nước · central · 236),0.81,0.86,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,plumbing
+BUY-000237,Có hỗ trợ sau bán không? (Sửa chữa · south · 237),0.82,0.87,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,repair
+BUY-000238,Có nhận COD không? (Camera · north · 238),0.83,0.88,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,camera
+BUY-000239,Thời gian triển khai bao lâu? (Thiết bị y tế · central · 239),0.84,0.89,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,medical_devices
+BUY-000240,Có được thử trước không? (Dịch vụ doanh nghiệp · south · 240),0.85,0.9,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,b2b_services
+BUY-000241,Bao giờ giao? (Bất động sản · north · 241),0.86,0.91,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,real_estate
+BUY-000242,Có bảo hành không? (Spa · central · 242),0.87,0.92,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,spa
+BUY-000243,Thanh toán thế nào? (Nha khoa · south · 243),0.88,0.93,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,dental
+BUY-000244,Có xuất hóa đơn không? (Bảo hiểm · north · 244),0.89,0.94,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,insurance
+BUY-000245,Lấy hai cái giảm không? (Giáo dục · central · 245),0.9,0.6,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,education
+BUY-000246,Có trả góp không? (Ô tô · south · 246),0.91,0.61,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,automotive
+BUY-000247,Ship tận nơi không? (Mỹ phẩm · north · 247),0.92,0.62,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,cosmetics
+BUY-000248,Gửi hợp đồng mẫu được không? (Gia dụng · central · 248),0.93,0.63,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,home_appliances
+BUY-000249,Ai lắp đặt vậy? (Thực phẩm · south · 249),0.94,0.64,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,food
+BUY-000250,Demo trực tiếp được không? (Điện máy · north · 250),0.45,0.65,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,electronics
+BUY-000251,Nếu chốt hôm nay còn ưu đãi không? (Nội thất · central · 251),0.46,0.66,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,furniture
+BUY-000252,Có hỗ trợ sau bán không? (Logistics · south · 252),0.47,0.67,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,logistics
+BUY-000253,Có nhận COD không? (Du lịch · north · 253),0.48,0.68,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,travel
+BUY-000254,Thời gian triển khai bao lâu? (Tài chính · central · 254),0.49,0.69,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,finance
+BUY-000255,Có được thử trước không? (Fitness · south · 255),0.5,0.7,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,fitness
+BUY-000256,Bao giờ giao? (Điện nước · north · 256),0.51,0.71,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,plumbing
+BUY-000257,Có bảo hành không? (Sửa chữa · central · 257),0.52,0.72,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,repair
+BUY-000258,Thanh toán thế nào? (Camera · south · 258),0.53,0.73,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,camera
+BUY-000259,Có xuất hóa đơn không? (Thiết bị y tế · north · 259),0.54,0.74,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,medical_devices
+BUY-000260,Lấy hai cái giảm không? (Dịch vụ doanh nghiệp · central · 260),0.55,0.75,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,b2b_services
+BUY-000261,Có trả góp không? (Bất động sản · south · 261),0.56,0.76,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,real_estate
+BUY-000262,Ship tận nơi không? (Spa · north · 262),0.57,0.77,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,spa
+BUY-000263,Gửi hợp đồng mẫu được không? (Nha khoa · central · 263),0.58,0.78,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,dental
+BUY-000264,Ai lắp đặt vậy? (Bảo hiểm · south · 264),0.59,0.79,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,insurance
+BUY-000265,Demo trực tiếp được không? (Giáo dục · north · 265),0.6,0.8,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,education
+BUY-000266,Nếu chốt hôm nay còn ưu đãi không? (Ô tô · central · 266),0.61,0.81,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,automotive
+BUY-000267,Có hỗ trợ sau bán không? (Mỹ phẩm · south · 267),0.62,0.82,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,cosmetics
+BUY-000268,Có nhận COD không? (Gia dụng · north · 268),0.63,0.83,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,home_appliances
+BUY-000269,Thời gian triển khai bao lâu? (Thực phẩm · central · 269),0.64,0.84,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,food
+BUY-000270,Có được thử trước không? (Điện máy · south · 270),0.65,0.85,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,electronics
+BUY-000271,Bao giờ giao? (Nội thất · north · 271),0.66,0.86,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,furniture
+BUY-000272,Có bảo hành không? (Logistics · central · 272),0.67,0.87,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,logistics
+BUY-000273,Thanh toán thế nào? (Du lịch · south · 273),0.68,0.88,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,travel
+BUY-000274,Có xuất hóa đơn không? (Tài chính · north · 274),0.69,0.89,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,finance
+BUY-000275,Lấy hai cái giảm không? (Fitness · central · 275),0.7,0.9,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,fitness
+BUY-000276,Có trả góp không? (Điện nước · south · 276),0.71,0.91,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,plumbing
+BUY-000277,Ship tận nơi không? (Sửa chữa · north · 277),0.72,0.92,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,repair
+BUY-000278,Gửi hợp đồng mẫu được không? (Camera · central · 278),0.73,0.93,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,camera
+BUY-000279,Ai lắp đặt vậy? (Thiết bị y tế · south · 279),0.74,0.94,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,medical_devices
+BUY-000280,Demo trực tiếp được không? (Dịch vụ doanh nghiệp · north · 280),0.75,0.6,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,b2b_services
+BUY-000281,Nếu chốt hôm nay còn ưu đãi không? (Bất động sản · central · 281),0.76,0.61,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,real_estate
+BUY-000282,Có hỗ trợ sau bán không? (Spa · south · 282),0.77,0.62,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,spa
+BUY-000283,Có nhận COD không? (Nha khoa · north · 283),0.78,0.63,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,dental
+BUY-000284,Thời gian triển khai bao lâu? (Bảo hiểm · central · 284),0.79,0.64,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,insurance
+BUY-000285,Có được thử trước không? (Giáo dục · south · 285),0.8,0.65,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,education
+BUY-000286,Bao giờ giao? (Ô tô · north · 286),0.81,0.66,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,automotive
+BUY-000287,Có bảo hành không? (Mỹ phẩm · central · 287),0.82,0.67,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,cosmetics
+BUY-000288,Thanh toán thế nào? (Gia dụng · south · 288),0.83,0.68,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,home_appliances
+BUY-000289,Có xuất hóa đơn không? (Thực phẩm · north · 289),0.84,0.69,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,food
+BUY-000290,Lấy hai cái giảm không? (Điện máy · central · 290),0.85,0.7,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,electronics
+BUY-000291,Có trả góp không? (Nội thất · south · 291),0.86,0.71,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,furniture
+BUY-000292,Ship tận nơi không? (Logistics · north · 292),0.87,0.72,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,logistics
+BUY-000293,Gửi hợp đồng mẫu được không? (Du lịch · central · 293),0.88,0.73,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,travel
+BUY-000294,Ai lắp đặt vậy? (Tài chính · south · 294),0.89,0.74,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,finance
+BUY-000295,Demo trực tiếp được không? (Fitness · north · 295),0.9,0.75,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,fitness
+BUY-000296,Nếu chốt hôm nay còn ưu đãi không? (Điện nước · central · 296),0.91,0.76,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,plumbing
+BUY-000297,Có hỗ trợ sau bán không? (Sửa chữa · south · 297),0.92,0.77,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,repair
+BUY-000298,Có nhận COD không? (Camera · north · 298),0.93,0.78,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,camera
+BUY-000299,Thời gian triển khai bao lâu? (Thiết bị y tế · central · 299),0.94,0.79,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,medical_devices
+BUY-000300,Có được thử trước không? (Dịch vụ doanh nghiệp · south · 300),0.45,0.8,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,b2b_services
+BUY-000301,Bao giờ giao? (Bất động sản · north · 301),0.46,0.81,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,real_estate
+BUY-000302,Có bảo hành không? (Spa · central · 302),0.47,0.82,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,spa
+BUY-000303,Thanh toán thế nào? (Nha khoa · south · 303),0.48,0.83,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,dental
+BUY-000304,Có xuất hóa đơn không? (Bảo hiểm · north · 304),0.49,0.84,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,insurance
+BUY-000305,Lấy hai cái giảm không? (Giáo dục · central · 305),0.5,0.85,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,education
+BUY-000306,Có trả góp không? (Ô tô · south · 306),0.51,0.86,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,automotive
+BUY-000307,Ship tận nơi không? (Mỹ phẩm · north · 307),0.52,0.87,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,cosmetics
+BUY-000308,Gửi hợp đồng mẫu được không? (Gia dụng · central · 308),0.53,0.88,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,home_appliances
+BUY-000309,Ai lắp đặt vậy? (Thực phẩm · south · 309),0.54,0.89,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,food
+BUY-000310,Demo trực tiếp được không? (Điện máy · north · 310),0.55,0.9,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,electronics
+BUY-000311,Nếu chốt hôm nay còn ưu đãi không? (Nội thất · central · 311),0.56,0.91,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,furniture
+BUY-000312,Có hỗ trợ sau bán không? (Logistics · south · 312),0.57,0.92,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,logistics
+BUY-000313,Có nhận COD không? (Du lịch · north · 313),0.58,0.93,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,travel
+BUY-000314,Thời gian triển khai bao lâu? (Tài chính · central · 314),0.59,0.94,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,finance
+BUY-000315,Có được thử trước không? (Fitness · south · 315),0.6,0.6,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,fitness
+BUY-000316,Bao giờ giao? (Điện nước · north · 316),0.61,0.61,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,plumbing
+BUY-000317,Có bảo hành không? (Sửa chữa · central · 317),0.62,0.62,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,repair
+BUY-000318,Thanh toán thế nào? (Camera · south · 318),0.63,0.63,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,camera
+BUY-000319,Có xuất hóa đơn không? (Thiết bị y tế · north · 319),0.64,0.64,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,medical_devices
+BUY-000320,Lấy hai cái giảm không? (Dịch vụ doanh nghiệp · central · 320),0.65,0.65,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,b2b_services
+BUY-000321,Có trả góp không? (Bất động sản · south · 321),0.66,0.66,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,real_estate
+BUY-000322,Ship tận nơi không? (Spa · north · 322),0.67,0.67,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,spa
+BUY-000323,Gửi hợp đồng mẫu được không? (Nha khoa · central · 323),0.68,0.68,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,dental
+BUY-000324,Ai lắp đặt vậy? (Bảo hiểm · south · 324),0.69,0.69,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,insurance
+BUY-000325,Demo trực tiếp được không? (Giáo dục · north · 325),0.7,0.7,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,education
+BUY-000326,Nếu chốt hôm nay còn ưu đãi không? (Ô tô · central · 326),0.71,0.71,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,automotive
+BUY-000327,Có hỗ trợ sau bán không? (Mỹ phẩm · south · 327),0.72,0.72,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,cosmetics
+BUY-000328,Có nhận COD không? (Gia dụng · north · 328),0.73,0.73,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,home_appliances
+BUY-000329,Thời gian triển khai bao lâu? (Thực phẩm · central · 329),0.74,0.74,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,food
+BUY-000330,Có được thử trước không? (Điện máy · south · 330),0.75,0.75,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,electronics
+BUY-000331,Bao giờ giao? (Nội thất · north · 331),0.76,0.76,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,furniture
+BUY-000332,Có bảo hành không? (Logistics · central · 332),0.77,0.77,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,logistics
+BUY-000333,Thanh toán thế nào? (Du lịch · south · 333),0.78,0.78,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,travel
+BUY-000334,Có xuất hóa đơn không? (Tài chính · north · 334),0.79,0.79,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,finance
+BUY-000335,Lấy hai cái giảm không? (Fitness · central · 335),0.8,0.8,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,fitness
+BUY-000336,Có trả góp không? (Điện nước · south · 336),0.81,0.81,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,plumbing
+BUY-000337,Ship tận nơi không? (Sửa chữa · north · 337),0.82,0.82,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,repair
+BUY-000338,Gửi hợp đồng mẫu được không? (Camera · central · 338),0.83,0.83,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,camera
+BUY-000339,Ai lắp đặt vậy? (Thiết bị y tế · south · 339),0.84,0.84,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,medical_devices
+BUY-000340,Demo trực tiếp được không? (Dịch vụ doanh nghiệp · north · 340),0.85,0.85,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,b2b_services
+BUY-000341,Nếu chốt hôm nay còn ưu đãi không? (Bất động sản · central · 341),0.86,0.86,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,real_estate
+BUY-000342,Có hỗ trợ sau bán không? (Spa · south · 342),0.87,0.87,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,spa
+BUY-000343,Có nhận COD không? (Nha khoa · north · 343),0.88,0.88,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,dental
+BUY-000344,Thời gian triển khai bao lâu? (Bảo hiểm · central · 344),0.89,0.89,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,insurance
+BUY-000345,Có được thử trước không? (Giáo dục · south · 345),0.9,0.9,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,education
+BUY-000346,Bao giờ giao? (Ô tô · north · 346),0.91,0.91,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,automotive
+BUY-000347,Có bảo hành không? (Mỹ phẩm · central · 347),0.92,0.92,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,cosmetics
+BUY-000348,Thanh toán thế nào? (Gia dụng · south · 348),0.93,0.93,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,home_appliances
+BUY-000349,Có xuất hóa đơn không? (Thực phẩm · north · 349),0.94,0.94,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,food
+BUY-000350,Lấy hai cái giảm không? (Điện máy · central · 350),0.45,0.6,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,electronics
+BUY-000351,Có trả góp không? (Nội thất · south · 351),0.46,0.61,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,furniture
+BUY-000352,Ship tận nơi không? (Logistics · north · 352),0.47,0.62,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,logistics
+BUY-000353,Gửi hợp đồng mẫu được không? (Du lịch · central · 353),0.48,0.63,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,travel
+BUY-000354,Ai lắp đặt vậy? (Tài chính · south · 354),0.49,0.64,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,finance
+BUY-000355,Demo trực tiếp được không? (Fitness · north · 355),0.5,0.65,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,fitness
+BUY-000356,Nếu chốt hôm nay còn ưu đãi không? (Điện nước · central · 356),0.51,0.66,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,plumbing
+BUY-000357,Có hỗ trợ sau bán không? (Sửa chữa · south · 357),0.52,0.67,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,repair
+BUY-000358,Có nhận COD không? (Camera · north · 358),0.53,0.68,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,camera
+BUY-000359,Thời gian triển khai bao lâu? (Thiết bị y tế · central · 359),0.54,0.69,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,medical_devices
+BUY-000360,Có được thử trước không? (Dịch vụ doanh nghiệp · south · 360),0.55,0.7,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,b2b_services
+BUY-000361,Bao giờ giao? (Bất động sản · north · 361),0.56,0.71,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,real_estate
+BUY-000362,Có bảo hành không? (Spa · central · 362),0.57,0.72,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,spa
+BUY-000363,Thanh toán thế nào? (Nha khoa · south · 363),0.58,0.73,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,dental
+BUY-000364,Có xuất hóa đơn không? (Bảo hiểm · north · 364),0.59,0.74,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,insurance
+BUY-000365,Lấy hai cái giảm không? (Giáo dục · central · 365),0.6,0.75,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,education
+BUY-000366,Có trả góp không? (Ô tô · south · 366),0.61,0.76,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,automotive
+BUY-000367,Ship tận nơi không? (Mỹ phẩm · north · 367),0.62,0.77,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,cosmetics
+BUY-000368,Gửi hợp đồng mẫu được không? (Gia dụng · central · 368),0.63,0.78,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,home_appliances
+BUY-000369,Ai lắp đặt vậy? (Thực phẩm · south · 369),0.64,0.79,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,food
+BUY-000370,Demo trực tiếp được không? (Điện máy · north · 370),0.65,0.8,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,electronics
+BUY-000371,Nếu chốt hôm nay còn ưu đãi không? (Nội thất · central · 371),0.66,0.81,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,furniture
+BUY-000372,Có hỗ trợ sau bán không? (Logistics · south · 372),0.67,0.82,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,logistics
+BUY-000373,Có nhận COD không? (Du lịch · north · 373),0.68,0.83,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,travel
+BUY-000374,Thời gian triển khai bao lâu? (Tài chính · central · 374),0.69,0.84,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,finance
+BUY-000375,Có được thử trước không? (Fitness · south · 375),0.7,0.85,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,fitness
+BUY-000376,Bao giờ giao? (Điện nước · north · 376),0.71,0.86,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,plumbing
+BUY-000377,Có bảo hành không? (Sửa chữa · central · 377),0.72,0.87,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,repair
+BUY-000378,Thanh toán thế nào? (Camera · south · 378),0.73,0.88,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,camera
+BUY-000379,Có xuất hóa đơn không? (Thiết bị y tế · north · 379),0.74,0.89,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,medical_devices
+BUY-000380,Lấy hai cái giảm không? (Dịch vụ doanh nghiệp · central · 380),0.75,0.9,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,b2b_services
+BUY-000381,Có trả góp không? (Bất động sản · south · 381),0.76,0.91,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,real_estate
+BUY-000382,Ship tận nơi không? (Spa · north · 382),0.77,0.92,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,spa
+BUY-000383,Gửi hợp đồng mẫu được không? (Nha khoa · central · 383),0.78,0.93,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,dental
+BUY-000384,Ai lắp đặt vậy? (Bảo hiểm · south · 384),0.79,0.94,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,insurance
+BUY-000385,Demo trực tiếp được không? (Giáo dục · north · 385),0.8,0.6,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,education
+BUY-000386,Nếu chốt hôm nay còn ưu đãi không? (Ô tô · central · 386),0.81,0.61,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,automotive
+BUY-000387,Có hỗ trợ sau bán không? (Mỹ phẩm · south · 387),0.82,0.62,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,cosmetics
+BUY-000388,Có nhận COD không? (Gia dụng · north · 388),0.83,0.63,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,home_appliances
+BUY-000389,Thời gian triển khai bao lâu? (Thực phẩm · central · 389),0.84,0.64,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,food
+BUY-000390,Có được thử trước không? (Điện máy · south · 390),0.85,0.65,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,electronics
+BUY-000391,Bao giờ giao? (Nội thất · north · 391),0.86,0.66,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,furniture
+BUY-000392,Có bảo hành không? (Logistics · central · 392),0.87,0.67,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,logistics
+BUY-000393,Thanh toán thế nào? (Du lịch · south · 393),0.88,0.68,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,travel
+BUY-000394,Có xuất hóa đơn không? (Tài chính · north · 394),0.89,0.69,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,finance
+BUY-000395,Lấy hai cái giảm không? (Fitness · central · 395),0.9,0.7,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,fitness
+BUY-000396,Có trả góp không? (Điện nước · south · 396),0.91,0.71,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,plumbing
+BUY-000397,Ship tận nơi không? (Sửa chữa · north · 397),0.92,0.72,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,repair
+BUY-000398,Gửi hợp đồng mẫu được không? (Camera · central · 398),0.93,0.73,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,camera
+BUY-000399,Ai lắp đặt vậy? (Thiết bị y tế · south · 399),0.94,0.74,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,medical_devices
+BUY-000400,Demo trực tiếp được không? (Dịch vụ doanh nghiệp · north · 400),0.45,0.75,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,b2b_services
+BUY-000401,Nếu chốt hôm nay còn ưu đãi không? (Bất động sản · central · 401),0.46,0.76,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,real_estate
+BUY-000402,Có hỗ trợ sau bán không? (Spa · south · 402),0.47,0.77,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,spa
+BUY-000403,Có nhận COD không? (Nha khoa · north · 403),0.48,0.78,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,dental
+BUY-000404,Thời gian triển khai bao lâu? (Bảo hiểm · central · 404),0.49,0.79,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,insurance
+BUY-000405,Có được thử trước không? (Giáo dục · south · 405),0.5,0.8,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,education
+BUY-000406,Bao giờ giao? (Ô tô · north · 406),0.51,0.81,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,automotive
+BUY-000407,Có bảo hành không? (Mỹ phẩm · central · 407),0.52,0.82,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,cosmetics
+BUY-000408,Thanh toán thế nào? (Gia dụng · south · 408),0.53,0.83,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,home_appliances
+BUY-000409,Có xuất hóa đơn không? (Thực phẩm · north · 409),0.54,0.84,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,food
+BUY-000410,Lấy hai cái giảm không? (Điện máy · central · 410),0.55,0.85,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,electronics
+BUY-000411,Có trả góp không? (Nội thất · south · 411),0.56,0.86,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,furniture
+BUY-000412,Ship tận nơi không? (Logistics · north · 412),0.57,0.87,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,logistics
+BUY-000413,Gửi hợp đồng mẫu được không? (Du lịch · central · 413),0.58,0.88,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,travel
+BUY-000414,Ai lắp đặt vậy? (Tài chính · south · 414),0.59,0.89,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,finance
+BUY-000415,Demo trực tiếp được không? (Fitness · north · 415),0.6,0.9,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,fitness
+BUY-000416,Nếu chốt hôm nay còn ưu đãi không? (Điện nước · central · 416),0.61,0.91,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,plumbing
+BUY-000417,Có hỗ trợ sau bán không? (Sửa chữa · south · 417),0.62,0.92,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,repair
+BUY-000418,Có nhận COD không? (Camera · north · 418),0.63,0.93,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,camera
+BUY-000419,Thời gian triển khai bao lâu? (Thiết bị y tế · central · 419),0.64,0.94,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,medical_devices
+BUY-000420,Có được thử trước không? (Dịch vụ doanh nghiệp · south · 420),0.65,0.6,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,b2b_services
+BUY-000421,Bao giờ giao? (Bất động sản · north · 421),0.66,0.61,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,real_estate
+BUY-000422,Có bảo hành không? (Spa · central · 422),0.67,0.62,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,spa
+BUY-000423,Thanh toán thế nào? (Nha khoa · south · 423),0.68,0.63,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,dental
+BUY-000424,Có xuất hóa đơn không? (Bảo hiểm · north · 424),0.69,0.64,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,insurance
+BUY-000425,Lấy hai cái giảm không? (Giáo dục · central · 425),0.7,0.65,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,education
+BUY-000426,Có trả góp không? (Ô tô · south · 426),0.71,0.66,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,automotive
+BUY-000427,Ship tận nơi không? (Mỹ phẩm · north · 427),0.72,0.67,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,cosmetics
+BUY-000428,Gửi hợp đồng mẫu được không? (Gia dụng · central · 428),0.73,0.68,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,home_appliances
+BUY-000429,Ai lắp đặt vậy? (Thực phẩm · south · 429),0.74,0.69,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,food
+BUY-000430,Demo trực tiếp được không? (Điện máy · north · 430),0.75,0.7,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,electronics
+BUY-000431,Nếu chốt hôm nay còn ưu đãi không? (Nội thất · central · 431),0.76,0.71,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,furniture
+BUY-000432,Có hỗ trợ sau bán không? (Logistics · south · 432),0.77,0.72,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,logistics
+BUY-000433,Có nhận COD không? (Du lịch · north · 433),0.78,0.73,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,travel
+BUY-000434,Thời gian triển khai bao lâu? (Tài chính · central · 434),0.79,0.74,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,finance
+BUY-000435,Có được thử trước không? (Fitness · south · 435),0.8,0.75,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,fitness
+BUY-000436,Bao giờ giao? (Điện nước · north · 436),0.81,0.76,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,plumbing
+BUY-000437,Có bảo hành không? (Sửa chữa · central · 437),0.82,0.77,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,repair
+BUY-000438,Thanh toán thế nào? (Camera · south · 438),0.83,0.78,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,camera
+BUY-000439,Có xuất hóa đơn không? (Thiết bị y tế · north · 439),0.84,0.79,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,medical_devices
+BUY-000440,Lấy hai cái giảm không? (Dịch vụ doanh nghiệp · central · 440),0.85,0.8,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,b2b_services
+BUY-000441,Có trả góp không? (Bất động sản · south · 441),0.86,0.81,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,real_estate
+BUY-000442,Ship tận nơi không? (Spa · north · 442),0.87,0.82,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,spa
+BUY-000443,Gửi hợp đồng mẫu được không? (Nha khoa · central · 443),0.88,0.83,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,dental
+BUY-000444,Ai lắp đặt vậy? (Bảo hiểm · south · 444),0.89,0.84,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,insurance
+BUY-000445,Demo trực tiếp được không? (Giáo dục · north · 445),0.9,0.85,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,education
+BUY-000446,Nếu chốt hôm nay còn ưu đãi không? (Ô tô · central · 446),0.91,0.86,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,automotive
+BUY-000447,Có hỗ trợ sau bán không? (Mỹ phẩm · south · 447),0.92,0.87,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,cosmetics
+BUY-000448,Có nhận COD không? (Gia dụng · north · 448),0.93,0.88,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,home_appliances
+BUY-000449,Thời gian triển khai bao lâu? (Thực phẩm · central · 449),0.94,0.89,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,food
+BUY-000450,Có được thử trước không? (Điện máy · south · 450),0.45,0.9,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,electronics
+BUY-000451,Bao giờ giao? (Nội thất · north · 451),0.46,0.91,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,furniture
+BUY-000452,Có bảo hành không? (Logistics · central · 452),0.47,0.92,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,logistics
+BUY-000453,Thanh toán thế nào? (Du lịch · south · 453),0.48,0.93,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,travel
+BUY-000454,Có xuất hóa đơn không? (Tài chính · north · 454),0.49,0.94,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,finance
+BUY-000455,Lấy hai cái giảm không? (Fitness · central · 455),0.5,0.6,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,fitness
+BUY-000456,Có trả góp không? (Điện nước · south · 456),0.51,0.61,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,plumbing
+BUY-000457,Ship tận nơi không? (Sửa chữa · north · 457),0.52,0.62,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,repair
+BUY-000458,Gửi hợp đồng mẫu được không? (Camera · central · 458),0.53,0.63,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,camera
+BUY-000459,Ai lắp đặt vậy? (Thiết bị y tế · south · 459),0.54,0.64,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,medical_devices
+BUY-000460,Demo trực tiếp được không? (Dịch vụ doanh nghiệp · north · 460),0.55,0.65,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,b2b_services
+BUY-000461,Nếu chốt hôm nay còn ưu đãi không? (Bất động sản · central · 461),0.56,0.66,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,real_estate
+BUY-000462,Có hỗ trợ sau bán không? (Spa · south · 462),0.57,0.67,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,spa
+BUY-000463,Có nhận COD không? (Nha khoa · north · 463),0.58,0.68,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,dental
+BUY-000464,Thời gian triển khai bao lâu? (Bảo hiểm · central · 464),0.59,0.69,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,insurance
+BUY-000465,Có được thử trước không? (Giáo dục · south · 465),0.6,0.7,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,education
+BUY-000466,Bao giờ giao? (Ô tô · north · 466),0.61,0.71,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,automotive
+BUY-000467,Có bảo hành không? (Mỹ phẩm · central · 467),0.62,0.72,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,cosmetics
+BUY-000468,Thanh toán thế nào? (Gia dụng · south · 468),0.63,0.73,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,home_appliances
+BUY-000469,Có xuất hóa đơn không? (Thực phẩm · north · 469),0.64,0.74,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,food
+BUY-000470,Lấy hai cái giảm không? (Điện máy · central · 470),0.65,0.75,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,electronics
+BUY-000471,Có trả góp không? (Nội thất · south · 471),0.66,0.76,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,furniture
+BUY-000472,Ship tận nơi không? (Logistics · north · 472),0.67,0.77,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,logistics
+BUY-000473,Gửi hợp đồng mẫu được không? (Du lịch · central · 473),0.68,0.78,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,travel
+BUY-000474,Ai lắp đặt vậy? (Tài chính · south · 474),0.69,0.79,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,finance
+BUY-000475,Demo trực tiếp được không? (Fitness · north · 475),0.7,0.8,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,fitness
+BUY-000476,Nếu chốt hôm nay còn ưu đãi không? (Điện nước · central · 476),0.71,0.81,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,plumbing
+BUY-000477,Có hỗ trợ sau bán không? (Sửa chữa · south · 477),0.72,0.82,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,repair
+BUY-000478,Có nhận COD không? (Camera · north · 478),0.73,0.83,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,camera
+BUY-000479,Thời gian triển khai bao lâu? (Thiết bị y tế · central · 479),0.74,0.84,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,medical_devices
+BUY-000480,Có được thử trước không? (Dịch vụ doanh nghiệp · south · 480),0.75,0.85,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,b2b_services
+BUY-000481,Bao giờ giao? (Bất động sản · north · 481),0.76,0.86,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,real_estate
+BUY-000482,Có bảo hành không? (Spa · central · 482),0.77,0.87,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,spa
+BUY-000483,Thanh toán thế nào? (Nha khoa · south · 483),0.78,0.88,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,dental
+BUY-000484,Có xuất hóa đơn không? (Bảo hiểm · north · 484),0.79,0.89,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,insurance
+BUY-000485,Lấy hai cái giảm không? (Giáo dục · central · 485),0.8,0.9,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,education
+BUY-000486,Có trả góp không? (Ô tô · south · 486),0.81,0.91,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,automotive
+BUY-000487,Ship tận nơi không? (Mỹ phẩm · north · 487),0.82,0.92,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,cosmetics
+BUY-000488,Gửi hợp đồng mẫu được không? (Gia dụng · central · 488),0.83,0.93,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,home_appliances
+BUY-000489,Ai lắp đặt vậy? (Thực phẩm · south · 489),0.84,0.94,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,food
+BUY-000490,Demo trực tiếp được không? (Điện máy · north · 490),0.85,0.6,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,electronics
+BUY-000491,Nếu chốt hôm nay còn ưu đãi không? (Nội thất · central · 491),0.86,0.61,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,furniture
+BUY-000492,Có hỗ trợ sau bán không? (Logistics · south · 492),0.87,0.62,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,logistics
+BUY-000493,Có nhận COD không? (Du lịch · north · 493),0.88,0.63,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,travel
+BUY-000494,Thời gian triển khai bao lâu? (Tài chính · central · 494),0.89,0.64,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,finance
+BUY-000495,Có được thử trước không? (Fitness · south · 495),0.9,0.65,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,fitness
+BUY-000496,Bao giờ giao? (Điện nước · north · 496),0.91,0.66,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,plumbing
+BUY-000497,Có bảo hành không? (Sửa chữa · central · 497),0.92,0.67,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,repair
+BUY-000498,Thanh toán thế nào? (Camera · south · 498),0.93,0.68,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,south,camera
+BUY-000499,Có xuất hóa đơn không? (Thiết bị y tế · north · 499),0.94,0.69,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,north,medical_devices
+BUY-000500,Lấy hai cái giảm không? (Dịch vụ doanh nghiệp · central · 500),0.45,0.7,Xác nhận điều kiện + chốt next-step cụ thể trong 60 giây.,central,b2b_services

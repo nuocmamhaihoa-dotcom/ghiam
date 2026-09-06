@@ -1,0 +1,33 @@
+{
+  "sprint": 4,
+  "title": "Intent + Emotion + Buying Signals",
+  "ok": true,
+  "checked_at": "2026-09-05T17:27:46.373512+00:00",
+  "gates": [
+    {
+      "gate": "intents",
+      "count": 1000,
+      "ok": true,
+      "errors": [],
+      "dialect_ratios": {},
+      "checked_at": "2026-09-05T17:27:46.372881+00:00"
+    },
+    {
+      "gate": "emotions",
+      "count": 500,
+      "ok": true,
+      "errors": [],
+      "dialect_ratios": {},
+      "checked_at": "2026-09-05T17:27:46.373158+00:00"
+    },
+    {
+      "gate": "buying_signals",
+      "count": 500,
+      "ok": true,
+      "errors": [],
+      "dialect_ratios": {},
+      "checked_at": "2026-09-05T17:27:46.373427+00:00"
+    }
+  ],
+  "extras": {}
+}

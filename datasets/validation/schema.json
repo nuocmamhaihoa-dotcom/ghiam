@@ -1,0 +1,137 @@
+{
+  "utterance_fields": [
+    "id",
+    "conversation_id",
+    "speaker",
+    "text",
+    "dialect",
+    "industry",
+    "stage",
+    "intent",
+    "emotion",
+    "objection_type",
+    "buying_signal",
+    "confidence",
+    "recommended_response",
+    "root_cause_if_failed"
+  ],
+  "dialects": [
+    [
+      "north",
+      0.35
+    ],
+    [
+      "central",
+      0.2
+    ],
+    [
+      "south",
+      0.45
+    ]
+  ],
+  "industries": [
+    [
+      "real_estate",
+      "Bất động sản"
+    ],
+    [
+      "spa",
+      "Spa"
+    ],
+    [
+      "dental",
+      "Nha khoa"
+    ],
+    [
+      "insurance",
+      "Bảo hiểm"
+    ],
+    [
+      "education",
+      "Giáo dục"
+    ],
+    [
+      "automotive",
+      "Ô tô"
+    ],
+    [
+      "cosmetics",
+      "Mỹ phẩm"
+    ],
+    [
+      "home_appliances",
+      "Gia dụng"
+    ],
+    [
+      "food",
+      "Thực phẩm"
+    ],
+    [
+      "electronics",
+      "Điện máy"
+    ],
+    [
+      "furniture",
+      "Nội thất"
+    ],
+    [
+      "logistics",
+      "Logistics"
+    ],
+    [
+      "travel",
+      "Du lịch"
+    ],
+    [
+      "finance",
+      "Tài chính"
+    ],
+    [
+      "fitness",
+      "Fitness"
+    ],
+    [
+      "plumbing",
+      "Điện nước"
+    ],
+    [
+      "repair",
+      "Sửa chữa"
+    ],
+    [
+      "camera",
+      "Camera"
+    ],
+    [
+      "medical_devices",
+      "Thiết bị y tế"
+    ],
+    [
+      "b2b_services",
+      "Dịch vụ doanh nghiệp"
+    ]
+  ],
+  "stages": [
+    "opening",
+    "rapport",
+    "discovery",
+    "qualification",
+    "presentation",
+    "pricing",
+    "objection",
+    "closing",
+    "follow_up"
+  ],
+  "targets": {
+    "customers": 100000,
+    "agents": 50000,
+    "conversations": 10000,
+    "objections": 5000,
+    "intents": 1000,
+    "buying_signals": 500,
+    "emotions": 500,
+    "root_causes": 500,
+    "golden_calls": 500,
+    "qa_benchmark": 10000
+  }
+}

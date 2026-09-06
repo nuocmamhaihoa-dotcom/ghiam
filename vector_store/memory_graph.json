@@ -1,0 +1,1273 @@
+{
+  "nodes": [
+    {
+      "id": "product:the_tin_dung",
+      "type": "product",
+      "label": "Thẻ tín dụng",
+      "version": "1.0.0",
+      "source": "catalog/products",
+      "timestamp": 1788635674.4695892,
+      "confidence": 0.95,
+      "content": "Thẻ tín dụng lãi suất ưu đãi 12 tháng",
+      "metadata": {}
+    },
+    {
+      "id": "product:vay_tieu_dung",
+      "type": "product",
+      "label": "Vay tiêu dùng",
+      "version": "1.0.0",
+      "source": "catalog/products",
+      "timestamp": 1788635674.469724,
+      "confidence": 0.95,
+      "content": "Vay tiêu dùng hạn mức đến 500 triệu",
+      "metadata": {}
+    },
+    {
+      "id": "sop:mo_dau",
+      "type": "sop",
+      "label": "SOP mở đầu",
+      "version": "1.0.0",
+      "source": "sop/opening",
+      "timestamp": 1788635674.4697726,
+      "confidence": 0.98,
+      "content": "SOP mở đầu: chào hỏi, xác minh danh tính, nêu mục đích cuộc gọi trong 30 giây",
+      "metadata": {}
+    },
+    {
+      "id": "sop:xu_ly_phan_doi",
+      "type": "sop",
+      "label": "SOP phản đối",
+      "version": "1.0.0",
+      "source": "sop/objection",
+      "timestamp": 1788635674.469807,
+      "confidence": 0.98,
+      "content": "SOP xử lý phản đối: lắng nghe, xác nhận cảm xúc, đưa bằng chứng, hỏi chốt nhẹ",
+      "metadata": {}
+    },
+    {
+      "id": "rulebook:no_guarantee",
+      "type": "rulebook",
+      "label": "Cấm cam kết duyệt",
+      "version": "1.0.0",
+      "source": "rulebook/compliance",
+      "timestamp": 1788635674.4698346,
+      "confidence": 1.0,
+      "content": "Cấm cam kết duyệt hồ sơ 100% hoặc lãi suất ngoài bảng giá công bố",
+      "metadata": {}
+    },
+    {
+      "id": "rulebook:disclose_fee",
+      "type": "rulebook",
+      "label": "Công bố phí",
+      "version": "1.0.0",
+      "source": "rulebook/disclosure",
+      "timestamp": 1788635674.469861,
+      "confidence": 1.0,
+      "content": "Bắt buộc công bố phí thường niên và điều kiện ưu đãi trước khi chốt",
+      "metadata": {}
+    },
+    {
+      "id": "intent:can_tu_van",
+      "type": "intent",
+      "label": "Cần tư vấn",
+      "version": "1.0.0",
+      "source": "taxonomy/intent",
+      "timestamp": 1788635674.4698853,
+      "confidence": 0.9,
+      "content": "Khách cần tư vấn thêm trước khi quyết định",
+      "metadata": {}
+    },
+    {
+      "id": "intent:so_sanh_gia",
+      "type": "intent",
+      "label": "So sánh giá",
+      "version": "1.0.0",
+      "source": "taxonomy/intent",
+      "timestamp": 1788635674.4699094,
+      "confidence": 0.9,
+      "content": "Khách đang so sánh giá với đối thủ",
+      "metadata": {}
+    },
+    {
+      "id": "objection:dat",
+      "type": "objection",
+      "label": "Phản đối giá",
+      "version": "1.0.0",
+      "source": "taxonomy/objection",
+      "timestamp": 1788635674.4699318,
+      "confidence": 0.92,
+      "content": "Phản đối giá cao / lãi suất cao",
+      "metadata": {}
+    },
+    {
+      "id": "objection:suy_nghi",
+      "type": "objection",
+      "label": "Để suy nghĩ",
+      "version": "1.0.0",
+      "source": "taxonomy/objection",
+      "timestamp": 1788635674.4699547,
+      "confidence": 0.92,
+      "content": "Phản đối để suy nghĩ thêm / gọi lại sau",
+      "metadata": {}
+    },
+    {
+      "id": "objection:da_co_the",
+      "type": "objection",
+      "label": "Đã có thẻ",
+      "version": "1.0.0",
+      "source": "taxonomy/objection",
+      "timestamp": 1788635674.4699774,
+      "confidence": 0.9,
+      "content": "Khách đã có thẻ/sản phẩm tương tự",
+      "metadata": {}
+    },
+    {
+      "id": "pricing:the_tin_dung_base",
+      "type": "pricing",
+      "label": "Giá thẻ tín dụng",
+      "version": "1.0.0",
+      "source": "pricing/card",
+      "timestamp": 1788635674.4699998,
+      "confidence": 0.97,
+      "content": "Thẻ tín dụng: phí thường niên 500.000đ, ưu đãi miễn phí năm đầu nếu chi tiêu 20 triệu",
+      "metadata": {}
+    },
+    {
+      "id": "pricing:vay_lai_suat",
+      "type": "pricing",
+      "label": "Lãi suất vay",
+      "version": "1.0.0",
+      "source": "pricing/loan",
+      "timestamp": 1788635674.4700267,
+      "confidence": 0.97,
+      "content": "Vay tiêu dùng: lãi suất từ 1.5%/tháng tùy xếp hạng tín dụng, không cam kết trước thẩm định",
+      "metadata": {}
+    },
+    {
+      "id": "policy:kyc",
+      "type": "policy",
+      "label": "KYC",
+      "version": "1.0.0",
+      "source": "policy/kyc",
+      "timestamp": 1788635674.4700527,
+      "confidence": 1.0,
+      "content": "Chính sách KYC: xác minh CMND/CCCD và số điện thoại trước khi tư vấn sản phẩm",
+      "metadata": {}
+    },
+    {
+      "id": "policy:privacy",
+      "type": "policy",
+      "label": "Bảo mật",
+      "version": "1.0.0",
+      "source": "policy/privacy",
+      "timestamp": 1788635674.4700766,
+      "confidence": 1.0,
+      "content": "Chính sách bảo mật: không ghi âm chia sẻ ra ngoài hệ thống được phê duyệt",
+      "metadata": {}
+    },
+    {
+      "id": "promotion:summer2026",
+      "type": "promotion",
+      "label": "KM hè 2026",
+      "version": "1.0.0",
+      "source": "promo/summer2026",
+      "timestamp": 1788635674.4701009,
+      "confidence": 0.9,
+      "content": "Khuyến mãi hè 2026: hoàn 5% chi tiêu siêu thị tối đa 500.000đ/tháng",
+      "metadata": {}
+    },
+    {
+      "id": "golden_call:gc001",
+      "type": "golden_call",
+      "label": "Golden call GC001",
+      "version": "1.0.0",
+      "source": "calls/golden/gc001",
+      "timestamp": 1788635674.4701238,
+      "confidence": 0.93,
+      "content": "Golden call: agent xác nhận cảm xúc khi khách nói đắt, so sánh phí năm đầu miễn, hỏi chốt thử thẻ phụ",
+      "metadata": {}
+    },
+    {
+      "id": "golden_call:gc002",
+      "type": "golden_call",
+      "label": "Golden call GC002",
+      "version": "1.0.0",
+      "source": "calls/golden/gc002",
+      "timestamp": 1788635674.470147,
+      "confidence": 0.93,
+      "content": "Golden call: xử lý để suy nghĩ bằng tóm tắt lợi ích + đề xuất gọi lại đúng giờ khách chọn",
+      "metadata": {}
+    },
+    {
+      "id": "customer_type:mass",
+      "type": "customer_type",
+      "label": "Mass affluent",
+      "version": "1.0.0",
+      "source": "taxonomy/customer",
+      "timestamp": 1788635674.4701695,
+      "confidence": 0.88,
+      "content": "Khách mass affluent: ưu tiên lợi ích phí và ưu đãi rõ ràng",
+      "metadata": {}
+    },
+    {
+      "id": "customer_type:price_sensitive",
+      "type": "customer_type",
+      "label": "Nhạy giá",
+      "version": "1.0.0",
+      "source": "taxonomy/customer",
+      "timestamp": 1788635674.4701903,
+      "confidence": 0.88,
+      "content": "Khách nhạy giá: cần dẫn chứng bảng giá và so sánh công khai",
+      "metadata": {}
+    },
+    {
+      "id": "root_cause:weak_discovery",
+      "type": "root_cause",
+      "label": "Discovery yếu",
+      "version": "1.0.0",
+      "source": "analytics/root_cause",
+      "timestamp": 1788635674.470212,
+      "confidence": 0.85,
+      "content": "Root cause: discovery yếu dẫn đến không khớp nhu cầu và mất chốt",
+      "metadata": {}
+    },
+    {
+      "id": "root_cause:overpromise",
+      "type": "root_cause",
+      "label": "Overpromise",
+      "version": "1.0.0",
+      "source": "analytics/root_cause",
+      "timestamp": 1788635674.4702375,
+      "confidence": 0.9,
+      "content": "Root cause: overpromise lãi suất gây compliance fail và revenue leak",
+      "metadata": {}
+    },
+    {
+      "id": "coaching:listen_ack",
+      "type": "coaching",
+      "label": "Lắng nghe xác nhận",
+      "version": "1.0.0",
+      "source": "coaching/playbook",
+      "timestamp": 1788635674.4702606,
+      "confidence": 0.94,
+      "content": "Coaching: lắng nghe phản đối 3 giây, nhắc lại nội dung khách nói trước khi trả lời",
+      "metadata": {}
+    },
+    {
+      "id": "coaching:evidence_close",
+      "type": "coaching",
+      "label": "Evidence close",
+      "version": "1.0.0",
+      "source": "coaching/playbook",
+      "timestamp": 1788635674.4702864,
+      "confidence": 0.94,
+      "content": "Coaching: mỗi claim phải gắn citation từ pricing/policy rồi mới hỏi chốt",
+      "metadata": {}
+    },
+    {
+      "id": "compliance:no_fake_rate",
+      "type": "compliance",
+      "label": "Cấm lãi giả",
+      "version": "1.0.0",
+      "source": "compliance/rules",
+      "timestamp": 1788635674.4703078,
+      "confidence": 1.0,
+      "content": "Compliance: cấm nêu lãi suất giả định không có trong bảng giá hiệu lực",
+      "metadata": {}
+    },
+    {
+      "id": "faq:phi_thuong_nien",
+      "type": "faq",
+      "label": "FAQ phí",
+      "version": "1.0.0",
+      "source": "faq/fees",
+      "timestamp": 1788635674.4703298,
+      "confidence": 0.96,
+      "content": "FAQ: phí thường niên thẻ tín dụng là 500.000đ, miễn năm đầu theo điều kiện chi tiêu",
+      "metadata": {}
+    },
+    {
+      "id": "faq:thoi_gian_duyet",
+      "type": "faq",
+      "label": "FAQ duyệt",
+      "version": "1.0.0",
+      "source": "faq/sla",
+      "timestamp": 1788635674.4703524,
+      "confidence": 0.96,
+      "content": "FAQ: thời gian duyệt hồ sơ thường 1-3 ngày làm việc, không cam kết duyệt chắc chắn",
+      "metadata": {}
+    },
+    {
+      "id": "revenue_leak:overpromise",
+      "type": "revenue_leak",
+      "label": "Leak overpromise",
+      "version": "1.0.0",
+      "source": "analytics/revenue_leak",
+      "timestamp": 1788635674.470375,
+      "confidence": 0.9,
+      "content": "Revenue leak từ overpromise lãi suất / cam kết duyệt",
+      "metadata": {}
+    },
+    {
+      "id": "call:qg-call",
+      "type": "call",
+      "label": "Call qg-call",
+      "version": "1.0.0",
+      "source": "call:qg-call",
+      "timestamp": 1788635834.339168,
+      "confidence": 1.0,
+      "content": "Analyzed call qg-call",
+      "metadata": {}
+    },
+    {
+      "id": "objection:price",
+      "type": "objection",
+      "label": "price",
+      "version": "1.0.2",
+      "source": "call:qg-call",
+      "timestamp": 1788657471.4540584,
+      "confidence": 0.7,
+      "content": "price",
+      "metadata": {
+        "type": "price",
+        "text": "đắt",
+        "previous_version": "1.0.1"
+      }
+    },
+    {
+      "id": "intent:price",
+      "type": "intent",
+      "label": "price",
+      "version": "1.0.0",
+      "source": "call:qg-call",
+      "timestamp": 1788635834.3393624,
+      "confidence": 0.7,
+      "content": "price",
+      "metadata": {
+        "name": "price"
+      }
+    },
+    {
+      "id": "customer_type:general",
+      "type": "customer_type",
+      "label": "Khách hàng chung",
+      "version": "1.0.0",
+      "source": "system",
+      "timestamp": 1788657471.4542148,
+      "confidence": 1.0,
+      "content": "Khách hàng chung",
+      "metadata": {}
+    },
+    {
+      "id": "root_cause:rc_price",
+      "type": "root_cause",
+      "label": "RC-PRICE",
+      "version": "1.0.0",
+      "source": "call:qg-call",
+      "timestamp": 1788657471.4542701,
+      "confidence": 0.7,
+      "content": "RC-PRICE",
+      "metadata": {
+        "primary_cause_code": "RC-PRICE"
+      }
+    },
+    {
+      "id": "revenue_leak:rc_price",
+      "type": "revenue_leak",
+      "label": "Revenue leak: RC-PRICE",
+      "version": "1.0.0",
+      "source": "call:qg-call",
+      "timestamp": 1788657471.4543343,
+      "confidence": 0.7,
+      "content": "Revenue leak linked to root cause RC-PRICE",
+      "metadata": {}
+    },
+    {
+      "id": "coaching:qg-call:reframe",
+      "type": "coaching",
+      "label": "reframe",
+      "version": "1.0.0",
+      "source": "call:qg-call",
+      "timestamp": 1788635834.3396022,
+      "confidence": 0.75,
+      "content": "reframe",
+      "metadata": {
+        "title": "reframe"
+      }
+    },
+    {
+      "id": "rulebook:r1",
+      "type": "rulebook",
+      "label": "R1",
+      "version": "1.0.2",
+      "source": "call:qg-call",
+      "timestamp": 1788635834.339667,
+      "confidence": 0.9,
+      "content": "R1",
+      "metadata": {
+        "rule_id": "R1",
+        "rule_code": "R1",
+        "message": "x",
+        "previous_version": "1.0.1"
+      }
+    },
+    {
+      "id": "compliance:r1",
+      "type": "compliance",
+      "label": "Compliance R1",
+      "version": "1.0.2",
+      "source": "call:qg-call",
+      "timestamp": 1788635834.3397841,
+      "confidence": 0.95,
+      "content": "R1",
+      "metadata": {
+        "previous_version": "1.0.1"
+      }
+    },
+    {
+      "id": "call:c1",
+      "type": "call",
+      "label": "Call c1",
+      "version": "1.0.0",
+      "source": "call:c1",
+      "timestamp": 1788635675.7641478,
+      "confidence": 1.0,
+      "content": "Analyzed call c1",
+      "metadata": {}
+    },
+    {
+      "id": "product:thẻ",
+      "type": "product",
+      "label": "Thẻ",
+      "version": "1.0.0",
+      "source": "call:c1",
+      "timestamp": 1788635675.7642286,
+      "confidence": 0.8,
+      "content": "Thẻ",
+      "metadata": {}
+    },
+    {
+      "id": "intent:n",
+      "type": "intent",
+      "label": "n",
+      "version": "1.0.0",
+      "source": "call:c1",
+      "timestamp": 1788635675.764447,
+      "confidence": 0.7,
+      "content": "n",
+      "metadata": {
+        "name": "n"
+      }
+    },
+    {
+      "id": "root_cause:rc1",
+      "type": "root_cause",
+      "label": "RC1",
+      "version": "1.0.0",
+      "source": "call:c1",
+      "timestamp": 1788635675.7645688,
+      "confidence": 0.8,
+      "content": "RC1",
+      "metadata": {
+        "primary_code": "RC1",
+        "confidence": 0.8
+      }
+    },
+    {
+      "id": "revenue_leak:rc1",
+      "type": "revenue_leak",
+      "label": "Revenue leak: RC1",
+      "version": "1.0.0",
+      "source": "call:c1",
+      "timestamp": 1788635675.7646224,
+      "confidence": 0.8,
+      "content": "Revenue leak linked to root cause RC1",
+      "metadata": {}
+    },
+    {
+      "id": "coaching:c1:t",
+      "type": "coaching",
+      "label": "t",
+      "version": "1.0.0",
+      "source": "call:c1",
+      "timestamp": 1788635675.7646751,
+      "confidence": 0.75,
+      "content": "tip",
+      "metadata": {
+        "title": "t",
+        "tip": "tip"
+      }
+    },
+    {
+      "id": "call:test-call",
+      "type": "call",
+      "label": "Call test-call",
+      "version": "1.0.0",
+      "source": "call:test-call",
+      "timestamp": 1788657471.4538329,
+      "confidence": 1.0,
+      "content": "Analyzed call test-call",
+      "metadata": {}
+    },
+    {
+      "id": "product:pkg_health",
+      "type": "product",
+      "label": "PKG-HEALTH",
+      "version": "1.0.0",
+      "source": "call:test-call",
+      "timestamp": 1788657471.4539351,
+      "confidence": 0.8,
+      "content": "PKG-HEALTH",
+      "metadata": {}
+    },
+    {
+      "id": "intent:price_concern",
+      "type": "intent",
+      "label": "price_concern",
+      "version": "1.0.0",
+      "source": "call:test-call",
+      "timestamp": 1788657471.454161,
+      "confidence": 0.7,
+      "content": "price_concern",
+      "metadata": {
+        "name": "price_concern"
+      }
+    },
+    {
+      "id": "coaching:test-call:reframe_value",
+      "type": "coaching",
+      "label": "reframe value",
+      "version": "1.0.0",
+      "source": "call:test-call",
+      "timestamp": 1788657471.4543915,
+      "confidence": 0.75,
+      "content": "reframe value",
+      "metadata": {
+        "title": "reframe value"
+      }
+    },
+    {
+      "id": "rulebook:r_obj_01",
+      "type": "rulebook",
+      "label": "R-OBJ-01",
+      "version": "1.0.0",
+      "source": "call:test-call",
+      "timestamp": 1788657471.4544535,
+      "confidence": 0.9,
+      "content": "R-OBJ-01",
+      "metadata": {
+        "rule_id": "R-OBJ-01"
+      }
+    },
+    {
+      "id": "compliance:r_obj_01",
+      "type": "compliance",
+      "label": "Compliance R-OBJ-01",
+      "version": "1.0.0",
+      "source": "call:test-call",
+      "timestamp": 1788657471.4545047,
+      "confidence": 0.95,
+      "content": "R-OBJ-01",
+      "metadata": {}
+    },
+    {
+      "id": "call:t",
+      "type": "call",
+      "label": "Call t",
+      "version": "1.0.0",
+      "source": "call:t",
+      "timestamp": 1788635815.9565454,
+      "confidence": 1.0,
+      "content": "Analyzed call t",
+      "metadata": {}
+    },
+    {
+      "id": "product:pkg",
+      "type": "product",
+      "label": "PKG",
+      "version": "1.0.0",
+      "source": "call:t",
+      "timestamp": 1788635815.956626,
+      "confidence": 0.8,
+      "content": "PKG",
+      "metadata": {}
+    },
+    {
+      "id": "coaching:t:x",
+      "type": "coaching",
+      "label": "x",
+      "version": "1.0.0",
+      "source": "call:t",
+      "timestamp": 1788635815.9570448,
+      "confidence": 0.75,
+      "content": "x",
+      "metadata": {
+        "title": "x"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge:45e11744d203",
+      "source": "product:the_tin_dung",
+      "target": "sop:mo_dau",
+      "relation": "product_has_sop",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.470414,
+      "metadata": {}
+    },
+    {
+      "id": "edge:f84d87074afd",
+      "source": "product:the_tin_dung",
+      "target": "sop:xu_ly_phan_doi",
+      "relation": "product_has_sop",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.4704463,
+      "metadata": {}
+    },
+    {
+      "id": "edge:e528807f4bfe",
+      "source": "product:vay_tieu_dung",
+      "target": "sop:mo_dau",
+      "relation": "product_has_sop",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.4704733,
+      "metadata": {}
+    },
+    {
+      "id": "edge:ef7fdbdf875c",
+      "source": "product:the_tin_dung",
+      "target": "objection:dat",
+      "relation": "product_has_objection",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.4705007,
+      "metadata": {}
+    },
+    {
+      "id": "edge:ecb19c59fecc",
+      "source": "product:the_tin_dung",
+      "target": "objection:suy_nghi",
+      "relation": "product_has_objection",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.470609,
+      "metadata": {}
+    },
+    {
+      "id": "edge:d9d08b694d2f",
+      "source": "product:the_tin_dung",
+      "target": "objection:da_co_the",
+      "relation": "product_has_objection",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.4706416,
+      "metadata": {}
+    },
+    {
+      "id": "edge:09f80db5a1bb",
+      "source": "product:vay_tieu_dung",
+      "target": "objection:dat",
+      "relation": "product_has_objection",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.4706697,
+      "metadata": {}
+    },
+    {
+      "id": "edge:5702dccffa7c",
+      "source": "objection:dat",
+      "target": "rulebook:disclose_fee",
+      "relation": "objection_maps_rule",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.4706988,
+      "metadata": {}
+    },
+    {
+      "id": "edge:46d50f79c5f2",
+      "source": "objection:dat",
+      "target": "pricing:the_tin_dung_base",
+      "relation": "objection_maps_rule",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.4707232,
+      "metadata": {}
+    },
+    {
+      "id": "edge:2fd73b1ee53d",
+      "source": "objection:suy_nghi",
+      "target": "rulebook:no_guarantee",
+      "relation": "objection_maps_rule",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.4707463,
+      "metadata": {}
+    },
+    {
+      "id": "edge:cf8acfc9050c",
+      "source": "customer_type:price_sensitive",
+      "target": "intent:so_sanh_gia",
+      "relation": "customer_has_intent",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.4707675,
+      "metadata": {}
+    },
+    {
+      "id": "edge:24db648ca475",
+      "source": "customer_type:mass",
+      "target": "intent:can_tu_van",
+      "relation": "customer_has_intent",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.4707897,
+      "metadata": {}
+    },
+    {
+      "id": "edge:c5b5472fe908",
+      "source": "golden_call:gc001",
+      "target": "coaching:listen_ack",
+      "relation": "golden_call_has_coaching",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.4708116,
+      "metadata": {}
+    },
+    {
+      "id": "edge:98442f2bd1e4",
+      "source": "golden_call:gc002",
+      "target": "coaching:evidence_close",
+      "relation": "golden_call_has_coaching",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.470833,
+      "metadata": {}
+    },
+    {
+      "id": "edge:89d4b33290f9",
+      "source": "root_cause:overpromise",
+      "target": "revenue_leak:overpromise",
+      "relation": "root_cause_causes_revenue_leak",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.470854,
+      "metadata": {}
+    },
+    {
+      "id": "edge:98a04edb14d2",
+      "source": "product:the_tin_dung",
+      "target": "pricing:the_tin_dung_base",
+      "relation": "product_has_pricing",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.470875,
+      "metadata": {}
+    },
+    {
+      "id": "edge:e44e7afbf40d",
+      "source": "product:vay_tieu_dung",
+      "target": "pricing:vay_lai_suat",
+      "relation": "product_has_pricing",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.4708962,
+      "metadata": {}
+    },
+    {
+      "id": "edge:82958b666625",
+      "source": "product:the_tin_dung",
+      "target": "policy:kyc",
+      "relation": "product_has_policy",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.4709191,
+      "metadata": {}
+    },
+    {
+      "id": "edge:c70722a0083d",
+      "source": "product:the_tin_dung",
+      "target": "promotion:summer2026",
+      "relation": "product_has_promotion",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.4709408,
+      "metadata": {}
+    },
+    {
+      "id": "edge:c679840f11f6",
+      "source": "rulebook:no_guarantee",
+      "target": "compliance:no_fake_rate",
+      "relation": "rule_enforces_compliance",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.4709618,
+      "metadata": {}
+    },
+    {
+      "id": "edge:bb33cd8ce568",
+      "source": "intent:so_sanh_gia",
+      "target": "objection:dat",
+      "relation": "intent_linked_objection",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.4709873,
+      "metadata": {}
+    },
+    {
+      "id": "edge:0e0a7726b101",
+      "source": "coaching:evidence_close",
+      "target": "root_cause:overpromise",
+      "relation": "coaching_addresses_root_cause",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635674.471009,
+      "metadata": {}
+    },
+    {
+      "id": "edge:14d53cc1ceb3",
+      "source": "call:qg-call",
+      "target": "objection:price",
+      "relation": "call_raises_objection",
+      "confidence": 0.75,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635834.3393219,
+      "metadata": {}
+    },
+    {
+      "id": "edge:4c0b26f9bc21",
+      "source": "call:qg-call",
+      "target": "intent:price",
+      "relation": "call_expresses_intent",
+      "confidence": 0.7,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635834.339395,
+      "metadata": {}
+    },
+    {
+      "id": "edge:17732f83d2d8",
+      "source": "customer_type:general",
+      "target": "intent:price",
+      "relation": "customer_has_intent",
+      "confidence": 0.6,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635834.3394566,
+      "metadata": {}
+    },
+    {
+      "id": "edge:10460b08d238",
+      "source": "call:qg-call",
+      "target": "root_cause:rc_price",
+      "relation": "call_has_root_cause",
+      "confidence": 0.8,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635834.3395185,
+      "metadata": {}
+    },
+    {
+      "id": "edge:86ad7b257a7a",
+      "source": "root_cause:rc_price",
+      "target": "revenue_leak:rc_price",
+      "relation": "root_cause_causes_revenue_leak",
+      "confidence": 0.85,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788657471.4543633,
+      "metadata": {}
+    },
+    {
+      "id": "edge:4382bae964ce",
+      "source": "call:qg-call",
+      "target": "coaching:qg-call:reframe",
+      "relation": "call_needs_coaching",
+      "confidence": 0.8,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635834.3396337,
+      "metadata": {}
+    },
+    {
+      "id": "edge:c7f4a19108cf",
+      "source": "call:qg-call",
+      "target": "rulebook:r1",
+      "relation": "call_violates_rule",
+      "confidence": 1.0,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635834.3396947,
+      "metadata": {}
+    },
+    {
+      "id": "edge:b3bc827dcc17",
+      "source": "rulebook:r1",
+      "target": "compliance:r1",
+      "relation": "rule_enforces_compliance",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635834.3398228,
+      "metadata": {}
+    },
+    {
+      "id": "edge:ca58cefa63c8",
+      "source": "call:c1",
+      "target": "product:thẻ",
+      "relation": "call_discusses_product",
+      "confidence": 0.7,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635675.7642918,
+      "metadata": {}
+    },
+    {
+      "id": "edge:3cc68a41afbe",
+      "source": "call:c1",
+      "target": "objection:price",
+      "relation": "call_raises_objection",
+      "confidence": 0.75,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635675.7643812,
+      "metadata": {}
+    },
+    {
+      "id": "edge:9cfe912f6a27",
+      "source": "product:thẻ",
+      "target": "objection:price",
+      "relation": "product_has_objection",
+      "confidence": 0.75,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635675.7644162,
+      "metadata": {}
+    },
+    {
+      "id": "edge:bfb119aefe98",
+      "source": "call:c1",
+      "target": "intent:n",
+      "relation": "call_expresses_intent",
+      "confidence": 0.7,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635675.7644787,
+      "metadata": {}
+    },
+    {
+      "id": "edge:ea2e5b80ba29",
+      "source": "customer_type:general",
+      "target": "intent:n",
+      "relation": "customer_has_intent",
+      "confidence": 0.6,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635675.764541,
+      "metadata": {}
+    },
+    {
+      "id": "edge:c3564c9cc66d",
+      "source": "call:c1",
+      "target": "root_cause:rc1",
+      "relation": "call_has_root_cause",
+      "confidence": 0.8,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635675.7645965,
+      "metadata": {}
+    },
+    {
+      "id": "edge:d0cd96947499",
+      "source": "root_cause:rc1",
+      "target": "revenue_leak:rc1",
+      "relation": "root_cause_causes_revenue_leak",
+      "confidence": 0.85,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635675.7646492,
+      "metadata": {}
+    },
+    {
+      "id": "edge:ec7d33c7b762",
+      "source": "call:c1",
+      "target": "coaching:c1:t",
+      "relation": "call_needs_coaching",
+      "confidence": 0.8,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635675.7647028,
+      "metadata": {}
+    },
+    {
+      "id": "edge:62eaa0707fab",
+      "source": "call:c1",
+      "target": "rulebook:r1",
+      "relation": "call_violates_rule",
+      "confidence": 1.0,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635675.764761,
+      "metadata": {}
+    },
+    {
+      "id": "edge:12c62727f35b",
+      "source": "call:test-call",
+      "target": "product:pkg_health",
+      "relation": "call_discusses_product",
+      "confidence": 0.7,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788657471.4540148,
+      "metadata": {}
+    },
+    {
+      "id": "edge:1a2de68e82ea",
+      "source": "call:test-call",
+      "target": "objection:price",
+      "relation": "call_raises_objection",
+      "confidence": 0.75,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788657471.4540966,
+      "metadata": {}
+    },
+    {
+      "id": "edge:6697f626f381",
+      "source": "product:pkg_health",
+      "target": "objection:price",
+      "relation": "product_has_objection",
+      "confidence": 0.75,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788657471.454132,
+      "metadata": {}
+    },
+    {
+      "id": "edge:352399674eb1",
+      "source": "call:test-call",
+      "target": "intent:price_concern",
+      "relation": "call_expresses_intent",
+      "confidence": 0.7,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788657471.4541895,
+      "metadata": {}
+    },
+    {
+      "id": "edge:42fc31e4a650",
+      "source": "customer_type:general",
+      "target": "intent:price_concern",
+      "relation": "customer_has_intent",
+      "confidence": 0.6,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788657471.4542434,
+      "metadata": {}
+    },
+    {
+      "id": "edge:a5d26cc5d4bd",
+      "source": "call:test-call",
+      "target": "root_cause:rc_price",
+      "relation": "call_has_root_cause",
+      "confidence": 0.8,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788657471.4543,
+      "metadata": {}
+    },
+    {
+      "id": "edge:8a11ec75301e",
+      "source": "call:test-call",
+      "target": "coaching:test-call:reframe_value",
+      "relation": "call_needs_coaching",
+      "confidence": 0.8,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788657471.4544241,
+      "metadata": {}
+    },
+    {
+      "id": "edge:4b644df5bc54",
+      "source": "call:test-call",
+      "target": "rulebook:r_obj_01",
+      "relation": "call_violates_rule",
+      "confidence": 1.0,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788657471.4544787,
+      "metadata": {}
+    },
+    {
+      "id": "edge:6fe7944622ae",
+      "source": "rulebook:r_obj_01",
+      "target": "compliance:r_obj_01",
+      "relation": "rule_enforces_compliance",
+      "confidence": 0.9,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788657471.454529,
+      "metadata": {}
+    },
+    {
+      "id": "edge:e1c5b22a4e16",
+      "source": "call:t",
+      "target": "product:pkg",
+      "relation": "call_discusses_product",
+      "confidence": 0.7,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635815.9566839,
+      "metadata": {}
+    },
+    {
+      "id": "edge:326c4e2991b0",
+      "source": "call:t",
+      "target": "objection:price",
+      "relation": "call_raises_objection",
+      "confidence": 0.75,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635815.9567583,
+      "metadata": {}
+    },
+    {
+      "id": "edge:bf1c74873d32",
+      "source": "product:pkg",
+      "target": "objection:price",
+      "relation": "product_has_objection",
+      "confidence": 0.75,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635815.9567897,
+      "metadata": {}
+    },
+    {
+      "id": "edge:2b1b0c160d94",
+      "source": "call:t",
+      "target": "intent:price_concern",
+      "relation": "call_expresses_intent",
+      "confidence": 0.7,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635815.956853,
+      "metadata": {}
+    },
+    {
+      "id": "edge:c15956466997",
+      "source": "call:t",
+      "target": "root_cause:rc_price",
+      "relation": "call_has_root_cause",
+      "confidence": 0.8,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635815.9569623,
+      "metadata": {}
+    },
+    {
+      "id": "edge:4163717d0bc5",
+      "source": "call:t",
+      "target": "coaching:t:x",
+      "relation": "call_needs_coaching",
+      "confidence": 0.8,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635815.9570718,
+      "metadata": {}
+    },
+    {
+      "id": "edge:077547f126bd",
+      "source": "call:t",
+      "target": "rulebook:r_obj_01",
+      "relation": "call_violates_rule",
+      "confidence": 1.0,
+      "version": "1.0.0",
+      "source_ref": "system",
+      "timestamp": 1788635815.957127,
+      "metadata": {}
+    },
+    {
+      "id": "edge:audit:faq:phi_thuong_nien:belongs_to",
+      "source": "faq:phi_thuong_nien",
+      "target": "intent:can_tu_van",
+      "relation": "belongs_to",
+      "confidence": 0.9,
+      "version": "1.0.1",
+      "source_ref": "enterprise_audit_v1",
+      "timestamp": 1788656429.0992646,
+      "metadata": {
+        "repair": true,
+        "note": "FAQ fee -> knowledge hub"
+      }
+    },
+    {
+      "id": "edge:audit:faq:thoi_gian_duyet:belongs_to",
+      "source": "faq:thoi_gian_duyet",
+      "target": "intent:can_tu_van",
+      "relation": "belongs_to",
+      "confidence": 0.9,
+      "version": "1.0.1",
+      "source_ref": "enterprise_audit_v1",
+      "timestamp": 1788656429.0992646,
+      "metadata": {
+        "repair": true,
+        "note": "FAQ SLA -> knowledge hub"
+      }
+    },
+    {
+      "id": "edge:audit:policy:privacy:governs",
+      "source": "policy:privacy",
+      "target": "compliance:no_fake_rate",
+      "relation": "related_to",
+      "confidence": 0.9,
+      "version": "1.0.1",
+      "source_ref": "enterprise_audit_v1",
+      "timestamp": 1788656429.0992646,
+      "metadata": {
+        "repair": true,
+        "note": "privacy policy linked"
+      }
+    },
+    {
+      "id": "edge:audit:root_cause:weak_discovery:causes",
+      "source": "root_cause:weak_discovery",
+      "target": "coaching:listen_ack",
+      "relation": "mitigated_by",
+      "confidence": 0.9,
+      "version": "1.0.1",
+      "source_ref": "enterprise_audit_v1",
+      "timestamp": 1788656429.0992646,
+      "metadata": {
+        "repair": true,
+        "note": "weak discovery linked to coaching/process"
+      }
+    }
+  ],
+  "saved_at": 1788657471.4548156
+}

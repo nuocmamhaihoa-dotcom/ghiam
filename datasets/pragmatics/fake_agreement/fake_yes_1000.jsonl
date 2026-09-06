@@ -1,0 +1,1000 @@
+{"id": "UTT-3eb4786df738", "text": "Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-7c582bbb9d72", "text": "Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-cf69e392d065", "text": "Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-2203c5bdb554", "text": "Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-0f832e865c27", "text": "Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-844ab7ef8197", "text": "Ờ Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-ec91345dedd5", "text": "Ờ Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-942c4615dbbe", "text": "Ờ Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-cea2e5beec6c", "text": "Ờ Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-8d08e0423245", "text": "Ờ Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-e456f9b7e8cc", "text": "À Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-fd05a5d5e247", "text": "À Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-557fb38b3353", "text": "À Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-0a92e6889998", "text": "À Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-d24bc53292a8", "text": "À Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-c35f570c05ef", "text": "Ừ thì Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-d38693baad83", "text": "Ừ thì Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-b56c1177d269", "text": "Ừ thì Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-9dcc111f6ee8", "text": "Ừ thì Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-e7c92d87d2fe", "text": "Ừ thì Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-6770413cdda5", "text": "Thôi Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-42a68e49f6c4", "text": "Thôi Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-5342670181ed", "text": "Thôi Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-2ed654f2151a", "text": "Thôi Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-830b72d95533", "text": "Thôi Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-4e06566cf479", "text": "Vậy Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-d1dc8b979021", "text": "Vậy Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-3d4558780c10", "text": "Vậy Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-7f727c944730", "text": "Vậy Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-d28850c1f710", "text": "Vậy Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-665dabd43c6f", "text": "Nói thật Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-d10fa673d8bd", "text": "Nói thật Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-e5cb6991963a", "text": "Nói thật Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-d6a2bf43ba5d", "text": "Nói thật Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-2b4e84578787", "text": "Nói thật Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-b4f718ae73d2", "text": "Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-d4c765abaf81", "text": "Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-fe93d85a1bc9", "text": "Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-60572504bc92", "text": "Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-7ebaf90aa611", "text": "Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-87a6fbeec905", "text": "Ờ Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-ea777ba2fe63", "text": "Ờ Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-378b1fa79a1f", "text": "Ờ Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-7f73af513af2", "text": "Ờ Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-498cb9bc7d46", "text": "Ờ Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-3ca5f866964c", "text": "À Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-1ab063405cf0", "text": "À Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-9db346e8f9d9", "text": "À Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-e8f235cc9f48", "text": "À Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-c1de9df4ad60", "text": "À Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-cebfb68f2ad9", "text": "Ừ thì Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-fe106da5f192", "text": "Ừ thì Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-4617a9f60472", "text": "Ừ thì Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-4c7bbc894679", "text": "Ừ thì Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-cdc342c70ee1", "text": "Ừ thì Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-47ba60bdb62a", "text": "Thôi Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-8ff7c4c609b8", "text": "Thôi Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-56e995b7b76d", "text": "Thôi Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-e6f854fa4889", "text": "Thôi Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-218374696a53", "text": "Thôi Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-646632ba2637", "text": "Vậy Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-7c14f3a0bda1", "text": "Vậy Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-511bdcccde9c", "text": "Vậy Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-a985e2553899", "text": "Vậy Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-b4ab7f6e2ad5", "text": "Vậy Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-844069df5041", "text": "Nói thật Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-66d4ee3428b8", "text": "Nói thật Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-0f9527ff5f9f", "text": "Nói thật Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-de2408a9e049", "text": "Nói thật Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-c9d0d063fb02", "text": "Nói thật Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-303d180ba5b9", "text": "Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-aacaba91f60c", "text": "Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-88c965995a3a", "text": "Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-782daf895c3f", "text": "Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-9a81f3504bee", "text": "Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-2e08e6ded593", "text": "Ờ Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-c4165da907a1", "text": "Ờ Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-041da5de3b3b", "text": "Ờ Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-8b52e16b16e3", "text": "Ờ Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-505e6f11b94c", "text": "Ờ Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-8541c6cd340c", "text": "À Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-4324059cf1c2", "text": "À Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 0}
+{"id": "UTT-aa7362cc8ea6", "text": "À Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-c039655a9c20", "text": "À Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 0}
+{"id": "UTT-cc77db936433", "text": "À Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-0d12f01eb61e", "text": "Ừ thì Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-c4af388bc436", "text": "Ừ thì Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-cd1b386f3c17", "text": "Ừ thì Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-1c09bd97e999", "text": "Ừ thì Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-8c851d8b2b34", "text": "Ừ thì Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-e22f1736e201", "text": "Thôi Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-0667bc1ef6f0", "text": "Thôi Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-3cafd6854f65", "text": "Thôi Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-4ab1adc9652b", "text": "Thôi Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-e8adc1d5de60", "text": "Thôi Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-c45bbbfe04a1", "text": "Vậy Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-034eda6662c4", "text": "Vậy Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-638d72b871ef", "text": "Vậy Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-2815837c05ae", "text": "Vậy Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-26e1959865e9", "text": "Vậy Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-a1d7d52120a2", "text": "Nói thật Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-9624bbd1a006", "text": "Nói thật Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-d73f43a104ac", "text": "Nói thật Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-89deb748e110", "text": "Nói thật Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-6cf766694868", "text": "Nói thật Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-9a6c7c63f31e", "text": "Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-cdf82e35ff38", "text": "Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-aed15ee195d6", "text": "Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-5690864c1e7a", "text": "Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-2906e34630b0", "text": "Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-36f34d91d154", "text": "Ờ Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-dffd8e276074", "text": "Ờ Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-10d45ef2e78e", "text": "Ờ Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-bfea518f09a2", "text": "Ờ Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-26c287baac16", "text": "Ờ Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-fd5ff1686753", "text": "À Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-c7fd7b638624", "text": "À Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-654809b48ee9", "text": "À Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-91523665794e", "text": "À Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-0587d58a5d20", "text": "À Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-08f097207a59", "text": "Ừ thì Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-3fe5b75bdfd5", "text": "Ừ thì Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-9a29cad068cc", "text": "Ừ thì Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-e59bc9d93293", "text": "Ừ thì Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-fd887f241026", "text": "Ừ thì Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-32a00d607e73", "text": "Thôi Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-e13541289d35", "text": "Thôi Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-6484359d0929", "text": "Thôi Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-65f8ac393b09", "text": "Thôi Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-b8646cfc7755", "text": "Thôi Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-75c7f75973f7", "text": "Vậy Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-50073d2de9a9", "text": "Vậy Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-8a01fcb4e5bd", "text": "Vậy Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-1817d9c231b4", "text": "Vậy Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-0c0425459a1f", "text": "Vậy Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-5437570d1398", "text": "Nói thật Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-f23e70badcdb", "text": "Nói thật Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-6cefb7f1e288", "text": "Nói thật Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-b4840ebd3fa7", "text": "Nói thật Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-aec568cf5dcb", "text": "Nói thật Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-63485a387908", "text": "Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-90271b455027", "text": "Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-e3c71a832e52", "text": "Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-d315368cef69", "text": "Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-82082561d0a9", "text": "Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-598a089fa947", "text": "Ờ Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-c05f9bf6d454", "text": "Ờ Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-c697ea65649e", "text": "Ờ Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-4c9987755433", "text": "Ờ Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-b6f8b045ab8d", "text": "Ờ Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-b47885017aa7", "text": "À Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-9995f9f5568c", "text": "À Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-2ba89d3e0b61", "text": "À Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-fda0bf59c30e", "text": "À Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-f72e86a48001", "text": "À Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-a609bab4b254", "text": "Ừ thì Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-8df491325218", "text": "Ừ thì Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-281f4fc52b7e", "text": "Ừ thì Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-d36117f96b0b", "text": "Ừ thì Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-9119791d82dd", "text": "Ừ thì Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-db037400d362", "text": "Thôi Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-ed3e36defb64", "text": "Thôi Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-93314787b11b", "text": "Thôi Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-da8524e46248", "text": "Thôi Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 1}
+{"id": "UTT-5b5f7546fda9", "text": "Thôi Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-b1b066e5a0f4", "text": "Vậy Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-afdca6b8462e", "text": "Vậy Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 1}
+{"id": "UTT-7c1f2eef9314", "text": "Vậy Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-96c43a693638", "text": "Vậy Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-08431d02c22e", "text": "Vậy Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-df487760ac8d", "text": "Nói thật Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-2819c5a89411", "text": "Nói thật Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-24ed94e634d6", "text": "Nói thật Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-ea4f90d26208", "text": "Nói thật Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-889f11e5e556", "text": "Nói thật Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-c69b15dc2081", "text": "Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-d0c6c581a369", "text": "Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-729cb231764e", "text": "Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-288cccbd2ef8", "text": "Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-4f1c0df77348", "text": "Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-33bb0d266d03", "text": "Ờ Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-5dd8d41a836b", "text": "Ờ Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-ffdc8d2e6de6", "text": "Ờ Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-02cef3bafa27", "text": "Ờ Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-51cbf5bb05c1", "text": "Ờ Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-7a870acc2803", "text": "À Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-e7388c5254fb", "text": "À Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-c649722db32f", "text": "À Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-89f4ebfa6d7c", "text": "À Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-cace88092814", "text": "À Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-258882feade0", "text": "Ừ thì Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-0128e10c9d60", "text": "Ừ thì Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-09a2d6cc7419", "text": "Ừ thì Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-a5496630d0c5", "text": "Ừ thì Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-3b0dc7c9e637", "text": "Ừ thì Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-a5b1161e163c", "text": "Thôi Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-7d2944184de6", "text": "Thôi Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-986c64a95bc5", "text": "Thôi Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-bc65492079e7", "text": "Thôi Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-e70acba190c1", "text": "Thôi Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-7a18f912abed", "text": "Vậy Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-3c0d15cc3422", "text": "Vậy Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-02b0c6eef5a1", "text": "Vậy Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-86a1d7307280", "text": "Vậy Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-f341afe346c6", "text": "Vậy Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-a57fc3be6b0a", "text": "Nói thật Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-f3505d1ef4e4", "text": "Nói thật Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-4b055a205b52", "text": "Nói thật Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-56f4901b76ad", "text": "Nói thật Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-bccfa1bad7ae", "text": "Nói thật Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-5f657bacc919", "text": "Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-62c9dfb21998", "text": "Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-089377059400", "text": "Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-835ae850643b", "text": "Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-ffc58bd8bdf5", "text": "Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-0e6a809f3955", "text": "Ờ Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-c4e6494b7bad", "text": "Ờ Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-acd042ce7b94", "text": "Ờ Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-ad4661c9fc15", "text": "Ờ Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-eabe34c1e2fe", "text": "Ờ Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-54b7992ec42f", "text": "À Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-da6448994b20", "text": "À Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-183fca5d8449", "text": "À Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-0953ee8b995b", "text": "À Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-d0d7115fd2b2", "text": "À Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-c4fb21ae58d7", "text": "Ừ thì Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-3331ed8960f7", "text": "Ừ thì Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-8e5c438840f3", "text": "Ừ thì Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-6de5e9aa5537", "text": "Ừ thì Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-3a71b90dcfca", "text": "Ừ thì Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-7ed136a87020", "text": "Thôi Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-b125e3a2528d", "text": "Thôi Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-5a33fcd3eeba", "text": "Thôi Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-3ebb2704523d", "text": "Thôi Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-5e3b93d52d58", "text": "Thôi Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-b814c5fb7841", "text": "Vậy Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-9b244f68c40d", "text": "Vậy Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-51ab3f24ac41", "text": "Vậy Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-78ab5ae0c917", "text": "Vậy Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-16f4972b3471", "text": "Vậy Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-68ed8d9d897e", "text": "Nói thật Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-d90ad4f52678", "text": "Nói thật Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-d197d42de719", "text": "Nói thật Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-1d1db8cb503e", "text": "Nói thật Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-7c6ab24c22f1", "text": "Nói thật Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-0499083e3d2e", "text": "Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-c3572f97eca0", "text": "Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-f215d5fce7aa", "text": "Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-c237be79a8b5", "text": "Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 2}
+{"id": "UTT-7b896eccf788", "text": "Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 2}
+{"id": "UTT-3d8de19a204e", "text": "Ờ Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-448f283a3e43", "text": "Ờ Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-0cd3c0873174", "text": "Ờ Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-640b9ab97b87", "text": "Ờ Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-68928696714d", "text": "Ờ Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-9346a72f2086", "text": "À Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-e88330420dd6", "text": "À Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-909b1a537d8b", "text": "À Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-c40c22e62f54", "text": "À Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-f1b48e6694dd", "text": "À Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-b626d06023a2", "text": "Ừ thì Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-a1d6a6d439df", "text": "Ừ thì Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-7051724ec313", "text": "Ừ thì Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-3e38015230d3", "text": "Ừ thì Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-c8e975247516", "text": "Ừ thì Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-20bcd13aff34", "text": "Thôi Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-251c1dc925a0", "text": "Thôi Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-5b332110ece2", "text": "Thôi Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-2949c4163a84", "text": "Thôi Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-59d2983c614d", "text": "Thôi Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-342e65617829", "text": "Vậy Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-1902b4986452", "text": "Vậy Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-64360de50857", "text": "Vậy Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-838d9c621ab8", "text": "Vậy Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-0334e70129c1", "text": "Vậy Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-0bb7f1a5ab9a", "text": "Nói thật Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-435f566f837c", "text": "Nói thật Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-e973ce414bd0", "text": "Nói thật Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-e5dc64e39de0", "text": "Nói thật Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-fb31803b3680", "text": "Nói thật Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-710b68d05a33", "text": "Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-a0fc4ef96221", "text": "Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-459be09bdb8c", "text": "Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-e4f7a038010d", "text": "Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-07cc6b9f8ba0", "text": "Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-e9f82b23d2be", "text": "Ờ Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-79c78f3eb9ba", "text": "Ờ Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-4ab949bf79b1", "text": "Ờ Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-959bcd0a1ece", "text": "Ờ Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-728966a45d92", "text": "Ờ Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-418c7401cfe1", "text": "À Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-4ce6bcf48d3d", "text": "À Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-7ef998228a14", "text": "À Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-adc61e4c4d49", "text": "À Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-45cb96155d6b", "text": "À Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-d23451c91484", "text": "Ừ thì Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-29dc8654e2b8", "text": "Ừ thì Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-260f929b32f9", "text": "Ừ thì Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-754d1f534dfb", "text": "Ừ thì Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-6d3dd80902a7", "text": "Ừ thì Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-115ca370435b", "text": "Thôi Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-6b059346abb1", "text": "Thôi Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-313e4a379c74", "text": "Thôi Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-b66349ed3ea9", "text": "Thôi Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-9c75afaa89b9", "text": "Thôi Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-7c831adf1f69", "text": "Vậy Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-4c46200be19d", "text": "Vậy Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-f5ffd1238ed0", "text": "Vậy Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-7c9e53435192", "text": "Vậy Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-85566a8b8655", "text": "Vậy Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-dceeffce352f", "text": "Nói thật Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-ab534e1732b2", "text": "Nói thật Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-4a6e6aa08ccb", "text": "Nói thật Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-54cbf3de9a72", "text": "Nói thật Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-461d2623b4db", "text": "Nói thật Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-8802a09487cf", "text": "Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-b07bba30a0d5", "text": "Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-1032d9aff180", "text": "Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-3ba1cae8c30d", "text": "Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-9a45087bbf5e", "text": "Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-deb4d56a440c", "text": "Ờ Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-7f838b81e984", "text": "Ờ Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-2b03d94853e6", "text": "Ờ Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-d18ab3e0f264", "text": "Ờ Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-c3f16d2e2dbb", "text": "Ờ Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-2633458e647e", "text": "À Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-969a8ffb91f8", "text": "À Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-1f88c73d1723", "text": "À Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-b014cb772348", "text": "À Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-a61f3844a0f1", "text": "À Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-267e10b6e5cd", "text": "Ừ thì Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-8714cb738aa5", "text": "Ừ thì Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 3}
+{"id": "UTT-3ae79917e279", "text": "Ừ thì Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-f2c51b77a50c", "text": "Ừ thì Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 3}
+{"id": "UTT-7d81ad0a6365", "text": "Ừ thì Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-266b4dabb072", "text": "Thôi Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-de97e237ba56", "text": "Thôi Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-1bdec5043c67", "text": "Thôi Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-1c023183f138", "text": "Thôi Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-9e99ce122c57", "text": "Thôi Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-4c6e5bc099b6", "text": "Vậy Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-29dc06886c04", "text": "Vậy Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-956d6d20fead", "text": "Vậy Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-c7287faf095e", "text": "Vậy Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-1c3bbc60d839", "text": "Vậy Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-78a22907af03", "text": "Nói thật Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-0d63f20d3680", "text": "Nói thật Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-14a10d069abf", "text": "Nói thật Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-28ec68dce91a", "text": "Nói thật Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-1c56615895ba", "text": "Nói thật Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-c5306db738f2", "text": "Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-76a56fcb09ad", "text": "Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-f80091db566b", "text": "Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-a85d92d3d744", "text": "Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-f5aea0c11656", "text": "Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-e3c8d733b3eb", "text": "Ờ Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-fd1cf6c67ac5", "text": "Ờ Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-bc1672b69e8d", "text": "Ờ Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-60a1e6eab3dd", "text": "Ờ Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-321ff650d53a", "text": "Ờ Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-4078b404ef40", "text": "À Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-362c5c5b6900", "text": "À Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-a603bbb8e0a6", "text": "À Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-58e2d2dcabbd", "text": "À Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-1f6fed2d33e4", "text": "À Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-e2fdbe725f2c", "text": "Ừ thì Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-941736f6c548", "text": "Ừ thì Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-08e68fe408c7", "text": "Ừ thì Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-40c967f580ed", "text": "Ừ thì Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-5088ecf85423", "text": "Ừ thì Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-8a519d42841c", "text": "Thôi Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-e4d27b32277c", "text": "Thôi Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-ca7b4828a542", "text": "Thôi Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-3bea609eeb55", "text": "Thôi Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-fa162b66aa1a", "text": "Thôi Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-b67481a03e6f", "text": "Vậy Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-3f17c570a366", "text": "Vậy Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-acf929782e43", "text": "Vậy Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-f50aef6701cc", "text": "Vậy Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-196d039e73f8", "text": "Vậy Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-6efa8230278f", "text": "Nói thật Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-26aa90b4ef52", "text": "Nói thật Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-2a122c1bfed6", "text": "Nói thật Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-63c9882d60e4", "text": "Nói thật Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-346cfe4a1cdb", "text": "Nói thật Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-795bea7d6fbd", "text": "Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-4d16bb1d535d", "text": "Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-3f1dd9e8b22a", "text": "Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-80356d4d2db0", "text": "Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-6946a084fbf6", "text": "Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-71eb599f7589", "text": "Ờ Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-e2178f2ffb27", "text": "Ờ Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-c2611af49b08", "text": "Ờ Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-a501b6cc08a1", "text": "Ờ Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-ea1f9a079654", "text": "Ờ Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-9569ced1376d", "text": "À Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-4629f9a620ff", "text": "À Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-ab4d4390d673", "text": "À Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-0e3342121790", "text": "À Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-9176f0991dd0", "text": "À Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-f41a247bcce9", "text": "Ừ thì Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-58cedcd0242b", "text": "Ừ thì Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-927c3d0f7765", "text": "Ừ thì Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-434cf7e9fddf", "text": "Ừ thì Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-09d0defd88f4", "text": "Ừ thì Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-e2f6cff401f7", "text": "Thôi Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-e348a5698656", "text": "Thôi Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-001993d993d4", "text": "Thôi Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-5a00d5354d2b", "text": "Thôi Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-605f3e157f4a", "text": "Thôi Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-ea7c48e7223c", "text": "Vậy Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-60af8d90a1d0", "text": "Vậy Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-935e2be8bee6", "text": "Vậy Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-d2dc5df07e80", "text": "Vậy Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 4}
+{"id": "UTT-bfd9b9b5bebf", "text": "Vậy Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-b8aeb1f34355", "text": "Nói thật Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-05c947fd2b5e", "text": "Nói thật Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 4}
+{"id": "UTT-730c43bd5eb5", "text": "Nói thật Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-409676ffec85", "text": "Nói thật Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-4fe693c0ebe7", "text": "Nói thật Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-21850ae8c9fd", "text": "Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-ea29224ecf50", "text": "Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-e53071d63261", "text": "Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-537e6f8ecd49", "text": "Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-82ee078a42fe", "text": "Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-051d67d7f038", "text": "Ờ Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-a80d74778e2a", "text": "Ờ Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-6af668114b29", "text": "Ờ Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-2239d4a6fd0c", "text": "Ờ Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-25384ec610f5", "text": "Ờ Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-a0685869472e", "text": "À Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-5cb7464e1146", "text": "À Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-cb2c8626c410", "text": "À Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-20f9ef691103", "text": "À Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-d5cf7078ac62", "text": "À Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-d3ae505bb181", "text": "Ừ thì Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-92420e1d4230", "text": "Ừ thì Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-96616caf169d", "text": "Ừ thì Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-23627d352dfb", "text": "Ừ thì Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-a8e909133bdb", "text": "Ừ thì Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-337448b114bb", "text": "Thôi Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-0c8cf74797fd", "text": "Thôi Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-308057683471", "text": "Thôi Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-8b1b36293de4", "text": "Thôi Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-3ad09ebbba8f", "text": "Thôi Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-3f0c1bdec073", "text": "Vậy Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-88f5398a7647", "text": "Vậy Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-8da89ea3c04e", "text": "Vậy Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-368d55e077a4", "text": "Vậy Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-5f30086c0a0d", "text": "Vậy Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-b17363e52520", "text": "Nói thật Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-c95a9d9147fc", "text": "Nói thật Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-77d82bc00b3d", "text": "Nói thật Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-436e4ca5d058", "text": "Nói thật Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-07b6b071e5b7", "text": "Nói thật Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-864a7e91687b", "text": "Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-d9b3f32c0a9c", "text": "Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-b107022e9b68", "text": "Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-d83971082b1b", "text": "Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-42128a92b3e2", "text": "Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-005122a81a15", "text": "Ờ Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-3b8504625d57", "text": "Ờ Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-d8ebc1d58669", "text": "Ờ Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-2dd04da00935", "text": "Ờ Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-5e1114b8b0c2", "text": "Ờ Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-d7cbca91de74", "text": "À Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-5a941e456575", "text": "À Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-9e82aa4ae0a0", "text": "À Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-aaa578963f1d", "text": "À Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-621dc5f84387", "text": "À Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-0689f5f32d46", "text": "Ừ thì Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-a336416cd880", "text": "Ừ thì Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-e390ab26355a", "text": "Ừ thì Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-23dbaec81317", "text": "Ừ thì Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-312ce7a824dd", "text": "Ừ thì Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-7d68749ac612", "text": "Thôi Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-96dd7156d096", "text": "Thôi Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-bc6b46e9c09f", "text": "Thôi Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-6acfbd5019e1", "text": "Thôi Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-1efa22eb4d9a", "text": "Thôi Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-ddf43cbe1ef4", "text": "Vậy Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-d240f2cd39a4", "text": "Vậy Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-57dfb764ee25", "text": "Vậy Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-673ff3c2eb4c", "text": "Vậy Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-342145f49806", "text": "Vậy Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-4470167e8f2e", "text": "Nói thật Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-f4548bcf2c40", "text": "Nói thật Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-2e989ddb12d5", "text": "Nói thật Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-92875abb693f", "text": "Nói thật Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-3a5db07b2f31", "text": "Nói thật Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-4cb328c9948e", "text": "Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-9d02e9b31a23", "text": "Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-183da53bc3c7", "text": "Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-602e7a4af8cc", "text": "Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-7af5c605c355", "text": "Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-610fb9331f38", "text": "Ờ Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-d0aea0cd059d", "text": "Ờ Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-e5c06f8d7873", "text": "Ờ Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-ff12476d1899", "text": "Ờ Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 5}
+{"id": "UTT-699af10208b1", "text": "Ờ Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 5}
+{"id": "UTT-f47bfbafce61", "text": "À Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-a991c24bcacf", "text": "À Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-fe889726df0b", "text": "À Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-22c04714f3b1", "text": "À Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-75eb85dd3e3b", "text": "À Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-91ef794dfdc5", "text": "Ừ thì Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-8065b499e723", "text": "Ừ thì Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-433e714c88c1", "text": "Ừ thì Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-7f90ff277139", "text": "Ừ thì Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-68cbc072646d", "text": "Ừ thì Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-dc0a32b967c9", "text": "Thôi Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-04f87aace0ef", "text": "Thôi Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-527f8da06f91", "text": "Thôi Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-18cbb7646f55", "text": "Thôi Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-4089d5cf0a1b", "text": "Thôi Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-872f11e3e16c", "text": "Vậy Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-9863d00231fa", "text": "Vậy Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-a4735ba82c8d", "text": "Vậy Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-5bd87555638e", "text": "Vậy Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-72a0981d7723", "text": "Vậy Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-f85b43d88449", "text": "Nói thật Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-864d0c9cd81a", "text": "Nói thật Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-f71437cf5542", "text": "Nói thật Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-1c61c04bbc63", "text": "Nói thật Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-8996fe23f21d", "text": "Nói thật Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-40c660587aac", "text": "Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-4b4abe9974c0", "text": "Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-3822667b37dd", "text": "Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-e1e5eaadd1d6", "text": "Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-c690bc6cf232", "text": "Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-7abfbd1ea268", "text": "Ờ Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-8d0190c7cb4a", "text": "Ờ Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-d1715dae34de", "text": "Ờ Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-7ab972d55e76", "text": "Ờ Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-b6927b919072", "text": "Ờ Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-6880b93f0fdc", "text": "À Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-e03b82c80df0", "text": "À Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-a6aadd06cf73", "text": "À Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-d7daa529c38c", "text": "À Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-464a18979156", "text": "À Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-1713a5d73108", "text": "Ừ thì Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-93e0892da2e2", "text": "Ừ thì Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-9403da5fa81f", "text": "Ừ thì Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-afb65eaecb2c", "text": "Ừ thì Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-4ae6ee016b24", "text": "Ừ thì Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-d946f3fbf02d", "text": "Thôi Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-51f9981590fa", "text": "Thôi Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-9cef25fc8e48", "text": "Thôi Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-5b53021a9c1f", "text": "Thôi Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-b06a12f60b5d", "text": "Thôi Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-019511979364", "text": "Vậy Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-6ce9a4614460", "text": "Vậy Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-78a524060b17", "text": "Vậy Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-457722c50700", "text": "Vậy Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-ce12cca9cf1d", "text": "Vậy Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-419ee9f808c5", "text": "Nói thật Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-379e878adf09", "text": "Nói thật Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-a89c6700eb66", "text": "Nói thật Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-873d647bb6c6", "text": "Nói thật Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-b1e41aa5fdf3", "text": "Nói thật Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-334e7e98ef6c", "text": "Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-fcf3863db0dc", "text": "Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-d1a88aa05ddc", "text": "Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-f53a87820406", "text": "Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-193700d543da", "text": "Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-214814cc7282", "text": "Ờ Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-4dc21847f257", "text": "Ờ Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-76efe3ae6573", "text": "Ờ Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-1a4fb0166014", "text": "Ờ Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-4bb1e5afedd0", "text": "Ờ Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-f19be54c3617", "text": "À Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-d9c46525cb7c", "text": "À Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-49c403fc775b", "text": "À Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-4e491a007713", "text": "À Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-2e939f559ebe", "text": "À Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-fd4ebec12f27", "text": "Ừ thì Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-0a3905787e37", "text": "Ừ thì Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-b85e1d1232ef", "text": "Ừ thì Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-f61d1fbff8d1", "text": "Ừ thì Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-93780f070345", "text": "Ừ thì Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-55a9f4804aad", "text": "Thôi Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-fd44511eb0c5", "text": "Thôi Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 6}
+{"id": "UTT-b195d93c4dea", "text": "Thôi Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-678384a3f180", "text": "Thôi Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 6}
+{"id": "UTT-b9f666c39c8b", "text": "Thôi Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-8ed8b8f2d7fc", "text": "Vậy Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-37a8bd563d74", "text": "Vậy Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-0aa5b54b11f6", "text": "Vậy Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-ad30f57dd5c0", "text": "Vậy Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-654bf35c2113", "text": "Vậy Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-130a89eb753e", "text": "Nói thật Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-8da9449530d3", "text": "Nói thật Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-dbab32130e37", "text": "Nói thật Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-53c4c99ef829", "text": "Nói thật Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-f3baacf5a7a9", "text": "Nói thật Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-6cc32d0eec4e", "text": "Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-c2cb8fe50392", "text": "Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-1c8959da09e6", "text": "Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-f1b3ce8e49e0", "text": "Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-911939c4bce2", "text": "Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-5bf562524b5f", "text": "Ờ Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-7b1778007ea0", "text": "Ờ Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-e56ffae51f1f", "text": "Ờ Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-1a84fe0ee976", "text": "Ờ Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-6ffd9ec9675a", "text": "Ờ Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-cc5af830a888", "text": "À Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-6450a6333e0d", "text": "À Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-af2e904c9299", "text": "À Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-07a5b993569b", "text": "À Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-e66ed019ff4b", "text": "À Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-cf970cee0599", "text": "Ừ thì Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-19529386d5e1", "text": "Ừ thì Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-17881b4e263f", "text": "Ừ thì Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-cb3fe88ac6ca", "text": "Ừ thì Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-8a60ca9c09a3", "text": "Ừ thì Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-8a1863c51d86", "text": "Thôi Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-46f357849dc1", "text": "Thôi Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-58f80ac3b564", "text": "Thôi Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-77e8d79e36e9", "text": "Thôi Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-08547567bdc0", "text": "Thôi Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-8439160fc403", "text": "Vậy Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-de19e2bbfcca", "text": "Vậy Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-b3e4ba31abbf", "text": "Vậy Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-5be9e3b35d5d", "text": "Vậy Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-a93bd7358ef0", "text": "Vậy Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-56e1fd93d465", "text": "Nói thật Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-1ac2427d1739", "text": "Nói thật Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-5599a4e24955", "text": "Nói thật Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-494be09de1de", "text": "Nói thật Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-c1877a3b761e", "text": "Nói thật Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-5cafc5fa284e", "text": "Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-56abfcad4b67", "text": "Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-9b7bb5ed175c", "text": "Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-21b9e287c70e", "text": "Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-e419c19aa47c", "text": "Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-a7781a376e84", "text": "Ờ Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-3d431f70575e", "text": "Ờ Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-480ee5408b4f", "text": "Ờ Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-f7c6accd67b2", "text": "Ờ Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-5b818c6fe59f", "text": "Ờ Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-199406882631", "text": "À Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-e6dd2e05cb65", "text": "À Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-a7aaeb91b49f", "text": "À Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-5e834257ad50", "text": "À Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-df3ef81f0028", "text": "À Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-bbd8239d9621", "text": "Ừ thì Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-9c542293922e", "text": "Ừ thì Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-7db26cff5a24", "text": "Ừ thì Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-c1fe88ffdf3a", "text": "Ừ thì Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-0caba0459293", "text": "Ừ thì Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-e8807626b375", "text": "Thôi Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-039e11fb9eb2", "text": "Thôi Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-950fa093f989", "text": "Thôi Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-b2d895480aba", "text": "Thôi Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-d8c34cc832d0", "text": "Thôi Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-51536b40419f", "text": "Vậy Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-84d2d14378f6", "text": "Vậy Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-67fb105843e3", "text": "Vậy Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-566ce626f639", "text": "Vậy Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-f502a329a86d", "text": "Vậy Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-2c8bd4d9c466", "text": "Nói thật Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-41f74f2b7ef7", "text": "Nói thật Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-997936736695", "text": "Nói thật Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-4066cff44d55", "text": "Nói thật Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 7}
+{"id": "UTT-d96c4f009f9f", "text": "Nói thật Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-e9937f9ed510", "text": "Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-f6502dc99f54", "text": "Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 7}
+{"id": "UTT-5c1be777d43e", "text": "Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-91bf91c35308", "text": "Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-91be924489a0", "text": "Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-5d7a06671702", "text": "Ờ Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-94f61f29f279", "text": "Ờ Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-fe82632aef03", "text": "Ờ Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-45a2424531ce", "text": "Ờ Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-96638ec4a198", "text": "Ờ Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-dfef8205f5e5", "text": "À Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-0c803304423f", "text": "À Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-64daa1852855", "text": "À Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-ac0bb35d04ac", "text": "À Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-8752cde40d59", "text": "À Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-ccc2c76be9f7", "text": "Ừ thì Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-f63f0e286a2d", "text": "Ừ thì Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-0be6d8461203", "text": "Ừ thì Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-a6f37fa3341c", "text": "Ừ thì Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-033f18cde07b", "text": "Ừ thì Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-6716df872a49", "text": "Thôi Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-e1cb10f331e4", "text": "Thôi Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-07b098e1a0e3", "text": "Thôi Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-2c6e4ecc5c5a", "text": "Thôi Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-5c46fdabf098", "text": "Thôi Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-9acffaf9a2ab", "text": "Vậy Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-6e2bafdc5767", "text": "Vậy Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-7b4700b5bf47", "text": "Vậy Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-77bf993b604c", "text": "Vậy Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-4fe47e0b27ce", "text": "Vậy Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-731fb19797c0", "text": "Nói thật Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-4aeefca66855", "text": "Nói thật Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-4fc2fcb39c6c", "text": "Nói thật Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-ea861c98024f", "text": "Nói thật Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-e1da77886acb", "text": "Nói thật Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-53187b3b0868", "text": "Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-c4a63a16ab93", "text": "Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-d561e5f751a6", "text": "Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-c174f2f57b90", "text": "Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-70095221e317", "text": "Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-64340e33617a", "text": "Ờ Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-3c7d5939ef66", "text": "Ờ Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-27dd3907342d", "text": "Ờ Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-9396f0d40ec1", "text": "Ờ Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-61f08765bc5e", "text": "Ờ Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-d1175d190b12", "text": "À Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-980f648af7b0", "text": "À Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-ad69d1115688", "text": "À Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-36d9494f783e", "text": "À Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-4614337dace0", "text": "À Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-0b6bfd29e5cb", "text": "Ừ thì Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-db722e3286a6", "text": "Ừ thì Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-07f8db839d7f", "text": "Ừ thì Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-0c3c4d8101df", "text": "Ừ thì Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-09ac30c76f93", "text": "Ừ thì Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-cf510493d8dc", "text": "Thôi Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-5878c926410e", "text": "Thôi Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-71e29b2e6a56", "text": "Thôi Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-52b0f9f3dcfd", "text": "Thôi Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-6b0f2d728393", "text": "Thôi Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-01b299820d32", "text": "Vậy Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-986a229a1489", "text": "Vậy Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-ab3f74d0bad4", "text": "Vậy Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-8c0b70815dc9", "text": "Vậy Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-c77acbde7664", "text": "Vậy Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-8af8fdde7d6b", "text": "Nói thật Ừ cũng được nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-ba6112598346", "text": "Nói thật Cũng được đó nhé", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-27224caaeca8", "text": "Nói thật Ừ ừ được rồi nhé", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-7089e90d4922", "text": "Nói thật Ok ok nhé", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-549be63420de", "text": "Nói thật Nghe cũng ổn nhé", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-7ffdb94afe3b", "text": "Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-46beab92b816", "text": "Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-c7c977318fed", "text": "Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-fe60495211c3", "text": "Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-8b38329784db", "text": "Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-ae79fd598d5f", "text": "Ờ Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-b9b3aabd3f98", "text": "Ờ Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-c07660d43802", "text": "Ờ Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-fc49e3a2f305", "text": "Ờ Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-04570e31d4f9", "text": "Ờ Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-6f723f75a4aa", "text": "À Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-3373f41fb3d8", "text": "À Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-f28912a603fb", "text": "À Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-d7f8aa78e1c5", "text": "À Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 8}
+{"id": "UTT-2bdb3f339feb", "text": "À Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 8}
+{"id": "UTT-289d1de653d7", "text": "Ừ thì Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-628671215795", "text": "Ừ thì Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-0ec1ace0fb7f", "text": "Ừ thì Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-19a296f4d72b", "text": "Ừ thì Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-8478c9aa3f33", "text": "Ừ thì Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-d1865e0a9faa", "text": "Thôi Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-21d8ce091268", "text": "Thôi Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-027bcb6114e7", "text": "Thôi Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-d39c454202e3", "text": "Thôi Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-1e01defd79b8", "text": "Thôi Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-35a796ae0b14", "text": "Vậy Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-f69bb8ccb935", "text": "Vậy Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-603918ec2a48", "text": "Vậy Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-516c2de425ea", "text": "Vậy Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-0a7ca78d96f3", "text": "Vậy Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-8d59e7e21e2f", "text": "Nói thật Ừ cũng được nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-f4fca0aedaf4", "text": "Nói thật Cũng được đó nha", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-fa23d3d56926", "text": "Nói thật Ừ ừ được rồi nha", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-262d55a06798", "text": "Nói thật Ok ok nha", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-fbb934b0c125", "text": "Nói thật Nghe cũng ổn nha", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-61f4843deb7e", "text": "Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-7d6fc8459950", "text": "Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-f896b507fa0c", "text": "Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-8ffb7972e806", "text": "Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-9c726a0eca6d", "text": "Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-3108620a04c9", "text": "Ờ Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-812e9d786e3f", "text": "Ờ Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-f8982952594d", "text": "Ờ Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-77e18532c44b", "text": "Ờ Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-bcbf8e24e9b3", "text": "Ờ Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-a43218a5c80c", "text": "À Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-2258b219d606", "text": "À Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-9727921b9475", "text": "À Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-96b708f9b541", "text": "À Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-9fffdbc4cca1", "text": "À Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-89e3fe705c8c", "text": "Ừ thì Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-9e11f44f6e0d", "text": "Ừ thì Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-9c19cc118116", "text": "Ừ thì Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-fb138931891a", "text": "Ừ thì Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-8bea1d59f319", "text": "Ừ thì Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-4da137b4008b", "text": "Thôi Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-2e4fbe1f3f5b", "text": "Thôi Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-71206c9e3163", "text": "Thôi Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-c19dd1d2a7d0", "text": "Thôi Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-e737011d5412", "text": "Thôi Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-5cd81570e4be", "text": "Vậy Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-a0ceb20f5e41", "text": "Vậy Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-41c9124b3626", "text": "Vậy Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-e72356ebbb63", "text": "Vậy Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-34e9892c4cc6", "text": "Vậy Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-cfdf9979b525", "text": "Nói thật Ừ cũng được đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-b75a243d6102", "text": "Nói thật Cũng được đó đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-4e65bf31fd97", "text": "Nói thật Ừ ừ được rồi đó", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-ef5cf40ccf32", "text": "Nói thật Ok ok đó", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-34e7d6d89187", "text": "Nói thật Nghe cũng ổn đó", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-9dca4a27ed46", "text": "Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-93062fab51d8", "text": "Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-c758378e91f8", "text": "Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-eb22d0b2b79e", "text": "Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-888014086837", "text": "Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-01a6828f3f87", "text": "Ờ Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-e9418652bff2", "text": "Ờ Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-7f7fa6610405", "text": "Ờ Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-7a0a87011e4b", "text": "Ờ Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-3b3773f00d44", "text": "Ờ Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-01f467db01b2", "text": "À Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-a5775e8c9675", "text": "À Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-85b954227d1f", "text": "À Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-08f79bbec564", "text": "À Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-905a065648ca", "text": "À Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-8b361f43f077", "text": "Ừ thì Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-f23af69f58d3", "text": "Ừ thì Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-d4244f7bb388", "text": "Ừ thì Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-d3326e2e3ddc", "text": "Ừ thì Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-04c3809c9795", "text": "Ừ thì Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-a0d9ee3fa6c0", "text": "Thôi Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-93a0778cc864", "text": "Thôi Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-8a72b7ceb989", "text": "Thôi Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-a114482b9df0", "text": "Thôi Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-fa5c9c3c96f0", "text": "Thôi Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-696af5188d70", "text": "Vậy Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-023f449461e2", "text": "Vậy Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 9}
+{"id": "UTT-3eccc1d625ac", "text": "Vậy Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-3837b2e79a2c", "text": "Vậy Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 9}
+{"id": "UTT-0d613dc8d431", "text": "Vậy Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-b03e58886faf", "text": "Nói thật Ừ cũng được rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-8123a91cf5fd", "text": "Nói thật Cũng được đó rồi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-dac6245a3958", "text": "Nói thật Ừ ừ được rồi rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-32d00b1df046", "text": "Nói thật Ok ok rồi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-94b33be25203", "text": "Nói thật Nghe cũng ổn rồi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-79e52bde6274", "text": "Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-f0a533c46e04", "text": "Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-d51d283a9b77", "text": "Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-b4a7ad3f84fd", "text": "Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-5490b3974fb1", "text": "Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-1d2dedd47e25", "text": "Ờ Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-f1e818a2edf5", "text": "Ờ Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-5e1b1c645749", "text": "Ờ Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-3452fa02a94e", "text": "Ờ Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-012306dc4e89", "text": "Ờ Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-f9269bde86ee", "text": "À Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-000087eca7ae", "text": "À Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-c509c2f87f7d", "text": "À Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-baa6fe478fe4", "text": "À Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-1699640557e6", "text": "À Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-6f2f9bf18bbe", "text": "Ừ thì Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-e1382be6e2b1", "text": "Ừ thì Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-b4f9c2325671", "text": "Ừ thì Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-3a983c5b4200", "text": "Ừ thì Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-bc92118f7a4b", "text": "Ừ thì Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-c225a231cdc8", "text": "Thôi Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-a3deee2620dd", "text": "Thôi Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-d8d56d60a0f4", "text": "Thôi Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-3b4c8ed333e6", "text": "Thôi Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-a925708c4878", "text": "Thôi Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-262445cae311", "text": "Vậy Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-0ff0d037b318", "text": "Vậy Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-28a3212ae23f", "text": "Vậy Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-251d3819c063", "text": "Vậy Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-a35b42f8b056", "text": "Vậy Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-5c7d43fcfe13", "text": "Nói thật Ừ cũng được á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-b6b81bdb5054", "text": "Nói thật Cũng được đó á", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-90691f1326c8", "text": "Nói thật Ừ ừ được rồi á", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-0a1bdc425634", "text": "Nói thật Ok ok á", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-29aa863ffea5", "text": "Nói thật Nghe cũng ổn á", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-cc4fe9829a2b", "text": "Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-b1c2cdd382b7", "text": "Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-ccd8224f9268", "text": "Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-bbe2f2fc4479", "text": "Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-42fc7d8f08f3", "text": "Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-f37ef901c15f", "text": "Ờ Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-dec4cbec4a2d", "text": "Ờ Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-f4fa0b2d1370", "text": "Ờ Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-6311ee68b390", "text": "Ờ Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-6a69e422333b", "text": "Ờ Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-a4ebc651791d", "text": "À Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-38e043477709", "text": "À Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-a2a0241bc95a", "text": "À Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-fdbeaf7f1dba", "text": "À Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-096e20783813", "text": "À Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-37cd351712b7", "text": "Ừ thì Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-87fcaa5af4f7", "text": "Ừ thì Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-0707842ada23", "text": "Ừ thì Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-536cd904c1b4", "text": "Ừ thì Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-2711573e9b54", "text": "Ừ thì Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-0e2da6c7b8c8", "text": "Thôi Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-0b319beae65f", "text": "Thôi Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-9632d2c63c98", "text": "Thôi Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-d1f405154c29", "text": "Thôi Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-933ba82ff8e1", "text": "Thôi Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-b0bb1f295796", "text": "Vậy Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-9c81b8214365", "text": "Vậy Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-0d8f90146f1b", "text": "Vậy Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-20e8eda69f47", "text": "Vậy Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-2ea070e4ecc1", "text": "Vậy Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-9a7edb9e0173", "text": "Nói thật Ừ cũng được hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-0b12ee78e0aa", "text": "Nói thật Cũng được đó hen", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-54b02592ed0b", "text": "Nói thật Ừ ừ được rồi hen", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-91cb22761058", "text": "Nói thật Ok ok hen", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-1ba2b338e6dd", "text": "Nói thật Nghe cũng ổn hen", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-f7b8c6b9fdb9", "text": "Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-17b8c2f1a0e3", "text": "Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-a6cdbf5226dd", "text": "Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-3850cbb9edcf", "text": "Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 10}
+{"id": "UTT-25c1e4de3ff4", "text": "Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-173698d40d75", "text": "Ờ Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-79d52a51c702", "text": "Ờ Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 10}
+{"id": "UTT-6b31e47cee04", "text": "Ờ Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-b1c4c6af07dd", "text": "Ờ Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-33644d4c305e", "text": "Ờ Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-062069f8292c", "text": "À Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-9f96084fcacb", "text": "À Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-654344cc4341", "text": "À Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-a880d9bec9f6", "text": "À Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-86ef101b3518", "text": "À Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-4fb0837026c0", "text": "Ừ thì Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-85bc90ec7b2b", "text": "Ừ thì Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-b52695469195", "text": "Ừ thì Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-0f43da734967", "text": "Ừ thì Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-854711d00f19", "text": "Ừ thì Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-2822683ded49", "text": "Thôi Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-e2f7e5a82f46", "text": "Thôi Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-afc146c78146", "text": "Thôi Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-3ca03a13deb5", "text": "Thôi Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-a801890e5168", "text": "Thôi Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-8adbd23a3e0c", "text": "Vậy Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-4b8868f72957", "text": "Vậy Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-1b697c1e20dd", "text": "Vậy Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-03fa1e6cfb3d", "text": "Vậy Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-b38bf158d869", "text": "Vậy Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-5843270fa6c1", "text": "Nói thật Ừ cũng được đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-d14d16723b5b", "text": "Nói thật Cũng được đó đi", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-27cd05684ee0", "text": "Nói thật Ừ ừ được rồi đi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-68ae9d24471d", "text": "Nói thật Ok ok đi", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-fd55ccc6553c", "text": "Nói thật Nghe cũng ổn đi", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-3594c2d817e8", "text": "Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-8a43fbc11676", "text": "Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-bc3b49e50a42", "text": "Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-6521db55365f", "text": "Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-9a2f4a6d64bf", "text": "Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-c1f2ca3fbdee", "text": "Ờ Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-6c06e5e3030f", "text": "Ờ Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-267b7fa9dabd", "text": "Ờ Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-f23a7cf297d3", "text": "Ờ Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-408926e86bb7", "text": "Ờ Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-d26d2620b3d1", "text": "À Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-6649aa818b21", "text": "À Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-68d9a7f72e10", "text": "À Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-64d465db0f05", "text": "À Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-f40cf2e4c04d", "text": "À Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-4c9cac3fe6cf", "text": "Ừ thì Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-01b665ba46ed", "text": "Ừ thì Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-49a96916c1ad", "text": "Ừ thì Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-85e7e79e3ee1", "text": "Ừ thì Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-b48317dc40c6", "text": "Ừ thì Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-952a39992e3d", "text": "Thôi Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-9c4b0ec68754", "text": "Thôi Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-c9dc71760785", "text": "Thôi Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-ac7c8928a476", "text": "Thôi Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-ea4ea40bd22c", "text": "Thôi Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-d6c462eebe09", "text": "Vậy Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-434fa420854b", "text": "Vậy Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-b64efbe404df", "text": "Vậy Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-702e166c0182", "text": "Vậy Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-d696971b7205", "text": "Vậy Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-346594dc39cc", "text": "Nói thật Ừ cũng được", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-238544f5b689", "text": "Nói thật Cũng được đó", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-c6ca80976d01", "text": "Nói thật Ừ ừ được rồi", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-7a1650b1fda4", "text": "Nói thật Ok ok", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-103ad0221797", "text": "Nói thật Nghe cũng ổn", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-cdd9ead08c74", "text": "Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-ebc0148dd69e", "text": "Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-ce9f0d892c0a", "text": "Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-399ab29542da", "text": "Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-c6f71b079fde", "text": "Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-a9bed0a9612a", "text": "Ờ Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-a91ff2837d67", "text": "Ờ Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-09cd5e654b85", "text": "Ờ Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-5b9a6e08c035", "text": "Ờ Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-dcbd8565a897", "text": "Ờ Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-701c0e27e702", "text": "À Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-e3b52ec9a06e", "text": "À Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-c1bef5c946c7", "text": "À Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-8a1712a4d273", "text": "À Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-393d6be6a5f9", "text": "À Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-bef078433fe8", "text": "Ừ thì Ừ cũng được ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-6faeea011f7c", "text": "Ừ thì Cũng được đó ạ", "dialect": "north", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}
+{"id": "UTT-20cdd7a7e9cd", "text": "Ừ thì Ừ ừ được rồi ạ", "dialect": "central", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-80d874a72e53", "text": "Ừ thì Ok ok ạ", "dialect": "south", "expected_top_intent": "fake_agreement", "bucket": "fake_yes", "batch": 11}
+{"id": "UTT-7c6355732e13", "text": "Ừ thì Nghe cũng ổn ạ", "dialect": "south", "expected_top_intent": "soft_agreement", "bucket": "fake_or_soft_yes", "batch": 11}

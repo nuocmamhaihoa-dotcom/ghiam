@@ -1,0 +1,12 @@
+{
+  "gate": "agents",
+  "count": 50000,
+  "ok": true,
+  "errors": [],
+  "dialect_ratios": {
+    "north": 0.35,
+    "central": 0.2,
+    "south": 0.45
+  },
+  "checked_at": "2026-09-05T17:27:46.341915+00:00"
+}

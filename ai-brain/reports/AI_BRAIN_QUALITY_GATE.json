@@ -1,0 +1,184 @@
+{
+  "generated_at": "2026-09-05T15:47:36.117263+00:00",
+  "seed": 20260905,
+  "rulebook": {
+    "count": 1000,
+    "allocation": {
+      "Opening": 100,
+      "Rapport": 80,
+      "Discovery": 150,
+      "Qualification": 80,
+      "Presentation": 120,
+      "Pricing": 80,
+      "Objection": 200,
+      "Closing": 80,
+      "Voice": 60,
+      "Compliance": 50
+    },
+    "unique_ids": 1000,
+    "unique_names": 1000,
+    "unique_good_examples": 1000,
+    "dedupe_gates": [
+      {
+        "checked_at_count": 50,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 100,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 150,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 200,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 250,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 300,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 350,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 400,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 450,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 500,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 550,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 600,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 650,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 700,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 750,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 800,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 850,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 900,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 950,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      },
+      {
+        "checked_at_count": 1000,
+        "unique_ids": true,
+        "unique_names": true,
+        "unique_good_examples_in_batch": true,
+        "required_fields_ok": true
+      }
+    ],
+    "dedupe_gates_pass": true
+  },
+  "root_cause_graphs": 500,
+  "vcie": {
+    "utterances": 20000,
+    "dialect": {
+      "trung": 4000,
+      "bac": 7000,
+      "nam": 9000
+    },
+    "intents": 500,
+    "objections": 1000,
+    "buying_signals": 300,
+    "emotions": 500,
+    "silence": 300,
+    "interrupts": 300,
+    "context": 200
+  },
+  "sop": 50,
+  "broken_rule_links": {},
+  "all_links_valid": true
+}

@@ -1,0 +1,52 @@
+{
+  "sprint": 2,
+  "checked_at": "2026-09-05T18:26:36.363152+00:00",
+  "all_ok": true,
+  "gates": [
+    {
+      "gate": "3_Rule_Consistency_1_500",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "count": 1000,
+        "categories": {
+          "Opening": 100,
+          "Rapport": 80,
+          "Discovery": 150,
+          "Qualification": 80,
+          "Presentation": 90
+        }
+      }
+    },
+    {
+      "gate": "4_Evidence_Verification",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "canonical_keys": [
+          "coaching",
+          "evidence",
+          "revenue_leak",
+          "root_cause",
+          "score",
+          "stage_scores",
+          "violations"
+        ]
+      }
+    },
+    {
+      "gate": "9_JSON_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "sample_bytes": 1058
+      }
+    }
+  ],
+  "passed": 3,
+  "failed": 0,
+  "total": 3
+}

@@ -1,0 +1,24 @@
+{
+  "name": "VCIE",
+  "version": "1.0.0",
+  "linked_rulebook": "ai-brain/rulebook/rules_1000.jsonl",
+  "counts": {
+    "utterances": 20000,
+    "intents": 500,
+    "objection_handlers": 1000,
+    "buying_signals": 300,
+    "emotion_timelines": 500,
+    "silence_patterns": 300,
+    "interrupt_patterns": 300,
+    "context_inference": 200,
+    "root_causes": 500,
+    "sop": 50,
+    "rules": 1000
+  },
+  "dialect_ratios": {
+    "nam": 0.447,
+    "bac": 0.3517,
+    "trung": 0.2014
+  },
+  "constitution": "evidence-only; rules from DB; Insufficient Evidence"
+}

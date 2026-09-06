@@ -1,0 +1,76 @@
+{
+  "sprint": 8,
+  "checked_at": "2026-09-05T19:17:15.399926+00:00",
+  "all_ok": true,
+  "gates": [
+    {
+      "gate": "21_Sales_OS_Modules",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "pipeline_order": [
+          "audio",
+          "whisper",
+          "diarization",
+          "normalize",
+          "segment",
+          "evidence_extract",
+          "evidence_verify",
+          "rule_engine",
+          "judge_ensemble",
+          "pragmatics",
+          "root_cause",
+          "coaching",
+          "revenue_leak",
+          "memory_graph",
+          "dashboard_json"
+        ]
+      }
+    },
+    {
+      "gate": "VPE 2.0",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {}
+    },
+    {
+      "gate": "Memory Graph + RAG",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {}
+    },
+    {
+      "gate": "22_Sales_OS_Frontend",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {}
+    },
+    {
+      "gate": "8_API_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "route_count": 60,
+        "openapi_paths": 56
+      }
+    },
+    {
+      "gate": "18_Test_Coverage_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "pytest_returncode": 0,
+        "pytest_tail": "......................                                                   [100%]\n22 passed in 0.05s\n"
+      }
+    }
+  ],
+  "passed": 6,
+  "failed": 0,
+  "total": 6
+}

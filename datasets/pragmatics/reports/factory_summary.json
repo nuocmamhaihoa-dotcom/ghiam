@@ -1,0 +1,595 @@
+{
+  "summary": {
+    "utterances": 100000,
+    "situations": 5000,
+    "fake_agreement": 1000,
+    "soft_refusal": 1000,
+    "topic_shift": 500,
+    "exit_imminent": 500,
+    "gates_passed": 210,
+    "all_gates_ok": true,
+    "avg_accuracy": 1.0
+  },
+  "gates": [
+    {
+      "ok": true,
+      "errors": [],
+      "label": "utterances_batch_190",
+      "rows": 500,
+      "dialects": {
+        "south": 167,
+        "north": 167,
+        "central": 166
+      },
+      "intents": {
+        "trust_concern": 34,
+        "topic_shift": 17,
+        "need_information": 50,
+        "soft_rejection": 49,
+        "delay": 85,
+        "negotiation": 17,
+        "soft_agreement": 51,
+        "price_concern": 34,
+        "decision_maker_missing": 34,
+        "busy": 17,
+        "fake_agreement": 32,
+        "real_refusal": 16,
+        "exit_imminent": 32,
+        "ready_to_buy": 32
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "utterances_batch_191",
+      "rows": 500,
+      "dialects": {
+        "central": 167,
+        "south": 167,
+        "north": 166
+      },
+      "intents": {
+        "fake_agreement": 34,
+        "soft_rejection": 51,
+        "real_refusal": 17,
+        "exit_imminent": 34,
+        "ready_to_buy": 34,
+        "need_information": 51,
+        "trust_concern": 34,
+        "topic_shift": 17,
+        "delay": 82,
+        "negotiation": 17,
+        "soft_agreement": 49,
+        "price_concern": 32,
+        "decision_maker_missing": 32,
+        "busy": 16
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "utterances_batch_192",
+      "rows": 500,
+      "dialects": {
+        "north": 167,
+        "central": 167,
+        "south": 166
+      },
+      "intents": {
+        "delay": 83,
+        "soft_agreement": 50,
+        "price_concern": 34,
+        "decision_maker_missing": 34,
+        "busy": 17,
+        "fake_agreement": 34,
+        "soft_rejection": 50,
+        "real_refusal": 17,
+        "exit_imminent": 34,
+        "ready_to_buy": 34,
+        "need_information": 49,
+        "trust_concern": 32,
+        "topic_shift": 16,
+        "negotiation": 16
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "utterances_batch_193",
+      "rows": 500,
+      "dialects": {
+        "south": 167,
+        "north": 167,
+        "central": 166
+      },
+      "intents": {
+        "trust_concern": 34,
+        "topic_shift": 17,
+        "need_information": 50,
+        "soft_rejection": 49,
+        "delay": 85,
+        "negotiation": 17,
+        "soft_agreement": 51,
+        "price_concern": 34,
+        "decision_maker_missing": 34,
+        "busy": 17,
+        "fake_agreement": 32,
+        "real_refusal": 16,
+        "exit_imminent": 32,
+        "ready_to_buy": 32
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "utterances_batch_194",
+      "rows": 500,
+      "dialects": {
+        "central": 167,
+        "south": 167,
+        "north": 166
+      },
+      "intents": {
+        "fake_agreement": 34,
+        "soft_rejection": 51,
+        "real_refusal": 17,
+        "exit_imminent": 34,
+        "ready_to_buy": 34,
+        "need_information": 51,
+        "trust_concern": 34,
+        "topic_shift": 17,
+        "delay": 82,
+        "negotiation": 17,
+        "soft_agreement": 49,
+        "price_concern": 32,
+        "decision_maker_missing": 32,
+        "busy": 16
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "utterances_batch_195",
+      "rows": 500,
+      "dialects": {
+        "north": 167,
+        "central": 167,
+        "south": 166
+      },
+      "intents": {
+        "delay": 83,
+        "soft_agreement": 50,
+        "price_concern": 34,
+        "decision_maker_missing": 34,
+        "busy": 17,
+        "fake_agreement": 34,
+        "soft_rejection": 50,
+        "real_refusal": 17,
+        "exit_imminent": 34,
+        "ready_to_buy": 34,
+        "need_information": 49,
+        "trust_concern": 32,
+        "topic_shift": 16,
+        "negotiation": 16
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "utterances_batch_196",
+      "rows": 500,
+      "dialects": {
+        "south": 167,
+        "north": 167,
+        "central": 166
+      },
+      "intents": {
+        "trust_concern": 34,
+        "topic_shift": 17,
+        "need_information": 50,
+        "soft_rejection": 49,
+        "delay": 85,
+        "negotiation": 17,
+        "soft_agreement": 51,
+        "price_concern": 34,
+        "decision_maker_missing": 34,
+        "busy": 17,
+        "fake_agreement": 32,
+        "real_refusal": 16,
+        "exit_imminent": 32,
+        "ready_to_buy": 32
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "utterances_batch_197",
+      "rows": 500,
+      "dialects": {
+        "central": 167,
+        "south": 167,
+        "north": 166
+      },
+      "intents": {
+        "fake_agreement": 34,
+        "soft_rejection": 51,
+        "real_refusal": 17,
+        "exit_imminent": 34,
+        "ready_to_buy": 34,
+        "need_information": 51,
+        "trust_concern": 34,
+        "topic_shift": 17,
+        "delay": 82,
+        "negotiation": 17,
+        "soft_agreement": 49,
+        "price_concern": 32,
+        "decision_maker_missing": 32,
+        "busy": 16
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "utterances_batch_198",
+      "rows": 500,
+      "dialects": {
+        "north": 167,
+        "central": 167,
+        "south": 166
+      },
+      "intents": {
+        "delay": 83,
+        "soft_agreement": 50,
+        "price_concern": 34,
+        "decision_maker_missing": 34,
+        "busy": 17,
+        "fake_agreement": 34,
+        "soft_rejection": 50,
+        "real_refusal": 17,
+        "exit_imminent": 34,
+        "ready_to_buy": 34,
+        "need_information": 49,
+        "trust_concern": 32,
+        "topic_shift": 16,
+        "negotiation": 16
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "utterances_batch_199",
+      "rows": 500,
+      "dialects": {
+        "south": 167,
+        "north": 167,
+        "central": 166
+      },
+      "intents": {
+        "trust_concern": 34,
+        "topic_shift": 17,
+        "need_information": 50,
+        "soft_rejection": 49,
+        "delay": 85,
+        "negotiation": 17,
+        "soft_agreement": 51,
+        "price_concern": 34,
+        "decision_maker_missing": 34,
+        "busy": 17,
+        "fake_agreement": 32,
+        "real_refusal": 16,
+        "exit_imminent": 32,
+        "ready_to_buy": 32
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "situations_batch_0",
+      "rows": 500,
+      "dialects": {
+        "north": 167,
+        "central": 167,
+        "south": 166
+      },
+      "intents": {
+        "delay": 83,
+        "soft_agreement": 50,
+        "price_concern": 34,
+        "decision_maker_missing": 34,
+        "busy": 17,
+        "fake_agreement": 34,
+        "soft_rejection": 50,
+        "real_refusal": 17,
+        "exit_imminent": 34,
+        "ready_to_buy": 34,
+        "need_information": 49,
+        "trust_concern": 32,
+        "topic_shift": 16,
+        "negotiation": 16
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "situations_batch_1",
+      "rows": 500,
+      "dialects": {
+        "south": 167,
+        "north": 167,
+        "central": 166
+      },
+      "intents": {
+        "trust_concern": 34,
+        "topic_shift": 17,
+        "need_information": 50,
+        "soft_rejection": 49,
+        "delay": 85,
+        "negotiation": 17,
+        "soft_agreement": 51,
+        "price_concern": 34,
+        "decision_maker_missing": 34,
+        "busy": 17,
+        "fake_agreement": 32,
+        "real_refusal": 16,
+        "exit_imminent": 32,
+        "ready_to_buy": 32
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "situations_batch_2",
+      "rows": 500,
+      "dialects": {
+        "central": 167,
+        "south": 167,
+        "north": 166
+      },
+      "intents": {
+        "fake_agreement": 34,
+        "soft_rejection": 51,
+        "real_refusal": 17,
+        "exit_imminent": 34,
+        "ready_to_buy": 34,
+        "need_information": 51,
+        "trust_concern": 34,
+        "topic_shift": 17,
+        "delay": 82,
+        "negotiation": 17,
+        "soft_agreement": 49,
+        "price_concern": 32,
+        "decision_maker_missing": 32,
+        "busy": 16
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "situations_batch_3",
+      "rows": 500,
+      "dialects": {
+        "north": 167,
+        "central": 167,
+        "south": 166
+      },
+      "intents": {
+        "delay": 83,
+        "soft_agreement": 50,
+        "price_concern": 34,
+        "decision_maker_missing": 34,
+        "busy": 17,
+        "fake_agreement": 34,
+        "soft_rejection": 50,
+        "real_refusal": 17,
+        "exit_imminent": 34,
+        "ready_to_buy": 34,
+        "need_information": 49,
+        "trust_concern": 32,
+        "topic_shift": 16,
+        "negotiation": 16
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "situations_batch_4",
+      "rows": 500,
+      "dialects": {
+        "south": 167,
+        "north": 167,
+        "central": 166
+      },
+      "intents": {
+        "trust_concern": 34,
+        "topic_shift": 17,
+        "need_information": 50,
+        "soft_rejection": 49,
+        "delay": 85,
+        "negotiation": 17,
+        "soft_agreement": 51,
+        "price_concern": 34,
+        "decision_maker_missing": 34,
+        "busy": 17,
+        "fake_agreement": 32,
+        "real_refusal": 16,
+        "exit_imminent": 32,
+        "ready_to_buy": 32
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "situations_batch_5",
+      "rows": 500,
+      "dialects": {
+        "central": 167,
+        "south": 167,
+        "north": 166
+      },
+      "intents": {
+        "fake_agreement": 34,
+        "soft_rejection": 51,
+        "real_refusal": 17,
+        "exit_imminent": 34,
+        "ready_to_buy": 34,
+        "need_information": 51,
+        "trust_concern": 34,
+        "topic_shift": 17,
+        "delay": 82,
+        "negotiation": 17,
+        "soft_agreement": 49,
+        "price_concern": 32,
+        "decision_maker_missing": 32,
+        "busy": 16
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "situations_batch_6",
+      "rows": 500,
+      "dialects": {
+        "north": 167,
+        "central": 167,
+        "south": 166
+      },
+      "intents": {
+        "delay": 83,
+        "soft_agreement": 50,
+        "price_concern": 34,
+        "decision_maker_missing": 34,
+        "busy": 17,
+        "fake_agreement": 34,
+        "soft_rejection": 50,
+        "real_refusal": 17,
+        "exit_imminent": 34,
+        "ready_to_buy": 34,
+        "need_information": 49,
+        "trust_concern": 32,
+        "topic_shift": 16,
+        "negotiation": 16
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "situations_batch_7",
+      "rows": 500,
+      "dialects": {
+        "south": 167,
+        "north": 167,
+        "central": 166
+      },
+      "intents": {
+        "trust_concern": 34,
+        "topic_shift": 17,
+        "need_information": 50,
+        "soft_rejection": 49,
+        "delay": 85,
+        "negotiation": 17,
+        "soft_agreement": 51,
+        "price_concern": 34,
+        "decision_maker_missing": 34,
+        "busy": 17,
+        "fake_agreement": 32,
+        "real_refusal": 16,
+        "exit_imminent": 32,
+        "ready_to_buy": 32
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "situations_batch_8",
+      "rows": 500,
+      "dialects": {
+        "central": 167,
+        "south": 167,
+        "north": 166
+      },
+      "intents": {
+        "fake_agreement": 34,
+        "soft_rejection": 51,
+        "real_refusal": 17,
+        "exit_imminent": 34,
+        "ready_to_buy": 34,
+        "need_information": 51,
+        "trust_concern": 34,
+        "topic_shift": 17,
+        "delay": 82,
+        "negotiation": 17,
+        "soft_agreement": 49,
+        "price_concern": 32,
+        "decision_maker_missing": 32,
+        "busy": 16
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    },
+    {
+      "ok": true,
+      "errors": [],
+      "label": "situations_batch_9",
+      "rows": 500,
+      "dialects": {
+        "north": 167,
+        "central": 167,
+        "south": 166
+      },
+      "intents": {
+        "delay": 83,
+        "soft_agreement": 50,
+        "price_concern": 34,
+        "decision_maker_missing": 34,
+        "busy": 17,
+        "fake_agreement": 34,
+        "soft_rejection": 50,
+        "real_refusal": 17,
+        "exit_imminent": 34,
+        "ready_to_buy": 34,
+        "need_information": 49,
+        "trust_concern": 32,
+        "topic_shift": 16,
+        "negotiation": 16
+      },
+      "duplicates_raw": 0,
+      "accuracy": 1.0
+    }
+  ]
+}

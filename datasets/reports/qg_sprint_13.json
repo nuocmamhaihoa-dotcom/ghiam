@@ -1,0 +1,55 @@
+{
+  "sprint": 13,
+  "checked_at": "2026-09-05T21:39:52.684190+00:00",
+  "all_ok": true,
+  "gates": [
+    {
+      "gate": "Negotiation Strategy Engine",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "strategies": 5,
+        "horizon": 3,
+        "win_probability": 0.655
+      }
+    },
+    {
+      "gate": "8_API_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "route_count": 102,
+        "openapi_paths": 98
+      }
+    },
+    {
+      "gate": "18_Test_Coverage_Validation",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {
+        "pytest_returncode": 0,
+        "pytest_tail": "......................                                                   [100%]\n22 passed in 0.06s\n"
+      }
+    },
+    {
+      "gate": "19_Documentation_Review",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {}
+    },
+    {
+      "gate": "20_Final_Self_Review",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "meta": {}
+    }
+  ],
+  "passed": 5,
+  "failed": 0,
+  "total": 5
+}

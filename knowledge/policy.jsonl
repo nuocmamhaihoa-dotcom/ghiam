@@ -1,0 +1,2 @@
+{"id": "policy:kyc", "type": "policy", "label": "KYC", "content": "Chính sách KYC: xác minh CMND/CCCD và số điện thoại trước khi tư vấn sản phẩm", "source": "policy/kyc", "confidence": 1.0}
+{"id": "policy:privacy", "type": "policy", "label": "Bảo mật", "content": "Chính sách bảo mật: không ghi âm chia sẻ ra ngoài hệ thống được phê duyệt", "source": "policy/privacy", "confidence": 1.0}

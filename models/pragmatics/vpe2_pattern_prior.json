@@ -1,0 +1,474 @@
+{
+  "name": "vpe2-pattern-prior",
+  "version": "2.0.0",
+  "dialects": [
+    "north",
+    "central",
+    "south"
+  ],
+  "patterns": [
+    {
+      "id": "VPE-DELAY-COI",
+      "dialects": [
+        "south",
+        "central",
+        "*"
+      ],
+      "patterns": [
+        "để\\s+(em|anh|chị|mình)\\s+coi",
+        "để\\s+em\\s+coi\\s+đã",
+        "coi\\s+cái\\s+đã",
+        "để\\s+coi\\s+sao"
+      ],
+      "intents": {
+        "delay": 0.42,
+        "need_information": 0.22,
+        "soft_rejection": 0.18,
+        "interested": 0.1,
+        "real_refusal": 0.08
+      },
+      "hidden_meanings": [
+        "Muốn có thời gian xem lại; chưa phải từ chối cứng.",
+        "Có thể đang stall lịch sự trong lúc cân nhắc giá trị."
+      ],
+      "buying_prior": 0.28,
+      "exit_prior": 0.32,
+      "slang_tags": [
+        "coi"
+      ]
+    },
+    {
+      "id": "VPE-DELAY-XEM",
+      "dialects": [
+        "north",
+        "central",
+        "south",
+        "*"
+      ],
+      "patterns": [
+        "để\\s+(em|anh|chị|mình)\\s+(xem|nghĩ|cân nhắc)",
+        "để\\s+em\\s+xem\\s+đã",
+        "em\\s+xem\\s+lại",
+        "để\\s+tính\\s+đã"
+      ],
+      "intents": {
+        "delay": 0.45,
+        "need_information": 0.2,
+        "soft_rejection": 0.2,
+        "interested": 0.08,
+        "real_refusal": 0.07
+      },
+      "hidden_meanings": [
+        "Yêu cầu thời gian suy nghĩ; cần xác nhận mốc follow-up.",
+        "Không mặc định là từ chối nếu sau đó hỏi giao hàng/bảo hành."
+      ],
+      "buying_prior": 0.26,
+      "exit_prior": 0.34
+    },
+    {
+      "id": "VPE-SOFT-OK",
+      "dialects": [
+        "north",
+        "central",
+        "south",
+        "*"
+      ],
+      "patterns": [
+        "ừ\\s+cũng\\s+được",
+        "cũng\\s+được",
+        "nghe\\s+cũng\\s+ổn",
+        "được\\s+đấy",
+        "ok\\s+vậy",
+        "ừ\\s+thôi"
+      ],
+      "intents": {
+        "soft_agreement": 0.34,
+        "fake_agreement": 0.22,
+        "interested": 0.2,
+        "delay": 0.14,
+        "real_refusal": 0.1
+      },
+      "hidden_meanings": [
+        "Đồng ý mềm — có thể xã giao. Cần câu chốt cam kết rõ.",
+        "Nếu không có bước tiếp theo (thanh toán/địa chỉ) → nghi fake agreement."
+      ],
+      "buying_prior": 0.48,
+      "exit_prior": 0.22
+    },
+    {
+      "id": "VPE-PRICE",
+      "dialects": [
+        "north",
+        "central",
+        "south",
+        "*"
+      ],
+      "patterns": [
+        "đắt\\s+quá",
+        "mắc\\s+quá",
+        "giá\\s+(cao|mắc|đắt)",
+        "hơi\\s+(cao|mắc|đắt)",
+        "salê\\s+bớt\\s+được\\s+không",
+        "bớt\\s+giá"
+      ],
+      "intents": {
+        "price_concern": 0.5,
+        "negotiation": 0.24,
+        "soft_rejection": 0.14,
+        "need_information": 0.07,
+        "real_refusal": 0.05
+      },
+      "hidden_meanings": [
+        "Phản đối giá — thường cần reframe value, chưa chắc hard no.",
+        "Có tín hiệu mua nếu đi kèm hỏi giao/bảo hành."
+      ],
+      "buying_prior": 0.36,
+      "exit_prior": 0.38
+    },
+    {
+      "id": "VPE-ASK-SPOUSE",
+      "dialects": [
+        "north",
+        "central",
+        "south",
+        "*"
+      ],
+      "patterns": [
+        "để\\s+(hỏi|bàn)\\s+(vợ|chồng|ba|mẹ|sếp|gia đình)",
+        "phải\\s+bàn\\s+với\\s+(vợ|chồng|ba|mẹ|sếp)",
+        "bàn\\s+với\\s+(vợ|chồng)",
+        "phải\\s+hỏi\\s+(vợ|chồng|sếp)",
+        "vợ\\s+(em|anh)\\s+quyết",
+        "để\\s+em\\s+hỏi\\s+vợ"
+      ],
+      "intents": {
+        "decision_maker_missing": 0.48,
+        "delay": 0.28,
+        "soft_rejection": 0.14,
+        "real_refusal": 0.06,
+        "need_information": 0.04
+      },
+      "hidden_meanings": [
+        "Người quyết định không có trên máy — hẹn gọi chung.",
+        "Đôi khi là lối thoát lịch sự — hỏi rõ ai quyết và khi nào."
+      ],
+      "buying_prior": 0.3,
+      "exit_prior": 0.44
+    },
+    {
+      "id": "VPE-CALL-LATER",
+      "dialects": [
+        "north",
+        "central",
+        "south",
+        "*"
+      ],
+      "patterns": [
+        "mai\\s+(gọi|alo)\\s+lại",
+        "gọi\\s+lại\\s+(sau|mai|chiều|tối)",
+        "đang\\s+bận",
+        "xong\\s+việc\\s+rồi\\s+gọi",
+        "mai\\s+gọi\\s+lại\\s+nhé"
+      ],
+      "intents": {
+        "delay": 0.36,
+        "busy": 0.28,
+        "soft_rejection": 0.18,
+        "real_refusal": 0.1,
+        "interested": 0.08
+      },
+      "hidden_meanings": [
+        "Hoãn cuộc gọi — cần chốt khung giờ cụ thể.",
+        "Nếu giọng cụt và không cho giờ → exit risk tăng."
+      ],
+      "buying_prior": 0.24,
+      "exit_prior": 0.46
+    },
+    {
+      "id": "VPE-FAKE-YES",
+      "dialects": [
+        "north",
+        "central",
+        "south",
+        "*"
+      ],
+      "patterns": [
+        "ừ\\s+ừ",
+        "ok\\s+ok",
+        "được\\s+rồi\\s+được\\s+rồi",
+        "ừ\\s+em\\s+biết\\s+rồi",
+        "thôi\\s+được"
+      ],
+      "intents": {
+        "fake_agreement": 0.4,
+        "soft_agreement": 0.2,
+        "exit_imminent": 0.18,
+        "delay": 0.12,
+        "real_refusal": 0.1
+      },
+      "hidden_meanings": [
+        "Đồng ý xã giao / muốn kết thúc nhanh.",
+        "Cần kiểm tra cam kết hành động (địa chỉ, thanh toán)."
+      ],
+      "buying_prior": 0.18,
+      "exit_prior": 0.55
+    },
+    {
+      "id": "VPE-SOFT-NO",
+      "dialects": [
+        "north",
+        "central",
+        "south",
+        "*"
+      ],
+      "patterns": [
+        "thôi\\s+để\\s+sau",
+        "không\\s+tiện",
+        "em\\s+xin\\s+phép\\s+không",
+        "chắc\\s+không\\s+mua",
+        "thôi\\s+anh[/ ]?chị\\s+ơi"
+      ],
+      "intents": {
+        "soft_rejection": 0.42,
+        "real_refusal": 0.22,
+        "delay": 0.18,
+        "busy": 0.1,
+        "price_concern": 0.08
+      },
+      "hidden_meanings": [
+        "Từ chối lịch sự — còn cơ hội nếu nguyên nhân là thời điểm/giá.",
+        "Không ép close; hỏi lý do ngắn rồi xin phép follow-up."
+      ],
+      "buying_prior": 0.14,
+      "exit_prior": 0.58
+    },
+    {
+      "id": "VPE-TOPIC-SHIFT",
+      "dialects": [
+        "north",
+        "central",
+        "south",
+        "*"
+      ],
+      "patterns": [
+        "chuyện\\s+khác",
+        "à\\s+nhân\\s+tiện",
+        "nói\\s+về",
+        "còn\\s+cái",
+        "khoan\\s+đã\\s+hỏi"
+      ],
+      "intents": {
+        "topic_shift": 0.5,
+        "need_information": 0.2,
+        "interested": 0.15,
+        "delay": 0.1,
+        "soft_rejection": 0.05
+      },
+      "hidden_meanings": [
+        "Chuyển ý — có thể tránh close hoặc mở discovery mới."
+      ],
+      "buying_prior": 0.33,
+      "exit_prior": 0.28
+    },
+    {
+      "id": "VPE-EXIT",
+      "dialects": [
+        "north",
+        "central",
+        "south",
+        "*"
+      ],
+      "patterns": [
+        "gác\\s+máy",
+        "thôi\\s+em\\s+gác",
+        "không\\s+cần\\s+nữa",
+        "đừng\\s+gọi",
+        "stop\\s+gọi",
+        "alo\\s+\\.{0,3}$"
+      ],
+      "intents": {
+        "exit_imminent": 0.55,
+        "real_refusal": 0.25,
+        "busy": 0.1,
+        "soft_rejection": 0.07,
+        "delay": 0.03
+      },
+      "hidden_meanings": [
+        "Nguy cơ cúp máy cao — ưu tiên giữ quan hệ, không hard sell."
+      ],
+      "buying_prior": 0.05,
+      "exit_prior": 0.85
+    },
+    {
+      "id": "VPE-BUY-SIGNAL",
+      "dialects": [
+        "north",
+        "central",
+        "south",
+        "*"
+      ],
+      "patterns": [
+        "bao\\s+giờ\\s+giao",
+        "giao\\s+khi\\s+nào",
+        "thanh\\s+toán\\s+sao",
+        "có\\s+bảo\\s+hành",
+        "ship\\s+tới",
+        "xuống\\s+tiền",
+        "ký\\s+hợp\\s+đồng"
+      ],
+      "intents": {
+        "ready_to_buy": 0.48,
+        "interested": 0.22,
+        "need_information": 0.18,
+        "negotiation": 0.08,
+        "delay": 0.04
+      },
+      "hidden_meanings": [
+        "Tín hiệu mua mạnh — chuyển sang closing checklist."
+      ],
+      "buying_prior": 0.78,
+      "exit_prior": 0.12
+    },
+    {
+      "id": "VPE-TRUST",
+      "dialects": [
+        "north",
+        "central",
+        "south",
+        "*"
+      ],
+      "patterns": [
+        "có\\s+lừa\\s+không",
+        "công\\s+ty\\s+ở\\s+đâu",
+        "uy\\s+tín",
+        "review",
+        "bên\\s+nào\\s+vậy"
+      ],
+      "intents": {
+        "trust_concern": 0.55,
+        "need_information": 0.25,
+        "soft_rejection": 0.12,
+        "interested": 0.05,
+        "real_refusal": 0.03
+      },
+      "hidden_meanings": [
+        "Thiếu niềm tin — cần bằng chứng/bảo hành/địa chỉ rõ."
+      ],
+      "buying_prior": 0.32,
+      "exit_prior": 0.4
+    },
+    {
+      "id": "VPE-NORTH-UNG",
+      "dialects": [
+        "north",
+        "*"
+      ],
+      "patterns": [
+        "ừ\\s+nhé",
+        "thế\\s+à",
+        "đắt\\s+thế",
+        "vâng\\s+để\\s+em\\s+xem"
+      ],
+      "intents": {
+        "delay": 0.3,
+        "price_concern": 0.25,
+        "soft_agreement": 0.2,
+        "need_information": 0.15,
+        "soft_rejection": 0.1
+      },
+      "hidden_meanings": [
+        "Biến thể miền Bắc — ưu tiên lịch sự, chốt mềm."
+      ],
+      "buying_prior": 0.34,
+      "exit_prior": 0.33
+    },
+    {
+      "id": "VPE-SOUTH-SLANG",
+      "dialects": [
+        "south",
+        "*"
+      ],
+      "patterns": [
+        "trời\\s+ơi",
+        "mắc\\s+quá\\s+trời",
+        "hong\\s+có",
+        "rồi\\s+đó",
+        "okela",
+        "dzậy\\s+đi"
+      ],
+      "intents": {
+        "price_concern": 0.28,
+        "soft_rejection": 0.22,
+        "soft_agreement": 0.18,
+        "interested": 0.17,
+        "delay": 0.15
+      },
+      "hidden_meanings": [
+        "Slang miền Nam — đọc cảm xúc mạnh hơn nghĩa đen."
+      ],
+      "buying_prior": 0.37,
+      "exit_prior": 0.36,
+      "slang_tags": [
+        "trời",
+        "hong",
+        "okela",
+        "dzậy"
+      ]
+    },
+    {
+      "id": "VPE-CENTRAL",
+      "dialects": [
+        "central",
+        "*"
+      ],
+      "patterns": [
+        "răng\\s+rồi",
+        "chi\\s+rứa",
+        "đi\\s+mô",
+        "chừ\\s+sao"
+      ],
+      "intents": {
+        "need_information": 0.35,
+        "delay": 0.25,
+        "soft_rejection": 0.2,
+        "interested": 0.12,
+        "busy": 0.08
+      },
+      "hidden_meanings": [
+        "Biến thể miền Trung — hỏi lại ngữ cảnh trước khi kết luận."
+      ],
+      "buying_prior": 0.3,
+      "exit_prior": 0.35
+    },
+    {
+      "id": "VPE-NEGOTIATE",
+      "dialects": [
+        "north",
+        "central",
+        "south",
+        "*"
+      ],
+      "patterns": [
+        "bớt\\s+được\\s+không",
+        "giảm\\s+(giá|được)\\s+không",
+        "bớt\\s+(chút|tí|xíu)",
+        "thương\\s+lượng",
+        "còn\\s+bớt\\s+nữa\\s+không"
+      ],
+      "intents": {
+        "negotiation": 0.5,
+        "price_concern": 0.25,
+        "interested": 0.12,
+        "soft_rejection": 0.08,
+        "ready_to_buy": 0.05
+      },
+      "hidden_meanings": [
+        "Khách đang thương lượng — còn cửa chốt nếu linh hoạt giá/gói."
+      ],
+      "buying_prior": 0.55,
+      "exit_prior": 0.25
+    }
+  ],
+  "context_radius_default": 5,
+  "context_radius_max": 10
+}

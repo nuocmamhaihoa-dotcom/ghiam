@@ -1,0 +1,46 @@
+{
+  "name": "negotiation_strategy_session",
+  "version": "1.0.0",
+  "required": [
+    "session_id",
+    "customer_utterance",
+    "prediction",
+    "strategies",
+    "graph"
+  ],
+  "prediction_fields": [
+    "next_question",
+    "next_objection",
+    "next_emotion",
+    "exit_risk",
+    "buy_probability",
+    "horizon",
+    "confidence",
+    "evidence"
+  ],
+  "strategy_fields": [
+    "strategy_id",
+    "kind",
+    "label",
+    "win_probability",
+    "risk_score",
+    "recommended_script",
+    "forbidden_script",
+    "rationale",
+    "evidence"
+  ],
+  "strategy_kinds": [
+    "empathy",
+    "value",
+    "comparison",
+    "urgency",
+    "clarify"
+  ],
+  "static_decision_tree": false,
+  "quality_thresholds": {
+    "prediction_accuracy": 0.7,
+    "strategy_consistency": 0.65,
+    "evidence_validation": 0.7,
+    "confidence_stability": 0.6
+  }
+}

@@ -1,0 +1,502 @@
+[
+  {
+    "id": "IMP-001",
+    "title": "Real STT adapter + WER calibration",
+    "horizon": "30d"
+  },
+  {
+    "id": "IMP-002",
+    "title": "Real diarization adapter + DER calibration",
+    "horizon": "30d"
+  },
+  {
+    "id": "IMP-003",
+    "title": "k6 performance gate on CI",
+    "horizon": "30d"
+  },
+  {
+    "id": "IMP-004",
+    "title": "CORS production hard-fail",
+    "horizon": "30d"
+  },
+  {
+    "id": "IMP-005",
+    "title": "Rulebook projection CI checksum",
+    "horizon": "30d"
+  },
+  {
+    "id": "IMP-006",
+    "title": "VECD balance gate",
+    "horizon": "30d"
+  },
+  {
+    "id": "IMP-007",
+    "title": "Connector contract tests + DLQ",
+    "horizon": "60d"
+  },
+  {
+    "id": "IMP-008",
+    "title": "pg_stat_statements digest",
+    "horizon": "60d"
+  },
+  {
+    "id": "IMP-009",
+    "title": "Billing entitlements MVP",
+    "horizon": "60d"
+  },
+  {
+    "id": "IMP-010",
+    "title": "White-label theme pack",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-011",
+    "title": "DR restore game-day",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-012",
+    "title": "Pen-test + fix cycle",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-013",
+    "title": "Shared audio DTO package",
+    "horizon": "30d"
+  },
+  {
+    "id": "IMP-014",
+    "title": "Redis-backed rate limiter",
+    "horizon": "60d"
+  },
+  {
+    "id": "IMP-015",
+    "title": "a11y axe CI",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-016",
+    "title": "Continuous improvement item 16",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-017",
+    "title": "Continuous improvement item 17",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-018",
+    "title": "Continuous improvement item 18",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-019",
+    "title": "Continuous improvement item 19",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-020",
+    "title": "Continuous improvement item 20",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-021",
+    "title": "Continuous improvement item 21",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-022",
+    "title": "Continuous improvement item 22",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-023",
+    "title": "Continuous improvement item 23",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-024",
+    "title": "Continuous improvement item 24",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-025",
+    "title": "Continuous improvement item 25",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-026",
+    "title": "Continuous improvement item 26",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-027",
+    "title": "Continuous improvement item 27",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-028",
+    "title": "Continuous improvement item 28",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-029",
+    "title": "Continuous improvement item 29",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-030",
+    "title": "Continuous improvement item 30",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-031",
+    "title": "Continuous improvement item 31",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-032",
+    "title": "Continuous improvement item 32",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-033",
+    "title": "Continuous improvement item 33",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-034",
+    "title": "Continuous improvement item 34",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-035",
+    "title": "Continuous improvement item 35",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-036",
+    "title": "Continuous improvement item 36",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-037",
+    "title": "Continuous improvement item 37",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-038",
+    "title": "Continuous improvement item 38",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-039",
+    "title": "Continuous improvement item 39",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-040",
+    "title": "Continuous improvement item 40",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-041",
+    "title": "Continuous improvement item 41",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-042",
+    "title": "Continuous improvement item 42",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-043",
+    "title": "Continuous improvement item 43",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-044",
+    "title": "Continuous improvement item 44",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-045",
+    "title": "Continuous improvement item 45",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-046",
+    "title": "Continuous improvement item 46",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-047",
+    "title": "Continuous improvement item 47",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-048",
+    "title": "Continuous improvement item 48",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-049",
+    "title": "Continuous improvement item 49",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-050",
+    "title": "Continuous improvement item 50",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-051",
+    "title": "Continuous improvement item 51",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-052",
+    "title": "Continuous improvement item 52",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-053",
+    "title": "Continuous improvement item 53",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-054",
+    "title": "Continuous improvement item 54",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-055",
+    "title": "Continuous improvement item 55",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-056",
+    "title": "Continuous improvement item 56",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-057",
+    "title": "Continuous improvement item 57",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-058",
+    "title": "Continuous improvement item 58",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-059",
+    "title": "Continuous improvement item 59",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-060",
+    "title": "Continuous improvement item 60",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-061",
+    "title": "Continuous improvement item 61",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-062",
+    "title": "Continuous improvement item 62",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-063",
+    "title": "Continuous improvement item 63",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-064",
+    "title": "Continuous improvement item 64",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-065",
+    "title": "Continuous improvement item 65",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-066",
+    "title": "Continuous improvement item 66",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-067",
+    "title": "Continuous improvement item 67",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-068",
+    "title": "Continuous improvement item 68",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-069",
+    "title": "Continuous improvement item 69",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-070",
+    "title": "Continuous improvement item 70",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-071",
+    "title": "Continuous improvement item 71",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-072",
+    "title": "Continuous improvement item 72",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-073",
+    "title": "Continuous improvement item 73",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-074",
+    "title": "Continuous improvement item 74",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-075",
+    "title": "Continuous improvement item 75",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-076",
+    "title": "Continuous improvement item 76",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-077",
+    "title": "Continuous improvement item 77",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-078",
+    "title": "Continuous improvement item 78",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-079",
+    "title": "Continuous improvement item 79",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-080",
+    "title": "Continuous improvement item 80",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-081",
+    "title": "Continuous improvement item 81",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-082",
+    "title": "Continuous improvement item 82",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-083",
+    "title": "Continuous improvement item 83",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-084",
+    "title": "Continuous improvement item 84",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-085",
+    "title": "Continuous improvement item 85",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-086",
+    "title": "Continuous improvement item 86",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-087",
+    "title": "Continuous improvement item 87",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-088",
+    "title": "Continuous improvement item 88",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-089",
+    "title": "Continuous improvement item 89",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-090",
+    "title": "Continuous improvement item 90",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-091",
+    "title": "Continuous improvement item 91",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-092",
+    "title": "Continuous improvement item 92",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-093",
+    "title": "Continuous improvement item 93",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-094",
+    "title": "Continuous improvement item 94",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-095",
+    "title": "Continuous improvement item 95",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-096",
+    "title": "Continuous improvement item 96",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-097",
+    "title": "Continuous improvement item 97",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-098",
+    "title": "Continuous improvement item 98",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-099",
+    "title": "Continuous improvement item 99",
+    "horizon": "90d"
+  },
+  {
+    "id": "IMP-100",
+    "title": "Continuous improvement item 100",
+    "horizon": "90d"
+  }
+]

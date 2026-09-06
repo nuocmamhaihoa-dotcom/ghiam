@@ -1,0 +1,87 @@
+{
+  "all_ok": true,
+  "results": [
+    {
+      "collection": "customers",
+      "file": "/agent/telesale-coach/datasets/customers/customers_100000.jsonl",
+      "count": 100000,
+      "ok": true,
+      "errors": [],
+      "dialect_ratios": {
+        "north": 0.35,
+        "central": 0.2,
+        "south": 0.45
+      },
+      "industries": 20
+    },
+    {
+      "collection": "agents",
+      "file": "/agent/telesale-coach/datasets/agents/agents_50000.jsonl",
+      "count": 50000,
+      "ok": true,
+      "errors": [],
+      "dialect_ratios": {
+        "north": 0.35,
+        "central": 0.2,
+        "south": 0.45
+      },
+      "industries": 20
+    },
+    {
+      "collection": "conversations",
+      "file": "/agent/telesale-coach/datasets/conversations/conversations_10000.jsonl",
+      "count": 10000,
+      "ok": true,
+      "errors": []
+    },
+    {
+      "collection": "intents",
+      "file": "/agent/telesale-coach/datasets/intents/intents_1000.jsonl",
+      "count": 1000,
+      "ok": true,
+      "errors": []
+    },
+    {
+      "collection": "emotions",
+      "file": "/agent/telesale-coach/datasets/emotions/emotions_500.jsonl",
+      "count": 500,
+      "ok": true,
+      "errors": []
+    },
+    {
+      "collection": "buying_signals",
+      "file": "/agent/telesale-coach/datasets/buying_signals/buying_signals_500.jsonl",
+      "count": 500,
+      "ok": true,
+      "errors": []
+    },
+    {
+      "collection": "objections",
+      "file": "/agent/telesale-coach/datasets/objections/objections_5000.jsonl",
+      "count": 5000,
+      "ok": true,
+      "errors": []
+    },
+    {
+      "collection": "root_causes",
+      "file": "/agent/telesale-coach/datasets/root_causes/root_causes_500.jsonl",
+      "count": 500,
+      "ok": true,
+      "errors": []
+    },
+    {
+      "collection": "golden_calls",
+      "file": "/agent/telesale-coach/datasets/golden_calls/golden_calls_500.jsonl",
+      "count": 500,
+      "ok": true,
+      "errors": []
+    },
+    {
+      "collection": "qa_benchmark",
+      "file": "/agent/telesale-coach/datasets/qa_benchmark/qa_benchmark_10000.jsonl",
+      "count": 10000,
+      "ok": true,
+      "errors": []
+    }
+  ]
+}
