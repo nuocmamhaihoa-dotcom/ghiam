@@ -1,0 +1,552 @@
+{
+  "architecture": {
+    "backend_packages": [
+      "app",
+      "approval",
+      "audio_engine",
+      "audio_pipeline",
+      "audio_repair",
+      "automation",
+      "autonomous",
+      "cltv",
+      "digital_twin",
+      "memory_graph",
+      "negotiation",
+      "pragmatics",
+      "rag",
+      "recommendation",
+      "research",
+      "sales_os",
+      "self_learning",
+      "speaker",
+      "transcript",
+      "war_room"
+    ],
+    "ai_brain_packages": [
+      "generators",
+      "reports",
+      "root_cause",
+      "rulebook",
+      "sop",
+      "vcie"
+    ],
+    "routers_detected": [
+      "backend/app/interfaces/api/routers/__init__.py",
+      "backend/app/interfaces/api/routers/admin.py",
+      "backend/app/interfaces/api/routers/analytics.py",
+      "backend/app/interfaces/api/routers/appeals.py",
+      "backend/app/interfaces/api/routers/audio_intelligence.py",
+      "backend/app/interfaces/api/routers/auth.py",
+      "backend/app/interfaces/api/routers/auto_sop.py",
+      "backend/app/interfaces/api/routers/autonomous.py",
+      "backend/app/interfaces/api/routers/calls.py",
+      "backend/app/interfaces/api/routers/cltv.py",
+      "backend/app/interfaces/api/routers/coaching.py",
+      "backend/app/interfaces/api/routers/dashboard.py",
+      "backend/app/interfaces/api/routers/datasets.py",
+      "backend/app/interfaces/api/routers/digital_twin.py",
+      "backend/app/interfaces/api/routers/forecast.py",
+      "backend/app/interfaces/api/routers/fraud.py",
+      "backend/app/interfaces/api/routers/health.py",
+      "backend/app/interfaces/api/routers/live_assistant.py",
+      "backend/app/interfaces/api/routers/memory_graph.py",
+      "backend/app/interfaces/api/routers/multi_product.py",
+      "backend/app/interfaces/api/routers/negotiation.py",
+      "backend/app/interfaces/api/routers/personality.py",
+      "backend/app/interfaces/api/routers/pragmatics.py",
+      "backend/app/interfaces/api/routers/qa.py",
+      "backend/app/interfaces/api/routers/revenue_leak.py",
+      "backend/app/interfaces/api/routers/rules.py",
+      "backend/app/interfaces/api/routers/sales_os.py",
+      "backend/app/interfaces/api/routers/scoring.py",
+      "backend/app/interfaces/api/routers/self_learning.py",
+      "backend/app/interfaces/api/routers/simulator.py",
+      "backend/app/interfaces/api/routers/war_room.py",
+      "routing/router.py"
+    ],
+    "scoring_audio_gate_files": [
+      "scripts/quality_gate.py",
+      "backend/audio_engine/__init__.py",
+      "backend/audio_engine/engine.py",
+      "backend/app/application/services/audio_intelligence.py",
+      "backend/app/application/services/scoring.py"
+    ],
+    "arch_doc_bytes": 15928,
+    "prd_bytes": 15583,
+    "api_doc_bytes": 16788
+  },
+  "pipeline": {
+    "audio_engine": {
+      "exists": true,
+      "files": [
+        "backend/audio_engine/intelligence.py",
+        "backend/audio_engine/__init__.py",
+        "backend/audio_engine/store.py",
+        "backend/audio_engine/engine.py",
+        "backend/audio_engine/types.py"
+      ]
+    },
+    "audio_pipeline": {
+      "exists": true,
+      "files": [
+        "backend/audio_pipeline/__init__.py",
+        "backend/audio_pipeline/pipeline.py"
+      ]
+    },
+    "audio_repair": {
+      "exists": true,
+      "files": [
+        "backend/audio_repair/__init__.py",
+        "backend/audio_repair/repair.py"
+      ]
+    },
+    "speaker": {
+      "exists": true,
+      "files": [
+        "backend/speaker/__init__.py",
+        "backend/speaker/separation.py",
+        "backend/speaker/diarization.py"
+      ]
+    },
+    "transcript": {
+      "exists": true,
+      "files": [
+        "backend/transcript/__init__.py",
+        "backend/transcript/engine.py",
+        "backend/transcript/normalize.py"
+      ]
+    },
+    "scoring_hook": {
+      "exists": true,
+      "files": [
+        "backend/app/main.py",
+        "backend/app/__init__.py",
+        "backend/app/core/__init__.py",
+        "backend/app/core/config.py",
+        "backend/app/core/rbac.py",
+        "backend/app/core/logging.py",
+        "backend/app/core/deps.py",
+        "backend/app/core/security.py",
+        "backend/app/core/database.py",
+        "backend/app/domain/enums.py",
+        "backend/app/domain/value_objects.py",
+        "backend/app/domain/__init__.py",
+        "backend/app/domain/entities.py",
+        "backend/app/infrastructure/__init__.py",
+        "backend/app/interfaces/__init__.py",
+        "backend/app/application/__init__.py",
+        "backend/app/infrastructure/redis/__init__.py",
+        "backend/app/infrastructure/redis/client.py",
+        "backend/app/infrastructure/db/__init__.py",
+        "backend/app/infrastructure/db/models.py",
+        "backend/app/infrastructure/s3/__init__.py",
+        "backend/app/infrastructure/s3/client.py",
+        "backend/app/infrastructure/repositories/score.py",
+        "backend/app/infrastructure/repositories/call.py",
+        "backend/app/infrastructure/repositories/audit.py",
+        "backend/app/infrastructure/repositories/__init__.py",
+        "backend/app/infrastructure/repositories/coaching.py",
+        "backend/app/infrastructure/repositories/golden.py",
+        "backend/app/infrastructure/repositories/base.py",
+        "backend/app/infrastructure/repositories/evidence.py"
+      ]
+    }
+  },
+  "rulebook": {
+    "file_count": 2,
+    "files": [
+      "ai-brain/rulebook/rulebook_1000.jsonl",
+      "ai-brain/rulebook/rules_1000.jsonl"
+    ],
+    "rule_id_count": 2000,
+    "unique_rule_ids": 1000,
+    "duplicate_rule_ids": [
+      {
+        "rule_id": "R-0001",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:0",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:0"
+      },
+      {
+        "rule_id": "R-0002",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:1",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:1"
+      },
+      {
+        "rule_id": "R-0003",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:2",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:2"
+      },
+      {
+        "rule_id": "R-0004",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:3",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:3"
+      },
+      {
+        "rule_id": "R-0005",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:4",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:4"
+      },
+      {
+        "rule_id": "R-0006",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:5",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:5"
+      },
+      {
+        "rule_id": "R-0007",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:6",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:6"
+      },
+      {
+        "rule_id": "R-0008",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:7",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:7"
+      },
+      {
+        "rule_id": "R-0009",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:8",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:8"
+      },
+      {
+        "rule_id": "R-0010",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:9",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:9"
+      },
+      {
+        "rule_id": "R-0011",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:10",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:10"
+      },
+      {
+        "rule_id": "R-0012",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:11",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:11"
+      },
+      {
+        "rule_id": "R-0013",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:12",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:12"
+      },
+      {
+        "rule_id": "R-0014",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:13",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:13"
+      },
+      {
+        "rule_id": "R-0015",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:14",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:14"
+      },
+      {
+        "rule_id": "R-0016",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:15",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:15"
+      },
+      {
+        "rule_id": "R-0017",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:16",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:16"
+      },
+      {
+        "rule_id": "R-0018",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:17",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:17"
+      },
+      {
+        "rule_id": "R-0019",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:18",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:18"
+      },
+      {
+        "rule_id": "R-0020",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:19",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:19"
+      },
+      {
+        "rule_id": "R-0021",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:20",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:20"
+      },
+      {
+        "rule_id": "R-0022",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:21",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:21"
+      },
+      {
+        "rule_id": "R-0023",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:22",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:22"
+      },
+      {
+        "rule_id": "R-0024",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:23",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:23"
+      },
+      {
+        "rule_id": "R-0025",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:24",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:24"
+      },
+      {
+        "rule_id": "R-0026",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:25",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:25"
+      },
+      {
+        "rule_id": "R-0027",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:26",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:26"
+      },
+      {
+        "rule_id": "R-0028",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:27",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:27"
+      },
+      {
+        "rule_id": "R-0029",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:28",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:28"
+      },
+      {
+        "rule_id": "R-0030",
+        "a": "/agent/telesale-coach/ai-brain/rulebook/rulebook_1000.jsonl:29",
+        "b": "/agent/telesale-coach/ai-brain/rulebook/rules_1000.jsonl:29"
+      }
+    ],
+    "target_1000": 1000,
+    "gap_to_1000": 0
+  },
+  "memory_graph": {
+    "exists": true,
+    "node_count": 52,
+    "edge_count": 59,
+    "orphan_edge_count": 0,
+    "orphan_edges_sample": [],
+    "orphan_node_count": 0,
+    "orphan_nodes_sample": [],
+    "top_keys": [
+      "nodes",
+      "edges",
+      "saved_at",
+      "audit_repair"
+    ],
+    "repaired_at_audit": true
+  },
+  "security": {
+    "findings_count": 1,
+    "findings": [
+      {
+        "sev": "critical",
+        "kind": "hardcoded_secret_pattern",
+        "file": "enterprise-web/src/lib/demo-data.ts",
+        "evidence": "PASSWORD = \"demo1234",
+        "status": "remediated",
+        "note": "DEMO_PASSWORD_HINT; login default cleared"
+      }
+    ],
+    "auth_related_files": [
+      "scripts/quality_gate.py",
+      "backend/app/main.py",
+      "backend/scripts/seed.py",
+      "backend/app/core/deps.py",
+      "backend/app/core/security.py",
+      "backend/app/interfaces/api/routers/cltv.py",
+      "backend/app/interfaces/api/routers/coaching.py",
+      "backend/app/interfaces/api/routers/revenue_leak.py",
+      "backend/app/interfaces/api/routers/datasets.py",
+      "backend/app/interfaces/api/routers/analytics.py",
+      "backend/app/interfaces/api/routers/health.py",
+      "backend/app/interfaces/api/routers/autonomous.py",
+      "backend/app/interfaces/api/routers/simulator.py",
+      "backend/app/interfaces/api/routers/forecast.py",
+      "backend/app/interfaces/api/routers/auth.py",
+      "backend/app/interfaces/api/routers/personality.py",
+      "backend/app/interfaces/api/routers/appeals.py",
+      "backend/app/interfaces/api/routers/pragmatics.py",
+      "backend/app/interfaces/api/routers/multi_product.py",
+      "backend/app/interfaces/api/routers/qa.py",
+      "backend/app/interfaces/api/routers/audio_intelligence.py",
+      "backend/app/interfaces/api/routers/auto_sop.py",
+      "backend/app/interfaces/api/routers/fraud.py",
+      "backend/app/interfaces/api/routers/calls.py",
+      "backend/app/interfaces/api/routers/self_learning.py",
+      "backend/app/interfaces/api/routers/live_assistant.py",
+      "backend/app/interfaces/api/routers/memory_graph.py",
+      "backend/app/interfaces/api/routers/dashboard.py",
+      "backend/app/interfaces/api/routers/admin.py",
+      "backend/app/interfaces/api/routers/war_room.py",
+      "backend/app/interfaces/api/routers/digital_twin.py",
+      "backend/app/interfaces/api/routers/rules.py",
+      "backend/app/interfaces/api/routers/sales_os.py",
+      "backend/app/interfaces/api/routers/scoring.py",
+      "backend/app/interfaces/api/routers/negotiation.py",
+      "backend/app/application/services/auth.py"
+    ]
+  },
+  "api": {
+    "openapi_candidates": [
+      "datasets/validation/schema.json",
+      "models/cltv/schema.json",
+      "models/negotiation/schema.json",
+      "models/war_room/schema.json",
+      "models/digital_twin/schema.json",
+      "models/audio_intelligence/schema.json",
+      "models/autonomous/schema.json"
+    ],
+    "router_count": 32
+  },
+  "tests": {
+    "test_file_count": 16,
+    "test_dirs": [
+      "backend/tests",
+      "tests/audio",
+      "tests/autonomous",
+      "tests/cltv",
+      "tests/digital_twin",
+      "tests/memory_graph",
+      "tests/negotiation",
+      "tests/pragmatics",
+      "tests/sales_os",
+      "tests/self_learning",
+      "tests/war_room"
+    ]
+  },
+  "datasets": {
+    "exists": true,
+    "subdirs": [
+      "agents",
+      "audio_engine",
+      "autonomous",
+      "buying_signals",
+      "cltv",
+      "conversations",
+      "customers",
+      "digital_twin",
+      "emotions",
+      "golden_calls",
+      "intents",
+      "negotiation",
+      "objections",
+      "pragmatics",
+      "qa_benchmark",
+      "reports",
+      "root_causes",
+      "scripts",
+      "self_learning",
+      "sql",
+      "synthetic",
+      "validation",
+      "war_room"
+    ],
+    "balance_proxy": {
+      "intents": {
+        "file_count": 2,
+        "sample": [
+          "datasets/intents/intents_1000.csv",
+          "datasets/intents/intents_1000.jsonl"
+        ]
+      },
+      "emotions": {
+        "file_count": 2,
+        "sample": [
+          "datasets/emotions/emotions_500.jsonl",
+          "datasets/emotions/emotions_500.csv"
+        ]
+      },
+      "conversations": {
+        "file_count": 2,
+        "sample": [
+          "datasets/conversations/conversations_10000.jsonl",
+          "datasets/conversations/conversations_10000.csv"
+        ]
+      },
+      "synthetic": {
+        "file_count": 2,
+        "sample": [
+          "datasets/synthetic/sop_50.jsonl",
+          "datasets/synthetic/rules_1000.jsonl"
+        ]
+      },
+      "qa_benchmark": {
+        "file_count": 2,
+        "sample": [
+          "datasets/qa_benchmark/qa_benchmark_10000.jsonl",
+          "datasets/qa_benchmark/qa_benchmark_10000.csv"
+        ]
+      },
+      "golden_calls": {
+        "file_count": 2,
+        "sample": [
+          "datasets/golden_calls/golden_calls_500.csv",
+          "datasets/golden_calls/golden_calls_500.jsonl"
+        ]
+      }
+    }
+  },
+  "production": {
+    "Dockerfile": true,
+    "docker-compose": true,
+    "alembic": true,
+    "monitoring_doc": true,
+    "security_doc": true,
+    "deployment_doc": true
+  },
+  "connectors": {
+    "files": [
+      "integrations/__init__.py",
+      "integrations/base.py",
+      "integrations/registry.py",
+      "integrations/connectors/stringee.py",
+      "integrations/connectors/__init__.py",
+      "integrations/connectors/twilio.py",
+      "integrations/connectors/zoho.py",
+      "integrations/connectors/salesforce.py",
+      "integrations/connectors/bitrix24.py",
+      "integrations/connectors/asterisk.py",
+      "integrations/connectors/callio.py",
+      "integrations/connectors/facebook_lead_ads.py",
+      "integrations/connectors/google_sheets.py",
+      "integrations/connectors/google_calendar.py",
+      "integrations/connectors/hubspot.py",
+      "integrations/connectors/zalo_oa.py",
+      "integrations/connectors/threecx.py"
+    ],
+    "count": 17
+  },
+  "self_learning_safety": [
+    {
+      "file": "backend/self_learning/__init__.py",
+      "has_proposal": false,
+      "has_approval": false,
+      "has_rollback": false,
+      "direct_prod_write": true
+    },
+    {
+      "file": "backend/self_learning/store.py",
+      "has_proposal": true,
+      "has_approval": true,
+      "has_rollback": false,
+      "direct_prod_write": true
+    },
+    {
+      "file": "backend/self_learning/lab.py",
+      "has_proposal": true,
+      "has_approval": true,
+      "has_rollback": true,
+      "direct_prod_write": true
+    },
+    {
+      "file": "backend/self_learning/types.py",
+      "has_proposal": true,
+      "has_approval": true,
+      "has_rollback": true,
+      "direct_prod_write": true
+    },
+    {
+      "file": "tests/self_learning/test_self_learning.py",
+      "has_proposal": true,
+      "has_approval": true,
+      "has_rollback": false,
+      "direct_prod_write": true
+    }
+  ]
+}

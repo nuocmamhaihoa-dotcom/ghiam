@@ -1,0 +1,371 @@
+{
+  "file_count_by_ext": {
+    ".py": 253,
+    ".md": 135,
+    ".json": 74,
+    ".tsx": 56,
+    ".jsonl": 53,
+    ".ts": 31,
+    "(none)": 13,
+    ".csv": 10,
+    ".mjs": 5,
+    ".svg": 5,
+    ".txt": 3,
+    ".tsbuildinfo": 2,
+    ".example": 2,
+    ".local": 2,
+    ".ico": 2,
+    ".css": 2,
+    ".woff": 2,
+    ".wav": 2,
+    ".yml": 1,
+    ".cjs": 1,
+    ".toml": 1,
+    ".ini": 1,
+    ".sql": 1,
+    ".log": 1,
+    ".mako": 1,
+    ".mdc": 1
+  },
+  "file_count_by_top": {
+    "backend": 216,
+    "docs": 118,
+    "datasets": 109,
+    "enterprise-web": 71,
+    "src": 32,
+    "ai-brain": 19,
+    "integrations": 17,
+    "tests": 15,
+    "data": 12,
+    "knowledge": 7,
+    "models": 7,
+    "public": 5,
+    "scripts": 5,
+    "routing": 3,
+    "vector_store": 2,
+    "automation": 2,
+    "forecast": 2,
+    "frontend": 2,
+    ".gitignore": 1,
+    "next-env.d.ts": 1,
+    "tsconfig.tsbuildinfo": 1,
+    ".env.example": 1,
+    "docker-compose.yml": 1,
+    "package-lock.json": 1,
+    "package.json": 1,
+    "eslint.config.mjs": 1,
+    "tsconfig.json": 1,
+    "ecosystem.config.cjs": 1,
+    ".env.local": 1,
+    "postcss.config.mjs": 1,
+    "next.config.ts": 1,
+    "README.md": 1,
+    "convex": 1,
+    ".cursor": 1
+  },
+  "largest_files": [
+    {
+      "size": 52809461,
+      "path": "datasets/customers/customers_100000.jsonl"
+    },
+    {
+      "size": 36511762,
+      "path": "datasets/conversations/conversations_10000.csv"
+    },
+    {
+      "size": 33838253,
+      "path": "datasets/conversations/conversations_10000.jsonl"
+    },
+    {
+      "size": 29464520,
+      "path": "datasets/customers/customers_100000.csv"
+    },
+    {
+      "size": 26145924,
+      "path": "datasets/agents/agents_50000.jsonl"
+    },
+    {
+      "size": 16011805,
+      "path": "datasets/pragmatics/utterances/utterances_100k.jsonl"
+    },
+    {
+      "size": 14470521,
+      "path": "datasets/agents/agents_50000.csv"
+    },
+    {
+      "size": 5183892,
+      "path": "ai-brain/vcie/utterances/utterances_20000.jsonl"
+    },
+    {
+      "size": 2690811,
+      "path": "datasets/objections/objections_5000.jsonl"
+    },
+    {
+      "size": 2487247,
+      "path": "datasets/qa_benchmark/qa_benchmark_10000.jsonl"
+    },
+    {
+      "size": 1991417,
+      "path": "datasets/golden_calls/golden_calls_500.csv"
+    },
+    {
+      "size": 1839688,
+      "path": "datasets/golden_calls/golden_calls_500.jsonl"
+    },
+    {
+      "size": 1804359,
+      "path": "datasets/pragmatics/situations/situations_5000.jsonl"
+    },
+    {
+      "size": 1793931,
+      "path": "datasets/objections/objections_5000.csv"
+    },
+    {
+      "size": 1722167,
+      "path": "ai-brain/rulebook/rulebook_1000.jsonl"
+    },
+    {
+      "size": 1499271,
+      "path": "tests/self_learning/fixtures_5000.jsonl"
+    },
+    {
+      "size": 1238420,
+      "path": "datasets/synthetic/rules_1000.jsonl"
+    },
+    {
+      "size": 1238420,
+      "path": "ai-brain/rulebook/rules_1000.jsonl"
+    },
+    {
+      "size": 1217333,
+      "path": "datasets/qa_benchmark/qa_benchmark_10000.csv"
+    },
+    {
+      "size": 1183669,
+      "path": "datasets/sql/vecd_seed.sql"
+    },
+    {
+      "size": 844572,
+      "path": "tests/sales_os/fixtures_5000.jsonl"
+    },
+    {
+      "size": 795564,
+      "path": "data/recordings/28951a9f-2b0e-4882-83ec-725797b2003f/audio.wav"
+    },
+    {
+      "size": 564248,
+      "path": "ai-brain/vcie/objections/objection_handlers_1000.jsonl"
+    },
+    {
+      "size": 550647,
+      "path": "datasets/intents/intents_1000.jsonl"
+    },
+    {
+      "size": 433939,
+      "path": "datasets/intents/intents_1000.csv"
+    }
+  ],
+  "duplicate_basenames_sample": {
+    "page.tsx": [
+      "enterprise-web/src/app/page.tsx",
+      "enterprise-web/src/app/war-room/page.tsx",
+      "enterprise-web/src/app/audio-intelligence/page.tsx",
+      "enterprise-web/src/app/cltv/page.tsx",
+      "enterprise-web/src/app/qa/page.tsx",
+      "enterprise-web/src/app/negotiation/page.tsx",
+      "enterprise-web/src/app/calls/page.tsx",
+      "enterprise-web/src/app/memory-graph/page.tsx",
+      "enterprise-web/src/app/simulator/page.tsx",
+      "enterprise-web/src/app/pragmatics/page.tsx",
+      "enterprise-web/src/app/portal/page.tsx",
+      "enterprise-web/src/app/auto-sop/page.tsx",
+      "enterprise-web/src/app/dashboard/page.tsx",
+      "enterprise-web/src/app/appeals/page.tsx",
+      "enterprise-web/src/app/live-assistant/page.tsx",
+      "enterprise-web/src/app/personality/page.tsx",
+      "enterprise-web/src/app/qa-approval/page.tsx",
+      "enterprise-web/src/app/revenue/page.tsx",
+      "enterprise-web/src/app/multi-product/page.tsx",
+      "enterprise-web/src/app/forecast/page.tsx",
+      "enterprise-web/src/app/self-learning/page.tsx",
+      "enterprise-web/src/app/digital-twin/page.tsx",
+      "enterprise-web/src/app/coaching/page.tsx",
+      "enterprise-web/src/app/admin/page.tsx",
+      "enterprise-web/src/app/sales-os/page.tsx",
+      "enterprise-web/src/app/rules/page.tsx",
+      "enterprise-web/src/app/fraud/page.tsx",
+      "enterprise-web/src/app/dna/page.tsx",
+      "enterprise-web/src/app/autonomous/page.tsx",
+      "enterprise-web/src/app/login/page.tsx",
+      "enterprise-web/src/app/calls/[id]/page.tsx",
+      "src/app/page.tsx",
+      "src/app/calls/page.tsx",
+      "src/app/recordings/page.tsx",
+      "src/app/proxy/page.tsx",
+      "src/app/playbooks/page.tsx",
+      "src/app/analyze/page.tsx",
+      "src/app/calls/[id]/page.tsx",
+      "src/app/recordings/[id]/page.tsx"
+    ],
+    "__init__.py": [
+      "integrations/__init__.py",
+      "automation/__init__.py",
+      "forecast/__init__.py",
+      "routing/__init__.py",
+      "integrations/connectors/__init__.py",
+      "backend/cltv/__init__.py",
+      "backend/audio_engine/__init__.py",
+      "backend/speaker/__init__.py",
+      "backend/negotiation/__init__.py",
+      "backend/war_room/__init__.py",
+      "backend/sales_os/__init__.py",
+      "backend/pragmatics/__init__.py",
+      "backend/automation/__init__.py",
+      "backend/audio_repair/__init__.py",
+      "backend/approval/__init__.py",
+      "backend/app/__init__.py",
+      "backend/transcript/__init__.py",
+      "backend/recommendation/__init__.py",
+      "backend/digital_twin/__init__.py",
+      "backend/rag/__init__.py",
+      "backend/self_learning/__init__.py",
+      "backend/research/__init__.py",
+      "backend/memory_graph/__init__.py",
+      "backend/autonomous/__init__.py",
+      "backend/audio_pipeline/__init__.py",
+      "backend/app/core/__init__.py",
+      "backend/app/domain/__init__.py",
+      "backend/app/infrastructure/__init__.py",
+      "backend/app/interfaces/__init__.py",
+      "backend/app/application/__init__.py",
+      "backend/app/infrastructure/redis/__init__.py",
+      "backend/app/infrastructure/db/__init__.py",
+      "backend/app/infrastructure/s3/__init__.py",
+      "backend/app/infrastructure/repositories/__init__.py",
+      "backend/app/interfaces/api/__init__.py",
+      "backend/app/interfaces/api/routers/__init__.py",
+      "backend/app/application/services/__init__.py"
+    ],
+    "engine.py": [
+      "automation/engine.py",
+      "forecast/engine.py",
+      "backend/cltv/engine.py",
+      "backend/audio_engine/engine.py",
+      "backend/negotiation/engine.py",
+      "backend/war_room/engine.py",
+      "backend/pragmatics/engine.py",
+      "backend/automation/engine.py",
+      "backend/transcript/engine.py",
+      "backend/digital_twin/engine.py",
+      "backend/autonomous/engine.py"
+    ],
+    "types.py": [
+      "backend/cltv/types.py",
+      "backend/audio_engine/types.py",
+      "backend/negotiation/types.py",
+      "backend/war_room/types.py",
+      "backend/pragmatics/types.py",
+      "backend/digital_twin/types.py",
+      "backend/self_learning/types.py",
+      "backend/memory_graph/types.py",
+      "backend/autonomous/types.py"
+    ],
+    "store.py": [
+      "backend/cltv/store.py",
+      "backend/audio_engine/store.py",
+      "backend/negotiation/store.py",
+      "backend/war_room/store.py",
+      "backend/digital_twin/store.py",
+      "backend/self_learning/store.py",
+      "backend/memory_graph/store.py",
+      "backend/autonomous/store.py"
+    ],
+    "route.ts": [
+      "src/app/api/ity/route.ts",
+      "src/app/api/recordings/route.ts",
+      "src/app/api/proxy/route.ts",
+      "src/app/api/chotkiem/route.ts",
+      "src/app/api/ity/auto/route.ts",
+      "src/app/api/ity/progress/route.ts",
+      "src/app/api/recordings/[id]/route.ts",
+      "src/app/api/recordings/[id]/audio/route.ts"
+    ],
+    "schema.json": [
+      "datasets/validation/schema.json",
+      "models/cltv/schema.json",
+      "models/negotiation/schema.json",
+      "models/war_room/schema.json",
+      "models/digital_twin/schema.json",
+      "models/audio_intelligence/schema.json",
+      "models/autonomous/schema.json"
+    ],
+    "README.md": [
+      "README.md",
+      "backend/README.md",
+      "enterprise-web/README.md",
+      "ai-brain/vcie/README.md",
+      "frontend/upload/README.md"
+    ],
+    "metrics.json": [
+      "datasets/cltv/metrics.json",
+      "datasets/audio_engine/metrics.json",
+      "datasets/war_room/metrics.json",
+      "datasets/self_learning/metrics.json",
+      "datasets/autonomous/metrics.json"
+    ],
+    "quality.py": [
+      "backend/cltv/quality.py",
+      "backend/negotiation/quality.py",
+      "backend/war_room/quality.py",
+      "backend/digital_twin/quality.py",
+      "backend/autonomous/quality.py"
+    ],
+    "coaching.py": [
+      "backend/research/coaching.py",
+      "backend/app/infrastructure/repositories/coaching.py",
+      "backend/app/interfaces/api/routers/coaching.py",
+      "backend/app/application/services/coaching.py"
+    ]
+  },
+  "syntax_errors": [],
+  "tiny_py_files": [
+    "backend/app/core/__init__.py",
+    "backend/app/domain/__init__.py",
+    "backend/app/infrastructure/__init__.py",
+    "backend/app/interfaces/__init__.py",
+    "backend/app/application/__init__.py",
+    "backend/app/infrastructure/redis/__init__.py",
+    "backend/app/infrastructure/s3/__init__.py",
+    "backend/app/infrastructure/repositories/__init__.py",
+    "backend/app/interfaces/api/__init__.py",
+    "backend/app/application/services/__init__.py"
+  ],
+  "missing_expected_docs": [],
+  "modules_present": {
+    "audio_engine": true,
+    "audio_pipeline": true,
+    "audio_repair": true,
+    "speaker": true,
+    "transcript": true,
+    "pragmatics": true,
+    "memory_graph": true,
+    "self_learning": true,
+    "digital_twin": true,
+    "negotiation": true,
+    "cltv": true,
+    "war_room": true,
+    "autonomous": true,
+    "sales_os": true,
+    "ai-brain/rulebook": true,
+    "ai-brain/vcie": true,
+    "enterprise-web": true,
+    "integrations": true
+  },
+  "dependency_manifests": [
+    "backend/requirements.txt",
+    "backend/pyproject.toml",
+    "package.json",
+    "enterprise-web/package.json"
+  ],
+  "py_file_count": 253
+}

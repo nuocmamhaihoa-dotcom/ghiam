@@ -13,6 +13,7 @@ from app import __version__
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.interfaces.api.middleware import AuditMiddleware
+from app.interfaces.api.rate_limit import RateLimitMiddleware
 from app.interfaces.api.routers import (
     admin,
     analytics,
@@ -50,12 +51,14 @@ from app.interfaces.api.routers import (
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
+    settings.assert_production_secrets()
     setup_logging(level=settings.log_level, json_logs=settings.log_json)
     yield
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    settings.assert_production_secrets()
     application = FastAPI(
         title="AI SALES OPERATING SYSTEM ENTERPRISE API",
         description="Evidence-first AI Sales OS: QA, pragmatics, live assist, personality, memory graph, revenue leak, fraud, SOP.",
@@ -82,6 +85,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     application.add_middleware(AuditMiddleware)
+    application.add_middleware(RateLimitMiddleware)
 
     @application.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:

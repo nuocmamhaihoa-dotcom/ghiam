@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = True
 
+    # API abuse controls (enterprise audit Phase 8 / 11)
+    rate_limit_enabled: bool = True
+    rate_limit_requests: int = 120
+    rate_limit_window_seconds: int = 60
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors(cls, value: object) -> object:
@@ -61,6 +66,27 @@ class Settings(BaseSettings):
                 return json.loads(raw)
             return [part.strip() for part in raw.split(",") if part.strip()]
         return value
+
+    def assert_production_secrets(self) -> None:
+        """Fail closed in production when insecure defaults remain.
+
+        Evidence: enterprise master audit Phase 11 found default JWT/admin/S3
+        secrets in config.py — unsafe if APP_ENV=production.
+        """
+        if self.app_env != "production":
+            return
+        insecure: list[str] = []
+        if self.jwt_secret_key.startswith("change-me"):
+            insecure.append("JWT_SECRET_KEY")
+        if self.seed_admin_password.startswith("ChangeMe"):
+            insecure.append("SEED_ADMIN_PASSWORD")
+        if self.s3_access_key == "minioadmin" or self.s3_secret_key == "minioadmin":
+            insecure.append("S3_ACCESS_KEY/S3_SECRET_KEY")
+        if insecure:
+            raise RuntimeError(
+                "Insecure default secrets blocked in production: "
+                + ", ".join(insecure)
+            )
 
 
 @lru_cache

@@ -325,7 +325,7 @@
       "label": "price",
       "version": "1.0.2",
       "source": "call:qg-call",
-      "timestamp": 1788635835.3339386,
+      "timestamp": 1788657471.4540584,
       "confidence": 0.7,
       "content": "price",
       "metadata": {
@@ -353,7 +353,7 @@
       "label": "Khách hàng chung",
       "version": "1.0.0",
       "source": "system",
-      "timestamp": 1788635835.3340912,
+      "timestamp": 1788657471.4542148,
       "confidence": 1.0,
       "content": "Khách hàng chung",
       "metadata": {}
@@ -364,7 +364,7 @@
       "label": "RC-PRICE",
       "version": "1.0.0",
       "source": "call:qg-call",
-      "timestamp": 1788635835.3341517,
+      "timestamp": 1788657471.4542701,
       "confidence": 0.7,
       "content": "RC-PRICE",
       "metadata": {
@@ -377,7 +377,7 @@
       "label": "Revenue leak: RC-PRICE",
       "version": "1.0.0",
       "source": "call:qg-call",
-      "timestamp": 1788635835.3342056,
+      "timestamp": 1788657471.4543343,
       "confidence": 0.7,
       "content": "Revenue leak linked to root cause RC-PRICE",
       "metadata": {}
@@ -504,7 +504,7 @@
       "label": "Call test-call",
       "version": "1.0.0",
       "source": "call:test-call",
-      "timestamp": 1788635835.3337562,
+      "timestamp": 1788657471.4538329,
       "confidence": 1.0,
       "content": "Analyzed call test-call",
       "metadata": {}
@@ -515,7 +515,7 @@
       "label": "PKG-HEALTH",
       "version": "1.0.0",
       "source": "call:test-call",
-      "timestamp": 1788635835.3338366,
+      "timestamp": 1788657471.4539351,
       "confidence": 0.8,
       "content": "PKG-HEALTH",
       "metadata": {}
@@ -526,7 +526,7 @@
       "label": "price_concern",
       "version": "1.0.0",
       "source": "call:test-call",
-      "timestamp": 1788635835.3340387,
+      "timestamp": 1788657471.454161,
       "confidence": 0.7,
       "content": "price_concern",
       "metadata": {
@@ -539,7 +539,7 @@
       "label": "reframe value",
       "version": "1.0.0",
       "source": "call:test-call",
-      "timestamp": 1788635835.334257,
+      "timestamp": 1788657471.4543915,
       "confidence": 0.75,
       "content": "reframe value",
       "metadata": {
@@ -552,7 +552,7 @@
       "label": "R-OBJ-01",
       "version": "1.0.0",
       "source": "call:test-call",
-      "timestamp": 1788635835.334307,
+      "timestamp": 1788657471.4544535,
       "confidence": 0.9,
       "content": "R-OBJ-01",
       "metadata": {
@@ -565,7 +565,7 @@
       "label": "Compliance R-OBJ-01",
       "version": "1.0.0",
       "source": "call:test-call",
-      "timestamp": 1788635835.3343587,
+      "timestamp": 1788657471.4545047,
       "confidence": 0.95,
       "content": "R-OBJ-01",
       "metadata": {}
@@ -901,7 +901,7 @@
       "confidence": 0.85,
       "version": "1.0.0",
       "source_ref": "system",
-      "timestamp": 1788635835.3342311,
+      "timestamp": 1788657471.4543633,
       "metadata": {}
     },
     {
@@ -1044,7 +1044,7 @@
       "confidence": 0.7,
       "version": "1.0.0",
       "source_ref": "system",
-      "timestamp": 1788635835.3338985,
+      "timestamp": 1788657471.4540148,
       "metadata": {}
     },
     {
@@ -1055,7 +1055,7 @@
       "confidence": 0.75,
       "version": "1.0.0",
       "source_ref": "system",
-      "timestamp": 1788635835.3339758,
+      "timestamp": 1788657471.4540966,
       "metadata": {}
     },
     {
@@ -1066,7 +1066,7 @@
       "confidence": 0.75,
       "version": "1.0.0",
       "source_ref": "system",
-      "timestamp": 1788635835.3340101,
+      "timestamp": 1788657471.454132,
       "metadata": {}
     },
     {
@@ -1077,7 +1077,7 @@
       "confidence": 0.7,
       "version": "1.0.0",
       "source_ref": "system",
-      "timestamp": 1788635835.334066,
+      "timestamp": 1788657471.4541895,
       "metadata": {}
     },
     {
@@ -1088,7 +1088,7 @@
       "confidence": 0.6,
       "version": "1.0.0",
       "source_ref": "system",
-      "timestamp": 1788635835.3341246,
+      "timestamp": 1788657471.4542434,
       "metadata": {}
     },
     {
@@ -1099,7 +1099,7 @@
       "confidence": 0.8,
       "version": "1.0.0",
       "source_ref": "system",
-      "timestamp": 1788635835.3341792,
+      "timestamp": 1788657471.4543,
       "metadata": {}
     },
     {
@@ -1110,7 +1110,7 @@
       "confidence": 0.8,
       "version": "1.0.0",
       "source_ref": "system",
-      "timestamp": 1788635835.334282,
+      "timestamp": 1788657471.4544241,
       "metadata": {}
     },
     {
@@ -1121,7 +1121,7 @@
       "confidence": 1.0,
       "version": "1.0.0",
       "source_ref": "system",
-      "timestamp": 1788635835.3343332,
+      "timestamp": 1788657471.4544787,
       "metadata": {}
     },
     {
@@ -1132,7 +1132,7 @@
       "confidence": 0.9,
       "version": "1.0.0",
       "source_ref": "system",
-      "timestamp": 1788635835.3343832,
+      "timestamp": 1788657471.454529,
       "metadata": {}
     },
     {
@@ -1211,7 +1211,63 @@
       "source_ref": "system",
       "timestamp": 1788635815.957127,
       "metadata": {}
+    },
+    {
+      "id": "edge:audit:faq:phi_thuong_nien:belongs_to",
+      "source": "faq:phi_thuong_nien",
+      "target": "intent:can_tu_van",
+      "relation": "belongs_to",
+      "confidence": 0.9,
+      "version": "1.0.1",
+      "source_ref": "enterprise_audit_v1",
+      "timestamp": 1788656429.0992646,
+      "metadata": {
+        "repair": true,
+        "note": "FAQ fee -> knowledge hub"
+      }
+    },
+    {
+      "id": "edge:audit:faq:thoi_gian_duyet:belongs_to",
+      "source": "faq:thoi_gian_duyet",
+      "target": "intent:can_tu_van",
+      "relation": "belongs_to",
+      "confidence": 0.9,
+      "version": "1.0.1",
+      "source_ref": "enterprise_audit_v1",
+      "timestamp": 1788656429.0992646,
+      "metadata": {
+        "repair": true,
+        "note": "FAQ SLA -> knowledge hub"
+      }
+    },
+    {
+      "id": "edge:audit:policy:privacy:governs",
+      "source": "policy:privacy",
+      "target": "compliance:no_fake_rate",
+      "relation": "related_to",
+      "confidence": 0.9,
+      "version": "1.0.1",
+      "source_ref": "enterprise_audit_v1",
+      "timestamp": 1788656429.0992646,
+      "metadata": {
+        "repair": true,
+        "note": "privacy policy linked"
+      }
+    },
+    {
+      "id": "edge:audit:root_cause:weak_discovery:causes",
+      "source": "root_cause:weak_discovery",
+      "target": "coaching:listen_ack",
+      "relation": "mitigated_by",
+      "confidence": 0.9,
+      "version": "1.0.1",
+      "source_ref": "enterprise_audit_v1",
+      "timestamp": 1788656429.0992646,
+      "metadata": {
+        "repair": true,
+        "note": "weak discovery linked to coaching/process"
+      }
     }
   ],
-  "saved_at": 1788635835.3352592
+  "saved_at": 1788657471.4548156
 }

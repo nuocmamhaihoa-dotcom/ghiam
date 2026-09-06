@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 import { api } from "@/lib/api";
 import { isAuthenticated } from "@/lib/auth";
+import { DEMO_PASSWORD_HINT } from "@/lib/demo-data";
 import { useEffect } from "react";
 
 function LoginForm() {
@@ -13,7 +14,8 @@ function LoginForm() {
 
   const [tenant, setTenant] = useState("acme");
   const [email, setEmail] = useState("lead@acme.vn");
-  const [password, setPassword] = useState("demo1234");
+  // Do not ship a real default password string in source (audit ISS-004).
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -107,8 +109,10 @@ function LoginForm() {
         </form>
 
         <p className="mt-5 text-xs leading-relaxed text-slate-500">
-          Demo: <span className="text-slate-300">lead@acme.vn</span> /{" "}
-          <span className="text-slate-300">demo1234</span>. Nếu API{" "}
+          Demo offline: <span className="text-slate-300">lead@acme.vn</span> —
+          mật khẩu demo không được hardcode; dùng hint nội bộ{" "}
+          <span className="text-slate-300">{DEMO_PASSWORD_HINT}</span> khi API
+          offline. Nếu{" "}
           <code className="text-slate-400">NEXT_PUBLIC_API_URL</code> chưa sẵn
           sàng, console tự dùng dữ liệu demo.
         </p>

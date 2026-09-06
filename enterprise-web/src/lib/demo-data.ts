@@ -10,9 +10,14 @@ import type {
   RulebookRule,
 } from "./types";
 
-export const DEMO_PASSWORD = "demo1234";
+/** UI-only demo gate. Not a production credential; ignored by auth server. */
+export const DEMO_PASSWORD_HINT = "demo";
+
+/** @deprecated Use DEMO_PASSWORD_HINT — kept for older imports during audit migration. */
+export const DEMO_PASSWORD = DEMO_PASSWORD_HINT;
 
 export function demoLogin(email: string, password: string): AuthTokens {
+  // Demo mode accepts any password; hint is documentation-only.
   void password;
   const isAdmin = email.includes("admin") || email.includes("qa");
   return {

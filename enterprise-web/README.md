@@ -19,7 +19,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Demo login: `lead@acme.vn` / `demo1234` (falls back to offline demo data if API is down).
+Demo login: `lead@acme.vn` (password not hard-coded; see DEMO_PASSWORD_HINT) (falls back to offline demo data if API is down).
 
 ## Scripts
 
