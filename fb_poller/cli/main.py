@@ -203,6 +203,14 @@ def probe_cmd(
     asyncio.run(_run())
 
 
+@app.command("doctor")
+def doctor_cmd() -> None:
+    """Check PC resources and local PA1 configuration."""
+    from fb_poller.obs.doctor import run_doctor
+
+    run_doctor()
+
+
 @app.command("kpi")
 def kpi_cmd(
     tail: int = typer.Option(500, help="Last N metric rows to analyze"),

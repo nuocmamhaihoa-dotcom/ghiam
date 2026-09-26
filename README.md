@@ -20,15 +20,40 @@ Chi tiết vận hành 2 PC: [`deploy/PA1_RUNBOOK.md`](deploy/PA1_RUNBOOK.md).
 
 > Hot 100 @ 30s là biên cứng với ~20 browser. Hệ thống mặc định `HOT_INTERVAL_SEC=45`. Hạ xuống 30 chỉ khi KPI đạt.
 
-## Cài đặt (1 máy)
+## Cài đặt trên PC (dùng tài nguyên máy local)
+
+Hướng dẫn đầy đủ: [`docs/CAI_DAT_PC.md`](docs/CAI_DAT_PC.md)
+
+**Linux (khuyến nghị):**
+
+```bash
+chmod +x install.sh scripts/*.sh
+./install.sh          # tự chọn workers theo CPU/RAM
+# ./install.sh pc20   # 14 workers
+# ./install.sh pc12   # 6 workers
+
+# nạp URL + proxy rồi chạy nền:
+./scripts/fb-poller-ctl.sh import
+./scripts/fb-poller-ctl.sh doctor
+./scripts/fb-poller-ctl.sh start
+./scripts/fb-poller-ctl.sh status
+```
+
+**Windows:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+.\scripts\fb-poller-ctl.ps1 import
+.\scripts\fb-poller-ctl.ps1 start
+```
+
+Cài thủ công (nếu cần):
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 playwright install chromium
-playwright install-deps chromium   # nếu thiếu lib hệ thống
-
 cp .env.example .env
 ```
 
