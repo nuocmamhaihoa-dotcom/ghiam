@@ -14,9 +14,11 @@ from fb_poller.orchestrator.runner import run_poller
 from fb_poller.storage.db import init_db, session_scope
 from fb_poller.storage.models import Comment, PollRun, Post, PostStatus, Tier
 from fb_poller.storage.repo import PostRepo
+from fb_poller.obs.metrics import Metrics
 from fb_poller.workers.job_hot import poll_post
 from fb_poller.workers.browser_pool import BrowserPool
 from fb_poller.workers.proxy_manager import ProxyManager, import_proxy_files
+from fb_poller.workers.types import PostJob
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 console = Console()
@@ -186,12 +188,12 @@ def probe_cmd(
         try:
             for idx, post in enumerate(posts):
                 worker = pool.workers[idx % workers]
-                # Detach instance fields used after session closed
+                job = PostJob(id=post.id, url=post.url, tier=post.tier)
                 outcome = await poll_post(
                     settings=settings,
                     pool=pool,
                     worker=worker,
-                    post=post,
+                    job=job,
                     proxy_manager=proxy_manager,
                 )
                 console.print(outcome)
@@ -199,6 +201,47 @@ def probe_cmd(
             await pool.close()
 
     asyncio.run(_run())
+
+
+@app.command("kpi")
+def kpi_cmd(
+    tail: int = typer.Option(500, help="Last N metric rows to analyze"),
+) -> None:
+    """Summarize PA1 KPI from metrics JSONL (gate before Hot @ 30s)."""
+    settings = get_settings()
+    path = settings.data_dir / "metrics" / f"{settings.worker_id}.jsonl"
+    if not path.exists():
+        console.print(f"[yellow]No metrics file yet:[/yellow] {path}")
+        raise typer.Exit(1)
+
+    lines = path.read_text(encoding="utf-8").splitlines()[-tail:]
+    m = Metrics(window=tail)
+    for line in lines:
+        try:
+            row = __import__("json").loads(line)
+        except Exception:
+            continue
+        m.record(
+            ok=bool(row.get("ok")),
+            latency_ms=int(row.get("latency_ms") or 0),
+            fetched=int(row.get("fetched") or 0),
+            inserted=int(row.get("inserted") or 0),
+            error_code=row.get("error_code"),
+            post_id=int(row.get("post_id") or 0),
+            tier=str(row.get("tier") or ""),
+            worker_slot=int(row.get("worker_slot") or 0),
+        )
+    snap = m.snapshot()
+    table = Table(title="PA1 KPI")
+    table.add_column("key")
+    table.add_column("value")
+    for k, v in snap.items():
+        table.add_row(k, str(v))
+    console.print(table)
+    if snap.get("ready_for_30s"):
+        console.print("[green]Gate OK — can try HOT_INTERVAL_SEC=30[/green]")
+    else:
+        console.print("[yellow]Gate NOT ready — keep HOT_INTERVAL_SEC=45[/yellow]")
 
 
 @app.command("run")

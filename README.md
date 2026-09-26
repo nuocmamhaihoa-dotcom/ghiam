@@ -1,6 +1,10 @@
 # fb-poller (PA1) — Tiered Facebook public comment poller
 
+**Hướng đã chốt: PA1-only** (không Graph API trong giai đoạn này).
+
 Thu thập **comment công khai** từ **bài viết công khai** bằng browser nhẹ (Playwright), chỉ lấy **Newest đầu trang**, **không nested replies** trong vòng Hot.
+
+Chi tiết vận hành 2 PC: [`deploy/PA1_RUNBOOK.md`](deploy/PA1_RUNBOOK.md).
 
 ## Mục tiêu vận hành đã chốt
 
@@ -83,7 +87,18 @@ fb-poller run
 | `fb-poller set-tier ID hot\|warm\|cold` | Gán tier thủ công |
 | `fb-poller probe` | Thử lấy comment guest |
 | `fb-poller status` | Số liệu + poll_runs gần nhất |
+| `fb-poller kpi` | Gate trước khi hạ Hot xuống 30s |
 | `fb-poller run` | Scheduler + workers |
+
+Chạy theo máy:
+
+```bash
+cp deploy/env.pc20.example deploy/env.pc20
+./deploy/run_pc20.sh
+# hoặc
+cp deploy/env.pc12.example deploy/env.pc12
+./deploy/run_pc12.sh
+```
 
 ## Kiến trúc thư mục
 
