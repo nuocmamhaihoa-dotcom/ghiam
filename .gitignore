@@ -8,6 +8,7 @@ data/*.db
 data/*.db-*
 data/posts.txt
 data/metrics/
+logs/
 deploy/env.pc12
 deploy/env.pc20
 .mypy_cache/
