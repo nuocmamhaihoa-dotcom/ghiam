@@ -1,0 +1,29 @@
+[project]
+name = "fb-poller"
+version = "0.1.0"
+description = "Tiered public Facebook comment poller (PA1 browser-light)"
+requires-python = ">=3.11"
+dependencies = [
+  "playwright>=1.49.0",
+  "sqlalchemy>=2.0.36",
+  "aiosqlite>=0.20.0",
+  "pydantic>=2.10.0",
+  "pydantic-settings>=2.6.0",
+  "httpx>=0.28.0",
+  "redis>=5.2.0",
+  "rich>=13.9.0",
+  "typer>=0.15.0",
+  "python-dotenv>=1.0.1",
+  "greenlet>=3.1.0",
+]
+
+[project.scripts]
+fb-poller = "fb_poller.cli.main:app"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fb_poller*"]

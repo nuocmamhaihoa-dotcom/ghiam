@@ -1,0 +1,5 @@
+# One proxy per line. Supported:
+#   http://user:pass@host:port
+#   host:port
+#   host:port:user:pass
+# Leave empty to run without proxy (dev only).
