@@ -24,6 +24,24 @@ class ServerSettings:
         self.h11_max_incomplete_size = int(
             os.environ.get("CONTROL_H11_MAX_INCOMPLETE", str(16 * 1024 * 1024))
         )
+        # Proxy health
+        env_proxies = os.environ.get("CONTROL_PROXIES_FILE")
+        if env_proxies:
+            self.proxies_file = Path(env_proxies)
+        else:
+            cd_proxies = self.data_dir / "proxies_static.txt"
+            repo_proxies = ROOT / "data" / "proxies_static.txt"
+            deploy_proxies = ROOT / "deploy" / "vps" / "proxies_static.txt"
+            if cd_proxies.exists():
+                self.proxies_file = cd_proxies
+            elif repo_proxies.exists():
+                self.proxies_file = repo_proxies
+            else:
+                self.proxies_file = deploy_proxies
+        self.proxy_check_interval_sec = int(os.environ.get("CONTROL_PROXY_CHECK_SEC", "300"))
+        self.proxy_check_concurrency = int(os.environ.get("CONTROL_PROXY_CHECK_CONCURRENCY", "40"))
+        self.proxy_check_timeout_sec = float(os.environ.get("CONTROL_PROXY_CHECK_TIMEOUT", "8"))
+        self.proxy_check_url = os.environ.get("CONTROL_PROXY_CHECK_URL", "http://api.ipify.org")
 
     def ensure_dirs(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)

@@ -40,6 +40,13 @@ if [[ -z "${TOKEN:-}" ]]; then
   TOKEN="$(uv run python -c 'import secrets; print(secrets.token_urlsafe(24))')"
 fi
 
+# Seed static proxies for live/die monitoring
+if [[ -f "$APP_DIR/deploy/vps/proxies_static.txt" ]]; then
+  cp -f "$APP_DIR/deploy/vps/proxies_static.txt" "$APP_DIR/control_data/proxies_static.txt"
+elif [[ -f "$APP_DIR/data/proxies_static.txt" ]]; then
+  grep -v '^#' "$APP_DIR/data/proxies_static.txt" | grep -v '^$' > "$APP_DIR/control_data/proxies_static.txt" || true
+fi
+
 cat > "$APP_DIR/control_data/server.env" <<EOF
 CONTROL_HOST=$BIND
 CONTROL_PORT=$PORT
@@ -47,11 +54,15 @@ CONTROL_TOKEN=$TOKEN
 CONTROL_DATA_DIR=$APP_DIR/control_data
 CONTROL_PACKAGES_DIR=$APP_DIR/control_data/packages
 CONTROL_DB=$APP_DIR/control_data/server.db
+CONTROL_PROXIES_FILE=$APP_DIR/control_data/proxies_static.txt
 CONTROL_MAX_UPLOAD_MB=512
 CONTROL_UVICORN_WORKERS=1
 CONTROL_LIMIT_CONCURRENCY=200
 CONTROL_BACKLOG=2048
 CONTROL_KEEPALIVE=75
+CONTROL_PROXY_CHECK_SEC=300
+CONTROL_PROXY_CHECK_CONCURRENCY=40
+CONTROL_PROXY_CHECK_TIMEOUT=8
 EOF
 
 cp -f "$APP_DIR/deploy/vps/fb-poller-hub.service" /etc/systemd/system/fb-poller-hub.service

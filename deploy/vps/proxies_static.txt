@@ -1,5 +1,3 @@
-# Static proxies for PA1 comment scanning (host:port)
-# Synced to VPS hub for live/die checks.
 epx9358.proxyvn.net:29536
 epx9358.proxyvn.net:29559
 epx9358.proxyvn.net:29636

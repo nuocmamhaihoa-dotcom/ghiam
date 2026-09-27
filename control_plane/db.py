@@ -53,6 +53,18 @@ def init_db(db_path: Path) -> None:
               ms INTEGER,
               at TEXT
             );
+            CREATE TABLE IF NOT EXISTS proxies (
+              endpoint TEXT PRIMARY KEY,
+              proxy_type TEXT NOT NULL DEFAULT 'static',
+              status TEXT NOT NULL DEFAULT 'unknown',
+              latency_ms INTEGER,
+              exit_ip TEXT,
+              error TEXT,
+              last_checked_at TEXT,
+              ok_count INTEGER NOT NULL DEFAULT 0,
+              fail_count INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_proxies_status ON proxies(status);
             """
         )
         conn.commit()
@@ -213,3 +225,104 @@ def list_comments(
                 (limit, offset),
             ).fetchall()
     return [dict(r) for r in rows]
+
+
+def upsert_proxy_endpoints(db_path: Path, endpoints: list[str], proxy_type: str = "static") -> int:
+    n = 0
+    with session(db_path) as conn:
+        for ep in endpoints:
+            ep = ep.strip()
+            if not ep or ep.startswith("#"):
+                continue
+            conn.execute(
+                """
+                INSERT INTO proxies(endpoint, proxy_type, status)
+                VALUES(?,?, 'unknown')
+                ON CONFLICT(endpoint) DO UPDATE SET proxy_type=excluded.proxy_type
+                """,
+                (ep, proxy_type),
+            )
+            n += 1
+    return n
+
+
+def update_proxy_check(
+    db_path: Path,
+    endpoint: str,
+    *,
+    status: str,
+    latency_ms: int | None,
+    exit_ip: str | None,
+    error: str | None,
+    checked_at: str,
+) -> None:
+    with session(db_path) as conn:
+        row = conn.execute(
+            "SELECT ok_count, fail_count FROM proxies WHERE endpoint=?", (endpoint,)
+        ).fetchone()
+        ok = int(row["ok_count"]) if row else 0
+        fail = int(row["fail_count"]) if row else 0
+        if status == "live":
+            ok += 1
+        else:
+            fail += 1
+        conn.execute(
+            """
+            INSERT INTO proxies(endpoint, proxy_type, status, latency_ms, exit_ip, error, last_checked_at, ok_count, fail_count)
+            VALUES(?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(endpoint) DO UPDATE SET
+              status=excluded.status,
+              latency_ms=excluded.latency_ms,
+              exit_ip=excluded.exit_ip,
+              error=excluded.error,
+              last_checked_at=excluded.last_checked_at,
+              ok_count=excluded.ok_count,
+              fail_count=excluded.fail_count
+            """,
+            (endpoint, "static", status, latency_ms, exit_ip, error, checked_at, ok, fail),
+        )
+
+
+def list_proxies(
+    db_path: Path,
+    *,
+    status: str | None = None,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    limit = max(1, min(int(limit), 2000))
+    with session(db_path) as conn:
+        if status:
+            rows = conn.execute(
+                """
+                SELECT * FROM proxies WHERE status=?
+                ORDER BY last_checked_at DESC
+                LIMIT ?
+                """,
+                (status, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM proxies ORDER BY status ASC, endpoint ASC LIMIT ?",
+                (limit,),
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def proxy_summary(db_path: Path) -> dict[str, Any]:
+    with session(db_path) as conn:
+        total = conn.execute("SELECT COUNT(*) AS n FROM proxies").fetchone()["n"]
+        live = conn.execute("SELECT COUNT(*) AS n FROM proxies WHERE status='live'").fetchone()["n"]
+        die = conn.execute("SELECT COUNT(*) AS n FROM proxies WHERE status='die'").fetchone()["n"]
+        unknown = conn.execute(
+            "SELECT COUNT(*) AS n FROM proxies WHERE status='unknown' OR status IS NULL"
+        ).fetchone()["n"]
+        last = conn.execute(
+            "SELECT MAX(last_checked_at) AS t FROM proxies"
+        ).fetchone()["t"]
+    return {
+        "total": total,
+        "live": live,
+        "die": die,
+        "unknown": unknown,
+        "last_checked_at": last,
+    }

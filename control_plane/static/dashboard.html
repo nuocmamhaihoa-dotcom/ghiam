@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>fb-poller — Kết quả comment</title>
+  <title>fb-poller — Hub VPS</title>
   <style>
     :root {
       --bg0: #0f1419;
@@ -15,6 +15,7 @@
       --accent: #3d9cf0;
       --ok: #3ecf8e;
       --warn: #e6b84d;
+      --bad: #ff6b6b;
       --font: "IBM Plex Sans", "Segoe UI", sans-serif;
       --mono: "IBM Plex Mono", ui-monospace, monospace;
     }
@@ -29,22 +30,14 @@
         radial-gradient(900px 400px at 90% 0%, #163528 0%, transparent 50%),
         var(--bg0);
     }
-    header {
-      padding: 1.5rem 1.25rem 0.75rem;
-      max-width: 1100px;
-      margin: 0 auto;
-    }
-    h1 {
-      margin: 0;
-      font-size: clamp(1.4rem, 3vw, 1.9rem);
-      letter-spacing: -0.02em;
-      font-weight: 650;
-    }
+    header { padding: 1.5rem 1.25rem 0.75rem; max-width: 1100px; margin: 0 auto; }
+    h1 { margin: 0; font-size: clamp(1.4rem, 3vw, 1.9rem); letter-spacing: -0.02em; font-weight: 650; }
+    h2 { margin: 1.4rem 0 0.6rem; font-size: 1.05rem; font-weight: 600; }
     .sub { color: var(--muted); margin-top: 0.35rem; font-size: 0.95rem; }
     main { max-width: 1100px; margin: 0 auto; padding: 0.75rem 1.25rem 2.5rem; }
     .stats {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
       gap: 0.75rem;
       margin: 1rem 0 1.25rem;
     }
@@ -56,58 +49,53 @@
     }
     .stat b { display: block; font-size: 1.45rem; font-variant-numeric: tabular-nums; }
     .stat span { color: var(--muted); font-size: 0.8rem; }
-    .toolbar {
+    .stat.bad b { color: var(--bad); }
+    .stat.ok b { color: var(--ok); }
+    .toolbar, .token-row {
       display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;
       margin-bottom: 0.9rem;
     }
+    .token-row { width: 100%; }
     input, button, select {
-      font: inherit;
-      border-radius: 8px;
-      border: 1px solid var(--line);
-      background: var(--bg1);
-      color: var(--text);
-      padding: 0.55rem 0.75rem;
+      font: inherit; border-radius: 8px; border: 1px solid var(--line);
+      background: var(--bg1); color: var(--text); padding: 0.55rem 0.75rem;
     }
     input { flex: 1; min-width: 180px; }
-    button {
-      background: var(--accent);
-      border-color: transparent;
-      color: #041018;
-      font-weight: 600;
-      cursor: pointer;
-    }
+    button { background: var(--accent); border-color: transparent; color: #041018; font-weight: 600; cursor: pointer; }
     button.ghost { background: transparent; color: var(--text); border-color: var(--line); }
-    .token-row { width: 100%; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    button.danger { background: #a33; color: #fff; }
     table {
-      width: 100%;
-      border-collapse: collapse;
-      background: rgba(26, 35, 50, 0.7);
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      overflow: hidden;
+      width: 100%; border-collapse: collapse;
+      background: rgba(26, 35, 50, 0.7); border: 1px solid var(--line);
+      border-radius: 10px; overflow: hidden;
     }
     th, td {
-      text-align: left;
-      padding: 0.65rem 0.75rem;
-      border-bottom: 1px solid var(--line);
-      vertical-align: top;
-      font-size: 0.9rem;
+      text-align: left; padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--line);
+      vertical-align: top; font-size: 0.9rem;
     }
     th { color: var(--muted); font-weight: 600; background: rgba(0,0,0,0.2); }
     tr:hover td { background: rgba(61, 156, 240, 0.06); }
     .text { white-space: pre-wrap; word-break: break-word; max-width: 42ch; }
     .meta { color: var(--muted); font-family: var(--mono); font-size: 0.78rem; }
     .pill {
-      display: inline-block;
-      padding: 0.15rem 0.45rem;
-      border-radius: 999px;
-      background: rgba(62, 207, 142, 0.15);
-      color: var(--ok);
-      font-size: 0.75rem;
+      display: inline-block; padding: 0.15rem 0.45rem; border-radius: 999px;
+      background: rgba(62, 207, 142, 0.15); color: var(--ok); font-size: 0.75rem;
     }
     .pill.off { background: rgba(230, 184, 77, 0.15); color: var(--warn); }
+    .pill.die { background: rgba(255, 107, 107, 0.18); color: var(--bad); }
+    .panel {
+      border: 1px solid rgba(255, 107, 107, 0.35);
+      background: rgba(80, 20, 20, 0.35);
+      border-radius: 10px; padding: 0.9rem 1rem; margin-bottom: 1rem;
+    }
+    .panel h2 { margin: 0 0 0.5rem; color: var(--bad); }
+    .panel.ok-panel {
+      border-color: rgba(62, 207, 142, 0.3);
+      background: rgba(20, 60, 40, 0.25);
+    }
+    .panel.ok-panel h2 { color: var(--ok); }
     .err { color: #ff7b7b; margin: 0.5rem 0; }
-    .empty { color: var(--muted); padding: 2rem; text-align: center; }
+    .empty { color: var(--muted); padding: 1.2rem; text-align: center; }
     a { color: var(--accent); }
     @media (max-width: 720px) {
       .hide-sm { display: none; }
@@ -121,31 +109,51 @@
 <body>
   <header>
     <h1>fb-poller</h1>
-    <p class="sub">Kết quả comment quét từ PC → đồng bộ lên VPS</p>
+    <p class="sub">VPS hub — comment đồng bộ + proxy live/die</p>
   </header>
   <main>
     <div class="token-row">
       <input id="token" type="password" placeholder="CONTROL_TOKEN (Bearer)" autocomplete="off" />
       <button id="saveToken" class="ghost" type="button">Lưu token</button>
       <button id="refresh" type="button">Tải lại</button>
+      <button id="recheck" class="danger" type="button">Check proxy ngay</button>
     </div>
-    <div class="stats" id="stats">
-      <div class="stat"><b>—</b><span>Comments</span></div>
-      <div class="stat"><b>—</b><span>Agents (PC)</span></div>
-      <div class="stat"><b>—</b><span>Transfers</span></div>
-      <div class="stat"><b>—</b><span>Bytes sync</span></div>
+    <div class="stats" id="stats"></div>
+    <div id="err" class="err" hidden></div>
+    <div id="agents"></div>
+
+    <div class="panel" id="diePanel">
+      <h2>Proxy DIE</h2>
+      <p class="meta" id="dieMeta">Đang tải…</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Endpoint</th>
+            <th>Lỗi</th>
+            <th class="hide-sm">Lần check</th>
+          </tr>
+        </thead>
+        <tbody id="dieRows">
+          <tr><td colspan="3" class="empty">—</td></tr>
+        </tbody>
+      </table>
     </div>
+
+    <div class="panel ok-panel">
+      <h2>Proxy LIVE (rút gọn)</h2>
+      <p class="meta" id="liveMeta">—</p>
+      <div id="liveSample" class="meta"></div>
+    </div>
+
+    <h2>Comment mới đồng bộ</h2>
     <div class="toolbar">
       <input id="q" type="search" placeholder="Lọc theo text / author / post…" />
       <select id="limit">
         <option value="50">50</option>
         <option value="100" selected>100</option>
         <option value="200">200</option>
-        <option value="500">500</option>
       </select>
     </div>
-    <div id="err" class="err" hidden></div>
-    <div id="agents"></div>
     <table>
       <thead>
         <tr>
@@ -169,13 +177,11 @@
       const t = $("token").value.trim();
       return t ? { Authorization: "Bearer " + t } : {};
     }
-
     function fmtBytes(n) {
       if (n < 1024) return n + " B";
       if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
       return (n / 1048576).toFixed(1) + " MB";
     }
-
     function esc(s) {
       return String(s ?? "").replace(/[&<>"']/g, (c) => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -187,68 +193,104 @@
       try {
         const lim = $("limit").value;
         const q = encodeURIComponent($("q").value.trim());
-        const [stats, agents, comments] = await Promise.all([
-          fetch("/v1/server/stats", { headers: headers() }).then((r) => {
-            if (!r.ok) throw new Error("stats " + r.status);
-            return r.json();
-          }),
-          fetch("/v1/agents", { headers: headers() }).then((r) => {
-            if (!r.ok) throw new Error("agents " + r.status);
-            return r.json();
-          }),
-          fetch("/v1/comments?limit=" + lim + "&q=" + q, { headers: headers() }).then((r) => {
-            if (!r.ok) throw new Error("comments " + r.status);
-            return r.json();
-          }),
+        const [stats, agents, comments, die, proxies] = await Promise.all([
+          fetch("/v1/server/stats", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("stats " + r.status); return r.json(); }),
+          fetch("/v1/agents", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("agents " + r.status); return r.json(); }),
+          fetch("/v1/comments?limit=" + lim + "&q=" + q, { headers: headers() }).then((r) => { if (!r.ok) throw new Error("comments " + r.status); return r.json(); }),
+          fetch("/v1/proxies/die?limit=500", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("proxies/die " + r.status); return r.json(); }),
+          fetch("/v1/proxies?status=live&limit=30", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("proxies " + r.status); return r.json(); }),
         ]);
 
+        const px = stats.proxies || die.summary || {};
         $("stats").innerHTML = [
-          ["Comments", stats.comments],
-          ["Agents (PC)", stats.agents],
-          ["Transfers", stats.transfers],
-          ["Bytes sync", fmtBytes(stats.bytes_total || 0)],
-        ].map(([label, val]) => `<div class="stat"><b>${esc(val)}</b><span>${label}</span></div>`).join("");
+          ["Comments", stats.comments, ""],
+          ["Agents", stats.agents, ""],
+          ["Proxy LIVE", px.live ?? "—", "ok"],
+          ["Proxy DIE", px.die ?? "—", "bad"],
+          ["Proxy tổng", px.total ?? "—", ""],
+          ["Bytes sync", fmtBytes(stats.bytes_total || 0), ""],
+        ].map(([label, val, cls]) =>
+          `<div class="stat ${cls}"><b>${esc(val)}</b><span>${label}</span></div>`
+        ).join("");
 
         const agentHtml = (agents.agents || []).slice(0, 12).map((a) => {
           const on = a.status === "online" || a.status === "connected";
-          return `<span class="pill ${on ? "" : "off"}" title="${esc(a.machine_id)}">${esc(a.hostname || a.machine_id)} · ${esc(a.status || "?")}</span>`;
+          return `<span class="pill ${on ? "" : "off"}">${esc(a.hostname || a.machine_id)} · ${esc(a.status || "?")}</span>`;
         }).join(" ");
         $("agents").innerHTML = agentHtml
           ? `<p style="margin:0 0 0.8rem;display:flex;flex-wrap:wrap;gap:0.4rem">${agentHtml}</p>`
-          : `<p class="meta" style="margin:0 0 0.8rem">Chưa có PC nào kết nối — cài Agent với ControlUrl=http://&lt;VPS&gt;:8088</p>`;
+          : `<p class="meta" style="margin:0 0 0.8rem">Chưa có PC kết nối</p>`;
+
+        const dieItems = die.items || [];
+        $("dieMeta").textContent = dieItems.length
+          ? `${dieItems.length} proxy DIE · check gần nhất: ${px.last_checked_at || "—"}`
+          : `Không có proxy DIE · check: ${px.last_checked_at || "chưa chạy"}`;
+        if (!dieItems.length) {
+          $("dieRows").innerHTML = `<tr><td colspan="3" class="empty">Tất cả proxy đang LIVE (hoặc chưa check)</td></tr>`;
+        } else {
+          $("dieRows").innerHTML = dieItems.map((p) => `<tr>
+            <td><span class="pill die">DIE</span> <span class="meta">${esc(p.endpoint)}</span></td>
+            <td class="meta">${esc(p.error || "—")}</td>
+            <td class="hide-sm meta">${esc(p.last_checked_at || "")}</td>
+          </tr>`).join("");
+        }
+
+        const liveItems = proxies.items || [];
+        $("liveMeta").textContent = `LIVE: ${px.live ?? liveItems.length} / ${px.total ?? "?"} · mẫu ${Math.min(30, liveItems.length)} proxy`;
+        $("liveSample").textContent = liveItems.map((p) => p.endpoint).join(" · ") || "—";
 
         const items = comments.items || [];
         if (!items.length) {
           $("rows").innerHTML = `<tr><td colspan="4" class="empty">Chưa có comment đồng bộ</td></tr>`;
-          return;
+        } else {
+          $("rows").innerHTML = items.map((c) => {
+            const when = c.created_time || c.first_seen_at || c.synced_at || "";
+            const post = c.post_url
+              ? `<a href="${esc(c.post_url)}" target="_blank" rel="noopener">bài viết</a>`
+              : esc(c.post_id || "");
+            return `<tr>
+              <td class="meta">${esc(when)}</td>
+              <td>${esc(c.author_name || "—")}<div class="meta">${esc(c.author_id || "")}</div></td>
+              <td class="text">${esc(c.text || "")}</td>
+              <td class="hide-sm meta">${post}<br/>PC: ${esc(c.machine_id || "")}</td>
+            </tr>`;
+          }).join("");
         }
-        $("rows").innerHTML = items.map((c) => {
-          const when = c.created_time || c.first_seen_at || c.synced_at || "";
-          const post = c.post_url
-            ? `<a href="${esc(c.post_url)}" target="_blank" rel="noopener">bài viết</a>`
-            : esc(c.post_id || "");
-          return `<tr>
-            <td class="meta">${esc(when)}</td>
-            <td>${esc(c.author_name || "—")}<div class="meta">${esc(c.author_id || "")}</div></td>
-            <td class="text">${esc(c.text || "")}</td>
-            <td class="hide-sm meta">${post}<br/>PC: ${esc(c.machine_id || "")}</td>
-          </tr>`;
-        }).join("");
       } catch (e) {
         $("err").hidden = false;
         $("err").textContent = "Lỗi: " + e.message + " — kiểm tra CONTROL_TOKEN";
       }
     }
 
-    $("saveToken").onclick = () => {
-      localStorage.setItem(tokenKey, $("token").value.trim());
-      loadAll();
-    };
+    async function recheck() {
+      $("err").hidden = true;
+      $("recheck").disabled = true;
+      $("recheck").textContent = "Đang check…";
+      try {
+        const r = await fetch("/v1/proxies/check", { method: "POST", headers: headers() });
+        if (!r.ok) throw new Error("check " + r.status);
+        const data = await r.json();
+        $("err").hidden = false;
+        $("err").style.color = "#3ecf8e";
+        $("err").textContent = `Check xong: live=${data.live} die=${data.die} (${data.elapsed_ms}ms)`;
+        await loadAll();
+      } catch (e) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Check lỗi: " + e.message;
+      } finally {
+        $("recheck").disabled = false;
+        $("recheck").textContent = "Check proxy ngay";
+      }
+    }
+
+    $("saveToken").onclick = () => { localStorage.setItem(tokenKey, $("token").value.trim()); loadAll(); };
     $("refresh").onclick = loadAll;
+    $("recheck").onclick = recheck;
     $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") loadAll(); });
     $("limit").onchange = loadAll;
     if ($("token").value) loadAll();
-    setInterval(() => { if ($("token").value) loadAll(); }, 15000);
+    setInterval(() => { if ($("token").value) loadAll(); }, 20000);
   </script>
 </body>
 </html>

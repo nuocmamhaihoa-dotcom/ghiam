@@ -21,7 +21,7 @@ from typing import Any
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -31,7 +31,7 @@ from control_plane.settings import settings
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
-app = FastAPI(title="fb-poller high-bandwidth control plane", version="1.2.0")
+app = FastAPI(title="fb-poller high-bandwidth control plane", version="1.3.0")
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CORSMiddleware,
@@ -59,9 +59,19 @@ def utcnow() -> str:
 
 
 @app.on_event("startup")
-def _startup() -> None:
+async def _startup() -> None:
     settings.ensure_dirs()
     db.init_db(settings.db_path)
+    # Import proxy list into DB immediately; live/die loop runs in background
+    from control_plane.proxy_check import load_proxy_lines, start_background_checker
+
+    lines = load_proxy_lines(settings.proxies_file)
+    if lines:
+        db.upsert_proxy_endpoints(settings.db_path, lines, "static")
+        cd_copy = settings.data_dir / "proxies_static.txt"
+        if not cd_copy.exists():
+            cd_copy.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    start_background_checker()
 
 
 def _auth(authorization: str | None) -> None:
@@ -136,7 +146,49 @@ def dashboard() -> HTMLResponse:
 @app.get("/v1/server/stats")
 def server_stats(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     _auth(authorization)
-    return db.transfer_summary(settings.db_path)
+    base = db.transfer_summary(settings.db_path)
+    base["proxies"] = db.proxy_summary(settings.db_path)
+    return base
+
+
+@app.get("/v1/proxies")
+def proxies_list(
+    authorization: str | None = Header(default=None),
+    status: str | None = Query(default=None, description="live|die|unknown"),
+    limit: int = Query(default=500, ge=1, le=2000),
+) -> dict[str, Any]:
+    _auth(authorization)
+    items = db.list_proxies(settings.db_path, status=status, limit=limit)
+    return {"summary": db.proxy_summary(settings.db_path), "count": len(items), "items": items}
+
+
+@app.get("/v1/proxies/die")
+def proxies_die(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=500, ge=1, le=2000),
+) -> dict[str, Any]:
+    """Dead proxies — highlighted on VPS homepage."""
+    _auth(authorization)
+    items = db.list_proxies(settings.db_path, status="die", limit=limit)
+    return {"count": len(items), "items": items, "summary": db.proxy_summary(settings.db_path)}
+
+
+@app.get("/v1/proxies/live.txt", response_class=PlainTextResponse)
+def proxies_live_txt(authorization: str | None = Header(default=None)) -> PlainTextResponse:
+    """Plaintext list of live proxies for scanner PCs."""
+    _auth(authorization)
+    items = db.list_proxies(settings.db_path, status="live", limit=2000)
+    body = "\n".join(i["endpoint"] for i in items) + ("\n" if items else "")
+    return PlainTextResponse(body)
+
+
+@app.post("/v1/proxies/check")
+async def proxies_check_now(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Trigger an immediate live/die sweep."""
+    _auth(authorization)
+    from control_plane.proxy_check import run_proxy_check_once
+
+    return await run_proxy_check_once()
 
 
 @app.get("/v1/comments")
