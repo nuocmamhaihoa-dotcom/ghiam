@@ -125,6 +125,7 @@
     <div class="panel" id="diePanel">
       <h2>Proxy DIE</h2>
       <p class="meta" id="dieMeta">Đang tải…</p>
+      <p class="meta" id="dieHint" style="margin:0.4rem 0 0.7rem;color:#e6b84d"></p>
       <table>
         <thead>
           <tr>
@@ -225,6 +226,14 @@
         $("dieMeta").textContent = dieItems.length
           ? `${dieItems.length} proxy DIE · check gần nhất: ${px.last_checked_at || "—"}`
           : `Không có proxy DIE · check: ${px.last_checked_at || "chưa chạy"}`;
+        const sampleErr = (dieItems[0] && dieItems[0].error) || "";
+        if (dieItems.length && /502|407|user:pass|whitelist/i.test(sampleErr)) {
+          $("dieHint").textContent =
+            "Gợi ý: ProxyVN host:port thường cần user:pass (hoặc whitelist IP VPS 14.225.192.11). " +
+            "Gửi thêm user/pass hoặc format host:port:user:pass để check LIVE chính xác.";
+        } else {
+          $("dieHint").textContent = "";
+        }
         if (!dieItems.length) {
           $("dieRows").innerHTML = `<tr><td colspan="3" class="empty">Tất cả proxy đang LIVE (hoặc chưa check)</td></tr>`;
         } else {

@@ -42,6 +42,9 @@ class ServerSettings:
         self.proxy_check_concurrency = int(os.environ.get("CONTROL_PROXY_CHECK_CONCURRENCY", "40"))
         self.proxy_check_timeout_sec = float(os.environ.get("CONTROL_PROXY_CHECK_TIMEOUT", "8"))
         self.proxy_check_url = os.environ.get("CONTROL_PROXY_CHECK_URL", "http://api.ipify.org")
+        # Optional shared auth for host:port lines (ProxyVN packages)
+        self.proxy_user = os.environ.get("CONTROL_PROXY_USER", "")
+        self.proxy_pass = os.environ.get("CONTROL_PROXY_PASS", "")
 
     def ensure_dirs(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)

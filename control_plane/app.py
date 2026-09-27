@@ -191,6 +191,41 @@ async def proxies_check_now(authorization: str | None = Header(default=None)) ->
     return await run_proxy_check_once()
 
 
+class ProxiesUploadBody(BaseModel):
+    """Replace static proxy list. One endpoint per line: host:port or host:port:user:pass."""
+
+    text: str
+    run_check: bool = True
+
+
+@app.post("/v1/proxies/upload")
+async def proxies_upload(
+    body: ProxiesUploadBody,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _auth(authorization)
+    lines = [ln.strip() for ln in body.text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
+    path = settings.data_dir / "proxies_static.txt"
+    path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+    settings.proxies_file = path
+    # Also mirror into repo data path for scanner PCs that rsync later
+    repo_data = Path(__file__).resolve().parents[1] / "data" / "proxies_static.txt"
+    try:
+        repo_data.write_text(
+            "# Static proxies (synced from VPS hub)\n" + "\n".join(lines) + "\n",
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+    inserted = db.upsert_proxy_endpoints(settings.db_path, lines, "static")
+    result: dict[str, Any] = {"ok": True, "saved": inserted, "file": str(path)}
+    if body.run_check:
+        from control_plane.proxy_check import run_proxy_check_once
+
+        result["check"] = await run_proxy_check_once()
+    return result
+
+
 @app.get("/v1/comments")
 def list_comments(
     authorization: str | None = Header(default=None),

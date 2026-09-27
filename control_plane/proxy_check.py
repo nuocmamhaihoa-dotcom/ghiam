@@ -31,7 +31,7 @@ def load_proxy_lines(path: Path) -> list[str]:
     return out
 
 
-def to_proxy_url(endpoint: str) -> str | None:
+def to_proxy_url(endpoint: str, *, user: str = "", password: str = "") -> str | None:
     """Normalize host:port / URL into httpx proxy URL."""
     ep = endpoint.strip()
     if not ep:
@@ -40,14 +40,30 @@ def to_proxy_url(endpoint: str) -> str | None:
         parsed = urlparse(ep)
         if not parsed.hostname or not parsed.port:
             return None
+        # If URL has no userinfo but shared auth provided, inject it
+        if user and password and not parsed.username:
+            return f"{parsed.scheme}://{user}:{password}@{parsed.hostname}:{parsed.port}"
         return ep
     parts = ep.split(":")
     if len(parts) == 2:
-        return f"http://{parts[0]}:{parts[1]}"
+        host, port = parts
+        if user and password:
+            return f"http://{user}:{password}@{host}:{port}"
+        return f"http://{host}:{port}"
     if len(parts) == 4:
-        host, port, user, password = parts
-        return f"http://{user}:{password}@{host}:{port}"
+        host, port, u, p = parts
+        return f"http://{u}:{p}@{host}:{port}"
     return None
+
+
+def _classify_http_error(code: int) -> str:
+    if code in (401, 407):
+        return f"http_{code} (cần user:pass)"
+    if code == 502:
+        return "http_502 (TCP ok — thường thiếu user:pass hoặc chưa whitelist IP VPS)"
+    if code == 403:
+        return "http_403 (bị chặn / chưa auth)"
+    return f"http_{code}"
 
 
 async def check_one(
@@ -56,8 +72,10 @@ async def check_one(
     timeout: float,
     check_url: str,
     sem: asyncio.Semaphore,
+    user: str = "",
+    password: str = "",
 ) -> dict[str, Any]:
-    proxy_url = to_proxy_url(endpoint)
+    proxy_url = to_proxy_url(endpoint, user=user, password=password)
     started = time.perf_counter()
     async with sem:
         if not proxy_url:
@@ -109,7 +127,7 @@ async def check_one(
                         "status": "die",
                         "latency_ms": ms,
                         "exit_ip": None,
-                        "error": f"http_{resp.status_code}",
+                        "error": _classify_http_error(resp.status_code),
                     }
                 ip = (resp.text or "").strip()[:64]
                 return {
@@ -121,12 +139,19 @@ async def check_one(
                 }
         except Exception as exc:
             ms = int((time.perf_counter() - started) * 1000)
+            msg = str(exc)
+            if "407" in msg:
+                err = "http_407 (cần user:pass)"
+            elif "502" in msg:
+                err = "http_502 (TCP ok — thường thiếu user:pass hoặc chưa whitelist IP VPS)"
+            else:
+                err = f"http: {type(exc).__name__}: {msg}"[:240]
             return {
                 "endpoint": endpoint,
                 "status": "die",
                 "latency_ms": ms,
                 "exit_ip": None,
-                "error": f"http: {type(exc).__name__}: {exc}"[:240],
+                "error": err,
             }
 
 
@@ -151,6 +176,8 @@ async def run_proxy_check_once() -> dict[str, Any]:
             timeout=settings.proxy_check_timeout_sec,
             check_url=settings.proxy_check_url,
             sem=sem,
+            user=settings.proxy_user,
+            password=settings.proxy_pass,
         )
         for ep in lines
     ]
