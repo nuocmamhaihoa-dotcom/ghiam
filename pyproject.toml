@@ -24,9 +24,20 @@ control = [
   "python-multipart>=0.0.12",
   "httptools>=0.6.0",
 ]
+tiktok = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.32.0",
+  "python-multipart>=0.0.12",
+  "openpyxl>=3.1.5",
+]
+dev = [
+  "pytest>=8.3.0",
+  "pytest-asyncio>=0.24.0",
+]
 
 [project.scripts]
 fb-poller = "fb_poller.cli.main:app"
+tiktok-osint = "tiktok_osint.cli:app"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -34,7 +45,11 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["fb_poller*", "control_plane*"]
+include = ["fb_poller*", "control_plane*", "tiktok_osint*"]
 
 [tool.setuptools.package-data]
 control_plane = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
