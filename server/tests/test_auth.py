@@ -62,7 +62,7 @@ async def test_agent_token_and_admin_token_are_not_interchangeable(harness: AppH
 async def test_wrong_agent_token_is_rejected(harness: AppHarness) -> None:
     response = await harness.anon.get("/api/agent/ping", headers={"Authorization": f"Bearer {AGENT_TOKEN}x"})
     assert response.status_code == 401
-    assert response.json()["detail"] == "Agent token không hợp lệ"
+    assert response.json()["detail"] == "Token agent không hợp lệ"
 
 
 @pytest.mark.parametrize("settings_overrides", [{"agent_tokens": ""}])

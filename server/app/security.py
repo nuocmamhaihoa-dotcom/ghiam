@@ -76,12 +76,12 @@ def require_agent(request: Request, credentials: BearerCredentials) -> str:
             detail="Server chưa cấu hình AGENT_TOKENS nên chưa nhận kết nối từ agent",
         )
     if credentials is None:
-        raise _unauthorized("Thiếu agent token")
+        raise _unauthorized("Thiếu token agent")
     presented = credentials.credentials.encode()
     for index, token in enumerate(tokens, start=1):
         if hmac.compare_digest(presented, token.encode()):
             return f"agent-token-{index}"
-    raise _unauthorized("Agent token không hợp lệ")
+    raise _unauthorized("Token agent không hợp lệ")
 
 
 AdminUser = Annotated[str, Depends(require_admin)]

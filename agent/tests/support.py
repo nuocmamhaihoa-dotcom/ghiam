@@ -482,7 +482,7 @@ class FakeSocks5Proxy(_Server):
 
 
 ERROR_DETAILS = {
-    401: "Agent token không hợp lệ",
+    401: "Token agent không hợp lệ",
     404: "Không tìm thấy lượt thuê proxy",
     410: "Lượt thuê proxy đã kết thúc, hãy thuê proxy mới",
 }
