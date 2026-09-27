@@ -8,6 +8,7 @@ venv/
 .coverage
 htmlcov/
 *.egg-info/
+build/
 
 .env
 .env.*
