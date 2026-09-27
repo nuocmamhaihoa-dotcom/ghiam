@@ -299,7 +299,7 @@ async def _demo() -> None:
         lines = await _demo_lines(sim)
         print("Mạng giả lập đang chạy. Đặt biến môi trường cho server:")
         print(f"  PROXY_CHECK_URLS={CHECK_URL}\n")
-        print("Dán các dòng sau vào ô Nhập proxy hàng loạt trên dashboard:\n")
+        print('Bấm "Thêm proxy hàng loạt" trên dashboard rồi dán các dòng sau:\n')
         print("\n".join(lines))
         print("\nNhấn Ctrl+C để dừng.", flush=True)
         await asyncio.Event().wait()
