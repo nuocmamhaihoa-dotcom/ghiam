@@ -24,6 +24,7 @@ Chi tiết vận hành 2 PC: [`deploy/PA1_RUNBOOK.md`](deploy/PA1_RUNBOOK.md).
 
 - Linux: [`docs/CAI_DAT_PC.md`](docs/CAI_DAT_PC.md)
 - **Windows agent (bật là kết nối + tự cập nhật + nhiều PC):** [`docs/AGENT_WINDOWS.md`](docs/AGENT_WINDOWS.md)
+- **PC Server LAN (băng thông cao, sync comment, serve update):** [`docs/SERVER_PC.md`](docs/SERVER_PC.md)
 
 **Windows — cài một lần, sau này tự nâng cấp:**
 
@@ -36,6 +37,8 @@ powershell -ExecutionPolicy Bypass -File .\pc_agent\windows\Install-Agent.ps1 -S
 ```
 
 Khi bạn tạo GitHub Release `v*`, workflow đóng gói zip + `update-manifest.json`; agent trên mọi PC tự tải và cập nhật, **không cần cài lại**.
+
+**Khuyến nghị vận hành nhiều PC:** chọn 1 máy làm LAN server (`Install-Server.ps1` / `scripts/install-server.sh`), upload zip lên đó; các PC scanner `prefer_lan` tải update + sync comment qua mạng nội bộ — tránh nghẽn Internet.
 
 **Linux:**
 

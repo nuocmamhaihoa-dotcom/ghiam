@@ -5,23 +5,26 @@
 1. Cài **một lần** trên mỗi PC Windows  
 2. Bật máy / đăng nhập là **tự kết nối** và **tự chạy** bộ quét comment  
 3. Khi bạn **phát hành bản mới**, mọi PC **tự tải và nâng cấp** (agent + poller) — không cần cài lại  
-4. Cài được **không giới hạn số PC** (mỗi máy có `machine_id` riêng)
+4. Cài được **không giới hạn số PC** (mỗi máy có `machine_id` riêng)  
+5. Ưu tiên **LAN server băng thông cao** để update/sync không nghẽn Internet — xem [`SERVER_PC.md`](SERVER_PC.md)
 
 ## Kiến trúc
 
 ```text
-[Bạn phát hành Release GitHub]
-        │ update-manifest.json + zip
+[Bạn phát hành Release / upload zip lên PC Server]
+        │
         ▼
+[PC Server LAN :8088]  ◄── prefer_lan: manifest + packages + comment sync
+        ▲
 [PC1 Agent]──┐
-[PC2 Agent]──┼──► (tuỳ chọn) Control Plane  :8088
-[PC N Agent]─┘         register + heartbeat
+[PC2 Agent]──┼── register / heartbeat / sync-push
+[PC N Agent]─┘
         │
         ▼
    fb-poller run  (quét comment bằng CPU/RAM máy đó)
 ```
 
-Giữ nguyên khi update: `data/`, `.env`, `logs/`, `pc_agent/windows/state/`, `config.json`.
+Giữ nguyên khi update: `data/`, `.env`, `logs/`, `control_data/`, `pc_agent/windows/state/`, `config.json`.
 
 ## Cài một lần trên mỗi PC
 
@@ -33,15 +36,20 @@ Giữ nguyên khi update: `data/`, `.env`, `logs/`, `pc_agent/windows/state/`, `
 powershell -ExecutionPolicy Bypass -File .\pc_agent\windows\Install-Agent.ps1 -StartNow
 ```
 
-Tuỳ chọn kết nối control plane + kênh update:
+**Khuyến nghị** — trỏ về PC server LAN:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\pc_agent\windows\Install-Agent.ps1 `
-  -ManifestUrl "https://github.com/<org>/<repo>/releases/latest/download/update-manifest.json" `
   -ControlUrl "http://IP_MAY_CHU:8088" `
   -ControlToken "secret-neu-co" `
   -Workers 14 `
   -StartNow
+```
+
+Tuỳ chọn thêm fallback Internet:
+
+```powershell
+  -ManifestUrl "https://github.com/<org>/<repo>/releases/latest/download/update-manifest.json"
 ```
 
 4. Dán URL/proxy:
@@ -61,69 +69,50 @@ data\proxies_static.txt
 
 Agent đã đăng ký Task Scheduler tên **`FbPollerAgent`** — lần đăng nhập sau sẽ tự chạy.
 
-Chạy ngay vòng kết nối + update + start poller:
-
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\pc_agent\windows\FbPollerAgent.ps1 -Once
 ```
 
 ## “Bật là tự kết nối” làm gì?
 
-Khi agent chạy, nó lần lượt:
-
-1. Tạo/đọc `machine_id` (không trùng giữa các PC)  
-2. `POST /v1/agents/register` tới control plane (nếu có `control_url`)  
-3. Kiểm tra `manifest_url` → tự update nếu có bản mới  
+1. Tạo/đọc `machine_id`  
+2. `POST /v1/agents/register` tới LAN server (kèm link speed NIC)  
+3. `prefer_lan` → lấy manifest từ server; tải zip LAN + **resume**; fallback Internet nếu LAN lỗi  
 4. Đảm bảo `fb-poller run` đang chạy  
-5. Gửi heartbeat định kỳ  
+5. Heartbeat định kỳ  
+6. `sync-push` comment về server (mặc định mỗi 2 phút)  
 
-Không có control plane vẫn chạy được (offline / update-only).
+## Nâng cấp phần mềm (không cài lại PC)
 
-## Nâng cấp phần mềm sau này (không cài lại PC)
+### Cách khuyến nghị: PC Server LAN
 
-### Cách khuyến nghị: GitHub Release
+1. Build/release zip (hoặc lấy từ GitHub Release)  
+2. Upload lên server: xem [`SERVER_PC.md`](SERVER_PC.md)  
+3. Agent mọi PC tự tải qua LAN (Gbps), không nghẽn Internet  
 
-1. Tăng version:
-   - `VERSION` (poller)
-   - `pc_agent/windows/VERSION` (agent)
-2. Tag: `git tag v0.2.0 && git push origin v0.2.0`
-3. Workflow `.github/workflows/release-windows.yml` tạo:
-   - `fb-poller-windows-v0.2.0.zip`
-   - `update-manifest.json` (kèm sha256)
-4. Trên mỗi PC, agent tự tải zip → thay code → giữ data → restart poller
+### Cách phụ: GitHub Release trực tiếp
 
-Trỏ `manifest_url` trong `pc_agent/windows/config.json` tới:
+1. Tăng `VERSION` + `pc_agent/windows/VERSION`  
+2. Tag `v*` → workflow tạo zip + `update-manifest.json`  
+3. `manifest_url` trỏ Release; chỉ dùng khi không có LAN server  
 
-```text
-https://github.com/<org>/<repo>/releases/latest/download/update-manifest.json
-```
-
-### Ép update thủ công trên 1 PC
+### Ép update thủ công
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\pc_agent\windows\Update-FromManifest.ps1 -Force
 ```
 
-## Control plane (tuỳ chọn, không giới hạn PC)
+## Control plane / Server
 
-Chạy trên 1 máy chủ / VPS / PC12:
+Chi tiết đầy đủ: [`SERVER_PC.md`](SERVER_PC.md).
 
-```bash
-pip install fastapi uvicorn
-export CONTROL_TOKEN=doi-secret
-uvicorn control_plane.app:app --host 0.0.0.0 --port 8088
+```powershell
+# Windows
+.\pc_agent\windows\Install-Server.ps1 -StartNow
+
+# Linux
+./scripts/install-server.sh
 ```
-
-API:
-
-| Method | Path | Việc |
-|---|---|---|
-| POST | `/v1/agents/register` | PC kết nối lần đầu / lại |
-| POST | `/v1/agents/heartbeat` | PC báo sống + poller running |
-| GET | `/v1/agents` | Liệt kê mọi PC đã kết nối |
-| GET | `/health` | Healthcheck |
-
-Mỗi PC chỉ cần `machine_id` — không có giới hạn license trong phần mềm.
 
 ## Gỡ agent
 
@@ -131,21 +120,23 @@ Mỗi PC chỉ cần `machine_id` — không có giới hạn license trong ph�
 powershell -ExecutionPolicy Bypass -File .\pc_agent\windows\Uninstall-Agent.ps1
 ```
 
-Dữ liệu `data/` (comment đã quét) được giữ.
+Dữ liệu `data/` được giữ.
 
 ## Kiểm tra nhanh
 
 | Việc | Cách |
 |---|---|
-| Task có chưa | `Get-ScheduledTask -TaskName FbPollerAgent` |
+| Task agent | `Get-ScheduledTask -TaskName FbPollerAgent` |
+| Task server | `Get-ScheduledTask -TaskName FbPollerServer` |
 | Log agent | `logs\agent.log` |
 | Log poller | `logs\fb-poller.out` |
-| PC đã lên control | `GET http://server:8088/v1/agents` |
-| Version local | `Get-Content VERSION; Get-Content pc_agent\windows\VERSION` |
+| Log server | `logs\server.out` |
+| PC đã lên server | `GET http://server:8088/v1/agents` |
+| Stats truyền tải | `GET http://server:8088/v1/server/stats` |
 
 ## Nhiều PC
 
 - Cài `Install-Agent.ps1` trên mỗi máy (không giới hạn)  
 - `WORKER_ID` mặc định = `TENMAY-1`  
-- Chia proxy tĩnh theo máy để tránh trùng session  
-- Nếu dùng chung DB: đổi `DATABASE_URL` trong `.env` sang Postgres dùng chung  
+- Chia proxy tĩnh theo máy  
+- Sync comment về 1 PC server qua LAN — không cần mỗi máy đẩy Internet  

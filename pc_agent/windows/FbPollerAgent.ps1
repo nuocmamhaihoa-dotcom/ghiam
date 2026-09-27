@@ -1,5 +1,4 @@
-# Agent Windows: tự kết nối, tự cập nhật, giữ poller chạy
-# Chạy bởi Scheduled Task lúc đăng nhập / khi bật máy.
+# Agent Windows: tự kết nối LAN server, sync comment băng thông cao, tự cập nhật, giữ poller chạy
 [CmdletBinding()]
 param(
   [switch]$Once
@@ -14,35 +13,32 @@ $MachineId = Get-OrCreateMachineId -AgentRoot $AgentRoot
 $StateDir = Get-StateDir -AgentRoot $AgentRoot
 $Versions = Get-LocalVersions -InstallRoot $InstallRoot -AgentRoot $AgentRoot
 
-Write-AgentLog "Agent start machine_id=$MachineId agent=$($Versions.agent) poller=$($Versions.poller)" -InstallRoot $InstallRoot
-
-function Get-ControlHeaders {
-  $h = @{ "X-Machine-Id" = $MachineId }
-  if ($Config.control_token) {
-    $h["Authorization"] = "Bearer $($Config.control_token)"
-  }
-  return $h
-}
+Write-AgentLog "Agent start machine_id=$MachineId agent=$($Versions.agent) poller=$($Versions.poller) prefer_lan=$($Config.prefer_lan)" -InstallRoot $InstallRoot
 
 function Connect-ControlPlane {
   if (-not $Config.control_url) {
     Write-AgentLog "No control_url — offline mode (update-only)" -InstallRoot $InstallRoot
     return
   }
+  $link = Get-LinkSpeedMbps
   $body = @{
-    machine_id   = $MachineId
-    hostname     = $env:COMPUTERNAME
+    machine_id     = $MachineId
+    hostname       = $env:COMPUTERNAME
     agent_version  = $Versions.agent
     poller_version = $Versions.poller
-    os           = "windows"
-    channel      = $Config.channel
-    started_at   = (Get-Date).ToString("o")
+    os             = "windows"
+    channel        = $Config.channel
+    started_at     = (Get-Date).ToString("o")
+    link_speed_mbps = $link
   }
   try {
     $url = ($Config.control_url.TrimEnd("/")) + "/v1/agents/register"
-    Invoke-JsonPost -Url $url -Body $body -Headers (Get-ControlHeaders) | Out-Null
-    Write-AgentLog "Connected/registered to control plane" -InstallRoot $InstallRoot
+    $resp = Invoke-JsonPost -Url $url -Body $body -Headers (Get-ControlHeaders -Config $Config -MachineId $MachineId)
+    Write-AgentLog "Connected/registered to LAN server (link=${link}Mbps)" -InstallRoot $InstallRoot
     Set-Content -Path (Join-Path $StateDir "connected.txt") -Value (Get-Date).ToString("o") -Encoding UTF8
+    if ($resp.server) {
+      Save-Json -Object $resp.server -Path (Join-Path $StateDir "server_caps.json")
+    }
   } catch {
     Write-AgentLog "Register failed: $($_.Exception.Message)" -Level "WARN" -InstallRoot $InstallRoot
   }
@@ -58,10 +54,11 @@ function Send-Heartbeat {
     poller_version = (Get-LocalVersions -InstallRoot $InstallRoot -AgentRoot $AgentRoot).poller
     poller_running = $pollerRunning
     ts             = (Get-Date).ToString("o")
+    link_speed_mbps = (Get-LinkSpeedMbps)
   }
   try {
     $url = ($Config.control_url.TrimEnd("/")) + "/v1/agents/heartbeat"
-    Invoke-JsonPost -Url $url -Body $body -Headers (Get-ControlHeaders) | Out-Null
+    Invoke-JsonPost -Url $url -Body $body -Headers (Get-ControlHeaders -Config $Config -MachineId $MachineId) | Out-Null
   } catch {
     Write-AgentLog "Heartbeat failed: $($_.Exception.Message)" -Level "WARN" -InstallRoot $InstallRoot
   }
@@ -102,7 +99,7 @@ function Start-PollerProcess {
 function Invoke-UpdateCycle {
   if (-not $Config.auto_update) { return }
   try {
-    $result = & (Join-Path $AgentRoot "Update-FromManifest.ps1") -ManifestUrl ([string]$Config.manifest_url)
+    $result = & (Join-Path $AgentRoot "Update-FromManifest.ps1")
     if ($result -and $result.updated) {
       Write-AgentLog "Update applied — restarting poller" -InstallRoot $InstallRoot
       Start-PollerProcess
@@ -112,11 +109,41 @@ function Invoke-UpdateCycle {
   }
 }
 
+function Invoke-CommentSync {
+  $syncOn = $true
+  if ($null -ne $Config.PSObject.Properties["sync_comments"]) {
+    $syncOn = [bool]$Config.sync_comments
+  }
+  if (-not $syncOn) { return }
+  if (-not $Config.control_url) { return }
+  $fb = Join-Path $InstallRoot ".venv\Scripts\fb-poller.exe"
+  if (-not (Test-Path $fb)) { return }
+  $limit = 2000
+  if ($Config.sync_comments_limit) { $limit = [int]$Config.sync_comments_limit }
+  $args = @(
+    "sync-push",
+    "--control-url", $Config.control_url,
+    "--machine-id", $MachineId,
+    "--limit", "$limit"
+  )
+  if ($Config.control_token) {
+    $args += @("--token", [string]$Config.control_token)
+  }
+  try {
+    $out = & $fb @args 2>&1 | Out-String
+    Write-AgentLog "Comment sync: $($out.Trim())" -InstallRoot $InstallRoot
+    Set-Content -Path (Join-Path $StateDir "last_sync.txt") -Value (Get-Date).ToString("o") -Encoding UTF8
+  } catch {
+    Write-AgentLog "Comment sync failed: $($_.Exception.Message)" -Level "WARN" -InstallRoot $InstallRoot
+  }
+}
+
 # --- main ---
 Connect-ControlPlane
 Invoke-UpdateCycle
 if ($Config.ensure_poller_running) { Start-PollerProcess }
 Send-Heartbeat
+Invoke-CommentSync
 
 if ($Once) {
   Write-AgentLog "Once mode done" -InstallRoot $InstallRoot
@@ -125,10 +152,14 @@ if ($Once) {
 
 $lastUpdate = Get-Date
 $lastBeat = Get-Date
+$lastSync = Get-Date
 $updateEvery = [TimeSpan]::FromMinutes([math]::Max(5, [int]$Config.update_check_minutes))
 $beatEvery = [TimeSpan]::FromMinutes([math]::Max(1, [int]$Config.heartbeat_minutes))
+$syncMinutes = 2
+if ($Config.sync_comments_minutes) { $syncMinutes = [int]$Config.sync_comments_minutes }
+$syncEvery = [TimeSpan]::FromMinutes([math]::Max(1, $syncMinutes))
 
-Write-AgentLog "Agent loop running (update every $($updateEvery.TotalMinutes)m, heartbeat every $($beatEvery.TotalMinutes)m)" -InstallRoot $InstallRoot
+Write-AgentLog "Agent loop (update=$($updateEvery.TotalMinutes)m heartbeat=$($beatEvery.TotalMinutes)m sync=$($syncEvery.TotalMinutes)m)" -InstallRoot $InstallRoot
 
 while ($true) {
   Start-Sleep -Seconds 20
@@ -144,6 +175,10 @@ while ($true) {
     if ((Get-Date) - $lastBeat -ge $beatEvery) {
       Send-Heartbeat
       $lastBeat = Get-Date
+    }
+    if ((Get-Date) - $lastSync -ge $syncEvery) {
+      Invoke-CommentSync
+      $lastSync = Get-Date
     }
   } catch {
     Write-AgentLog "Loop error: $($_.Exception.Message)" -Level "ERROR" -InstallRoot $InstallRoot

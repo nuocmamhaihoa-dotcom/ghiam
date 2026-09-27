@@ -19,3 +19,4 @@ deploy/update-manifest.json
 playwright-report/
 test-results/
 *.log
+control_data/

@@ -1,26 +1,70 @@
 """
-Minimal control plane for unlimited Windows agents.
-Run on a server/PC:  uvicorn control_plane.app:app --host 0.0.0.0 --port 8088
+High-bandwidth LAN control plane — run on a PC server.
 
-Agents POST /v1/agents/register and /v1/agents/heartbeat
+Features:
+- Agent register / heartbeat (unlimited PCs)
+- Serve update manifest + packages over LAN (prefer vs Internet)
+- Bulk comment sync from scanner PCs
+- GZip, large uploads, keep-alive friendly defaults
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
+import time
 from datetime import datetime, timezone
-from threading import Lock
+from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
 
-app = FastAPI(title="fb-poller control plane", version="1.0.0")
-_lock = Lock()
-_agents: dict[str, dict[str, Any]] = {}
+from control_plane import db
+from control_plane.settings import settings
+
+app = FastAPI(title="fb-poller high-bandwidth control plane", version="1.1.0")
+app.add_middleware(GZipMiddleware, minimum_size=500)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+class LimitUploadSizeMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+        cl = request.headers.get("content-length")
+        if cl and int(cl) > settings.max_upload_mb * 1024 * 1024:
+            return JSONResponse({"detail": "upload too large"}, status_code=413)
+        return await call_next(request)
+
+
+app.add_middleware(LimitUploadSizeMiddleware)
 
 
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    settings.ensure_dirs()
+    db.init_db(settings.db_path)
+
+
+def _auth(authorization: str | None) -> None:
+    expected = settings.token or os.environ.get("CONTROL_TOKEN")
+    if not expected:
+        return
+    if not authorization or authorization != f"Bearer {expected}":
+        raise HTTPException(status_code=401, detail="unauthorized")
 
 
 class RegisterBody(BaseModel):
@@ -31,6 +75,8 @@ class RegisterBody(BaseModel):
     os: str | None = None
     channel: str | None = None
     started_at: str | None = None
+    link_speed_mbps: float | None = None
+    ip: str | None = None
 
 
 class HeartbeatBody(BaseModel):
@@ -39,64 +85,224 @@ class HeartbeatBody(BaseModel):
     agent_version: str | None = None
     poller_version: str | None = None
     poller_running: bool | None = None
+    comments_local: int | None = None
     ts: str | None = None
+    link_speed_mbps: float | None = None
 
 
-def _auth(authorization: str | None, expected: str | None) -> None:
-    # optional shared token via env CONTROL_TOKEN
-    import os
+class CommentItem(BaseModel):
+    comment_id: str
+    post_url: str | None = None
+    post_id: str | int | None = None
+    text: str | None = None
+    author_name: str | None = None
+    author_id: str | None = None
+    created_time: str | None = None
+    first_seen_at: str | None = None
+    raw: dict[str, Any] | None = None
 
-    expected = expected or os.environ.get("CONTROL_TOKEN")
-    if not expected:
-        return
-    if not authorization or authorization != f"Bearer {expected}":
-        raise HTTPException(status_code=401, detail="unauthorized")
+
+class SyncCommentsBody(BaseModel):
+    machine_id: str
+    comments: list[CommentItem] = Field(default_factory=list)
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "time": utcnow()}
+def health() -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "time": utcnow(),
+        "mode": "high-bandwidth-lan-server",
+        "max_upload_mb": settings.max_upload_mb,
+        "packages_dir": str(settings.packages_dir),
+    }
+
+
+@app.get("/v1/server/stats")
+def server_stats(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    return db.transfer_summary(settings.db_path)
 
 
 @app.post("/v1/agents/register")
 def register(
     body: RegisterBody,
+    request: Request,
     authorization: str | None = Header(default=None),
-    x_machine_id: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    _auth(authorization, None)
-    mid = body.machine_id or x_machine_id
-    if not mid:
-        raise HTTPException(400, "machine_id required")
-    with _lock:
-        row = _agents.get(mid, {})
-        row.update(body.model_dump())
-        row["machine_id"] = mid
-        row["registered_at"] = row.get("registered_at") or utcnow()
-        row["last_seen_at"] = utcnow()
-        row["status"] = "connected"
-        _agents[mid] = row
-    return {"ok": True, "machine_id": mid}
+    _auth(authorization)
+    payload = body.model_dump()
+    payload["last_seen_at"] = utcnow()
+    payload["client_host"] = request.client.host if request.client else None
+    db.upsert_agent(settings.db_path, body.machine_id, payload, status="connected")
+    return {
+        "ok": True,
+        "machine_id": body.machine_id,
+        "server": {
+            "prefer_lan_updates": True,
+            "manifest_path": "/v1/updates/manifest",
+            "sync_path": "/v1/sync/comments",
+            "max_upload_mb": settings.max_upload_mb,
+        },
+    }
 
 
 @app.post("/v1/agents/heartbeat")
-def heartbeat(
-    body: HeartbeatBody,
-    authorization: str | None = Header(default=None),
-) -> dict[str, Any]:
-    _auth(authorization, None)
-    with _lock:
-        row = _agents.get(body.machine_id, {"machine_id": body.machine_id})
-        row.update({k: v for k, v in body.model_dump().items() if v is not None})
-        row["last_seen_at"] = utcnow()
-        row["status"] = "online" if body.poller_running else "agent_only"
-        _agents[body.machine_id] = row
-    return {"ok": True}
+def heartbeat(body: HeartbeatBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    payload = body.model_dump()
+    payload["last_seen_at"] = utcnow()
+    status = "online" if body.poller_running else "agent_only"
+    db.upsert_agent(settings.db_path, body.machine_id, payload, status=status)
+    return {"ok": True, "server_time": utcnow()}
 
 
 @app.get("/v1/agents")
 def list_agents(authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    _auth(authorization, None)
-    with _lock:
-        items = list(_agents.values())
+    _auth(authorization)
+    items = db.list_agents(settings.db_path)
     return {"count": len(items), "agents": items}
+
+
+def _latest_package() -> Path | None:
+    files = sorted(settings.packages_dir.glob("*.zip"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return files[0] if files else None
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+@app.get("/v1/updates/manifest")
+def updates_manifest(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """LAN manifest — agents should prefer this over GitHub for high bandwidth."""
+    _auth(authorization)
+    pkg = _latest_package()
+    manifest_path = settings.data_dir / "update-manifest.json"
+    if manifest_path.exists():
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        # Rewrite package URL to LAN endpoint when package exists
+        if pkg is not None:
+            data.setdefault("agent", {})
+            data["agent"]["package_url"] = f"/v1/updates/packages/{pkg.name}"
+            data["agent"]["sha256"] = _sha256(pkg)
+            data["agent"].setdefault("version", "1.0.0")
+        data["channel"] = data.get("channel") or "stable"
+        data["transport"] = "lan-high-bandwidth"
+        return data
+
+    if pkg is None:
+        raise HTTPException(404, "No package on server. Put a .zip into control_data/packages/")
+
+    root = Path(__file__).resolve().parents[1]
+    agent_ver = root / "pc_agent" / "windows" / "VERSION"
+    poller_ver = root / "VERSION"
+    return {
+        "schema_version": 1,
+        "channel": "stable",
+        "released_at": utcnow(),
+        "transport": "lan-high-bandwidth",
+        "agent": {
+            "version": agent_ver.read_text(encoding="utf-8").strip() if agent_ver.exists() else "1.0.0",
+            "package_url": f"/v1/updates/packages/{pkg.name}",
+            "sha256": _sha256(pkg),
+        },
+        "poller": {
+            "version": poller_ver.read_text(encoding="utf-8").strip() if poller_ver.exists() else "0.1.0",
+            "notes": "Served from LAN PC server",
+        },
+        "rollout": {"force_update": False, "min_agent_version": "1.0.0"},
+    }
+
+
+@app.get("/v1/updates/packages/{name}")
+def download_package(
+    name: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> FileResponse:
+    _auth(authorization)
+    # Prevent path traversal
+    safe = Path(name).name
+    path = settings.packages_dir / safe
+    if not path.exists() or not path.is_file():
+        raise HTTPException(404, "package not found")
+    size = path.stat().st_size
+    mid = request.headers.get("x-machine-id", "unknown")
+    db.record_transfer(settings.db_path, mid, "package_download", size, 0, utcnow())
+    return FileResponse(
+        path,
+        media_type="application/zip",
+        filename=safe,
+        headers={
+            "Cache-Control": "no-cache",
+            "Accept-Ranges": "bytes",
+            "X-Transfer-Mode": "lan-high-bandwidth",
+        },
+    )
+
+
+@app.post("/v1/updates/packages/upload")
+async def upload_package(
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Admin: push a release zip onto the server PC over LAN."""
+    _auth(authorization)
+    name = Path(file.filename or "package.zip").name
+    if not name.endswith(".zip"):
+        raise HTTPException(400, "only .zip supported")
+    dest = settings.packages_dir / name
+    started = time.time()
+    nbytes = 0
+    with dest.open("wb") as out:
+        while True:
+            chunk = await file.read(8 * 1024 * 1024)  # 8MB chunks
+            if not chunk:
+                break
+            out.write(chunk)
+            nbytes += len(chunk)
+    ms = int((time.time() - started) * 1000)
+    db.record_transfer(settings.db_path, "admin", "package_upload", nbytes, ms, utcnow())
+    # Refresh local manifest helper file
+    manifest = {
+        "schema_version": 1,
+        "channel": "stable",
+        "released_at": utcnow(),
+        "transport": "lan-high-bandwidth",
+        "agent": {
+            "version": utcnow()[:10].replace("-", "."),
+            "package_url": f"/v1/updates/packages/{name}",
+            "sha256": _sha256(dest),
+        },
+        "poller": {"version": utcnow()[:10].replace("-", "."), "notes": name},
+        "rollout": {"force_update": False, "min_agent_version": "1.0.0"},
+    }
+    (settings.data_dir / "update-manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    mbps = (nbytes * 8 / 1_000_000) / (ms / 1000) if ms > 0 else 0
+    return {"ok": True, "name": name, "bytes": nbytes, "ms": ms, "approx_mbps": round(mbps, 1)}
+
+
+@app.post("/v1/sync/comments")
+def sync_comments(body: SyncCommentsBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Bulk sync comments from scanner PCs → server PC database."""
+    _auth(authorization)
+    started = time.time()
+    payload = [c.model_dump() for c in body.comments]
+    inserted = db.upsert_comments(settings.db_path, body.machine_id, payload, utcnow())
+    raw_bytes = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+    ms = int((time.time() - started) * 1000)
+    db.record_transfer(settings.db_path, body.machine_id, "comments_sync", raw_bytes, ms, utcnow())
+    return {
+        "ok": True,
+        "received": len(body.comments),
+        "inserted_new": inserted,
+        "bytes": raw_bytes,
+        "ms": ms,
+    }

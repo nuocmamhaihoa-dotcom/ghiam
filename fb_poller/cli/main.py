@@ -273,5 +273,30 @@ def run_cmd(
         console.print("[yellow]stopped[/yellow]")
 
 
+@app.command("sync-push")
+def sync_push_cmd(
+    control_url: str = typer.Option(..., "--control-url", envvar="CONTROL_URL", help="LAN server base URL"),
+    machine_id: str = typer.Option("local", "--machine-id", envvar="MACHINE_ID"),
+    token: str = typer.Option("", "--token", envvar="CONTROL_TOKEN"),
+    limit: int = typer.Option(2000, help="Max comments to push per call"),
+) -> None:
+    """Push local comments to the high-bandwidth LAN PC server."""
+    from fb_poller.cli.sync_push import push_comments
+
+    settings = get_settings()
+
+    async def _run() -> None:
+        result = await push_comments(
+            settings=settings,
+            control_url=control_url,
+            machine_id=machine_id,
+            token=token,
+            limit=limit,
+        )
+        console.print(result)
+
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     app()

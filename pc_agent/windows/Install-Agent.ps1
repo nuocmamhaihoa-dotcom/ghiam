@@ -41,7 +41,8 @@ $pip = Join-Path $InstallRoot ".venv\Scripts\pip.exe"
 $pw = Join-Path $InstallRoot ".venv\Scripts\playwright.exe"
 $fb = Join-Path $InstallRoot ".venv\Scripts\fb-poller.exe"
 & $py -m pip install -U pip wheel | Out-Null
-& $pip install -e $InstallRoot
+& $pip install -e "$InstallRoot[control]"
+if ($LASTEXITCODE -ne 0) { & $pip install -e $InstallRoot }
 & $pw install chromium
 
 # 2) data + .env
@@ -80,7 +81,11 @@ DATA_DIR=$InstallRoot\data
 Write-Host "[3/5] Ghi cấu hình agent..."
 $cfg = Get-Content (Join-Path $AgentRoot "config.example.json") -Raw | ConvertFrom-Json
 if ($ManifestUrl) { $cfg.manifest_url = $ManifestUrl }
-if ($ControlUrl) { $cfg.control_url = $ControlUrl }
+if ($ControlUrl) {
+  $cfg.control_url = $ControlUrl
+  $cfg.prefer_lan = $true
+  $cfg.sync_comments = $true
+}
 if ($ControlToken) { $cfg.control_token = $ControlToken }
 $cfg.install_dir = $InstallRoot
 $cfg.python_exe = $py
@@ -127,5 +132,7 @@ if ($StartNow) {
 }
 
 Write-Host ""
-Write-Host "Sau này nâng cấp phần mềm trên GitHub Release + update-manifest.json:" -ForegroundColor Cyan
-Write-Host "  PC sẽ tự tải và cập nhật agent + bộ quét, KHÔNG cần cài lại."
+Write-Host "Khuyến nghị: dùng 1 PC làm LAN server (băng thông cao, không nghẽn Internet):" -ForegroundColor Cyan
+Write-Host "  xem docs\SERVER_PC.md  hoặc chạy Install-Server.ps1 trên máy chủ."
+Write-Host "Agent sẽ ưu tiên tải update + sync comment qua control_url (LAN)."
+
