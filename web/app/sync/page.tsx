@@ -59,9 +59,7 @@ export default function SyncPage() {
   const [quickUsername, setQuickUsername] = useState("");
   const [quickDisplayName, setQuickDisplayName] = useState("");
   const [resultNote, setResultNote] = useState("");
-  const [openedTikTok, setOpenedTikTok] = useState(false);
-  const [permissionGranted, setPermissionGranted] = useState(false);
-  const [suggestionsVisible, setSuggestionsVisible] = useState(false);
+  const [contactQuery, setContactQuery] = useState("");
   const [busy, setBusy] = useState(false);
 
   function applyBook(next: Book, preferContactId?: string) {
@@ -358,44 +356,165 @@ export default function SyncPage() {
   );
   const linkedContacts = linkedContactIds.size;
   const contactTotal = book?.contacts.length ?? 0;
-  const workflowSteps = [
-    contactTotal > 0,
-    openedTikTok,
-    permissionGranted,
-    suggestionsVisible,
-    rows.length > 0,
-  ];
-  const completedSteps = workflowSteps.filter(Boolean).length;
+  const query = contactQuery.trim().toLowerCase();
+  const matchedContacts = (book?.contacts ?? []).filter((contact) => {
+    if (!query) return true;
+    return `${contact.display_name} ${contact.phone_e164 ?? ""} ${contact.phone_raw ?? ""} ${contact.email ?? ""}`
+      .toLowerCase()
+      .includes(query);
+  });
+  const unmatchedContacts = (book?.contacts ?? []).filter((contact) => !linkedContactIds.has(contact.id));
+  const selectedContact = book?.contacts.find((contact) => contact.id === contactId) ?? null;
+  const savedMatches = rows.filter((row) => row.contact);
+
+  function skipContact() {
+    if (unmatchedContacts.length === 0) return;
+    const index = unmatchedContacts.findIndex((contact) => contact.id === contactId);
+    const next = unmatchedContacts[(index + 1) % unmatchedContacts.length];
+    if (next) setContactId(next.id);
+    setQuickUsername("");
+  }
 
   return (
     <>
-      <h1>Contact Sync Assistant</h1>
-      <p className="lede">
-        Nhập danh bạ của chính bạn, rồi ghi lại username mà ứng dụng TikTok đã hiển thị sau khi bạn tự bật đồng bộ trong app.
-        Khóa đối chiếu là username, không phải số điện thoại.
-      </p>
-      <div className="policy">
-        Không có tra cứu SĐT → ID. Nếu dán một số điện thoại vào ô username, API từ chối. Quyền danh bạ chỉ được cấp trong ứng dụng TikTok chính thức.
+      <h1>Đồng bộ danh bạ</h1>
+      <p className="lede">Lưu số của bạn. Trên TikTok, xem tài khoản được gợi ý. Quay lại đây và gắn @username với đúng người.</p>
+      <div className="sync-stats" aria-label="Tiến độ">
+        <span><strong>{contactTotal}</strong> số đã lưu</span>
+        <span><strong>{linkedContacts}</strong> username đã gắn</span>
       </div>
-      <div className="workflow-progress" aria-label="Tiến độ quy trình">
-        <strong>Tiến độ: {completedSteps}/5 bước</strong>
-        <div className="progress-track"><span style={{ width: `${completedSteps * 20}%` }} /></div>
-        <span>{linkedContacts}/{contactTotal} liên hệ đã được bạn gắn với tài khoản TikTok hiển thị.</span>
+      {message && <p className="status-line">{message}</p>}
+      <div className="sync-layout">
+        <section className="panel">
+          <h2>1. Lưu số vào danh bạ</h2>
+          <p className="hint">Mỗi dòng một số. Có thể ghi kèm tên: <code>An, 0901234567</code></p>
+          <textarea
+            aria-label="Danh sách số điện thoại"
+            placeholder={"0901234567\nAn, 0912345678"}
+            value={bulkText}
+            onChange={(event) => setBulkText(event.target.value)}
+          />
+          <div className="row">
+            <button disabled={busy} onClick={() => importLines().catch((err: Error) => setMessage(err.message))}>
+              {busy ? "Đang lưu…" : "Lưu vào danh bạ"}
+            </button>
+            <label className="button secondary">
+              Chọn file
+              <input
+                aria-label="File danh bạ"
+                type="file"
+                accept=".txt,.csv,.vcf,text/plain,text/csv,text/vcard"
+                hidden
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  importFile(file).catch((err: Error) => setMessage(err.message));
+                }}
+              />
+            </label>
+          </div>
+          {rejected.length > 0 && (
+            <ul>
+              {rejected.map((item) => (
+                <li key={`${item.line}-${item.raw}`}>Dòng {item.line}: {item.raw} — {item.reason}</li>
+              ))}
+            </ul>
+          )}
+          <input
+            aria-label="Tìm số đã lưu"
+            placeholder={contactTotal ? `Tìm trong ${contactTotal} số đã lưu` : "Chưa có số nào"}
+            value={contactQuery}
+            onChange={(event) => setContactQuery(event.target.value)}
+          />
+          {query && (
+            <ul className="contact-list">
+              {matchedContacts.slice(0, 8).map((contact) => (
+                <li key={contact.id}>
+                  <button className="text-button" onClick={() => setContactId(contact.id)}>
+                    {contact.display_name} · {contact.phone_e164 ?? "không có số"}
+                  </button>
+                  {linkedContactIds.has(contact.id) && <span className="pill">đã gắn</span>}
+                  <button className="text-button" onClick={() => editContact(contact).catch((err: Error) => setMessage(err.message))}>Sửa</button>
+                  <button className="text-button danger" onClick={() => deleteContact(contact).catch((err: Error) => setMessage(err.message))}>Xóa</button>
+                </li>
+              ))}
+              {matchedContacts.length === 0 && <li>Không thấy số này.</li>}
+            </ul>
+          )}
+        </section>
+        <section className="panel">
+          <h2>Trên điện thoại</h2>
+          <ol className="phone-guide">
+            <li>Mở TikTok → <strong>Thêm/Tìm bạn bè</strong> → <strong>Danh bạ</strong>.</li>
+            <li>Tự cấp quyền khi TikTok hỏi.</li>
+            <li>Xem các tài khoản TikTok hiện ra.</li>
+          </ol>
+          <h2>5. Gắn username với liên hệ</h2>
+          {selectedContact ? (
+            <div className="selected-contact">
+              <strong>{selectedContact.display_name}</strong>
+              <span>{selectedContact.phone_e164 ?? selectedContact.phone_raw ?? "Không có số"}</span>
+            </div>
+          ) : (
+            <p className="hint">Hãy lưu ít nhất một số trước.</p>
+          )}
+          <select aria-label="Liên hệ cần gắn" value={contactId} onChange={(event) => setContactId(event.target.value)} disabled={!book}>
+            <option value="">Chọn liên hệ</option>
+            {(unmatchedContacts.length ? unmatchedContacts : book?.contacts ?? []).map((contact) => (
+              <option key={contact.id} value={contact.id}>
+                {linkedContactIds.has(contact.id) ? "✓ " : ""}{contact.display_name} · {contact.phone_e164 ?? "không có số"}
+              </option>
+            ))}
+            {selectedContact && unmatchedContacts.length > 0 && !unmatchedContacts.some((contact) => contact.id === selectedContact.id) && (
+              <option value={selectedContact.id}>✓ {selectedContact.display_name} · {selectedContact.phone_e164 ?? "không có số"}</option>
+            )}
+          </select>
+          <input
+            aria-label="Username TikTok của liên hệ"
+            placeholder="@username TikTok đã hiện"
+            value={quickUsername}
+            onChange={(event) => setQuickUsername(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") recordQuickMatch().catch((err: Error) => setMessage(err.message));
+            }}
+          />
+          <div className="row">
+            <button
+              disabled={busy || !book || !contactId || !quickUsername.trim()}
+              onClick={() => recordQuickMatch().catch((err: Error) => setMessage(err.message))}
+            >
+              Lưu và sang người tiếp theo
+            </button>
+            <button className="secondary" type="button" disabled={unmatchedContacts.length < 2} onClick={skipContact}>
+              Bỏ qua
+            </button>
+          </div>
+          {savedMatches.length > 0 && (
+            <ul className="contact-list">
+              {savedMatches.slice(0, 8).map((row) => (
+                <li key={row.match_id}>
+                  {row.contact?.display_name ?? "Không rõ"} → @{row.tiktok_username}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
-      {message && <p>{message}</p>}
-      <section className={`panel workflow-step ${workflowSteps[0] ? "done" : ""}`}>
-        <h2>1. Danh bạ của bạn</h2>
+      <details>
+        <summary>Thêm liên hệ, xuất file và nhập nhiều username</summary>
         <div className="row">
-          <button className="secondary" onClick={() => createNewBook().catch((err: Error) => setMessage(err.message))}>
-            Tạo danh bạ mới
-          </button>
-          <button className="secondary" disabled={!book} onClick={() => renameCurrentBook().catch((err: Error) => setMessage(err.message))}>
-            Đổi tên danh bạ
-          </button>
+          <input aria-label="Tên liên hệ" placeholder="Tên" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+          <input aria-label="Số điện thoại" placeholder="Số điện thoại" value={phone} onChange={(event) => setPhone(event.target.value)} />
+          <input aria-label="Email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} />
+          <button onClick={() => createBook().catch((err: Error) => setMessage(err.message))}>Thêm một liên hệ</button>
+        </div>
+        <div className="row">
+          <button className="secondary" onClick={() => createNewBook().catch((err: Error) => setMessage(err.message))}>Tạo danh bạ mới</button>
+          <button className="secondary" disabled={!book} onClick={() => renameCurrentBook().catch((err: Error) => setMessage(err.message))}>Đổi tên</button>
           {book && (
             <>
-              <a className="button secondary" href={downloadUrl(`/api/contact-books/${book.id}/export.csv`)}>Xuất CSV</a>
-              <a className="button secondary" href={downloadUrl(`/api/contact-books/${book.id}/export.xlsx`)}>Xuất Excel</a>
+              <a className="button secondary" href={downloadUrl(`/api/contact-books/${book.id}/export.csv`)}>Xuất danh bạ CSV</a>
+              <a className="button secondary" href={downloadUrl(`/api/contact-books/${book.id}/export.xlsx`)}>Xuất danh bạ Excel</a>
             </>
           )}
         </div>
@@ -406,151 +525,23 @@ export default function SyncPage() {
             onChange={(event) => refreshBooks(event.target.value).catch((err: Error) => setMessage(err.message))}
           >
             {books.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name} ({item.contact_count})
-              </option>
+              <option key={item.id} value={item.id}>{item.name} ({item.contact_count})</option>
             ))}
           </select>
         )}
-        <div className="row">
-          <input aria-label="Tên danh bạ" value={bookName} onChange={(event) => setBookName(event.target.value)} disabled={book !== null} />
-          <input aria-label="Tên liên hệ" placeholder="Tên" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-          <input aria-label="Số điện thoại" placeholder="Số điện thoại" value={phone} onChange={(event) => setPhone(event.target.value)} />
-          <input aria-label="Email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} />
-          <button onClick={() => createBook().catch((err: Error) => setMessage(err.message))}>Thêm một liên hệ</button>
-        </div>
-        <h3>Nhập hàng loạt</h3>
-        <p className="hint">
-          Mỗi dòng một số. Có thể ghi kèm tên, ví dụ <code>Nguyễn Văn A, 0901234567</code>. Chấp nhận 090…, +84… và file .txt, .csv, .vcf.
-        </p>
-        <textarea
-          aria-label="Danh sách số điện thoại"
-          placeholder={"0901234567\nNguyễn Văn A, 0912345678\n+84987000111"}
-          value={bulkText}
-          onChange={(event) => setBulkText(event.target.value)}
-        />
-        <div className="row">
-          <button disabled={busy} onClick={() => importLines().catch((err: Error) => setMessage(err.message))}>
-            Nhập danh sách
-          </button>
-          <label className="button secondary">
-            Chọn file .txt, .csv, .vcf
-            <input
-              aria-label="File danh bạ"
-              type="file"
-              accept=".txt,.csv,.vcf,text/plain,text/csv,text/vcard"
-              hidden
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                importFile(file).catch((err: Error) => setMessage(err.message));
-              }}
-            />
-          </label>
-        </div>
-        {rejected.length > 0 && (
-          <ul>
-            {rejected.map((item) => (
-              <li key={`${item.line}-${item.raw}`}>Dòng {item.line}: {item.raw} — {item.reason}</li>
-            ))}
-          </ul>
-        )}
-        {book && (
-          <>
-            <p className="hint">{book.contacts.length} liên hệ trong «{book.name}».</p>
-            <ul className="contact-list">
-              {book.contacts.slice(0, 200).map((contact) => (
-                <li key={contact.id}>
-                  {contact.display_name} · {contact.phone_e164 ?? "không có SĐT"} · {contact.email ?? "không có email"}{" "}
-                  <button className="text-button" onClick={() => editContact(contact).catch((err: Error) => setMessage(err.message))}>Sửa</button>{" "}
-                  <button className="text-button danger" onClick={() => deleteContact(contact).catch((err: Error) => setMessage(err.message))}>Xóa</button>
-                </li>
-              ))}
-            </ul>
-            {book.contacts.length > 200 && <p className="hint">Đang hiện 200 liên hệ đầu. Toàn bộ đã lưu trong danh bạ.</p>}
-          </>
-        )}
-      </section>
-      <section className={`panel workflow-step ${workflowSteps[1] ? "done" : ""}`}>
-        <h2>2. Mở TikTok và vào Danh bạ</h2>
-        <p>Mở TikTok trên điện thoại → <strong>Thêm/Tìm bạn bè</strong> → <strong>Danh bạ</strong>. Tên mục có thể khác đôi chút theo phiên bản hoặc khu vực.</p>
-        <label className="check-row">
-          <input type="checkbox" checked={openedTikTok} onChange={(event) => setOpenedTikTok(event.target.checked)} />
-          Tôi đã mở đúng màn hình Danh bạ trong ứng dụng TikTok chính thức.
-        </label>
-      </section>
-      <section className={`panel workflow-step ${workflowSteps[2] ? "done" : ""}`}>
-        <h2>3. Tự cấp quyền danh bạ</h2>
-        <p>Đọc thông báo xin quyền của TikTok và hệ điều hành. Chỉ bấm cho phép nếu bạn đồng ý; quyền có thể thu hồi trong cài đặt điện thoại hoặc TikTok.</p>
-        <label className="check-row">
-          <input type="checkbox" checked={permissionGranted} onChange={(event) => setPermissionGranted(event.target.checked)} />
-          Tôi đã tự quyết định và hoàn tất bước cấp quyền trong TikTok.
-        </label>
-      </section>
-      <section className={`panel workflow-step ${workflowSteps[3] ? "done" : ""}`}>
-        <h2>4. Xem tài khoản TikTok gợi ý</h2>
-        <p>Chờ TikTok tải danh sách, sau đó mở từng tài khoản được gợi ý và ghi lại <strong>@username</strong>. TikTok có thể không hiển thị mọi người do cài đặt riêng tư và chính sách của nền tảng.</p>
-        <label className="check-row">
-          <input type="checkbox" checked={suggestionsVisible} onChange={(event) => setSuggestionsVisible(event.target.checked)} />
-          TikTok đã hiển thị các tài khoản gợi ý cho tôi.
-        </label>
-        <div className="policy">
-          Công cụ này không đăng nhập TikTok, không tải danh bạ lên TikTok và không gọi API riêng tư.
-        </div>
-      </section>
-      <section className={`panel workflow-step ${workflowSteps[4] ? "done" : ""}`}>
-        <h2>5. Gắn username TikTok với từng liên hệ</h2>
-        <p className="hint">Chế độ nhanh tự tạo/tiếp tục phiên và chuyển sang liên hệ chưa ghi nhận kế tiếp.</p>
-        <div className="row">
-          {sessions.length > 0 && (
-            <select
-              aria-label="Phiên ghi nhận"
-              value={sessionId ?? ""}
-              onChange={(event) => loadSession(event.target.value).catch((err: Error) => setMessage(err.message))}
-            >
-              {sessions.map((session) => (
-                <option key={session.id} value={session.id}>
-                  {new Date(session.created_at).toLocaleString("vi-VN")} · {session.status} · {session.recorded_count} tài khoản
-                </option>
-              ))}
-            </select>
-          )}
-          <select aria-label="Liên hệ để đối chiếu" value={contactId} onChange={(event) => setContactId(event.target.value)} disabled={!book}>
-            <option value="">Chọn liên hệ</option>
-            {book?.contacts.map((contact) => (
-              <option key={contact.id} value={contact.id}>
-                {linkedContactIds.has(contact.id) ? "✓ " : ""}{contact.display_name} · {contact.phone_e164 ?? contact.email ?? "không có số"}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="quick-match">
-          <input
-            aria-label="Username TikTok của liên hệ"
-            placeholder="@username TikTok đã hiển thị"
-            value={quickUsername}
-            onChange={(event) => setQuickUsername(event.target.value)}
-          />
-          <input
-            aria-label="Tên TikTok hiển thị"
-            placeholder="Tên TikTok hiển thị (không bắt buộc)"
-            value={quickDisplayName}
-            onChange={(event) => setQuickDisplayName(event.target.value)}
-          />
-          <button
-            disabled={busy || !book || !contactId || !quickUsername.trim()}
-            onClick={() => recordQuickMatch().catch((err: Error) => setMessage(err.message))}
+        {sessions.length > 0 && (
+          <select
+            aria-label="Phiên ghi nhận"
+            value={sessionId ?? ""}
+            onChange={(event) => loadSession(event.target.value).catch((err: Error) => setMessage(err.message))}
           >
-            Lưu và sang người tiếp theo
-          </button>
-        </div>
-        <details>
-          <summary>Nhập nhiều username hoặc quản lý phiên nâng cao</summary>
-          <div className="row">
-            <button onClick={() => openSession().catch((err: Error) => setMessage(err.message))} disabled={!book}>
-              Tạo phiên mới
-            </button>
-          </div>
+            {sessions.map((session) => (
+              <option key={session.id} value={session.id}>
+                {new Date(session.created_at).toLocaleString("vi-VN")} · {session.status} · {session.recorded_count} tài khoản
+              </option>
+            ))}
+          </select>
+        )}
         <textarea
           aria-label="Tài khoản TikTok đã hiển thị"
           placeholder={"@username_da_thay\nhttps://www.tiktok.com/@tai_khoan_khac"}
@@ -559,26 +550,27 @@ export default function SyncPage() {
         />
         <input
           aria-label="Ghi chú kết quả"
-          placeholder="Ghi chú chung cho các tài khoản này (không bắt buộc)"
+          placeholder="Ghi chú (không bắt buộc)"
           value={resultNote}
           onChange={(event) => setResultNote(event.target.value)}
         />
+        <input
+          aria-label="Tên TikTok hiển thị"
+          placeholder="Tên TikTok hiển thị khi gắn từng người (không bắt buộc)"
+          value={quickDisplayName}
+          onChange={(event) => setQuickDisplayName(event.target.value)}
+        />
         <div className="row">
+          <button onClick={() => openSession().catch((err: Error) => setMessage(err.message))} disabled={!book}>Tạo phiên mới</button>
           <button
             onClick={() => recordDisplayedAccounts().catch((err: Error) => setMessage(err.message))}
             disabled={!sessionId || !displayedAccounts.trim() || sessions.find((item) => item.id === sessionId)?.status !== "recording"}
           >
-            Ghi nhận và đối chiếu
+            Ghi nhiều username
           </button>
-          <button className="secondary" onClick={() => changeSessionStatus("pause").catch((err: Error) => setMessage(err.message))} disabled={!sessionId}>
-            Tạm dừng
-          </button>
-          <button className="secondary" onClick={() => changeSessionStatus("resume").catch((err: Error) => setMessage(err.message))} disabled={!sessionId}>
-            Tiếp tục
-          </button>
-          <button className="secondary" onClick={() => changeSessionStatus("complete").catch((err: Error) => setMessage(err.message))} disabled={!sessionId}>
-            Hoàn tất
-          </button>
+          <button className="secondary" onClick={() => changeSessionStatus("pause").catch((err: Error) => setMessage(err.message))} disabled={!sessionId}>Tạm dừng</button>
+          <button className="secondary" onClick={() => changeSessionStatus("resume").catch((err: Error) => setMessage(err.message))} disabled={!sessionId}>Tiếp tục</button>
+          <button className="secondary" onClick={() => changeSessionStatus("complete").catch((err: Error) => setMessage(err.message))} disabled={!sessionId}>Hoàn tất</button>
           {sessionId && (
             <>
               <a className="button secondary" href={downloadUrl(`/api/official-sync/sessions/${sessionId}/export.csv`)}>Xuất kết quả CSV</a>
@@ -586,7 +578,6 @@ export default function SyncPage() {
             </>
           )}
         </div>
-        </details>
         {accountRejected.length > 0 && (
           <ul>
             {accountRejected.map((item) => (
@@ -594,27 +585,21 @@ export default function SyncPage() {
             ))}
           </ul>
         )}
-        {sessionId && sessions.find((item) => item.id === sessionId) && (
-          <p className="hint">
-            Trạng thái: {sessions.find((item) => item.id === sessionId)?.status}. Checkpoint đã lưu:{" "}
-            {sessions.find((item) => item.id === sessionId)?.checkpoint.recorded ?? 0} tài khoản.
-          </p>
+        {savedMatches.length > 0 && (
+          <table>
+            <thead><tr><th>Username</th><th>Liên hệ</th><th>Hồ sơ công khai</th></tr></thead>
+            <tbody>
+              {savedMatches.map((row) => (
+                <tr key={row.match_id}>
+                  <td>@{row.tiktok_username}</td>
+                  <td>{row.contact?.display_name ?? "—"}</td>
+                  <td>{row.matched_public_profile ? row.public_profile?.nickname ?? "Đã thấy" : "Chưa quét"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
-        <table>
-          <thead><tr><th>Username</th><th>Liên hệ của bạn</th><th>Hồ sơ công khai</th><th>Ghi chú</th><th>Khóa</th></tr></thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.match_id}>
-                <td>@{row.tiktok_username}</td>
-                <td>{row.contact?.display_name ?? "—"}</td>
-                <td>{row.matched_public_profile ? `${row.public_profile?.nickname ?? ""} (${row.public_profile?.followers ?? "?"} followers)` : "Chưa quét hồ sơ công khai"}</td>
-                <td>{row.note ?? "—"}</td>
-                <td>{row.match_key}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      </details>
     </>
   );
 }

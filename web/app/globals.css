@@ -240,6 +240,61 @@ button.secondary, .button.secondary {
   flex: 0 0 auto;
 }
 
+.sync-stats {
+  display: flex;
+  gap: 18px;
+  margin: 8px 0 18px;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+}
+
+.sync-stats strong {
+  font-size: 28px;
+  margin-right: 6px;
+}
+
+.status-line {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--accent-ink);
+}
+
+.sync-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.sync-layout .panel { margin-top: 0; }
+
+.sync-layout h2 { margin: 0 0 8px; font-size: 22px; }
+
+.phone-guide {
+  margin: 0 0 18px;
+  padding-left: 22px;
+  line-height: 1.55;
+}
+
+.phone-guide li { margin-bottom: 8px; }
+
+.selected-contact {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--accent-ink);
+}
+
+.sync-layout select,
+.sync-layout input,
+details select,
+details input {
+  margin-top: 12px;
+}
+
 .quick-match {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
@@ -289,5 +344,5 @@ th { color: var(--muted); font-weight: 600; }
   .grid { grid-template-columns: 1fr 1fr; }
   .main { padding: 20px; }
   .main h1 { font-size: 32px; }
-  .quick-match { grid-template-columns: 1fr; }
+  .quick-match, .sync-layout { grid-template-columns: 1fr; }
 }

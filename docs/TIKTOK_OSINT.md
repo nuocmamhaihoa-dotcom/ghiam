@@ -42,7 +42,7 @@ Module này là trợ lý ghi nhận; nó không tự đồng bộ với TikTok:
 5. Ứng dụng lưu checkpoint sau mỗi lượt, cho phép tạm dừng/tiếp tục. Đối chiếu với dữ liệu quét công khai chỉ dùng `tiktok_username`.
 6. Danh bạ và kết quả phiên có thể tải xuống dạng CSV hoặc Excel.
 
-Dashboard trình bày đúng 5 bước trên, có thanh tiến độ và chế độ ghi nhanh: chọn liên hệ, nhập username TikTok đã thấy, bấm **Lưu và sang người tiếp theo**. Phiên đang ghi được tự dùng lại; phiên tạm dừng được tiếp tục từ checkpoint.
+Dashboard gom thành hai việc: lưu số vào danh bạ, rồi gắn `@username` TikTok đã hiển thị với từng liên hệ. Hướng dẫn trên điện thoại nằm cạnh ô ghi username. Phiên đang ghi được tự dùng lại; phiên tạm dừng được tiếp tục từ checkpoint.
 
 Không có số điện thoại nào được dùng làm khóa tìm kiếm TikTok. Nhập số vào danh sách tài khoản hiển thị sẽ bị từ chối. Retry của module chỉ xử lý lỗi khóa SQLite tạm thời; lỗi chính sách và dữ liệu không hợp lệ không được retry.
 
