@@ -42,8 +42,11 @@ export function TikTokPhone({ onOpen }: TikTokPhoneProps) {
           </button>
         </div>
       </div>
-      <button type="button" onClick={onOpen}>Mở TikTok</button>
-      <p className="hint">Cửa sổ mở trang TikTok chính thức. Danh bạ không được gửi đi.</p>
+      <a className="button" href="/phone/vnc.html?autoconnect=1&reconnect=1&resize=scale&path=phone/websockify" target="_blank" rel="noreferrer">
+        Mở TikTok trên máy chủ
+      </a>
+      <button type="button" className="secondary" onClick={onOpen}>Mở trên máy này</button>
+      <p className="hint">Máy chủ mở trang đăng nhập TikTok chính thức. Bạn tự đăng nhập trong cửa sổ đó. Danh bạ không được gửi đi.</p>
     </div>
   );
 }
