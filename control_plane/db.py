@@ -176,3 +176,40 @@ def transfer_summary(db_path: Path) -> dict[str, Any]:
         "bytes_total": row["bytes"],
         "avg_transfer_ms": round(row["avg_ms"], 1),
     }
+
+
+def list_comments(
+    db_path: Path,
+    *,
+    limit: int = 100,
+    offset: int = 0,
+    q: str = "",
+) -> list[dict[str, Any]]:
+    limit = max(1, min(int(limit), 1000))
+    offset = max(0, int(offset))
+    like = f"%{q.strip()}%" if q and q.strip() else None
+    with session(db_path) as conn:
+        if like:
+            rows = conn.execute(
+                """
+                SELECT comment_id, machine_id, post_url, post_id, text, author_name, author_id,
+                       created_time, first_seen_at, synced_at
+                FROM comments
+                WHERE text LIKE ? OR author_name LIKE ? OR post_url LIKE ? OR comment_id LIKE ?
+                ORDER BY synced_at DESC
+                LIMIT ? OFFSET ?
+                """,
+                (like, like, like, like, limit, offset),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT comment_id, machine_id, post_url, post_id, text, author_name, author_id,
+                       created_time, first_seen_at, synced_at
+                FROM comments
+                ORDER BY synced_at DESC
+                LIMIT ? OFFSET ?
+                """,
+                (limit, offset),
+            ).fetchall()
+    return [dict(r) for r in rows]

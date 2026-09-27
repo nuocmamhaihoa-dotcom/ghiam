@@ -35,3 +35,6 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["fb_poller*", "control_plane*"]
+
+[tool.setuptools.package-data]
+control_plane = ["static/*"]

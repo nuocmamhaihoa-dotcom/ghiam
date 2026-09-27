@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>fb-poller — Kết quả comment</title>
+  <style>
+    :root {
+      --bg0: #0f1419;
+      --bg1: #1a2332;
+      --bg2: #243044;
+      --line: #2e3f56;
+      --text: #e8eef6;
+      --muted: #8fa3b8;
+      --accent: #3d9cf0;
+      --ok: #3ecf8e;
+      --warn: #e6b84d;
+      --font: "IBM Plex Sans", "Segoe UI", sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(1200px 500px at 10% -10%, #1e3a5f 0%, transparent 55%),
+        radial-gradient(900px 400px at 90% 0%, #163528 0%, transparent 50%),
+        var(--bg0);
+    }
+    header {
+      padding: 1.5rem 1.25rem 0.75rem;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(1.4rem, 3vw, 1.9rem);
+      letter-spacing: -0.02em;
+      font-weight: 650;
+    }
+    .sub { color: var(--muted); margin-top: 0.35rem; font-size: 0.95rem; }
+    main { max-width: 1100px; margin: 0 auto; padding: 0.75rem 1.25rem 2.5rem; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.75rem;
+      margin: 1rem 0 1.25rem;
+    }
+    .stat {
+      background: linear-gradient(180deg, var(--bg1), var(--bg2));
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 0.9rem 1rem;
+    }
+    .stat b { display: block; font-size: 1.45rem; font-variant-numeric: tabular-nums; }
+    .stat span { color: var(--muted); font-size: 0.8rem; }
+    .toolbar {
+      display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;
+      margin-bottom: 0.9rem;
+    }
+    input, button, select {
+      font: inherit;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--bg1);
+      color: var(--text);
+      padding: 0.55rem 0.75rem;
+    }
+    input { flex: 1; min-width: 180px; }
+    button {
+      background: var(--accent);
+      border-color: transparent;
+      color: #041018;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.ghost { background: transparent; color: var(--text); border-color: var(--line); }
+    .token-row { width: 100%; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: rgba(26, 35, 50, 0.7);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.65rem 0.75rem;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      font-size: 0.9rem;
+    }
+    th { color: var(--muted); font-weight: 600; background: rgba(0,0,0,0.2); }
+    tr:hover td { background: rgba(61, 156, 240, 0.06); }
+    .text { white-space: pre-wrap; word-break: break-word; max-width: 42ch; }
+    .meta { color: var(--muted); font-family: var(--mono); font-size: 0.78rem; }
+    .pill {
+      display: inline-block;
+      padding: 0.15rem 0.45rem;
+      border-radius: 999px;
+      background: rgba(62, 207, 142, 0.15);
+      color: var(--ok);
+      font-size: 0.75rem;
+    }
+    .pill.off { background: rgba(230, 184, 77, 0.15); color: var(--warn); }
+    .err { color: #ff7b7b; margin: 0.5rem 0; }
+    .empty { color: var(--muted); padding: 2rem; text-align: center; }
+    a { color: var(--accent); }
+    @media (max-width: 720px) {
+      .hide-sm { display: none; }
+      .text { max-width: none; }
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;550;650&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <header>
+    <h1>fb-poller</h1>
+    <p class="sub">Kết quả comment quét từ PC → đồng bộ lên VPS</p>
+  </header>
+  <main>
+    <div class="token-row">
+      <input id="token" type="password" placeholder="CONTROL_TOKEN (Bearer)" autocomplete="off" />
+      <button id="saveToken" class="ghost" type="button">Lưu token</button>
+      <button id="refresh" type="button">Tải lại</button>
+    </div>
+    <div class="stats" id="stats">
+      <div class="stat"><b>—</b><span>Comments</span></div>
+      <div class="stat"><b>—</b><span>Agents (PC)</span></div>
+      <div class="stat"><b>—</b><span>Transfers</span></div>
+      <div class="stat"><b>—</b><span>Bytes sync</span></div>
+    </div>
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="Lọc theo text / author / post…" />
+      <select id="limit">
+        <option value="50">50</option>
+        <option value="100" selected>100</option>
+        <option value="200">200</option>
+        <option value="500">500</option>
+      </select>
+    </div>
+    <div id="err" class="err" hidden></div>
+    <div id="agents"></div>
+    <table>
+      <thead>
+        <tr>
+          <th>Thời gian</th>
+          <th>Author</th>
+          <th>Comment</th>
+          <th class="hide-sm">Post / PC</th>
+        </tr>
+      </thead>
+      <tbody id="rows">
+        <tr><td colspan="4" class="empty">Nhập token rồi bấm Tải lại</td></tr>
+      </tbody>
+    </table>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const tokenKey = "fb_poller_control_token";
+    $("token").value = localStorage.getItem(tokenKey) || "";
+
+    function headers() {
+      const t = $("token").value.trim();
+      return t ? { Authorization: "Bearer " + t } : {};
+    }
+
+    function fmtBytes(n) {
+      if (n < 1024) return n + " B";
+      if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+      return (n / 1048576).toFixed(1) + " MB";
+    }
+
+    function esc(s) {
+      return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[c]);
+    }
+
+    async function loadAll() {
+      $("err").hidden = true;
+      try {
+        const lim = $("limit").value;
+        const q = encodeURIComponent($("q").value.trim());
+        const [stats, agents, comments] = await Promise.all([
+          fetch("/v1/server/stats", { headers: headers() }).then((r) => {
+            if (!r.ok) throw new Error("stats " + r.status);
+            return r.json();
+          }),
+          fetch("/v1/agents", { headers: headers() }).then((r) => {
+            if (!r.ok) throw new Error("agents " + r.status);
+            return r.json();
+          }),
+          fetch("/v1/comments?limit=" + lim + "&q=" + q, { headers: headers() }).then((r) => {
+            if (!r.ok) throw new Error("comments " + r.status);
+            return r.json();
+          }),
+        ]);
+
+        $("stats").innerHTML = [
+          ["Comments", stats.comments],
+          ["Agents (PC)", stats.agents],
+          ["Transfers", stats.transfers],
+          ["Bytes sync", fmtBytes(stats.bytes_total || 0)],
+        ].map(([label, val]) => `<div class="stat"><b>${esc(val)}</b><span>${label}</span></div>`).join("");
+
+        const agentHtml = (agents.agents || []).slice(0, 12).map((a) => {
+          const on = a.status === "online" || a.status === "connected";
+          return `<span class="pill ${on ? "" : "off"}" title="${esc(a.machine_id)}">${esc(a.hostname || a.machine_id)} · ${esc(a.status || "?")}</span>`;
+        }).join(" ");
+        $("agents").innerHTML = agentHtml
+          ? `<p style="margin:0 0 0.8rem;display:flex;flex-wrap:wrap;gap:0.4rem">${agentHtml}</p>`
+          : `<p class="meta" style="margin:0 0 0.8rem">Chưa có PC nào kết nối — cài Agent với ControlUrl=http://&lt;VPS&gt;:8088</p>`;
+
+        const items = comments.items || [];
+        if (!items.length) {
+          $("rows").innerHTML = `<tr><td colspan="4" class="empty">Chưa có comment đồng bộ</td></tr>`;
+          return;
+        }
+        $("rows").innerHTML = items.map((c) => {
+          const when = c.created_time || c.first_seen_at || c.synced_at || "";
+          const post = c.post_url
+            ? `<a href="${esc(c.post_url)}" target="_blank" rel="noopener">bài viết</a>`
+            : esc(c.post_id || "");
+          return `<tr>
+            <td class="meta">${esc(when)}</td>
+            <td>${esc(c.author_name || "—")}<div class="meta">${esc(c.author_id || "")}</div></td>
+            <td class="text">${esc(c.text || "")}</td>
+            <td class="hide-sm meta">${post}<br/>PC: ${esc(c.machine_id || "")}</td>
+          </tr>`;
+        }).join("");
+      } catch (e) {
+        $("err").hidden = false;
+        $("err").textContent = "Lỗi: " + e.message + " — kiểm tra CONTROL_TOKEN";
+      }
+    }
+
+    $("saveToken").onclick = () => {
+      localStorage.setItem(tokenKey, $("token").value.trim());
+      loadAll();
+    };
+    $("refresh").onclick = loadAll;
+    $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") loadAll(); });
+    $("limit").onchange = loadAll;
+    if ($("token").value) loadAll();
+    setInterval(() => { if ($("token").value) loadAll(); }, 15000);
+  </script>
+</body>
+</html>

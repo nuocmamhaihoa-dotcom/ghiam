@@ -18,17 +18,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
 from control_plane.settings import settings
 
-app = FastAPI(title="fb-poller high-bandwidth control plane", version="1.1.0")
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+app = FastAPI(title="fb-poller high-bandwidth control plane", version="1.2.0")
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CORSMiddleware,
@@ -36,6 +39,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+if STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 class LimitUploadSizeMiddleware(BaseHTTPMiddleware):
@@ -112,16 +117,38 @@ def health() -> dict[str, Any]:
     return {
         "status": "ok",
         "time": utcnow(),
-        "mode": "high-bandwidth-lan-server",
+        "mode": "vps-hub-high-bandwidth",
         "max_upload_mb": settings.max_upload_mb,
         "packages_dir": str(settings.packages_dir),
+        "dashboard": "/",
     }
+
+
+@app.get("/", response_class=HTMLResponse)
+def dashboard() -> HTMLResponse:
+    """Web UI — hiển thị comment đã sync từ các PC scanner."""
+    path = STATIC_DIR / "dashboard.html"
+    if not path.exists():
+        return HTMLResponse("<h1>fb-poller</h1><p>Dashboard missing.</p>", status_code=404)
+    return HTMLResponse(path.read_text(encoding="utf-8"))
 
 
 @app.get("/v1/server/stats")
 def server_stats(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     _auth(authorization)
     return db.transfer_summary(settings.db_path)
+
+
+@app.get("/v1/comments")
+def list_comments(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    q: str = Query(default=""),
+) -> dict[str, Any]:
+    _auth(authorization)
+    items = db.list_comments(settings.db_path, limit=limit, offset=offset, q=q)
+    return {"count": len(items), "offset": offset, "items": items}
 
 
 @app.post("/v1/agents/register")
