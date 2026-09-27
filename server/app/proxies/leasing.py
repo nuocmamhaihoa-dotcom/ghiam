@@ -167,6 +167,8 @@ def _should_rotate(proxy: Proxy, data: ReleaseIn) -> bool:
 
 
 def _record_outcome(proxy: Proxy, outcome: str, *, will_rotate: bool, now: datetime, settings: Settings) -> None:
+    if outcome == LeaseOutcome.CANCELLED:
+        return
     if outcome == LeaseOutcome.OK:
         proxy.success_count += 1
         proxy.consecutive_failures = 0

@@ -291,7 +291,8 @@ class RenewOut(BaseModel):
 
 
 class ReleaseIn(BaseModel):
-    outcome: Literal["ok", "blocked", "failed"]
+    # "cancelled": agent dừng giữa chừng hoặc lỗi phía máy PC, không chấm điểm proxy.
+    outcome: Literal["ok", "blocked", "failed", "cancelled"]
     detail: str | None = Field(default=None, max_length=500)
     request_rotation: bool = False
 

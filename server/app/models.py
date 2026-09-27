@@ -79,6 +79,7 @@ class LeaseOutcome(StrEnum):
     OK = "ok"
     BLOCKED = "blocked"
     FAILED = "failed"
+    CANCELLED = "cancelled"
     EXPIRED = "expired"
 
 

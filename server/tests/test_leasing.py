@@ -171,6 +171,22 @@ async def test_success_resets_the_failure_streak(harness: AppHarness) -> None:
     assert (proxy["consecutive_failures"], proxy["quarantined_until"]) == (2, None)
 
 
+async def test_cancelled_release_frees_the_proxy_without_scoring_it(harness: AppHarness) -> None:
+    await harness.add("1.1.1.1:80")
+    await harness.mark_alive()
+    for outcome in ("failed", "failed", "cancelled", "cancelled", "cancelled"):
+        lease = (await harness.lease()).json()
+        released = await harness.release(lease["lease_id"], outcome, detail="Người dùng dừng agent")
+        assert released.json() == {"released": True, "rotation_scheduled": False, "quarantined_until": None}
+    proxy = (await harness.proxies())[0]
+    assert (proxy["success_count"], proxy["failure_count"], proxy["consecutive_failures"]) == (0, 2, 2)
+    assert proxy["active_leases"] == 0
+
+    lease = (await harness.lease()).json()
+    third_failure = await harness.release(lease["lease_id"], "failed")
+    assert third_failure.json()["quarantined_until"] is not None
+
+
 async def test_session_proxy_gets_a_sticky_session(harness: AppHarness) -> None:
     await harness.add("gate.example.com:7000:user-session-{session}:pw")
     await harness.mark_alive()
