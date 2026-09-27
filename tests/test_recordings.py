@@ -63,6 +63,68 @@ class RecordingSanitizeTests(unittest.TestCase):
         )
         self.assertEqual(default_title(events), "1 lần chạm · 1 phím")
 
+    def test_off_target_touch_keeps_the_intended_control(self) -> None:
+        events = sanitize_events(
+            [
+                {
+                    "t": 8,
+                    "kind": "pointer",
+                    "target": "#refresh",
+                    "phase": "up",
+                    "pointerType": "touch",
+                    "click": True,
+                    "intent": "tap",
+                    "label": "  Tải\n lại  ",
+                    "snapped": True,
+                    "x": 4,
+                    "y": 9,
+                },
+                {
+                    "t": 12,
+                    "kind": "pointer",
+                    "target": "#actionText",
+                    "phase": "up",
+                    "pointerType": "touch",
+                    "intent": "focus",
+                    "label": "Mình vừa làm gì?",
+                    "click": True,
+                },
+                {
+                    "t": 20,
+                    "kind": "pointer",
+                    "target": "body",
+                    "phase": "up",
+                    "pointerType": "touch",
+                    "intent": "swipe",
+                    "click": True,
+                    "label": "không phải nút",
+                },
+                {
+                    "t": 30,
+                    "kind": "pointer",
+                    "target": "#refresh",
+                    "phase": "up",
+                    "pointerType": "touch",
+                    "intent": "explode",
+                    "click": True,
+                },
+            ]
+        )
+        self.assertEqual(events[0]["label"], "Tải lại")
+        self.assertTrue(events[0]["snapped"])
+        self.assertEqual(events[0]["intent"], "tap")
+        self.assertNotIn("label", events[2])
+        self.assertFalse(events[2]["click"])
+        self.assertNotIn("intent", events[3])
+        self.assertEqual(
+            script_lines(events),
+            [
+                "Chạm lệch, hiểu là Tải lại",
+                "Chạm vào ô Mình vừa làm gì?",
+                "Chạm #refresh",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

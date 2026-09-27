@@ -164,6 +164,7 @@
 
       <div data-norecord>
         <h2 style="margin-top:1.1rem">Làm lại đúng phím và cảm ứng</h2>
+        <p class="meta">Chạm lệch trong 36px vẫn được hiểu là nút hoặc ô gần nhất. Khi làm lại, nếu chưa trúng, phần mềm tự thử lại.</p>
         <p class="meta" id="recordState" style="margin:0 0 0.6rem">Chưa ghi.</p>
         <div class="toolbar">
           <button id="recordToggle" type="button">Ghi bấm phím và cảm ứng</button>
@@ -418,6 +419,8 @@
     const recorder = { on: false, t0: 0, events: [], press: null, lastMove: 0, moves: 0 };
     let replaying = false;
 
+    const TOUCH_SLOP = 36;
+
     function selectorOf(node) {
       const el = node instanceof Element ? node : node && node.parentElement;
       if (!el || el === document.body || el === document.documentElement) return "body";
@@ -425,6 +428,43 @@
       const withId = el.id ? el : el.closest("[id]");
       if (!withId || !withId.id) return "body";
       return "#" + CSS.escape(withId.id);
+    }
+
+    function labelOf(el) {
+      if (!(el instanceof Element)) return "";
+      const raw = el.getAttribute("aria-label") || el.innerText || el.getAttribute("placeholder") || "";
+      return raw.trim().replace(/\s+/g, " ").slice(0, 80);
+    }
+
+    function isActionable(el) {
+      return el instanceof Element
+        && el.matches("button, a, input, textarea, select, [role='button']")
+        && !el.closest("[data-norecord]")
+        && !el.disabled;
+    }
+
+    function distanceTo(el, x, y) {
+      const box = el.getBoundingClientRect();
+      const cx = Math.max(box.left, Math.min(x, box.right));
+      const cy = Math.max(box.top, Math.min(y, box.bottom));
+      return Math.hypot(x - cx, y - cy);
+    }
+
+    function nearestAction(x, y, radius) {
+      let best = null;
+      document.querySelectorAll("button, a, input, textarea, select, [role='button']").forEach((el) => {
+        if (!isActionable(el) || !el.getClientRects().length) return;
+        const distance = distanceTo(el, x, y);
+        if (distance <= radius && (!best || distance < best.distance)) best = { el: el, distance: distance };
+      });
+      return best;
+    }
+
+    function gestureIntent(el, moved, slop) {
+      if (!(el instanceof Element) || selectorOf(el) === "body") return "";
+      if (moved > slop) return "swipe";
+      if (el.matches("input, textarea, select")) return "focus";
+      return "tap";
     }
 
     function isSecret(el) {
@@ -461,10 +501,15 @@
 
     function onPointerDown(e) {
       if (!recorder.on || replaying) return;
-      const target = selectorOf(e.target);
-      if (!target) { recorder.press = null; return; }
-      recorder.press = { id: e.pointerId, x: e.clientX, y: e.clientY, target: target };
-      pushEvent(Object.assign(pointOf(e, target), { phase: "down", click: false }));
+      if (e.target instanceof Element && e.target.closest("[data-norecord]")) {
+        recorder.press = null;
+        return;
+      }
+      const slop = e.pointerType === "mouse" ? 12 : TOUCH_SLOP;
+      const aimed = aimAt(e.clientX, e.clientY, e.target, slop);
+      if (!aimed.selector) { recorder.press = null; return; }
+      recorder.press = { id: e.pointerId, x: e.clientX, y: e.clientY, target: aimed.selector, slop: slop };
+      pushEvent(Object.assign(pointOf(e, aimed.selector), { phase: "down", click: false }));
     }
 
     function onPointerMove(e) {
@@ -478,13 +523,33 @@
       pushEvent(Object.assign(pointOf(e, target), { phase: "move", click: false }));
     }
 
+    function aimAt(x, y, rawNode, slop) {
+      const direct = rawNode instanceof Element ? rawNode.closest("button, a, input, textarea, select, [role='button']") : null;
+      const hit = direct && isActionable(direct) && distanceTo(direct, x, y) <= slop ? direct : null;
+      const near = hit ? { el: hit, distance: distanceTo(hit, x, y) } : nearestAction(x, y, slop);
+      const el = near ? near.el : rawNode;
+      return {
+        el: el instanceof Element ? el : null,
+        selector: selectorOf(el),
+        snapped: Boolean(near && near.distance > 0),
+        label: near ? labelOf(near.el) : "",
+      };
+    }
+
     function onPointerUp(e) {
       if (!recorder.on || replaying || !recorder.press || e.pointerId !== recorder.press.id) return;
-      const target = selectorOf(e.target) || recorder.press.target;
+      const slop = recorder.press.slop || TOUCH_SLOP;
       const moved = Math.hypot(e.clientX - recorder.press.x, e.clientY - recorder.press.y);
-      const click = moved < 10 && target === recorder.press.target && target !== "body";
+      const aimed = aimAt(e.clientX, e.clientY, e.target, slop);
+      const target = aimed.selector || recorder.press.target;
+      const intent = gestureIntent(aimed.el, moved, slop);
+      const click = (intent === "tap" || intent === "focus") && target !== "body";
       recorder.press = null;
-      pushEvent(Object.assign(pointOf(e, target), { phase: "up", click: click }));
+      const event = Object.assign(pointOf(e, target), { phase: "up", click: click });
+      if (intent) event.intent = intent;
+      if (click && aimed.label) event.label = aimed.label;
+      if (click && aimed.snapped) event.snapped = true;
+      pushEvent(event);
     }
 
     function onKeyDown(e) {
@@ -545,8 +610,31 @@
       catch (_err) { return null; }
     }
 
-    function moveCursor(ev, el) {
+    function findByLabel(label, x, y) {
+      if (!label) return null;
+      let best = null;
+      document.querySelectorAll("button, a, input, textarea, select, [role='button']").forEach((el) => {
+        if (!isActionable(el) || labelOf(el) !== label) return;
+        const distance = distanceTo(el, x, y);
+        if (!best || distance < best.distance) best = { el: el, distance: distance };
+      });
+      return best ? best.el : null;
+    }
+
+    function pointFrom(ev) {
+      const x = typeof ev.nx === "number" ? ev.nx * window.innerWidth : ev.x;
+      const y = typeof ev.ny === "number" ? ev.ny * window.innerHeight : ev.y;
+      return { x: x || 0, y: y || 0 };
+    }
+
+    function moveCursorAt(x, y) {
       const cursor = $("replayCursor");
+      cursor.hidden = false;
+      cursor.style.left = (x || 0) + "px";
+      cursor.style.top = (y || 0) + "px";
+    }
+
+    function moveCursor(ev, el) {
       let x = typeof ev.nx === "number" ? ev.nx * window.innerWidth : ev.x;
       let y = typeof ev.ny === "number" ? ev.ny * window.innerHeight : ev.y;
       if ((x == null || y == null) && el && el.getBoundingClientRect) {
@@ -554,15 +642,62 @@
         x = box.left + box.width / 2;
         y = box.top + box.height / 2;
       }
-      cursor.hidden = false;
-      cursor.style.left = (x || 0) + "px";
-      cursor.style.top = (y || 0) + "px";
+      moveCursorAt(x, y);
+    }
+
+    function chooseTarget(ev, point, radius) {
+      const direct = resolveTarget(ev.target);
+      const usable = direct && direct !== document.body && !direct.closest("[data-norecord]") ? direct : null;
+      if (radius === 0) return usable || findByLabel(ev.label, point.x, point.y);
+      const near = nearestAction(point.x, point.y, radius);
+      return (near && near.el) || findByLabel(ev.label, point.x, point.y) || usable;
+    }
+
+    function proved(el, intent) {
+      return new Promise((resolve) => {
+        let done = false;
+        const finish = (ok) => {
+          if (done) return;
+          done = true;
+          el.removeEventListener("click", onClick, true);
+          resolve(ok);
+        };
+        const onClick = () => {
+          if (intent === "focus") finish(document.activeElement === el || el.contains(document.activeElement));
+          else finish(true);
+        };
+        el.addEventListener("click", onClick, true);
+        setTimeout(() => finish(intent === "focus" && (document.activeElement === el || el.contains(document.activeElement))), 80);
+      });
+    }
+
+    async function activate(ev) {
+      const intent = ev.intent || (ev.click ? "tap" : "");
+      if (intent !== "tap" && intent !== "focus") return { fixes: 0, ok: true };
+      const point = pointFrom(ev);
+      const pauses = [0, 120, 280, 500];
+      for (let attempt = 0; attempt < pauses.length; attempt++) {
+        if (pauses[attempt]) await new Promise((resolve) => setTimeout(resolve, pauses[attempt]));
+        const radius = attempt === 0 ? 0 : attempt === 1 ? 18 : TOUCH_SLOP;
+        const el = chooseTarget(ev, point, radius);
+        if (!el || el.disabled) continue;
+        el.scrollIntoView({ block: "center", inline: "nearest" });
+        const box = el.getBoundingClientRect();
+        moveCursorAt(box.left + box.width / 2, box.top + box.height / 2);
+        const proof = proved(el, intent);
+        if (intent === "focus") el.focus();
+        el.click();
+        if (await proof) return { fixes: attempt, ok: true };
+      }
+      return { fixes: 0, ok: false };
     }
 
     async function playEvents(events) {
       replaying = true;
       $("recordState").textContent = "Đang làm theo…";
       let prev = 0;
+      let fixes = 0;
+      let missed = 0;
       try {
         for (let i = 0; i < events.length; i++) {
           const ev = events[i];
@@ -572,9 +707,10 @@
           const el = resolveTarget(ev.target);
           if (ev.kind === "pointer") {
             moveCursor(ev, el);
-            if (ev.phase === "up" && ev.click && el && !el.closest("[data-norecord]")) {
-              el.scrollIntoView({ block: "center", inline: "nearest" });
-              el.click();
+            if (ev.phase === "up") {
+              const result = await activate(ev);
+              if (result.ok) fixes += result.fixes;
+              else missed += 1;
             }
           } else if (ev.kind === "value" && el && !isSecret(el)) {
             el.focus();
@@ -590,7 +726,10 @@
       } finally {
         replaying = false;
         $("replayCursor").hidden = true;
-        $("recordState").textContent = "Làm theo xong.";
+        const notes = [];
+        if (fixes) notes.push("Đã tự chỉnh " + fixes + " chạm lệch");
+        if (missed) notes.push("Còn " + missed + " thao tác chưa làm được");
+        $("recordState").textContent = notes.length ? "Làm theo xong. " + notes.join(". ") + "." : "Làm theo xong.";
       }
     }
 

@@ -9,8 +9,11 @@ _TARGET = re.compile(r"^#[A-Za-z][A-Za-z0-9_-]{0,40}$")
 _KINDS = {"key", "pointer", "value"}
 _PHASES = {"down", "move", "up"}
 _POINTER_TYPES = {"mouse", "touch", "pen"}
+_INTENTS = {"tap", "focus", "swipe"}
 _SECRET_TARGETS = {"#token"}
 _MAX_EVENTS = 3000
+# A finger can miss a control by this many CSS pixels and still mean that control.
+TOUCH_SLOP_PX = 36
 
 
 def sanitize_events(raw: list[Any]) -> list[dict[str, Any]]:
@@ -49,9 +52,10 @@ def script_lines(events: list[dict[str, Any]]) -> list[str]:
                 continue
             lines.append(f"Phím {key} tại {target}")
             continue
-        if kind == "pointer" and event.get("click"):
-            verb = "Chạm" if event.get("pointerType") == "touch" else "Bấm"
-            lines.append(f"{verb} {target}")
+        if kind == "pointer":
+            line = _pointer_line(event)
+            if line:
+                lines.append(line)
     return lines
 
 
@@ -131,6 +135,7 @@ def _pointer(event: dict[str, Any], item: dict[str, Any]) -> dict[str, Any] | No
     event["phase"] = phase
     event["pointerType"] = pointer_type
     event["click"] = bool(item.get("click")) and phase == "up"
+    _intent(event, item)
     for axis in ("x", "y"):
         if item.get(axis) is None:
             continue
@@ -148,3 +153,42 @@ def _pointer(event: dict[str, Any], item: dict[str, Any]) -> dict[str, Any] | No
         if 0 <= fraction <= 1:
             event[axis] = round(fraction, 4)
     return event
+
+
+def _intent(event: dict[str, Any], item: dict[str, Any]) -> None:
+    """Keep what the gesture meant: tap a control, focus a field, or swipe."""
+    if event.get("phase") != "up":
+        return
+    intent = str(item.get("intent") or "")
+    if intent not in _INTENTS:
+        return
+    event["intent"] = intent
+    if intent == "swipe":
+        event["click"] = False
+        return
+    label = _label(item.get("label"))
+    if label:
+        event["label"] = label
+    if item.get("snapped"):
+        event["snapped"] = True
+
+
+def _label(value: Any) -> str:
+    text = " ".join(str(value or "").split())
+    text = "".join(ch for ch in text if ch.isprintable())
+    return text[:80]
+
+
+def _pointer_line(event: dict[str, Any]) -> str | None:
+    intent = event.get("intent")
+    if intent == "swipe" or not (event.get("click") or intent in {"tap", "focus"}):
+        return None
+    touch = event.get("pointerType") == "touch"
+    name = str(event.get("label") or event.get("target") or "")
+    if intent == "focus":
+        verb = "Chạm vào ô" if touch else "Bấm vào ô"
+    else:
+        verb = "Chạm" if touch else "Bấm"
+    if event.get("snapped"):
+        return f"{verb} lệch, hiểu là {name}"
+    return f"{verb} {name}"
