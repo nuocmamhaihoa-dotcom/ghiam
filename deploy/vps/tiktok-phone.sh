@@ -29,7 +29,7 @@ if [[ -f /tmp/.X99-lock ]] && ! pgrep -f 'Xvfb :99' >/dev/null 2>&1; then
   rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
 fi
 
-Xvfb :99 -screen 0 420x900x24 -ac +extension GLX +render -noreset >"$LOG_DIR/xvfb.log" 2>&1 &
+Xvfb :99 -screen 0 1200x900x24 -ac +extension GLX +render -noreset >"$LOG_DIR/xvfb.log" 2>&1 &
 xvfb_pid=$!
 sleep 0.6
 if ! kill -0 "$xvfb_pid" 2>/dev/null; then
@@ -55,7 +55,7 @@ start_chrome() {
   # HOME inside the newer system is the profile mount, not the host path.
   setsid env HOME=/chrome-profile DISPLAY=:99 chroot --userspec=999:999 "$ROOT" "$CHROME" \
     --user-data-dir=/chrome-profile \
-    --window-size=420,900 \
+    --window-size=1200,900 \
     --window-position=0,0 \
     --no-first-run \
     --no-default-browser-check \
