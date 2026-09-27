@@ -23,11 +23,18 @@ class PingOut(BaseModel):
     agent: str
     server_time: datetime
     version: str
+    check_urls: list[str]
 
 
 @router.get("/ping")
-async def ping(agent: AgentIdentity) -> PingOut:
-    return PingOut(ok=True, agent=agent, server_time=utcnow(), version=__version__)
+async def ping(agent: AgentIdentity, container: ContainerDep) -> PingOut:
+    return PingOut(
+        ok=True,
+        agent=agent,
+        server_time=utcnow(),
+        version=__version__,
+        check_urls=container.settings.check_url_list,
+    )
 
 
 @router.post("/proxies/lease")

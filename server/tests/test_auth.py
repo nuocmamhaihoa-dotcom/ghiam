@@ -7,6 +7,7 @@ import pytest
 
 from app.timeutil import utcnow
 from tests.conftest import ADMIN_PASSWORD, AGENT_TOKEN, AppHarness
+from tests.netsim import CHECK_URL
 
 
 async def test_login_issues_token_usable_for_admin_api(harness: AppHarness) -> None:
@@ -55,6 +56,7 @@ async def test_agent_token_and_admin_token_are_not_interchangeable(harness: AppH
     ping = await harness.agent.get("/api/agent/ping")
     assert ping.status_code == 200
     assert ping.json()["agent"] == "agent-token-1"
+    assert ping.json()["check_urls"] == [CHECK_URL]
 
 
 async def test_wrong_agent_token_is_rejected(harness: AppHarness) -> None:
