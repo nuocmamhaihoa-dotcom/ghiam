@@ -68,19 +68,19 @@ Gỡ:
 
 ## Windows
 
+**Khuyến nghị:** Agent tự kết nối + tự cập nhật — xem [`AGENT_WINDOWS.md`](AGENT_WINDOWS.md).
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\pc_agent\windows\Install-Agent.ps1 -StartNow
+```
+
+Cài tay đơn giản:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1
-# sửa data\posts.txt + data\proxies_static.txt
 .\scripts\fb-poller-ctl.ps1 import
 .\scripts\fb-poller-ctl.ps1 start
 .\scripts\fb-poller-ctl.ps1 status
-```
-
-Hoặc:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-fb-poller run
 ```
 
 ## Phân bổ 2 PC của bạn

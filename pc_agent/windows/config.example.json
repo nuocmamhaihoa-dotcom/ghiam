@@ -1,0 +1,14 @@
+{
+  "channel": "stable",
+  "manifest_url": "https://raw.githubusercontent.com/OWNER/REPO/main/deploy/update-manifest.json",
+  "control_url": "",
+  "control_token": "",
+  "auto_update": true,
+  "update_check_minutes": 30,
+  "heartbeat_minutes": 5,
+  "ensure_poller_running": true,
+  "poller_restart_on_exit": true,
+  "install_dir": "",
+  "python_exe": "",
+  "headless": true
+}

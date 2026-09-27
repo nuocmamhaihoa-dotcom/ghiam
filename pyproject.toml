@@ -17,6 +17,12 @@ dependencies = [
   "greenlet>=3.1.0",
 ]
 
+[project.optional-dependencies]
+control = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.32.0",
+]
+
 [project.scripts]
 fb-poller = "fb_poller.cli.main:app"
 
@@ -26,4 +32,4 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["fb_poller*"]
+include = ["fb_poller*", "control_plane*"]

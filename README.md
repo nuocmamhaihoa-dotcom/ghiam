@@ -22,9 +22,22 @@ Chi tiết vận hành 2 PC: [`deploy/PA1_RUNBOOK.md`](deploy/PA1_RUNBOOK.md).
 
 ## Cài đặt trên PC (dùng tài nguyên máy local)
 
-Hướng dẫn đầy đủ: [`docs/CAI_DAT_PC.md`](docs/CAI_DAT_PC.md)
+- Linux: [`docs/CAI_DAT_PC.md`](docs/CAI_DAT_PC.md)
+- **Windows agent (bật là kết nối + tự cập nhật + nhiều PC):** [`docs/AGENT_WINDOWS.md`](docs/AGENT_WINDOWS.md)
 
-**Linux (khuyến nghị):**
+**Windows — cài một lần, sau này tự nâng cấp:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\pc_agent\windows\Install-Agent.ps1 -StartNow
+# dán URL/proxy vào data\ rồi:
+.\.venv\Scripts\fb-poller.exe import-urls .\data\posts.txt
+.\.venv\Scripts\fb-poller.exe import-proxies
+.\.venv\Scripts\fb-poller.exe rebalance-hot
+```
+
+Khi bạn tạo GitHub Release `v*`, workflow đóng gói zip + `update-manifest.json`; agent trên mọi PC tự tải và cập nhật, **không cần cài lại**.
+
+**Linux:**
 
 ```bash
 chmod +x install.sh scripts/*.sh
@@ -32,19 +45,10 @@ chmod +x install.sh scripts/*.sh
 # ./install.sh pc20   # 14 workers
 # ./install.sh pc12   # 6 workers
 
-# nạp URL + proxy rồi chạy nền:
 ./scripts/fb-poller-ctl.sh import
 ./scripts/fb-poller-ctl.sh doctor
 ./scripts/fb-poller-ctl.sh start
 ./scripts/fb-poller-ctl.sh status
-```
-
-**Windows:**
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\install.ps1
-.\scripts\fb-poller-ctl.ps1 import
-.\scripts\fb-poller-ctl.ps1 start
 ```
 
 Cài thủ công (nếu cần):

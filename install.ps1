@@ -64,3 +64,7 @@ Write-Host "   fb-poller import-proxies"
 Write-Host "   fb-poller rebalance-hot"
 Write-Host "   fb-poller run"
 Write-Host "Hoặc dùng: .\scripts\fb-poller-ctl.ps1 start"
+Write-Host ""
+Write-Host "Khuyến nghị production Windows (tự chạy + tự cập nhật):" -ForegroundColor Cyan
+Write-Host "  powershell -ExecutionPolicy Bypass -File .\pc_agent\windows\Install-Agent.ps1 -StartNow"
+Write-Host "Xem docs\AGENT_WINDOWS.md"

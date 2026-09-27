@@ -11,6 +11,9 @@ data/metrics/
 logs/
 deploy/env.pc12
 deploy/env.pc20
+pc_agent/windows/config.json
+pc_agent/windows/state/
+deploy/update-manifest.json
 .mypy_cache/
 .ruff_cache/
 playwright-report/
