@@ -21,6 +21,21 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+export async function apiForm<T>(path: string, body: FormData): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    body,
+    cache: "no-store",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = payload?.detail;
+    const message = typeof detail === "string" ? detail : detail?.message || response.statusText;
+    throw new Error(message);
+  }
+  return payload as T;
+}
+
 export function downloadUrl(path: string): string {
   return `${API_BASE}${path}`;
 }

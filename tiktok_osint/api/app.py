@@ -25,7 +25,7 @@ from tiktok_osint.policy import reject_reverse_lookup
 from tiktok_osint.queue.redis_queue import JobQueue, build_queue
 from tiktok_osint.storage.db import build_repository
 from tiktok_osint.storage.repo import Repository
-from tiktok_osint.sync.book import build_contact, parse_contact_csv, parse_vcard
+from tiktok_osint.sync.book import ImportedContact, build_contact, parse_address_book_file, parse_phone_lines
 from tiktok_osint.sync.official import assert_record_payload, reconciliation_rows
 
 logger = logging.getLogger(__name__)
@@ -55,6 +55,10 @@ class ContactIn(BaseModel):
 class BookCreate(BaseModel):
     name: str
     contacts: list[ContactIn] = Field(default_factory=list)
+
+
+class PhoneBulk(BaseModel):
+    text: str = Field(min_length=1, max_length=500_000)
 
 
 class SessionCreate(BaseModel):
@@ -221,16 +225,31 @@ def create_app(
     def get_book(book_id: str) -> dict[str, object]:
         return services.repo.get_book(book_id)
 
+    @app.post("/api/contact-books/{book_id}/contacts")
+    def add_contact(book_id: str, body: ContactIn) -> dict[str, object]:
+        contact = build_contact(display_name=body.display_name, phone=body.phone, email=body.email)
+        if contact.phone_e164 is None and contact.email is None and contact.display_name == "Không tên":
+            raise ValidationError("Cần tên, số điện thoại hoặc email")
+        stored, skipped = services.repo.add_contacts(book_id, [contact], skip_existing_phones=True)
+        return {"imported": len(stored), "skipped_duplicates": skipped, "contacts": stored}
+
+    @app.post("/api/contact-books/{book_id}/phones")
+    def import_phone_lines(book_id: str, body: PhoneBulk) -> dict[str, object]:
+        if not body.text.strip():
+            raise ValidationError("Chưa có số điện thoại nào")
+        return _store_parsed_contacts(services, book_id, *parse_phone_lines(body.text))
+
     @app.post("/api/contact-books/{book_id}/import")
     async def import_book_file(book_id: str, file: UploadFile = File(...)) -> dict[str, object]:
         raw_bytes = await file.read()
         if len(raw_bytes) > 2_000_000:
             raise ValidationError("File danh bạ vượt quá 2MB")
-        text = raw_bytes.decode("utf-8-sig")
-        name = (file.filename or "").lower()
-        contacts = parse_vcard(text) if name.endswith(".vcf") else parse_contact_csv(text)
-        stored = services.repo.add_contacts_to_book(book_id, contacts)
-        return {"imported": len(stored), "contacts": stored}
+        try:
+            text = raw_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise ValidationError("File danh bạ phải là UTF-8") from exc
+        contacts, skipped, rejected = parse_address_book_file(file.filename or "", text)
+        return _store_parsed_contacts(services, book_id, contacts, skipped, rejected)
 
     @app.post("/api/official-sync/sessions")
     def create_session(body: SessionCreate) -> dict[str, object]:
@@ -271,6 +290,23 @@ def create_app(
         reject_reverse_lookup("phone_to_user_id")
 
     return app
+
+
+def _store_parsed_contacts(
+    services: Services,
+    book_id: str,
+    contacts: list[ImportedContact],
+    skipped_in_batch: int,
+    rejected: list[dict[str, object]],
+) -> dict[str, object]:
+    stored, skipped_existing = services.repo.add_contacts(book_id, contacts, skip_existing_phones=True)
+    return {
+        "imported": len(stored),
+        "skipped_duplicates": skipped_in_batch + skipped_existing,
+        "rejected_count": len(rejected),
+        "rejected": rejected[:40],
+        "contacts": stored,
+    }
 
 
 def _enqueue(services: Services, job_id: str) -> dict[str, object]:

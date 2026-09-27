@@ -79,6 +79,31 @@ def test_contact_book_csv_and_vcard() -> None:
     assert cards[0].phone_e164 == "+84987000111"
 
 
+def test_parse_bulk_phone_lines() -> None:
+    from tiktok_osint.sync.book import parse_address_book_file, parse_phone_lines
+
+    text = "\n".join(
+        [
+            "0901234567",
+            "# ghi chú",
+            "Nguyễn Văn A, 0912 345 678",
+            "0901.234.567",
+            "Bình - +84 987 000 111",
+            "không phải số",
+        ]
+    )
+    contacts, skipped, rejected = parse_phone_lines(text)
+    assert [row.phone_e164 for row in contacts] == ["+84901234567", "+84912345678", "+84987000111"]
+    assert contacts[0].display_name == "0901234567"
+    assert contacts[1].display_name == "Nguyễn Văn A"
+    assert contacts[2].display_name == "Bình"
+    assert skipped == 1
+    assert rejected == [{"line": 6, "raw": "không phải số", "reason": "Không thấy số điện thoại hợp lệ"}]
+    from_file, file_skipped, _file_rejected = parse_address_book_file("so.txt", "0987000111\n")
+    assert from_file[0].phone_e164 == "+84987000111"
+    assert file_skipped == 0
+
+
 def test_cross_profile_annotation() -> None:
     rows = annotate_cross_profile(
         [

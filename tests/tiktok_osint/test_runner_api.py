@@ -163,6 +163,22 @@ def test_api_import_export_and_official_sync(repo: Repository, settings: TikTokS
         json={"name": "Cá nhân", "contacts": [{"display_name": "An", "phone": "0901.234.567", "email": "an@example.com"}]},
     ).json()
     assert book["contacts"][0]["phone_e164"] == "+84901234567"
+    bulk = client.post(
+        f"/api/contact-books/{book['id']}/phones",
+        json={"text": "0901234567\nMai, 0912345678\n0901234567\nkhông phải số"},
+    ).json()
+    assert bulk["imported"] == 1
+    assert bulk["skipped_duplicates"] == 2
+    assert bulk["rejected_count"] == 1
+    assert bulk["contacts"][0]["phone_e164"] == "+84912345678"
+    pasted_file = client.post(
+        f"/api/contact-books/{book['id']}/import",
+        files={"file": ("phones.txt", "0987000111\n0987000111\n".encode(), "text/plain")},
+    ).json()
+    assert pasted_file["imported"] == 1
+    assert pasted_file["skipped_duplicates"] == 1
+    stored = client.get(f"/api/contact-books/{book['id']}").json()
+    assert {row["phone_e164"] for row in stored["contacts"]} == {"+84901234567", "+84912345678", "+84987000111"}
     session = client.post("/api/official-sync/sessions", json={"book_id": book["id"], "note": "Đã thấy trong app TikTok"}).json()
     phone_record = client.post(
         f"/api/official-sync/sessions/{session['id']}/results",

@@ -142,13 +142,26 @@ button, input, textarea {
   align-items: center;
 }
 
-input, textarea {
+input, textarea, select {
   width: 100%;
   border: 1px solid var(--line);
   background: white;
   border-radius: 12px;
   padding: 12px 14px;
   color: var(--ink);
+}
+
+.contact-list {
+  max-height: 280px;
+  overflow: auto;
+  margin: 12px 0 0;
+  padding-left: 18px;
+}
+
+.hint {
+  color: var(--muted, #5c6570);
+  font-size: 14px;
+  margin: 8px 0 12px;
 }
 
 textarea { min-height: 140px; resize: vertical; }

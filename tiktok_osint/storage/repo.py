@@ -448,12 +448,35 @@ class Repository:
             return {"id": row.id, "name": row.name, "created_at": row.created_at.isoformat(), "contacts": []}
 
     def add_contacts_to_book(self, book_id: str, contacts: list[ImportedContact]) -> list[dict[str, Any]]:
+        stored, _skipped = self.add_contacts(book_id, contacts, skip_existing_phones=False)
+        return stored
+
+    def add_contacts(
+        self,
+        book_id: str,
+        contacts: list[ImportedContact],
+        *,
+        skip_existing_phones: bool,
+    ) -> tuple[list[dict[str, Any]], int]:
         with self._sessions() as session:
             book = session.get(ContactBookRow, book_id)
             if book is None:
                 raise BookNotFound(book_id)
+            existing: set[str] = set()
+            if skip_existing_phones:
+                phones = session.scalars(
+                    select(UserContactRow.phone_e164).where(
+                        UserContactRow.book_id == book_id,
+                        UserContactRow.phone_e164.is_not(None),
+                    )
+                ).all()
+                existing = {phone for phone in phones if phone}
             stored: list[dict[str, Any]] = []
+            skipped = 0
             for contact in contacts:
+                if skip_existing_phones and contact.phone_e164 and contact.phone_e164 in existing:
+                    skipped += 1
+                    continue
                 row = UserContactRow(
                     id=new_id(),
                     book_id=book_id,
@@ -465,8 +488,10 @@ class Repository:
                 )
                 session.add(row)
                 stored.append(_user_contact_dict(row))
+                if contact.phone_e164:
+                    existing.add(contact.phone_e164)
             session.commit()
-            return stored
+            return stored, skipped
 
     def list_books(self) -> list[dict[str, Any]]:
         with self._sessions() as session:
