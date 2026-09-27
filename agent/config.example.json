@@ -1,0 +1,10 @@
+{
+  "server_url": "https://scope.example.com",
+  "token": "dan-mot-token-trong-AGENT_TOKENS-tren-VPS",
+  "worker_id": "pc-van-phong-01",
+  "pool": "vn-static",
+  "kind": null,
+  "lease_ttl_sec": 600,
+  "lease_wait_sec": 120,
+  "request_timeout_sec": 20
+}
