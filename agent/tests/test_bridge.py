@@ -35,6 +35,7 @@ class RawResponse:
     status: int
     headers: dict[str, str]
     body: bytes
+    size: int
 
     @property
     def text(self) -> str:
@@ -45,7 +46,7 @@ def parse_response(raw: bytes) -> RawResponse:
     head, _, body = raw.partition(b"\r\n\r\n")
     lines = head.decode("latin-1").split("\r\n")
     headers = {name.strip().lower(): value.strip() for name, _, value in (line.partition(":") for line in lines[1:])}
-    return RawResponse(int(lines[0].split(" ")[1]), headers, body)
+    return RawResponse(int(lines[0].split(" ")[1]), headers, body, len(raw))
 
 
 async def exchange(bridge: ProxyBridge, request: bytes) -> RawResponse:
@@ -186,6 +187,27 @@ async def test_plain_http_over_socks5_sends_origin_form_requests() -> None:
         (3, "origin.test", None),
         (1, "127.0.0.1", None),
     ]
+
+
+async def test_traffic_counters_include_headers_not_only_bodies() -> None:
+    async with (
+        FakeOrigin() as origin,
+        FakeSocks5Proxy() as proxy,
+        bridge_to(Upstream("socks5", "127.0.0.1", proxy.port)) as bridge,
+    ):
+        response = await exchange(
+            bridge,
+            request_bytes(
+                f"POST {origin.url('/echo')} HTTP/1.1",
+                f"Host: origin.test:{origin.port}",
+                f"Proxy-Authorization: {bridge_auth(bridge)}",
+                "Content-Length: 5",
+                body=b"hello",
+            ),
+        )
+    assert json.loads(response.body)["body"] == "hello"
+    assert bridge.stats.bytes_sent == origin.requests[0].size
+    assert bridge.stats.bytes_received == response.size
 
 
 async def test_https_proxy_is_reached_over_tls(certs: Certs) -> None:

@@ -320,8 +320,10 @@ class ProxyBridge:
             if via_proxy and (auth := self.upstream.basic_auth()):
                 extra.append(("Proxy-Authorization", auth))
             request_target = f"http://{authority}{path}" if via_proxy else path
-            up_writer.write(_request_bytes(head, method, request_target, authority, extra))
+            request_head = _request_bytes(head, method, request_target, authority, extra)
+            up_writer.write(request_head)
             await up_writer.drain()
+            self._count(len(request_head), upload=True)
             if length:
                 await self._copy(reader, up_writer, length, upload=True)
             await self._relay_response(method, up_reader, writer, via_proxy=via_proxy)
@@ -353,8 +355,10 @@ class ProxyBridge:
             return
         if via_proxy:
             self.stats.upstream_ok += 1
-        writer.write(_response_head_bytes(head))
+        response_head = _response_head_bytes(head)
+        writer.write(response_head)
         await writer.drain()
+        self._count(len(response_head), upload=False)
         await self._copy(reader, writer, _response_body_length(method, head), upload=False)
 
     async def _copy(

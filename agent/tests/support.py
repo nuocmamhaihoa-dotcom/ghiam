@@ -130,6 +130,7 @@ class HttpRequest:
     target: str
     headers: dict[str, str]
     body: bytes = b""
+    size: int = 0
 
     def header(self, name: str) -> str | None:
         return self.headers.get(name.lower())
@@ -149,7 +150,7 @@ async def read_request(reader: asyncio.StreamReader) -> HttpRequest | None:
         headers[key] = f"{headers[key]}, {value.strip()}" if key in headers else value.strip()
     length = int(headers.get("content-length") or 0)
     body = await reader.readexactly(length) if length else b""
-    return HttpRequest(method, target, headers, body)
+    return HttpRequest(method, target, headers, body, len(raw) + len(body))
 
 
 def response_bytes(
