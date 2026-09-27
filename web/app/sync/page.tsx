@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { TikTokPhone } from "../../components/TikTokPhone";
 import { api, apiForm, downloadUrl } from "../../lib/api";
 
 type Contact = {
@@ -375,6 +376,20 @@ export default function SyncPage() {
     setQuickUsername("");
   }
 
+  function openTikTokPhone() {
+    const popup = window.open(
+      "https://www.tiktok.com/",
+      "tiktok-phone",
+      "popup=yes,width=420,height=860,left=80,top=40",
+    );
+    if (!popup) {
+      setMessage("Trình duyệt đã chặn cửa sổ điện thoại. Hãy cho phép popup, hoặc mở TikTok trên điện thoại thật.");
+      return;
+    }
+    popup.focus();
+    setMessage("Đã mở TikTok chính thức trong cửa sổ điện thoại. Tự cấp quyền danh bạ trong ứng dụng trên máy thật nếu bạn muốn xem gợi ý.");
+  }
+
   return (
     <>
       <h1>Đồng bộ danh bạ</h1>
@@ -444,11 +459,7 @@ export default function SyncPage() {
         </section>
         <section className="panel">
           <h2>Trên điện thoại</h2>
-          <ol className="phone-guide">
-            <li>Mở TikTok → <strong>Thêm/Tìm bạn bè</strong> → <strong>Danh bạ</strong>.</li>
-            <li>Tự cấp quyền khi TikTok hỏi.</li>
-            <li>Xem các tài khoản TikTok hiện ra.</li>
-          </ol>
+          <TikTokPhone onOpen={openTikTokPhone} />
           <h2>5. Gắn username với liên hệ</h2>
           {selectedContact ? (
             <div className="selected-contact">

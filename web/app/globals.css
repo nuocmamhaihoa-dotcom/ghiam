@@ -270,13 +270,52 @@ button.secondary, .button.secondary {
 
 .sync-layout h2 { margin: 0 0 8px; font-size: 22px; }
 
-.phone-guide {
-  margin: 0 0 18px;
-  padding-left: 22px;
-  line-height: 1.55;
+.phone-device {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
-.phone-guide li { margin-bottom: 8px; }
+.phone-bezel {
+  width: min(100%, 280px);
+  padding: 14px 12px 18px;
+  border-radius: 32px;
+  background: #1c1915;
+  box-shadow: inset 0 0 0 2px #3a332b;
+}
+
+.phone-notch {
+  width: 92px;
+  height: 16px;
+  margin: 0 auto 12px;
+  border-radius: 999px;
+  background: #0d0b09;
+}
+
+.phone-screen {
+  min-height: 220px;
+  padding: 16px;
+  border-radius: 22px;
+  background: #fffaf3;
+  color: var(--ink);
+}
+
+.phone-screen h3 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.phone-screen p { margin: 0 0 14px; line-height: 1.45; }
+
+.phone-kicker {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 
 .selected-contact {
   display: flex;
