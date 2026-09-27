@@ -107,7 +107,7 @@ export function ProxyTable({
 }: ProxyTableProps) {
   const now = useNow();
   return (
-    <div className={clsx("overflow-x-auto transition-opacity", dimmed && "opacity-60")}>
+    <div className={clsx("relative overflow-x-auto transition-opacity", dimmed && "opacity-60")}>
       <table className="w-full min-w-[1080px] text-sm">
         <thead className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-medium text-slate-500">
           <tr>
