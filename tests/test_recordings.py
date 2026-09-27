@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from control_plane.recordings import default_title, sanitize_events, script_lines
+from control_plane.recordings import default_title, pick_match, sanitize_events, script_lines
 
 
 class RecordingSanitizeTests(unittest.TestCase):
@@ -124,6 +124,52 @@ class RecordingSanitizeTests(unittest.TestCase):
                 "Chạm #refresh",
             ],
         )
+
+    def test_signature_is_kept_and_ranks_a_moved_control(self) -> None:
+        events = sanitize_events(
+            [
+                {
+                    "t": 4,
+                    "kind": "pointer",
+                    "target": "#refresh",
+                    "phase": "up",
+                    "pointerType": "touch",
+                    "click": True,
+                    "intent": "tap",
+                    "label": "Tải lại",
+                    "role": "button",
+                    "hint": "  ",
+                    "index": 1,
+                    "snapped": True,
+                }
+            ]
+        )
+        self.assertEqual(events[0]["role"], "button")
+        self.assertEqual(events[0]["index"], 1)
+        self.assertNotIn("hint", events[0])
+        wanted = events[0]
+        picked = pick_match(
+            wanted,
+            [
+                {"target": "#saveToken", "label": "Lưu token", "role": "button", "index": 0},
+                {"target": "#refreshMoved", "label": "Tải lại", "role": "button", "index": 1},
+                {"target": "#recheck", "label": "Check proxy ngay", "role": "button", "index": 2},
+            ],
+        )
+        self.assertEqual(picked["choice"]["target"], "#refreshMoved")
+        self.assertFalse(picked["ambiguous"])
+
+    def test_close_scores_ask_the_user(self) -> None:
+        picked = pick_match(
+            {"target": "#gone", "label": "Lưu", "role": "button", "hint": "Nhật ký", "index": 0},
+            [
+                {"target": "#a", "label": "Lưu", "role": "button", "hint": "Nhật ký", "index": 0},
+                {"target": "#b", "label": "Lưu", "role": "button", "hint": "Nhật ký", "index": 1},
+            ],
+        )
+        self.assertEqual(picked["choice"]["target"], "#a")
+        self.assertTrue(picked["ambiguous"])
+        self.assertEqual(picked["alternatives"][0]["target"], "#b")
 
 
 if __name__ == "__main__":
