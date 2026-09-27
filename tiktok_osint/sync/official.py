@@ -3,6 +3,8 @@ from __future__ import annotations
 from tiktok_osint.domain.normalize import normalize_phone, parse_profile_input
 from tiktok_osint.errors import InvalidProfileInput, ReverseLookupForbidden, ValidationError
 
+MAX_DISPLAYED_ACCOUNTS = 5000
+
 
 def normalize_displayed_username(raw: str) -> str:
     """Username taken from a result TikTok already showed the user. Not a phone lookup."""
@@ -48,6 +50,34 @@ def assert_record_payload(username: str, display_name_shown: str | None) -> str:
     if display_name_shown is not None and len(display_name_shown) > 200:
         raise ValidationError("Tên hiển thị quá dài")
     return normalize_displayed_username(username)
+
+
+def parse_displayed_account_lines(text: str) -> tuple[list[str], int, list[dict[str, object]]]:
+    """Parse usernames copied manually from results shown by TikTok's official app."""
+    lines = text.splitlines()
+    data_lines = [line for line in lines if line.strip() and not line.strip().startswith("#")]
+    if len(data_lines) > MAX_DISPLAYED_ACCOUNTS:
+        raise ValidationError(f"Mỗi lần ghi tối đa {MAX_DISPLAYED_ACCOUNTS} tài khoản")
+    usernames: list[str] = []
+    rejected: list[dict[str, object]] = []
+    seen: set[str] = set()
+    skipped = 0
+    for index, raw in enumerate(lines, start=1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        candidate = line.split(",", 1)[0].strip()
+        try:
+            username = normalize_displayed_username(candidate)
+        except (InvalidProfileInput, ReverseLookupForbidden) as exc:
+            rejected.append({"line": index, "raw": line[:180], "reason": str(exc)})
+            continue
+        if username in seen:
+            skipped += 1
+            continue
+        seen.add(username)
+        usernames.append(username)
+    return usernames, skipped, rejected
 
 
 def _public_contact_view(contact: dict[str, object] | None) -> dict[str, object] | None:

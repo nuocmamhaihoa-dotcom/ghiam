@@ -100,7 +100,10 @@ class OfficialSyncSessionRow(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     book_id: Mapped[str] = mapped_column(ForeignKey("contact_books.id"), index=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="recording", index=True)
+    checkpoint_json: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class OfficialDisplayedMatchRow(Base):

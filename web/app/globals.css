@@ -142,13 +142,26 @@ button, input, textarea {
   align-items: center;
 }
 
-input, textarea {
+input, textarea, select {
   width: 100%;
   border: 1px solid var(--line);
   background: white;
   border-radius: 12px;
   padding: 12px 14px;
   color: var(--ink);
+}
+
+.contact-list {
+  max-height: 280px;
+  overflow: auto;
+  margin: 12px 0 0;
+  padding-left: 18px;
+}
+
+.hint {
+  color: var(--muted, #5c6570);
+  font-size: 14px;
+  margin: 8px 0 12px;
 }
 
 textarea { min-height: 140px; resize: vertical; }
@@ -169,6 +182,174 @@ button.secondary, .button.secondary {
   color: var(--ink);
   border: 1px solid var(--line);
 }
+
+.text-button {
+  background: transparent;
+  color: var(--accent);
+  border: 0;
+  border-radius: 0;
+  padding: 2px 4px;
+}
+
+.text-button.danger { color: #a32626; }
+
+.steps {
+  line-height: 1.55;
+  padding-left: 22px;
+}
+
+.steps li { margin-bottom: 8px; }
+
+.workflow-progress {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.progress-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 180ms ease;
+}
+
+.workflow-step { border-left: 4px solid var(--line); }
+.workflow-step.done { border-left-color: var(--accent); }
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.check-row input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.sync-stats {
+  display: flex;
+  gap: 18px;
+  margin: 8px 0 18px;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+}
+
+.sync-stats strong {
+  font-size: 28px;
+  margin-right: 6px;
+}
+
+.status-line {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--accent-ink);
+}
+
+.sync-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.sync-layout .panel { margin-top: 0; }
+
+.sync-layout h2 { margin: 0 0 8px; font-size: 22px; }
+
+.phone-device {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.phone-bezel {
+  width: min(100%, 280px);
+  padding: 14px 12px 18px;
+  border-radius: 32px;
+  background: #1c1915;
+  box-shadow: inset 0 0 0 2px #3a332b;
+}
+
+.phone-notch {
+  width: 92px;
+  height: 16px;
+  margin: 0 auto 12px;
+  border-radius: 999px;
+  background: #0d0b09;
+}
+
+.phone-screen {
+  min-height: 220px;
+  padding: 16px;
+  border-radius: 22px;
+  background: #fffaf3;
+  color: var(--ink);
+}
+
+.phone-screen h3 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.phone-screen p { margin: 0 0 14px; line-height: 1.45; }
+
+.phone-kicker {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.selected-contact {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--accent-ink);
+}
+
+.sync-layout select,
+.sync-layout input,
+details select,
+details input {
+  margin-top: 12px;
+}
+
+.quick-match {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+details {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+summary { cursor: pointer; font-weight: 600; }
+details[open] summary { margin-bottom: 12px; }
 
 table {
   width: 100%;
@@ -202,4 +383,5 @@ th { color: var(--muted); font-weight: 600; }
   .grid { grid-template-columns: 1fr 1fr; }
   .main { padding: 20px; }
   .main h1 { font-size: 32px; }
+  .quick-match, .sync-layout { grid-template-columns: 1fr; }
 }

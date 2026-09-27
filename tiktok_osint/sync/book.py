@@ -42,6 +42,51 @@ def parse_contact_csv(text: str) -> list[ImportedContact]:
     return [row for row in rows if row.phone_raw or row.email or row.display_name != "Không tên"]
 
 
+_MAX_PHONE_LINES = 5000
+_PHONE_CANDIDATE = re.compile(r"(?<!\d)(?:\+|00)?\d(?:[\d.\-\s()]{0,18}\d)?(?!\d)")
+
+
+def parse_phone_lines(text: str) -> tuple[list[ImportedContact], int, list[dict[str, object]]]:
+    """Đọc danh sách số điện thoại do người dùng dán: mỗi dòng một số, có thể kèm tên."""
+    lines = text.splitlines()
+    data_lines = [line for line in lines if line.strip() and not line.strip().startswith("#")]
+    if len(data_lines) > _MAX_PHONE_LINES:
+        raise ValidationError(f"Mỗi lần nhập tối đa {_MAX_PHONE_LINES} số")
+    contacts: list[ImportedContact] = []
+    rejected: list[dict[str, object]] = []
+    seen: set[str] = set()
+    skipped = 0
+    for index, raw in enumerate(lines, start=1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        found = _first_phone(line)
+        if found is None:
+            rejected.append({"line": index, "raw": line[:180], "reason": "Không thấy số điện thoại hợp lệ"})
+            continue
+        token, start, end = found
+        name = _name_around_phone(line, start, end)
+        contact = build_contact(display_name=name or token, phone=token, email=None)
+        if contact.phone_e164 is None:
+            rejected.append({"line": index, "raw": line[:180], "reason": "Số không chuẩn hóa được"})
+            continue
+        if contact.phone_e164 in seen:
+            skipped += 1
+            continue
+        seen.add(contact.phone_e164)
+        contacts.append(contact)
+    return contacts, skipped, rejected
+
+
+def parse_address_book_file(filename: str, text: str) -> tuple[list[ImportedContact], int, list[dict[str, object]]]:
+    lower = filename.lower()
+    if lower.endswith(".vcf"):
+        return parse_vcard(text), 0, []
+    if lower.endswith(".csv") and _csv_has_header(text):
+        return parse_contact_csv(text), 0, []
+    return parse_phone_lines(text)
+
+
 def parse_vcard(text: str) -> list[ImportedContact]:
     cards = re.split(r"(?i)END:VCARD", text)
     rows: list[ImportedContact] = []
@@ -96,3 +141,29 @@ def _vcard_value(card: str, field: str) -> str | None:
     if not match:
         return None
     return match.group(1).strip() or None
+
+
+def _first_phone(line: str) -> tuple[str, int, int] | None:
+    for match in _PHONE_CANDIDATE.finditer(line):
+        token = match.group(0).strip()
+        if normalize_phone(token):
+            return token, match.start(), match.end()
+    return None
+
+
+def _name_around_phone(line: str, start: int, end: int) -> str | None:
+    raw = f"{line[:start]} {line[end:]}"
+    raw = re.sub(r"[,;\|\t]+", " ", raw)
+    raw = re.sub(r"\s+[-–—]\s+", " ", raw)
+    name = " ".join(raw.split()).strip(" -–—")
+    return name or None
+
+
+def _csv_has_header(text: str) -> bool:
+    sample = text.lstrip("\ufeff").strip()
+    if not sample:
+        return False
+    header = sample.splitlines()[0].strip().lower()
+    tokens = {part.strip() for part in re.split(r"[,;\t]", header)}
+    known = {"name", "display_name", "ten", "họ tên", "ho ten", "phone", "tel", "sdt", "sđt", "mobile", "email", "mail"}
+    return bool(tokens & known)

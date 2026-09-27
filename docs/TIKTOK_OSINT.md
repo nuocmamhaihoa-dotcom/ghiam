@@ -13,6 +13,7 @@ Có:
 - Retry, timeout, checkpoint, pause/resume, hàng đợi Redis (hoặc bộ nhớ nếu chưa cấu hình Redis).
 - Xuất CSV, Excel, SQLite.
 - Contact Sync Assistant: lưu danh bạ của người dùng, ghi username mà ứng dụng TikTok đã hiển thị, đối chiếu username đó với hồ sơ công khai đã quét.
+- Quản lý nhiều danh bạ, sửa/xóa liên hệ, checkpoint và tiếp tục phiên ghi nhận, xuất danh bạ/kết quả ra CSV hoặc Excel.
 
 Không có:
 
@@ -29,6 +30,21 @@ Không có:
 | M3 | FastAPI, hàng đợi, worker | Có trong `tiktok_osint/api` và `worker` |
 | M4 | OCR ảnh đại diện qua PaddleOCR, cài đặt tùy chọn | Có trong `tiktok_osint/ocr` |
 | M5 | Ghi nhận luồng danh bạ chính thức và dashboard Next.js | Có trong `tiktok_osint/sync` và `web/` |
+
+## Đồng bộ Danh bạ TikTok theo quy trình chính thức
+
+Module này là trợ lý ghi nhận; nó không tự đồng bộ với TikTok:
+
+1. Người dùng nhập danh bạ của chính mình bằng biểu mẫu, danh sách nhiều dòng, CSV, TXT hoặc vCard. Số Việt Nam được chuẩn hóa về E.164 và lưu trong SQLite.
+2. Người dùng tự mở ứng dụng TikTok chính thức trên điện thoại, vào phần tìm/thêm bạn bè hoặc cài đặt quyền riêng tư và chọn đồng bộ danh bạ. Tên mục có thể thay đổi theo phiên bản hoặc khu vực.
+3. Người dùng đọc thông báo xin quyền của hệ điều hành và tự quyết định cấp quyền. Quyền có thể được thu hồi trong cài đặt TikTok hoặc điện thoại.
+4. Người dùng tạo một phiên ghi nhận trong dashboard, rồi nhập **username hoặc URL hồ sơ** mà TikTok chính thức đã gợi ý/hiển thị.
+5. Ứng dụng lưu checkpoint sau mỗi lượt, cho phép tạm dừng/tiếp tục. Đối chiếu với dữ liệu quét công khai chỉ dùng `tiktok_username`.
+6. Danh bạ và kết quả phiên có thể tải xuống dạng CSV hoặc Excel.
+
+Dashboard gom thành hai việc: lưu số vào danh bạ, rồi gắn `@username` TikTok đã hiển thị với từng liên hệ. Nút **Mở TikTok trên máy chủ** mở trang đăng nhập chính thức trong trình duyệt chạy trên VPS; người dùng tự đăng nhập. Danh bạ không được gửi đi. Phiên đang ghi được tự dùng lại; phiên tạm dừng được tiếp tục từ checkpoint.
+
+Không có số điện thoại nào được dùng làm khóa tìm kiếm TikTok. Nhập số vào danh sách tài khoản hiển thị sẽ bị từ chối. Retry của module chỉ xử lý lỗi khóa SQLite tạm thời; lỗi chính sách và dữ liệu không hợp lệ không được retry.
 
 ## Chạy
 

@@ -1,0 +1,17 @@
+[Unit]
+Description=Official TikTok login browser on the VPS
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/tiktok-osint
+ExecStart=/opt/tiktok-osint/deploy/vps/tiktok-phone.sh
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
@@ -27,6 +27,30 @@ def make_engine(database_url: str) -> Engine:
 
 def init_db(engine: Engine) -> None:
     Base.metadata.create_all(engine)
+    if engine.dialect.name == "sqlite":
+        _migrate_sqlite(engine)
+
+
+def _migrate_sqlite(engine: Engine) -> None:
+    """Apply additive compatibility changes for existing VPS SQLite databases."""
+    columns = {column["name"] for column in inspect(engine).get_columns("official_sync_sessions")}
+    additions = {
+        "status": "status VARCHAR(32) NOT NULL DEFAULT 'recording'",
+        "checkpoint_json": "checkpoint_json TEXT NOT NULL DEFAULT '{}'",
+        "updated_at": "updated_at DATETIME",
+    }
+    with engine.begin() as connection:
+        for name, definition in additions.items():
+            if name not in columns:
+                connection.execute(text(f"ALTER TABLE official_sync_sessions ADD COLUMN {definition}"))
+        connection.execute(
+            text(
+                "UPDATE official_sync_sessions "
+                "SET updated_at = COALESCE(updated_at, created_at), "
+                "status = COALESCE(status, 'recording'), "
+                "checkpoint_json = COALESCE(checkpoint_json, '{}')"
+            )
+        )
 
 
 def session_factory(engine: Engine) -> sessionmaker[Session]:
