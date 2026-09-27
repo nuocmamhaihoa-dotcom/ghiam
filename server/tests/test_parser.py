@@ -57,6 +57,12 @@ def parse_error(line: str, defaults: ImportDefaults = STATIC) -> str:
         ("[2001:DB8:0::1]:8080:user:pass", ("http", "2001:db8::1", 8080, "user", "pass")),
         ("http://user:pass@[2001:db8::1]:8080", ("http", "2001:db8::1", 8080, "user", "pass")),
         ("token@1.2.3.4:8080", ("http", "1.2.3.4", 8080, "token", None)),
+        ("1.2.3.4:8080:user:p@ss", ("http", "1.2.3.4", 8080, "user", "p@ss")),
+        ("1.2.3.4:8080:me@mail.com:pass", ("http", "1.2.3.4", 8080, "me@mail.com", "pass")),
+        ("user:p@ss:1.2.3.4:8080", ("http", "1.2.3.4", 8080, "user", "p@ss")),
+        ("proxy.vn:3128:user:@@pw:x", ("http", "proxy.vn", 3128, "user", "@@pw:x")),
+        ("me@mail.com:pass@1.2.3.4:8080", ("http", "1.2.3.4", 8080, "me@mail.com", "pass")),
+        ("http://user:p@ss@1.2.3.4:8080", ("http", "1.2.3.4", 8080, "user", "p@ss")),
     ],
 )
 def test_supported_proxy_formats(line: str, expected: tuple[str, str, int, str, str | None]) -> None:
@@ -198,6 +204,8 @@ def test_link_without_path_warns() -> None:
         ("https://api.vn/change?key=1", "không được chứa đường dẫn"),
         ("2001:db8::1:8080", "ngoặc vuông"),
         (":pass@1.2.3.4:8080", "thiếu tên đăng nhập"),
+        ("user:pass@1.2.3.4:99999", "Cổng (port) không hợp lệ"),
+        ("user:pass@bad_host:80", "Host không hợp lệ"),
         ("1.2.3.4 8080 user https://x.vn/a?b=1", "Thiếu mật khẩu"),
         ("1.2.3.4:8080 type=abc", "type="),
         ("1.2.3.4:8080 type=4g interval=10x", "interval="),

@@ -6,6 +6,7 @@ dấu cách hoặc tab. Dòng trống và dòng bắt đầu bằng ``#`` hoặc
 
 from __future__ import annotations
 
+import contextlib
 import ipaddress
 import re
 from dataclasses import dataclass, field, replace
@@ -233,6 +234,10 @@ def parse_endpoint(spec: str) -> Endpoint:
         consider(primary_hostport, *_split_credentials(credentials, decode=decode), priority=1)
         swapped_hostport, swapped_credentials = text.split("@", 1)
         consider(swapped_hostport, *_split_credentials(swapped_credentials, decode=decode), priority=0)
+        if not candidates and not decode:
+            with contextlib.suppress(ProxyParseError):
+                for form in _colon_forms(text):
+                    consider(*form)
     elif text.startswith("["):
         closing = text.find("]")
         if closing == -1:
@@ -247,18 +252,10 @@ def parse_endpoint(spec: str) -> Endpoint:
         username, password = (parts[1], parts[2]) if len(parts) == 3 else ("", None)
         consider(primary_hostport, username, password, priority=1)
     else:
-        parts = text.split(":")
-        if len(parts) == 1:
-            raise ProxyParseError("Thiếu cổng (port), định dạng: host:port")
-        if len(parts) == 3:
-            raise ProxyParseError("Thiếu mật khẩu, định dạng: host:port:user:pass")
-        primary_hostport = f"{parts[0]}:{parts[1]}"
-        if len(parts) == 2:
-            consider(primary_hostport, "", None, priority=1)
-        else:
-            consider(primary_hostport, parts[2], ":".join(parts[3:]), priority=1)
-            if len(parts) == 4:
-                consider(f"{parts[2]}:{parts[3]}", parts[0], parts[1], priority=0)
+        forms = _colon_forms(text)
+        primary_hostport = forms[0][0]
+        for form in forms:
+            consider(*form)
 
     if not candidates:
         if text.count(":") >= 2 and _BARE_IPV6_RE.match(text):
@@ -434,6 +431,22 @@ def _parse_hostport(text: str) -> tuple[str, int, int] | None:
     if host is None or port is None:
         return None
     return host[0], port, host[1]
+
+
+def _colon_forms(text: str) -> list[tuple[str, str, str | None, int]]:
+    """Các cách hiểu ``host:port``, ``host:port:user:pass``, ``user:pass:host:port`` (cách đầu tiên là cách chính)."""
+    parts = text.split(":")
+    if len(parts) == 1:
+        raise ProxyParseError("Thiếu cổng (port), định dạng: host:port")
+    if len(parts) == 3:
+        raise ProxyParseError("Thiếu mật khẩu, định dạng: host:port:user:pass")
+    primary_hostport = f"{parts[0]}:{parts[1]}"
+    if len(parts) == 2:
+        return [(primary_hostport, "", None, 1)]
+    forms: list[tuple[str, str, str | None, int]] = [(primary_hostport, parts[2], ":".join(parts[3:]), 1)]
+    if len(parts) == 4:
+        forms.append((f"{parts[2]}:{parts[3]}", parts[0], parts[1], 0))
+    return forms
 
 
 def _describe_hostport_problem(hostport: str) -> str:
