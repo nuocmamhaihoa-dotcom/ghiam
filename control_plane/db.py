@@ -75,6 +75,15 @@ def init_db(db_path: Path) -> None:
               detail TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_actions_at ON operator_actions(at);
+            CREATE TABLE IF NOT EXISTS input_recordings (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              at TEXT NOT NULL,
+              actor TEXT NOT NULL,
+              title TEXT NOT NULL,
+              event_count INTEGER NOT NULL,
+              steps_json TEXT NOT NULL,
+              events_json TEXT NOT NULL
+            );
             """
         )
         conn.commit()
@@ -241,6 +250,87 @@ def list_actions(
             params,
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def save_recording(
+    db_path: Path,
+    *,
+    at: str,
+    actor: str,
+    title: str,
+    steps: list[str],
+    events: list[dict[str, Any]],
+) -> int:
+    with session(db_path) as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO input_recordings(at, actor, title, event_count, steps_json, events_json)
+            VALUES(?,?,?,?,?,?)
+            """,
+            (
+                at,
+                actor[:80],
+                title[:200],
+                len(events),
+                json.dumps(steps, ensure_ascii=False),
+                json.dumps(events, ensure_ascii=False),
+            ),
+        )
+        conn.execute(
+            """
+            DELETE FROM input_recordings
+            WHERE id NOT IN (
+              SELECT id FROM input_recordings ORDER BY id DESC LIMIT 100
+            )
+            """
+        )
+        return int(cur.lastrowid)
+
+
+def list_recordings(db_path: Path, *, limit: int = 20) -> list[dict[str, Any]]:
+    limit = max(1, min(int(limit), 50))
+    with session(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, at, actor, title, event_count, steps_json
+            FROM input_recordings
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        try:
+            item["steps"] = json.loads(item.pop("steps_json") or "[]")
+        except json.JSONDecodeError:
+            item["steps"] = []
+            item.pop("steps_json", None)
+        items.append(item)
+    return items
+
+
+def get_recording(db_path: Path, recording_id: int) -> dict[str, Any] | None:
+    with session(db_path) as conn:
+        row = conn.execute(
+            "SELECT id, at, actor, title, event_count, steps_json, events_json FROM input_recordings WHERE id=?",
+            (recording_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    item = dict(row)
+    try:
+        item["steps"] = json.loads(item.pop("steps_json") or "[]")
+    except json.JSONDecodeError:
+        item["steps"] = []
+        item.pop("steps_json", None)
+    try:
+        item["events"] = json.loads(item.pop("events_json") or "[]")
+    except json.JSONDecodeError:
+        item["events"] = []
+        item.pop("events_json", None)
+    return item
 
 
 def record_transfer(db_path: Path, machine_id: str, kind: str, nbytes: int, ms: int, at: str) -> None:

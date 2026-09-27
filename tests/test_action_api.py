@@ -66,11 +66,59 @@ class ActionApiTests(unittest.TestCase):
         self.assertGreaterEqual(listed.json()["count"], 1)
         self.assertIn("Check proxy", listed.json()["items"][0]["summary"])
 
+    def test_recording_roundtrip_hides_password(self) -> None:
+        created = self.client.post(
+            "/v1/recordings",
+            headers=self.headers,
+            json={
+                "events": [
+                    {"t": 0, "kind": "key", "target": "#token", "key": "secret-key"},
+                    {"t": 5, "kind": "value", "target": "#q", "value": "xin chào"},
+                    {
+                        "t": 12,
+                        "kind": "pointer",
+                        "target": "#refresh",
+                        "phase": "up",
+                        "pointerType": "mouse",
+                        "click": True,
+                    },
+                ]
+            },
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        body = created.json()
+        self.assertNotIn("secret-key", created.text)
+        self.assertIn("Gõ vào #q: xin chào", body["steps"])
+        self.assertIn("Bấm #refresh", body["steps"])
+
+        listed = self.client.get("/v1/recordings", headers=self.headers)
+        self.assertEqual(listed.status_code, 200)
+        self.assertGreaterEqual(listed.json()["count"], 1)
+
+        fetched = self.client.get(f"/v1/recordings/{body['id']}", headers=self.headers)
+        self.assertEqual(fetched.status_code, 200)
+        kinds = [event["kind"] for event in fetched.json()["events"]]
+        self.assertEqual(kinds, ["key", "value", "pointer"])
+        self.assertTrue(fetched.json()["events"][0]["redacted"])
+        self.assertNotIn("key", fetched.json()["events"][0])
+
+    def test_recording_requires_token_and_real_events(self) -> None:
+        denied = self.client.post("/v1/recordings", json={"events": [{"t": 0, "kind": "key", "target": "#q", "key": "a"}]})
+        self.assertEqual(denied.status_code, 401)
+        empty = self.client.post(
+            "/v1/recordings",
+            headers=self.headers,
+            json={"events": [{"t": 0, "kind": "value", "target": "#token", "value": "nope"}]},
+        )
+        self.assertEqual(empty.status_code, 400)
+
     def test_dashboard_has_journal(self) -> None:
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Nhật ký thao tác", response.text)
         self.assertIn("Ghi nhớ", response.text)
+        self.assertIn("Làm theo", response.text)
+        self.assertIn("Ghi bấm phím và cảm ứng", response.text)
 
 
 if __name__ == "__main__":

@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
+from control_plane.recordings import default_title, sanitize_events, script_lines
 from control_plane.settings import settings
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -58,7 +59,7 @@ def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-_ACTION_KINDS = {"note", "cli", "proxy_check", "proxy_upload", "package_upload"}
+_ACTION_KINDS = {"note", "cli", "proxy_check", "proxy_upload", "package_upload", "input_replay"}
 
 
 def _remember_hub(kind: str, summary: str, detail: str | None = None, actor: str = "me") -> None:
@@ -481,6 +482,51 @@ def get_actions(
         raise HTTPException(400, "unknown kind")
     items = db.list_actions(settings.db_path, limit=limit, q=q, kind=kind)
     return {"count": len(items), "items": items}
+
+
+class RecordingBody(BaseModel):
+    title: str = Field(default="", max_length=200)
+    events: list[dict[str, Any]] = Field(min_length=1, max_length=3000)
+
+
+@app.post("/v1/recordings")
+def create_recording(body: RecordingBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Store a keyboard / pointer recording that can be replayed in order."""
+    _auth(authorization)
+    events = sanitize_events(body.events)
+    if not events:
+        raise HTTPException(400, "no replayable events")
+    steps = script_lines(events)
+    title = " ".join(body.title.split()) or default_title(events)
+    recording_id = db.save_recording(
+        settings.db_path,
+        at=utcnow(),
+        actor="me",
+        title=title,
+        steps=steps,
+        events=events,
+    )
+    _remember_hub("input_replay", title, detail=" → ".join(steps[:20]) or None)
+    return {"ok": True, "id": recording_id, "title": title, "steps": steps, "event_count": len(events)}
+
+
+@app.get("/v1/recordings")
+def recordings_list(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=20, ge=1, le=50),
+) -> dict[str, Any]:
+    _auth(authorization)
+    items = db.list_recordings(settings.db_path, limit=limit)
+    return {"count": len(items), "items": items}
+
+
+@app.get("/v1/recordings/{recording_id}")
+def recordings_get(recording_id: int, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    item = db.get_recording(settings.db_path, recording_id)
+    if item is None:
+        raise HTTPException(404, "recording not found")
+    return item
 
 
 @app.post("/v1/sync/comments")
