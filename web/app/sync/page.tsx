@@ -36,7 +36,7 @@ type Row = {
   note: string | null;
   matched_public_profile: boolean;
   match_key: string;
-  contact: { display_name: string } | null;
+  contact: { id: string; display_name: string } | null;
   public_profile: { nickname: string | null; followers: number | null } | null;
 };
 
@@ -56,7 +56,12 @@ export default function SyncPage() {
   const [rejected, setRejected] = useState<Rejected[]>([]);
   const [accountRejected, setAccountRejected] = useState<Rejected[]>([]);
   const [displayedAccounts, setDisplayedAccounts] = useState("");
+  const [quickUsername, setQuickUsername] = useState("");
+  const [quickDisplayName, setQuickDisplayName] = useState("");
   const [resultNote, setResultNote] = useState("");
+  const [openedTikTok, setOpenedTikTok] = useState(false);
+  const [permissionGranted, setPermissionGranted] = useState(false);
+  const [suggestionsVisible, setSuggestionsVisible] = useState(false);
   const [busy, setBusy] = useState(false);
 
   function applyBook(next: Book, preferContactId?: string) {
@@ -74,18 +79,29 @@ export default function SyncPage() {
     const full = await api<Book>(`/api/contact-books/${selectedId}`);
     applyBook(full);
     setBookName(full.name);
-    await refreshSessions(full.id);
+    await refreshSessions(full.id, undefined, full.contacts);
     return full;
   }
 
-  async function refreshSessions(bookId: string, selectedSessionId?: string) {
+  async function refreshSessions(bookId: string, selectedSessionId?: string, contacts?: Contact[]) {
     const list = await api<SyncSession[]>(`/api/official-sync/sessions?book_id=${encodeURIComponent(bookId)}`);
     setSessions(list);
     const target = selectedSessionId ?? sessionId;
-    if (target && list.some((item) => item.id === target)) {
-      setSessionId(target);
+    const selected = target && list.some((item) => item.id === target) ? target : list[0]?.id ?? null;
+    setSessionId(selected);
+    if (selected) {
+      const recon = await api<{ rows: Row[] }>(`/api/official-sync/sessions/${selected}/reconciliation`);
+      setRows(recon.rows);
+      const linkedIds = new Set(
+        recon.rows.map((row) => row.contact?.id).filter((id): id is string => Boolean(id)),
+      );
+      const candidates = contacts ?? book?.contacts ?? [];
+      setContactId((current) => {
+        if (current && !linkedIds.has(current)) return current;
+        return candidates.find((contact) => !linkedIds.has(contact.id))?.id ?? current;
+      });
     } else {
-      setSessionId(list[0]?.id ?? null);
+      setRows([]);
     }
   }
 
@@ -103,7 +119,7 @@ export default function SyncPage() {
         const full = await api<Book>(`/api/contact-books/${list[0].id}`);
         applyBook(full);
         setBookName(full.name);
-        await refreshSessions(full.id);
+        await refreshSessions(full.id, undefined, full.contacts);
       })
       .catch((err: Error) => setMessage(err.message));
   }, []);
@@ -232,8 +248,8 @@ export default function SyncPage() {
     setMessage("Đã xóa liên hệ. Kết quả TikTok đã ghi vẫn được giữ nhưng không còn gắn với liên hệ này.");
   }
 
-  async function openSession() {
-    if (!book) return;
+  async function createRecordingSession(): Promise<string> {
+    if (!book) throw new Error("Hãy nhập danh bạ trước");
     const session = await api<SyncSession>("/api/official-sync/sessions", {
       method: "POST",
       body: JSON.stringify({ book_id: book.id, note: "Kết quả người dùng nhìn thấy trong ứng dụng TikTok" }),
@@ -241,7 +257,62 @@ export default function SyncPage() {
     setSessionId(session.id);
     setRows([]);
     await refreshSessions(book.id, session.id);
+    return session.id;
+  }
+
+  async function openSession() {
+    await createRecordingSession();
     setMessage("Đã mở phiên ghi nhận. Hãy tự cấp quyền trong ứng dụng TikTok chính thức, rồi nhập các username TikTok đã hiển thị.");
+  }
+
+  async function ensureRecordingSession(): Promise<string> {
+    if (!book) throw new Error("Hãy nhập danh bạ trước");
+    const current = sessions.find((item) => item.id === sessionId);
+    if (current?.status === "recording") return current.id;
+    if (current?.status === "paused") {
+      await api<SyncSession>(`/api/official-sync/sessions/${current.id}/resume`, { method: "POST" });
+      await refreshSessions(book.id, current.id);
+      return current.id;
+    }
+    const existing = sessions.find((item) => item.status === "recording");
+    if (existing) {
+      await loadSession(existing.id);
+      return existing.id;
+    }
+    return await createRecordingSession();
+  }
+
+  async function recordQuickMatch() {
+    if (!book || !contactId || !quickUsername.trim()) {
+      setMessage("Chọn một liên hệ và nhập username TikTok mà ứng dụng đã hiển thị.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const activeSessionId = await ensureRecordingSession();
+      await api(`/api/official-sync/sessions/${activeSessionId}/results`, {
+        method: "POST",
+        body: JSON.stringify([
+          {
+            tiktok_username: quickUsername,
+            user_contact_id: contactId,
+            display_name_shown: quickDisplayName || null,
+            note: resultNote || null,
+          },
+        ]),
+      });
+      const recon = await api<{ rows: Row[] }>(`/api/official-sync/sessions/${activeSessionId}/reconciliation`);
+      setRows(recon.rows);
+      await refreshSessions(book.id, activeSessionId);
+      const linkedIds = new Set(recon.rows.map((row) => row.contact?.id).filter((id): id is string => Boolean(id)));
+      const next = book.contacts.find((contact) => !linkedIds.has(contact.id));
+      setContactId(next?.id ?? "");
+      setQuickUsername("");
+      setQuickDisplayName("");
+      setMessage(next ? `Đã lưu. Tiếp theo: ${next.display_name}.` : "Đã ghi nhận xong tất cả liên hệ được xác định.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function recordDisplayedAccounts() {
@@ -282,6 +353,20 @@ export default function SyncPage() {
     );
   }
 
+  const linkedContactIds = new Set(
+    rows.map((row) => row.contact?.id).filter((id): id is string => Boolean(id)),
+  );
+  const linkedContacts = linkedContactIds.size;
+  const contactTotal = book?.contacts.length ?? 0;
+  const workflowSteps = [
+    contactTotal > 0,
+    openedTikTok,
+    permissionGranted,
+    suggestionsVisible,
+    rows.length > 0,
+  ];
+  const completedSteps = workflowSteps.filter(Boolean).length;
+
   return (
     <>
       <h1>Contact Sync Assistant</h1>
@@ -292,8 +377,13 @@ export default function SyncPage() {
       <div className="policy">
         Không có tra cứu SĐT → ID. Nếu dán một số điện thoại vào ô username, API từ chối. Quyền danh bạ chỉ được cấp trong ứng dụng TikTok chính thức.
       </div>
+      <div className="workflow-progress" aria-label="Tiến độ quy trình">
+        <strong>Tiến độ: {completedSteps}/5 bước</strong>
+        <div className="progress-track"><span style={{ width: `${completedSteps * 20}%` }} /></div>
+        <span>{linkedContacts}/{contactTotal} liên hệ đã được bạn gắn với tài khoản TikTok hiển thị.</span>
+      </div>
       {message && <p>{message}</p>}
-      <section className="panel">
+      <section className={`panel workflow-step ${workflowSteps[0] ? "done" : ""}`}>
         <h2>1. Danh bạ của bạn</h2>
         <div className="row">
           <button className="secondary" onClick={() => createNewBook().catch((err: Error) => setMessage(err.message))}>
@@ -381,24 +471,37 @@ export default function SyncPage() {
           </>
         )}
       </section>
-      <section className="panel">
-        <h2>2. Tự đồng bộ trong ứng dụng TikTok chính thức</h2>
-        <ol className="steps">
-          <li>Mở TikTok trên điện thoại bằng tài khoản của bạn.</li>
-          <li>Vào phần tìm bạn bè/thêm bạn bè hoặc cài đặt quyền riêng tư, chọn đồng bộ danh bạ. Tên mục có thể khác theo phiên bản và khu vực.</li>
-          <li>Đọc màn hình xin quyền của hệ điều hành và chỉ bấm cho phép nếu bạn đồng ý. Bạn có thể thu hồi quyền trong cài đặt điện thoại/TikTok.</li>
-          <li>Quay lại đây và ghi đúng các <strong>username</strong> mà TikTok chính thức gợi ý hoặc hiển thị. Không nhập số điện thoại để tìm tài khoản.</li>
-        </ol>
+      <section className={`panel workflow-step ${workflowSteps[1] ? "done" : ""}`}>
+        <h2>2. Mở TikTok và vào Danh bạ</h2>
+        <p>Mở TikTok trên điện thoại → <strong>Thêm/Tìm bạn bè</strong> → <strong>Danh bạ</strong>. Tên mục có thể khác đôi chút theo phiên bản hoặc khu vực.</p>
+        <label className="check-row">
+          <input type="checkbox" checked={openedTikTok} onChange={(event) => setOpenedTikTok(event.target.checked)} />
+          Tôi đã mở đúng màn hình Danh bạ trong ứng dụng TikTok chính thức.
+        </label>
+      </section>
+      <section className={`panel workflow-step ${workflowSteps[2] ? "done" : ""}`}>
+        <h2>3. Tự cấp quyền danh bạ</h2>
+        <p>Đọc thông báo xin quyền của TikTok và hệ điều hành. Chỉ bấm cho phép nếu bạn đồng ý; quyền có thể thu hồi trong cài đặt điện thoại hoặc TikTok.</p>
+        <label className="check-row">
+          <input type="checkbox" checked={permissionGranted} onChange={(event) => setPermissionGranted(event.target.checked)} />
+          Tôi đã tự quyết định và hoàn tất bước cấp quyền trong TikTok.
+        </label>
+      </section>
+      <section className={`panel workflow-step ${workflowSteps[3] ? "done" : ""}`}>
+        <h2>4. Xem tài khoản TikTok gợi ý</h2>
+        <p>Chờ TikTok tải danh sách, sau đó mở từng tài khoản được gợi ý và ghi lại <strong>@username</strong>. TikTok có thể không hiển thị mọi người do cài đặt riêng tư và chính sách của nền tảng.</p>
+        <label className="check-row">
+          <input type="checkbox" checked={suggestionsVisible} onChange={(event) => setSuggestionsVisible(event.target.checked)} />
+          TikTok đã hiển thị các tài khoản gợi ý cho tôi.
+        </label>
         <div className="policy">
-          Công cụ này không đăng nhập TikTok, không tải danh bạ lên TikTok và không gọi API riêng tư. Quyền danh bạ chỉ được bạn cấp trực tiếp cho ứng dụng TikTok chính thức.
+          Công cụ này không đăng nhập TikTok, không tải danh bạ lên TikTok và không gọi API riêng tư.
         </div>
       </section>
-      <section className="panel">
-        <h2>3. Ghi nhận và tổ chức tài khoản TikTok đã hiển thị</h2>
+      <section className={`panel workflow-step ${workflowSteps[4] ? "done" : ""}`}>
+        <h2>5. Gắn username TikTok với từng liên hệ</h2>
+        <p className="hint">Chế độ nhanh tự tạo/tiếp tục phiên và chuyển sang liên hệ chưa ghi nhận kế tiếp.</p>
         <div className="row">
-          <button onClick={() => openSession().catch((err: Error) => setMessage(err.message))} disabled={!book}>
-            Tạo phiên ghi nhận
-          </button>
           {sessions.length > 0 && (
             <select
               aria-label="Phiên ghi nhận"
@@ -413,14 +516,41 @@ export default function SyncPage() {
             </select>
           )}
           <select aria-label="Liên hệ để đối chiếu" value={contactId} onChange={(event) => setContactId(event.target.value)} disabled={!book}>
-            <option value="">Không gắn liên hệ</option>
+            <option value="">Chọn liên hệ</option>
             {book?.contacts.map((contact) => (
               <option key={contact.id} value={contact.id}>
-                {contact.display_name} · {contact.phone_e164 ?? contact.email ?? "không có số"}
+                {linkedContactIds.has(contact.id) ? "✓ " : ""}{contact.display_name} · {contact.phone_e164 ?? contact.email ?? "không có số"}
               </option>
             ))}
           </select>
         </div>
+        <div className="quick-match">
+          <input
+            aria-label="Username TikTok của liên hệ"
+            placeholder="@username TikTok đã hiển thị"
+            value={quickUsername}
+            onChange={(event) => setQuickUsername(event.target.value)}
+          />
+          <input
+            aria-label="Tên TikTok hiển thị"
+            placeholder="Tên TikTok hiển thị (không bắt buộc)"
+            value={quickDisplayName}
+            onChange={(event) => setQuickDisplayName(event.target.value)}
+          />
+          <button
+            disabled={busy || !book || !contactId || !quickUsername.trim()}
+            onClick={() => recordQuickMatch().catch((err: Error) => setMessage(err.message))}
+          >
+            Lưu và sang người tiếp theo
+          </button>
+        </div>
+        <details>
+          <summary>Nhập nhiều username hoặc quản lý phiên nâng cao</summary>
+          <div className="row">
+            <button onClick={() => openSession().catch((err: Error) => setMessage(err.message))} disabled={!book}>
+              Tạo phiên mới
+            </button>
+          </div>
         <textarea
           aria-label="Tài khoản TikTok đã hiển thị"
           placeholder={"@username_da_thay\nhttps://www.tiktok.com/@tai_khoan_khac"}
@@ -456,6 +586,7 @@ export default function SyncPage() {
             </>
           )}
         </div>
+        </details>
         {accountRejected.length > 0 && (
           <ul>
             {accountRejected.map((item) => (

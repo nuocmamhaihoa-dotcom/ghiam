@@ -200,6 +200,63 @@ button.secondary, .button.secondary {
 
 .steps li { margin-bottom: 8px; }
 
+.workflow-progress {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.progress-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 180ms ease;
+}
+
+.workflow-step { border-left: 4px solid var(--line); }
+.workflow-step.done { border-left-color: var(--accent); }
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.check-row input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.quick-match {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+details {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+summary { cursor: pointer; font-weight: 600; }
+details[open] summary { margin-bottom: 12px; }
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -232,4 +289,5 @@ th { color: var(--muted); font-weight: 600; }
   .grid { grid-template-columns: 1fr 1fr; }
   .main { padding: 20px; }
   .main h1 { font-size: 32px; }
+  .quick-match { grid-template-columns: 1fr; }
 }
