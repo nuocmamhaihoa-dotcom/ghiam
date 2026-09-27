@@ -526,6 +526,7 @@ export default function SyncPage() {
             <>
               <a className="button secondary" href={downloadUrl(`/api/contact-books/${book.id}/export.csv`)}>Xuất danh bạ CSV</a>
               <a className="button secondary" href={downloadUrl(`/api/contact-books/${book.id}/export.xlsx`)}>Xuất danh bạ Excel</a>
+              <a className="button secondary" href={downloadUrl(`/api/contact-books/${book.id}/export.vcf`)}>Tải danh bạ cho iOS (VCF)</a>
             </>
           )}
         </div>

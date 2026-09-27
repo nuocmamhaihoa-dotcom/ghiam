@@ -24,6 +24,7 @@ from tiktok_osint.errors import (
 from tiktok_osint.export.writers import (
     flat_rows,
     write_contact_book_csv,
+    write_contact_book_vcard,
     write_contact_book_xlsx,
     write_csv,
     write_sqlite,
@@ -319,6 +320,13 @@ def create_app(
         path = services.settings.export_dir / f"contact-book-{book_id}.csv"
         write_contact_book_csv(path, list(book["contacts"]))
         return FileResponse(path, filename=path.name, media_type="text/csv")
+
+    @app.get("/api/contact-books/{book_id}/export.vcf")
+    def export_book_vcf(book_id: str) -> FileResponse:
+        book = services.repo.get_book(book_id)
+        path = services.settings.export_dir / f"contact-book-{book_id}.vcf"
+        write_contact_book_vcard(path, str(book["name"]), list(book["contacts"]))
+        return FileResponse(path, filename=path.name, media_type="text/vcard")
 
     @app.get("/api/contact-books/{book_id}/export.xlsx")
     def export_book_xlsx(book_id: str) -> FileResponse:

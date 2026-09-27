@@ -138,6 +138,34 @@ def write_contact_book_csv(path: Path, contacts: list[dict[str, Any]]) -> None:
     _write_dict_csv(path, CONTACT_BOOK_FIELDS, contacts)
 
 
+def write_contact_book_vcard(path: Path, name: str, contacts: list[dict[str, Any]]) -> None:
+    """Export a contact book to a simple vCard file for phone import.
+
+    Each contact becomes a vCard with:
+    - FN: display_name (or the book name when missing)
+    - TEL: phone_e164 if present, otherwise phone_raw
+    - EMAIL: email when present
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    book_label = str(name) or "Danh bạ"
+    for contact in contacts:
+      display_name = str(contact.get("display_name") or "").strip() or book_label
+      phone = str(contact.get("phone_e164") or contact.get("phone_raw") or "").strip()
+      email = str(contact.get("email") or "").strip()
+      if not display_name and not phone and not email:
+          continue
+      lines.append("BEGIN:VCARD")
+      lines.append("VERSION:3.0")
+      lines.append(f"FN:{display_name}")
+      if phone:
+          lines.append(f"TEL;TYPE=CELL:{phone}")
+      if email:
+          lines.append(f"EMAIL;TYPE=INTERNET:{email}")
+      lines.append("END:VCARD")
+    path.write_text("\r\n".join(lines) + ("\r\n" if lines else ""), encoding="utf-8")
+
+
 def write_contact_book_xlsx(path: Path, name: str, contacts: list[dict[str, Any]]) -> None:
     book = _new_workbook()
     sheet = book.active
