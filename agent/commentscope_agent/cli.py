@@ -201,7 +201,7 @@ async def _ping(client: ControlPlaneClient, config: AgentConfig, console: Consol
             "server_version": info.version,
             "agent_version": __version__,
             "latency_ms": latency_ms,
-            "clock_skew_sec": round(skew_sec, 1),
+            "clock_skew_sec": round(skew_sec, 1) or 0.0,  # không in -0.0 khi lệch rất nhỏ về phía âm
             "check_urls": list(info.check_urls),
         }
     )
