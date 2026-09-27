@@ -58,6 +58,25 @@ def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+_ACTION_KINDS = {"note", "cli", "proxy_check", "proxy_upload", "package_upload"}
+
+
+def _remember_hub(kind: str, summary: str, detail: str | None = None, actor: str = "me") -> None:
+    """Persist an operator action. A journal failure must not break the action itself."""
+    try:
+        db.record_action(
+            settings.db_path,
+            at=utcnow(),
+            actor=actor,
+            source="hub",
+            kind=kind,
+            summary=summary,
+            detail=detail,
+        )
+    except Exception:
+        return
+
+
 @app.on_event("startup")
 async def _startup() -> None:
     settings.ensure_dirs()
@@ -188,7 +207,13 @@ async def proxies_check_now(authorization: str | None = Header(default=None)) ->
     _auth(authorization)
     from control_plane.proxy_check import run_proxy_check_once
 
-    return await run_proxy_check_once()
+    result = await run_proxy_check_once()
+    _remember_hub(
+        "proxy_check",
+        f"Check proxy: live={result.get('live', 0)} die={result.get('die', 0)}",
+        detail=f"checked={result.get('checked', 0)} elapsed_ms={result.get('elapsed_ms', 0)}",
+    )
+    return result
 
 
 class ProxiesUploadBody(BaseModel):
@@ -219,10 +244,15 @@ async def proxies_upload(
         pass
     inserted = db.upsert_proxy_endpoints(settings.db_path, lines, "static")
     result: dict[str, Any] = {"ok": True, "saved": inserted, "file": str(path)}
-    if body.run_check:
-        from control_plane.proxy_check import run_proxy_check_once
+    try:
+        if body.run_check:
+            from control_plane.proxy_check import run_proxy_check_once
 
-        result["check"] = await run_proxy_check_once()
+            result["check"] = await run_proxy_check_once()
+    finally:
+        check = result.get("check") or {}
+        extra = f" · live={check.get('live', 0)} die={check.get('die', 0)}" if check else ""
+        _remember_hub("proxy_upload", f"Cập nhật {inserted} proxy{extra}")
     return result
 
 
@@ -400,7 +430,57 @@ async def upload_package(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     mbps = (nbytes * 8 / 1_000_000) / (ms / 1000) if ms > 0 else 0
+    _remember_hub(
+        "package_upload",
+        f"Upload gói {name} ({nbytes} bytes)",
+        detail=f"ms={ms} approx_mbps={round(mbps, 1)}",
+    )
     return {"ok": True, "name": name, "bytes": nbytes, "ms": ms, "approx_mbps": round(mbps, 1)}
+
+
+class ActionBody(BaseModel):
+    summary: str = Field(min_length=1, max_length=500)
+    kind: str = Field(default="note", max_length=40)
+    detail: str | None = Field(default=None, max_length=2000)
+    source: str = Field(default="manual", max_length=40)
+    actor: str = Field(default="me", max_length=80)
+
+
+@app.post("/v1/actions")
+def create_action(body: ActionBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Remember one thing the operator just did."""
+    _auth(authorization)
+    kind = body.kind.strip() or "note"
+    if kind not in _ACTION_KINDS:
+        raise HTTPException(400, "kind must be note, cli, proxy_check, proxy_upload, or package_upload")
+    summary = " ".join(body.summary.split())
+    if not summary:
+        raise HTTPException(400, "summary is empty")
+    action_id = db.record_action(
+        settings.db_path,
+        at=utcnow(),
+        actor=body.actor.strip() or "me",
+        source=body.source.strip() or "manual",
+        kind=kind,
+        summary=summary,
+        detail=body.detail,
+    )
+    return {"ok": True, "id": action_id}
+
+
+@app.get("/v1/actions")
+def get_actions(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    q: str = Query(default=""),
+    kind: str | None = Query(default=None),
+) -> dict[str, Any]:
+    """List remembered operator actions, newest first."""
+    _auth(authorization)
+    if kind is not None and kind not in _ACTION_KINDS:
+        raise HTTPException(400, "unknown kind")
+    items = db.list_actions(settings.db_path, limit=limit, q=q, kind=kind)
+    return {"count": len(items), "items": items}
 
 
 @app.post("/v1/sync/comments")

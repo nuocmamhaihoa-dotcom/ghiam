@@ -94,6 +94,11 @@
       background: rgba(20, 60, 40, 0.25);
     }
     .panel.ok-panel h2 { color: var(--ok); }
+    .panel.journal {
+      border-color: rgba(61, 156, 240, 0.4);
+      background: rgba(16, 36, 64, 0.45);
+    }
+    .panel.journal h2 { color: var(--accent); }
     .err { color: #ff7b7b; margin: 0.5rem 0; }
     .empty { color: var(--muted); padding: 1.2rem; text-align: center; }
     a { color: var(--accent); }
@@ -121,6 +126,33 @@
     <div class="stats" id="stats"></div>
     <div id="err" class="err" hidden></div>
     <div id="agents"></div>
+
+    <div class="panel journal" id="journal">
+      <h2>Nhật ký thao tác</h2>
+      <p class="meta" style="margin:0 0 0.7rem">
+        Ghi việc bạn vừa làm để tìm lại sau. Check proxy, cập nhật proxy và upload gói được ghi tự động.
+      </p>
+      <div class="toolbar">
+        <input id="actionText" type="text" maxlength="500" placeholder="Mình vừa làm gì? Ví dụ: import 300 URL rồi rebalance hot" />
+        <button id="saveAction" type="button">Ghi nhớ</button>
+      </div>
+      <div class="toolbar">
+        <input id="actionQ" type="search" placeholder="Tìm lại thao tác…" />
+        <button id="searchAction" class="ghost" type="button">Tìm</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Thời gian</th>
+            <th>Loại</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="actionRows">
+          <tr><td colspan="3" class="empty">Chưa có thao tác</td></tr>
+        </tbody>
+      </table>
+    </div>
 
     <div class="panel" id="diePanel">
       <h2>Proxy DIE</h2>
@@ -188,19 +220,45 @@
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
       })[c]);
     }
+    const kindLabel = {
+      note: "Ghi chú",
+      cli: "Lệnh",
+      proxy_check: "Check proxy",
+      proxy_upload: "Cập nhật proxy",
+      package_upload: "Upload gói",
+    };
+    function fmtTime(iso) {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso || "";
+      return d.toLocaleString("vi-VN");
+    }
+    function renderActions(items) {
+      if (!items.length) {
+        $("actionRows").innerHTML = `<tr><td colspan="3" class="empty">Chưa có thao tác. Gõ việc vừa làm rồi bấm Ghi nhớ.</td></tr>`;
+        return;
+      }
+      $("actionRows").innerHTML = items.map((a) => `<tr>
+        <td class="meta">${esc(fmtTime(a.at))}</td>
+        <td><span class="pill">${esc(kindLabel[a.kind] || a.kind || "")}</span></td>
+        <td>${esc(a.summary || "")}${a.detail ? `<div class="meta">${esc(a.detail)}</div>` : ""}${a.actor && a.actor !== "me" ? `<div class="meta">${esc(a.actor)}</div>` : ""}</td>
+      </tr>`).join("");
+    }
 
     async function loadAll() {
       $("err").hidden = true;
       try {
         const lim = $("limit").value;
         const q = encodeURIComponent($("q").value.trim());
-        const [stats, agents, comments, die, proxies] = await Promise.all([
+        const actionQ = encodeURIComponent($("actionQ").value.trim());
+        const [stats, agents, comments, die, proxies, actions] = await Promise.all([
           fetch("/v1/server/stats", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("stats " + r.status); return r.json(); }),
           fetch("/v1/agents", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("agents " + r.status); return r.json(); }),
           fetch("/v1/comments?limit=" + lim + "&q=" + q, { headers: headers() }).then((r) => { if (!r.ok) throw new Error("comments " + r.status); return r.json(); }),
           fetch("/v1/proxies/die?limit=500", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("proxies/die " + r.status); return r.json(); }),
           fetch("/v1/proxies?status=live&limit=30", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("proxies " + r.status); return r.json(); }),
+          fetch("/v1/actions?limit=40&q=" + actionQ, { headers: headers() }).then((r) => { if (!r.ok) throw new Error("actions " + r.status); return r.json(); }),
         ]);
+        renderActions(actions.items || []);
 
         const px = stats.proxies || die.summary || {};
         $("stats").innerHTML = [
@@ -293,9 +351,44 @@
       }
     }
 
+    async function saveAction() {
+      const summary = $("actionText").value.trim();
+      $("err").hidden = true;
+      if (!summary) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Nhập thao tác bạn vừa làm trước khi ghi.";
+        return;
+      }
+      $("saveAction").disabled = true;
+      try {
+        const r = await fetch("/v1/actions", {
+          method: "POST",
+          headers: { ...headers(), "Content-Type": "application/json" },
+          body: JSON.stringify({ summary, kind: "note", source: "manual" }),
+        });
+        if (!r.ok) throw new Error("actions " + r.status);
+        $("actionText").value = "";
+        await loadAll();
+        $("err").hidden = false;
+        $("err").style.color = "#3ecf8e";
+        $("err").textContent = "Đã ghi nhớ thao tác.";
+      } catch (e) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không ghi được: " + e.message;
+      } finally {
+        $("saveAction").disabled = false;
+      }
+    }
+
     $("saveToken").onclick = () => { localStorage.setItem(tokenKey, $("token").value.trim()); loadAll(); };
     $("refresh").onclick = loadAll;
     $("recheck").onclick = recheck;
+    $("saveAction").onclick = saveAction;
+    $("searchAction").onclick = loadAll;
+    $("actionText").addEventListener("keydown", (e) => { if (e.key === "Enter") saveAction(); });
+    $("actionQ").addEventListener("keydown", (e) => { if (e.key === "Enter") loadAll(); });
     $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") loadAll(); });
     $("limit").onchange = loadAll;
     if ($("token").value) loadAll();

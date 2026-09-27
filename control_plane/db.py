@@ -65,6 +65,16 @@ def init_db(db_path: Path) -> None:
               fail_count INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS idx_proxies_status ON proxies(status);
+            CREATE TABLE IF NOT EXISTS operator_actions (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              at TEXT NOT NULL,
+              actor TEXT NOT NULL,
+              source TEXT NOT NULL,
+              kind TEXT NOT NULL,
+              summary TEXT NOT NULL,
+              detail TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_actions_at ON operator_actions(at);
             """
         )
         conn.commit()
@@ -164,6 +174,73 @@ def upsert_comments(db_path: Path, machine_id: str, comments: list[dict[str, Any
             if before is None:
                 inserted += 1
     return inserted
+
+
+def record_action(
+    db_path: Path,
+    *,
+    at: str,
+    actor: str,
+    source: str,
+    kind: str,
+    summary: str,
+    detail: str | None = None,
+) -> int:
+    with session(db_path) as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO operator_actions(at, actor, source, kind, summary, detail)
+            VALUES(?,?,?,?,?,?)
+            """,
+            (at, actor[:80], source[:40], kind[:40], summary[:500], (detail[:2000] if detail else None)),
+        )
+        conn.execute(
+            """
+            DELETE FROM operator_actions
+            WHERE id NOT IN (
+              SELECT id FROM operator_actions ORDER BY id DESC LIMIT 5000
+            )
+            """
+        )
+        return int(cur.lastrowid)
+
+
+def list_actions(
+    db_path: Path,
+    *,
+    limit: int = 50,
+    q: str = "",
+    kind: str | None = None,
+) -> list[dict[str, Any]]:
+    limit = max(1, min(int(limit), 200))
+    clauses: list[str] = []
+    params: list[Any] = []
+    needle = q.strip()
+    if needle:
+        escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like = f"%{escaped}%"
+        clauses.append(
+            "(summary LIKE ? ESCAPE '\\' OR IFNULL(detail,'') LIKE ? ESCAPE '\\' "
+            "OR kind LIKE ? ESCAPE '\\' OR actor LIKE ? ESCAPE '\\')"
+        )
+        params.extend([like, like, like, like])
+    if kind:
+        clauses.append("kind = ?")
+        params.append(kind)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    params.append(limit)
+    with session(db_path) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT id, at, actor, source, kind, summary, detail
+            FROM operator_actions
+            {where}
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def record_transfer(db_path: Path, machine_id: str, kind: str, nbytes: int, ms: int, at: str) -> None:
