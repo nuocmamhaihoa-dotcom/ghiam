@@ -25,6 +25,7 @@ Chi tiết vận hành 2 PC: [`deploy/PA1_RUNBOOK.md`](deploy/PA1_RUNBOOK.md).
 - Linux: [`docs/CAI_DAT_PC.md`](docs/CAI_DAT_PC.md)
 - **Windows agent (bật là kết nối + tự cập nhật + nhiều PC):** [`docs/AGENT_WINDOWS.md`](docs/AGENT_WINDOWS.md)
 - **PC Server LAN (băng thông cao, sync comment, serve update):** [`docs/SERVER_PC.md`](docs/SERVER_PC.md)
+- **VPS Hub (máy chủ gốc + dashboard comment):** [`docs/VPS_HUB.md`](docs/VPS_HUB.md)
 
 **Windows — cài một lần, sau này tự nâng cấp:**
 
