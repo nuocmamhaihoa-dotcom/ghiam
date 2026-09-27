@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import time
+from collections.abc import Coroutine
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from commentscope_agent.verdict import PageVisit
 
@@ -49,7 +50,7 @@ class ProxiedBrowser:
             raise BrowserUnavailableError(
                 f"Chưa cài Playwright: chạy pip install -r requirements.txt rồi {INSTALL_HINT}"
             ) from None
-        playwright = await async_playwright().start()
+        playwright = await _start_driver(async_playwright().start())
         try:
             browser = await playwright.chromium.launch(
                 headless=self._headless, proxy=self._proxy, args=list(CHROMIUM_ARGS)
@@ -57,9 +58,12 @@ class ProxiedBrowser:
             context = await browser.new_context(
                 ignore_https_errors=self._ignore_https_errors, no_viewport=not self._headless
             )
-        except Error as exc:
-            await playwright.stop()
-            raise BrowserUnavailableError(_launch_error(exc.message)) from None
+        except BaseException as exc:
+            with contextlib.suppress(Exception):
+                await playwright.stop()
+            if isinstance(exc, Error):
+                raise BrowserUnavailableError(_launch_error(exc.message)) from None
+            raise
         context.set_default_navigation_timeout(self._timeout_sec * 1000)
         self._playwright, self._browser, self._context = playwright, browser, context
         return self
@@ -126,6 +130,18 @@ class ProxiedBrowser:
         if self._context is None:
             raise RuntimeError("Chromium chưa được mở")
         return self._context
+
+
+async def _start_driver(starting: Coroutine[Any, Any, Playwright]) -> Playwright:
+    # Driver Playwright là tiến trình Node.js con. Bị Ctrl+C giữa lúc khởi động thì vẫn chờ nó lên hẳn rồi tắt:
+    # bỏ dở, tiến trình con không được dọn và asyncio in lỗi "Event loop is closed" khi agent thoát.
+    task = asyncio.ensure_future(starting)
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        with contextlib.suppress(Exception):
+            await (await task).stop()
+        raise
 
 
 def _launch_error(message: str) -> str:
