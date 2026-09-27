@@ -76,6 +76,12 @@ TIKTOK_HEADLESS=true
 
 SQLite là nguồn sự thật cho checkpoint. Redis chỉ đánh thức worker. Không có Redis thì worker vẫn nhận job `queued` từ SQLite.
 
+## VPS
+
+Script cài: `deploy/vps/install-tiktok-osint.sh`. Nginx phục vụ dashboard tĩnh và chuyển `/api/` vào API trên `127.0.0.1:8088`, có mật khẩu HTTP basic. Redis dùng DB index `/1`.
+
+Worker Playwright cần glibc 2.28 trở lên (Ubuntu 20.04+). Ubuntu 18.04 chạy được API và dashboard; tiến trình worker không mở được Chromium trên bản đó.
+
 ## Kiểm thử
 
 ```bash
