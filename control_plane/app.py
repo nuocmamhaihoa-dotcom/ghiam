@@ -27,7 +27,14 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
-from control_plane.recordings import default_title, sanitize_events, script_lines
+from control_plane.recordings import (
+    default_title,
+    events_to_steps,
+    sanitize_events,
+    sanitize_steps,
+    script_lines,
+    steps_to_events,
+)
 from control_plane.settings import settings
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -489,6 +496,22 @@ class RecordingBody(BaseModel):
     events: list[dict[str, Any]] = Field(min_length=1, max_length=3000)
 
 
+class ParseBody(BaseModel):
+    events: list[dict[str, Any]] = Field(default_factory=list, max_length=3000)
+
+
+class StepsBody(BaseModel):
+    title: str = Field(default="", max_length=200)
+    steps: list[dict[str, Any]] = Field(default_factory=list, max_length=400)
+
+
+def _events_from_steps(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    events = steps_to_events(steps)
+    if not events:
+        raise HTTPException(400, "no replayable steps")
+    return events
+
+
 @app.post("/v1/recordings")
 def create_recording(body: RecordingBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     """Store a keyboard / pointer recording that can be replayed in order."""
@@ -508,6 +531,48 @@ def create_recording(body: RecordingBody, authorization: str | None = Header(def
     )
     _remember_hub("input_replay", title, detail=" → ".join(steps[:20]) or None)
     return {"ok": True, "id": recording_id, "title": title, "steps": steps, "event_count": len(events)}
+
+
+@app.post("/v1/recordings/parse")
+def recordings_parse(body: ParseBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Collapse a raw recording into steps that can be edited."""
+    _auth(authorization)
+    steps = events_to_steps(sanitize_events(body.events))
+    return {"steps": steps}
+
+
+@app.post("/v1/recordings/compile")
+def recordings_compile(body: StepsBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Turn edited steps into replay events without saving."""
+    _auth(authorization)
+    events = _events_from_steps(body.steps)
+    title = " ".join(body.title.split()) or default_title(events)
+    return {
+        "title": title,
+        "events": events,
+        "lines": script_lines(events),
+        "steps": sanitize_steps(body.steps),
+        "event_count": len(events),
+    }
+
+
+@app.post("/v1/recordings/from-steps")
+def recordings_from_steps(body: StepsBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Save an edited script as a new recording and keep the original."""
+    _auth(authorization)
+    events = _events_from_steps(body.steps)
+    lines = script_lines(events)
+    title = " ".join(body.title.split()) or default_title(events)
+    recording_id = db.save_recording(
+        settings.db_path,
+        at=utcnow(),
+        actor="me",
+        title=title,
+        steps=lines,
+        events=events,
+    )
+    _remember_hub("input_replay", title, detail=" → ".join(lines[:20]) or None)
+    return {"ok": True, "id": recording_id, "title": title, "steps": lines, "event_count": len(events)}
 
 
 @app.get("/v1/recordings")

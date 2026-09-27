@@ -114,6 +114,15 @@
       padding: 0.8rem 1rem; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
     }
     #replayAskChoices { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.55rem; }
+    #scriptEditor { margin-top: 0.9rem; padding-top: 0.7rem; border-top: 1px solid var(--line); }
+    .editor-step {
+      display: grid; grid-template-columns: auto 1fr; gap: 0.35rem 0.6rem;
+      align-items: start; padding: 0.45rem 0.35rem; border-bottom: 1px solid var(--line);
+    }
+    .editor-step.selected { background: rgba(61, 156, 240, 0.12); border-radius: 8px; }
+    .editor-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .editor-actions button { padding: 0.35rem 0.55rem; }
+    #editorDetail { white-space: pre-wrap; margin: 0.6rem 0 0; }
     body.is-recording { box-shadow: inset 0 0 0 3px rgba(255, 107, 107, 0.85); }
     .err { color: #ff7b7b; margin: 0.5rem 0; }
     .empty { color: var(--muted); padding: 1.2rem; text-align: center; }
@@ -172,7 +181,7 @@
 
       <div data-norecord>
         <h2 style="margin-top:1.1rem">Làm lại đúng phím và cảm ứng</h2>
-        <p class="meta">Chạm lệch trong 36px vẫn được hiểu là nút gần nhất. Khi làm lại, phần mềm đối chiếu chữ, vai trò và vị trí. Hai lựa chọn quá giống thì hỏi bạn. Thao tác chỉ tính là xong khi việc thực sự xảy ra.</p>
+        <p class="meta">Chạm lệch trong 36px vẫn được hiểu là nút gần nhất. Khi làm lại, phần mềm đối chiếu chữ, vai trò và vị trí. Hai lựa chọn quá giống thì hỏi bạn. Thao tác chỉ tính là xong khi việc thực sự xảy ra. Bấm «Sửa» để thêm, xoá, đổi thứ tự, ghi lại một đoạn, và xem control của từng bước trên trang. Lưu ra bản mới, bản gốc giữ nguyên.</p>
         <p class="meta" id="recordState" style="margin:0 0 0.6rem">Chưa ghi.</p>
         <div class="toolbar">
           <button id="recordToggle" type="button">Ghi bấm phím và cảm ứng</button>
@@ -189,6 +198,24 @@
             <tr><td colspan="3" class="empty">Chưa có bản ghi</td></tr>
           </tbody>
         </table>
+        <div id="scriptEditor" hidden>
+          <h2 style="margin-top:0.2rem">Sửa kịch bản</h2>
+          <p class="meta" id="editorHint">Chọn một bước để thấy control trên trang. Đánh dấu vài bước rồi ghi đè cả đoạn đó, hoặc ghi thêm ngay sau bước đang chọn.</p>
+          <div class="toolbar">
+            <input id="editorTitle" type="text" maxlength="200" placeholder="Tên bản mới" />
+          </div>
+          <div id="editorSteps"></div>
+          <p id="editorDetail" class="meta"></p>
+          <div class="toolbar">
+            <button id="editorAddTouch" class="ghost" type="button">Thêm bước bằng một lần chạm</button>
+            <button id="editorRetarget" class="ghost" type="button">Đổi control</button>
+            <button id="editorReplace" class="ghost" type="button">Ghi đè đoạn đã chọn</button>
+            <button id="editorInsert" class="ghost" type="button">Ghi thêm sau bước này</button>
+            <button id="editorPreview" class="ghost" type="button">Xem chậm đoạn này</button>
+            <button id="editorSave" type="button">Lưu thành bản mới</button>
+            <button id="editorClose" class="ghost" type="button">Đóng</button>
+          </div>
+        </div>
       </div>
     </div>
     <div id="replayCursor" data-norecord hidden></div>
@@ -432,6 +459,7 @@
     }
 
     const recorder = { on: false, t0: 0, events: [], press: null, lastMove: 0, moves: 0 };
+    const editor = { open: false, sourceId: null, title: "", steps: [], selected: 0, checked: new Set(), capture: null };
     const epochs = { reload: 0, recheck: 0, note: 0 };
     let replaying = false;
 
@@ -606,6 +634,17 @@
     }
 
     function onPointerUp(e) {
+      if ((editor.capture === "add" || editor.capture === "retarget") && !replaying) {
+        if (e.target instanceof Element && e.target.closest("[data-norecord]")) return;
+        const mode = editor.capture;
+        editor.capture = null;
+        capturePointerStep(e, mode).catch((err) => {
+          $("err").hidden = false;
+          $("err").style.color = "#ff7b7b";
+          $("err").textContent = "Không thêm được bước: " + err.message;
+        });
+        return;
+      }
       if (!recorder.on || replaying || !recorder.press || e.pointerId !== recorder.press.id) return;
       const slop = recorder.press.slop || TOUCH_SLOP;
       const moved = Math.hypot(e.clientX - recorder.press.x, e.clientY - recorder.press.y);
@@ -671,7 +710,7 @@
         return `<tr>
           <td class="meta">${esc(fmtTime(rec.at))}<div>${esc(rec.event_count)} sự kiện</div></td>
           <td>${esc(rec.title || "")}<div class="meta">${esc(steps)}</div></td>
-          <td><button type="button" data-replay="${esc(rec.id)}">Làm theo</button></td>
+          <td><button type="button" data-replay="${esc(rec.id)}">Làm theo</button> <button type="button" class="ghost" data-edit="${esc(rec.id)}">Sửa</button></td>
         </tr>`;
       }).join("");
     }
@@ -966,14 +1005,379 @@
       await playEvents(data.events || []);
     }
 
+    function stepCaption(step) {
+      const name = step.label || step.target || "";
+      const touch = (step.pointerType || "touch") !== "mouse";
+      if (step.kind === "type") return "Gõ vào " + name + ": " + (step.value || "");
+      if (step.kind === "key") {
+        if (step.redacted) return "Bấm phím trong ô mật khẩu " + name + " (không lưu ký tự)";
+        return "Phím " + (step.key || "") + " tại " + name;
+      }
+      if (step.kind === "swipe") return "Vuốt tại " + name;
+      const verb = step.kind === "focus" ? (touch ? "Chạm vào ô" : "Bấm vào ô") : (touch ? "Chạm" : "Bấm");
+      if (step.snapped) return verb + " lệch, hiểu là " + name;
+      return verb + " " + name;
+    }
+
+    function selectedRange() {
+      const indexes = Array.from(editor.checked).filter((index) => index >= 0 && index < editor.steps.length).sort((a, b) => a - b);
+      if (!indexes.length) {
+        if (editor.selected < 0 || editor.selected >= editor.steps.length) return null;
+        return { start: editor.selected, end: editor.selected };
+      }
+      return { start: indexes[0], end: indexes[indexes.length - 1] };
+    }
+
+    function illustrateStep() {
+      if (replaying) return;
+      clearMarks();
+      const step = editor.steps[editor.selected];
+      const box = $("editorDetail");
+      if (!step) {
+        box.textContent = "Chưa có bước. Thêm bằng một lần chạm, hoặc ghi thêm.";
+        return;
+      }
+      const ranked = rankControls(step);
+      const found = ranked[0];
+      if (found && found.el) {
+        found.el.classList.add("replay-target");
+        found.el.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+      const roleNames = {
+        button: "nút",
+        link: "liên kết",
+        textbox: "ô chữ",
+        search: "ô tìm",
+        select: "danh sách",
+        checkbox: "hộp chọn",
+        radio: "nút chọn",
+      };
+      const lines = [
+        step.caption || stepCaption(step),
+        "Nhãn: " + (step.label || "(không có)"),
+        "Selector: " + (step.target || ""),
+        "Vai trò: " + (roleNames[step.role] || step.role || "(không có)"),
+        "Gợi ý gần đó: " + (step.hint || "(không có)"),
+        "Vị trí trong nhóm: " + (typeof step.index === "number" ? String(step.index + 1) : "(không có)"),
+      ];
+      if (step.kind === "type") lines.push("Chữ sẽ gõ: " + (step.value || ""));
+      if (step.kind === "key" && !step.redacted) lines.push("Phím: " + (step.key || ""));
+      lines.push("Chạm lệch lúc ghi: " + (step.snapped ? "có" : "không"));
+      lines.push(found ? "Trên trang lúc này: " + (found.label || "control") : "Trên trang lúc này: không thấy control khớp");
+      box.textContent = lines.join("\n");
+    }
+
+    function renderEditor() {
+      const root = $("editorSteps");
+      $("scriptEditor").hidden = !editor.open;
+      if (!editor.open) return;
+      if (document.activeElement !== $("editorTitle")) $("editorTitle").value = editor.title;
+      root.replaceChildren();
+      if (!editor.steps.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Kịch bản chưa có bước.";
+        root.appendChild(empty);
+      }
+      editor.steps.forEach((step, index) => {
+        const row = document.createElement("div");
+        row.className = "editor-step" + (index === editor.selected ? " selected" : "");
+        const mark = document.createElement("input");
+        mark.type = "checkbox";
+        mark.checked = editor.checked.has(index);
+        mark.title = "Chọn vào đoạn";
+        mark.addEventListener("change", () => {
+          if (mark.checked) editor.checked.add(index);
+          else editor.checked.delete(index);
+          editor.selected = index;
+          renderEditor();
+        });
+        const body = document.createElement("div");
+        const caption = document.createElement("div");
+        caption.textContent = step.caption || stepCaption(step);
+        body.appendChild(caption);
+        if (step.kind === "type") {
+          const field = document.createElement("input");
+          field.type = "text";
+          field.maxLength = 500;
+          field.value = step.value || "";
+          field.placeholder = "Chữ sẽ gõ";
+          field.addEventListener("input", () => {
+            step.value = field.value.slice(0, 500);
+            step.caption = stepCaption(step);
+            caption.textContent = step.caption;
+            if (editor.selected === index) illustrateStep();
+          });
+          body.appendChild(field);
+        }
+        const actions = document.createElement("div");
+        actions.className = "editor-actions";
+        const up = document.createElement("button");
+        up.type = "button";
+        up.className = "ghost";
+        up.textContent = "Lên";
+        up.disabled = index === 0;
+        up.addEventListener("click", () => moveStep(index, index - 1));
+        const down = document.createElement("button");
+        down.type = "button";
+        down.className = "ghost";
+        down.textContent = "Xuống";
+        down.disabled = index === editor.steps.length - 1;
+        down.addEventListener("click", () => moveStep(index, index + 1));
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "ghost";
+        remove.textContent = "Xoá";
+        remove.addEventListener("click", () => deleteStep(index));
+        actions.appendChild(up);
+        actions.appendChild(down);
+        actions.appendChild(remove);
+        body.appendChild(actions);
+        row.appendChild(mark);
+        row.appendChild(body);
+        row.addEventListener("click", (event) => {
+          if (event.target.closest("button, input")) return;
+          editor.selected = index;
+          renderEditor();
+        });
+        root.appendChild(row);
+      });
+      const captureNote = editor.capture === "add"
+        ? " Chạm một control trên trang để thêm bước."
+        : editor.capture === "retarget"
+          ? " Chạm control mới cho bước đang chọn."
+          : "";
+      $("editorHint").textContent = "Bước " + (editor.steps.length ? editor.selected + 1 : 0) + "/" + editor.steps.length + ". Đánh dấu vài ô để ghi đè cả đoạn từ ô đầu đến ô cuối." + captureNote;
+      illustrateStep();
+    }
+
+    function moveStep(from, to) {
+      if (to < 0 || to >= editor.steps.length) return;
+      const step = editor.steps.splice(from, 1)[0];
+      editor.steps.splice(to, 0, step);
+      const next = new Set();
+      editor.checked.forEach((index) => {
+        let moved = index;
+        if (index === from) moved = to;
+        else if (from < to && index > from && index <= to) moved -= 1;
+        else if (to < from && index >= to && index < from) moved += 1;
+        next.add(moved);
+      });
+      editor.checked = next;
+      editor.selected = to;
+      renderEditor();
+    }
+
+    function deleteStep(index) {
+      editor.steps.splice(index, 1);
+      const next = new Set();
+      editor.checked.forEach((item) => {
+        if (item === index) return;
+        next.add(item > index ? item - 1 : item);
+      });
+      editor.checked = next;
+      if (editor.selected >= editor.steps.length) editor.selected = Math.max(0, editor.steps.length - 1);
+      renderEditor();
+    }
+
+    function retargetStep(current, incoming) {
+      const ontoField = incoming.kind === "focus";
+      if (!current) return incoming;
+      if (current.kind === "type" && !ontoField) return incoming;
+      if (current.kind === "tap" && ontoField) return incoming;
+      const next = {
+        kind: current.kind,
+        target: incoming.target,
+        pointerType: incoming.pointerType || current.pointerType || "touch",
+      };
+      ["label", "role", "hint", "index"].forEach((key) => {
+        if (incoming[key] !== undefined && incoming[key] !== "") next[key] = incoming[key];
+      });
+      if (incoming.snapped) next.snapped = true;
+      if (current.kind === "type") next.value = current.value || "";
+      if (current.kind === "key") {
+        if (current.redacted) next.redacted = true;
+        else next.key = current.key;
+        ["shift", "ctrl", "alt", "meta"].forEach((flag) => {
+          if (current[flag]) next[flag] = true;
+        });
+      }
+      next.caption = stepCaption(next);
+      return next;
+    }
+
+    async function capturePointerStep(e, mode) {
+      const slop = e.pointerType === "mouse" ? 12 : TOUCH_SLOP;
+      const aimed = aimAt(e.clientX, e.clientY, e.target, slop);
+      if (!aimed.selector) {
+        $("recordState").textContent = "Không thấy control. Chạm vào nút hoặc ô trên trang.";
+        renderEditor();
+        return;
+      }
+      const intent = gestureIntent(aimed.el, 0, slop) || "tap";
+      const event = {
+        t: 0,
+        kind: "pointer",
+        phase: "up",
+        target: aimed.selector,
+        pointerType: e.pointerType || "touch",
+        click: intent !== "swipe",
+        intent: intent,
+      };
+      if (aimed.label) event.label = aimed.label;
+      if (aimed.snapped) event.snapped = true;
+      markControl(event, aimed.el);
+      const response = await fetch("/v1/recordings/parse", {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ events: [event] }),
+      });
+      if (!response.ok) throw new Error("parse " + response.status);
+      const fresh = (await response.json()).steps || [];
+      if (!fresh.length) {
+        $("recordState").textContent = "Chạm đó không thành một bước.";
+        renderEditor();
+        return;
+      }
+      const step = fresh[0];
+      if (mode === "retarget") {
+        editor.steps[editor.selected] = retargetStep(editor.steps[editor.selected], step);
+      } else {
+        const at = editor.steps.length ? editor.selected + 1 : 0;
+        editor.steps.splice(at, 0, step);
+        editor.selected = at;
+      }
+      renderEditor();
+      $("recordState").textContent = mode === "retarget" ? "Đã đổi control của bước đang chọn." : "Đã thêm một bước.";
+    }
+
+    async function openEditor(id) {
+      if (replaying || recorder.on) return;
+      const response = await fetch("/v1/recordings/" + id, { headers: headers() });
+      if (!response.ok) throw new Error("recordings " + response.status);
+      const data = await response.json();
+      const parsed = await fetch("/v1/recordings/parse", {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ events: data.events || [] }),
+      });
+      if (!parsed.ok) throw new Error("parse " + parsed.status);
+      editor.open = true;
+      editor.sourceId = id;
+      editor.title = ((data.title || "Kịch bản") + " (sửa)").slice(0, 200);
+      editor.steps = (await parsed.json()).steps || [];
+      editor.selected = 0;
+      editor.checked = new Set();
+      editor.capture = null;
+      renderEditor();
+      $("recordState").textContent = "Đang sửa kịch bản. Bản gốc chưa đổi.";
+    }
+
+    function closeEditor() {
+      editor.open = false;
+      editor.capture = null;
+      editor.steps = [];
+      editor.checked = new Set();
+      $("scriptEditor").hidden = true;
+      clearMarks();
+    }
+
+    function beginSlice(mode) {
+      if (!editor.open || recorder.on || replaying) return;
+      editor.capture = mode;
+      startRecording();
+      $("recordToggle").textContent = "Dừng và ghép vào kịch bản";
+      $("recordState").textContent = mode === "replace"
+        ? "Đang ghi đè đoạn đã chọn. Làm thao tác rồi bấm dừng."
+        : "Đang ghi thêm sau bước đang chọn. Làm thao tác rồi bấm dừng.";
+    }
+
+    async function spliceParsed(events, mode) {
+      const response = await fetch("/v1/recordings/parse", {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ events: events }),
+      });
+      if (!response.ok) throw new Error("parse " + response.status);
+      const fresh = (await response.json()).steps || [];
+      if (!fresh.length) {
+        $("recordState").textContent = "Đoạn vừa ghi không có bước để ghép.";
+        renderEditor();
+        return;
+      }
+      if (mode === "insert") {
+        const at = Math.min(editor.steps.length, Math.max(0, editor.selected + 1));
+        editor.steps.splice(at, 0, ...fresh);
+        editor.selected = at;
+      } else {
+        const range = selectedRange();
+        if (!range) {
+          editor.steps.push(...fresh);
+          editor.selected = Math.max(0, editor.steps.length - fresh.length);
+        } else {
+          editor.steps.splice(range.start, range.end - range.start + 1, ...fresh);
+          editor.selected = range.start;
+          editor.checked = new Set();
+        }
+      }
+      renderEditor();
+      $("recordState").textContent = "Đã ghép " + fresh.length + " bước. Bản gốc chưa đổi. Bấm «Lưu thành bản mới» khi xong.";
+    }
+
+    async function previewSlice() {
+      if (!editor.open || replaying || recorder.on) return;
+      const range = selectedRange();
+      if (!range) return;
+      const slice = editor.steps.slice(range.start, range.end + 1);
+      const response = await fetch("/v1/recordings/compile", {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ title: editor.title, steps: slice }),
+      });
+      if (!response.ok) throw new Error("compile " + response.status);
+      const data = await response.json();
+      await playEvents(data.events || []);
+      if (editor.open) illustrateStep();
+    }
+
+    async function saveEdited() {
+      if (!editor.open || replaying || recorder.on) return;
+      editor.title = $("editorTitle").value.trim().slice(0, 200);
+      const response = await fetch("/v1/recordings/from-steps", {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ title: editor.title, steps: editor.steps }),
+      });
+      if (!response.ok) throw new Error("from-steps " + response.status);
+      const saved = await response.json();
+      await loadAll();
+      $("err").hidden = false;
+      $("err").style.color = "#3ecf8e";
+      $("err").textContent = "Đã lưu bản mới «" + (saved.title || "") + "». Bản gốc vẫn giữ.";
+      $("recordState").textContent = "Đã lưu thành bản mới.";
+      closeEditor();
+    }
+
     async function stopRecording(auto) {
       const events = recorder.events.slice();
+      const capture = editor.capture;
       recorder.on = false;
       recorder.press = null;
       recorder.events = [];
+      if (capture === "replace" || capture === "insert") editor.capture = null;
       document.body.classList.remove("is-recording");
       $("recordToggle").classList.remove("live");
       $("recordToggle").textContent = "Ghi bấm phím và cảm ứng";
+      if (capture === "replace" || capture === "insert") {
+        if (!events.length) {
+          $("recordState").textContent = "Không có bước mới để ghép vào kịch bản.";
+          renderEditor();
+          return;
+        }
+        $("recordState").textContent = "Đang ghép đoạn vừa ghi…";
+        await spliceParsed(events, capture);
+        return;
+      }
       if (!events.length) {
         $("recordState").textContent = auto ? "Bản ghi đầy và trống." : "Không có phím hay chạm để lưu.";
         return;
@@ -1036,6 +1440,17 @@
       }
     };
     $("recordingRows").onclick = async (e) => {
+      const edit = e.target.closest("[data-edit]");
+      if (edit) {
+        try {
+          await openEditor(edit.getAttribute("data-edit"));
+        } catch (err) {
+          $("err").hidden = false;
+          $("err").style.color = "#ff7b7b";
+          $("err").textContent = "Không mở được kịch bản: " + err.message;
+        }
+        return;
+      }
       const btn = e.target.closest("[data-replay]");
       if (!btn) return;
       try {
@@ -1045,6 +1460,56 @@
         $("err").style.color = "#ff7b7b";
         $("err").textContent = "Không làm theo được: " + err.message;
       }
+    };
+    $("editorTitle").addEventListener("input", () => { editor.title = $("editorTitle").value; });
+    $("editorAddTouch").onclick = () => {
+      if (recorder.on || replaying) return;
+      editor.capture = editor.capture === "add" ? null : "add";
+      renderEditor();
+      $("recordState").textContent = editor.capture === "add"
+        ? "Chạm một control trên trang để thêm bước."
+        : "Đã huỷ thêm bước.";
+    };
+    $("editorRetarget").onclick = () => {
+      if (recorder.on || replaying || !editor.steps.length) return;
+      editor.capture = editor.capture === "retarget" ? null : "retarget";
+      renderEditor();
+      $("recordState").textContent = editor.capture === "retarget"
+        ? "Chạm control mới cho bước đang chọn."
+        : "Đã huỷ đổi control.";
+    };
+    $("editorReplace").onclick = () => beginSlice("replace");
+    $("editorInsert").onclick = () => beginSlice("insert");
+    $("editorPreview").onclick = async () => {
+      try {
+        await previewSlice();
+      } catch (err) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không xem được đoạn này: " + err.message;
+      }
+    };
+    $("editorSave").onclick = async () => {
+      try {
+        await saveEdited();
+      } catch (err) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không lưu được bản mới: " + err.message;
+      }
+    };
+    $("editorClose").onclick = () => {
+      if (recorder.on && (editor.capture === "replace" || editor.capture === "insert")) {
+        editor.capture = null;
+        recorder.on = false;
+        recorder.events = [];
+        recorder.press = null;
+        document.body.classList.remove("is-recording");
+        $("recordToggle").classList.remove("live");
+        $("recordToggle").textContent = "Ghi bấm phím và cảm ứng";
+      }
+      closeEditor();
+      $("recordState").textContent = "Đã đóng phần sửa. Bản gốc không đổi.";
     };
 
     $("saveToken").onclick = () => { localStorage.setItem(tokenKey, $("token").value.trim()); loadAll(); };

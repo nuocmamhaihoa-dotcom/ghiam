@@ -119,6 +119,70 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Ghi nhớ", response.text)
         self.assertIn("Làm theo", response.text)
         self.assertIn("Ghi bấm phím và cảm ứng", response.text)
+        self.assertIn("Sửa", response.text)
+        self.assertIn("Lưu thành bản mới", response.text)
+
+    def test_edit_script_saves_a_new_copy(self) -> None:
+        created = self.client.post(
+            "/v1/recordings",
+            headers=self.headers,
+            json={
+                "title": "bản gốc",
+                "events": [
+                    {
+                        "t": 1,
+                        "kind": "pointer",
+                        "target": "#actionText",
+                        "phase": "up",
+                        "pointerType": "mouse",
+                        "click": True,
+                        "intent": "focus",
+                        "label": "Mình vừa làm gì?",
+                    },
+                    {"t": 2, "kind": "value", "target": "#actionText", "value": "import"},
+                    {
+                        "t": 3,
+                        "kind": "pointer",
+                        "target": "#refresh",
+                        "phase": "up",
+                        "pointerType": "mouse",
+                        "click": True,
+                        "intent": "tap",
+                        "label": "Tải lại",
+                    },
+                ],
+            },
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        original_id = created.json()["id"]
+        parsed = self.client.post(
+            "/v1/recordings/parse",
+            headers=self.headers,
+            json={"events": self.client.get(f"/v1/recordings/{original_id}", headers=self.headers).json()["events"]},
+        )
+        self.assertEqual(parsed.status_code, 200, parsed.text)
+        steps = parsed.json()["steps"]
+        self.assertEqual([step["kind"] for step in steps], ["type", "tap"])
+        steps[0]["value"] = "đã sửa"
+        compiled = self.client.post(
+            "/v1/recordings/compile",
+            headers=self.headers,
+            json={"title": "bản gốc (sửa)", "steps": steps},
+        )
+        self.assertEqual(compiled.status_code, 200, compiled.text)
+        self.assertIn("Gõ vào #actionText: đã sửa", compiled.json()["lines"])
+        saved = self.client.post(
+            "/v1/recordings/from-steps",
+            headers=self.headers,
+            json={"title": "bản gốc (sửa)", "steps": steps},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertNotEqual(saved.json()["id"], original_id)
+        original = self.client.get(f"/v1/recordings/{original_id}", headers=self.headers)
+        self.assertIn("import", original.text)
+        self.assertNotIn("đã sửa", original.text)
+        denied = self.client.post("/v1/recordings/from-steps", json={"steps": steps})
+        self.assertEqual(denied.status_code, 401)
 
 
 if __name__ == "__main__":

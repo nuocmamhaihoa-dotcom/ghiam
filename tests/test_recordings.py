@@ -4,7 +4,16 @@ from __future__ import annotations
 
 import unittest
 
-from control_plane.recordings import default_title, pick_match, sanitize_events, script_lines
+from control_plane.recordings import (
+    default_title,
+    events_to_steps,
+    pick_match,
+    sanitize_events,
+    sanitize_steps,
+    script_lines,
+    splice_steps,
+    steps_to_events,
+)
 
 
 class RecordingSanitizeTests(unittest.TestCase):
@@ -170,6 +179,73 @@ class RecordingSanitizeTests(unittest.TestCase):
         self.assertEqual(picked["choice"]["target"], "#a")
         self.assertTrue(picked["ambiguous"])
         self.assertEqual(picked["alternatives"][0]["target"], "#b")
+
+
+class ScriptStepTests(unittest.TestCase):
+    def test_typing_collapses_and_compiles_back(self) -> None:
+        events = sanitize_events(
+            [
+                {
+                    "t": 1,
+                    "kind": "pointer",
+                    "target": "#actionText",
+                    "phase": "up",
+                    "pointerType": "touch",
+                    "click": True,
+                    "intent": "focus",
+                    "label": "Mình vừa làm gì?",
+                    "role": "textbox",
+                    "index": 0,
+                },
+                {"t": 2, "kind": "value", "target": "#actionText", "value": "im"},
+                {"t": 3, "kind": "value", "target": "#actionText", "value": "import"},
+                {
+                    "t": 4,
+                    "kind": "pointer",
+                    "target": "#refresh",
+                    "phase": "up",
+                    "pointerType": "touch",
+                    "click": True,
+                    "intent": "tap",
+                    "label": "Tải lại",
+                    "role": "button",
+                    "index": 1,
+                },
+            ]
+        )
+        steps = events_to_steps(events)
+        self.assertEqual([step["kind"] for step in steps], ["type", "tap"])
+        self.assertEqual(steps[0]["value"], "import")
+        self.assertEqual(steps[0]["label"], "Mình vừa làm gì?")
+        self.assertEqual(steps[1]["caption"], "Chạm Tải lại")
+        compiled = steps_to_events(steps)
+        self.assertEqual([event["kind"] for event in compiled], ["pointer", "value", "pointer"])
+        self.assertEqual(compiled[0]["intent"], "focus")
+        self.assertEqual(compiled[1]["value"], "import")
+        self.assertIn("Gõ vào #actionText: import", script_lines(compiled))
+
+    def test_splice_deletes_a_range_and_drops_bad_targets(self) -> None:
+        steps = sanitize_steps(
+            [
+                {"kind": "tap", "target": "#refresh", "label": "Tải lại"},
+                {"kind": "tap", "target": "#recheck", "label": "Check"},
+                {"kind": "tap", "target": "#saveAction", "label": "Ghi nhớ"},
+            ]
+        )
+        deleted = splice_steps(steps, 0, 1, [])
+        self.assertEqual([step["target"] for step in deleted], ["#saveAction"])
+        with self.assertRaises(ValueError):
+            splice_steps(steps, 2, 1, [])
+        cleaned = sanitize_steps(
+            [
+                {"kind": "tap", "target": "javascript:alert(1)"},
+                {"kind": "nope", "target": "#refresh"},
+                {"kind": "type", "target": "#token", "value": "super-secret"},
+            ]
+        )
+        self.assertEqual(len(cleaned), 1)
+        self.assertTrue(cleaned[0]["redacted"])
+        self.assertNotIn("super-secret", str(cleaned))
 
 
 if __name__ == "__main__":

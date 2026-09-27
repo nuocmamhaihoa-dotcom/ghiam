@@ -253,3 +253,235 @@ def _pointer_line(event: dict[str, Any]) -> str | None:
     if event.get("snapped"):
         return f"{verb} lệch, hiểu là {name}"
     return f"{verb} {name}"
+
+
+_STEP_KINDS = {"tap", "focus", "type", "key", "swipe"}
+
+
+def events_to_steps(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse a recording into steps a person can add, delete, and edit."""
+    steps: list[dict[str, Any]] = []
+    for event in events:
+        kind = event.get("kind")
+        if kind == "value":
+            _absorb_text(steps, event)
+        elif kind == "key":
+            if event.get("redacted") or not _printable_key(event):
+                steps.append(_key_step(event))
+        elif kind == "pointer" and event.get("phase") == "up":
+            step = _pointer_step(event)
+            if step is not None:
+                steps.append(step)
+    for step in steps:
+        step["caption"] = step_caption(step)
+    return steps
+
+
+def steps_to_events(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Turn edited steps back into replayable events."""
+    events: list[dict[str, Any]] = []
+    clock = 0
+    for step in sanitize_steps(steps):
+        clock += 100
+        kind = step["kind"]
+        if kind == "type":
+            events.append(_pointer_event(step, clock, "focus"))
+            clock += 100
+            value_event: dict[str, Any] = {
+                "t": clock,
+                "kind": "value",
+                "target": step["target"],
+                "value": step.get("value") or "",
+            }
+            _copy_signature(step, value_event)
+            events.append(value_event)
+        elif kind == "key":
+            key_event: dict[str, Any] = {"t": clock, "kind": "key", "target": step["target"]}
+            if step.get("redacted"):
+                key_event["redacted"] = True
+            else:
+                key_event["key"] = step["key"]
+                for flag in ("shift", "ctrl", "alt", "meta"):
+                    if step.get(flag):
+                        key_event[flag] = True
+            events.append(key_event)
+        else:
+            events.append(_pointer_event(step, clock, kind))
+    return events
+
+
+def sanitize_steps(raw: list[Any]) -> list[dict[str, Any]]:
+    """Keep only steps that can be shown and replayed."""
+    cleaned: list[dict[str, Any]] = []
+    for item in raw[:400]:
+        step = _one_step(item)
+        if step is not None:
+            cleaned.append(step)
+    return cleaned
+
+
+def splice_steps(
+    steps: list[dict[str, Any]],
+    start: int,
+    end: int,
+    replacement: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Replace the inclusive range with another list of steps."""
+    if start < 0 or end < start or end >= len(steps):
+        raise ValueError("step range is outside the script")
+    return [*steps[:start], *replacement, *steps[end + 1 :]]
+
+
+def step_caption(step: dict[str, Any]) -> str:
+    """One detailed line for a step in the editor."""
+    name = str(step.get("label") or step.get("target") or "")
+    touch = step.get("pointerType", "touch") != "mouse"
+    kind = step.get("kind")
+    if kind == "type":
+        return f"Gõ vào {name}: {step.get('value') or ''}"
+    if kind == "key":
+        if step.get("redacted"):
+            return f"Bấm phím trong ô mật khẩu {name} (không lưu ký tự)"
+        return f"Phím {step.get('key') or ''} tại {name}"
+    if kind == "swipe":
+        return f"Vuốt tại {name}"
+    if kind == "focus":
+        verb = "Chạm vào ô" if touch else "Bấm vào ô"
+    else:
+        verb = "Chạm" if touch else "Bấm"
+    if step.get("snapped"):
+        return f"{verb} lệch, hiểu là {name}"
+    return f"{verb} {name}"
+
+
+def _absorb_text(steps: list[dict[str, Any]], event: dict[str, Any]) -> None:
+    target = str(event.get("target") or "")
+    if steps and steps[-1].get("kind") == "type" and steps[-1].get("target") == target:
+        steps[-1]["value"] = str(event.get("value") or "")
+        return
+    if steps and steps[-1].get("kind") == "focus" and steps[-1].get("target") == target:
+        steps[-1]["kind"] = "type"
+        steps[-1]["value"] = str(event.get("value") or "")
+        _copy_signature(event, steps[-1])
+        return
+    step: dict[str, Any] = {"kind": "type", "target": target, "value": str(event.get("value") or "")}
+    _copy_signature(event, step)
+    steps.append(step)
+
+
+def _printable_key(event: dict[str, Any]) -> bool:
+    key = str(event.get("key") or "")
+    return len(key) == 1 and not event.get("ctrl") and not event.get("meta") and not event.get("alt")
+
+
+def _key_step(event: dict[str, Any]) -> dict[str, Any]:
+    step: dict[str, Any] = {"kind": "key", "target": str(event.get("target") or "")}
+    if event.get("redacted"):
+        step["redacted"] = True
+        return step
+    step["key"] = str(event.get("key") or "")
+    for flag in ("shift", "ctrl", "alt", "meta"):
+        if event.get(flag):
+            step[flag] = True
+    _copy_signature(event, step)
+    return step
+
+
+def _pointer_step(event: dict[str, Any]) -> dict[str, Any] | None:
+    intent = str(event.get("intent") or "")
+    if intent == "swipe":
+        kind = "swipe"
+    elif intent == "focus":
+        kind = "focus"
+    elif intent == "tap" or event.get("click"):
+        kind = "tap"
+    else:
+        return None
+    step: dict[str, Any] = {
+        "kind": kind,
+        "target": str(event.get("target") or ""),
+        "pointerType": str(event.get("pointerType") or "touch"),
+    }
+    if event.get("snapped"):
+        step["snapped"] = True
+    _copy_signature(event, step)
+    return step
+
+
+def _copy_signature(source: dict[str, Any], dest: dict[str, Any]) -> None:
+    for key in ("label", "role", "hint"):
+        if source.get(key):
+            dest[key] = source[key]
+    if source.get("index") is not None and "index" not in dest:
+        dest["index"] = source["index"]
+    if source.get("pointerType") and "pointerType" not in dest:
+        dest["pointerType"] = source["pointerType"]
+
+
+def _pointer_event(step: dict[str, Any], clock: int, intent: str) -> dict[str, Any]:
+    event: dict[str, Any] = {
+        "t": clock,
+        "kind": "pointer",
+        "phase": "up",
+        "target": step["target"],
+        "pointerType": step.get("pointerType") or "touch",
+        "click": intent in {"tap", "focus"},
+        "intent": intent,
+    }
+    _copy_signature(step, event)
+    if step.get("snapped"):
+        event["snapped"] = True
+    return event
+
+
+def _one_step(item: Any) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    kind = item.get("kind")
+    target = str(item.get("target") or "")
+    if kind not in _STEP_KINDS:
+        return None
+    if target != "body" and _TARGET.match(target) is None:
+        return None
+    step: dict[str, Any] = {"kind": kind, "target": target}
+    pointer_type = str(item.get("pointerType") or "")
+    if pointer_type in _POINTER_TYPES:
+        step["pointerType"] = pointer_type
+    label = _label(item.get("label"))
+    if label:
+        step["label"] = label
+    role = str(item.get("role") or "")
+    if role in _ROLES:
+        step["role"] = role
+    hint = _label(item.get("hint"))
+    if hint:
+        step["hint"] = hint
+    if item.get("index") is not None:
+        try:
+            index = int(item.get("index"))
+        except (TypeError, ValueError):
+            index = -1
+        if 0 <= index <= 40:
+            step["index"] = index
+    if item.get("snapped"):
+        step["snapped"] = True
+    if kind == "type" and target in _SECRET_TARGETS:
+        step["kind"] = "key"
+        step["redacted"] = True
+        step["caption"] = step_caption(step)
+        return step
+    if kind == "type":
+        step["value"] = str(item.get("value") or "")[:500]
+    elif kind == "key":
+        if item.get("redacted"):
+            step["redacted"] = True
+        else:
+            key = str(item.get("key") or "")[:32]
+            if not key:
+                return None
+            step["key"] = key
+            for flag in ("shift", "ctrl", "alt", "meta"):
+                if item.get(flag):
+                    step[flag] = True
+    step["caption"] = step_caption(step)
+    return step
