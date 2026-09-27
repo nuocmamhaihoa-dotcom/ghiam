@@ -56,7 +56,7 @@ async def active_leases_by_proxy(session: AsyncSession, ids: Sequence[int], now:
             .where(ProxyLease.proxy_id.in_(chunk), active_lease_condition(now))
             .group_by(ProxyLease.proxy_id)
         )
-        counts.update({int(proxy_id): int(count) for proxy_id, count in rows.tuples()})
+        counts.update({int(proxy_id): int(count) for proxy_id, count in rows})
     return counts
 
 

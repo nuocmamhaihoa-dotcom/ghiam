@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from alembic import command
 from alembic.config import Config
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncEngine
-
-from alembic import command
 
 ALEMBIC_DIR = Path(__file__).resolve().parent.parent / "alembic"
 

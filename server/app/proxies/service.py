@@ -541,7 +541,7 @@ async def proxy_stats(session: AsyncSession) -> ProxyStatsOut:
         quarantined=row[9],
         leased_proxies=leased_proxies,
         active_leases=active_leases,
-        pools=[PoolCount(pool=pool, total=total) for pool, total in pools.tuples()],
+        pools=[PoolCount(pool=pool, total=total) for pool, total in pools],
     )
 
 
