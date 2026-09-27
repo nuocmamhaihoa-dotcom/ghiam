@@ -280,7 +280,7 @@ export function ProxiesPage() {
   const count = selectedCount(selection, total);
 
   return (
-    <div className={count > 0 ? "space-y-6 pb-24" : "space-y-6"}>
+    <div className={count > 0 ? "space-y-6 pb-36 sm:pb-24" : "space-y-6"}>
       <title>Kho proxy · CommentScope</title>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
