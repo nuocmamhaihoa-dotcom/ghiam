@@ -272,3 +272,41 @@ class NetSim:
             moved = await self.add_proxy(proxy.protocol, username=proxy.username, password=proxy.password)
             return 200, {"success": True, "data": {"proxyhttp": moved.colon_line}}
         return 404, {"message": "not found"}
+
+
+async def _demo_lines(sim: NetSim) -> list[str]:
+    lines: list[str] = []
+    for index in range(4):
+        auth = {"username": f"user{index}", "password": "pass"} if index % 2 else {}
+        proxy = await sim.add_proxy(**auth)
+        lines.append(f"{proxy.colon_line}|pool=vn-static")
+    for index in range(2):
+        proxy = await sim.add_proxy("socks5", username=f"sock{index}", password="pass")
+        lines.append(f"socks5://{proxy.username}:{proxy.password}@{HOST}:{proxy.port}|pool=vn-static")
+    for index in range(3):
+        proxy = await sim.add_proxy(username=f"viettel{index}", password="pass")
+        lines.append(f"{proxy.colon_line}|{sim.change_url(proxy)}|pool=4g-viettel|cooldown=10s")
+    gateway = await sim.add_proxy(session_prefix="cust-vn-session-", password="pass")
+    lines.append(f"{gateway.colon_line}|pool=4g-gateway|concurrency=3")
+    lines.extend(f"{HOST}:{free_port()}|pool=vn-static" for _ in range(2))
+    return lines
+
+
+async def _demo() -> None:
+    sim = NetSim()
+    await sim.start()
+    try:
+        lines = await _demo_lines(sim)
+        print("Mạng giả lập đang chạy. Đặt biến môi trường cho server:")
+        print(f"  PROXY_CHECK_URLS={CHECK_URL}\n")
+        print("Dán các dòng sau vào ô Nhập proxy hàng loạt trên dashboard:\n")
+        print("\n".join(lines))
+        print("\nNhấn Ctrl+C để dừng.", flush=True)
+        await asyncio.Event().wait()
+    finally:
+        await sim.stop()
+
+
+if __name__ == "__main__":
+    with contextlib.suppress(KeyboardInterrupt):
+        asyncio.run(_demo())
