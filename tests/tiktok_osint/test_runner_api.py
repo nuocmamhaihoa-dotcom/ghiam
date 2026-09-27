@@ -179,7 +179,26 @@ def test_api_import_export_and_official_sync(repo: Repository, settings: TikTokS
     assert pasted_file["skipped_duplicates"] == 1
     stored = client.get(f"/api/contact-books/{book['id']}").json()
     assert {row["phone_e164"] for row in stored["contacts"]} == {"+84901234567", "+84912345678", "+84987000111"}
+    renamed = client.patch(f"/api/contact-books/{book['id']}", json={"name": "Danh bạ cá nhân"}).json()
+    assert renamed["name"] == "Danh bạ cá nhân"
+    extra = client.post(
+        f"/api/contact-books/{book['id']}/contacts",
+        json={"display_name": "Tạm", "phone": "0933000111"},
+    ).json()["contacts"][0]
+    updated = client.put(
+        f"/api/contact-books/{book['id']}/contacts/{extra['id']}",
+        json={"display_name": "Đã sửa", "phone": "0933000222", "email": "edit@example.com"},
+    ).json()
+    assert updated["display_name"] == "Đã sửa"
+    assert updated["phone_e164"] == "+84933000222"
+    assert client.delete(f"/api/contact-books/{book['id']}/contacts/{extra['id']}").json() == {"deleted": True}
+    assert client.get(f"/api/contact-books/{book['id']}/export.csv").status_code == 200
+    book_xlsx = client.get(f"/api/contact-books/{book['id']}/export.xlsx")
+    assert book_xlsx.status_code == 200
+    assert book_xlsx.content[:2] == b"PK"
+
     session = client.post("/api/official-sync/sessions", json={"book_id": book["id"], "note": "Đã thấy trong app TikTok"}).json()
+    assert session["status"] == "recording"
     phone_record = client.post(
         f"/api/official-sync/sessions/{session['id']}/results",
         json=[{"tiktok_username": "0901234567"}],
@@ -196,6 +215,31 @@ def test_api_import_export_and_official_sync(repo: Repository, settings: TikTokS
         ],
     )
     assert recorded.status_code == 200
+    assert recorded.json()["checkpoint"]["recorded"] == 1
+    bulk_accounts = client.post(
+        f"/api/official-sync/sessions/{session['id']}/results/bulk",
+        json={
+            "text": "@publicshop\n@second.account\n@second.account\n0901234567",
+            "user_contact_id": book["contacts"][0]["id"],
+            "note": "TikTok đã gợi ý",
+        },
+    ).json()
+    assert bulk_accounts["recorded"] == 2
+    assert bulk_accounts["skipped_duplicates"] == 1
+    assert bulk_accounts["rejected_count"] == 1
+    assert bulk_accounts["checkpoint"]["recorded"] == 2
+    sessions = client.get("/api/official-sync/sessions", params={"book_id": book["id"]}).json()
+    assert sessions[0]["recorded_count"] == 2
+    assert sessions[0]["checkpoint"]["last_username"] == "second.account"
+    paused = client.post(f"/api/official-sync/sessions/{session['id']}/pause").json()
+    assert paused["status"] == "paused"
+    blocked = client.post(
+        f"/api/official-sync/sessions/{session['id']}/results",
+        json=[{"tiktok_username": "@another"}],
+    )
+    assert blocked.status_code == 400
+    resumed = client.post(f"/api/official-sync/sessions/{session['id']}/resume").json()
+    assert resumed["status"] == "recording"
 
     import asyncio
 
@@ -216,6 +260,15 @@ def test_api_import_export_and_official_sync(repo: Repository, settings: TikTokS
     assert recon["rows"][0]["matched_public_profile"] is True
     assert recon["rows"][0]["match_key"] == "tiktok_username"
     assert recon["rows"][0]["public_profile"]["username"] == "publicshop"
+    sync_csv = client.get(f"/api/official-sync/sessions/{session['id']}/export.csv")
+    assert sync_csv.status_code == 200
+    sync_rows = list(csv.DictReader(sync_csv.text.lstrip("\ufeff").splitlines()))
+    assert {row["tiktok_username"] for row in sync_rows} == {"publicshop", "second.account"}
+    sync_xlsx = client.get(f"/api/official-sync/sessions/{session['id']}/export.xlsx")
+    assert sync_xlsx.status_code == 200
+    assert sync_xlsx.content[:2] == b"PK"
+    completed = client.post(f"/api/official-sync/sessions/{session['id']}/complete").json()
+    assert completed["status"] == "completed"
 
     dashboard = client.get("/api/dashboard").json()
     assert dashboard["profiles_total"] == 1

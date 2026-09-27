@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
+from typing import TypeVar
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,16 +21,32 @@ from tiktok_osint.errors import (
     TikTokOsintError,
     ValidationError,
 )
-from tiktok_osint.export.writers import flat_rows, write_csv, write_sqlite, write_xlsx
+from tiktok_osint.export.writers import (
+    flat_rows,
+    write_contact_book_csv,
+    write_contact_book_xlsx,
+    write_csv,
+    write_sqlite,
+    write_sync_results_csv,
+    write_sync_results_xlsx,
+    write_xlsx,
+)
 from tiktok_osint.logging_config import log_event, setup_logging
 from tiktok_osint.policy import reject_reverse_lookup
 from tiktok_osint.queue.redis_queue import JobQueue, build_queue
 from tiktok_osint.storage.db import build_repository
 from tiktok_osint.storage.repo import Repository
 from tiktok_osint.sync.book import ImportedContact, build_contact, parse_address_book_file, parse_phone_lines
-from tiktok_osint.sync.official import assert_record_payload, reconciliation_rows
+from tiktok_osint.sync.official import (
+    MAX_DISPLAYED_ACCOUNTS,
+    assert_record_payload,
+    parse_displayed_account_lines,
+    reconciliation_rows,
+)
+from tiktok_osint.sync.retry import retry_sqlite_write
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 
 class Services:
@@ -57,6 +75,10 @@ class BookCreate(BaseModel):
     contacts: list[ContactIn] = Field(default_factory=list)
 
 
+class BookRename(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
 class PhoneBulk(BaseModel):
     text: str = Field(min_length=1, max_length=500_000)
 
@@ -71,6 +93,12 @@ class MatchIn(BaseModel):
     display_name_shown: str | None = None
     user_contact_id: str | None = None
     note: str | None = None
+
+
+class DisplayedBulk(BaseModel):
+    text: str = Field(min_length=1, max_length=500_000)
+    user_contact_id: str | None = None
+    note: str | None = Field(default=None, max_length=1000)
 
 
 def create_app(
@@ -209,12 +237,16 @@ def create_app(
 
     @app.post("/api/contact-books")
     def create_book(body: BookCreate) -> dict[str, object]:
-        book = services.repo.create_book(body.name)
+        book = _retry_write(services, "contact_book.create", lambda: services.repo.create_book(body.name))
         if body.contacts:
             imported = [
                 build_contact(display_name=item.display_name, phone=item.phone, email=item.email) for item in body.contacts
             ]
-            book["contacts"] = services.repo.add_contacts_to_book(str(book["id"]), imported)
+            book["contacts"] = _retry_write(
+                services,
+                "contact_book.contacts.create",
+                lambda: services.repo.add_contacts_to_book(str(book["id"]), imported),
+            )
         return book
 
     @app.get("/api/contact-books")
@@ -225,13 +257,43 @@ def create_app(
     def get_book(book_id: str) -> dict[str, object]:
         return services.repo.get_book(book_id)
 
+    @app.patch("/api/contact-books/{book_id}")
+    def rename_book(book_id: str, body: BookRename) -> dict[str, object]:
+        return _retry_write(
+            services,
+            "contact_book.rename",
+            lambda: services.repo.rename_book(book_id, body.name),
+        )
+
     @app.post("/api/contact-books/{book_id}/contacts")
     def add_contact(book_id: str, body: ContactIn) -> dict[str, object]:
         contact = build_contact(display_name=body.display_name, phone=body.phone, email=body.email)
         if contact.phone_e164 is None and contact.email is None and contact.display_name == "Không tên":
             raise ValidationError("Cần tên, số điện thoại hoặc email")
-        stored, skipped = services.repo.add_contacts(book_id, [contact], skip_existing_phones=True)
+        stored, skipped = _retry_write(
+            services,
+            "contact_book.contact.create",
+            lambda: services.repo.add_contacts(book_id, [contact], skip_existing_phones=True),
+        )
         return {"imported": len(stored), "skipped_duplicates": skipped, "contacts": stored}
+
+    @app.put("/api/contact-books/{book_id}/contacts/{contact_id}")
+    def update_contact(book_id: str, contact_id: str, body: ContactIn) -> dict[str, object]:
+        contact = build_contact(display_name=body.display_name, phone=body.phone, email=body.email)
+        return _retry_write(
+            services,
+            "contact_book.contact.update",
+            lambda: services.repo.update_contact(book_id, contact_id, contact),
+        )
+
+    @app.delete("/api/contact-books/{book_id}/contacts/{contact_id}")
+    def delete_contact(book_id: str, contact_id: str) -> dict[str, bool]:
+        _retry_write(
+            services,
+            "contact_book.contact.delete",
+            lambda: services.repo.delete_contact(book_id, contact_id),
+        )
+        return {"deleted": True}
 
     @app.post("/api/contact-books/{book_id}/phones")
     def import_phone_lines(book_id: str, body: PhoneBulk) -> dict[str, object]:
@@ -251,12 +313,48 @@ def create_app(
         contacts, skipped, rejected = parse_address_book_file(file.filename or "", text)
         return _store_parsed_contacts(services, book_id, contacts, skipped, rejected)
 
+    @app.get("/api/contact-books/{book_id}/export.csv")
+    def export_book_csv(book_id: str) -> FileResponse:
+        book = services.repo.get_book(book_id)
+        path = services.settings.export_dir / f"contact-book-{book_id}.csv"
+        write_contact_book_csv(path, list(book["contacts"]))
+        return FileResponse(path, filename=path.name, media_type="text/csv")
+
+    @app.get("/api/contact-books/{book_id}/export.xlsx")
+    def export_book_xlsx(book_id: str) -> FileResponse:
+        book = services.repo.get_book(book_id)
+        path = services.settings.export_dir / f"contact-book-{book_id}.xlsx"
+        write_contact_book_xlsx(path, str(book["name"]), list(book["contacts"]))
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
     @app.post("/api/official-sync/sessions")
     def create_session(body: SessionCreate) -> dict[str, object]:
-        return services.repo.create_session(body.book_id, body.note)
+        result = _retry_write(
+            services,
+            "official_sync.session.create",
+            lambda: services.repo.create_session(body.book_id, body.note),
+        )
+        log_event(logger, logging.INFO, "official_sync.session.created", session_id=result["id"], book_id=body.book_id)
+        return result
+
+    @app.get("/api/official-sync/sessions")
+    def list_sync_sessions(book_id: str = Query(min_length=1)) -> list[dict[str, object]]:
+        return services.repo.list_sessions(book_id)
+
+    @app.get("/api/official-sync/sessions/{session_id}")
+    def get_sync_session(session_id: str) -> dict[str, object]:
+        return services.repo.get_session(session_id)
 
     @app.post("/api/official-sync/sessions/{session_id}/results")
     def record_results(session_id: str, body: list[MatchIn]) -> dict[str, object]:
+        if not body:
+            raise ValidationError("Cần ít nhất một username TikTok đã được hiển thị")
+        if len(body) > MAX_DISPLAYED_ACCOUNTS:
+            raise ValidationError(f"Mỗi lần ghi tối đa {MAX_DISPLAYED_ACCOUNTS} tài khoản")
         items = []
         for row in body:
             username = assert_record_payload(row.tiktok_username, row.display_name_shown)
@@ -268,22 +366,101 @@ def create_app(
                     "note": row.note,
                 }
             )
-        stored = services.repo.add_matches(session_id, items)
-        return {"recorded": len(stored), "matches": stored}
+        stored = _retry_write(
+            services,
+            "official_sync.results.record",
+            lambda: services.repo.add_matches(session_id, items),
+        )
+        checkpoint = services.repo.get_session(session_id)
+        log_event(
+            logger,
+            logging.INFO,
+            "official_sync.results.recorded",
+            session_id=session_id,
+            recorded=len(stored),
+            checkpoint=checkpoint.get("checkpoint"),
+        )
+        return {"recorded": len(stored), "matches": stored, "checkpoint": checkpoint["checkpoint"]}
+
+    @app.post("/api/official-sync/sessions/{session_id}/results/bulk")
+    def record_result_lines(session_id: str, body: DisplayedBulk) -> dict[str, object]:
+        usernames, skipped, rejected = parse_displayed_account_lines(body.text)
+        items = [
+            {
+                "tiktok_username": username,
+                "display_name_shown": None,
+                "user_contact_id": body.user_contact_id,
+                "note": body.note,
+            }
+            for username in usernames
+        ]
+        stored = (
+            _retry_write(
+                services,
+                "official_sync.results.bulk_record",
+                lambda: services.repo.add_matches(session_id, items),
+            )
+            if items
+            else []
+        )
+        checkpoint = services.repo.get_session(session_id)
+        return {
+            "recorded": len(stored),
+            "skipped_duplicates": skipped,
+            "rejected_count": len(rejected),
+            "rejected": rejected[:40],
+            "matches": stored,
+            "checkpoint": checkpoint["checkpoint"],
+        }
+
+    @app.post("/api/official-sync/sessions/{session_id}/pause")
+    def pause_sync_session(session_id: str) -> dict[str, object]:
+        return _retry_write(
+            services,
+            "official_sync.session.pause",
+            lambda: services.repo.set_session_status(session_id, "paused"),
+        )
+
+    @app.post("/api/official-sync/sessions/{session_id}/resume")
+    def resume_sync_session(session_id: str) -> dict[str, object]:
+        return _retry_write(
+            services,
+            "official_sync.session.resume",
+            lambda: services.repo.set_session_status(session_id, "recording"),
+        )
+
+    @app.post("/api/official-sync/sessions/{session_id}/complete")
+    def complete_sync_session(session_id: str) -> dict[str, object]:
+        return _retry_write(
+            services,
+            "official_sync.session.complete",
+            lambda: services.repo.set_session_status(session_id, "completed"),
+        )
 
     @app.get("/api/official-sync/sessions/{session_id}/reconciliation")
     def reconcile(session_id: str) -> dict[str, object]:
-        matches = services.repo.list_matches(session_id)
-        profiles = {}
-        for match in matches:
-            profile = services.repo.get_profile(str(match["tiktok_username"]))
-            if profile is not None:
-                profiles[str(match["tiktok_username"])] = profile
-        contact_ids = [str(match["user_contact_id"]) for match in matches if match.get("user_contact_id")]
         return {
             "policy": "match-by-displayed-username-only",
-            "rows": reconciliation_rows(matches, profiles, services.repo.contacts_by_ids(contact_ids)),
+            "rows": _reconciliation(services, session_id),
         }
+
+    @app.get("/api/official-sync/sessions/{session_id}/export.csv")
+    def export_sync_csv(session_id: str) -> FileResponse:
+        services.repo.get_session(session_id)
+        path = services.settings.export_dir / f"official-sync-{session_id}.csv"
+        write_sync_results_csv(path, _reconciliation(services, session_id))
+        return FileResponse(path, filename=path.name, media_type="text/csv")
+
+    @app.get("/api/official-sync/sessions/{session_id}/export.xlsx")
+    def export_sync_xlsx(session_id: str) -> FileResponse:
+        session = services.repo.get_session(session_id)
+        path = services.settings.export_dir / f"official-sync-{session_id}.xlsx"
+        write_sync_results_xlsx(path, session, _reconciliation(services, session_id))
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
     @app.post("/api/official-sync/phone-to-id")
     def phone_to_id_refused() -> None:
@@ -299,7 +476,20 @@ def _store_parsed_contacts(
     skipped_in_batch: int,
     rejected: list[dict[str, object]],
 ) -> dict[str, object]:
-    stored, skipped_existing = services.repo.add_contacts(book_id, contacts, skip_existing_phones=True)
+    stored, skipped_existing = _retry_write(
+        services,
+        "contact_book.contacts.import",
+        lambda: services.repo.add_contacts(book_id, contacts, skip_existing_phones=True),
+    )
+    log_event(
+        logger,
+        logging.INFO,
+        "contact_book.contacts.imported",
+        book_id=book_id,
+        imported=len(stored),
+        skipped=skipped_in_batch + skipped_existing,
+        rejected=len(rejected),
+    )
     return {
         "imported": len(stored),
         "skipped_duplicates": skipped_in_batch + skipped_existing,
@@ -307,6 +497,23 @@ def _store_parsed_contacts(
         "rejected": rejected[:40],
         "contacts": stored,
     }
+
+
+def _retry_write(services: Services, event: str, operation: Callable[[], T]) -> T:
+    del services
+    return retry_sqlite_write(operation, event=event, logger=logger)
+
+
+def _reconciliation(services: Services, session_id: str) -> list[dict[str, object]]:
+    matches = services.repo.list_matches(session_id)
+    profiles: dict[str, dict[str, object]] = {}
+    for match in matches:
+        username = str(match["tiktok_username"])
+        profile = services.repo.get_profile(username)
+        if profile is not None:
+            profiles[username] = profile
+    contact_ids = [str(match["user_contact_id"]) for match in matches if match.get("user_contact_id")]
+    return reconciliation_rows(matches, profiles, services.repo.contacts_by_ids(contact_ids))
 
 
 def _enqueue(services: Services, job_id: str) -> dict[str, object]:

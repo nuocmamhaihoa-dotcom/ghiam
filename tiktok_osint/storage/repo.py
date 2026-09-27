@@ -520,22 +520,133 @@ class Repository:
                 "contacts": [_user_contact_dict(row) for row in contacts],
             }
 
+    def rename_book(self, book_id: str, name: str) -> dict[str, Any]:
+        clean = " ".join(name.split()).strip()
+        if not clean or len(clean) > 120:
+            raise ValidationError("Tên danh bạ phải từ 1 đến 120 ký tự")
+        with self._sessions() as session:
+            book = session.get(ContactBookRow, book_id)
+            if book is None:
+                raise BookNotFound(book_id)
+            book.name = clean
+            session.commit()
+        return self.get_book(book_id)
+
+    def update_contact(self, book_id: str, contact_id: str, contact: ImportedContact) -> dict[str, Any]:
+        with self._sessions() as session:
+            row = session.get(UserContactRow, contact_id)
+            if row is None or row.book_id != book_id:
+                raise ValidationError("Không tìm thấy liên hệ trong danh bạ này")
+            duplicate = None
+            if contact.phone_e164:
+                duplicate = session.scalar(
+                    select(UserContactRow).where(
+                        UserContactRow.book_id == book_id,
+                        UserContactRow.phone_e164 == contact.phone_e164,
+                        UserContactRow.id != contact_id,
+                    )
+                )
+            if duplicate is not None:
+                raise ValidationError("Số điện thoại đã có trong danh bạ")
+            row.display_name = contact.display_name
+            row.phone_raw = contact.phone_raw
+            row.phone_e164 = contact.phone_e164
+            row.email = contact.email
+            session.commit()
+            return _user_contact_dict(row)
+
+    def delete_contact(self, book_id: str, contact_id: str) -> None:
+        with self._sessions() as session:
+            row = session.get(UserContactRow, contact_id)
+            if row is None or row.book_id != book_id:
+                raise ValidationError("Không tìm thấy liên hệ trong danh bạ này")
+            matches = session.scalars(
+                select(OfficialDisplayedMatchRow).where(OfficialDisplayedMatchRow.user_contact_id == contact_id)
+            ).all()
+            for match in matches:
+                match.user_contact_id = None
+            session.delete(row)
+            session.commit()
+
     def create_session(self, book_id: str, note: str | None) -> dict[str, Any]:
         if note is not None and len(note) > 1000:
             raise ValidationError("Ghi chú phiên quá dài")
         with self._sessions() as session:
             if session.get(ContactBookRow, book_id) is None:
                 raise BookNotFound(book_id)
-            row = OfficialSyncSessionRow(id=new_id(), book_id=book_id, note=note, created_at=utcnow())
+            now = utcnow()
+            row = OfficialSyncSessionRow(
+                id=new_id(),
+                book_id=book_id,
+                note=note,
+                status="recording",
+                checkpoint_json="{}",
+                created_at=now,
+                updated_at=now,
+            )
             session.add(row)
             session.commit()
             return _session_dict(row)
+
+    def get_session(self, session_id: str) -> dict[str, Any]:
+        with self._sessions() as session:
+            row = session.get(OfficialSyncSessionRow, session_id)
+            if row is None:
+                raise SessionNotFound(session_id)
+            result = _session_dict(row)
+            result["recorded_count"] = int(
+                session.scalar(
+                    select(func.count())
+                    .select_from(OfficialDisplayedMatchRow)
+                    .where(OfficialDisplayedMatchRow.session_id == session_id)
+                )
+                or 0
+            )
+            return result
+
+    def list_sessions(self, book_id: str) -> list[dict[str, Any]]:
+        with self._sessions() as session:
+            if session.get(ContactBookRow, book_id) is None:
+                raise BookNotFound(book_id)
+            rows = session.scalars(
+                select(OfficialSyncSessionRow)
+                .where(OfficialSyncSessionRow.book_id == book_id)
+                .order_by(OfficialSyncSessionRow.created_at.desc())
+            ).all()
+            results: list[dict[str, Any]] = []
+            for row in rows:
+                item = _session_dict(row)
+                item["recorded_count"] = int(
+                    session.scalar(
+                        select(func.count())
+                        .select_from(OfficialDisplayedMatchRow)
+                        .where(OfficialDisplayedMatchRow.session_id == row.id)
+                    )
+                    or 0
+                )
+                results.append(item)
+            return results
+
+    def set_session_status(self, session_id: str, status: str) -> dict[str, Any]:
+        allowed = {"recording", "paused", "completed"}
+        if status not in allowed:
+            raise ValidationError("Trạng thái phiên không hợp lệ")
+        with self._sessions() as session:
+            row = session.get(OfficialSyncSessionRow, session_id)
+            if row is None:
+                raise SessionNotFound(session_id)
+            row.status = status
+            row.updated_at = utcnow()
+            session.commit()
+        return self.get_session(session_id)
 
     def add_matches(self, session_id: str, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         with self._sessions() as session:
             sync = session.get(OfficialSyncSessionRow, session_id)
             if sync is None:
                 raise SessionNotFound(session_id)
+            if sync.status != "recording":
+                raise ValidationError("Phiên đang tạm dừng hoặc đã hoàn tất; hãy tiếp tục phiên trước khi ghi")
             stored: list[dict[str, Any]] = []
             for item in items:
                 username = str(item["tiktok_username"])
@@ -568,6 +679,24 @@ class Repository:
                     if item.get("note") is not None:
                         existing.note = item["note"]
                 stored.append(_match_dict(existing))
+            count = int(
+                session.scalar(
+                    select(func.count())
+                    .select_from(OfficialDisplayedMatchRow)
+                    .where(OfficialDisplayedMatchRow.session_id == session_id)
+                )
+                or 0
+            )
+            now = utcnow()
+            sync.checkpoint_json = json.dumps(
+                {
+                    "recorded": count,
+                    "last_username": stored[-1]["tiktok_username"] if stored else None,
+                    "updated_at": now.isoformat(),
+                },
+                ensure_ascii=False,
+            )
+            sync.updated_at = now
             session.commit()
             return stored
 
@@ -679,11 +808,18 @@ def _user_contact_dict(row: UserContactRow) -> dict[str, Any]:
 
 
 def _session_dict(row: OfficialSyncSessionRow) -> dict[str, Any]:
+    try:
+        checkpoint = json.loads(row.checkpoint_json or "{}")
+    except json.JSONDecodeError:
+        checkpoint = {}
     return {
         "id": row.id,
         "book_id": row.book_id,
         "note": row.note,
+        "status": row.status,
+        "checkpoint": checkpoint,
         "created_at": row.created_at.isoformat(),
+        "updated_at": row.updated_at.isoformat(),
     }
 
 

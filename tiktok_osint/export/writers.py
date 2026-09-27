@@ -33,6 +33,22 @@ FLAT_FIELDS = [
     "also_seen_on",
 ]
 
+CONTACT_BOOK_FIELDS = ["id", "display_name", "phone_raw", "phone_e164", "email"]
+SYNC_RESULT_FIELDS = [
+    "tiktok_username",
+    "display_name_shown",
+    "contact_name",
+    "contact_phone_e164",
+    "contact_email",
+    "matched_public_profile",
+    "public_nickname",
+    "public_followers",
+    "public_verified",
+    "public_profile_url",
+    "note",
+    "match_key",
+]
+
 
 def flat_rows(profiles: list[dict[str, Any]]) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
@@ -118,6 +134,48 @@ def write_xlsx(path: Path, profiles: list[dict[str, Any]], rows: list[dict[str, 
     book.save(path)
 
 
+def write_contact_book_csv(path: Path, contacts: list[dict[str, Any]]) -> None:
+    _write_dict_csv(path, CONTACT_BOOK_FIELDS, contacts)
+
+
+def write_contact_book_xlsx(path: Path, name: str, contacts: list[dict[str, Any]]) -> None:
+    book = _new_workbook()
+    sheet = book.active
+    sheet.title = "Contacts"
+    sheet.append(["Danh bạ", *CONTACT_BOOK_FIELDS])
+    for contact in contacts:
+        sheet.append([name, *[contact.get(field, "") for field in CONTACT_BOOK_FIELDS]])
+    book.save(path)
+
+
+def write_sync_results_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    _write_dict_csv(path, SYNC_RESULT_FIELDS, [_flatten_sync_result(row) for row in rows])
+
+
+def write_sync_results_xlsx(path: Path, session: dict[str, Any], rows: list[dict[str, Any]]) -> None:
+    book = _new_workbook()
+    summary = book.active
+    summary.title = "Session"
+    summary.append(["id", "book_id", "status", "note", "recorded_count", "created_at", "updated_at"])
+    summary.append(
+        [
+            session.get("id"),
+            session.get("book_id"),
+            session.get("status"),
+            session.get("note"),
+            session.get("recorded_count"),
+            session.get("created_at"),
+            session.get("updated_at"),
+        ]
+    )
+    results = book.create_sheet("Displayed accounts")
+    results.append(SYNC_RESULT_FIELDS)
+    for row in rows:
+        flat = _flatten_sync_result(row)
+        results.append([flat.get(field, "") for field in SYNC_RESULT_FIELDS])
+    book.save(path)
+
+
 def write_sqlite(path: Path, repo: Repository, job_id: str) -> None:
     job = repo.get_job(job_id)
     if job is None:
@@ -198,6 +256,42 @@ def _s(value: object) -> str:
     if value is None:
         return ""
     return str(value)
+
+
+def _write_dict_csv(path: Path, fields: list[str], rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _new_workbook() -> Any:
+    try:
+        from openpyxl import Workbook
+    except ImportError as exc:
+        raise ExportError("Cài openpyxl để xuất Excel") from exc
+    return Workbook()
+
+
+def _flatten_sync_result(row: dict[str, Any]) -> dict[str, Any]:
+    contact = row.get("contact") if isinstance(row.get("contact"), dict) else {}
+    profile = row.get("public_profile") if isinstance(row.get("public_profile"), dict) else {}
+    username = str(row.get("tiktok_username") or "")
+    return {
+        "tiktok_username": username,
+        "display_name_shown": row.get("display_name_shown"),
+        "contact_name": contact.get("display_name"),
+        "contact_phone_e164": contact.get("phone_e164"),
+        "contact_email": contact.get("email"),
+        "matched_public_profile": row.get("matched_public_profile"),
+        "public_nickname": profile.get("nickname"),
+        "public_followers": profile.get("followers"),
+        "public_verified": profile.get("verified"),
+        "public_profile_url": f"https://www.tiktok.com/@{username}" if username else "",
+        "note": row.get("note"),
+        "match_key": row.get("match_key"),
+    }
 
 
 def _parse_dt(value: str) -> datetime:
