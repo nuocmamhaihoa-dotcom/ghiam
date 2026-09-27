@@ -1,0 +1,71 @@
+name: release-windows
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build zip package
+        id: pack
+        run: |
+          set -euo pipefail
+          VER="${GITHUB_REF_NAME}"
+          OUT="fb-poller-windows-${VER}.zip"
+          # Keep runtime essentials; exclude venv/git/local state
+          zip -r "$OUT" \
+            fb_poller pc_agent deploy docs scripts \
+            install.ps1 install.sh pyproject.toml requirements.txt README.md VERSION \
+            -x "**/__pycache__/*" "**/.venv/*" "**/data/*" "**/logs/*" \
+               "**/pc_agent/windows/state/*" "**/pc_agent/windows/config.json" \
+               "**/.env" "**/*.db"
+          SHA=$(sha256sum "$OUT" | awk '{print $1}')
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "asset=$OUT" >> "$GITHUB_OUTPUT"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Write update-manifest.json
+        run: |
+          set -euo pipefail
+          VER="${{ steps.pack.outputs.ver }}"
+          SHA="${{ steps.pack.outputs.sha }}"
+          ASSET="${{ steps.pack.outputs.asset }}"
+          URL="https://github.com/${{ github.repository }}/releases/download/${VER}/${ASSET}"
+          POLLER_VER=$(cat VERSION | tr -d '\n')
+          AGENT_VER=$(cat pc_agent/windows/VERSION | tr -d '\n')
+          cat > update-manifest.json <<EOF
+          {
+            "schema_version": 1,
+            "channel": "stable",
+            "released_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "agent": {
+              "version": "${AGENT_VER}",
+              "package_url": "${URL}",
+              "sha256": "${SHA}"
+            },
+            "poller": {
+              "version": "${POLLER_VER}",
+              "notes": "Windows auto-update package ${VER}"
+            },
+            "rollout": {
+              "force_update": false,
+              "min_agent_version": "1.0.0"
+            }
+          }
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.pack.outputs.asset }}
+            update-manifest.json
+          generate_release_notes: true

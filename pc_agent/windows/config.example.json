@@ -1,0 +1,18 @@
+{
+  "channel": "stable",
+  "prefer_lan": true,
+  "manifest_url": "https://raw.githubusercontent.com/OWNER/REPO/main/deploy/update-manifest.json",
+  "control_url": "http://192.168.1.10:8088",
+  "control_token": "",
+  "auto_update": true,
+  "update_check_minutes": 30,
+  "heartbeat_minutes": 5,
+  "sync_comments": true,
+  "sync_comments_minutes": 2,
+  "sync_comments_limit": 2000,
+  "ensure_poller_running": true,
+  "poller_restart_on_exit": true,
+  "install_dir": "",
+  "python_exe": "",
+  "headless": true
+}
