@@ -2356,6 +2356,8 @@
         $("phoneBanner").textContent = "Chạm trên iPhone được ghi để làm lại.";
         const go = document.querySelector(".iphone-go");
         if (go) go.hidden = true;
+        const deliver = document.querySelector("a.deliver");
+        if (deliver) deliver.hidden = true;
       }
     }
     if (/iPhone|iPod/.test(navigator.userAgent)) {
