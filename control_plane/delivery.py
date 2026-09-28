@@ -18,12 +18,13 @@ _FILES = (
     "watch.js",
     "version.js",
 )
-_GUIDE = """fb-poller — đường truyền tải
+_GUIDE = """fb-poller
 
-Trên iPhone, mở Safari rồi vào trang /tai của hub.
-Bấm Mở app. Sau đó bấm Chia sẻ, rồi Thêm vào Màn hình chính.
+Trên iPhone, mở Safari và vào /iphone của hub.
+Bấm Chia sẻ, rồi Thêm vào Màn hình chính.
 
-Gói zip này là bản giao diện để lưu. App chạy khi mở /iphone trên hub.
+Gói zip này là bản giao diện để lưu trên máy tính.
+App chạy khi mở /iphone trên hub.
 Không có token và không có dữ liệu đã lưu trong gói này.
 """
 
