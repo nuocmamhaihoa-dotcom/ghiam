@@ -1,6 +1,6 @@
 import Foundation
 
-struct ContactDraft: Equatable {
+struct ContactDraft: Equatable, Codable {
     var name: String
     var phone: String?
     var facebook: String?
@@ -16,7 +16,7 @@ enum ImportParserError: Error {
 }
 
 enum ImportParser {
-    static let maxDrafts = 5000
+    static let maxDrafts = 100_000
 
     static func parse(text: String) -> ImportBatch {
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -104,6 +104,9 @@ enum ImportParser {
             break
         }
         guard (8 ... 15).contains(digits.count) else { return nil }
+        if digits.count == 11, digits.hasPrefix("84") {
+            return "0" + digits.dropFirst(2)
+        }
         return leadingPlus ? "+" + digits : digits
     }
 
@@ -169,7 +172,7 @@ enum ImportParser {
         var raw: [ContactDraft] = []
         var extra = false
         for (index, line) in lines.enumerated() {
-            if index >= 20_000 {
+            if index >= 100_000 {
                 extra = true
                 break
             }

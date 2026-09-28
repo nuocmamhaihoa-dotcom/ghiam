@@ -21,6 +21,10 @@ Những lần mở sau không hỏi tin lại, cho đến khi chứng chỉ cài
 
 ## Dùng app
 
-1. Bấm Cho phép danh bạ. iPhone hỏi một lần. Nếu đã từ chối, app không hỏi lại; bật trong Cài đặt.
-2. Tab Nạp: mỗi dòng một người, ví dụ `Trần Tùng, 0901234567`, rồi bấm Nạp vào iPhone.
-3. Tab Danh bạ: chạm để chọn, bấm Xoá. Vuốt một dòng để xoá một người. Xoá xong, máy đang đồng bộ iCloud cũng mất liên hệ đó.
+1. Nhập tên danh bạ, ví dụ `Khach`.
+2. Dán danh sách hoặc chọn file. Mỗi dòng một người, ví dụ `Trần Tùng, 0901234567`. Bấm Nạp hàng loạt.
+3. Bấm Chia danh bạ. Cứ 5000 số thành một cuốn: `Khach 1`, `Khach 2`, … Số trùng chỉ giữ ở cuốn đầu.
+4. Bấm Nạp vào iPhone. iPhone hỏi quyền Danh bạ một lần. Mỗi cuốn thành một nhóm trong Danh bạ.
+5. Chạm một cuốn để chọn danh bạ đang dùng, rồi bấm Xoá danh bạ đang dùng. Các cuốn khác giữ nguyên.
+
+Nếu đã từ chối quyền Danh bạ, app không hỏi lại. Bật trong Cài đặt. Xoá xong, máy đang đồng bộ iCloud cũng mất các số trong nhóm đó.

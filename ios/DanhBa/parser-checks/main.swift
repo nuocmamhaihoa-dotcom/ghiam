@@ -23,7 +23,7 @@ check(lines.drafts.count == 5, "line count \(lines.drafts.count)", failures: &fa
 check(lines.drafts[0].name == "Trần Tùng" && lines.drafts[0].phone == "0901234567", "csv phone", failures: &failures)
 check(lines.drafts[1].name == "A Tùng Bán Gạch" && lines.drafts[1].phone == nil, "name only", failures: &failures)
 check(lines.drafts[2].phone == "0912345678", "space phone", failures: &failures)
-check(lines.drafts[3].name == "Nguyễn, An" && lines.drafts[3].phone == "+84901234567", "quoted plus", failures: &failures)
+check(lines.drafts[3].name == "Nguyễn, An" && lines.drafts[3].phone == "0901234567", "quoted plus becomes local", failures: &failures)
 check(lines.drafts[4].name == "Tên không phải số", "short second field stays in the name", failures: &failures)
 check(lines.truncated == false, "not truncated", failures: &failures)
 
@@ -41,7 +41,7 @@ END:VCARD
 
 """)
 check(cards.drafts.count == 2, "vcard count \(cards.drafts.count)", failures: &failures)
-check(cards.drafts[0].name == "Trần Tùng" && cards.drafts[0].phone == "+84901234567", "vcard fn tel", failures: &failures)
+check(cards.drafts[0].name == "Trần Tùng" && cards.drafts[0].phone == "0901234567", "vcard fn tel", failures: &failures)
 check(cards.drafts[1].name == "Bà soi", "folded fn \(cards.drafts[1].name)", failures: &failures)
 
 let named = ImportParser.parse(text: "BEGIN:VCARD\nN:Tùng;Trần;;;\nEND:VCARD\n")
@@ -76,6 +76,27 @@ check(ImportParser.peopleURL(from: "http://example.com") == nil, "public http re
 let stripped = ImportParser.peopleURL(from: "https://user:secret@hub.example/v1/people")
 check(stripped != nil && stripped?.user == nil, "strip userinfo", failures: &failures)
 check(ImportParser.cleanUsername("@b.soi22") == "b.soi22", "username", failures: &failures)
+
+let mixed = ImportParser.parse(text: """
+An, 0901234567
+Bình, +84 901-234-567
+Chi, 0911111111
+Dung, 0922222222
+Em, 0933333333
+Phong, 0944444444
+""")
+let split = BookSplitter.split(drafts: mixed.drafts, title: "Khach", pageSize: 2)
+check(split?.duplicatePhones == 1, "one duplicate phone", failures: &failures)
+check(split?.books.count == 3, "three books \(split?.books.count ?? -1)", failures: &failures)
+check(split?.books[0].name == "Khach 1" && split?.books[0].entries.count == 2, "first page", failures: &failures)
+check(split?.books[1].name == "Khach 2" && split?.books[1].entries.count == 2, "second page", failures: &failures)
+check(split?.books[2].entries.count == 1, "last page", failures: &failures)
+check(split?.books[0].entries[0].phone == "0901234567", "first number kept", failures: &failures)
+check(BookSplitter.phonesAreUnique(split?.books ?? []), "phones stay in one book", failures: &failures)
+check(BookSplitter.split(drafts: mixed.drafts, title: "   ") == nil, "blank title", failures: &failures)
+let exact = (1 ... 4).map { ContactDraft(name: "N\($0)", phone: "090000000\($0)", facebook: nil) }
+let oneBook = BookSplitter.split(drafts: exact, title: "Đủ", pageSize: 4)
+check(oneBook?.books.count == 1 && oneBook?.books[0].entries.count == 4, "exact page", failures: &failures)
 
 if !failures.isEmpty {
     for failure in failures {
