@@ -11,10 +11,12 @@ Features:
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import tempfile
 import time
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,7 +24,7 @@ from typing import Any
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -30,12 +32,13 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
 from control_plane.delivery import PACKAGE_NAME, ensure_package
-from control_plane.people import apply_novel, complete_rows
+from control_plane.people import apply_novel, complete_rows, profile_from_line
 from control_plane.version import IPHONE_BUILD
-from control_plane.screen_steps import ScreenVideoError, read_screen_image, read_screen_video
+from control_plane.screen_steps import ScreenVideoError, clean_ocr, read_screen_image, read_screen_video, seen_line
 from control_plane.settings import settings
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+IOS_DIR = Path(__file__).resolve().parents[1] / "ios"
 
 app = FastAPI(title="fb-poller high-bandwidth control plane", version="1.3.0")
 app.add_middleware(GZipMiddleware, minimum_size=500)
@@ -197,6 +200,12 @@ def iphone_app() -> HTMLResponse:
     return _html("iphone.html")
 
 
+@app.get("/cai-app", response_class=HTMLResponse)
+def install_ios_app() -> HTMLResponse:
+    """Cách cài app đọc chữ trên ứng dụng khác."""
+    return _html("cai-app.html")
+
+
 @app.get("/tai")
 def delivery_page() -> RedirectResponse:
     """Đường ngắn trên điện thoại: vào thẳng app."""
@@ -217,6 +226,27 @@ def delivery_info() -> dict[str, Any]:
             "path": "/tai/goi.zip",
         },
     }
+
+
+@app.get("/tai/ios.zip")
+def ios_source_zip() -> Response:
+    """Xcode project for the iPhone app. No token and no database."""
+    if not IOS_DIR.is_dir():
+        raise HTTPException(status_code=404, detail="ios project missing")
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(IOS_DIR.rglob("*")):
+            if not path.is_file() or "xcuserdata" in path.parts:
+                continue
+            archive.write(path, Path("ios") / path.relative_to(IOS_DIR))
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": "attachment; filename=fb-poller-ios.zip",
+            "Cache-Control": "no-cache",
+        },
+    )
 
 
 @app.get("/tai/goi.zip")
@@ -695,6 +725,47 @@ async def recordings_from_frame(
     finally:
         dest.unlink(missing_ok=True)
     return {"ok": True, "line": line}
+
+
+class LiveTextBody(BaseModel):
+    text: str = ""
+
+
+def _live_line(text: str) -> str:
+    cleaned = clean_ocr(text)
+    if not cleaned:
+        return ""
+    return seen_line(cleaned)[:180]
+
+
+@app.post("/v1/screen/live")
+def screen_live_post(body: LiveTextBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Store one line read from the iPhone screen while another app is open."""
+    _auth(authorization)
+    line = _live_line(body.text)
+    if not line:
+        return {"ok": True, "line": "", "saved": False, "people": 0}
+    saved = db.append_screen_line(settings.db_path, at=utcnow(), line=line)
+    added = 0
+    sighting = profile_from_line(line)
+    if sighting is not None:
+        stored = db.list_people(settings.db_path)
+        folded, added = apply_novel(stored, [sighting])
+        if added:
+            db.save_people(settings.db_path, folded, utcnow())
+    if saved:
+        _remember_hub("screen", line)
+    return {"ok": True, "line": line, "saved": saved, "people": added}
+
+
+@app.get("/v1/screen/live")
+def screen_live_list(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=30, ge=1, le=50),
+) -> dict[str, Any]:
+    _auth(authorization)
+    items = db.list_screen_lines(settings.db_path, limit=limit)
+    return {"count": len(items), "items": items}
 
 
 @app.post("/v1/recordings/seen")

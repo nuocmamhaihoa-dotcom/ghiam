@@ -1,0 +1,15 @@
+Cài fb-poller lên iPhone
+
+iPhone một mình không cài được app này. Cần máy Mac có Xcode, làm một lần.
+
+1. Tải http://222.255.214.202:8088/tai/ios.zip
+2. Giải nén và mở ios/FbPoller.xcodeproj
+3. Cắm iPhone, chọn máy đó trong Xcode
+4. Chọn Team là Apple ID của bạn
+5. Bấm Run
+6. Nếu iPhone hỏi, vào Cài đặt → Cài đặt chung → VPN và quản lý thiết bị, rồi tin cậy nhà phát triển
+7. Mở app fb-poller, bấm Bắt đầu ghi, chọn fb-poller, rồi mở ứng dụng khác
+
+App đọc chữ trên màn hình và gửi về hub. App không bấm nút trong TikTok hay ứng dụng khác.
+Bản cài bằng Apple ID miễn phí hết hạn sau khoảng 7 ngày. Bấm Run lại.
+Ghi hình hệ thống không chạy trên Simulator. Cần iPhone thật.

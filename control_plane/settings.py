@@ -41,7 +41,7 @@ class ServerSettings:
         self.proxy_check_interval_sec = int(os.environ.get("CONTROL_PROXY_CHECK_SEC", "300"))
         self.proxy_check_concurrency = int(os.environ.get("CONTROL_PROXY_CHECK_CONCURRENCY", "40"))
         self.proxy_check_timeout_sec = float(os.environ.get("CONTROL_PROXY_CHECK_TIMEOUT", "8"))
-        self.proxy_check_url = os.environ.get("CONTROL_PROXY_CHECK_URL", "http://api.ipify.org")
+        self.proxy_check_url = os.environ.get("CONTROL_PROXY_CHECK_URL", "http://ident.me")
         # Optional shared auth for host:port lines (ProxyVN packages)
         self.proxy_user = os.environ.get("CONTROL_PROXY_USER", "")
         self.proxy_pass = os.environ.get("CONTROL_PROXY_PASS", "")

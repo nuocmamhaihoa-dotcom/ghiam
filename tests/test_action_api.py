@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import os
+import sqlite3
 import tempfile
 import unittest
 import zipfile
@@ -166,6 +167,8 @@ class ActionApiTests(unittest.TestCase):
         self.assertNotIn("Quay màn hình", page.text)
         self.assertIn("Trung tâm điều khiển", page.text)
         self.assertIn("nhìn thấy", page.text)
+        self.assertIn("Cài app", page.text)
+        self.assertIn('href="/cai-app"', page.text)
         self.assertNotIn("kịch bản", page.text)
         self.assertIn('accept="video/*"', page.text)
         self.assertNotIn("confirmOk", page.text)
@@ -249,12 +252,12 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "17")
+        self.assertEqual(build, "18")
 
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 17)
+        self.assertEqual(payload["iphoneBuild"], 18)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -282,6 +285,54 @@ class ActionApiTests(unittest.TestCase):
         self.assertFalse(any(Path(_TMP, "packages").glob("*.zip")))
         denied = self.client.get(f"/v1/updates/packages/{package['name']}")
         self.assertEqual(denied.status_code, 401)
+
+    def test_ios_app_reads_other_apps_as_text(self) -> None:
+        page = self.client.get("/cai-app")
+        self.assertEqual(page.status_code, 200, page.text)
+        self.assertIn("Xcode", page.text)
+        self.assertIn("không bấm", page.text.casefold())
+        bundle = self.client.get("/tai/ios.zip")
+        self.assertEqual(bundle.status_code, 200, bundle.text)
+        self.assertTrue(bundle.content.startswith(b"PK"))
+        with zipfile.ZipFile(io.BytesIO(bundle.content)) as archive:
+            names = archive.namelist()
+            self.assertIn("ios/FbPollerBroadcast/SampleHandler.swift", names)
+            self.assertIn("ios/Shared/HubStore.swift", names)
+            joined = "\n".join(
+                archive.read(name).decode("utf-8", errors="ignore")
+                for name in names
+                if name.endswith((".swift", ".plist", ".txt", ".html"))
+            )
+            self.assertNotIn("test-token", joined)
+        denied = self.client.post("/v1/screen/live", json={"text": "Nguyễn Anh @nguyen.anh"})
+        self.assertEqual(denied.status_code, 401)
+        empty = self.client.post("/v1/screen/live", headers=self.headers, json={"text": "   "})
+        self.assertEqual(empty.status_code, 200, empty.text)
+        self.assertEqual(empty.json()["line"], "")
+        self.assertFalse(empty.json()["saved"])
+        self.assertEqual(empty.json()["people"], 0)
+        saved = self.client.post(
+            "/v1/screen/live",
+            headers=self.headers,
+            json={"text": "Nguyễn Anh @nguyen.anh"},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+        body = saved.json()
+        self.assertIn("@nguyen.anh", body["line"])
+        self.assertTrue(body["saved"])
+        self.assertEqual(body["people"], 1)
+        again = self.client.post(
+            "/v1/screen/live",
+            headers=self.headers,
+            json={"text": "Nguyễn Anh @nguyen.anh"},
+        )
+        self.assertEqual(again.status_code, 200, again.text)
+        self.assertFalse(again.json()["saved"])
+        listed = self.client.get("/v1/screen/live", headers=self.headers)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertEqual(listed.json()["count"], 1)
+        with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
+            conn.execute("DELETE FROM saved_people WHERE username = ?", ("@nguyen.anh",))
 
 
 if __name__ == "__main__":

@@ -102,3 +102,22 @@ def fold_sightings(stored: list[dict[str, str]], items: list[dict[str, str]]) ->
 
 def complete_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     return [row for row in rows if row.get("contactName") and row.get("username")]
+
+
+_PROFILE_LABELS = ("TikTok", "Facebook", "Instagram", "Zalo", "Danh bạ", "Đã follow")
+
+
+def profile_from_line(line: str) -> dict[str, str] | None:
+    """A profile screen names one person and one @account."""
+    handles = re.findall(r"@[A-Za-z0-9._]{3,30}", line)
+    if len(handles) != 1:
+        return None
+    name = line
+    for handle in handles:
+        name = name.replace(handle, " ")
+    for label in _PROFILE_LABELS:
+        name = name.replace(label, " ")
+    name = clean_name(name.replace("·", " "))
+    if len(name) < 2:
+        return None
+    return {"kind": "profile", "name": name, "contactName": "", "username": handles[0]}

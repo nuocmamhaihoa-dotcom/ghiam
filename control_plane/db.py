@@ -103,6 +103,11 @@ def init_db(db_path: Path) -> None:
               username TEXT NOT NULL DEFAULT '',
               updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS screen_lines (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              at TEXT NOT NULL,
+              line TEXT NOT NULL
+            );
             """
         )
         conn.commit()
@@ -568,3 +573,34 @@ def save_people(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> N
                     updated_at,
                 ),
             )
+
+
+def append_screen_line(db_path: Path, *, at: str, line: str) -> bool:
+    """Store one new on-screen line. The same line as the latest row is skipped."""
+    text = " ".join(line.split())[:180]
+    if not text:
+        return False
+    with session(db_path) as conn:
+        latest = conn.execute("SELECT line FROM screen_lines ORDER BY id DESC LIMIT 1").fetchone()
+        if latest is not None and latest["line"] == text:
+            return False
+        conn.execute("INSERT INTO screen_lines(at, line) VALUES(?, ?)", (at, text))
+        conn.execute(
+            """
+            DELETE FROM screen_lines
+            WHERE id NOT IN (
+              SELECT id FROM screen_lines ORDER BY id DESC LIMIT 100
+            )
+            """
+        )
+    return True
+
+
+def list_screen_lines(db_path: Path, *, limit: int = 30) -> list[dict[str, Any]]:
+    limit = max(1, min(int(limit), 50))
+    with session(db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, at, line FROM screen_lines ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [{"id": int(row["id"]), "at": row["at"], "line": row["line"]} for row in reversed(rows)]
