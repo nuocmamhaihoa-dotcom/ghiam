@@ -12,156 +12,49 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>fb-poller</title>
   <style>
-    :root { --text: #111; --muted: #8a8f98; --font: -apple-system, "Segoe UI", system-ui, sans-serif; }
+    :root { --font: -apple-system, "Segoe UI", system-ui, sans-serif; }
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; }
     body {
       font-family: var(--font);
-      color: var(--text);
+      color: #111;
       background: #fff;
-      font-size: 16px;
+      font-size: 18px;
       display: flex;
       flex-direction: column;
       height: 100dvh;
       overflow: hidden;
+      touch-action: manipulation;
     }
-    header {
-      display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
-      padding: calc(0.55rem + env(safe-area-inset-top)) max(0.9rem, env(safe-area-inset-right)) 0.55rem max(0.9rem, env(safe-area-inset-left));
+    #updateNote[hidden] { display: none !important; }
+    #updateNote { margin: 0; padding: 0.4rem 1rem 0; color: #0a7a32; font-weight: 700; }
+    #pad { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; }
+    #stepList { margin: 0; padding: 1.1rem 1.3rem 0.6rem; }
+    #stepList li { margin: 0.45rem 0; }
+    #stepList p { margin: 1.2rem 0.2rem; color: #666; }
+    #actions {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;
+      padding: 0.7rem max(0.8rem, env(safe-area-inset-right)) calc(0.7rem + env(safe-area-inset-bottom)) max(0.8rem, env(safe-area-inset-left));
       background: #fff;
-      border-bottom: 1px solid #eee;
     }
-    h1 { font-size: 1.05rem; margin: 0; }
-    #updateNote { margin: 0; color: #0a7a32; font-weight: 700; font-size: 0.95rem; }
-    main { flex: 1; min-height: 0; position: relative; }
-    .view { height: 100%; overflow: auto; -webkit-overflow-scrolling: touch; }
-    #view-controls { overflow: hidden; }
-    #controls { width: 100%; height: 100%; border: 0; background: #10141b; }
-    .install { margin: 0; padding: 0.65rem 0.9rem; background: #f4f7fb; color: #243044; }
-    .install button { margin-top: 0.45rem; min-height: 44px; font-size: 16px; }
-    #view-saved { padding: 0.4rem 0.7rem 1rem; }
-    #view-saved table { width: 100%; border-collapse: collapse; }
-    #view-saved th, #view-saved td { text-align: left; padding: 0.55rem 0.35rem; border-bottom: 1px solid #eee; vertical-align: top; font-size: 0.95rem; }
-    #view-saved th { color: var(--muted); font-weight: 650; }
-    nav.app {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem;
-      padding: 0.4rem max(0.6rem, env(safe-area-inset-right)) calc(0.4rem + env(safe-area-inset-bottom)) max(0.6rem, env(safe-area-inset-left));
-      background: #fff; border-top: 1px solid #eee;
+    #startBtn, #endBtn {
+      min-height: 64px; border-radius: 16px; border: 2px solid #111;
+      font: inherit; font-size: 20px; font-weight: 800;
     }
-    nav.app button {
-      min-height: 48px; border: 0; border-radius: 10px; background: #f4f5f7;
-      font-size: 16px; font-weight: 700; color: #111;
-    }
-    nav.app button.on { background: #111; color: #fff; }
-    body.is-quiet header,
-    body.is-quiet nav.app,
-    body.is-quiet .install { display: none !important; }
-    #cornerDock[hidden] { display: none !important; }
-    #cornerDock {
-      position: fixed; z-index: 70;
-      left: 50%;
-      bottom: calc(0.45rem + env(safe-area-inset-bottom));
-      transform: translateX(-50%);
-      display: flex; flex-direction: row; align-items: center; gap: 0.35rem;
-    }
-    #confirmShade[hidden], #confirmBar[hidden], #confirmActions[hidden], #lockedSteps[hidden] { display: none !important; }
-    #confirmShade {
-      position: fixed; inset: 0; z-index: 55; background: rgba(17, 17, 17, 0.28);
-    }
-    #confirmBar {
-      position: fixed; z-index: 65;
-      left: max(0.6rem, env(safe-area-inset-left));
-      right: max(0.6rem, env(safe-area-inset-right));
-      bottom: calc(3.6rem + env(safe-area-inset-bottom));
-      background: #fff; color: #111; border-radius: 16px;
-      padding: 0.75rem; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
-    }
-    #confirmAsk { margin: 0 0 0.55rem; font-weight: 700; }
-    #confirmActions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; }
-    #confirmOk, #confirmRedo {
-      min-height: 48px; border: 0; border-radius: 12px;
-      font: inherit; font-size: 16px; font-weight: 700;
-    }
-    #confirmOk { background: #0a7a32; color: #fff; }
-    #confirmRedo { background: #f4f5f7; color: #111; }
-    #lockedSteps { margin: 0.65rem 0 0; padding-left: 1.2rem; max-height: 24dvh; overflow: auto; }
-    #cornerStatus, #cornerEnd {
-      min-height: 40px; padding: 0 0.8rem; border: 0; border-radius: 999px;
-      font: inherit; font-size: 14px; font-weight: 700;
-    }
-    #cornerStatus { background: #fff; color: #111; border: 1px solid #111; }
-    #cornerStatus.on { background: #0a7a32; color: #fff; border-color: #0a7a32; }
-    #cornerEnd { background: #111; color: #fff; }
-    #stepSheet[hidden] { display: none !important; }
-    #stepSheet {
-      position: fixed; z-index: 80; left: 0; right: 0; bottom: 0;
-      max-height: 72dvh; overflow: auto;
-      padding: 0.8rem max(0.8rem, env(safe-area-inset-right)) calc(0.8rem + env(safe-area-inset-bottom)) max(0.8rem, env(safe-area-inset-left));
-      background: #fff; border-top: 1px solid #e6e6e6; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.08);
-    }
-    #stepSheet h2 { margin: 0 0 0.4rem; font-size: 1.05rem; }
-    .step-row {
-      display: grid; grid-template-columns: 1fr auto; gap: 0.35rem; align-items: center;
-      padding: 0.45rem 0; border-bottom: 1px solid #f0f0f0;
-    }
-    .step-row button { min-height: 36px; border: 0; border-radius: 8px; background: #f4f5f7; font: inherit; font-weight: 650; }
-    #stepSave[hidden], #stepClose[hidden] { display: none !important; }
-    #stepSave, #stepClose {
-      display: flex; align-items: center; justify-content: center; width: 100%;
-      min-height: 48px; margin-top: 0.45rem; border: 0; border-radius: 12px;
-      font: inherit; font-weight: 700;
-    }
-    #stepSave { background: #111; color: #fff; }
-    #stepClose { background: #f4f5f7; color: #111; }
-    #endVideo {
-      position: fixed; width: 2px; height: 2px; left: 0; bottom: 0;
-      opacity: 0.01; pointer-events: none;
-    }
+    #startBtn { background: #111; color: #fff; }
+    #endBtn { background: #fff; color: #111; }
+    #startBtn:disabled, #endBtn:disabled { opacity: 0.35; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>fb-poller</h1>
-    <p id="updateNote" hidden></p>
-  </header>
-  <p class="install" id="install">Bấm Chia sẻ, rồi Thêm vào Màn hình chính.
-    <br /><button type="button" id="installHide">Đã hiểu</button>
-  </p>
-  <main>
-    <section class="view" id="view-controls">
-      <iframe id="controls" title="Điều khiển" src="/?as=iphone"></iframe>
-    </section>
-    <section class="view" id="view-saved" hidden>
-      <table>
-        <thead><tr><th>Tên</th><th>Tên trong danh bạ</th><th>Username</th></tr></thead>
-        <tbody id="savedRows"><tr><td colspan="3">Chưa có người đã lưu.</td></tr></tbody>
-      </table>
-    </section>
+  <p id="updateNote" hidden></p>
+  <main id="pad">
+    <div id="stepList"><p>Bấm Bắt đầu, rồi chạm hoặc kéo trên màn hình.</p></div>
   </main>
-  <div id="confirmShade" data-norecord hidden></div>
-  <section id="confirmBar" data-norecord hidden>
-    <p id="confirmAsk"></p>
-    <div id="confirmActions" hidden>
-      <button id="confirmOk" type="button">OK</button>
-      <button id="confirmRedo" type="button">Làm lại</button>
-    </div>
-    <ol id="lockedSteps" hidden></ol>
-  </section>
-  <div id="cornerDock" data-norecord hidden>
-    <button id="cornerStatus" type="button">Chưa ghi</button>
-    <button id="cornerEnd" type="button">Kết thúc</button>
+  <div id="actions" data-norecord>
+    <button id="startBtn" type="button">Bắt đầu</button>
+    <button id="endBtn" type="button" disabled>Kết thúc</button>
   </div>
-  <section id="stepSheet" data-norecord hidden>
-    <h2>Kịch bản</h2>
-    <div id="stepList"></div>
-    <button id="stepSave" type="button">Lưu các bước đã sửa</button>
-    <button id="stepClose" type="button">Đóng</button>
-  </section>
-  <video id="endVideo" playsinline webkit-playsinline loop src="/static/ket-thuc.mp4"></video>
-  <nav class="app">
-    <button type="button" data-app="controls" class="on">Điều khiển</button>
-    <button type="button" data-app="saved">Đã lưu</button>
-  </nav>
   <script>
     const hubToken = __CONTROL_TOKEN_JSON__;
     if (hubToken) localStorage.setItem("fb_poller_control_token", hubToken);
@@ -169,60 +62,11 @@
   <script src="/static/version.js"></script>
   <script src="/static/watch.js?v=__IPHONE_BUILD__"></script>
   <script>
-    const install = document.getElementById("install");
-    const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
-    if (standalone || localStorage.getItem("fb_poller_iphone_install") === "1") install.hidden = true;
-    document.getElementById("installHide").addEventListener("click", () => {
-      localStorage.setItem("fb_poller_iphone_install", "1");
-      install.hidden = true;
-    });
-    const views = {
-      controls: document.getElementById("view-controls"),
-      saved: document.getElementById("view-saved"),
-    };
-    function showApp(name) {
-      Object.entries(views).forEach(([key, node]) => { node.hidden = key !== name; });
-      document.querySelectorAll("[data-app]").forEach((button) => {
-        button.classList.toggle("on", button.getAttribute("data-app") === name);
-      });
-    }
-    document.querySelectorAll("[data-app]").forEach((button) => {
-      button.addEventListener("click", () => showApp(button.getAttribute("data-app")));
-    });
-    function esc(value) {
-      return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
-        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-      })[ch]);
-    }
-    function draw(items) {
-      const rows = document.getElementById("savedRows");
-      if (!items.length) {
-        rows.innerHTML = "<tr><td colspan=\"3\">Chưa có người đã lưu.</td></tr>";
-        return;
-      }
-      rows.innerHTML = items.map((person) =>
-        "<tr><td>" + esc(person.name) + "</td><td>" + esc(person.contactName) + "</td><td>" + esc(person.username) + "</td></tr>"
-      ).join("");
-    }
-    document.addEventListener("people-saved", (event) => draw(event.detail || []));
-    document.addEventListener("people-auth", () => {
-      document.getElementById("savedRows").innerHTML = "<tr><td colspan=\"3\">Chưa lưu được danh sách.</td></tr>";
-    });
-    (async function loadSaved() {
-      const token = localStorage.getItem("fb_poller_control_token") || "";
-      const headers = {};
-      if (token) headers.Authorization = "Bearer " + token;
-      const response = await fetch("/v1/people", { headers: headers });
-      if (!response.ok) return;
-      const data = await response.json();
-      draw(data.items || []);
-    })();
-
-    const endVideo = document.getElementById("endVideo");
-    const capture = { phase: "", t0: 0, events: [], press: null, steps: [], pending: null, redoNote: "" };
-    let quietTimer = 0;
-    let closing = false;
-    let pipSeen = false;
+    const startBtn = document.getElementById("startBtn");
+    const endBtn = document.getElementById("endBtn");
+    const capture = { on: false, t0: 0, events: [], down: null };
+    let lastGesture = 0;
+    let saving = false;
 
     function authHeaders() {
       const token = localStorage.getItem("fb_poller_control_token") || "";
@@ -231,225 +75,126 @@
       return headers;
     }
 
-    function paintStatus() {
-      const status = document.getElementById("cornerStatus");
-      if (capture.phase === "confirm") {
-        status.textContent = "Chốt bước?";
-        status.classList.add("on");
-        return;
-      }
-      if (capture.phase !== "record") return;
-      const count = capture.events.length;
-      status.textContent = count ? "Đã chốt " + count : "Chưa ghi";
-      status.classList.toggle("on", count > 0);
-    }
-
     function captionOf(event) {
-      const name = event.label || event.target || "màn hình";
+      const name = event.label || "màn hình";
       if (event.intent === "swipe") return "Vuốt tại " + name;
-      if (event.intent === "focus") return "Chạm vào ô " + name;
       return "Chạm " + name;
     }
 
-    function renderLocked() {
-      const list = document.getElementById("lockedSteps");
-      list.replaceChildren();
-      capture.events.forEach((event) => {
+    function showLines(lines) {
+      const root = document.getElementById("stepList");
+      root.replaceChildren();
+      if (!lines.length) {
+        const empty = document.createElement("p");
+        empty.textContent = "Chưa có bước. Bấm Bắt đầu, chạm hoặc kéo trên màn hình, rồi bấm Kết thúc.";
+        root.appendChild(empty);
+        return;
+      }
+      const list = document.createElement("ol");
+      lines.forEach((line) => {
         const item = document.createElement("li");
-        item.textContent = captionOf(event);
+        item.textContent = line;
         list.appendChild(item);
       });
-      list.hidden = capture.events.length === 0;
+      root.appendChild(list);
     }
 
-    function hideConfirm() {
-      document.getElementById("confirmShade").hidden = true;
-      document.getElementById("confirmBar").hidden = true;
-      document.getElementById("confirmActions").hidden = true;
+    function paint() {
+      showLines(capture.events.map(captionOf));
     }
 
-    function showConfirm() {
-      const bar = document.getElementById("confirmBar");
-      const ask = document.getElementById("confirmAsk");
-      const actions = document.getElementById("confirmActions");
-      const shade = document.getElementById("confirmShade");
-      renderLocked();
-      if (capture.pending) {
-        ask.textContent = captionOf(capture.pending) + ". Chốt OK?";
-        actions.hidden = false;
-        shade.hidden = false;
-        bar.hidden = false;
-        paintStatus();
+    function ignored(target) {
+      return target instanceof Element && Boolean(target.closest("[data-norecord]"));
+    }
+
+    function pointerDown(x, y, target) {
+      if (!capture.on || ignored(target)) {
+        capture.down = null;
         return;
       }
-      actions.hidden = true;
-      shade.hidden = true;
-      if (capture.redoNote) {
-        ask.textContent = capture.redoNote;
-        bar.hidden = false;
-        paintStatus();
+      capture.down = { x: x, y: y };
+    }
+
+    function pointerUp(x, y, target) {
+      if (!capture.on || !capture.down) return;
+      const now = performance.now();
+      if (now - lastGesture < 80) {
+        capture.down = null;
         return;
       }
-      if (capture.events.length) {
-        ask.textContent = "Đã chốt " + capture.events.length + " bước. Làm bước tiếp theo.";
-        bar.hidden = false;
-      } else {
-        bar.hidden = true;
+      if (ignored(target)) {
+        capture.down = null;
+        return;
       }
-      paintStatus();
+      const start = capture.down;
+      capture.down = null;
+      lastGesture = now;
+      const moved = Math.hypot(x - start.x, y - start.y);
+      capture.events.push({
+        t: Math.max(0, Math.round(now - capture.t0)),
+        kind: "pointer",
+        phase: "up",
+        target: "body",
+        x: Math.round(x),
+        y: Math.round(y),
+        pointerType: "touch",
+        click: false,
+        intent: moved > 36 ? "swipe" : "tap",
+        label: "màn hình",
+      });
+      paint();
     }
 
-    function closeFloat() {
-      pipSeen = false;
-      try {
-        if (document.pictureInPictureElement === endVideo) document.exitPictureInPicture();
-        if (endVideo.webkitPresentationMode === "picture-in-picture" && endVideo.webkitSetPresentationMode) {
-          endVideo.webkitSetPresentationMode("inline");
-        }
-      } catch (error) {
-        /* PiP đã đóng */
-      }
-      endVideo.pause();
-    }
+    document.addEventListener("pointerdown", (event) => {
+      pointerDown(event.clientX, event.clientY, event.target);
+    }, true);
+    document.addEventListener("pointerup", (event) => {
+      pointerUp(event.clientX, event.clientY, event.target);
+    }, true);
+    document.addEventListener("pointercancel", (event) => {
+      pointerUp(event.clientX, event.clientY, event.target);
+    }, true);
+    document.addEventListener("touchstart", (event) => {
+      const touch = event.changedTouches && event.changedTouches[0];
+      if (!touch) return;
+      pointerDown(touch.clientX, touch.clientY, event.target);
+    }, true);
+    document.addEventListener("touchend", (event) => {
+      const touch = event.changedTouches && event.changedTouches[0];
+      if (!touch) return;
+      pointerUp(touch.clientX, touch.clientY, event.target);
+    }, true);
+    document.addEventListener("touchcancel", (event) => {
+      const touch = event.changedTouches && event.changedTouches[0];
+      if (!touch) return;
+      pointerUp(touch.clientX, touch.clientY, event.target);
+    }, true);
 
-    function stopQuiet() {
-      if (quietTimer) window.clearInterval(quietTimer);
-      quietTimer = 0;
-      capture.phase = "";
-      capture.press = null;
-      capture.pending = null;
-      capture.redoNote = "";
-      hideConfirm();
-      document.body.classList.remove("is-quiet");
-      document.getElementById("cornerDock").hidden = true;
-      document.getElementById("cornerStatus").classList.remove("on");
-      document.getElementById("cornerStatus").textContent = "Chưa ghi";
-      closeFloat();
-      showApp("controls");
-    }
-
-    function floatEnd() {
-      try {
-        endVideo.muted = false;
-        const playing = endVideo.play();
-        if (typeof endVideo.webkitSetPresentationMode === "function") {
-          endVideo.webkitSetPresentationMode("picture-in-picture");
-        } else if (document.pictureInPictureEnabled && document.pictureInPictureElement !== endVideo) {
-          const request = endVideo.requestPictureInPicture();
-          if (request && typeof request.catch === "function") request.catch(() => {});
-        }
-        if (playing && typeof playing.then === "function") {
-          playing.then(() => {
-            const floating = endVideo.webkitPresentationMode === "picture-in-picture"
-              || document.pictureInPictureElement === endVideo;
-            if (!floating) endVideo.pause();
-          }).catch(() => {});
-        }
-      } catch (error) {
-        /* Nút Kết thúc trên trang vẫn bấm được */
-      }
-    }
-
-    function startRecording() {
-      capture.phase = "record";
+    startBtn.addEventListener("click", () => {
+      if (capture.on || saving) return;
+      capture.on = true;
       capture.t0 = performance.now();
       capture.events = [];
-      capture.press = null;
-      capture.steps = [];
-      capture.pending = null;
-      capture.redoNote = "";
-      hideConfirm();
-      paintStatus();
-      floatEnd();
-    }
+      capture.down = null;
+      startBtn.disabled = true;
+      endBtn.disabled = false;
+      document.getElementById("stepList").replaceChildren();
+    });
 
-    function selectorOf(node) {
-      if (!(node instanceof Element)) return "body";
-      const withId = node.closest("[id]");
-      if (!withId || withId.closest("[data-norecord]")) return "body";
-      if (!/^[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(withId.id)) return "body";
-      return "#" + withId.id;
-    }
-
-    function renderSteps() {
-      const root = document.getElementById("stepList");
-      const save = document.getElementById("stepSave");
-      root.replaceChildren();
-      if (!capture.steps.length) {
-        const empty = document.createElement("p");
-        empty.textContent = "Chưa chốt bước nào. Chạm một nút hoặc kéo màn hình, rồi bấm OK.";
-        root.appendChild(empty);
-        save.hidden = true;
-        return;
-      }
-      save.hidden = false;
-      capture.steps.forEach((step, index) => {
-        const row = document.createElement("div");
-        row.className = "step-row";
-        const label = document.createElement("div");
-        label.textContent = (index + 1) + ". " + (step.caption || step.kind || "Bước");
-        const actions = document.createElement("div");
-        const up = document.createElement("button");
-        up.type = "button";
-        up.textContent = "Lên";
-        up.disabled = index === 0;
-        up.addEventListener("click", () => {
-          const item = capture.steps.splice(index, 1)[0];
-          capture.steps.splice(index - 1, 0, item);
-          renderSteps();
-        });
-        const down = document.createElement("button");
-        down.type = "button";
-        down.textContent = "Xuống";
-        down.disabled = index === capture.steps.length - 1;
-        down.addEventListener("click", () => {
-          const item = capture.steps.splice(index, 1)[0];
-          capture.steps.splice(index + 1, 0, item);
-          renderSteps();
-        });
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.textContent = "Xoá";
-        remove.addEventListener("click", () => {
-          capture.steps.splice(index, 1);
-          renderSteps();
-        });
-        actions.appendChild(up);
-        actions.appendChild(down);
-        actions.appendChild(remove);
-        row.appendChild(label);
-        row.appendChild(actions);
-        root.appendChild(row);
-      });
-    }
-
-    function showSheet() {
-      document.body.classList.remove("is-quiet");
-      document.getElementById("cornerDock").hidden = true;
-      hideConfirm();
-      document.getElementById("stepSheet").hidden = false;
-      showApp("controls");
-    }
-
-    async function finishRecording() {
-      if (closing) return;
-      closing = true;
-      capture.pending = null;
+    endBtn.addEventListener("click", async () => {
+      if (!capture.on || saving) return;
+      capture.on = false;
+      capture.down = null;
+      saving = true;
+      startBtn.disabled = false;
+      endBtn.disabled = true;
       const events = capture.events.slice();
-      capture.phase = "";
-      capture.press = null;
-      if (quietTimer) window.clearInterval(quietTimer);
-      quietTimer = 0;
-      closeFloat();
-      showSheet();
-      const list = document.getElementById("stepList");
       if (!events.length) {
-        capture.steps = [];
-        renderSteps();
-        closing = false;
+        showLines([]);
+        startBtn.disabled = false;
+        saving = false;
         return;
       }
-      list.textContent = "Đang lưu và tách bước...";
       const headers = authHeaders();
       const saved = await fetch("/v1/recordings", {
         method: "POST",
@@ -462,222 +207,15 @@
         body: JSON.stringify({ events: events }),
       });
       if (!saved.ok || !parsed.ok) {
-        capture.steps = [];
-        list.textContent = "Không lưu được. Mở lại trang rồi ghi tiếp.";
-        document.getElementById("stepSave").hidden = true;
-        closing = false;
+        const note = document.createElement("p");
+        note.textContent = "Chưa lưu được. Bấm Bắt đầu rồi làm lại.";
+        document.getElementById("stepList").appendChild(note);
+        saving = false;
         return;
       }
-      capture.steps = (await parsed.json()).steps || [];
-      renderSteps();
-      closing = false;
-    }
-
-    function beginPhoneUse(delay) {
-      if (capture.phase === "record" || capture.phase === "confirm") return;
-      closing = false;
-      if (quietTimer) window.clearInterval(quietTimer);
-      quietTimer = 0;
-      capture.events = [];
-      capture.steps = [];
-      capture.pending = null;
-      capture.redoNote = "";
-      hideConfirm();
-      document.getElementById("stepSheet").hidden = true;
-      document.body.classList.add("is-quiet");
-      document.getElementById("cornerDock").hidden = false;
-      document.getElementById("cornerEnd").textContent = "Kết thúc";
-      const status = document.getElementById("cornerStatus");
-      status.classList.remove("on");
-      if (!delay) {
-        status.textContent = "Chưa ghi";
-        startRecording();
-        return;
-      }
-      capture.phase = "wait";
-      const ends = Date.now() + 10000;
-      status.textContent = "10";
-      quietTimer = window.setInterval(() => {
-        if (capture.phase !== "wait") {
-          window.clearInterval(quietTimer);
-          quietTimer = 0;
-          return;
-        }
-        if (document.hidden) return;
-        const left = Math.ceil((ends - Date.now()) / 1000);
-        if (left > 0) {
-          status.textContent = String(left);
-          return;
-        }
-        window.clearInterval(quietTimer);
-        quietTimer = 0;
-        startRecording();
-      }, 250);
-    }
-    window.beginPhoneUse = beginPhoneUse;
-
-    document.getElementById("confirmOk").addEventListener("click", () => {
-      if (capture.phase !== "confirm" || !capture.pending) return;
-      capture.events.push(capture.pending);
-      if (capture.events.length > 400) capture.events.splice(0, capture.events.length - 400);
-      capture.pending = null;
-      capture.redoNote = "";
-      capture.phase = "record";
-      showConfirm();
-    });
-    document.getElementById("confirmRedo").addEventListener("click", () => {
-      if (capture.phase !== "confirm") return;
-      capture.pending = null;
-      capture.redoNote = "Làm lại bước này.";
-      capture.phase = "record";
-      showConfirm();
-    });
-    document.getElementById("cornerStatus").addEventListener("click", (event) => {
-      event.preventDefault();
-    });
-    document.getElementById("cornerEnd").addEventListener("click", () => {
-      if (capture.phase === "record" || capture.phase === "confirm") finishRecording();
-      else stopQuiet();
-    });
-    document.getElementById("stepClose").addEventListener("click", () => {
-      document.getElementById("stepSheet").hidden = true;
-      stopQuiet();
-    });
-    document.getElementById("stepSave").addEventListener("click", async () => {
-      const save = document.getElementById("stepSave");
-      if (!capture.steps.length) return;
-      save.disabled = true;
-      const response = await fetch("/v1/recordings/from-steps", {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ title: "Thao tác trên điện thoại", steps: capture.steps }),
-      });
-      save.disabled = false;
-      save.textContent = response.ok ? "Đã lưu kịch bản" : "Chưa lưu được";
-    });
-
-    function phoneRecording() {
-      return capture.phase === "record";
-    }
-
-    function holdStep(event) {
-      if (capture.phase !== "record" || capture.pending) return;
-      if (event.kind !== "pointer" || event.phase !== "up") return;
-      if (event.intent !== "tap" && event.intent !== "swipe" && event.intent !== "focus") return;
-      capture.pending = event;
-      capture.redoNote = "";
-      capture.phase = "confirm";
-      showConfirm();
-    }
-
-    function pushPhoneEvent(raw) {
-      if (!phoneRecording() || !raw || typeof raw !== "object") return;
-      const kind = raw.kind;
-      if (kind !== "pointer" && kind !== "key" && kind !== "value") return;
-      const target = String(raw.target || "");
-      if (target !== "body" && !/^#[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(target)) return;
-      const event = {
-        t: Math.max(0, Math.round(performance.now() - capture.t0)),
-        kind: kind,
-        target: target,
-      };
-      if (kind === "pointer") {
-        event.phase = raw.phase === "down" || raw.phase === "move" ? raw.phase : "up";
-        event.pointerType = raw.pointerType === "mouse" || raw.pointerType === "pen" ? raw.pointerType : "touch";
-        event.click = Boolean(raw.click) && event.phase === "up";
-        if (raw.intent === "tap" || raw.intent === "focus" || raw.intent === "swipe") event.intent = raw.intent;
-        const label = String(raw.label || "").trim().replace(/\s+/g, " ").slice(0, 80);
-        if (label) event.label = label;
-        const roles = { button: 1, link: 1, textbox: 1, search: 1, select: 1, checkbox: 1, radio: 1 };
-        if (roles[raw.role]) event.role = raw.role;
-        if (typeof raw.x === "number") event.x = Math.round(raw.x);
-        if (typeof raw.y === "number") event.y = Math.round(raw.y);
-      } else if (kind === "key") {
-        if (raw.redacted || target === "#token") {
-          event.redacted = true;
-          const last = capture.events[capture.events.length - 1];
-          if (last && last.redacted && last.target === target) return;
-        } else if (raw.key) {
-          event.key = String(raw.key).slice(0, 32);
-          if (raw.code) event.code = String(raw.code).slice(0, 32);
-          if (raw.shift) event.shift = true;
-          if (raw.ctrl) event.ctrl = true;
-          if (raw.alt) event.alt = true;
-          if (raw.meta) event.meta = true;
-        } else {
-          return;
-        }
-      } else if (target === "#token" || raw.redacted) {
-        return;
-      } else {
-        event.value = String(raw.value || "").slice(0, 500);
-      }
-      if (event.kind === "pointer") {
-        holdStep(event);
-        return;
-      }
-    }
-    window.phoneRecording = phoneRecording;
-    window.pushPhoneEvent = pushPhoneEvent;
-
-    function releasePointer(event) {
-      if (capture.phase !== "record" || !capture.press || event.pointerId !== capture.press.id) return;
-      const start = capture.press;
-      capture.press = null;
-      if (event.target instanceof Element && event.target.closest("[data-norecord]")) return;
-      const moved = Math.hypot(event.clientX - start.x, event.clientY - start.y);
-      if (moved > 36) {
-        pushPhoneEvent({
-          kind: "pointer", phase: "up", target: "body",
-          x: event.clientX, y: event.clientY,
-          pointerType: "touch", click: false, intent: "swipe", label: "màn hình",
-        });
-        return;
-      }
-      const control = event.target instanceof Element ? event.target.closest("button, a") : null;
-      const target = control ? selectorOf(control) : "body";
-      const label = control
-        ? (control.innerText || "").trim().replace(/\s+/g, " ").slice(0, 80)
-        : "Màn hình";
-      pushPhoneEvent({
-        kind: "pointer", phase: "up", target: target,
-        x: event.clientX, y: event.clientY,
-        pointerType: "touch", click: target !== "body", intent: "tap",
-        label: label || "Màn hình",
-        role: control ? (control.tagName === "A" ? "link" : "button") : undefined,
-      });
-    }
-    document.addEventListener("pointerdown", (event) => {
-      if (capture.phase !== "record") return;
-      if (event.target instanceof Element && event.target.closest("[data-norecord]")) {
-        capture.press = null;
-        return;
-      }
-      capture.press = { id: event.pointerId, x: event.clientX, y: event.clientY };
-    }, true);
-    document.addEventListener("pointerup", releasePointer, true);
-    document.addEventListener("pointercancel", releasePointer, true);
-    function pipEnded() {
-      if (!pipSeen || capture.phase !== "record") return;
-      if (performance.now() - capture.t0 < 1200) {
-        pipSeen = false;
-        return;
-      }
-      finishRecording();
-    }
-    endVideo.addEventListener("leavepictureinpicture", pipEnded);
-    endVideo.addEventListener("webkitpresentationmodechanged", () => {
-      if (endVideo.webkitPresentationMode === "picture-in-picture") {
-        pipSeen = true;
-        return;
-      }
-      pipEnded();
-    });
-    window.addEventListener("message", (event) => {
-      if (event.origin !== location.origin) return;
-      const data = event.data || {};
-      if (data.type !== "fb-arm") return;
-      beginPhoneUse(Boolean(data.delay));
+      const steps = (await parsed.json()).steps || [];
+      showLines(steps.map((step) => step.caption || step.kind || "Bước"));
+      saving = false;
     });
   </script>
 </body>
