@@ -123,6 +123,8 @@
     .editor-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; }
     .editor-actions button { padding: 0.35rem 0.55rem; }
     #editorDetail { white-space: pre-wrap; margin: 0.6rem 0 0; }
+    .scenario-part { padding: 0.45rem 0; border-bottom: 1px solid var(--line); }
+    .scenario-part input, .editor-step input { width: 100%; margin: 0.3rem 0; box-sizing: border-box; }
     body.is-recording { box-shadow: inset 0 0 0 3px rgba(255, 107, 107, 0.85); }
     .err { color: #ff7b7b; margin: 0.5rem 0; }
     .empty { color: var(--muted); padding: 1.2rem; text-align: center; }
@@ -181,7 +183,7 @@
 
       <div data-norecord>
         <h2 style="margin-top:1.1rem">Làm lại đúng phím và cảm ứng</h2>
-        <p class="meta">Chạm lệch trong 36px vẫn được hiểu là nút gần nhất. Khi làm lại, phần mềm đối chiếu chữ, vai trò và vị trí. Hai lựa chọn quá giống thì hỏi bạn. Thao tác chỉ tính là xong khi việc thực sự xảy ra. Bấm «Sửa» để thêm, xoá, đổi thứ tự, ghi lại một đoạn, và xem control của từng bước trên trang. Lưu ra bản mới, bản gốc giữ nguyên.</p>
+        <p class="meta">Chạm lệch trong 36px vẫn được hiểu là nút gần nhất. Khi làm lại, phần mềm đối chiếu chữ, vai trò và vị trí. Hai lựa chọn quá giống thì hỏi bạn. Thao tác chỉ tính là xong khi việc thực sự xảy ra. Bấm «Sửa» để thêm, xoá, đổi thứ tự, ghi lại một đoạn, và xem control của từng bước trên trang. Lưu ra bản mới, bản gốc giữ nguyên. Đặt tên một đoạn rồi ghép nhiều đoạn thành kịch bản. Sửa đoạn thì mọi kịch bản đang dùng đoạn đó làm theo bản mới. Chỗ trống chữ hoặc control được điền riêng trong từng kịch bản.</p>
         <p class="meta" id="recordState" style="margin:0 0 0.6rem">Chưa ghi.</p>
         <div class="toolbar">
           <button id="recordToggle" type="button">Ghi bấm phím và cảm ứng</button>
@@ -213,9 +215,51 @@
             <button id="editorInsert" class="ghost" type="button">Ghi thêm sau bước này</button>
             <button id="editorPreview" class="ghost" type="button">Xem chậm đoạn này</button>
             <button id="editorSave" type="button">Lưu thành bản mới</button>
+            <button id="editorSaveClip" class="ghost" type="button">Lưu thành đoạn</button>
             <button id="editorClose" class="ghost" type="button">Đóng</button>
           </div>
         </div>
+
+        <h2>Đoạn có tên</h2>
+        <p class="meta">Một đoạn là một khúc kịch bản có tên. Kịch bản ghép chỉ xếp tên các đoạn, theo thứ tự. Cùng một tên chỗ trống trên nhiều bước thì điền một lần.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Tên đoạn</th>
+              <th>Các bước</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="clipRows">
+            <tr><td colspan="3" class="empty">Chưa có đoạn</td></tr>
+          </tbody>
+        </table>
+
+        <h2>Kịch bản ghép</h2>
+        <p class="meta" id="scenarioHint">Thêm từng đoạn, điền chỗ trống, rồi lưu. Làm theo luôn đọc bản đoạn mới nhất.</p>
+        <div class="toolbar">
+          <input id="scenarioName" type="text" maxlength="80" placeholder="Tên kịch bản" />
+        </div>
+        <div id="scenarioParts"></div>
+        <div class="toolbar">
+          <select id="scenarioClipPick"></select>
+          <button id="scenarioAdd" class="ghost" type="button">Thêm đoạn này</button>
+          <button id="scenarioPreview" class="ghost" type="button">Xem chậm kịch bản</button>
+          <button id="scenarioSave" type="button">Lưu kịch bản</button>
+          <button id="scenarioNew" class="ghost" type="button">Kịch bản mới</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Tên kịch bản</th>
+              <th>Thứ tự đoạn</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="scenarioRows">
+            <tr><td colspan="3" class="empty">Chưa có kịch bản ghép</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
     <div id="replayCursor" data-norecord hidden></div>
@@ -321,7 +365,7 @@
         const lim = $("limit").value;
         const q = encodeURIComponent($("q").value.trim());
         const actionQ = encodeURIComponent($("actionQ").value.trim());
-        const [stats, agents, comments, die, proxies, actions, recordings] = await Promise.all([
+        const [stats, agents, comments, die, proxies, actions, recordings, clipList, scenarioList] = await Promise.all([
           fetch("/v1/server/stats", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("stats " + r.status); return r.json(); }),
           fetch("/v1/agents", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("agents " + r.status); return r.json(); }),
           fetch("/v1/comments?limit=" + lim + "&q=" + q, { headers: headers() }).then((r) => { if (!r.ok) throw new Error("comments " + r.status); return r.json(); }),
@@ -329,9 +373,12 @@
           fetch("/v1/proxies?status=live&limit=30", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("proxies " + r.status); return r.json(); }),
           fetch("/v1/actions?limit=40&q=" + actionQ, { headers: headers() }).then((r) => { if (!r.ok) throw new Error("actions " + r.status); return r.json(); }),
           fetch("/v1/recordings?limit=20", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("recordings " + r.status); return r.json(); }),
+          fetch("/v1/clips?limit=50", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("clips " + r.status); return r.json(); }),
+          fetch("/v1/scenarios?limit=50", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("scenarios " + r.status); return r.json(); }),
         ]);
         renderActions(actions.items || []);
         renderRecordings(recordings.items || []);
+        renderLibrary(clipList.items || [], scenarioList.items || []);
 
         const px = stats.proxies || die.summary || {};
         $("stats").innerHTML = [
@@ -459,7 +506,9 @@
     }
 
     const recorder = { on: false, t0: 0, events: [], press: null, lastMove: 0, moves: 0 };
-    const editor = { open: false, sourceId: null, title: "", steps: [], selected: 0, checked: new Set(), capture: null };
+    const editor = { open: false, sourceId: null, clipId: null, title: "", steps: [], selected: 0, checked: new Set(), capture: null };
+    const library = { clips: [], scenarios: [] };
+    const scenario = { id: null, name: "", parts: [], capture: null };
     const epochs = { reload: 0, recheck: 0, note: 0 };
     let replaying = false;
 
@@ -634,6 +683,17 @@
     }
 
     function onPointerUp(e) {
+      if (scenario.capture && !replaying) {
+        if (e.target instanceof Element && e.target.closest("[data-norecord]")) return;
+        const pending = scenario.capture;
+        scenario.capture = null;
+        captureFill(e, pending).catch((err) => {
+          $("err").hidden = false;
+          $("err").style.color = "#ff7b7b";
+          $("err").textContent = "Không chọn được control: " + err.message;
+        });
+        return;
+      }
       if ((editor.capture === "add" || editor.capture === "retarget") && !replaying) {
         if (e.target instanceof Element && e.target.closest("[data-norecord]")) return;
         const mode = editor.capture;
@@ -1008,15 +1068,22 @@
     function stepCaption(step) {
       const name = step.label || step.target || "";
       const touch = (step.pointerType || "touch") !== "mouse";
-      if (step.kind === "type") return "Gõ vào " + name + ": " + (step.value || "");
-      if (step.kind === "key") {
-        if (step.redacted) return "Bấm phím trong ô mật khẩu " + name + " (không lưu ký tự)";
-        return "Phím " + (step.key || "") + " tại " + name;
+      let text;
+      if (step.kind === "type") text = "Gõ vào " + name + ": " + (step.value || "");
+      else if (step.kind === "key") {
+        text = step.redacted
+          ? "Bấm phím trong ô mật khẩu " + name + " (không lưu ký tự)"
+          : "Phím " + (step.key || "") + " tại " + name;
+      } else if (step.kind === "swipe") text = "Vuốt tại " + name;
+      else {
+        const verb = step.kind === "focus" ? (touch ? "Chạm vào ô" : "Bấm vào ô") : (touch ? "Chạm" : "Bấm");
+        text = step.snapped ? verb + " lệch, hiểu là " + name : verb + " " + name;
       }
-      if (step.kind === "swipe") return "Vuốt tại " + name;
-      const verb = step.kind === "focus" ? (touch ? "Chạm vào ô" : "Bấm vào ô") : (touch ? "Chạm" : "Bấm");
-      if (step.snapped) return verb + " lệch, hiểu là " + name;
-      return verb + " " + name;
+      const notes = [];
+      if (step.valueBlank) notes.push("chỗ trống chữ «" + step.valueBlank + "»");
+      if (step.targetBlank) notes.push("chỗ trống control «" + step.targetBlank + "»");
+      if (notes.length) return text + " · " + notes.join(", ");
+      return text;
     }
 
     function selectedRange() {
@@ -1061,6 +1128,8 @@
         "Vị trí trong nhóm: " + (typeof step.index === "number" ? String(step.index + 1) : "(không có)"),
       ];
       if (step.kind === "type") lines.push("Chữ sẽ gõ: " + (step.value || ""));
+      if (step.valueBlank) lines.push("Chỗ trống chữ: " + step.valueBlank);
+      if (step.targetBlank) lines.push("Chỗ trống control: " + step.targetBlank);
       if (step.kind === "key" && !step.redacted) lines.push("Phím: " + (step.key || ""));
       lines.push("Chạm lệch lúc ghi: " + (step.snapped ? "có" : "không"));
       lines.push(found ? "Trên trang lúc này: " + (found.label || "control") : "Trên trang lúc này: không thấy control khớp");
@@ -1109,7 +1178,9 @@
             if (editor.selected === index) illustrateStep();
           });
           body.appendChild(field);
+          body.appendChild(blankInput(step, "valueBlank", "Tên chỗ trống của chữ, để trống nếu cố định", caption, index));
         }
+        body.appendChild(blankInput(step, "targetBlank", "Tên chỗ trống của control, để trống nếu cố định", caption, index));
         const actions = document.createElement("div");
         actions.className = "editor-actions";
         const up = document.createElement("button");
@@ -1147,8 +1218,27 @@
         : editor.capture === "retarget"
           ? " Chạm control mới cho bước đang chọn."
           : "";
-      $("editorHint").textContent = "Bước " + (editor.steps.length ? editor.selected + 1 : 0) + "/" + editor.steps.length + ". Đánh dấu vài ô để ghi đè cả đoạn từ ô đầu đến ô cuối." + captureNote;
+      const clipNote = editor.clipId ? " Cập nhật đoạn sẽ đổi mọi kịch bản đang dùng đoạn này." : "";
+      $("editorHint").textContent = "Bước " + (editor.steps.length ? editor.selected + 1 : 0) + "/" + editor.steps.length + ". Đánh dấu vài ô để ghi đè cả đoạn từ ô đầu đến ô cuối." + captureNote + clipNote;
+      $("editorSaveClip").textContent = editor.clipId ? "Cập nhật đoạn" : "Lưu thành đoạn";
       illustrateStep();
+    }
+
+    function blankInput(step, key, placeholder, caption, index) {
+      const field = document.createElement("input");
+      field.type = "text";
+      field.maxLength = 40;
+      field.value = step[key] || "";
+      field.placeholder = placeholder;
+      field.addEventListener("input", () => {
+        const name = field.value.replace(/\s+/g, " ").trim().slice(0, 40);
+        if (name) step[key] = name;
+        else delete step[key];
+        step.caption = stepCaption(step);
+        caption.textContent = step.caption;
+        if (editor.selected === index) illustrateStep();
+      });
+      return field;
     }
 
     function moveStep(from, to) {
@@ -1183,25 +1273,30 @@
     function retargetStep(current, incoming) {
       const ontoField = incoming.kind === "focus";
       if (!current) return incoming;
-      if (current.kind === "type" && !ontoField) return incoming;
-      if (current.kind === "tap" && ontoField) return incoming;
-      const next = {
-        kind: current.kind,
-        target: incoming.target,
-        pointerType: incoming.pointerType || current.pointerType || "touch",
-      };
-      ["label", "role", "hint", "index"].forEach((key) => {
-        if (incoming[key] !== undefined && incoming[key] !== "") next[key] = incoming[key];
-      });
-      if (incoming.snapped) next.snapped = true;
-      if (current.kind === "type") next.value = current.value || "";
-      if (current.kind === "key") {
-        if (current.redacted) next.redacted = true;
-        else next.key = current.key;
-        ["shift", "ctrl", "alt", "meta"].forEach((flag) => {
-          if (current[flag]) next[flag] = true;
+      let next;
+      if ((current.kind === "type" && !ontoField) || (current.kind === "tap" && ontoField)) {
+        next = Object.assign({}, incoming);
+      } else {
+        next = {
+          kind: current.kind,
+          target: incoming.target,
+          pointerType: incoming.pointerType || current.pointerType || "touch",
+        };
+        ["label", "role", "hint", "index"].forEach((key) => {
+          if (incoming[key] !== undefined && incoming[key] !== "") next[key] = incoming[key];
         });
+        if (incoming.snapped) next.snapped = true;
+        if (current.kind === "type") next.value = current.value || "";
+        if (current.kind === "key") {
+          if (current.redacted) next.redacted = true;
+          else next.key = current.key;
+          ["shift", "ctrl", "alt", "meta"].forEach((flag) => {
+            if (current[flag]) next[flag] = true;
+          });
+        }
       }
+      if (current.targetBlank) next.targetBlank = current.targetBlank;
+      if (next.kind === "type" && current.valueBlank) next.valueBlank = current.valueBlank;
       next.caption = stepCaption(next);
       return next;
     }
@@ -1264,6 +1359,7 @@
       if (!parsed.ok) throw new Error("parse " + parsed.status);
       editor.open = true;
       editor.sourceId = id;
+      editor.clipId = null;
       editor.title = ((data.title || "Kịch bản") + " (sửa)").slice(0, 200);
       editor.steps = (await parsed.json()).steps || [];
       editor.selected = 0;
@@ -1276,6 +1372,7 @@
     function closeEditor() {
       editor.open = false;
       editor.capture = null;
+      editor.clipId = null;
       editor.steps = [];
       editor.checked = new Set();
       $("scriptEditor").hidden = true;
@@ -1356,6 +1453,379 @@
       $("err").textContent = "Đã lưu bản mới «" + (saved.title || "") + "». Bản gốc vẫn giữ.";
       $("recordState").textContent = "Đã lưu thành bản mới.";
       closeEditor();
+    }
+
+    function apiDetail(data, fallback) {
+      const detail = data && data.detail != null ? String(data.detail) : fallback;
+      const known = {
+        "blank used for text and control": "Cùng một tên chỗ trống đang dùng cho cả chữ và control",
+        "clip is used by a scenario": "Đoạn này đang nằm trong một kịch bản. Xoá kịch bản đó trước.",
+        "missing clip": "Kịch bản trỏ tới đoạn đã mất",
+        "no replayable steps": "Không có bước để làm theo",
+        "scenario has no clips": "Kịch bản chưa có đoạn",
+        "name is empty": "Tên đang trống",
+        "clip not found": "Không thấy đoạn",
+        "scenario not found": "Không thấy kịch bản",
+      };
+      return known[detail] || detail;
+    }
+
+    async function readDetail(response, fallback) {
+      let data = null;
+      try { data = await response.json(); } catch (err) { data = null; }
+      return apiDetail(data, fallback);
+    }
+
+    function clipById(id) {
+      return library.clips.find((clip) => clip.id === Number(id)) || null;
+    }
+
+    function renderLibrary(clips, scenarios) {
+      library.clips = clips || [];
+      library.scenarios = scenarios || [];
+      const rows = $("clipRows");
+      if (!library.clips.length) {
+        rows.innerHTML = `<tr><td colspan="3" class="empty">Chưa có đoạn</td></tr>`;
+      } else {
+        rows.innerHTML = library.clips.map((clip) => {
+          const steps = (clip.captions || []).map((line) => esc(line)).join("<br>");
+          const blanks = (clip.blanks || []).map((blank) => {
+            const kind = blank.kind === "text" ? "chữ" : "control";
+            return esc(blank.name) + " (" + kind + ")";
+          }).join(", ");
+          const used = clip.scenarioCount
+            ? `<div class="meta">Dùng trong ${clip.scenarioCount} kịch bản: ${esc((clip.scenarioNames || []).join(", "))}</div>`
+            : "";
+          return `<tr>
+            <td>${esc(clip.name)}${used}${blanks ? `<div class="meta">Chỗ trống: ${blanks}</div>` : ""}</td>
+            <td>${steps || "—"}</td>
+            <td>
+              <button type="button" class="ghost" data-edit-clip="${clip.id}">Sửa</button>
+              <button type="button" class="ghost" data-delete-clip="${clip.id}">Xoá</button>
+            </td>
+          </tr>`;
+        }).join("");
+      }
+      const pick = $("scenarioClipPick");
+      const current = pick.value;
+      pick.replaceChildren();
+      if (!library.clips.length) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "Chưa có đoạn";
+        pick.appendChild(option);
+      } else {
+        library.clips.forEach((clip) => {
+          const option = document.createElement("option");
+          option.value = String(clip.id);
+          option.textContent = clip.name;
+          pick.appendChild(option);
+        });
+        if (current && library.clips.some((clip) => String(clip.id) === current)) pick.value = current;
+      }
+      const scenarioBody = $("scenarioRows");
+      if (!library.scenarios.length) {
+        scenarioBody.innerHTML = `<tr><td colspan="3" class="empty">Chưa có kịch bản ghép</td></tr>`;
+      } else {
+        scenarioBody.innerHTML = library.scenarios.map((item) => {
+          const order = (item.parts || []).map((part) => esc(part.clipName || ("#" + part.clipId))).join(" → ");
+          return `<tr>
+            <td>${esc(item.name)}</td>
+            <td>${order || "—"}</td>
+            <td>
+              <button type="button" data-play-scenario="${item.id}">Làm theo</button>
+              <button type="button" class="ghost" data-edit-scenario="${item.id}">Sửa</button>
+              <button type="button" class="ghost" data-delete-scenario="${item.id}">Xoá</button>
+            </td>
+          </tr>`;
+        }).join("");
+      }
+      const focused = document.activeElement;
+      const keep = focused && (focused.closest("#scenarioParts") || focused.id === "scenarioName");
+      if (!keep) renderScenario();
+    }
+
+    function renderScenario() {
+      const root = $("scenarioParts");
+      root.replaceChildren();
+      if (document.activeElement !== $("scenarioName")) $("scenarioName").value = scenario.name;
+      $("scenarioSave").textContent = scenario.id ? "Cập nhật kịch bản" : "Lưu kịch bản";
+      if (!scenario.parts.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Chưa thêm đoạn vào kịch bản này.";
+        root.appendChild(empty);
+        return;
+      }
+      scenario.parts.forEach((part, index) => {
+        const clip = clipById(part.clipId);
+        const box = document.createElement("div");
+        box.className = "scenario-part";
+        const title = document.createElement("div");
+        title.textContent = (index + 1) + ". " + (clip ? clip.name : "Đoạn đã mất");
+        box.appendChild(title);
+        (clip ? (clip.blanks || []) : []).forEach((blank) => {
+          const label = document.createElement("div");
+          label.className = "meta";
+          label.textContent = blank.kind === "text"
+            ? "Chỗ trống chữ «" + blank.name + "»"
+            : "Chỗ trống control «" + blank.name + "»";
+          box.appendChild(label);
+          if (blank.kind === "text") {
+            const field = document.createElement("input");
+            field.type = "text";
+            field.maxLength = 500;
+            field.placeholder = "Chữ cho lần này. Để trống thì dùng mẫu.";
+            const current = part.fills[blank.name];
+            field.value = typeof current === "string" ? current : "";
+            field.addEventListener("input", () => {
+              part.fills[blank.name] = field.value.slice(0, 500);
+            });
+            box.appendChild(field);
+          } else {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "ghost";
+            const fill = part.fills[blank.name];
+            const waiting = scenario.capture && scenario.capture.partIndex === index && scenario.capture.blankName === blank.name;
+            const chosen = fill && typeof fill === "object" ? (fill.label || fill.target || "") : "";
+            button.textContent = waiting ? "Đang chờ chạm…" : (chosen ? "Đã chọn: " + chosen : "Chạm để chọn");
+            button.addEventListener("click", () => {
+              if (replaying || recorder.on) return;
+              if (waiting) scenario.capture = null;
+              else {
+                editor.capture = null;
+                scenario.capture = { partIndex: index, blankName: blank.name };
+              }
+              renderScenario();
+            });
+            box.appendChild(button);
+          }
+        });
+        const actions = document.createElement("div");
+        actions.className = "editor-actions";
+        const up = document.createElement("button");
+        up.type = "button";
+        up.className = "ghost";
+        up.textContent = "Lên";
+        up.disabled = index === 0;
+        up.addEventListener("click", () => moveScenarioPart(index, index - 1));
+        const down = document.createElement("button");
+        down.type = "button";
+        down.className = "ghost";
+        down.textContent = "Xuống";
+        down.disabled = index === scenario.parts.length - 1;
+        down.addEventListener("click", () => moveScenarioPart(index, index + 1));
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "ghost";
+        remove.textContent = "Xoá";
+        remove.addEventListener("click", () => {
+          scenario.parts.splice(index, 1);
+          if (scenario.capture && scenario.capture.partIndex === index) scenario.capture = null;
+          renderScenario();
+        });
+        actions.appendChild(up);
+        actions.appendChild(down);
+        actions.appendChild(remove);
+        box.appendChild(actions);
+        root.appendChild(box);
+      });
+    }
+
+    function moveScenarioPart(from, to) {
+      if (to < 0 || to >= scenario.parts.length) return;
+      const part = scenario.parts.splice(from, 1)[0];
+      scenario.parts.splice(to, 0, part);
+      scenario.capture = null;
+      renderScenario();
+    }
+
+    async function captureFill(e, pending) {
+      const slop = e.pointerType === "mouse" ? 12 : TOUCH_SLOP;
+      const aimed = aimAt(e.clientX, e.clientY, e.target, slop);
+      const part = scenario.parts[pending.partIndex];
+      if (!part || !aimed.selector) {
+        renderScenario();
+        $("recordState").textContent = "Không thấy control. Chạm vào nút hoặc ô trên trang.";
+        return;
+      }
+      const intent = gestureIntent(aimed.el, 0, slop) || "tap";
+      const event = {
+        t: 0,
+        kind: "pointer",
+        phase: "up",
+        target: aimed.selector,
+        pointerType: e.pointerType || "touch",
+        click: intent !== "swipe",
+        intent: intent,
+      };
+      if (aimed.label) event.label = aimed.label;
+      if (aimed.snapped) event.snapped = true;
+      markControl(event, aimed.el);
+      const response = await fetch("/v1/recordings/parse", {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ events: [event] }),
+      });
+      if (!response.ok) throw new Error(await readDetail(response, "parse " + response.status));
+      const fresh = (await response.json()).steps || [];
+      if (!fresh.length) {
+        renderScenario();
+        $("recordState").textContent = "Chạm đó không thành một control.";
+        return;
+      }
+      const step = fresh[0];
+      const fill = { target: step.target };
+      ["label", "role", "hint", "index", "pointerType"].forEach((key) => {
+        if (step[key] !== undefined && step[key] !== "") fill[key] = step[key];
+      });
+      part.fills[pending.blankName] = fill;
+      renderScenario();
+      $("recordState").textContent = "Đã chọn control cho chỗ trống «" + pending.blankName + "».";
+    }
+
+    async function openClip(id) {
+      if (replaying || recorder.on) return;
+      const response = await fetch("/v1/clips/" + id, { headers: headers() });
+      if (!response.ok) throw new Error(await readDetail(response, "clips " + response.status));
+      const data = await response.json();
+      editor.open = true;
+      editor.clipId = data.id;
+      editor.sourceId = null;
+      editor.title = data.name || "";
+      editor.steps = data.steps || [];
+      editor.selected = 0;
+      editor.checked = new Set();
+      editor.capture = null;
+      renderEditor();
+      const names = data.scenarioNames || [];
+      $("recordState").textContent = names.length
+        ? "Đang sửa đoạn «" + data.name + "». Đang được dùng trong: " + names.join(", ") + "."
+        : "Đang sửa đoạn «" + (data.name || "") + "».";
+    }
+
+    async function saveClip() {
+      if (!editor.open || replaying || recorder.on) return;
+      const name = ($("editorTitle").value.trim() || "Đoạn mới").slice(0, 80);
+      editor.title = name;
+      const updating = Boolean(editor.clipId);
+      const response = await fetch(updating ? "/v1/clips/" + editor.clipId : "/v1/clips", {
+        method: updating ? "PUT" : "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name, steps: editor.steps }),
+      });
+      if (!response.ok) throw new Error(await readDetail(response, "clips " + response.status));
+      const saved = await response.json();
+      await loadAll();
+      $("err").hidden = false;
+      $("err").style.color = "#3ecf8e";
+      $("err").textContent = (saved.scenarioCount || 0)
+        ? "Đã cập nhật đoạn «" + saved.name + "». Mọi kịch bản đang dùng đoạn này theo các bước mới."
+        : "Đã lưu đoạn «" + saved.name + "».";
+      $("recordState").textContent = "Đã lưu đoạn có tên.";
+      closeEditor();
+    }
+
+    async function deleteClip(id) {
+      const clip = clipById(id);
+      const name = clip ? clip.name : "đoạn này";
+      if (!confirm("Xoá đoạn «" + name + "»?")) return;
+      const response = await fetch("/v1/clips/" + id, { method: "DELETE", headers: headers() });
+      if (!response.ok) throw new Error(await readDetail(response, "clips " + response.status));
+      if (editor.clipId === Number(id)) closeEditor();
+      $("err").hidden = true;
+      await loadAll();
+      $("recordState").textContent = "Đã xoá đoạn «" + name + "».";
+    }
+
+    function newScenario() {
+      scenario.id = null;
+      scenario.name = "";
+      scenario.parts = [];
+      scenario.capture = null;
+      renderScenario();
+      $("recordState").textContent = "Kịch bản mới. Thêm đoạn rồi điền chỗ trống.";
+    }
+
+    async function openScenario(id) {
+      const response = await fetch("/v1/scenarios/" + id, { headers: headers() });
+      if (!response.ok) throw new Error(await readDetail(response, "scenarios " + response.status));
+      const data = await response.json();
+      scenario.id = data.id;
+      scenario.name = data.name || "";
+      scenario.parts = (data.parts || []).map((part) => ({
+        clipId: part.clipId,
+        fills: Object.assign({}, part.fills || {}),
+      }));
+      scenario.capture = null;
+      renderScenario();
+      $("recordState").textContent = "Đang sửa kịch bản «" + (data.name || "") + "».";
+    }
+
+    async function compileScenario(name, parts) {
+      const response = await fetch("/v1/scenarios/compile", {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: (name || "xem").slice(0, 80),
+          parts: parts.map((part) => ({ clipId: part.clipId, fills: part.fills || {} })),
+        }),
+      });
+      if (!response.ok) throw new Error(await readDetail(response, "compile " + response.status));
+      return response.json();
+    }
+
+    async function previewScenario() {
+      if (replaying || recorder.on || !scenario.parts.length) return;
+      const data = await compileScenario($("scenarioName").value.trim() || scenario.name || "xem", scenario.parts);
+      await playEvents(data.events || []);
+    }
+
+    async function playScenario(id) {
+      if (replaying || recorder.on) return;
+      const response = await fetch("/v1/scenarios/" + id, { headers: headers() });
+      if (!response.ok) throw new Error(await readDetail(response, "scenarios " + response.status));
+      const data = await response.json();
+      const compiled = await compileScenario(data.name, data.parts || []);
+      await playEvents(compiled.events || []);
+    }
+
+    async function saveScenario() {
+      if (replaying || recorder.on) return;
+      const name = ($("scenarioName").value.trim() || "Kịch bản mới").slice(0, 80);
+      scenario.name = name;
+      if (!scenario.parts.length) throw new Error("Kịch bản chưa có đoạn");
+      const updating = Boolean(scenario.id);
+      const response = await fetch(updating ? "/v1/scenarios/" + scenario.id : "/v1/scenarios", {
+        method: updating ? "PUT" : "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name,
+          parts: scenario.parts.map((part) => ({ clipId: part.clipId, fills: part.fills || {} })),
+        }),
+      });
+      if (!response.ok) throw new Error(await readDetail(response, "scenarios " + response.status));
+      const saved = await response.json();
+      scenario.id = saved.id;
+      scenario.name = saved.name || name;
+      await loadAll();
+      $("err").hidden = false;
+      $("err").style.color = "#3ecf8e";
+      $("err").textContent = "Đã lưu kịch bản «" + (saved.name || name) + "».";
+      $("recordState").textContent = "Đã lưu kịch bản ghép.";
+    }
+
+    async function deleteScenario(id) {
+      const item = library.scenarios.find((row) => row.id === Number(id));
+      const name = item ? item.name : "kịch bản này";
+      if (!confirm("Xoá kịch bản «" + name + "»?")) return;
+      const response = await fetch("/v1/scenarios/" + id, { method: "DELETE", headers: headers() });
+      if (!response.ok) throw new Error(await readDetail(response, "scenarios " + response.status));
+      if (scenario.id === Number(id)) newScenario();
+      $("err").hidden = true;
+      await loadAll();
+      $("recordState").textContent = "Đã xoá kịch bản «" + name + "».";
     }
 
     async function stopRecording(auto) {
@@ -1496,6 +1966,67 @@
         $("err").hidden = false;
         $("err").style.color = "#ff7b7b";
         $("err").textContent = "Không lưu được bản mới: " + err.message;
+      }
+    };
+    $("editorSaveClip").onclick = async () => {
+      try {
+        await saveClip();
+      } catch (err) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không lưu được đoạn: " + err.message;
+      }
+    };
+    $("clipRows").onclick = async (e) => {
+      const edit = e.target.closest("[data-edit-clip]");
+      const remove = e.target.closest("[data-delete-clip]");
+      try {
+        if (edit) await openClip(edit.getAttribute("data-edit-clip"));
+        else if (remove) await deleteClip(remove.getAttribute("data-delete-clip"));
+      } catch (err) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không xử lý được đoạn: " + err.message;
+      }
+    };
+    $("scenarioName").addEventListener("input", () => { scenario.name = $("scenarioName").value; });
+    $("scenarioAdd").onclick = () => {
+      const id = Number($("scenarioClipPick").value);
+      if (!id) return;
+      scenario.parts.push({ clipId: id, fills: {} });
+      renderScenario();
+    };
+    $("scenarioPreview").onclick = async () => {
+      try {
+        await previewScenario();
+      } catch (err) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không xem được kịch bản: " + err.message;
+      }
+    };
+    $("scenarioSave").onclick = async () => {
+      try {
+        await saveScenario();
+      } catch (err) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không lưu được kịch bản: " + err.message;
+      }
+    };
+    $("scenarioNew").onclick = () => newScenario();
+    $("scenarioRows").onclick = async (e) => {
+      const play = e.target.closest("[data-play-scenario]");
+      const edit = e.target.closest("[data-edit-scenario]");
+      const remove = e.target.closest("[data-delete-scenario]");
+      try {
+        if (play) await playScenario(play.getAttribute("data-play-scenario"));
+        else if (edit) await openScenario(edit.getAttribute("data-edit-scenario"));
+        else if (remove) await deleteScenario(remove.getAttribute("data-delete-scenario"));
+      } catch (err) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không xử lý được kịch bản: " + err.message;
       }
     };
     $("editorClose").onclick = () => {

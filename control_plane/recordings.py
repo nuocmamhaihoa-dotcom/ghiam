@@ -338,20 +338,165 @@ def step_caption(step: dict[str, Any]) -> str:
     touch = step.get("pointerType", "touch") != "mouse"
     kind = step.get("kind")
     if kind == "type":
-        return f"Gõ vào {name}: {step.get('value') or ''}"
-    if kind == "key":
+        text = f"Gõ vào {name}: {step.get('value') or ''}"
+    elif kind == "key":
         if step.get("redacted"):
-            return f"Bấm phím trong ô mật khẩu {name} (không lưu ký tự)"
-        return f"Phím {step.get('key') or ''} tại {name}"
-    if kind == "swipe":
-        return f"Vuốt tại {name}"
-    if kind == "focus":
-        verb = "Chạm vào ô" if touch else "Bấm vào ô"
+            text = f"Bấm phím trong ô mật khẩu {name} (không lưu ký tự)"
+        else:
+            text = f"Phím {step.get('key') or ''} tại {name}"
+    elif kind == "swipe":
+        text = f"Vuốt tại {name}"
     else:
-        verb = "Chạm" if touch else "Bấm"
-    if step.get("snapped"):
-        return f"{verb} lệch, hiểu là {name}"
-    return f"{verb} {name}"
+        if kind == "focus":
+            verb = "Chạm vào ô" if touch else "Bấm vào ô"
+        else:
+            verb = "Chạm" if touch else "Bấm"
+        if step.get("snapped"):
+            text = f"{verb} lệch, hiểu là {name}"
+        else:
+            text = f"{verb} {name}"
+    notes: list[str] = []
+    if step.get("valueBlank"):
+        notes.append(f"chỗ trống chữ «{step['valueBlank']}»")
+    if step.get("targetBlank"):
+        notes.append(f"chỗ trống control «{step['targetBlank']}»")
+    if notes:
+        return text + " · " + ", ".join(notes)
+    return text
+
+
+def blanks_of(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Named holes in a clip. The same name is filled once for every step that uses it."""
+    found: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for step in sanitize_steps(steps):
+        for kind, field in (("text", "valueBlank"), ("control", "targetBlank")):
+            name = step.get(field)
+            if not name:
+                continue
+            current = found.get(str(name))
+            if current and current["kind"] != kind:
+                raise ValueError("blank used for text and control")
+            if current:
+                continue
+            item: dict[str, Any] = {"name": name, "kind": kind}
+            if kind == "text":
+                item["sample"] = step.get("value") or ""
+            else:
+                sample: dict[str, Any] = {"target": step.get("target") or ""}
+                for key in ("label", "role", "hint", "index", "pointerType"):
+                    if step.get(key) not in (None, ""):
+                        sample[key] = step[key]
+                item["sample"] = sample
+            found[str(name)] = item
+            order.append(str(name))
+    return [found[name] for name in order]
+
+
+def prepare_clip_steps(raw: list[Any]) -> list[dict[str, Any]]:
+    """Sanitize clip steps and reject a blank name used as both text and control."""
+    steps = sanitize_steps(raw)
+    blanks_of(steps)
+    return steps
+
+
+def apply_fills(steps: list[dict[str, Any]], fills: dict[str, Any]) -> list[dict[str, Any]]:
+    """Overlay one scenario's answers onto a clip. Missing answers keep the sample."""
+    safe = fills if isinstance(fills, dict) else {}
+    edited: list[dict[str, Any]] = []
+    for source in sanitize_steps(steps):
+        step = dict(source)
+        value_name = step.get("valueBlank")
+        if value_name and isinstance(safe.get(value_name), str):
+            step["value"] = safe[value_name][:500]
+        target_name = step.get("targetBlank")
+        control = _control_fill(safe.get(target_name)) if target_name else None
+        if control:
+            for key in ("label", "role", "hint", "index", "pointerType", "snapped"):
+                step.pop(key, None)
+            step.update(control)
+        edited.append(step)
+    return sanitize_steps(edited)
+
+
+def resolve_scenario(clips: dict[int, list[dict[str, Any]]], parts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Join named clips in order, using the live clip body plus each part's fills."""
+    merged: list[dict[str, Any]] = []
+    for part in parts:
+        try:
+            clip_id = int(part.get("clipId") or 0)
+        except (TypeError, ValueError) as exc:
+            raise KeyError(0) from exc
+        steps = clips.get(clip_id)
+        if steps is None:
+            raise KeyError(clip_id)
+        merged.extend(apply_fills(steps, part.get("fills") or {}))
+    return merged
+
+
+def sanitize_parts(raw: list[Any]) -> list[dict[str, Any]]:
+    """Keep scenario parts that point at a clip and carry only safe fills."""
+    parts: list[dict[str, Any]] = []
+    for item in raw[:40]:
+        if not isinstance(item, dict):
+            continue
+        try:
+            clip_id = int(item.get("clipId") or 0)
+        except (TypeError, ValueError):
+            continue
+        if clip_id <= 0:
+            continue
+        fills = item.get("fills") if isinstance(item.get("fills"), dict) else {}
+        parts.append({"clipId": clip_id, "fills": _sanitize_fills(fills)})
+    return parts
+
+
+def _blank_name(value: Any) -> str:
+    return _label(value)[:40]
+
+
+def _control_fill(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    target = str(value.get("target") or "")
+    if target != "body" and _TARGET.match(target) is None:
+        return None
+    fill: dict[str, Any] = {"target": target}
+    label = _label(value.get("label"))
+    if label:
+        fill["label"] = label
+    role = str(value.get("role") or "")
+    if role in _ROLES:
+        fill["role"] = role
+    hint = _label(value.get("hint"))
+    if hint:
+        fill["hint"] = hint
+    if value.get("index") is not None:
+        try:
+            index = int(value.get("index"))
+        except (TypeError, ValueError):
+            index = -1
+        if 0 <= index <= 40:
+            fill["index"] = index
+    pointer_type = str(value.get("pointerType") or "")
+    if pointer_type in _POINTER_TYPES:
+        fill["pointerType"] = pointer_type
+    return fill
+
+
+def _sanitize_fills(fills: dict[str, Any]) -> dict[str, Any]:
+    cleaned: dict[str, Any] = {}
+    for key, value in list(fills.items())[:40]:
+        name = _blank_name(key)
+        if not name:
+            continue
+        if isinstance(value, str):
+            cleaned[name] = value[:500]
+        else:
+            control = _control_fill(value)
+            if control:
+                cleaned[name] = control
+    return cleaned
 
 
 def _absorb_text(steps: list[dict[str, Any]], event: dict[str, Any]) -> None:
@@ -472,6 +617,9 @@ def _one_step(item: Any) -> dict[str, Any] | None:
         return step
     if kind == "type":
         step["value"] = str(item.get("value") or "")[:500]
+        value_blank = _blank_name(item.get("valueBlank"))
+        if value_blank:
+            step["valueBlank"] = value_blank
     elif kind == "key":
         if item.get("redacted"):
             step["redacted"] = True
@@ -483,5 +631,8 @@ def _one_step(item: Any) -> dict[str, Any] | None:
             for flag in ("shift", "ctrl", "alt", "meta"):
                 if item.get(flag):
                     step[flag] = True
+    target_blank = _blank_name(item.get("targetBlank"))
+    if target_blank:
+        step["targetBlank"] = target_blank
     step["caption"] = step_caption(step)
     return step

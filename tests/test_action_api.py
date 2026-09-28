@@ -121,6 +121,86 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Ghi bấm phím và cảm ứng", response.text)
         self.assertIn("Sửa", response.text)
         self.assertIn("Lưu thành bản mới", response.text)
+        self.assertIn("Lưu thành đoạn", response.text)
+        self.assertIn("Kịch bản ghép", response.text)
+
+    def test_named_clip_updates_every_scenario(self) -> None:
+        created = self.client.post(
+            "/v1/clips",
+            headers=self.headers,
+            json={
+                "name": "Gõ và bấm",
+                "steps": [
+                    {
+                        "kind": "type",
+                        "target": "#actionText",
+                        "label": "Mình vừa làm gì?",
+                        "value": "mẫu",
+                        "valueBlank": "Nội dung",
+                    },
+                    {"kind": "tap", "target": "#refresh", "label": "Tải lại", "targetBlank": "Nút"},
+                ],
+            },
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        clip_id = created.json()["id"]
+        self.assertEqual([blank["kind"] for blank in created.json()["blanks"]], ["text", "control"])
+        scenario = self.client.post(
+            "/v1/scenarios",
+            headers=self.headers,
+            json={
+                "name": "Hai lần",
+                "parts": [
+                    {"clipId": clip_id, "fills": {"Nội dung": "AAAA", "Nút": {"target": "#searchAction", "label": "Tìm"}}},
+                    {"clipId": clip_id, "fills": {"Nội dung": "BBBB"}},
+                ],
+            },
+        )
+        self.assertEqual(scenario.status_code, 200, scenario.text)
+        scenario_id = scenario.json()["id"]
+        compiled = self.client.post(
+            "/v1/scenarios/compile",
+            headers=self.headers,
+            json={"name": "xem", "parts": scenario.json()["parts"]},
+        )
+        self.assertEqual(compiled.status_code, 200, compiled.text)
+        values = [step["value"] for step in compiled.json()["steps"] if step["kind"] == "type"]
+        self.assertEqual(values, ["AAAA", "BBBB"])
+        self.assertEqual(compiled.json()["steps"][1]["target"], "#searchAction")
+        updated = self.client.put(
+            f"/v1/clips/{clip_id}",
+            headers=self.headers,
+            json={
+                "name": "Gõ và bấm",
+                "steps": [
+                    {
+                        "kind": "type",
+                        "target": "#actionText",
+                        "label": "Mình vừa làm gì?",
+                        "value": "mẫu",
+                        "valueBlank": "Nội dung",
+                    },
+                    {"kind": "tap", "target": "#refresh", "label": "Tải lại", "targetBlank": "Nút"},
+                    {"kind": "tap", "target": "#recheck", "label": "Check proxy ngay"},
+                ],
+            },
+        )
+        self.assertEqual(updated.status_code, 200, updated.text)
+        self.assertEqual(updated.json()["scenarioCount"], 1)
+        again = self.client.post(
+            "/v1/scenarios/compile",
+            headers=self.headers,
+            json={"name": "xem", "parts": [{"clipId": clip_id, "fills": {"Nội dung": "AAAA"}}]},
+        )
+        self.assertEqual(again.status_code, 200, again.text)
+        self.assertEqual(again.json()["steps"][-1]["target"], "#recheck")
+        self.assertEqual(again.json()["steps"][0]["value"], "AAAA")
+        blocked = self.client.delete(f"/v1/clips/{clip_id}", headers=self.headers)
+        self.assertEqual(blocked.status_code, 409)
+        removed = self.client.delete(f"/v1/scenarios/{scenario_id}", headers=self.headers)
+        self.assertEqual(removed.status_code, 200)
+        freed = self.client.delete(f"/v1/clips/{clip_id}", headers=self.headers)
+        self.assertEqual(freed.status_code, 200)
 
     def test_edit_script_saves_a_new_copy(self) -> None:
         created = self.client.post(

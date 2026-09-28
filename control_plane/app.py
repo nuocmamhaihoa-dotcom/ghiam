@@ -28,9 +28,13 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
 from control_plane.recordings import (
+    blanks_of,
     default_title,
     events_to_steps,
+    prepare_clip_steps,
+    resolve_scenario,
     sanitize_events,
+    sanitize_parts,
     sanitize_steps,
     script_lines,
     steps_to_events,
@@ -592,6 +596,209 @@ def recordings_get(recording_id: int, authorization: str | None = Header(default
     if item is None:
         raise HTTPException(404, "recording not found")
     return item
+
+
+class ClipBody(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    steps: list[dict[str, Any]] = Field(min_length=1, max_length=400)
+
+
+class ScenarioBody(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    parts: list[dict[str, Any]] = Field(min_length=1, max_length=40)
+
+
+def _clip_payload(name: str, steps: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+    title = " ".join(name.split())
+    if not title:
+        raise HTTPException(400, "name is empty")
+    try:
+        cleaned = prepare_clip_steps(steps)
+    except ValueError as exc:
+        raise HTTPException(400, "blank used for text and control") from exc
+    if not cleaned:
+        raise HTTPException(400, "no replayable steps")
+    return title, cleaned
+
+
+def _scenario_payload(name: str, parts: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]], dict[int, list[dict[str, Any]]]]:
+    title = " ".join(name.split())
+    if not title:
+        raise HTTPException(400, "name is empty")
+    cleaned = sanitize_parts(parts)
+    if not cleaned:
+        raise HTTPException(400, "scenario has no clips")
+    found = db.clips_by_id(settings.db_path, [part["clipId"] for part in cleaned])
+    missing = [part["clipId"] for part in cleaned if part["clipId"] not in found]
+    if missing:
+        raise HTTPException(400, "missing clip")
+    return title, cleaned, found
+
+
+def _public_clip(item: dict[str, Any]) -> dict[str, Any]:
+    steps = item["steps"]
+    try:
+        blanks = blanks_of(steps)
+    except ValueError:
+        blanks = []
+    return {
+        "id": item["id"],
+        "at": item["at"],
+        "name": item["name"],
+        "steps": steps,
+        "captions": [str(step.get("caption") or "") for step in steps],
+        "blanks": blanks,
+        "scenarioCount": item.get("scenarioCount", 0),
+        "scenarioNames": item.get("scenarioNames", []),
+    }
+
+
+@app.get("/v1/clips")
+def clips_list(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=50, ge=1, le=50),
+) -> dict[str, Any]:
+    _auth(authorization)
+    items = [_public_clip(item) for item in db.list_clips(settings.db_path, limit=limit)]
+    return {"count": len(items), "items": items}
+
+
+@app.post("/v1/clips")
+def clips_create(body: ClipBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Save a named clip. Scenarios keep a link to this id, not a frozen copy."""
+    _auth(authorization)
+    title, steps = _clip_payload(body.name, body.steps)
+    clip_id = db.save_clip(settings.db_path, at=utcnow(), name=title, steps=steps)
+    return _public_clip({"id": clip_id, "at": utcnow(), "name": title, "steps": steps, "scenarioCount": 0, "scenarioNames": []})
+
+
+@app.get("/v1/clips/{clip_id}")
+def clips_get(clip_id: int, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    item = db.get_clip(settings.db_path, clip_id)
+    if item is None:
+        raise HTTPException(404, "clip not found")
+    listed = next((row for row in db.list_clips(settings.db_path) if row["id"] == clip_id), None)
+    if listed:
+        item["scenarioCount"] = listed["scenarioCount"]
+        item["scenarioNames"] = listed["scenarioNames"]
+    return _public_clip(item)
+
+
+@app.put("/v1/clips/{clip_id}")
+def clips_update(clip_id: int, body: ClipBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Replace a clip. Every scenario that names it plays the new steps."""
+    _auth(authorization)
+    title, steps = _clip_payload(body.name, body.steps)
+    if not db.update_clip(settings.db_path, clip_id, at=utcnow(), name=title, steps=steps):
+        raise HTTPException(404, "clip not found")
+    item = db.get_clip(settings.db_path, clip_id)
+    if item is None:
+        raise HTTPException(404, "clip not found")
+    listed = next((row for row in db.list_clips(settings.db_path) if row["id"] == clip_id), None)
+    if listed:
+        item["scenarioCount"] = listed["scenarioCount"]
+        item["scenarioNames"] = listed["scenarioNames"]
+    return _public_clip(item)
+
+
+@app.delete("/v1/clips/{clip_id}")
+def clips_delete(clip_id: int, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    result = db.delete_clip(settings.db_path, clip_id)
+    if result == "missing":
+        raise HTTPException(404, "clip not found")
+    if result == "used":
+        raise HTTPException(409, "clip is used by a scenario")
+    return {"ok": True}
+
+
+def _public_scenario(item: dict[str, Any], clips: dict[int, list[dict[str, Any]]] | None = None) -> dict[str, Any]:
+    parts = []
+    for part in item["parts"]:
+        clip_id = int(part["clipId"])
+        steps = (clips or {}).get(clip_id)
+        blanks: list[dict[str, Any]] = []
+        if steps is not None:
+            try:
+                blanks = blanks_of(steps)
+            except ValueError:
+                blanks = []
+        parts.append(
+            {
+                "clipId": clip_id,
+                "clipName": part.get("clipName") or "",
+                "fills": part.get("fills") or {},
+                "blanks": blanks,
+            }
+        )
+    return {"id": item["id"], "at": item["at"], "name": item["name"], "parts": parts}
+
+
+@app.get("/v1/scenarios")
+def scenarios_list(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=50, ge=1, le=50),
+) -> dict[str, Any]:
+    _auth(authorization)
+    items = db.list_scenarios(settings.db_path, limit=limit)
+    return {"count": len(items), "items": [_public_scenario(item) for item in items]}
+
+
+@app.post("/v1/scenarios/compile")
+def scenarios_compile(body: ScenarioBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Resolve linked clips with this scenario's fills. Does not save."""
+    _auth(authorization)
+    title, parts, clips = _scenario_payload(body.name, body.parts)
+    try:
+        steps = resolve_scenario(clips, parts)
+    except KeyError as exc:
+        raise HTTPException(400, "missing clip") from exc
+    events = steps_to_events(steps)
+    if not events:
+        raise HTTPException(400, "no replayable steps")
+    return {"title": title, "events": events, "lines": script_lines(events), "steps": steps, "event_count": len(events)}
+
+
+@app.post("/v1/scenarios")
+def scenarios_create(body: ScenarioBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    title, parts, clips = _scenario_payload(body.name, body.parts)
+    scenario_id = db.save_scenario(settings.db_path, at=utcnow(), name=title, parts=parts)
+    stored = db.get_scenario(settings.db_path, scenario_id)
+    if stored is None:
+        raise HTTPException(404, "scenario not found")
+    return _public_scenario(stored, clips)
+
+
+@app.get("/v1/scenarios/{scenario_id}")
+def scenarios_get(scenario_id: int, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    item = db.get_scenario(settings.db_path, scenario_id)
+    if item is None:
+        raise HTTPException(404, "scenario not found")
+    clips = db.clips_by_id(settings.db_path, [part["clipId"] for part in item["parts"]])
+    return _public_scenario(item, clips)
+
+
+@app.put("/v1/scenarios/{scenario_id}")
+def scenarios_update(scenario_id: int, body: ScenarioBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    title, parts, clips = _scenario_payload(body.name, body.parts)
+    if not db.update_scenario(settings.db_path, scenario_id, at=utcnow(), name=title, parts=parts):
+        raise HTTPException(404, "scenario not found")
+    stored = db.get_scenario(settings.db_path, scenario_id)
+    if stored is None:
+        raise HTTPException(404, "scenario not found")
+    return _public_scenario(stored, clips)
+
+
+@app.delete("/v1/scenarios/{scenario_id}")
+def scenarios_delete(scenario_id: int, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    if not db.delete_scenario(settings.db_path, scenario_id):
+        raise HTTPException(404, "scenario not found")
+    return {"ok": True}
 
 
 @app.post("/v1/sync/comments")

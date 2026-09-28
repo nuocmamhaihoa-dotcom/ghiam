@@ -5,9 +5,13 @@ from __future__ import annotations
 import unittest
 
 from control_plane.recordings import (
+    apply_fills,
+    blanks_of,
     default_title,
     events_to_steps,
     pick_match,
+    prepare_clip_steps,
+    resolve_scenario,
     sanitize_events,
     sanitize_steps,
     script_lines,
@@ -246,6 +250,68 @@ class ScriptStepTests(unittest.TestCase):
         self.assertEqual(len(cleaned), 1)
         self.assertTrue(cleaned[0]["redacted"])
         self.assertNotIn("super-secret", str(cleaned))
+
+
+class NamedClipTests(unittest.TestCase):
+    def test_blanks_fill_independently_and_stay_linked(self) -> None:
+        steps = prepare_clip_steps(
+            [
+                {
+                    "kind": "type",
+                    "target": "#actionText",
+                    "label": "Mình vừa làm gì?",
+                    "value": "mẫu",
+                    "valueBlank": "Nội dung",
+                    "role": "textbox",
+                },
+                {
+                    "kind": "tap",
+                    "target": "#refresh",
+                    "label": "Tải lại",
+                    "role": "button",
+                    "targetBlank": "Nút",
+                },
+            ]
+        )
+        self.assertEqual(steps[0]["caption"], "Gõ vào Mình vừa làm gì?: mẫu · chỗ trống chữ «Nội dung»")
+        blanks = blanks_of(steps)
+        self.assertEqual([blank["name"] for blank in blanks], ["Nội dung", "Nút"])
+        filled = apply_fills(
+            steps,
+            {"Nội dung": "lan mot", "Nút": {"target": "#searchAction", "label": "Tìm", "role": "button"}},
+        )
+        self.assertEqual(filled[0]["value"], "lan mot")
+        self.assertEqual(filled[1]["target"], "#searchAction")
+        self.assertEqual(filled[1]["label"], "Tìm")
+        self.assertNotIn("Tải lại", filled[1].get("label", ""))
+        shared = apply_fills(steps, {"Nội dung": "chung"})
+        self.assertEqual(shared[0]["value"], "chung")
+        self.assertEqual(shared[1]["target"], "#refresh")
+        with self.assertRaises(ValueError):
+            prepare_clip_steps(
+                [
+                    {"kind": "type", "target": "#actionText", "value": "a", "valueBlank": "Ô"},
+                    {"kind": "tap", "target": "#refresh", "targetBlank": "Ô"},
+                ]
+            )
+        first = {"1": steps}
+        resolved = resolve_scenario(
+            {1: steps},
+            [
+                {"clipId": 1, "fills": {"Nội dung": "AAAA"}},
+                {"clipId": 1, "fills": {"Nội dung": "BBBB"}},
+            ],
+        )
+        self.assertEqual([step["value"] for step in resolved if step["kind"] == "type"], ["AAAA", "BBBB"])
+        changed = [dict(step) for step in steps]
+        changed.append({"kind": "tap", "target": "#recheck", "label": "Check proxy ngay"})
+        changed = prepare_clip_steps(changed)
+        again = resolve_scenario({1: changed}, [{"clipId": 1, "fills": {"Nội dung": "AAAA"}}])
+        self.assertEqual(again[-1]["target"], "#recheck")
+        self.assertEqual(again[0]["value"], "AAAA")
+        self.assertTrue(first)
+        with self.assertRaises(KeyError):
+            resolve_scenario({}, [{"clipId": 9, "fills": {}}])
 
 
 if __name__ == "__main__":
