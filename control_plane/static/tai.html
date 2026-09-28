@@ -2,62 +2,12 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
+  <meta http-equiv="refresh" content="0; url=/iphone" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="theme-color" content="#ffffff" />
-  <meta name="iphone-build" content="__IPHONE_BUILD__" />
-  <title>Tải fb-poller</title>
-  <style>
-    :root { --font: -apple-system, "Segoe UI", system-ui, sans-serif; }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; font-family: var(--font); font-size: 16px; color: #111; background: #fff;
-      padding: calc(1rem + env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) calc(1.4rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
-    }
-    h1 { font-size: 1.35rem; margin: 0 0 0.35rem; }
-    p { margin: 0 0 0.8rem; line-height: 1.4; }
-    .url {
-      margin: 0 0 0.8rem; padding: 0.75rem 0.8rem; background: #f4f5f7; border-radius: 12px;
-      word-break: break-all; font-weight: 650;
-    }
-    a.btn, button {
-      display: flex; align-items: center; justify-content: center;
-      width: 100%; min-height: 48px; margin: 0 0 0.55rem;
-      border: 0; border-radius: 12px; font-size: 16px; font-weight: 700;
-      text-decoration: none; color: #fff; background: #111;
-    }
-    button.ghost, a.ghost { background: #f4f5f7; color: #111; }
-    ol { margin: 0.2rem 0 1rem; padding-left: 1.2rem; }
-    li { margin: 0.35rem 0; }
-    .build { color: #5c6570; font-size: 0.95rem; }
-  </style>
+  <title>Mở fb-poller</title>
+  <script>location.replace("/iphone");</script>
 </head>
 <body>
-  <h1>Tải phần mềm</h1>
-  <p>Đường này mở app trên iPhone và tải gói giao diện. Không cần cài từ App Store.</p>
-  <p class="url" id="appUrl">/iphone</p>
-  <a class="btn" id="openApp" href="/iphone">Mở app</a>
-  <button class="ghost" id="copyUrl" type="button">Sao chép đường dẫn</button>
-  <a class="btn ghost" id="download" href="/tai/goi.zip">Tải gói zip</a>
-  <ol>
-    <li>Mở trang này bằng Safari.</li>
-    <li>Bấm Mở app.</li>
-    <li>Bấm Chia sẻ, rồi Thêm vào Màn hình chính.</li>
-  </ol>
-  <p class="build" id="buildLine">Bản __IPHONE_BUILD__</p>
-  <script src="/static/version.js"></script>
-  <script>
-    const appUrl = location.origin + "/iphone";
-    document.getElementById("appUrl").textContent = appUrl;
-    document.getElementById("copyUrl").addEventListener("click", async () => {
-      const button = document.getElementById("copyUrl");
-      try {
-        await navigator.clipboard.writeText(appUrl);
-        button.textContent = "Đã sao chép";
-      } catch (err) {
-        button.textContent = appUrl;
-      }
-    });
-  </script>
+  <p><a href="/iphone">Mở app</a></p>
 </body>
 </html>

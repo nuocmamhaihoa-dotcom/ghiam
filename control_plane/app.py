@@ -21,9 +21,10 @@ from typing import Any
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
@@ -170,12 +171,20 @@ def health() -> dict[str, Any]:
     }
 
 
-def _html(name: str) -> HTMLResponse:
+def _html(name: str, status_code: int = 200) -> HTMLResponse:
     path = STATIC_DIR / name
     if not path.exists():
         return HTMLResponse("<p>Missing page.</p>", status_code=404)
     text = path.read_text(encoding="utf-8").replace("__IPHONE_BUILD__", str(IPHONE_BUILD))
-    return HTMLResponse(text, headers={"Cache-Control": "no-cache"})
+    return HTMLResponse(text, status_code=status_code, headers={"Cache-Control": "no-cache"})
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error(request: Request, exc: StarletteHTTPException) -> HTMLResponse | JSONResponse:
+    path = request.url.path
+    if exc.status_code == 404 and not path.startswith("/v1/") and not path.endswith(".zip"):
+        return _html("missing.html", 404)
+    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -196,10 +205,10 @@ def iphone_app() -> HTMLResponse:
     return _html("iphone.html")
 
 
-@app.get("/tai", response_class=HTMLResponse)
-def delivery_page() -> HTMLResponse:
-    """Đường truyền tải: mở app trên iPhone hoặc tải gói zip."""
-    return _html("tai.html")
+@app.get("/tai")
+def delivery_page() -> RedirectResponse:
+    """Đường ngắn trên điện thoại: vào thẳng app."""
+    return RedirectResponse(url="/iphone", status_code=302)
 
 
 @app.get("/v1/delivery")

@@ -11,6 +11,14 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <meta name="iphone-build" content="__IPHONE_BUILD__" />
   <title>fb-poller — Hub VPS</title>
+  <script>
+    (function () {
+      var q = new URLSearchParams(location.search);
+      if (/iPhone|iPod/.test(navigator.userAgent) && q.get("as") !== "iphone" && q.get("screen") !== "pc") {
+        location.replace("/iphone");
+      }
+    })();
+  </script>
   <style>
     [hidden] { display: none !important; }
     :root {
@@ -216,7 +224,7 @@
     <div class="brand">
       <h1>fb-poller</h1>
       <p class="sub">Hub</p>
-      <a class="deliver" href="/tai">Tải phần mềm</a>
+      <a class="deliver" href="/iphone">Mở trên iPhone</a>
       <p class="sub" id="updateNote" hidden></p>
     </div>
     <div class="token-row">
