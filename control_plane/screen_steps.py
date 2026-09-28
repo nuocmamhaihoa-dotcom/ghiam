@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import os
+import queue
 import re
 import subprocess
 import tempfile
+import threading
+import time
 import unicodedata
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +49,24 @@ _PLACES = (
 
 class ScreenVideoError(ValueError):
     """The file is not a usable screen recording."""
+
+
+class ReadProgress:
+    """Nhận phần trăm và việc đang làm. Mặc định không làm gì."""
+
+    def report(self, percent: int, task: str) -> None:
+        del percent, task
+
+    def problem(self, text: str) -> None:
+        del text
+
+
+def _media_seconds(raw: str) -> float | None:
+    """ffmpeg ghi out_time_us và out_time_ms bằng micro giây."""
+    try:
+        return max(0.0, int(raw) / 1_000_000)
+    except ValueError:
+        return None
 
 
 def _fold(text: str) -> str:
@@ -240,19 +261,25 @@ def visible_steps(frames: list[tuple[float, list[str]]]) -> list[dict[str, Any]]
     return steps
 
 
-def analyze_screen_video(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+def analyze_screen_video(
+    path: Path,
+    progress: ReadProgress | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     """Đọc chữ nhìn thấy và đề xuất người đủ ba cột. Chưa ghi vào bảng."""
+    sink = progress if progress is not None else ReadProgress()
+    sink.report(8, "Đọc thời lượng")
     duration = _duration(path)
     if duration is not None and duration > _MAX_SECONDS:
         raise ScreenVideoError("Video dài quá 10 phút. Dừng ghi rồi chọn lại.")
     rate = _sample_rate(duration)
     with tempfile.TemporaryDirectory(prefix="fb-screen-") as folder:
         work = Path(folder)
-        images = _extract_frames(path, work, rate)
+        images = _extract_frames(path, work, rate, duration, sink)
         if not images:
             raise ScreenVideoError("Video không có hình.")
-        chosen = _changed_frames(images)
-        readings = _read_frames(chosen)
+        chosen = _changed_frames(images, sink)
+        readings = _read_frames(chosen, sink)
+    sink.report(94, "Ghép tên")
     frames = [(seconds, lines) for seconds, lines, _sightings in readings]
     sightings = [item for _seconds, _lines, found in readings for item in found]
     return visible_steps(frames), propose_rows(sightings)
@@ -302,10 +329,17 @@ def _duration(path: Path) -> float | None:
         return None
 
 
-def _extract_frames(path: Path, work: Path, rate: float) -> list[tuple[float, Path]]:
+def _extract_frames(
+    path: Path,
+    work: Path,
+    rate: float,
+    duration: float | None,
+    progress: ReadProgress,
+) -> list[tuple[float, Path]]:
     pattern = work / "f-%05d.png"
+    progress.report(12, "Tách khung hình")
     try:
-        subprocess.run(
+        proc = subprocess.Popen(
             [
                 "ffmpeg",
                 "-nostdin",
@@ -319,24 +353,108 @@ def _extract_frames(path: Path, work: Path, rate: float) -> list[tuple[float, Pa
                 f"fps={rate:.4f},scale=min(1080\\,iw):-2",
                 "-frames:v",
                 str(_MAX_FRAMES),
+                "-progress",
+                "pipe:1",
                 str(pattern),
             ],
-            capture_output=True,
-            timeout=180,
-            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
         )
-    except (OSError, subprocess.TimeoutExpired) as error:
+    except OSError as error:
         raise ScreenVideoError("Không đọc được video.") from error
-    images = sorted(path for path in work.glob("f-*.png") if path.stem[2:].isdigit())
+    lines: queue.Queue[str | None] = queue.Queue()
+
+    def _read_stdout() -> None:
+        if proc.stdout is None:
+            lines.put(None)
+            return
+        for line in proc.stdout:
+            lines.put(line)
+        lines.put(None)
+
+    def _drain_stderr() -> None:
+        if proc.stderr is None:
+            return
+        for _line in proc.stderr:
+            pass
+
+    reader = threading.Thread(target=_read_stdout, daemon=True)
+    drain = threading.Thread(target=_drain_stderr, daemon=True)
+    reader.start()
+    drain.start()
+    crept = 12
+    shown = 12
+    deadline = time.monotonic() + 180
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                proc.kill()
+                raise ScreenVideoError("Không đọc được video.")
+            try:
+                line = lines.get(timeout=min(1.0, remaining))
+            except queue.Empty:
+                if proc.poll() is not None:
+                    break
+                continue
+            if line is None:
+                break
+            raw = line.strip()
+            seconds: float | None = None
+            if raw.startswith("out_time_us="):
+                seconds = _media_seconds(raw.split("=", 1)[1])
+            elif raw.startswith("out_time_ms="):
+                seconds = _media_seconds(raw.split("=", 1)[1])
+            if seconds is None:
+                continue
+            if duration and duration > 0:
+                percent = 12 + int(min(1.0, seconds / duration) * 28)
+            else:
+                crept = min(39, crept + 1)
+                percent = crept
+            shown = max(shown, min(40, percent))
+            progress.report(shown, "Tách khung hình")
+        try:
+            proc.wait(timeout=max(1.0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
+            raise ScreenVideoError("Không đọc được video.") from None
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+        reader.join(timeout=2)
+        drain.join(timeout=2)
+        for pipe in (proc.stdout, proc.stderr):
+            if pipe is not None and not pipe.closed:
+                pipe.close()
+    images = sorted(image for image in work.glob("f-*.png") if image.stem[2:].isdigit())
+    if proc.returncode != 0 and not images:
+        raise ScreenVideoError("Không đọc được video.")
+    if proc.returncode != 0 and images:
+        progress.problem("Tách hình dừng sớm.")
+    if images:
+        progress.report(40, "Tách khung hình")
     return [(index / rate, image) for index, image in enumerate(images)]
 
 
-def _changed_frames(images: list[tuple[float, Path]]) -> list[tuple[float, Path]]:
+def _changed_frames(images: list[tuple[float, Path]], progress: ReadProgress) -> list[tuple[float, Path]]:
     chosen: list[tuple[float, Path]] = []
     previous: Image.Image | None = None
-    for seconds, image in images:
+    unopened = 0
+    total = len(images)
+    progress.report(42, "Chọn khung đổi")
+    for index, (seconds, image) in enumerate(images):
+        if index % 8 == 0:
+            progress.report(42 + int((index / max(total, 1)) * 5), "Chọn khung đổi")
         small = _thumb(image)
         if small is None:
+            unopened += 1
             continue
         if previous is not None:
             score = ImageStat.Stat(ImageChops.difference(previous, small)).mean[0]
@@ -345,7 +463,12 @@ def _changed_frames(images: list[tuple[float, Path]]) -> list[tuple[float, Path]
         chosen.append((seconds, image))
         previous = small
         if len(chosen) == _MAX_READS:
+            if index + 1 < total:
+                progress.problem("Đã đọc 1000 khung đổi. Phần sau của video chưa xử lý.")
             break
+    if unopened:
+        progress.problem(f"{unopened} khung không mở được.")
+    progress.report(47, "Chọn khung đổi")
     return chosen
 
 
@@ -376,12 +499,44 @@ def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str
     return seconds, captions, sightings
 
 
-def _read_frames(chosen: list[tuple[float, Path]]) -> list[tuple[float, list[str], list[dict[str, str]]]]:
+def _read_frames(
+    chosen: list[tuple[float, Path]],
+    progress: ReadProgress,
+) -> list[tuple[float, list[str], list[dict[str, str]]]]:
     if not chosen:
+        progress.report(92, "Đọc chữ")
         return []
-    workers = min(8, os.cpu_count() or 1, len(chosen))
+    total = len(chosen)
+    workers = min(8, os.cpu_count() or 1, total)
+    results: list[tuple[float, list[str], list[dict[str, str]]] | None] = [None] * total
+    blank = 0
+    failed = 0
+    done_count = 0
+    progress.report(48, "Đọc chữ")
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        return list(pool.map(_read_one, chosen))
+        futures = {pool.submit(_read_one, item): index for index, item in enumerate(chosen)}
+        for future in as_completed(futures):
+            index = futures[future]
+            done_count += 1
+            try:
+                reading = future.result()
+            except Exception:
+                failed += 1
+                results[index] = (chosen[index][0], [], [])
+            else:
+                _seconds, captions, sightings = reading
+                if not captions and not sightings:
+                    blank += 1
+                results[index] = reading
+            percent = 48 + int((done_count / total) * 44)
+            progress.report(min(92, percent), f"Đọc chữ, khung {done_count}/{total}")
+    if failed:
+        progress.problem(f"{failed} khung không đọc được.")
+    if blank == total:
+        progress.problem("Không đọc được chữ trên video.")
+    elif blank:
+        progress.problem(f"{blank} khung không có chữ.")
+    return [item for item in results if item is not None]
 
 
 def _ocr(image: Path) -> str:

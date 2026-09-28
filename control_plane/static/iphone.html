@@ -35,6 +35,13 @@
     #status.live { color: #b42318; }
     #playback { width: 100%; border-radius: 12px; background: #000; margin-bottom: 0.8rem; }
     #playback[hidden] { display: none !important; }
+    #progressBox { margin: 0 0 0.8rem; }
+    #progressBox[hidden], #problemLead[hidden], #problemList[hidden] { display: none !important; }
+    #progressTrack { height: 14px; border-radius: 8px; background: #eee; overflow: hidden; border: 1px solid #ddd; }
+    #progressFill { height: 100%; width: 0%; background: #111; transition: width 0.2s linear; }
+    #progressLabel { margin: 0.4rem 0 0; font-weight: 700; line-height: 1.35; font-size: 16px; word-break: break-word; }
+    #problemLead { margin: 0.6rem 0 0.25rem; color: #b42318; font-weight: 800; }
+    #problemList { margin: 0; padding-left: 1.15rem; color: #b42318; font-size: 15px; overflow-wrap: anywhere; }
     #peopleBox, #savedBox { margin-top: 0.4rem; }
     #peopleBox[hidden] { display: none !important; }
     #peopleLead, #savedLead { margin: 0 0 0.6rem; line-height: 1.4; }
@@ -68,6 +75,12 @@
     <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
     <p id="status" hidden></p>
     <video id="playback" controls playsinline hidden></video>
+    <section id="progressBox" hidden>
+      <div id="progressTrack"><div id="progressFill"></div></div>
+      <p id="progressLabel"></p>
+      <p id="problemLead" hidden>Vấn đề khi xử lý</p>
+      <ul id="problemList" hidden></ul>
+    </section>
     <section id="savedBox">
       <p id="savedLead">Kết quả đã lưu. Hub tự ghi ngay sau mỗi video. Mở lại trang vẫn còn.</p>
       <p id="savedEmpty">Chưa có người đủ ba cột.</p>
@@ -119,6 +132,11 @@
     const savedEmpty = document.getElementById("savedEmpty");
     const playback = document.getElementById("playback");
     const status = document.getElementById("status");
+    const progressBox = document.getElementById("progressBox");
+    const progressFill = document.getElementById("progressFill");
+    const progressLabel = document.getElementById("progressLabel");
+    const problemLead = document.getElementById("problemLead");
+    const problemList = document.getElementById("problemList");
     const SAMPLE_MS = 4000;
     const MAX_MS = 600000;
     let busy = false;
@@ -139,6 +157,8 @@
     let pumping = false;
     let batchDone = 0;
     let batchTotal = 0;
+    let carried = [];
+    let shownPercent = 0;
 
     function authHeaders() {
       const headers = {};
@@ -246,23 +266,117 @@
       playback.removeAttribute("src");
     }
 
-    async function sendVideo(file) {
-      const body = new FormData();
-      body.append("file", file, file.name || "man-hinh.mp4");
-      let response;
-      try {
-        response = await fetch("/v1/recordings/from-video", { method: "POST", headers: authHeaders(), body: body });
-      } catch (error) {
-        return { ok: false };
+    function renderProblems(items) {
+      problemList.replaceChildren();
+      const list = items || [];
+      list.forEach((text) => {
+        const item = document.createElement("li");
+        item.textContent = text;
+        problemList.appendChild(item);
+      });
+      const empty = list.length === 0;
+      problemLead.hidden = empty;
+      problemList.hidden = empty;
+    }
+
+    function rememberProblems(items) {
+      (items || []).forEach((text) => {
+        if (text && carried.indexOf(text) === -1 && carried.length < 40) carried.push(text);
+      });
+      renderProblems(carried);
+    }
+
+    function paintProgress(videoPercent, task) {
+      const safe = Math.max(0, Math.min(100, videoPercent));
+      shownPercent = Math.max(shownPercent, safe);
+      const overall = batchTotal
+        ? Math.round((((batchDone - 1) + shownPercent / 100) / batchTotal) * 100)
+        : Math.round(shownPercent);
+      progressFill.style.width = overall + "%";
+      progressLabel.textContent = overall + "% — Video " + batchDone + "/" + batchTotal + (task ? " — " + task : "");
+      progressBox.hidden = false;
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => window.setTimeout(resolve, ms));
+    }
+
+    function postJob(file) {
+      return new Promise((resolve) => {
+        const body = new FormData();
+        body.append("file", file, file.name || "man-hinh.mp4");
+        const request = new XMLHttpRequest();
+        request.open("POST", "/v1/recordings/from-video/job");
+        const headers = authHeaders();
+        Object.keys(headers).forEach((key) => request.setRequestHeader(key, headers[key]));
+        request.upload.onprogress = (event) => {
+          if (!event.lengthComputable || !event.total) return;
+          paintProgress(Math.round((event.loaded / event.total) * 8), "Đang gửi video");
+        };
+        request.onload = () => {
+          if (request.status === 413) {
+            resolve({ ok: false, error: "Video quá lớn." });
+            return;
+          }
+          if (request.status < 200 || request.status >= 300) {
+            resolve({ ok: false, error: "Không gửi được video." });
+            return;
+          }
+          try {
+            resolve({ ok: true, jobId: JSON.parse(request.responseText).jobId });
+          } catch (error) {
+            resolve({ ok: false, error: "Không gửi được video." });
+          }
+        };
+        request.onerror = () => resolve({ ok: false, error: "Mất kết nối khi đang xử lý." });
+        request.send(body);
+      });
+    }
+
+    async function pollJob(jobId) {
+      let misses = 0;
+      while (true) {
+        let response;
+        try {
+          response = await fetch("/v1/recordings/jobs/" + jobId, { headers: authHeaders() });
+        } catch (error) {
+          misses += 1;
+          if (misses >= 8) return { ok: false, error: "Mất kết nối khi đang xử lý." };
+          await sleep(400);
+          continue;
+        }
+        if (response.status === 404) return { ok: false, error: "Mất tiến trình xử lý." };
+        if (!response.ok) {
+          misses += 1;
+          if (misses >= 8) return { ok: false, error: "Mất kết nối khi đang xử lý." };
+          await sleep(400);
+          continue;
+        }
+        misses = 0;
+        const data = await response.json();
+        paintProgress(data.percent || 0, data.task || "");
+        renderProblems(carried.concat(data.problems || []));
+        if (!data.done) {
+          await sleep(400);
+          continue;
+        }
+        if (data.error) return { ok: false, error: data.error, problems: data.problems || [] };
+        return {
+          ok: true,
+          people: data.people || [],
+          savedPeople: data.savedPeople || 0,
+          archive: data.archive,
+          problems: data.problems || [],
+        };
       }
-      if (!response.ok) return { ok: false };
-      const data = await response.json();
-      return {
-        ok: true,
-        people: data.people || [],
-        savedPeople: data.savedPeople || 0,
-        archive: data.archive,
-      };
+    }
+
+    async function sendVideo(file) {
+      shownPercent = 0;
+      paintProgress(0, "Đang gửi video");
+      const posted = await postJob(file);
+      if (!posted.ok) return posted;
+      return pollJob(posted.jobId);
     }
 
     function enqueue(files) {
@@ -279,6 +393,8 @@
       busy = true;
       pick.classList.add("busy");
       recordBtn.disabled = true;
+      carried = [];
+      renderProblems([]);
       let failed = 0;
       let added = 0;
       let found = 0;
@@ -289,8 +405,10 @@
         hidePlayback();
         hidePeople();
         const result = await sendVideo(file);
+        rememberProblems(result.problems);
         if (!result.ok) {
           failed += 1;
+          rememberProblems(result.error ? [result.error] : []);
           continue;
         }
         added += result.savedPeople || 0;
@@ -298,6 +416,7 @@
         if (Array.isArray(result.archive)) showSaved(result.archive);
         showPeople(result.people);
       }
+      if (batchTotal) paintProgress(100, failed ? "Gặp vấn đề" : "Đã ghi xong");
       if (failed && added) setStatus("Đã lưu " + added + " người. " + failed + " video chưa đọc được.", false);
       else if (failed) setStatus(failed + " video chưa đọc được. Kết quả đã lưu vẫn còn.", false);
       else if (added) setStatus("Đã lưu " + added + " người vào mục kết quả.", false);

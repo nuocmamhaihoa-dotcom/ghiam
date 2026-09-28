@@ -6,6 +6,7 @@ import io
 import os
 import sqlite3
 import tempfile
+import time
 import unittest
 import zipfile
 from pathlib import Path
@@ -22,6 +23,7 @@ Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from control_plane.app import app  # noqa: E402
+from control_plane.video_jobs import VideoJob  # noqa: E402
 
 
 class ActionApiTests(unittest.TestCase):
@@ -180,6 +182,11 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("getDisplayMedia", page.text)
         self.assertIn('id="playback"', page.text)
         self.assertIn("/v1/recordings/from-video", page.text)
+        self.assertIn("/v1/recordings/from-video/job", page.text)
+        self.assertIn('id="progressBox"', page.text)
+        self.assertIn('id="progressFill"', page.text)
+        self.assertIn('id="problemList"', page.text)
+        self.assertIn("Vấn đề khi xử lý", page.text)
         self.assertIn("/v1/recordings/from-frame", page.text)
         self.assertNotIn("Quay màn hình", page.text)
         self.assertIn("Trung tâm điều khiển", page.text)
@@ -260,6 +267,56 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Mở app", missing.text)
         self.assertIn('href="/iphone"', missing.text)
 
+    def test_video_job_keeps_the_percent_when_it_fails(self) -> None:
+        job = VideoJob("thu")
+        job.update(40, "Đọc chữ")
+        job.update(12, "Đọc chữ, khung 1/4")
+        self.assertEqual(job.percent, 40)
+        self.assertEqual(job.task, "Đọc chữ, khung 1/4")
+        job.add_problem("2 khung không có chữ.")
+        job.fail("Video không có hình.")
+        body = job.public()
+        self.assertTrue(body["done"])
+        self.assertEqual(body["percent"], 40)
+        self.assertEqual(body["task"], "Gặp vấn đề")
+        self.assertEqual(body["error"], "Video không có hình.")
+        self.assertIn("2 khung không có chữ.", body["problems"])
+        self.assertNotIn("people", body)
+        job.update(90, "không nhận nữa")
+        self.assertEqual(job.percent, 40)
+
+    def test_video_job_reports_a_problem(self) -> None:
+        denied = self.client.post(
+            "/v1/recordings/from-video/job",
+            files={"file": ("clip.mp4", b"not-a-video", "video/mp4")},
+        )
+        self.assertEqual(denied.status_code, 401)
+        missing = self.client.get("/v1/recordings/jobs/khong-co", headers=self.headers)
+        self.assertEqual(missing.status_code, 404, missing.text)
+        opened = self.client.post(
+            "/v1/recordings/from-video/job",
+            headers=self.headers,
+            files={"file": ("clip.mp4", b"not-a-video", "video/mp4")},
+        )
+        self.assertEqual(opened.status_code, 200, opened.text)
+        job_id = opened.json()["jobId"]
+        self.assertTrue(job_id)
+        deadline = time.time() + 20
+        body: dict[str, object] = {}
+        while time.time() < deadline:
+            polled = self.client.get(f"/v1/recordings/jobs/{job_id}", headers=self.headers)
+            self.assertEqual(polled.status_code, 200, polled.text)
+            body = polled.json()
+            if body.get("done"):
+                break
+            time.sleep(0.2)
+        self.assertTrue(body.get("done"), body)
+        self.assertTrue(body.get("error"), body)
+        self.assertLess(int(body.get("percent") or 0), 100)
+        problems = body.get("problems")
+        self.assertIsInstance(problems, list)
+        self.assertIn(body["error"], problems)
+
     def test_public_delivery_package(self) -> None:
         opened = self.client.get("/tai", follow_redirects=False)
         self.assertEqual(opened.status_code, 302)
@@ -269,12 +326,12 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "22")
+        self.assertEqual(build, "23")
 
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 22)
+        self.assertEqual(payload["iphoneBuild"], 23)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]

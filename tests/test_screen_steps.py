@@ -9,6 +9,9 @@ import unittest
 from pathlib import Path
 
 from control_plane.screen_steps import (
+    ReadProgress,
+    _media_seconds,
+    analyze_screen_video,
     clean_ocr,
     read_screen_video,
     same_caption,
@@ -94,3 +97,44 @@ class ScreenVideoTests(unittest.TestCase):
         captions = " ".join(step["caption"] for step in steps)
         self.assertIn("Thanh", captions)
         self.assertIn("monaco.daily6", captions)
+
+    def test_media_seconds_are_microseconds(self) -> None:
+        self.assertEqual(_media_seconds("960000"), 0.96)
+        self.assertIsNone(_media_seconds("N/A"))
+
+    def test_progress_names_the_work(self) -> None:
+        if shutil.which("ffmpeg") is None or shutil.which("tesseract") is None:
+            self.skipTest("ffmpeg and tesseract are required")
+
+        class Capture(ReadProgress):
+            def __init__(self) -> None:
+                self.events: list[tuple[int, str]] = []
+                self.problems: list[str] = []
+
+            def report(self, percent: int, task: str) -> None:
+                self.events.append((int(percent), task))
+
+            def problem(self, text: str) -> None:
+                self.problems.append(text)
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "clip.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+                    "-f", "lavfi", "-i", "color=c=white:s=320x480:d=1",
+                    str(path),
+                ],
+                check=True,
+                timeout=30,
+            )
+            capture = Capture()
+            _steps, people = analyze_screen_video(path, capture)
+        self.assertEqual(people, [])
+        tasks = [task for _percent, task in capture.events]
+        self.assertTrue(any(task == "Tách khung hình" for task in tasks))
+        self.assertTrue(any(task.startswith("Đọc chữ") for task in tasks))
+        percents = [percent for percent, _task in capture.events]
+        self.assertEqual(percents, sorted(percents))
+        self.assertGreaterEqual(percents[-1], 90)
+        self.assertTrue(capture.problems)

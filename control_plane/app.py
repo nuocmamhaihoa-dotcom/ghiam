@@ -15,6 +15,7 @@ import io
 import json
 import os
 import tempfile
+import threading
 import time
 import zipfile
 from datetime import datetime, timezone
@@ -36,6 +37,7 @@ from control_plane.people import apply_novel, complete_rows, complete_sightings,
 from control_plane.version import IPHONE_BUILD
 from control_plane.screen_steps import ScreenVideoError, analyze_screen_video, clean_ocr, read_screen_image, seen_line
 from control_plane.settings import settings
+from control_plane.video_jobs import JobProgress, jobs
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 IOS_DIR = Path(__file__).resolve().parents[1] / "ios"
@@ -794,6 +796,55 @@ async def recordings_from_video(
     stored["archive"] = archive
     stored["archiveCount"] = len(archive)
     return stored
+
+
+def _run_video_job(job_id: str, path: Path) -> None:
+    """Đọc video ở luồng riêng để trang hỏi được phần trăm."""
+    job = jobs.get(job_id)
+    if job is None:
+        path.unlink(missing_ok=True)
+        return
+    try:
+        _steps, people = analyze_screen_video(path, JobProgress(job))
+        job.update(97, "Ghi kết quả")
+        _store_seen([f"{len(people)} người"] if people else ["Đã đọc video"])
+        _added, people_saved = _save_proposed(people)
+        job.finish(people, people_saved, _people_archive())
+    except ScreenVideoError as error:
+        job.fail(str(error))
+    except HTTPException as error:
+        detail = error.detail if isinstance(error.detail, str) else "Chưa ghi được kết quả. Chọn lại video."
+        job.fail(detail)
+    except Exception:
+        job.fail("Không xử lý được video.")
+    finally:
+        path.unlink(missing_ok=True)
+
+
+@app.post("/v1/recordings/from-video/job")
+async def recordings_from_video_job(
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Nhận video và trả mã tiến trình ngay. Trang hỏi phần trăm sau đó."""
+    _auth(authorization)
+    suffix = Path(file.filename or "clip.mp4").suffix.lower()
+    if suffix not in {".mp4", ".mov", ".m4v", ".webm"}:
+        suffix = ".mp4"
+    dest = await _store_upload(file, suffix)
+    job = jobs.create()
+    job.update(8, "Đã nhận video")
+    threading.Thread(target=_run_video_job, args=(job.id, dest), daemon=True).start()
+    return {"ok": True, "jobId": job.id}
+
+
+@app.get("/v1/recordings/jobs/{job_id}")
+def recordings_job(job_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, "không thấy tiến trình")
+    return job.public()
 
 
 @app.post("/v1/recordings/from-frame")
