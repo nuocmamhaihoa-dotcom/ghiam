@@ -1,5 +1,7 @@
 # fb-poller (PA1) — Tiered Facebook public comment poller
 
+Bộ quét hồ sơ TikTok công khai nằm riêng ở `tiktok_osint/` và dashboard `web/`. Chỉ dữ liệu công khai; không tra cứu số điện thoại sang ID. Cách chạy: [`docs/TIKTOK_OSINT.md`](docs/TIKTOK_OSINT.md).
+
 **Hướng đã chốt: PA1-only** (không Graph API trong giai đoạn này).
 
 Thu thập **comment công khai** từ **bài viết công khai** bằng browser nhẹ (Playwright), chỉ lấy **Newest đầu trang**, **không nested replies** trong vòng Hot.

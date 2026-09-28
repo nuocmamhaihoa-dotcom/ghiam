@@ -1,0 +1,4 @@
+# Một username hoặc URL hồ sơ TikTok công khai mỗi dòng.
+# Short link vm.tiktok.com / vt.tiktok.com được phân giải về /@username.
+@examplecreator
+https://www.tiktok.com/@publicshop

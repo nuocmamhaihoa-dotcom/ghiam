@@ -1,0 +1,17 @@
+[Unit]
+Description=TikTok public OSINT worker
+After=network.target redis-server.service tiktok-osint-api.service
+Wants=redis-server.service
+
+[Service]
+Type=simple
+User=tiktok
+Group=tiktok
+WorkingDirectory=/opt/tiktok-osint
+EnvironmentFile=/opt/tiktok-osint/tiktok.env
+ExecStart=/opt/tiktok-osint/.venv/bin/tiktok-osint worker
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

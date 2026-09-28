@@ -20,3 +20,8 @@ playwright-report/
 test-results/
 *.log
 control_data/
+web/node_modules/
+web/.next/
+web/out/
+data/exports/
+.playwright-mcp/
