@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +18,37 @@ from control_plane.settings import settings
 
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# api.ipify.org returns 502 through these proxies. These three return the exit IP.
+_FALLBACK_CHECK_URLS = (
+    "http://ident.me",
+    "http://ifconfig.me/ip",
+    "http://icanhazip.com",
+)
+
+
+def check_targets(configured: str) -> list[str]:
+    """Configured URL first, then known-good fallbacks, without duplicates."""
+    urls: list[str] = []
+    for url in (configured, *_FALLBACK_CHECK_URLS):
+        text = url.strip()
+        if text and text not in urls:
+            urls.append(text)
+    return urls
+
+
+def exit_ip_from_body(status_code: int, body: str) -> str | None:
+    """A live proxy returns only an IP. An HTML error page is not live."""
+    if status_code >= 400:
+        return None
+    text = (body or "").strip()
+    if not text or len(text) > 64:
+        return None
+    try:
+        return str(ipaddress.ip_address(text))
+    except ValueError:
+        return None
 
 
 def load_proxy_lines(path: Path) -> list[str]:
@@ -111,7 +143,8 @@ async def check_one(
                 "error": f"tcp: {type(exc).__name__}: {exc}"[:240],
             }
 
-        # 2) HTTP via proxy
+        # 2) HTTP via proxy. One bad check host must not mark a working proxy dead.
+        last_error = "http: no check"
         try:
             async with httpx.AsyncClient(
                 proxy=proxy_url,
@@ -119,40 +152,42 @@ async def check_one(
                 follow_redirects=True,
                 trust_env=False,
             ) as client:
-                resp = await client.get(check_url)
-                ms = int((time.perf_counter() - started) * 1000)
-                if resp.status_code >= 400:
-                    return {
-                        "endpoint": endpoint,
-                        "status": "die",
-                        "latency_ms": ms,
-                        "exit_ip": None,
-                        "error": _classify_http_error(resp.status_code),
-                    }
-                ip = (resp.text or "").strip()[:64]
-                return {
-                    "endpoint": endpoint,
-                    "status": "live",
-                    "latency_ms": ms,
-                    "exit_ip": ip or None,
-                    "error": None,
-                }
+                for url in check_targets(check_url):
+                    try:
+                        resp = await client.get(url)
+                    except Exception as exc:
+                        msg = str(exc)
+                        if "407" in msg:
+                            last_error = "http_407 (cần user:pass)"
+                        elif "502" in msg:
+                            last_error = "http_502 (TCP ok — thường thiếu user:pass hoặc chưa whitelist IP VPS)"
+                        else:
+                            last_error = f"http: {type(exc).__name__}: {msg}"[:240]
+                        continue
+                    ip = exit_ip_from_body(resp.status_code, resp.text or "")
+                    ms = int((time.perf_counter() - started) * 1000)
+                    if ip:
+                        return {
+                            "endpoint": endpoint,
+                            "status": "live",
+                            "latency_ms": ms,
+                            "exit_ip": ip,
+                            "error": None,
+                        }
+                    if resp.status_code >= 400:
+                        last_error = _classify_http_error(resp.status_code)
+                    else:
+                        last_error = "response is not an IP"
         except Exception as exc:
-            ms = int((time.perf_counter() - started) * 1000)
-            msg = str(exc)
-            if "407" in msg:
-                err = "http_407 (cần user:pass)"
-            elif "502" in msg:
-                err = "http_502 (TCP ok — thường thiếu user:pass hoặc chưa whitelist IP VPS)"
-            else:
-                err = f"http: {type(exc).__name__}: {msg}"[:240]
-            return {
-                "endpoint": endpoint,
-                "status": "die",
-                "latency_ms": ms,
-                "exit_ip": None,
-                "error": err,
-            }
+            last_error = f"http: {type(exc).__name__}: {exc}"[:240]
+        ms = int((time.perf_counter() - started) * 1000)
+        return {
+            "endpoint": endpoint,
+            "status": "die",
+            "latency_ms": ms,
+            "exit_ip": None,
+            "error": last_error,
+        }
 
 
 async def run_proxy_check_once() -> dict[str, Any]:
