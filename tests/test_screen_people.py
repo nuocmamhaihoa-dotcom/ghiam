@@ -96,6 +96,22 @@ class ScreenPeopleTests(unittest.TestCase):
         self.assertEqual(found, [{"kind": "profile", "name": "Trần Tùng", "contactName": "", "username": "@trn.tng751"}])
         self.assertEqual(propose_rows(found), [])
 
+    def test_at_sign_and_sentence_are_not_names(self) -> None:
+        found = sightings_from_lines(
+            [
+                _line("Hồng Hàn Xì Cơ Khí", 100),
+                _line("Hong@1978", 128, 22),
+                _line("Bạn Dũng Xin Việc", 220),
+                _line("Tháo niềng thì đổi", 248, 22),
+                _line("A Trình Xây Nhà", 360),
+                _line("vịt", 388, 20),
+            ]
+        )
+        self.assertEqual(
+            found,
+            [{"kind": "contact", "name": "vịt", "contactName": "A Trình Xây Nhà", "username": ""}],
+        )
+
     def test_drawn_frames_match_the_shared_name(self) -> None:
         if shutil.which("tesseract") is None:
             self.skipTest("tesseract is required")

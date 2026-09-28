@@ -24,7 +24,7 @@ from control_plane.screen_people import (
 _MAX_SECONDS = 600
 _MAX_FRAMES = 2400
 _MAX_READS = 1000
-_MIN_DIFF = 0.18
+_MIN_DIFF = 0.08
 _SAMPLE_FPS = 8.0
 _STEP_LIMIT = 400
 _APP_WORDS = {"tiktok", "facebook", "instagram", "zalo", "danh", "ba", "follow", "da", "thich", "follower"}

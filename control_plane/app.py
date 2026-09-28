@@ -736,25 +736,26 @@ async def recordings_from_video(
         suffix = ".mp4"
     dest = await _store_upload(file, suffix)
     try:
-        steps, people = analyze_screen_video(dest)
+        _steps, people = analyze_screen_video(dest)
     except ScreenVideoError as error:
         raise HTTPException(400, str(error)) from error
     finally:
         dest.unlink(missing_ok=True)
-    lines = [str(step["caption"]) for step in steps]
     if not save:
         return {
             "ok": True,
             "id": None,
-            "title": "Chữ trên màn hình",
-            "steps": steps,
-            "count": len(steps),
+            "title": "Người đủ ba cột",
+            "steps": [],
+            "count": len(people),
             "people": people,
             "saved": 0,
             "savedPeople": 0,
         }
-    stored = _store_seen(lines)
+    stored = _store_seen([f"{len(people)} người"] if people else ["Đã đọc video"])
     added, people_saved = _save_proposed(people)
+    stored["steps"] = []
+    stored["count"] = len(people)
     stored["people"] = people
     stored["saved"] = added
     stored["savedPeople"] = people_saved

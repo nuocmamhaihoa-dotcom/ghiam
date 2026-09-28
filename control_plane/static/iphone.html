@@ -35,14 +35,15 @@
     #status.live { color: #b42318; }
     #playback { width: 100%; border-radius: 12px; background: #000; margin-bottom: 0.8rem; }
     #playback[hidden] { display: none !important; }
-    #stepList { margin: 0.4rem 0 0; padding-left: 1.3rem; }
-    #stepList li { margin: 0.55rem 0; }
-    #peopleBox { margin-top: 1rem; }
+    #peopleBox { margin-top: 0.4rem; }
     #peopleBox[hidden] { display: none !important; }
     #peopleLead { margin: 0 0 0.6rem; line-height: 1.4; }
-    .person { border-bottom: 1px solid #ddd; padding: 0.65rem 0; }
-    .person .who { margin: 0; font-weight: 800; }
-    .person p { margin: 0.2rem 0 0; }
+    #peopleTable { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
+    #peopleTable th, #peopleTable td {
+      border-bottom: 1px solid #ddd; padding: 0.45rem 0.2rem;
+      text-align: left; vertical-align: top; word-break: break-word; overflow-wrap: anywhere;
+    }
+    #peopleTable th { font-size: 13px; font-weight: 800; }
     #actions {
       display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;
       padding: 0.7rem max(0.8rem, env(safe-area-inset-right)) calc(0.7rem + env(safe-area-inset-bottom)) max(0.8rem, env(safe-area-inset-left));
@@ -65,10 +66,18 @@
     <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video thì hub đọc ngay và tự lưu, không cần bấm phát. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
     <p id="status" hidden></p>
     <video id="playback" controls playsinline hidden></video>
-    <ol id="stepList"></ol>
     <section id="peopleBox" hidden>
       <p id="peopleLead">Dòng đủ ba cột đã được lưu. Cột đã có sẵn được giữ nguyên.</p>
-      <div id="peopleBody"></div>
+      <table id="peopleTable">
+        <thead>
+          <tr>
+            <th>Tên</th>
+            <th>Tên danh bạ</th>
+            <th>Tài khoản</th>
+          </tr>
+        </thead>
+        <tbody id="peopleBody"></tbody>
+      </table>
     </section>
   </main>
   <div id="actions">
@@ -87,7 +96,6 @@
     const pick = document.getElementById("pick");
     const fileInput = document.getElementById("videoFile");
     const recordBtn = document.getElementById("recordBtn");
-    const list = document.getElementById("stepList");
     const peopleBox = document.getElementById("peopleBox");
     const peopleBody = document.getElementById("peopleBody");
     const playback = document.getElementById("playback");
@@ -122,25 +130,15 @@
       status.classList.toggle("live", !!live);
     }
 
-    function showMessage(text) {
-      list.replaceChildren();
-      const item = document.createElement("li");
-      item.textContent = text;
-      list.appendChild(item);
-    }
-
-    function renderSeen() {
-      list.replaceChildren();
-      seen.forEach((item) => {
-        const row = document.createElement("li");
-        row.textContent = item.caption;
-        list.appendChild(row);
-      });
-    }
-
     function hidePeople() {
       peopleBody.replaceChildren();
       peopleBox.hidden = true;
+    }
+
+    function cell(text) {
+      const item = document.createElement("td");
+      item.textContent = text || "";
+      return item;
     }
 
     function showPeople(rows) {
@@ -150,35 +148,13 @@
         return;
       }
       rows.forEach((row) => {
-        const card = document.createElement("div");
-        card.className = "person";
-        const who = document.createElement("p");
-        who.className = "who";
-        who.textContent = row.name || "";
-        const contact = document.createElement("p");
-        contact.textContent = "Tên danh bạ: " + (row.contactName || "");
-        const account = document.createElement("p");
-        account.textContent = "Tài khoản: " + (row.username || "");
-        card.appendChild(who);
-        card.appendChild(contact);
-        card.appendChild(account);
-        peopleBody.appendChild(card);
+        const tr = document.createElement("tr");
+        tr.appendChild(cell(row.name));
+        tr.appendChild(cell(row.contactName));
+        tr.appendChild(cell(row.username));
+        peopleBody.appendChild(tr);
       });
       peopleBox.hidden = false;
-    }
-
-    function showSteps(steps) {
-      seen = [];
-      list.replaceChildren();
-      if (!steps.length) {
-        showMessage("Không đọc được chữ chắc. Để màn hình đứng yên lâu hơn rồi chọn lại.");
-        return;
-      }
-      steps.forEach((step) => {
-        const item = document.createElement("li");
-        item.textContent = step.caption || "";
-        list.appendChild(item);
-      });
     }
 
     function showClip(file) {
@@ -209,12 +185,10 @@
         if (previous === body || previous.includes(body)) return;
         if (body.includes(previous)) {
           seen[index] = { body: body, caption: clockLabel() + " — " + body };
-          renderSeen();
           return;
         }
       }
       seen.push({ body: body, caption: clockLabel() + " — " + body });
-      renderSeen();
     }
 
     function hidePlayback() {
@@ -238,16 +212,14 @@
       try {
         response = await fetch("/v1/recordings/from-video", { method: "POST", headers: authHeaders(), body: body });
       } catch (error) {
-        setStatus("", false);
-        showMessage("Chưa gửi được video. Mở lại trang rồi chọn lại.");
+        setStatus("Chưa gửi được video. Mở lại trang rồi chọn lại.", false);
         pick.classList.remove("busy");
         recordBtn.disabled = false;
         busy = false;
         return;
       }
       if (!response.ok) {
-        setStatus("", false);
-        showMessage("Chưa đọc được video. Chọn đúng bản ghi màn hình.");
+        setStatus("Chưa đọc được video. Chọn đúng bản ghi màn hình.", false);
         pick.classList.remove("busy");
         recordBtn.disabled = false;
         busy = false;
@@ -259,7 +231,6 @@
       if (savedPeople) setStatus("Đã lưu " + savedPeople + " người.", false);
       else if (people.length) setStatus("Cột đã có sẵn được giữ nguyên.", false);
       else setStatus("Không thấy người đủ ba cột.", false);
-      showSteps(data.steps || []);
       showPeople(people);
       pick.classList.remove("busy");
       recordBtn.disabled = false;
@@ -340,7 +311,6 @@
         } catch (error) {
           stored = false;
         }
-        renderSeen();
         if (blob.size) showClip(blob);
         setStatus(stored ? "" : "Đã đọc trên máy này. Chưa lưu được lên hub.", false);
         stopping = false;
@@ -348,8 +318,7 @@
       }
       stopping = false;
       if (!blob.size) {
-        setStatus("", false);
-        showMessage("Bản quay trống. Thử lại.");
+        setStatus("Bản quay trống. Thử lại.", false);
         return;
       }
       const ext = type.includes("mp4") ? "mp4" : "webm";
@@ -421,7 +390,6 @@
       try { await playback.play(); } catch (error) { /* The frame sampler retries until a frame exists. */ }
       recordBtn.textContent = "Dừng ghi";
       recordBtn.classList.add("live");
-      list.replaceChildren();
       setStatus("Đang ghi liên tục. Bấm Dừng ghi khi xong.", true);
       sampleTimer = window.setInterval(sampleFrame, SAMPLE_MS);
       firstSample = window.setTimeout(sampleFrame, 1200);

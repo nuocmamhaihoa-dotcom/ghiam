@@ -69,9 +69,15 @@ def _is_label(text: str) -> bool:
 
 def _is_name_line(text: str) -> bool:
     stripped = text.strip()
-    if _is_label(stripped) or _TIME.match(stripped):
+    if _is_label(stripped) or _TIME.match(stripped) or "@" in stripped:
         return False
     if re.fullmatch(r"[\d.\s]+", stripped):
+        return False
+    words = stripped.split()
+    if len(words) > 6:
+        return False
+    lowered = f" {stripped.casefold()} "
+    if " thì " in lowered or "đổi tên" in lowered:
         return False
     letters = [char for char in stripped if char.isalpha()]
     return len(letters) >= 2 and not _valid_handles(stripped)
@@ -119,7 +125,31 @@ def lines_from_tsv(tsv: str) -> list[TextLine]:
         bottom = max(int(item["bottom"]) for item in words)
         lines.append(TextLine(text, left, top, bottom))
     lines.sort(key=lambda line: (line.top, line.left))
-    return lines
+    return _merge_same_row(lines)
+
+
+def _merge_same_row(lines: list[TextLine]) -> list[TextLine]:
+    """Ghép mảnh chữ cùng một hàng, để một tên bị tách không thành hai người."""
+    merged: list[TextLine] = []
+    for line in lines:
+        if not merged:
+            merged.append(line)
+            continue
+        previous = merged[-1]
+        overlap = min(previous.bottom, line.bottom) - max(previous.top, line.top)
+        same_row = overlap >= int(0.45 * min(previous.height, line.height))
+        same_column = abs(previous.left - line.left) <= 240 and line.left >= previous.left - 8
+        if not same_row or not same_column:
+            merged.append(line)
+            continue
+        text = _strip_button(f"{previous.text} {line.text}")
+        merged[-1] = TextLine(
+            text,
+            min(previous.left, line.left),
+            min(previous.top, line.top),
+            max(previous.bottom, line.bottom),
+        )
+    return merged
 
 
 def _is_contacts(lines: list[TextLine]) -> bool:
@@ -209,7 +239,7 @@ def propose_rows(sightings: list[dict[str, str]]) -> list[dict[str, str]]:
         kind = item.get("kind") or ""
         if kind == "contact":
             contact_name = clean_name(item.get("contactName") or "")
-            if not contact_name or fold_name(contact_name) == key:
+            if not contact_name or "@" in contact_name or "@" in name or fold_name(contact_name) == key:
                 continue
             if key not in contacts and key not in profiles:
                 order.append(key)
@@ -263,7 +293,13 @@ def read_frame_tsv(path: Path) -> str:
     prepared = path.with_name(path.stem + "-people.png")
     try:
         with Image.open(path) as full:
-            ImageOps.autocontrast(full.convert("L")).save(prepared)
+            gray = ImageOps.autocontrast(full.convert("L"))
+            width, height = gray.size
+            top = int(height * 0.04)
+            bottom = int(height * 0.92)
+            if bottom - top > 40:
+                gray = gray.crop((0, top, width, bottom))
+            gray.save(prepared)
     except OSError:
         return ""
     env = os.environ.copy()
@@ -271,7 +307,7 @@ def read_frame_tsv(path: Path) -> str:
     for lang in ("vie+eng", "eng"):
         try:
             result = subprocess.run(
-                ["tesseract", str(prepared), "stdout", "-l", lang, "--psm", "11", "tsv"],
+                ["tesseract", str(prepared), "stdout", "-l", lang, "--oem", "1", "--psm", "11", "tsv"],
                 capture_output=True,
                 text=True,
                 timeout=25,
