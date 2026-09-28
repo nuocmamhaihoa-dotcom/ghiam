@@ -99,6 +99,7 @@
 				TargetAttributes = {
 					A50000000000000000000001 = {
 						CreatedOnToolsVersion = 16.0;
+						ProvisioningStyle = Automatic;
 					};
 				};
 			};

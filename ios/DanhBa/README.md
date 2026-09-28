@@ -1,16 +1,26 @@
 # Danh bạ trên iPhone
 
-App này nạp liên hệ vào danh bạ iPhone của bạn và xoá những liên hệ bạn chọn. iPhone hỏi quyền Danh bạ một lần. Không có thao tác nào chạy nếu bạn chưa bấm Nạp hoặc Xoá.
+App nạp liên hệ vào iPhone của bạn và xoá liên hệ bạn chọn. Máy tin nhà phát triển một lần. App hỏi quyền Danh bạ một lần.
 
-Cài bằng Xcode trên máy Mac:
+## Cài để máy tin được ngay
 
-1. Mở `ios/DanhBa/DanhBa.xcodeproj`.
-2. Chọn target DanhBa, ô Signing, chọn Team bằng Apple ID của bạn.
-3. Cắm iPhone, chọn máy đó, bấm Run.
-4. Nếu iPhone chưa tin máy Mac: Cài đặt → Cài đặt chung → VPN và quản lý thiết bị → tin cậy nhà phát triển.
+1. Cắm iPhone bằng cáp, mở khoá máy, bấm Tin cậy máy tính nếu iPhone hỏi.
+2. Trên máy Mac, mở `ios/DanhBa/DanhBa.xcodeproj`.
+3. Chọn target DanhBa → Signing & Capabilities → Automatically manage signing → chọn Team là Apple ID của bạn.
+4. Phía trên Xcode, chọn đúng iPhone đang cắm, bấm Run.
 
-Trong app:
+Lần đầu mở app, iPhone báo nhà phát triển chưa được tin. Làm đúng một lần:
 
-- Tab Nạp: dán từng dòng `Tên` hoặc `Tên, 0901234567`, hoặc mở file `.csv`, `.txt`, `.vcf`. Bấm Nạp vào iPhone rồi xác nhận.
-- Cùng tab đó có thể lấy tên đã lưu trên hub (`/v1/people`). Dán địa chỉ gốc của hub và token. Máy trong mạng nội bộ dùng được `http`. Máy trên Internet cần `https`.
-- Tab Danh bạ: chọn liên hệ rồi xoá. Xoá liên hệ đã nạp chỉ xoá những người app này đã thêm trong lần cài hiện tại. Xoá xong, iCloud sẽ đồng bộ mất liên hệ đó trên các máy khác.
+1. Bấm Đóng trên hộp thoại đó.
+2. Mở Cài đặt → Cài đặt chung → VPN và quản lý thiết bị.
+3. Trong mục Ứng dụng nhà phát triển, bấm Apple ID vừa dùng để cài.
+4. Bấm Tin cậy, rồi bấm Tin cậy lần nữa.
+5. Mở lại app Danh bạ.
+
+Những lần mở sau không hỏi tin lại, cho đến khi chứng chỉ cài đặt hết hạn. Apple ID miễn phí hết hạn khoảng 7 ngày; cài lại bằng Xcode rồi tin một lần nữa.
+
+## Dùng app
+
+1. Bấm Cho phép danh bạ. iPhone hỏi một lần. Nếu đã từ chối, app không hỏi lại; bật trong Cài đặt.
+2. Tab Nạp: mỗi dòng một người, ví dụ `Trần Tùng, 0901234567`, rồi bấm Nạp vào iPhone.
+3. Tab Danh bạ: chạm để chọn, bấm Xoá. Vuốt một dòng để xoá một người. Xoá xong, máy đang đồng bộ iCloud cũng mất liên hệ đó.

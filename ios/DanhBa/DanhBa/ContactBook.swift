@@ -45,6 +45,7 @@ final class ContactBookModel: ObservableObject {
     private let store = CNContactStore()
     private let ledger = ImportLedger()
     private let hubKey = "danhba.hubURL"
+    private var askingForAccess = false
 
     var filtered: [PhoneContact] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -83,16 +84,19 @@ final class ContactBookModel: ObservableObject {
     }
 
     func requestAccess() async {
+        guard !askingForAccess else { return }
         let current = CNContactStore.authorizationStatus(for: .contacts)
         if Self.granted(current) {
             access = Self.kind(current)
             reload()
             return
         }
-        if current == .denied || current == .restricted {
+        guard current == .notDetermined else {
             access = .denied
             return
         }
+        askingForAccess = true
+        defer { askingForAccess = false }
         let allowed = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
             store.requestAccess(for: .contacts) { granted, _ in
                 continuation.resume(returning: granted)
