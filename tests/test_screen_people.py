@@ -73,6 +73,38 @@ class ScreenPeopleTests(unittest.TestCase):
         self.assertEqual(rows[0]["name"], "Bà soi")
         self.assertEqual(rows[0]["contactName"], "Chị Soi Xuân Trung")
 
+    def test_repeated_handle_wins_over_one_character_drift(self) -> None:
+        rows = propose_rows(
+            [
+                {"kind": "contact", "name": "Dịu 93", "contactName": "user7457244303237"},
+                {"kind": "profile", "name": "Dịu 93", "username": "@daodiu100693"},
+                {"kind": "profile", "name": "Dịu 93", "username": "@daodiu100693"},
+                {"kind": "profile", "name": "Diu 93", "username": "@daodiu10069s"},
+            ]
+        )
+        self.assertEqual(rows[0]["username"], "@daodiu100693")
+        self.assertEqual(rows[0]["name"], "Dịu 93")
+
+    def test_two_different_handles_are_not_proposed(self) -> None:
+        rows = propose_rows(
+            [
+                {"kind": "contact", "name": "Dịu 93", "contactName": "user7457244303237"},
+                {"kind": "profile", "name": "Dịu 93", "username": "@daodiu100693"},
+                {"kind": "profile", "name": "Dịu 93", "username": "@other.handle1"},
+            ]
+        )
+        self.assertEqual(rows, [])
+
+    def test_contact_seen_three_times_beats_one_different_name(self) -> None:
+        contacts = [
+            {"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"}
+            for _index in range(3)
+        ]
+        contacts.append({"kind": "contact", "name": "Trần Tùng", "contactName": "Tên khác"})
+        rows = propose_rows(contacts + [{"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"}])
+        self.assertEqual(rows[0]["contactName"], "A Tùng Bán Gạch")
+        self.assertEqual(rows[0]["username"], "@trn.tng751")
+
     def test_two_contact_names_are_not_proposed(self) -> None:
         rows = propose_rows(
             [

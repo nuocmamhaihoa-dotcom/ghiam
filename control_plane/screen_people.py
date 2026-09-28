@@ -5,10 +5,11 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageFilter, ImageOps
 
 from control_plane.people import clean_name, clean_username, fold_name
 
@@ -203,7 +204,9 @@ def _profile_sighting(lines: list[TextLine]) -> dict[str, str] | None:
     above = [
         line
         for line in lines
-        if line.bottom <= anchor.top + 6 and anchor.top - line.bottom <= 80 and _is_name_line(line.text)
+        if line.bottom <= anchor.top + 6
+        and anchor.top - line.bottom <= max(80, int(2.2 * max(line.height, anchor.height)))
+        and _is_name_line(line.text)
     ]
     if not above:
         return None
@@ -226,8 +229,77 @@ def sightings_from_lines(lines: list[TextLine]) -> list[dict[str, str]]:
     return pairs
 
 
+def _edit_distance(left: str, right: str, limit: int) -> int:
+    if left == right:
+        return 0
+    if abs(len(left) - len(right)) > limit:
+        return limit + 1
+    previous = list(range(len(right) + 1))
+    for index, left_char in enumerate(left, start=1):
+        current = [index]
+        lowest = limit + 1
+        for column, right_char in enumerate(right, start=1):
+            cost = 0 if left_char == right_char else 1
+            current.append(min(previous[column] + 1, current[column - 1] + 1, previous[column - 1] + cost))
+            lowest = min(lowest, current[-1])
+        if lowest > limit:
+            return limit + 1
+        previous = current
+    return previous[-1]
+
+
+def _near_contact(left: str, right: str) -> bool:
+    """Tên danh bạ dài lệch một ký tự là cùng một dòng bị đọc sai."""
+    folded_left = fold_name(left)
+    folded_right = fold_name(right)
+    if folded_left == folded_right:
+        return True
+    if min(len(folded_left), len(folded_right)) < 8:
+        return False
+    return _edit_distance(folded_left, folded_right, 1) <= 1
+
+
+def _near_username(left: str, right: str) -> bool:
+    """Tài khoản cùng độ dài lệch một ký tự. Id khác nhiều số thì giữ riêng."""
+    folded_left = left.lstrip("@")
+    folded_right = right.lstrip("@")
+    if folded_left == folded_right:
+        return True
+    if len(folded_left) != len(folded_right) or len(folded_left) < 4:
+        return False
+    return _edit_distance(folded_left, folded_right, 1) <= 1
+
+
+def _winning_spellings(values: list[str], near: Callable[[str, str], bool]) -> list[str] | None:
+    """Cụm đọc nhiều nhất. Hai cách đọc khác nhau ngang nhau thì không chọn."""
+    groups: list[list[str]] = []
+    for value in values:
+        placed = False
+        for group in groups:
+            if near(value, group[0]):
+                group.append(value)
+                placed = True
+                break
+        if not placed:
+            groups.append([value])
+    if not groups:
+        return None
+    groups.sort(key=len, reverse=True)
+    if len(groups) == 1:
+        return groups[0]
+    leader = len(groups[0])
+    runner = len(groups[1])
+    if leader == runner or leader < 3 or leader < runner * 3:
+        return None
+    return groups[0]
+
+
+def _mode(values: list[str]) -> str:
+    return max(values, key=lambda value: (values.count(value), len(value)))
+
+
 def propose_rows(sightings: list[dict[str, str]]) -> list[dict[str, str]]:
-    """Chỉ đề xuất khi một tên có đúng một tên danh bạ và đúng một tài khoản."""
+    """Chỉ đề xuất khi một tên có một tên danh bạ và một tài khoản đọc thống nhất."""
     contacts: dict[str, list[tuple[str, str]]] = {}
     profiles: dict[str, list[tuple[str, str]]] = {}
     order: list[str] = []
@@ -256,15 +328,17 @@ def propose_rows(sightings: list[dict[str, str]]) -> list[dict[str, str]]:
         if key not in contacts or key not in profiles:
             continue
         contact_names = [contact_name for _name, contact_name in contacts[key]]
-        usernames = {username for _name, username in profiles[key]}
-        if len({fold_name(contact_name) for contact_name in contact_names}) != 1 or len(usernames) != 1:
+        usernames = [username for _name, username in profiles[key]]
+        chosen_contacts = _winning_spellings(contact_names, _near_contact)
+        chosen_usernames = _winning_spellings(usernames, _near_username)
+        if not chosen_contacts or not chosen_usernames:
             continue
         display = _richer_name([name for name, _extra in contacts[key] + profiles[key]])
         rows.append(
             {
                 "name": display,
-                "contactName": _richer_name(contact_names),
-                "username": next(iter(usernames)),
+                "contactName": _richer_name(chosen_contacts),
+                "username": _mode(chosen_usernames),
             }
         )
     return rows[:200]
@@ -288,9 +362,8 @@ def captions_from_sightings(sightings: list[dict[str, str]]) -> list[str]:
     return lines
 
 
-def read_frame_tsv(path: Path) -> str:
-    """Một lần Tesseract cho cả danh bạ và dòng chữ nhìn thấy."""
-    prepared = path.with_name(path.stem + "-people.png")
+def _prepare_people_image(path: Path, prepared: Path) -> bool:
+    """Làm nét chữ đúng kích thước gốc. Phóng to dễ đọc nhầm số."""
     try:
         with Image.open(path) as full:
             gray = ImageOps.autocontrast(full.convert("L"))
@@ -299,15 +372,36 @@ def read_frame_tsv(path: Path) -> str:
             bottom = int(height * 0.92)
             if bottom - top > 40:
                 gray = gray.crop((0, top, width, bottom))
-            gray.save(prepared)
+            gray.filter(ImageFilter.SHARPEN).save(prepared)
     except OSError:
+        return False
+    return True
+
+
+def read_frame_tsv(path: Path) -> str:
+    """Một lần Tesseract cho cả danh bạ và dòng chữ nhìn thấy."""
+    prepared = path.with_name(path.stem + "-people.png")
+    if not _prepare_people_image(path, prepared):
         return ""
     env = os.environ.copy()
     env["OMP_THREAD_LIMIT"] = "1"
     for lang in ("vie+eng", "eng"):
         try:
             result = subprocess.run(
-                ["tesseract", str(prepared), "stdout", "-l", lang, "--oem", "1", "--psm", "11", "tsv"],
+                [
+                    "tesseract",
+                    str(prepared),
+                    "stdout",
+                    "--dpi",
+                    "300",
+                    "-l",
+                    lang,
+                    "--oem",
+                    "1",
+                    "--psm",
+                    "11",
+                    "tsv",
+                ],
                 capture_output=True,
                 text=True,
                 timeout=25,

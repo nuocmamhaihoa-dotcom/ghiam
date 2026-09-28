@@ -35,15 +35,17 @@
     #status.live { color: #b42318; }
     #playback { width: 100%; border-radius: 12px; background: #000; margin-bottom: 0.8rem; }
     #playback[hidden] { display: none !important; }
-    #peopleBox { margin-top: 0.4rem; }
+    #peopleBox, #savedBox { margin-top: 0.4rem; }
     #peopleBox[hidden] { display: none !important; }
-    #peopleLead { margin: 0 0 0.6rem; line-height: 1.4; }
-    #peopleTable { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
-    #peopleTable th, #peopleTable td {
+    #peopleLead, #savedLead { margin: 0 0 0.6rem; line-height: 1.4; }
+    #savedEmpty { margin: 0; color: #444; }
+    #savedEmpty[hidden], #savedTable[hidden] { display: none !important; }
+    #peopleTable, #savedTable { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
+    #peopleTable th, #peopleTable td, #savedTable th, #savedTable td {
       border-bottom: 1px solid #ddd; padding: 0.45rem 0.2rem;
       text-align: left; vertical-align: top; word-break: break-word; overflow-wrap: anywhere;
     }
-    #peopleTable th { font-size: 13px; font-weight: 800; }
+    #peopleTable th, #savedTable th { font-size: 13px; font-weight: 800; }
     #actions {
       display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;
       padding: 0.7rem max(0.8rem, env(safe-area-inset-right)) calc(0.7rem + env(safe-area-inset-bottom)) max(0.8rem, env(safe-area-inset-left));
@@ -63,11 +65,25 @@
 <body>
   <p id="updateNote" hidden></p>
   <main>
-    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video thì hub đọc ngay và tự lưu, không cần bấm phát. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
+    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
     <p id="status" hidden></p>
     <video id="playback" controls playsinline hidden></video>
+    <section id="savedBox">
+      <p id="savedLead">Kết quả đã lưu. Hub tự ghi ngay sau mỗi video. Mở lại trang vẫn còn.</p>
+      <p id="savedEmpty">Chưa có người đủ ba cột.</p>
+      <table id="savedTable" hidden>
+        <thead>
+          <tr>
+            <th>Tên</th>
+            <th>Tên danh bạ</th>
+            <th>Tài khoản</th>
+          </tr>
+        </thead>
+        <tbody id="savedBody"></tbody>
+      </table>
+    </section>
     <section id="peopleBox" hidden>
-      <p id="peopleLead">Dòng đủ ba cột đã được lưu. Cột đã có sẵn được giữ nguyên.</p>
+      <p id="peopleLead">Video vừa đọc. Cột đã có sẵn được giữ nguyên.</p>
       <table id="peopleTable">
         <thead>
           <tr>
@@ -83,7 +99,7 @@
   <div id="actions">
     <button id="recordBtn" type="button">Bắt đầu ghi</button>
     <label id="pick">Chọn video
-      <input id="videoFile" type="file" accept="video/*" />
+      <input id="videoFile" type="file" accept="video/*" multiple />
     </label>
   </div>
   <script>
@@ -98,6 +114,9 @@
     const recordBtn = document.getElementById("recordBtn");
     const peopleBox = document.getElementById("peopleBox");
     const peopleBody = document.getElementById("peopleBody");
+    const savedTable = document.getElementById("savedTable");
+    const savedBody = document.getElementById("savedBody");
+    const savedEmpty = document.getElementById("savedEmpty");
     const playback = document.getElementById("playback");
     const status = document.getElementById("status");
     const SAMPLE_MS = 4000;
@@ -116,6 +135,10 @@
     let firstSample = 0;
     let playbackUrl = "";
     let closed = false;
+    const queue = [];
+    let pumping = false;
+    let batchDone = 0;
+    let batchTotal = 0;
 
     function authHeaders() {
       const headers = {};
@@ -141,20 +164,43 @@
       return item;
     }
 
-    function showPeople(rows) {
-      peopleBody.replaceChildren();
-      if (!rows || !rows.length) {
-        peopleBox.hidden = true;
-        return;
-      }
+    function fillTable(body, rows) {
+      body.replaceChildren();
       rows.forEach((row) => {
         const tr = document.createElement("tr");
         tr.appendChild(cell(row.name));
         tr.appendChild(cell(row.contactName));
         tr.appendChild(cell(row.username));
-        peopleBody.appendChild(tr);
+        body.appendChild(tr);
       });
+    }
+
+    function showPeople(rows) {
+      if (!rows || !rows.length) {
+        peopleBody.replaceChildren();
+        peopleBox.hidden = true;
+        return;
+      }
+      fillTable(peopleBody, rows);
       peopleBox.hidden = false;
+    }
+
+    function showSaved(rows) {
+      const list = rows || [];
+      savedEmpty.hidden = list.length > 0;
+      savedTable.hidden = list.length === 0;
+      fillTable(savedBody, list);
+    }
+
+    async function loadSaved() {
+      try {
+        const response = await fetch("/v1/people", { headers: authHeaders() });
+        if (!response.ok) return;
+        const data = await response.json();
+        showSaved(data.items || []);
+      } catch (error) {
+        setStatus("Chưa mở được kết quả đã lưu. Mở lại trang.", false);
+      }
     }
 
     function showClip(file) {
@@ -201,40 +247,68 @@
     }
 
     async function sendVideo(file) {
-      busy = true;
-      pick.classList.add("busy");
-      recordBtn.disabled = true;
-      setStatus("Đang đọc video. Không cần bấm phát.", false);
-      hidePeople();
       const body = new FormData();
       body.append("file", file, file.name || "man-hinh.mp4");
       let response;
       try {
         response = await fetch("/v1/recordings/from-video", { method: "POST", headers: authHeaders(), body: body });
       } catch (error) {
-        setStatus("Chưa gửi được video. Mở lại trang rồi chọn lại.", false);
-        pick.classList.remove("busy");
-        recordBtn.disabled = false;
-        busy = false;
-        return;
+        return { ok: false };
       }
-      if (!response.ok) {
-        setStatus("Chưa đọc được video. Chọn đúng bản ghi màn hình.", false);
-        pick.classList.remove("busy");
-        recordBtn.disabled = false;
-        busy = false;
-        return;
-      }
+      if (!response.ok) return { ok: false };
       const data = await response.json();
-      const people = data.people || [];
-      const savedPeople = data.savedPeople || 0;
-      if (savedPeople) setStatus("Đã lưu " + savedPeople + " người.", false);
-      else if (people.length) setStatus("Cột đã có sẵn được giữ nguyên.", false);
+      return {
+        ok: true,
+        people: data.people || [],
+        savedPeople: data.savedPeople || 0,
+        archive: data.archive,
+      };
+    }
+
+    function enqueue(files) {
+      const room = Math.max(0, 40 - queue.length);
+      const accepted = Array.from(files).filter((file) => file).slice(0, room);
+      accepted.forEach((file) => queue.push(file));
+      batchTotal += accepted.length;
+      pumpQueue();
+    }
+
+    async function pumpQueue() {
+      if (pumping) return;
+      pumping = true;
+      busy = true;
+      pick.classList.add("busy");
+      recordBtn.disabled = true;
+      let failed = 0;
+      let added = 0;
+      let found = 0;
+      while (queue.length) {
+        const file = queue.shift();
+        batchDone += 1;
+        setStatus("Đang đọc video " + batchDone + "/" + batchTotal + ". Không cần bấm phát.", false);
+        hidePlayback();
+        hidePeople();
+        const result = await sendVideo(file);
+        if (!result.ok) {
+          failed += 1;
+          continue;
+        }
+        added += result.savedPeople || 0;
+        found += result.people.length;
+        if (Array.isArray(result.archive)) showSaved(result.archive);
+        showPeople(result.people);
+      }
+      if (failed && added) setStatus("Đã lưu " + added + " người. " + failed + " video chưa đọc được.", false);
+      else if (failed) setStatus(failed + " video chưa đọc được. Kết quả đã lưu vẫn còn.", false);
+      else if (added) setStatus("Đã lưu " + added + " người vào mục kết quả.", false);
+      else if (found) setStatus("Cột đã có sẵn được giữ nguyên.", false);
       else setStatus("Không thấy người đủ ba cột.", false);
-      showPeople(people);
-      pick.classList.remove("busy");
-      recordBtn.disabled = false;
+      batchDone = 0;
+      batchTotal = 0;
+      pumping = false;
       busy = false;
+      pick.classList.remove("busy");
+      recordBtn.disabled = recording;
     }
 
     function stopTracks() {
@@ -324,7 +398,7 @@
       const ext = type.includes("mp4") ? "mp4" : "webm";
       const file = new File([blob], "man-hinh." + ext, { type: type });
       hidePlayback();
-      await sendVideo(file);
+      enqueue([file]);
     }
 
     function stopRecording() {
@@ -401,13 +475,14 @@
       else startRecording();
     });
 
-    fileInput.addEventListener("change", async () => {
-      const file = fileInput.files && fileInput.files[0];
+    fileInput.addEventListener("change", () => {
+      const files = Array.from(fileInput.files || []);
       fileInput.value = "";
-      if (!file || busy || recording) return;
-      hidePlayback();
-      await sendVideo(file);
+      if (!files.length || recording) return;
+      enqueue(files);
     });
+
+    loadSaved();
   </script>
 </body>
 </html>

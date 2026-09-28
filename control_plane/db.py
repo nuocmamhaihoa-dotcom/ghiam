@@ -538,6 +538,7 @@ def list_people(db_path: Path) -> list[dict[str, str]]:
 
 def save_people(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> None:
     with session(db_path) as conn:
+        conn.execute("PRAGMA synchronous=FULL;")
         current = {
             row["name_key"]: row
             for row in conn.execute(

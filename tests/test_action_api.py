@@ -165,6 +165,12 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("<th>Tên</th>", page.text)
         self.assertIn("<th>Tài khoản</th>", page.text)
         self.assertIn('id="peopleBox"', page.text)
+        self.assertIn('id="savedBox"', page.text)
+        self.assertIn('id="savedTable"', page.text)
+        self.assertIn("Kết quả đã lưu", page.text)
+        self.assertIn("/v1/people", page.text)
+        self.assertIn("multiple", page.text)
+        self.assertIn("nhiều video", page.text)
         self.assertNotIn('id="stepList"', page.text)
         self.assertNotIn("Lưu thông tin", page.text)
         self.assertNotIn("/v1/people/confirm", page.text)
@@ -263,12 +269,12 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "21")
+        self.assertEqual(build, "22")
 
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 21)
+        self.assertEqual(payload["iphoneBuild"], 22)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -371,6 +377,9 @@ class ActionApiTests(unittest.TestCase):
         kept = next(item for item in repeat.json()["items"] if item["name"] == "Lê Hoa")
         self.assertEqual(kept["contactName"], "Chị Hoa")
         self.assertEqual(kept["username"], "@le.hoa")
+        listed = self.client.get("/v1/people", headers=self.headers)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertTrue(any(item["username"] == "@le.hoa" for item in listed.json()["items"]))
         skipped = self.client.post(
             "/v1/people/confirm",
             headers=self.headers,

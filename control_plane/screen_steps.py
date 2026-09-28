@@ -316,7 +316,7 @@ def _extract_frames(path: Path, work: Path, rate: float) -> list[tuple[float, Pa
                 "-i",
                 str(path),
                 "-vf",
-                f"fps={rate:.4f},scale=720:-2",
+                f"fps={rate:.4f},scale=min(1080\\,iw):-2",
                 "-frames:v",
                 str(_MAX_FRAMES),
                 str(pattern),

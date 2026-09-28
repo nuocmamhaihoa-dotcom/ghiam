@@ -327,6 +327,37 @@ def people_sightings(
     return {"count": len(ready), "items": ready, "saved": added, "known": folded}
 
 
+def _people_archive() -> list[dict[str, str]]:
+    """Đọc lại đúng những dòng đủ ba cột đang nằm trong bảng."""
+    return [
+        {"name": row["name"], "contactName": row["contactName"], "username": row["username"]}
+        for row in complete_rows(db.list_people(settings.db_path))
+    ]
+
+
+def _write_people(rows: list[dict[str, str]]) -> None:
+    """Ghi rồi đọc lại. Lần ghi không thấy trên đĩa thì ghi một lần nữa."""
+    db.save_people(settings.db_path, rows, utcnow())
+    if _people_match(rows):
+        return
+    db.save_people(settings.db_path, rows, utcnow())
+    if not _people_match(rows):
+        raise HTTPException(500, "Chưa ghi được kết quả. Chọn lại video.")
+
+
+def _people_match(rows: list[dict[str, str]]) -> bool:
+    saved = {row["nameKey"]: row for row in db.list_people(settings.db_path)}
+    for row in rows:
+        found = saved.get(row["nameKey"])
+        if found is None:
+            return False
+        if found.get("contactName") != (row.get("contactName") or ""):
+            return False
+        if found.get("username") != (row.get("username") or ""):
+            return False
+    return True
+
+
 def _save_proposed(rows: list[dict[str, str]]) -> tuple[int, int]:
     """Ghi dòng đủ ba cột. Cột đã có thì giữ nguyên. Trả về (lần nhìn thấy mới, số người mới)."""
     stored = db.list_people(settings.db_path)
@@ -342,7 +373,7 @@ def _save_proposed(rows: list[dict[str, str]]) -> tuple[int, int]:
             people_saved += 1
             sightings_saved += added
     if sightings_saved:
-        db.save_people(settings.db_path, current, utcnow())
+        _write_people(current)
     return sightings_saved, people_saved
 
 
@@ -754,11 +785,14 @@ async def recordings_from_video(
         }
     stored = _store_seen([f"{len(people)} người"] if people else ["Đã đọc video"])
     added, people_saved = _save_proposed(people)
+    archive = _people_archive()
     stored["steps"] = []
     stored["count"] = len(people)
     stored["people"] = people
     stored["saved"] = added
     stored["savedPeople"] = people_saved
+    stored["archive"] = archive
+    stored["archiveCount"] = len(archive)
     return stored
 
 
