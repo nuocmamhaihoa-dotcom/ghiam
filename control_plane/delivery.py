@@ -22,6 +22,8 @@ _GUIDE = """fb-poller
 
 Trên iPhone, mở Safari và vào /iphone của hub.
 Bấm Chia sẻ, rồi Thêm vào Màn hình chính.
+Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc chữ nhìn thấy đến khi bấm Dừng ghi.
+Trên iPhone, vuốt Trung tâm điều khiển, bấm nút ghi hình, dùng ứng dụng khác, rồi chọn video đó trên trang.
 
 Gói zip này là bản giao diện để lưu trên máy tính.
 App chạy khi mở /iphone trên hub.

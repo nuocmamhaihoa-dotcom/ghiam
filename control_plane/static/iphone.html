@@ -24,36 +24,47 @@
       flex-direction: column;
       height: 100dvh;
       overflow: hidden;
-      touch-action: manipulation;
     }
     #updateNote[hidden] { display: none !important; }
-    #updateNote { margin: 0; padding: 0.4rem 1rem 0; color: #0a7a32; font-weight: 700; }
-    #pad { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; }
-    #stepList { margin: 0; padding: 1.1rem 1.3rem 0.6rem; }
-    #stepList li { margin: 0.45rem 0; }
-    #stepList p { margin: 1.2rem 0.2rem; color: #666; }
+    #updateNote { margin: 0; padding: 0.7rem 1rem 0; color: #0a7a32; font-weight: 700; }
+    main { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; padding: 1rem 1.1rem 0.6rem; }
+    p.lead { margin: 0.2rem 0 0.8rem; line-height: 1.45; }
+    #status { margin: 0 0 0.7rem; font-weight: 700; line-height: 1.4; }
+    #status[hidden] { display: none !important; }
+    #status.live { color: #b42318; }
+    #playback { width: 100%; border-radius: 12px; background: #000; margin-bottom: 0.8rem; }
+    #playback[hidden] { display: none !important; }
+    #stepList { margin: 0.4rem 0 0; padding-left: 1.3rem; }
+    #stepList li { margin: 0.55rem 0; }
     #actions {
       display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;
       padding: 0.7rem max(0.8rem, env(safe-area-inset-right)) calc(0.7rem + env(safe-area-inset-bottom)) max(0.8rem, env(safe-area-inset-left));
-      background: #fff;
     }
-    #startBtn, #endBtn {
+    #recordBtn, #pick {
+      display: flex; align-items: center; justify-content: center;
       min-height: 64px; border-radius: 16px; border: 2px solid #111;
-      font: inherit; font-size: 20px; font-weight: 800;
+      font: inherit; font-size: 18px; font-weight: 800; text-align: center;
     }
-    #startBtn { background: #111; color: #fff; }
-    #endBtn { background: #fff; color: #111; }
-    #startBtn:disabled, #endBtn:disabled { opacity: 0.35; }
+    #recordBtn { background: #111; color: #fff; }
+    #recordBtn.live { background: #b42318; border-color: #b42318; }
+    #pick { background: #fff; color: #111; }
+    #pick input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    #recordBtn:disabled, #pick.busy { opacity: 0.45; }
   </style>
 </head>
 <body>
   <p id="updateNote" hidden></p>
-  <main id="pad">
-    <div id="stepList"><p>Bấm Bắt đầu, rồi chạm hoặc kéo trên màn hình.</p></div>
+  <main>
+    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi.</p>
+    <p id="status" hidden></p>
+    <video id="playback" controls playsinline hidden></video>
+    <ol id="stepList"></ol>
   </main>
-  <div id="actions" data-norecord>
-    <button id="startBtn" type="button">Bắt đầu</button>
-    <button id="endBtn" type="button" disabled>Kết thúc</button>
+  <div id="actions">
+    <button id="recordBtn" type="button">Bắt đầu ghi</button>
+    <label id="pick">Chọn video
+      <input id="videoFile" type="file" accept="video/*" />
+    </label>
   </div>
   <script>
     const hubToken = __CONTROL_TOKEN_JSON__;
@@ -62,160 +73,314 @@
   <script src="/static/version.js"></script>
   <script src="/static/watch.js?v=__IPHONE_BUILD__"></script>
   <script>
-    const startBtn = document.getElementById("startBtn");
-    const endBtn = document.getElementById("endBtn");
-    const capture = { on: false, t0: 0, events: [], down: null };
-    let lastGesture = 0;
-    let saving = false;
+    const pick = document.getElementById("pick");
+    const fileInput = document.getElementById("videoFile");
+    const recordBtn = document.getElementById("recordBtn");
+    const list = document.getElementById("stepList");
+    const playback = document.getElementById("playback");
+    const status = document.getElementById("status");
+    const SAMPLE_MS = 4000;
+    const MAX_MS = 600000;
+    let busy = false;
+    let recording = false;
+    let stopping = false;
+    let sampling = false;
+    let recorder = null;
+    let stream = null;
+    let chunks = [];
+    let seen = [];
+    let startedAt = 0;
+    let stopTimer = 0;
+    let sampleTimer = 0;
+    let firstSample = 0;
+    let playbackUrl = "";
+    let closed = false;
 
     function authHeaders() {
+      const headers = {};
       const token = localStorage.getItem("fb_poller_control_token") || "";
-      const headers = { "Content-Type": "application/json" };
       if (token) headers.Authorization = "Bearer " + token;
       return headers;
     }
 
-    function captionOf(event) {
-      const name = event.label || "màn hình";
-      if (event.intent === "swipe") return "Vuốt tại " + name;
-      return "Chạm " + name;
+    function setStatus(text, live) {
+      status.textContent = text || "";
+      status.hidden = !text;
+      status.classList.toggle("live", !!live);
     }
 
-    function showLines(lines) {
-      const root = document.getElementById("stepList");
-      root.replaceChildren();
-      if (!lines.length) {
-        const empty = document.createElement("p");
-        empty.textContent = "Chưa có bước. Bấm Bắt đầu, chạm hoặc kéo trên màn hình, rồi bấm Kết thúc.";
-        root.appendChild(empty);
+    function showMessage(text) {
+      list.replaceChildren();
+      const item = document.createElement("li");
+      item.textContent = text;
+      list.appendChild(item);
+    }
+
+    function renderSeen() {
+      list.replaceChildren();
+      seen.forEach((item) => {
+        const row = document.createElement("li");
+        row.textContent = item.caption;
+        list.appendChild(row);
+      });
+    }
+
+    function showSteps(steps) {
+      seen = [];
+      list.replaceChildren();
+      if (!steps.length) {
+        showMessage("Không đọc được chữ chắc. Để màn hình đứng yên lâu hơn rồi chọn lại.");
         return;
       }
-      const list = document.createElement("ol");
-      lines.forEach((line) => {
+      steps.forEach((step) => {
         const item = document.createElement("li");
-        item.textContent = line;
+        item.textContent = step.caption || "";
         list.appendChild(item);
       });
-      root.appendChild(list);
     }
 
-    function paint() {
-      showLines(capture.events.map(captionOf));
+    function showClip(file) {
+      if (playbackUrl) URL.revokeObjectURL(playbackUrl);
+      playback.srcObject = null;
+      playbackUrl = URL.createObjectURL(file);
+      playback.hidden = false;
+      playback.muted = false;
+      playback.src = playbackUrl;
     }
 
-    function ignored(target) {
-      return target instanceof Element && Boolean(target.closest("[data-norecord]"));
+    function screenCapture() {
+      const devices = navigator.mediaDevices;
+      if (!window.isSecureContext || !devices || typeof devices.getDisplayMedia !== "function") return null;
+      return devices;
     }
 
-    function pointerDown(x, y, target) {
-      if (!capture.on || ignored(target)) {
-        capture.down = null;
+    function clockLabel() {
+      const total = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+      return Math.floor(total / 60) + ":" + String(total % 60).padStart(2, "0");
+    }
+
+    function addLine(line) {
+      const body = (line || "").trim();
+      if (!body || seen.length >= 20) return;
+      for (let index = 0; index < seen.length; index += 1) {
+        const previous = seen[index].body;
+        if (previous === body || previous.includes(body)) return;
+        if (body.includes(previous)) {
+          seen[index] = { body: body, caption: clockLabel() + " — " + body };
+          renderSeen();
+          return;
+        }
+      }
+      seen.push({ body: body, caption: clockLabel() + " — " + body });
+      renderSeen();
+    }
+
+    async function sendVideo(file) {
+      busy = true;
+      pick.classList.add("busy");
+      recordBtn.disabled = true;
+      setStatus("Đang đọc chữ trên màn hình...", false);
+      const body = new FormData();
+      body.append("file", file, file.name || "man-hinh.mp4");
+      let response;
+      try {
+        response = await fetch("/v1/recordings/from-video", { method: "POST", headers: authHeaders(), body: body });
+      } catch (error) {
+        setStatus("", false);
+        showMessage("Chưa gửi được video. Mở lại trang rồi chọn lại.");
+        pick.classList.remove("busy");
+        recordBtn.disabled = false;
+        busy = false;
         return;
       }
-      capture.down = { x: x, y: y };
+      if (!response.ok) {
+        setStatus("", false);
+        showMessage("Chưa đọc được video. Chọn đúng bản ghi màn hình.");
+        pick.classList.remove("busy");
+        recordBtn.disabled = false;
+        busy = false;
+        return;
+      }
+      const data = await response.json();
+      setStatus("", false);
+      showSteps(data.steps || []);
+      pick.classList.remove("busy");
+      recordBtn.disabled = false;
+      busy = false;
     }
 
-    function pointerUp(x, y, target) {
-      if (!capture.on || !capture.down) return;
-      const now = performance.now();
-      if (now - lastGesture < 80) {
-        capture.down = null;
-        return;
+    function stopTracks() {
+      if (!stream) return;
+      stream.getTracks().forEach((track) => track.stop());
+      stream = null;
+    }
+
+    function frameBlob() {
+      const width = playback.videoWidth;
+      const height = playback.videoHeight;
+      if (!width || !height) return Promise.resolve(null);
+      const target = Math.min(720, width);
+      const canvas = document.createElement("canvas");
+      canvas.width = target;
+      canvas.height = Math.max(1, Math.round(height * (target / width)));
+      const context = canvas.getContext("2d");
+      if (!context) return Promise.resolve(null);
+      context.drawImage(playback, 0, 0, canvas.width, canvas.height);
+      return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.72));
+    }
+
+    async function sampleFrame() {
+      if (!recording || sampling) return;
+      const blob = await frameBlob();
+      if (!blob || !recording) return;
+      sampling = true;
+      const body = new FormData();
+      body.append("file", blob, "khung.jpg");
+      try {
+        const response = await fetch("/v1/recordings/from-frame", { method: "POST", headers: authHeaders(), body: body });
+        if (response.ok && recording) {
+          const data = await response.json();
+          addLine(data.line || "");
+        }
+      } catch (error) {
+        // Keep the recording running if one frame fails to send.
+      } finally {
+        sampling = false;
       }
-      if (ignored(target)) {
-        capture.down = null;
-        return;
-      }
-      const start = capture.down;
-      capture.down = null;
-      lastGesture = now;
-      const moved = Math.hypot(x - start.x, y - start.y);
-      capture.events.push({
-        t: Math.max(0, Math.round(now - capture.t0)),
-        kind: "pointer",
-        phase: "up",
-        target: "body",
-        x: Math.round(x),
-        y: Math.round(y),
-        pointerType: "touch",
-        click: false,
-        intent: moved > 36 ? "swipe" : "tap",
-        label: "màn hình",
+    }
+
+    async function saveSeen() {
+      if (!seen.length) return false;
+      const response = await fetch("/v1/recordings/seen", {
+        method: "POST",
+        headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+        body: JSON.stringify({ lines: seen.map((item) => item.caption) }),
       });
-      paint();
+      return response.ok;
     }
 
-    document.addEventListener("pointerdown", (event) => {
-      pointerDown(event.clientX, event.clientY, event.target);
-    }, true);
-    document.addEventListener("pointerup", (event) => {
-      pointerUp(event.clientX, event.clientY, event.target);
-    }, true);
-    document.addEventListener("pointercancel", (event) => {
-      pointerUp(event.clientX, event.clientY, event.target);
-    }, true);
-    document.addEventListener("touchstart", (event) => {
-      const touch = event.changedTouches && event.changedTouches[0];
-      if (!touch) return;
-      pointerDown(touch.clientX, touch.clientY, event.target);
-    }, true);
-    document.addEventListener("touchend", (event) => {
-      const touch = event.changedTouches && event.changedTouches[0];
-      if (!touch) return;
-      pointerUp(touch.clientX, touch.clientY, event.target);
-    }, true);
-    document.addEventListener("touchcancel", (event) => {
-      const touch = event.changedTouches && event.changedTouches[0];
-      if (!touch) return;
-      pointerUp(touch.clientX, touch.clientY, event.target);
-    }, true);
+    async function finishRecording() {
+      if (closed) return;
+      closed = true;
+      recording = false;
+      stopping = true;
+      window.clearTimeout(stopTimer);
+      window.clearTimeout(firstSample);
+      window.clearInterval(sampleTimer);
+      const type = (recorder && recorder.mimeType) || "video/webm";
+      const blob = new Blob(chunks, { type: type });
+      recorder = null;
+      chunks = [];
+      playback.srcObject = null;
+      stopTracks();
+      recordBtn.textContent = "Bắt đầu ghi";
+      recordBtn.classList.remove("live");
+      setStatus("Đang lưu chữ đã đọc...", false);
+      if (seen.length) {
+        let stored = false;
+        try {
+          stored = await saveSeen();
+        } catch (error) {
+          stored = false;
+        }
+        renderSeen();
+        if (blob.size) showClip(blob);
+        setStatus(stored ? "" : "Đã đọc trên máy này. Chưa lưu được lên hub.", false);
+        stopping = false;
+        return;
+      }
+      stopping = false;
+      if (!blob.size) {
+        setStatus("", false);
+        showMessage("Bản quay trống. Thử lại.");
+        return;
+      }
+      const ext = type.includes("mp4") ? "mp4" : "webm";
+      const file = new File([blob], "man-hinh." + ext, { type: type });
+      showClip(file);
+      await sendVideo(file);
+    }
 
-    startBtn.addEventListener("click", () => {
-      if (capture.on || saving) return;
-      capture.on = true;
-      capture.t0 = performance.now();
-      capture.events = [];
-      capture.down = null;
-      startBtn.disabled = true;
-      endBtn.disabled = false;
-      document.getElementById("stepList").replaceChildren();
+    function stopRecording() {
+      if (!recording || stopping) return;
+      stopping = true;
+      recording = false;
+      window.clearTimeout(stopTimer);
+      window.clearTimeout(firstSample);
+      window.clearInterval(sampleTimer);
+      if (recorder && recorder.state === "recording") {
+        recorder.stop();
+        return;
+      }
+      finishRecording();
+    }
+
+    async function startRecording() {
+      if (busy || recording) return;
+      const devices = screenCapture();
+      if (!devices) {
+        setStatus("Máy này không cho trang web tự ghi màn hình. Vuốt Trung tâm điều khiển, bấm nút ghi hình. Ghi chạy liên tục đến khi bạn bấm thanh đỏ, rồi chọn video.", false);
+        return;
+      }
+      try {
+        stream = await devices.getDisplayMedia({ video: { frameRate: 5 }, audio: false });
+      } catch (error) {
+        setStatus("Chưa bật được ghi hình. Cho phép chia sẻ màn hình, hoặc ghi ở Trung tâm điều khiển rồi chọn video.", false);
+        return;
+      }
+      const mime = ["video/webm;codecs=vp8", "video/webm", "video/mp4"].find((type) => {
+        return window.MediaRecorder && MediaRecorder.isTypeSupported(type);
+      }) || "";
+      chunks = [];
+      seen = [];
+      startedAt = Date.now();
+      recording = true;
+      stopping = false;
+      closed = false;
+      try {
+        recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+        recorder.ondataavailable = (event) => {
+          if (event.data && event.data.size) chunks.push(event.data);
+        };
+        recorder.onstop = () => { finishRecording(); };
+        stream.getVideoTracks().forEach((track) => {
+          track.onended = () => {
+            if (recording && !stopping) stopRecording();
+          };
+        });
+        recorder.start(1000);
+      } catch (error) {
+        recording = false;
+        closed = true;
+        recorder = null;
+        stopTracks();
+        setStatus("Chưa bật được ghi hình. Cho phép chia sẻ màn hình, hoặc ghi ở Trung tâm điều khiển rồi chọn video.", false);
+        return;
+      }
+      playback.hidden = false;
+      playback.srcObject = stream;
+      playback.muted = true;
+      try { await playback.play(); } catch (error) { /* The frame sampler retries until a frame exists. */ }
+      recordBtn.textContent = "Dừng ghi";
+      recordBtn.classList.add("live");
+      list.replaceChildren();
+      setStatus("Đang ghi liên tục. Bấm Dừng ghi khi xong.", true);
+      sampleTimer = window.setInterval(sampleFrame, SAMPLE_MS);
+      firstSample = window.setTimeout(sampleFrame, 1200);
+      stopTimer = window.setTimeout(stopRecording, MAX_MS);
+    }
+
+    recordBtn.addEventListener("click", () => {
+      if (recording) stopRecording();
+      else startRecording();
     });
 
-    endBtn.addEventListener("click", async () => {
-      if (!capture.on || saving) return;
-      capture.on = false;
-      capture.down = null;
-      saving = true;
-      startBtn.disabled = false;
-      endBtn.disabled = true;
-      const events = capture.events.slice();
-      if (!events.length) {
-        showLines([]);
-        startBtn.disabled = false;
-        saving = false;
-        return;
-      }
-      const headers = authHeaders();
-      const saved = await fetch("/v1/recordings", {
-        method: "POST",
-        headers: headers,
-        body: JSON.stringify({ title: "Thao tác trên điện thoại", events: events }),
-      });
-      const parsed = await fetch("/v1/recordings/parse", {
-        method: "POST",
-        headers: headers,
-        body: JSON.stringify({ events: events }),
-      });
-      if (!saved.ok || !parsed.ok) {
-        const note = document.createElement("p");
-        note.textContent = "Chưa lưu được. Bấm Bắt đầu rồi làm lại.";
-        document.getElementById("stepList").appendChild(note);
-        saving = false;
-        return;
-      }
-      const steps = (await parsed.json()).steps || [];
-      showLines(steps.map((step) => step.caption || step.kind || "Bước"));
-      saving = false;
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files && fileInput.files[0];
+      fileInput.value = "";
+      if (!file || busy || recording) return;
+      showClip(file);
+      await sendVideo(file);
     });
   </script>
 </body>

@@ -13,6 +13,10 @@ if [[ ! -d "$APP_DIR" ]]; then
 fi
 
 export PATH="${HOME}/.local/bin:${PATH}"
+if command -v apt-get >/dev/null 2>&1; then
+  DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg tesseract-ocr tesseract-ocr-eng tesseract-ocr-vie
+fi
 if ! command -v uv >/dev/null 2>&1; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
 fi

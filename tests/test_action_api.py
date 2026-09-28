@@ -68,65 +68,15 @@ class ActionApiTests(unittest.TestCase):
         self.assertGreaterEqual(listed.json()["count"], 1)
         self.assertIn("Check proxy", listed.json()["items"][0]["summary"])
 
-    def test_recording_roundtrip_hides_password(self) -> None:
-        created = self.client.post(
-            "/v1/recordings",
-            headers=self.headers,
-            json={
-                "events": [
-                    {"t": 0, "kind": "key", "target": "#token", "key": "secret-key"},
-                    {"t": 5, "kind": "value", "target": "#q", "value": "xin chào"},
-                    {
-                        "t": 12,
-                        "kind": "pointer",
-                        "target": "#refresh",
-                        "phase": "up",
-                        "pointerType": "mouse",
-                        "click": True,
-                    },
-                ]
-            },
-        )
-        self.assertEqual(created.status_code, 200, created.text)
-        body = created.json()
-        self.assertNotIn("secret-key", created.text)
-        self.assertIn("Gõ vào #q: xin chào", body["steps"])
-        self.assertIn("Bấm #refresh", body["steps"])
-
-        listed = self.client.get("/v1/recordings", headers=self.headers)
-        self.assertEqual(listed.status_code, 200)
-        self.assertGreaterEqual(listed.json()["count"], 1)
-
-        fetched = self.client.get(f"/v1/recordings/{body['id']}", headers=self.headers)
-        self.assertEqual(fetched.status_code, 200)
-        kinds = [event["kind"] for event in fetched.json()["events"]]
-        self.assertEqual(kinds, ["key", "value", "pointer"])
-        self.assertTrue(fetched.json()["events"][0]["redacted"])
-        self.assertNotIn("key", fetched.json()["events"][0])
-
-    def test_recording_requires_token_and_real_events(self) -> None:
-        denied = self.client.post("/v1/recordings", json={"events": [{"t": 0, "kind": "key", "target": "#q", "key": "a"}]})
-        self.assertEqual(denied.status_code, 401)
-        empty = self.client.post(
-            "/v1/recordings",
-            headers=self.headers,
-            json={"events": [{"t": 0, "kind": "value", "target": "#token", "value": "nope"}]},
-        )
-        self.assertEqual(empty.status_code, 400)
-
     def test_dashboard_has_journal(self) -> None:
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Nhật ký thao tác", response.text)
         self.assertIn("Ghi nhớ", response.text)
-        self.assertIn("Làm theo", response.text)
-        self.assertIn("Ghi bấm phím và cảm ứng", response.text)
-        self.assertIn('id="recordDock"', response.text)
-        self.assertIn("Sau 10 giây", response.text)
-        self.assertIn("Sửa", response.text)
-        self.assertIn("Lưu thành bản mới", response.text)
-        self.assertIn("Lưu thành đoạn", response.text)
-        self.assertIn("Kịch bản ghép", response.text)
+        self.assertNotIn("Làm theo", response.text)
+        self.assertNotIn("Ghi bấm phím", response.text)
+        self.assertNotIn('id="recordDock"', response.text)
+        self.assertIn("Đã lưu", response.text)
         self.assertIn("Mở giả lập điện thoại trên PC", response.text)
 
     def test_phone_emulator_page(self) -> None:
@@ -137,146 +87,6 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("/?as=phone", response.text)
         self.assertIn("Kết nối PC", response.text)
         self.assertIn("Tên trong danh bạ", response.text)
-
-    def test_named_clip_updates_every_scenario(self) -> None:
-        created = self.client.post(
-            "/v1/clips",
-            headers=self.headers,
-            json={
-                "name": "Gõ và bấm",
-                "steps": [
-                    {
-                        "kind": "type",
-                        "target": "#actionText",
-                        "label": "Mình vừa làm gì?",
-                        "value": "mẫu",
-                        "valueBlank": "Nội dung",
-                    },
-                    {"kind": "tap", "target": "#refresh", "label": "Tải lại", "targetBlank": "Nút"},
-                ],
-            },
-        )
-        self.assertEqual(created.status_code, 200, created.text)
-        clip_id = created.json()["id"]
-        self.assertEqual([blank["kind"] for blank in created.json()["blanks"]], ["text", "control"])
-        scenario = self.client.post(
-            "/v1/scenarios",
-            headers=self.headers,
-            json={
-                "name": "Hai lần",
-                "parts": [
-                    {"clipId": clip_id, "fills": {"Nội dung": "AAAA", "Nút": {"target": "#searchAction", "label": "Tìm"}}},
-                    {"clipId": clip_id, "fills": {"Nội dung": "BBBB"}},
-                ],
-            },
-        )
-        self.assertEqual(scenario.status_code, 200, scenario.text)
-        scenario_id = scenario.json()["id"]
-        compiled = self.client.post(
-            "/v1/scenarios/compile",
-            headers=self.headers,
-            json={"name": "xem", "parts": scenario.json()["parts"]},
-        )
-        self.assertEqual(compiled.status_code, 200, compiled.text)
-        values = [step["value"] for step in compiled.json()["steps"] if step["kind"] == "type"]
-        self.assertEqual(values, ["AAAA", "BBBB"])
-        self.assertEqual(compiled.json()["steps"][1]["target"], "#searchAction")
-        updated = self.client.put(
-            f"/v1/clips/{clip_id}",
-            headers=self.headers,
-            json={
-                "name": "Gõ và bấm",
-                "steps": [
-                    {
-                        "kind": "type",
-                        "target": "#actionText",
-                        "label": "Mình vừa làm gì?",
-                        "value": "mẫu",
-                        "valueBlank": "Nội dung",
-                    },
-                    {"kind": "tap", "target": "#refresh", "label": "Tải lại", "targetBlank": "Nút"},
-                    {"kind": "tap", "target": "#recheck", "label": "Check proxy ngay"},
-                ],
-            },
-        )
-        self.assertEqual(updated.status_code, 200, updated.text)
-        self.assertEqual(updated.json()["scenarioCount"], 1)
-        again = self.client.post(
-            "/v1/scenarios/compile",
-            headers=self.headers,
-            json={"name": "xem", "parts": [{"clipId": clip_id, "fills": {"Nội dung": "AAAA"}}]},
-        )
-        self.assertEqual(again.status_code, 200, again.text)
-        self.assertEqual(again.json()["steps"][-1]["target"], "#recheck")
-        self.assertEqual(again.json()["steps"][0]["value"], "AAAA")
-        blocked = self.client.delete(f"/v1/clips/{clip_id}", headers=self.headers)
-        self.assertEqual(blocked.status_code, 409)
-        removed = self.client.delete(f"/v1/scenarios/{scenario_id}", headers=self.headers)
-        self.assertEqual(removed.status_code, 200)
-        freed = self.client.delete(f"/v1/clips/{clip_id}", headers=self.headers)
-        self.assertEqual(freed.status_code, 200)
-
-    def test_edit_script_saves_a_new_copy(self) -> None:
-        created = self.client.post(
-            "/v1/recordings",
-            headers=self.headers,
-            json={
-                "title": "bản gốc",
-                "events": [
-                    {
-                        "t": 1,
-                        "kind": "pointer",
-                        "target": "#actionText",
-                        "phase": "up",
-                        "pointerType": "mouse",
-                        "click": True,
-                        "intent": "focus",
-                        "label": "Mình vừa làm gì?",
-                    },
-                    {"t": 2, "kind": "value", "target": "#actionText", "value": "import"},
-                    {
-                        "t": 3,
-                        "kind": "pointer",
-                        "target": "#refresh",
-                        "phase": "up",
-                        "pointerType": "mouse",
-                        "click": True,
-                        "intent": "tap",
-                        "label": "Tải lại",
-                    },
-                ],
-            },
-        )
-        self.assertEqual(created.status_code, 200, created.text)
-        original_id = created.json()["id"]
-        parsed = self.client.post(
-            "/v1/recordings/parse",
-            headers=self.headers,
-            json={"events": self.client.get(f"/v1/recordings/{original_id}", headers=self.headers).json()["events"]},
-        )
-        self.assertEqual(parsed.status_code, 200, parsed.text)
-        steps = parsed.json()["steps"]
-        self.assertEqual([step["kind"] for step in steps], ["type", "tap"])
-        steps[0]["value"] = "đã sửa"
-        compiled = self.client.post(
-            "/v1/recordings/compile",
-            headers=self.headers,
-            json={"title": "bản gốc (sửa)", "steps": steps},
-        )
-        self.assertEqual(compiled.status_code, 200, compiled.text)
-        self.assertIn("Gõ vào #actionText: đã sửa", compiled.json()["lines"])
-        saved = self.client.post(
-            "/v1/recordings/from-steps",
-            headers=self.headers,
-            json={"title": "bản gốc (sửa)", "steps": steps},
-        )
-        self.assertEqual(saved.status_code, 200, saved.text)
-        self.assertNotEqual(saved.json()["id"], original_id)
-        original = self.client.get(f"/v1/recordings/{original_id}", headers=self.headers)
-        self.assertIn("import", original.text)
-        self.assertNotIn("đã sửa", original.text)
-        denied = self.client.post("/v1/recordings/from-steps", json={"steps": steps})
-        self.assertEqual(denied.status_code, 401)
 
     def test_scroll_sightings_merge_into_saved_people(self) -> None:
         denied = self.client.get("/v1/people")
@@ -345,13 +155,19 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("/static/version.js", page.text)
         self.assertNotIn('data-app="browse"', page.text)
         self.assertNotIn("followTung", page.text)
-        self.assertIn('id="startBtn"', page.text)
-        self.assertIn('id="endBtn"', page.text)
-        self.assertIn("Bắt đầu", page.text)
-        self.assertIn("Kết thúc", page.text)
-        self.assertIn("/v1/recordings/parse", page.text)
-        self.assertIn("pointerup", page.text)
-        self.assertIn("touchend", page.text)
+        self.assertIn("Chọn video", page.text)
+        self.assertIn("Bắt đầu ghi", page.text)
+        self.assertIn("Dừng ghi", page.text)
+        self.assertIn("liên tục", page.text)
+        self.assertIn("getDisplayMedia", page.text)
+        self.assertIn('id="playback"', page.text)
+        self.assertIn("/v1/recordings/from-video", page.text)
+        self.assertIn("/v1/recordings/from-frame", page.text)
+        self.assertNotIn("Quay màn hình", page.text)
+        self.assertIn("Trung tâm điều khiển", page.text)
+        self.assertIn("nhìn thấy", page.text)
+        self.assertNotIn("kịch bản", page.text)
+        self.assertIn('accept="video/*"', page.text)
         self.assertNotIn("confirmOk", page.text)
         self.assertNotIn("beginPhoneUse", page.text)
         self.assertNotIn('src="/?as=iphone"', page.text)
@@ -370,15 +186,54 @@ class ActionApiTests(unittest.TestCase):
         home = self.client.get("/")
         self.assertIn("Mở app iPhone", home.text)
         self.assertIn("Mở giả lập điện thoại trên PC", home.text)
-        self.assertIn("Chạm trên iPhone được ghi để làm lại.", home.text)
+        self.assertNotIn("Chạm trên iPhone được ghi để làm lại.", home.text)
         self.assertIn("/static/version.js", home.text)
         self.assertIn('location.replace("/iphone")', home.text)
         self.assertIn('href="/iphone">Mở trên iPhone', home.text)
-        self.assertIn("deliver.hidden = true", home.text)
-        self.assertIn('type: "fb-arm"', home.text)
-        self.assertIn("pushPhoneEvent", home.text)
-        self.assertIn("pointercancel", home.text)
+        self.assertNotIn("pushPhoneEvent", home.text)
+        self.assertNotIn('type: "fb-arm"', home.text)
         self.assertNotIn('href="/tai"', page.text)
+
+    def test_screen_video_requires_token(self) -> None:
+        denied = self.client.post(
+            "/v1/recordings/from-video",
+            files={"file": ("clip.mp4", b"not-a-video", "video/mp4")},
+        )
+        self.assertEqual(denied.status_code, 401)
+        opened = self.client.post(
+            "/v1/recordings/from-video",
+            headers=self.headers,
+            files={"file": ("clip.mp4", b"not-a-video", "video/mp4")},
+        )
+        self.assertEqual(opened.status_code, 400, opened.text)
+        frame = self.client.post(
+            "/v1/recordings/from-frame",
+            files={"file": ("khung.jpg", b"not-a-photo", "image/jpeg")},
+        )
+        self.assertEqual(frame.status_code, 401)
+        blank = self.client.post(
+            "/v1/recordings/from-frame",
+            headers=self.headers,
+            files={"file": ("khung.jpg", b"not-a-photo", "image/jpeg")},
+        )
+        self.assertEqual(blank.status_code, 200, blank.text)
+        self.assertEqual(blank.json()["line"], "")
+        denied_lines = self.client.post("/v1/recordings/seen", json={"lines": ["0:01 — TikTok"]})
+        self.assertEqual(denied_lines.status_code, 401)
+        empty_lines = self.client.post(
+            "/v1/recordings/seen",
+            headers=self.headers,
+            json={"lines": ["   "]},
+        )
+        self.assertEqual(empty_lines.status_code, 400, empty_lines.text)
+        saved = self.client.post(
+            "/v1/recordings/seen",
+            headers=self.headers,
+            json={"lines": ["0:01 — TikTok", "0:01 — TikTok"]},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(saved.json()["count"], 1)
+        self.assertEqual(saved.json()["steps"][0]["caption"], "0:01 — TikTok")
 
         missing = self.client.get("/khong-co-trang-nay")
         self.assertEqual(missing.status_code, 404)
@@ -394,12 +249,12 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "12")
+        self.assertEqual(build, "17")
 
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 12)
+        self.assertEqual(payload["iphoneBuild"], 17)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]

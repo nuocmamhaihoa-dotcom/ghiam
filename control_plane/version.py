@@ -1,3 +1,3 @@
-"""Số bản app trên iPhone. Tăng số này mỗi lần giao diện hoặc cách ghi thao tác đổi."""
+"""Số bản app trên iPhone. Tăng số này mỗi lần giao diện trên iPhone đổi."""
 
-IPHONE_BUILD = 12
+IPHONE_BUILD = 17
