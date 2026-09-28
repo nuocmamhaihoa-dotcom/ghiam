@@ -126,7 +126,7 @@ class RecordingSanitizeTests(unittest.TestCase):
         self.assertEqual(events[0]["label"], "Tải lại")
         self.assertTrue(events[0]["snapped"])
         self.assertEqual(events[0]["intent"], "tap")
-        self.assertNotIn("label", events[2])
+        self.assertEqual(events[2]["label"], "không phải nút")
         self.assertFalse(events[2]["click"])
         self.assertNotIn("intent", events[3])
         self.assertEqual(

@@ -11,6 +11,14 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <meta name="iphone-build" content="__IPHONE_BUILD__" />
   <title>fb-poller — Hub VPS</title>
+  <script>
+    (function () {
+      var q = new URLSearchParams(location.search);
+      if (/iPhone|iPod/.test(navigator.userAgent) && q.get("as") !== "iphone" && q.get("screen") !== "pc") {
+        location.replace("/iphone");
+      }
+    })();
+  </script>
   <style>
     [hidden] { display: none !important; }
     :root {
@@ -36,6 +44,7 @@
       background: var(--bg);
       font-size: 14px;
       line-height: 1.4;
+      touch-action: manipulation;
     }
     .shell {
       position: sticky; top: 0; z-index: 20;
@@ -216,7 +225,7 @@
     <div class="brand">
       <h1>fb-poller</h1>
       <p class="sub">Hub</p>
-      <a class="deliver" href="/tai">Tải phần mềm</a>
+      <a class="deliver" href="/iphone">Mở trên iPhone</a>
       <p class="sub" id="updateNote" hidden></p>
     </div>
     <div class="token-row">
@@ -248,7 +257,7 @@
   <main>
     <section data-view="home">
       <p class="lead">Số liệu hub, máy đang nối, rồi chuyển tab để ghi nhớ, làm lại thao tác, xem proxy hoặc comment.</p>
-      <a class="iphone-go" href="/iphone">Lướt trên iPhone</a>
+      <a class="iphone-go" href="/iphone">Mở app iPhone</a>
       <div class="stats" id="stats"></div>
       <div id="agents"></div>
     </section>
@@ -2185,10 +2194,169 @@
         $("err").textContent = "Không lưu bản ghi: " + e.message;
       }
     };
-    $("recordNow").onclick = () => { $("recordToggle").click(); };
+    function phoneShell() {
+      return screenMode === "iphone" && window.parent !== window;
+    }
+
+    const phonePress = { id: null, x: 0, y: 0, target: null };
+
+    function parentRecording() {
+      if (!phoneShell()) return false;
+      try {
+        return typeof window.parent.phoneRecording === "function" && window.parent.phoneRecording();
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function phoneIgnored(node) {
+      return node instanceof Element && Boolean(node.closest("#recordDock, #replayAsk, #replayCursor"));
+    }
+
+    function phoneTarget(node) {
+      const el = node instanceof Element ? node : null;
+      if (!el || phoneIgnored(el)) return "";
+      const withId = el.closest("[id]");
+      if (!withId || !/^[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(withId.id)) return "body";
+      return "#" + withId.id;
+    }
+
+    function forwardPhoneEvent(event) {
+      try {
+        window.parent.pushPhoneEvent(event);
+      } catch (error) {
+        /* trang cha không nhận thao tác */
+      }
+    }
+
+    function onPhonePointerDown(event) {
+      if (!parentRecording()) return;
+      if (phoneIgnored(event.target)) {
+        phonePress.id = null;
+        return;
+      }
+      phonePress.id = event.pointerId;
+      phonePress.x = event.clientX;
+      phonePress.y = event.clientY;
+      phonePress.target = event.target;
+    }
+
+    function onPhonePointerUp(event) {
+      if (!parentRecording() || phonePress.id !== event.pointerId) return;
+      const startX = phonePress.x;
+      const startY = phonePress.y;
+      const raw = phonePress.target;
+      phonePress.id = null;
+      if (phoneIgnored(event.target)) return;
+      const moved = Math.hypot(event.clientX - startX, event.clientY - startY);
+      const node = event.target instanceof Element ? event.target : raw;
+      if (moved > 36) {
+        forwardPhoneEvent({
+          kind: "pointer", phase: "up", target: "body",
+          x: event.clientX, y: event.clientY,
+          pointerType: "touch", click: false, intent: "swipe", label: "màn hình",
+        });
+        return;
+      }
+      const control = node instanceof Element
+        ? node.closest("button, a, input, textarea, select, [role='button']")
+        : null;
+      if (control && phoneIgnored(control)) return;
+      const secret = control instanceof HTMLInputElement && (control.type === "password" || control.id === "token");
+      const target = secret ? "#token" : (control ? phoneTarget(control) : "body");
+      if (!target) return;
+      const label = secret
+        ? "Token"
+        : (control
+          ? (control.getAttribute("aria-label") || control.innerText || control.getAttribute("placeholder") || "Màn hình")
+          : "Màn hình");
+      let role;
+      let intent = "tap";
+      if (secret || (control && control.matches("input, textarea"))) {
+        intent = "focus";
+        role = control && control.getAttribute("type") === "search" ? "search" : "textbox";
+      } else if (control instanceof HTMLSelectElement) {
+        intent = "focus";
+        role = "select";
+      } else if (control instanceof HTMLAnchorElement) {
+        role = "link";
+      } else if (control) {
+        role = "button";
+      }
+      forwardPhoneEvent({
+        kind: "pointer", phase: "up", target: target,
+        x: event.clientX, y: event.clientY,
+        pointerType: "touch", click: Boolean(control) && target !== "body" && !secret,
+        intent: intent,
+        label: String(label).trim().replace(/\s+/g, " ").slice(0, 80) || "Màn hình",
+        role: role,
+      });
+    }
+
+    function onPhoneKey(event) {
+      if (!parentRecording()) return;
+      const el = event.target;
+      if (!(el instanceof Element) || phoneIgnored(el)) return;
+      const secret = el instanceof HTMLInputElement && (el.type === "password" || el.id === "token");
+      const target = secret ? "#token" : phoneTarget(el);
+      if (!target) return;
+      if (secret) {
+        forwardPhoneEvent({ kind: "key", target: "#token", redacted: true });
+        return;
+      }
+      forwardPhoneEvent({
+        kind: "key", target: target, key: event.key, code: event.code,
+        shift: event.shiftKey, ctrl: event.ctrlKey, alt: event.altKey, meta: event.metaKey,
+      });
+    }
+
+    function onPhoneInput(event) {
+      if (!parentRecording()) return;
+      const el = event.target;
+      if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)) return;
+      if (phoneIgnored(el) || el.type === "password" || el.id === "token") return;
+      const target = phoneTarget(el);
+      if (!target || target === "body") return;
+      forwardPhoneEvent({ kind: "value", target: target, value: String(el.value || "").slice(0, 500) });
+    }
+
+    document.addEventListener("pointerdown", onPhonePointerDown, true);
+    document.addEventListener("pointerup", onPhonePointerUp, true);
+    document.addEventListener("pointercancel", onPhonePointerUp, true);
+    document.addEventListener("keydown", onPhoneKey, true);
+    document.addEventListener("input", onPhoneInput, true);
+    document.addEventListener("change", onPhoneInput, true);
+
+    function armPhone(delay) {
+      const parent = window.parent;
+      if (parent && typeof parent.beginPhoneUse === "function") {
+        parent.beginPhoneUse(delay);
+        return;
+      }
+      window.parent.postMessage({ type: "fb-arm", delay: delay }, location.origin);
+    }
+
+    $("recordNow").onclick = () => {
+      $("err").hidden = true;
+      if (!phoneShell()) {
+        $("recordToggle").click();
+        return;
+      }
+      clearRecordDelay();
+      armPhone(false);
+      $("recordState").textContent = "Chạm một nút hoặc kéo màn hình. Hỏi OK hoặc Làm lại. Kết thúc để liệt kê các bước.";
+      paintRecord();
+    };
     $("recordDelay").onclick = () => {
       $("err").hidden = true;
-      armRecordDelay();
+      if (!phoneShell()) {
+        armRecordDelay();
+        return;
+      }
+      clearRecordDelay();
+      armPhone(true);
+      $("recordState").textContent = "10 giây nữa ghi chạm trên màn này. Bấm Kết thúc để lưu.";
+      paintRecord();
     };
     $("recordingRows").onclick = async (e) => {
       const edit = e.target.closest("[data-edit]");
@@ -2348,6 +2516,8 @@
         $("phoneBanner").textContent = "Chạm trên iPhone được ghi để làm lại.";
         const go = document.querySelector(".iphone-go");
         if (go) go.hidden = true;
+        const deliver = document.querySelector("a.deliver");
+        if (deliver) deliver.hidden = true;
       }
     }
     if (/iPhone|iPod/.test(navigator.userAgent)) {

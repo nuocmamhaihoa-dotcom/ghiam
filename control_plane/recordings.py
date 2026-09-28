@@ -167,10 +167,12 @@ def _intent(event: dict[str, Any], item: dict[str, Any]) -> None:
     if intent not in _INTENTS:
         return
     event["intent"] = intent
+    label = _label(item.get("label"))
     if intent == "swipe":
         event["click"] = False
+        if label:
+            event["label"] = label
         return
-    label = _label(item.get("label"))
     if label:
         event["label"] = label
     if item.get("snapped"):
