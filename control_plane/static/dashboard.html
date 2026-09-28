@@ -49,7 +49,12 @@
       padding: 0.55rem 0.9rem;
       background: transparent;
     }
-    .brand { display: flex; align-items: baseline; gap: 0.55rem; min-width: 8rem; }
+    .brand { display: flex; align-items: baseline; gap: 0.55rem; min-width: 8rem; flex-wrap: wrap; }
+    a.deliver {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-height: 44px; padding: 0 0.75rem; border-radius: 10px;
+      background: var(--accent); color: var(--accent-ink); font-weight: 700; text-decoration: none;
+    }
     h1 { margin: 0; font-size: 1.05rem; font-weight: 650; letter-spacing: -0.02em; }
     .sub { margin: 0; color: var(--muted); font-size: 0.78rem; }
     h2 { margin: 0 0 0.45rem; font-size: 0.95rem; font-weight: 650; }
@@ -211,6 +216,7 @@
     <div class="brand">
       <h1>fb-poller</h1>
       <p class="sub">Hub</p>
+      <a class="deliver" href="/tai">Tải phần mềm</a>
       <p class="sub" id="updateNote" hidden></p>
     </div>
     <div class="token-row">
