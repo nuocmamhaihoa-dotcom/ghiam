@@ -44,6 +44,7 @@
       background: var(--bg);
       font-size: 14px;
       line-height: 1.4;
+      touch-action: manipulation;
     }
     .shell {
       position: sticky; top: 0; z-index: 20;
@@ -2197,6 +2198,135 @@
       return screenMode === "iphone" && window.parent !== window;
     }
 
+    const phonePress = { id: null, x: 0, y: 0, target: null };
+
+    function parentRecording() {
+      if (!phoneShell()) return false;
+      try {
+        return typeof window.parent.phoneRecording === "function" && window.parent.phoneRecording();
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function phoneIgnored(node) {
+      return node instanceof Element && Boolean(node.closest("#recordDock, #replayAsk, #replayCursor"));
+    }
+
+    function phoneTarget(node) {
+      const el = node instanceof Element ? node : null;
+      if (!el || phoneIgnored(el)) return "";
+      const withId = el.closest("[id]");
+      if (!withId || !/^[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(withId.id)) return "body";
+      return "#" + withId.id;
+    }
+
+    function forwardPhoneEvent(event) {
+      try {
+        window.parent.pushPhoneEvent(event);
+      } catch (error) {
+        /* trang cha không nhận thao tác */
+      }
+    }
+
+    function onPhonePointerDown(event) {
+      if (!parentRecording()) return;
+      if (phoneIgnored(event.target)) {
+        phonePress.id = null;
+        return;
+      }
+      phonePress.id = event.pointerId;
+      phonePress.x = event.clientX;
+      phonePress.y = event.clientY;
+      phonePress.target = event.target;
+    }
+
+    function onPhonePointerUp(event) {
+      if (!parentRecording() || phonePress.id !== event.pointerId) return;
+      const startX = phonePress.x;
+      const startY = phonePress.y;
+      const raw = phonePress.target;
+      phonePress.id = null;
+      if (phoneIgnored(event.target)) return;
+      const moved = Math.hypot(event.clientX - startX, event.clientY - startY);
+      const node = event.target instanceof Element ? event.target : raw;
+      if (moved > 36) {
+        forwardPhoneEvent({
+          kind: "pointer", phase: "up", target: "body",
+          x: event.clientX, y: event.clientY,
+          pointerType: "touch", click: false, intent: "swipe", label: "màn hình",
+        });
+        return;
+      }
+      const control = node instanceof Element
+        ? node.closest("button, a, input, textarea, select, [role='button']")
+        : null;
+      if (control && phoneIgnored(control)) return;
+      const secret = control instanceof HTMLInputElement && (control.type === "password" || control.id === "token");
+      const target = secret ? "#token" : (control ? phoneTarget(control) : "body");
+      if (!target) return;
+      const label = secret
+        ? "Token"
+        : (control
+          ? (control.getAttribute("aria-label") || control.innerText || control.getAttribute("placeholder") || "Màn hình")
+          : "Màn hình");
+      let role;
+      let intent = "tap";
+      if (secret || (control && control.matches("input, textarea"))) {
+        intent = "focus";
+        role = control && control.getAttribute("type") === "search" ? "search" : "textbox";
+      } else if (control instanceof HTMLSelectElement) {
+        intent = "focus";
+        role = "select";
+      } else if (control instanceof HTMLAnchorElement) {
+        role = "link";
+      } else if (control) {
+        role = "button";
+      }
+      forwardPhoneEvent({
+        kind: "pointer", phase: "up", target: target,
+        x: event.clientX, y: event.clientY,
+        pointerType: "touch", click: Boolean(control) && target !== "body" && !secret,
+        intent: intent,
+        label: String(label).trim().replace(/\s+/g, " ").slice(0, 80) || "Màn hình",
+        role: role,
+      });
+    }
+
+    function onPhoneKey(event) {
+      if (!parentRecording()) return;
+      const el = event.target;
+      if (!(el instanceof Element) || phoneIgnored(el)) return;
+      const secret = el instanceof HTMLInputElement && (el.type === "password" || el.id === "token");
+      const target = secret ? "#token" : phoneTarget(el);
+      if (!target) return;
+      if (secret) {
+        forwardPhoneEvent({ kind: "key", target: "#token", redacted: true });
+        return;
+      }
+      forwardPhoneEvent({
+        kind: "key", target: target, key: event.key, code: event.code,
+        shift: event.shiftKey, ctrl: event.ctrlKey, alt: event.altKey, meta: event.metaKey,
+      });
+    }
+
+    function onPhoneInput(event) {
+      if (!parentRecording()) return;
+      const el = event.target;
+      if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)) return;
+      if (phoneIgnored(el) || el.type === "password" || el.id === "token") return;
+      const target = phoneTarget(el);
+      if (!target || target === "body") return;
+      forwardPhoneEvent({ kind: "value", target: target, value: String(el.value || "").slice(0, 500) });
+    }
+
+    document.addEventListener("pointerdown", onPhonePointerDown, true);
+    document.addEventListener("pointerup", onPhonePointerUp, true);
+    document.addEventListener("pointercancel", onPhonePointerUp, true);
+    document.addEventListener("keydown", onPhoneKey, true);
+    document.addEventListener("input", onPhoneInput, true);
+    document.addEventListener("change", onPhoneInput, true);
+
     function armPhone(delay) {
       const parent = window.parent;
       if (parent && typeof parent.beginPhoneUse === "function") {
@@ -2214,7 +2344,7 @@
       }
       clearRecordDelay();
       armPhone(false);
-      $("recordState").textContent = "Đang ghi. Nút góc báo Chưa ghi hoặc Đã ghi. Bấm Kết thúc để lưu kịch bản.";
+      $("recordState").textContent = "Đang ghi trên màn này. Góc dưới hiện Đã ghi. Bấm Kết thúc để lưu.";
       paintRecord();
     };
     $("recordDelay").onclick = () => {
@@ -2225,7 +2355,7 @@
       }
       clearRecordDelay();
       armPhone(true);
-      $("recordState").textContent = "Đã ẩn. Kết thúc hiện sau 10 giây.";
+      $("recordState").textContent = "10 giây nữa ghi chạm trên màn này. Bấm Kết thúc để lưu.";
       paintRecord();
     };
     $("recordingRows").onclick = async (e) => {

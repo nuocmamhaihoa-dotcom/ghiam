@@ -55,14 +55,14 @@
     nav.app button.on { background: #111; color: #fff; }
     body.is-quiet header,
     body.is-quiet nav.app,
-    body.is-quiet .install,
-    body.is-quiet main { display: none !important; }
+    body.is-quiet .install { display: none !important; }
     #cornerDock[hidden] { display: none !important; }
     #cornerDock {
       position: fixed; z-index: 50;
-      top: calc(0.55rem + env(safe-area-inset-top));
-      right: max(0.55rem, env(safe-area-inset-right));
-      display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem;
+      left: 50%;
+      bottom: calc(0.45rem + env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      display: flex; flex-direction: row; align-items: center; gap: 0.35rem;
     }
     #cornerStatus, #cornerEnd {
       min-height: 40px; padding: 0 0.8rem; border: 0; border-radius: 999px;
@@ -84,6 +84,7 @@
       padding: 0.45rem 0; border-bottom: 1px solid #f0f0f0;
     }
     .step-row button { min-height: 36px; border: 0; border-radius: 8px; background: #f4f5f7; font: inherit; font-weight: 650; }
+    #stepSave[hidden], #stepClose[hidden] { display: none !important; }
     #stepSave, #stepClose {
       display: flex; align-items: center; justify-content: center; width: 100%;
       min-height: 48px; margin-top: 0.45rem; border: 0; border-radius: 12px;
@@ -280,7 +281,7 @@
       root.replaceChildren();
       if (!capture.steps.length) {
         const empty = document.createElement("p");
-        empty.textContent = "Chưa ghi được hành động nào. Chạm trên màn hình, rồi bấm Kết thúc.";
+        empty.textContent = "Chưa ghi được hành động nào. Chạm trên màn Điều khiển, rồi bấm Kết thúc.";
         root.appendChild(empty);
         save.hidden = true;
         return;
@@ -437,6 +438,87 @@
       save.disabled = false;
       save.textContent = response.ok ? "Đã lưu kịch bản" : "Chưa lưu được";
     });
+
+    function phoneRecording() {
+      return capture.phase === "record";
+    }
+
+    function pushPhoneEvent(raw) {
+      if (!phoneRecording() || !raw || typeof raw !== "object") return;
+      const kind = raw.kind;
+      if (kind !== "pointer" && kind !== "key" && kind !== "value") return;
+      const target = String(raw.target || "");
+      if (target !== "body" && !/^#[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(target)) return;
+      const event = {
+        t: Math.max(0, Math.round(performance.now() - capture.t0)),
+        kind: kind,
+        target: target,
+      };
+      if (kind === "pointer") {
+        event.phase = raw.phase === "down" || raw.phase === "move" ? raw.phase : "up";
+        event.pointerType = raw.pointerType === "mouse" || raw.pointerType === "pen" ? raw.pointerType : "touch";
+        event.click = Boolean(raw.click) && event.phase === "up";
+        if (raw.intent === "tap" || raw.intent === "focus" || raw.intent === "swipe") event.intent = raw.intent;
+        const label = String(raw.label || "").trim().replace(/\s+/g, " ").slice(0, 80);
+        if (label) event.label = label;
+        const roles = { button: 1, link: 1, textbox: 1, search: 1, select: 1, checkbox: 1, radio: 1 };
+        if (roles[raw.role]) event.role = raw.role;
+        if (typeof raw.x === "number") event.x = Math.round(raw.x);
+        if (typeof raw.y === "number") event.y = Math.round(raw.y);
+      } else if (kind === "key") {
+        if (raw.redacted || target === "#token") {
+          event.redacted = true;
+          const last = capture.events[capture.events.length - 1];
+          if (last && last.redacted && last.target === target) return;
+        } else if (raw.key) {
+          event.key = String(raw.key).slice(0, 32);
+          if (raw.code) event.code = String(raw.code).slice(0, 32);
+          if (raw.shift) event.shift = true;
+          if (raw.ctrl) event.ctrl = true;
+          if (raw.alt) event.alt = true;
+          if (raw.meta) event.meta = true;
+        } else {
+          return;
+        }
+      } else if (target === "#token" || raw.redacted) {
+        return;
+      } else {
+        event.value = String(raw.value || "").slice(0, 500);
+      }
+      capture.events.push(event);
+      if (capture.events.length > 3000) capture.events.splice(0, capture.events.length - 3000);
+      paintStatus();
+    }
+    window.phoneRecording = phoneRecording;
+    window.pushPhoneEvent = pushPhoneEvent;
+
+    function releasePointer(event) {
+      if (capture.phase !== "record" || !capture.press || event.pointerId !== capture.press.id) return;
+      const start = capture.press;
+      capture.press = null;
+      if (event.target instanceof Element && event.target.closest("[data-norecord]")) return;
+      const moved = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+      if (moved > 36) {
+        pushPhoneEvent({
+          kind: "pointer", phase: "up", target: "body",
+          x: event.clientX, y: event.clientY,
+          pointerType: "touch", click: false, intent: "swipe", label: "màn hình",
+        });
+        return;
+      }
+      const control = event.target instanceof Element ? event.target.closest("button, a") : null;
+      const target = control ? selectorOf(control) : "body";
+      const label = control
+        ? (control.innerText || "").trim().replace(/\s+/g, " ").slice(0, 80)
+        : "Màn hình";
+      pushPhoneEvent({
+        kind: "pointer", phase: "up", target: target,
+        x: event.clientX, y: event.clientY,
+        pointerType: "touch", click: target !== "body", intent: "tap",
+        label: label || "Màn hình",
+        role: control ? (control.tagName === "A" ? "link" : "button") : undefined,
+      });
+    }
     document.addEventListener("pointerdown", (event) => {
       if (capture.phase !== "record") return;
       if (event.target instanceof Element && event.target.closest("[data-norecord]")) {
@@ -445,45 +527,23 @@
       }
       capture.press = { id: event.pointerId, x: event.clientX, y: event.clientY };
     }, true);
-    document.addEventListener("pointerup", (event) => {
-      if (capture.phase !== "record" || !capture.press || event.pointerId !== capture.press.id) return;
-      const start = capture.press;
-      capture.press = null;
-      if (event.target instanceof Element && event.target.closest("[data-norecord]")) return;
-      const moved = Math.hypot(event.clientX - start.x, event.clientY - start.y);
-      const t = Math.max(0, Math.round(performance.now() - capture.t0));
-      if (moved > 36) {
-        capture.events.push({
-          t: t, kind: "pointer", phase: "up", target: "body",
-          x: Math.round(event.clientX), y: Math.round(event.clientY),
-          pointerType: "touch", click: false, intent: "swipe", label: "màn hình",
-        });
-        paintStatus();
+    document.addEventListener("pointerup", releasePointer, true);
+    document.addEventListener("pointercancel", releasePointer, true);
+    function pipEnded() {
+      if (!pipSeen || capture.phase !== "record") return;
+      if (performance.now() - capture.t0 < 1200) {
+        pipSeen = false;
         return;
       }
-      const control = event.target instanceof Element ? event.target.closest("button, a") : null;
-      const target = control ? selectorOf(control) : "body";
-      const label = control
-        ? (control.innerText || "").trim().replace(/\s+/g, " ").slice(0, 80)
-        : "Màn hình";
-      capture.events.push({
-        t: t, kind: "pointer", phase: "up", target: target,
-        x: Math.round(event.clientX), y: Math.round(event.clientY),
-        pointerType: "touch", click: target !== "body", intent: "tap",
-        label: label || "Màn hình",
-        role: control ? (control.tagName === "A" ? "link" : "button") : undefined,
-      });
-      paintStatus();
-    }, true);
-    endVideo.addEventListener("leavepictureinpicture", () => {
-      if (pipSeen && capture.phase === "record") finishRecording();
-    });
+      finishRecording();
+    }
+    endVideo.addEventListener("leavepictureinpicture", pipEnded);
     endVideo.addEventListener("webkitpresentationmodechanged", () => {
       if (endVideo.webkitPresentationMode === "picture-in-picture") {
         pipSeen = true;
         return;
       }
-      if (pipSeen && capture.phase === "record") finishRecording();
+      pipEnded();
     });
     window.addEventListener("message", (event) => {
       if (event.origin !== location.origin) return;
