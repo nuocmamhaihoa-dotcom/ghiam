@@ -27,6 +27,20 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
+from control_plane.people import apply_novel, complete_rows
+from control_plane.version import IPHONE_BUILD
+from control_plane.recordings import (
+    blanks_of,
+    default_title,
+    events_to_steps,
+    prepare_clip_steps,
+    resolve_scenario,
+    sanitize_events,
+    sanitize_parts,
+    sanitize_steps,
+    script_lines,
+    steps_to_events,
+)
 from control_plane.settings import settings
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -56,6 +70,25 @@ app.add_middleware(LimitUploadSizeMiddleware)
 
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+_ACTION_KINDS = {"note", "cli", "proxy_check", "proxy_upload", "package_upload", "input_replay"}
+
+
+def _remember_hub(kind: str, summary: str, detail: str | None = None, actor: str = "me") -> None:
+    """Persist an operator action. A journal failure must not break the action itself."""
+    try:
+        db.record_action(
+            settings.db_path,
+            at=utcnow(),
+            actor=actor,
+            source="hub",
+            kind=kind,
+            summary=summary,
+            detail=detail,
+        )
+    except Exception:
+        return
 
 
 @app.on_event("startup")
@@ -131,16 +164,89 @@ def health() -> dict[str, Any]:
         "max_upload_mb": settings.max_upload_mb,
         "packages_dir": str(settings.packages_dir),
         "dashboard": "/",
+        "iphoneBuild": IPHONE_BUILD,
     }
+
+
+def _html(name: str) -> HTMLResponse:
+    path = STATIC_DIR / name
+    if not path.exists():
+        return HTMLResponse("<p>Missing page.</p>", status_code=404)
+    text = path.read_text(encoding="utf-8").replace("__IPHONE_BUILD__", str(IPHONE_BUILD))
+    return HTMLResponse(text, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard() -> HTMLResponse:
     """Web UI — hiển thị comment đã sync từ các PC scanner."""
-    path = STATIC_DIR / "dashboard.html"
+    return _html("dashboard.html")
+
+
+@app.get("/phone", response_class=HTMLResponse)
+def phone() -> HTMLResponse:
+    """Khung điện thoại trên PC. Trang trong khung là dashboard, chuột được ghi như ngón tay."""
+    return _html("phone.html")
+
+
+@app.get("/iphone", response_class=HTMLResponse)
+def iphone_app() -> HTMLResponse:
+    """App trên iPhone: lướt để lưu tên, điều khiển để ghi và làm lại thao tác."""
+    return _html("iphone.html")
+
+
+@app.get("/manifest.webmanifest")
+def web_manifest() -> FileResponse:
+    path = STATIC_DIR / "manifest.webmanifest"
     if not path.exists():
-        return HTMLResponse("<h1>fb-poller</h1><p>Dashboard missing.</p>", status_code=404)
-    return HTMLResponse(path.read_text(encoding="utf-8"))
+        raise HTTPException(status_code=404, detail="manifest missing")
+    return FileResponse(path, media_type="application/manifest+json")
+
+
+@app.get("/apple-touch-icon.png")
+def apple_touch_icon() -> FileResponse:
+    path = STATIC_DIR / "apple-touch-icon.png"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="icon missing")
+    return FileResponse(path, media_type="image/png")
+
+
+@app.get("/sample-people", response_class=HTMLResponse)
+def sample_people() -> HTMLResponse:
+    """Trang lướt mẫu: danh bạ rồi hồ sơ, để khung điện thoại tự ghép tên trùng."""
+    return _html("sample-people.html")
+
+
+class Sighting(BaseModel):
+    kind: str
+    name: str
+    contactName: str = ""
+    username: str = ""
+
+
+class SightingsBody(BaseModel):
+    items: list[Sighting] = Field(default_factory=list)
+
+
+@app.get("/v1/people")
+def people_list(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    rows = db.list_people(settings.db_path)
+    ready = complete_rows(rows)
+    return {"count": len(ready), "items": ready, "known": rows}
+
+
+@app.post("/v1/people/sightings")
+def people_sightings(
+    body: SightingsBody,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _auth(authorization)
+    stored = db.list_people(settings.db_path)
+    folded, added = apply_novel(stored, [item.model_dump() for item in body.items])
+    if added:
+        db.save_people(settings.db_path, folded, utcnow())
+    ready = complete_rows(folded)
+    return {"count": len(ready), "items": ready, "saved": added, "known": folded}
 
 
 @app.get("/v1/server/stats")
@@ -188,7 +294,13 @@ async def proxies_check_now(authorization: str | None = Header(default=None)) ->
     _auth(authorization)
     from control_plane.proxy_check import run_proxy_check_once
 
-    return await run_proxy_check_once()
+    result = await run_proxy_check_once()
+    _remember_hub(
+        "proxy_check",
+        f"Check proxy: live={result.get('live', 0)} die={result.get('die', 0)}",
+        detail=f"checked={result.get('checked', 0)} elapsed_ms={result.get('elapsed_ms', 0)}",
+    )
+    return result
 
 
 class ProxiesUploadBody(BaseModel):
@@ -219,10 +331,15 @@ async def proxies_upload(
         pass
     inserted = db.upsert_proxy_endpoints(settings.db_path, lines, "static")
     result: dict[str, Any] = {"ok": True, "saved": inserted, "file": str(path)}
-    if body.run_check:
-        from control_plane.proxy_check import run_proxy_check_once
+    try:
+        if body.run_check:
+            from control_plane.proxy_check import run_proxy_check_once
 
-        result["check"] = await run_proxy_check_once()
+            result["check"] = await run_proxy_check_once()
+    finally:
+        check = result.get("check") or {}
+        extra = f" · live={check.get('live', 0)} die={check.get('die', 0)}" if check else ""
+        _remember_hub("proxy_upload", f"Cập nhật {inserted} proxy{extra}")
     return result
 
 
@@ -400,7 +517,363 @@ async def upload_package(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     mbps = (nbytes * 8 / 1_000_000) / (ms / 1000) if ms > 0 else 0
+    _remember_hub(
+        "package_upload",
+        f"Upload gói {name} ({nbytes} bytes)",
+        detail=f"ms={ms} approx_mbps={round(mbps, 1)}",
+    )
     return {"ok": True, "name": name, "bytes": nbytes, "ms": ms, "approx_mbps": round(mbps, 1)}
+
+
+class ActionBody(BaseModel):
+    summary: str = Field(min_length=1, max_length=500)
+    kind: str = Field(default="note", max_length=40)
+    detail: str | None = Field(default=None, max_length=2000)
+    source: str = Field(default="manual", max_length=40)
+    actor: str = Field(default="me", max_length=80)
+
+
+@app.post("/v1/actions")
+def create_action(body: ActionBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Remember one thing the operator just did."""
+    _auth(authorization)
+    kind = body.kind.strip() or "note"
+    if kind not in _ACTION_KINDS:
+        raise HTTPException(400, "kind must be note, cli, proxy_check, proxy_upload, or package_upload")
+    summary = " ".join(body.summary.split())
+    if not summary:
+        raise HTTPException(400, "summary is empty")
+    action_id = db.record_action(
+        settings.db_path,
+        at=utcnow(),
+        actor=body.actor.strip() or "me",
+        source=body.source.strip() or "manual",
+        kind=kind,
+        summary=summary,
+        detail=body.detail,
+    )
+    return {"ok": True, "id": action_id}
+
+
+@app.get("/v1/actions")
+def get_actions(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    q: str = Query(default=""),
+    kind: str | None = Query(default=None),
+) -> dict[str, Any]:
+    """List remembered operator actions, newest first."""
+    _auth(authorization)
+    if kind is not None and kind not in _ACTION_KINDS:
+        raise HTTPException(400, "unknown kind")
+    items = db.list_actions(settings.db_path, limit=limit, q=q, kind=kind)
+    return {"count": len(items), "items": items}
+
+
+class RecordingBody(BaseModel):
+    title: str = Field(default="", max_length=200)
+    events: list[dict[str, Any]] = Field(min_length=1, max_length=3000)
+
+
+class ParseBody(BaseModel):
+    events: list[dict[str, Any]] = Field(default_factory=list, max_length=3000)
+
+
+class StepsBody(BaseModel):
+    title: str = Field(default="", max_length=200)
+    steps: list[dict[str, Any]] = Field(default_factory=list, max_length=400)
+
+
+def _events_from_steps(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    events = steps_to_events(steps)
+    if not events:
+        raise HTTPException(400, "no replayable steps")
+    return events
+
+
+@app.post("/v1/recordings")
+def create_recording(body: RecordingBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Store a keyboard / pointer recording that can be replayed in order."""
+    _auth(authorization)
+    events = sanitize_events(body.events)
+    if not events:
+        raise HTTPException(400, "no replayable events")
+    steps = script_lines(events)
+    title = " ".join(body.title.split()) or default_title(events)
+    recording_id = db.save_recording(
+        settings.db_path,
+        at=utcnow(),
+        actor="me",
+        title=title,
+        steps=steps,
+        events=events,
+    )
+    _remember_hub("input_replay", title, detail=" → ".join(steps[:20]) or None)
+    return {"ok": True, "id": recording_id, "title": title, "steps": steps, "event_count": len(events)}
+
+
+@app.post("/v1/recordings/parse")
+def recordings_parse(body: ParseBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Collapse a raw recording into steps that can be edited."""
+    _auth(authorization)
+    steps = events_to_steps(sanitize_events(body.events))
+    return {"steps": steps}
+
+
+@app.post("/v1/recordings/compile")
+def recordings_compile(body: StepsBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Turn edited steps into replay events without saving."""
+    _auth(authorization)
+    events = _events_from_steps(body.steps)
+    title = " ".join(body.title.split()) or default_title(events)
+    return {
+        "title": title,
+        "events": events,
+        "lines": script_lines(events),
+        "steps": sanitize_steps(body.steps),
+        "event_count": len(events),
+    }
+
+
+@app.post("/v1/recordings/from-steps")
+def recordings_from_steps(body: StepsBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Save an edited script as a new recording and keep the original."""
+    _auth(authorization)
+    events = _events_from_steps(body.steps)
+    lines = script_lines(events)
+    title = " ".join(body.title.split()) or default_title(events)
+    recording_id = db.save_recording(
+        settings.db_path,
+        at=utcnow(),
+        actor="me",
+        title=title,
+        steps=lines,
+        events=events,
+    )
+    _remember_hub("input_replay", title, detail=" → ".join(lines[:20]) or None)
+    return {"ok": True, "id": recording_id, "title": title, "steps": lines, "event_count": len(events)}
+
+
+@app.get("/v1/recordings")
+def recordings_list(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=20, ge=1, le=50),
+) -> dict[str, Any]:
+    _auth(authorization)
+    items = db.list_recordings(settings.db_path, limit=limit)
+    return {"count": len(items), "items": items}
+
+
+@app.get("/v1/recordings/{recording_id}")
+def recordings_get(recording_id: int, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    item = db.get_recording(settings.db_path, recording_id)
+    if item is None:
+        raise HTTPException(404, "recording not found")
+    return item
+
+
+class ClipBody(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    steps: list[dict[str, Any]] = Field(min_length=1, max_length=400)
+
+
+class ScenarioBody(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    parts: list[dict[str, Any]] = Field(min_length=1, max_length=40)
+
+
+def _clip_payload(name: str, steps: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+    title = " ".join(name.split())
+    if not title:
+        raise HTTPException(400, "name is empty")
+    try:
+        cleaned = prepare_clip_steps(steps)
+    except ValueError as exc:
+        raise HTTPException(400, "blank used for text and control") from exc
+    if not cleaned:
+        raise HTTPException(400, "no replayable steps")
+    return title, cleaned
+
+
+def _scenario_payload(name: str, parts: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]], dict[int, list[dict[str, Any]]]]:
+    title = " ".join(name.split())
+    if not title:
+        raise HTTPException(400, "name is empty")
+    cleaned = sanitize_parts(parts)
+    if not cleaned:
+        raise HTTPException(400, "scenario has no clips")
+    found = db.clips_by_id(settings.db_path, [part["clipId"] for part in cleaned])
+    missing = [part["clipId"] for part in cleaned if part["clipId"] not in found]
+    if missing:
+        raise HTTPException(400, "missing clip")
+    return title, cleaned, found
+
+
+def _public_clip(item: dict[str, Any]) -> dict[str, Any]:
+    steps = item["steps"]
+    try:
+        blanks = blanks_of(steps)
+    except ValueError:
+        blanks = []
+    return {
+        "id": item["id"],
+        "at": item["at"],
+        "name": item["name"],
+        "steps": steps,
+        "captions": [str(step.get("caption") or "") for step in steps],
+        "blanks": blanks,
+        "scenarioCount": item.get("scenarioCount", 0),
+        "scenarioNames": item.get("scenarioNames", []),
+    }
+
+
+@app.get("/v1/clips")
+def clips_list(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=50, ge=1, le=50),
+) -> dict[str, Any]:
+    _auth(authorization)
+    items = [_public_clip(item) for item in db.list_clips(settings.db_path, limit=limit)]
+    return {"count": len(items), "items": items}
+
+
+@app.post("/v1/clips")
+def clips_create(body: ClipBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Save a named clip. Scenarios keep a link to this id, not a frozen copy."""
+    _auth(authorization)
+    title, steps = _clip_payload(body.name, body.steps)
+    clip_id = db.save_clip(settings.db_path, at=utcnow(), name=title, steps=steps)
+    return _public_clip({"id": clip_id, "at": utcnow(), "name": title, "steps": steps, "scenarioCount": 0, "scenarioNames": []})
+
+
+@app.get("/v1/clips/{clip_id}")
+def clips_get(clip_id: int, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    item = db.get_clip(settings.db_path, clip_id)
+    if item is None:
+        raise HTTPException(404, "clip not found")
+    listed = next((row for row in db.list_clips(settings.db_path) if row["id"] == clip_id), None)
+    if listed:
+        item["scenarioCount"] = listed["scenarioCount"]
+        item["scenarioNames"] = listed["scenarioNames"]
+    return _public_clip(item)
+
+
+@app.put("/v1/clips/{clip_id}")
+def clips_update(clip_id: int, body: ClipBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Replace a clip. Every scenario that names it plays the new steps."""
+    _auth(authorization)
+    title, steps = _clip_payload(body.name, body.steps)
+    if not db.update_clip(settings.db_path, clip_id, at=utcnow(), name=title, steps=steps):
+        raise HTTPException(404, "clip not found")
+    item = db.get_clip(settings.db_path, clip_id)
+    if item is None:
+        raise HTTPException(404, "clip not found")
+    listed = next((row for row in db.list_clips(settings.db_path) if row["id"] == clip_id), None)
+    if listed:
+        item["scenarioCount"] = listed["scenarioCount"]
+        item["scenarioNames"] = listed["scenarioNames"]
+    return _public_clip(item)
+
+
+@app.delete("/v1/clips/{clip_id}")
+def clips_delete(clip_id: int, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    result = db.delete_clip(settings.db_path, clip_id)
+    if result == "missing":
+        raise HTTPException(404, "clip not found")
+    if result == "used":
+        raise HTTPException(409, "clip is used by a scenario")
+    return {"ok": True}
+
+
+def _public_scenario(item: dict[str, Any], clips: dict[int, list[dict[str, Any]]] | None = None) -> dict[str, Any]:
+    parts = []
+    for part in item["parts"]:
+        clip_id = int(part["clipId"])
+        steps = (clips or {}).get(clip_id)
+        blanks: list[dict[str, Any]] = []
+        if steps is not None:
+            try:
+                blanks = blanks_of(steps)
+            except ValueError:
+                blanks = []
+        parts.append(
+            {
+                "clipId": clip_id,
+                "clipName": part.get("clipName") or "",
+                "fills": part.get("fills") or {},
+                "blanks": blanks,
+            }
+        )
+    return {"id": item["id"], "at": item["at"], "name": item["name"], "parts": parts}
+
+
+@app.get("/v1/scenarios")
+def scenarios_list(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=50, ge=1, le=50),
+) -> dict[str, Any]:
+    _auth(authorization)
+    items = db.list_scenarios(settings.db_path, limit=limit)
+    return {"count": len(items), "items": [_public_scenario(item) for item in items]}
+
+
+@app.post("/v1/scenarios/compile")
+def scenarios_compile(body: ScenarioBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Resolve linked clips with this scenario's fills. Does not save."""
+    _auth(authorization)
+    title, parts, clips = _scenario_payload(body.name, body.parts)
+    try:
+        steps = resolve_scenario(clips, parts)
+    except KeyError as exc:
+        raise HTTPException(400, "missing clip") from exc
+    events = steps_to_events(steps)
+    if not events:
+        raise HTTPException(400, "no replayable steps")
+    return {"title": title, "events": events, "lines": script_lines(events), "steps": steps, "event_count": len(events)}
+
+
+@app.post("/v1/scenarios")
+def scenarios_create(body: ScenarioBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    title, parts, clips = _scenario_payload(body.name, body.parts)
+    scenario_id = db.save_scenario(settings.db_path, at=utcnow(), name=title, parts=parts)
+    stored = db.get_scenario(settings.db_path, scenario_id)
+    if stored is None:
+        raise HTTPException(404, "scenario not found")
+    return _public_scenario(stored, clips)
+
+
+@app.get("/v1/scenarios/{scenario_id}")
+def scenarios_get(scenario_id: int, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    item = db.get_scenario(settings.db_path, scenario_id)
+    if item is None:
+        raise HTTPException(404, "scenario not found")
+    clips = db.clips_by_id(settings.db_path, [part["clipId"] for part in item["parts"]])
+    return _public_scenario(item, clips)
+
+
+@app.put("/v1/scenarios/{scenario_id}")
+def scenarios_update(scenario_id: int, body: ScenarioBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    title, parts, clips = _scenario_payload(body.name, body.parts)
+    if not db.update_scenario(settings.db_path, scenario_id, at=utcnow(), name=title, parts=parts):
+        raise HTTPException(404, "scenario not found")
+    stored = db.get_scenario(settings.db_path, scenario_id)
+    if stored is None:
+        raise HTTPException(404, "scenario not found")
+    return _public_scenario(stored, clips)
+
+
+@app.delete("/v1/scenarios/{scenario_id}")
+def scenarios_delete(scenario_id: int, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    if not db.delete_scenario(settings.db_path, scenario_id):
+        raise HTTPException(404, "scenario not found")
+    return {"ok": True}
 
 
 @app.post("/v1/sync/comments")

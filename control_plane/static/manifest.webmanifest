@@ -1,0 +1,20 @@
+{
+  "name": "fb-poller",
+  "short_name": "fb-poller",
+  "description": "Hub trên iPhone. Lướt danh bạ, tên trùng tự lưu.",
+  "start_url": "/iphone",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "lang": "vi",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

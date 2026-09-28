@@ -136,3 +136,11 @@ Write-Host "Khuyến nghị: dùng 1 PC làm LAN server (băng thông cao, khôn
 Write-Host "  xem docs\SERVER_PC.md  hoặc chạy Install-Server.ps1 trên máy chủ."
 Write-Host "Agent sẽ ưu tiên tải update + sync comment qua control_url (LAN)."
 
+if ($ControlUrl) {
+  $phone = ($ControlUrl.Trim().TrimEnd("/")) + "/phone"
+  Write-Host ""
+  Write-Host "Giả lập điện thoại trên PC này:" -ForegroundColor Cyan
+  Write-Host "  $phone"
+  Write-Host "  powershell -ExecutionPolicy Bypass -File `"$(Join-Path $AgentRoot 'Open-Phone.ps1')`""
+}
+

@@ -2,175 +2,446 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#10141b" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta name="iphone-build" content="__IPHONE_BUILD__" />
   <title>fb-poller — Hub VPS</title>
   <style>
+    [hidden] { display: none !important; }
     :root {
-      --bg0: #0f1419;
-      --bg1: #1a2332;
-      --bg2: #243044;
-      --line: #2e3f56;
-      --text: #e8eef6;
-      --muted: #8fa3b8;
-      --accent: #3d9cf0;
-      --ok: #3ecf8e;
+      --bg: #10141b;
+      --card: #171d27;
+      --card2: #1e2633;
+      --line: #2c3848;
+      --text: #e7edf5;
+      --muted: #8b9bb0;
+      --accent: #4aa3f0;
+      --accent-ink: #041018;
+      --ok: #3dcc8e;
       --warn: #e6b84d;
-      --bad: #ff6b6b;
-      --font: "IBM Plex Sans", "Segoe UI", sans-serif;
-      --mono: "IBM Plex Mono", ui-monospace, monospace;
+      --bad: #f07178;
+      --font: "Segoe UI", system-ui, sans-serif;
+      --mono: ui-monospace, "Cascadia Mono", monospace;
     }
     * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
     body {
-      margin: 0;
-      min-height: 100vh;
       font-family: var(--font);
       color: var(--text);
-      background:
-        radial-gradient(1200px 500px at 10% -10%, #1e3a5f 0%, transparent 55%),
-        radial-gradient(900px 400px at 90% 0%, #163528 0%, transparent 50%),
-        var(--bg0);
+      background: var(--bg);
+      font-size: 14px;
+      line-height: 1.4;
     }
-    header { padding: 1.5rem 1.25rem 0.75rem; max-width: 1100px; margin: 0 auto; }
-    h1 { margin: 0; font-size: clamp(1.4rem, 3vw, 1.9rem); letter-spacing: -0.02em; font-weight: 650; }
-    h2 { margin: 1.4rem 0 0.6rem; font-size: 1.05rem; font-weight: 600; }
-    .sub { color: var(--muted); margin-top: 0.35rem; font-size: 0.95rem; }
-    main { max-width: 1100px; margin: 0 auto; padding: 0.75rem 1.25rem 2.5rem; }
+    .shell {
+      position: sticky; top: 0; z-index: 20;
+      background: rgba(16, 20, 27, 0.96);
+      border-bottom: 1px solid var(--line);
+    }
+    .top {
+      position: static;
+      display: flex; flex-wrap: wrap; gap: 0.6rem 1rem;
+      align-items: center; justify-content: space-between;
+      padding: 0.55rem 0.9rem;
+      background: transparent;
+    }
+    .brand { display: flex; align-items: baseline; gap: 0.55rem; min-width: 8rem; }
+    h1 { margin: 0; font-size: 1.05rem; font-weight: 650; letter-spacing: -0.02em; }
+    .sub { margin: 0; color: var(--muted); font-size: 0.78rem; }
+    h2 { margin: 0 0 0.45rem; font-size: 0.95rem; font-weight: 650; }
+    .token-row, .toolbar {
+      display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center;
+    }
+    .token-row { flex: 1; min-width: min(100%, 280px); }
+    input, button, select, textarea {
+      font: inherit; color: var(--text);
+      background: var(--card2); border: 1px solid var(--line);
+      border-radius: 8px; padding: 0.4rem 0.6rem;
+    }
+    input, select { min-width: 0; }
+    .token-row input, .toolbar input { flex: 1; min-width: 140px; }
+    button, a#openPhone {
+      background: var(--accent); color: var(--accent-ink);
+      border-color: transparent; font-weight: 650; cursor: pointer;
+      text-decoration: none; display: inline-flex; align-items: center;
+    }
+    button.ghost, a#openPhone {
+      background: transparent; color: var(--text); border-color: var(--line); font-weight: 600;
+    }
+    button.danger { background: #8d3a3a; color: #fff; }
+    button.live { background: var(--bad); color: #fff; }
+    button:disabled { opacity: 0.55; cursor: default; }
+    .tabs {
+      display: flex; gap: 0.3rem; flex-wrap: wrap;
+      padding: 0 0.9rem 0.45rem;
+      background: transparent;
+    }
+    .tabs button.ghost.on, .subtabs button.ghost.on {
+      background: var(--accent); color: #041018; border-color: transparent;
+    }
+    .subtabs { display: flex; gap: 0.3rem; flex-wrap: wrap; margin: 0 0 0.7rem; }
+    main { padding: 0.75rem 0.9rem 2rem; max-width: 1100px; }
+    .lead { color: var(--muted); margin: 0 0 0.65rem; font-size: 0.82rem; }
     .stats {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 0.75rem;
-      margin: 1rem 0 1.25rem;
+      grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+      gap: 0.45rem; margin-bottom: 0.7rem;
     }
     .stat {
-      background: linear-gradient(180deg, var(--bg1), var(--bg2));
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 0.9rem 1rem;
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 10px; padding: 0.55rem 0.65rem;
     }
-    .stat b { display: block; font-size: 1.45rem; font-variant-numeric: tabular-nums; }
-    .stat span { color: var(--muted); font-size: 0.8rem; }
-    .stat.bad b { color: var(--bad); }
+    .stat b { display: block; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+    .stat span { color: var(--muted); font-size: 0.72rem; }
     .stat.ok b { color: var(--ok); }
-    .toolbar, .token-row {
-      display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;
-      margin-bottom: 0.9rem;
+    .stat.bad b { color: var(--bad); }
+    #agents { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    #agents p { margin: 0; display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .panel {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 12px; padding: 0.7rem 0.75rem; margin-bottom: 0.7rem;
     }
-    .token-row { width: 100%; }
-    input, button, select {
-      font: inherit; border-radius: 8px; border: 1px solid var(--line);
-      background: var(--bg1); color: var(--text); padding: 0.55rem 0.75rem;
-    }
-    input { flex: 1; min-width: 180px; }
-    button { background: var(--accent); border-color: transparent; color: #041018; font-weight: 600; cursor: pointer; }
-    button.ghost { background: transparent; color: var(--text); border-color: var(--line); }
-    button.danger { background: #a33; color: #fff; }
-    table {
-      width: 100%; border-collapse: collapse;
-      background: rgba(26, 35, 50, 0.7); border: 1px solid var(--line);
-      border-radius: 10px; overflow: hidden;
-    }
+    .panel h2 { color: var(--bad); }
+    .panel.ok-panel h2 { color: var(--ok); }
+    .panel.journal h2 { color: var(--accent); }
+    .split { display: grid; grid-template-columns: 1.4fr 0.8fr; gap: 0.7rem; }
+    .scroll { max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+    table { width: 100%; border-collapse: collapse; }
     th, td {
-      text-align: left; padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--line);
-      vertical-align: top; font-size: 0.9rem;
+      text-align: left; padding: 0.4rem 0.55rem;
+      border-bottom: 1px solid var(--line); vertical-align: top; font-size: 0.84rem;
     }
-    th { color: var(--muted); font-weight: 600; background: rgba(0,0,0,0.2); }
-    tr:hover td { background: rgba(61, 156, 240, 0.06); }
-    .text { white-space: pre-wrap; word-break: break-word; max-width: 42ch; }
-    .meta { color: var(--muted); font-family: var(--mono); font-size: 0.78rem; }
+    th {
+      position: sticky; top: 0; z-index: 1;
+      color: var(--muted); font-weight: 650; background: #222a36;
+    }
+    tr:hover td { background: rgba(74, 163, 240, 0.06); }
+    .text { white-space: pre-wrap; word-break: break-word; }
+    .meta { color: var(--muted); font-family: var(--mono); font-size: 0.75rem; }
     .pill {
-      display: inline-block; padding: 0.15rem 0.45rem; border-radius: 999px;
-      background: rgba(62, 207, 142, 0.15); color: var(--ok); font-size: 0.75rem;
+      display: inline-block; padding: 0.12rem 0.4rem; border-radius: 999px;
+      background: rgba(61, 204, 142, 0.15); color: var(--ok); font-size: 0.75rem;
     }
     .pill.off { background: rgba(230, 184, 77, 0.15); color: var(--warn); }
-    .pill.die { background: rgba(255, 107, 107, 0.18); color: var(--bad); }
-    .panel {
-      border: 1px solid rgba(255, 107, 107, 0.35);
-      background: rgba(80, 20, 20, 0.35);
-      border-radius: 10px; padding: 0.9rem 1rem; margin-bottom: 1rem;
+    .pill.die { background: rgba(240, 113, 120, 0.16); color: var(--bad); }
+    .err {
+      margin: 0.45rem 0.9rem 0; padding: 0.45rem 0.65rem;
+      border-radius: 8px; background: #2a1c1c; color: #ffb4b4;
     }
-    .panel h2 { margin: 0 0 0.5rem; color: var(--bad); }
-    .panel.ok-panel {
-      border-color: rgba(62, 207, 142, 0.3);
-      background: rgba(20, 60, 40, 0.25);
-    }
-    .panel.ok-panel h2 { color: var(--ok); }
-    .err { color: #ff7b7b; margin: 0.5rem 0; }
-    .empty { color: var(--muted); padding: 1.2rem; text-align: center; }
+    .empty { color: var(--muted); text-align: center; padding: 0.9rem; }
     a { color: var(--accent); }
-    @media (max-width: 720px) {
+    #replayCursor {
+      position: fixed; z-index: 10000; width: 18px; height: 18px;
+      margin: -9px 0 0 -9px; border-radius: 50%;
+      border: 2px solid #fff; background: rgba(74, 163, 240, 0.85);
+      pointer-events: none; box-shadow: 0 0 0 5px rgba(74, 163, 240, 0.25);
+    }
+    .replay-target { outline: 3px solid var(--accent); outline-offset: 2px; }
+    .replay-choice { outline: 3px solid var(--warn); outline-offset: 2px; }
+    #replayAsk {
+      position: fixed; z-index: 10001; left: 0.7rem; right: 0.7rem; bottom: 0.7rem;
+      background: #172033; border: 1px solid var(--accent); border-radius: 12px;
+      padding: 0.7rem 0.8rem; box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+    }
+    #replayAskChoices { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.45rem; }
+    #scriptEditor { margin-top: 0.7rem; }
+    .editor-step {
+      display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.5rem;
+      padding: 0.4rem 0.2rem; border-bottom: 1px solid var(--line);
+    }
+    .editor-step.selected { background: rgba(74, 163, 240, 0.12); border-radius: 8px; }
+    .editor-actions { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.25rem; }
+    .editor-actions button { padding: 0.25rem 0.45rem; }
+    #editorDetail { white-space: pre-wrap; margin: 0.45rem 0 0; }
+    .scenario-part { padding: 0.4rem 0; border-bottom: 1px solid var(--line); }
+    .scenario-part input, .editor-step input { width: 100%; margin: 0.25rem 0; }
+    body.is-recording { box-shadow: inset 0 0 0 3px rgba(240, 113, 120, 0.9); }
+    #phoneBanner {
+      margin: 0; padding: 0.35rem 0.9rem; background: #16324a; color: #d5e9f8; font-size: 0.8rem;
+    }
+    a.iphone-go {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 48px; margin: 0 0 0.7rem;
+      background: var(--accent); color: var(--accent-ink);
+      border-radius: 12px; font-weight: 700; text-decoration: none;
+    }
+    @media (max-width: 800px) {
+      .split { grid-template-columns: 1fr; }
       .hide-sm { display: none; }
-      .text { max-width: none; }
+      .tabs { padding-bottom: 0.4rem; }
+    }
+    @media (max-width: 640px) {
+      body { font-size: 16px; }
+      .shell { padding-top: env(safe-area-inset-top); }
+      .top, .tabs, #phoneBanner, .err {
+        padding-left: max(0.9rem, env(safe-area-inset-left));
+        padding-right: max(0.9rem, env(safe-area-inset-right));
+      }
+      .tabs {
+        flex-wrap: nowrap; overflow-x: auto;
+        -webkit-overflow-scrolling: touch; scrollbar-width: none;
+      }
+      .tabs button, .subtabs button, .token-row button, .toolbar button, a#openPhone {
+        min-height: 44px; flex: 0 0 auto;
+      }
+      input, select, textarea { font-size: 16px; }
+      main { padding-bottom: calc(1.4rem + env(safe-area-inset-bottom)); }
+      .editor-step { grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;550;650&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <header>
-    <h1>fb-poller</h1>
-    <p class="sub">VPS hub — comment đồng bộ + proxy live/die</p>
-  </header>
-  <main>
+  <div class="shell">
+  <header class="top">
+    <div class="brand">
+      <h1>fb-poller</h1>
+      <p class="sub">Hub</p>
+      <p class="sub" id="updateNote" hidden></p>
+    </div>
     <div class="token-row">
-      <input id="token" type="password" placeholder="CONTROL_TOKEN (Bearer)" autocomplete="off" />
+      <input id="token" type="password" placeholder="Token hub" autocomplete="off" />
       <button id="saveToken" class="ghost" type="button">Lưu token</button>
       <button id="refresh" type="button">Tải lại</button>
       <button id="recheck" class="danger" type="button">Check proxy ngay</button>
     </div>
-    <div class="stats" id="stats"></div>
-    <div id="err" class="err" hidden></div>
-    <div id="agents"></div>
-
-    <div class="panel" id="diePanel">
-      <h2>Proxy DIE</h2>
-      <p class="meta" id="dieMeta">Đang tải…</p>
-      <p class="meta" id="dieHint" style="margin:0.4rem 0 0.7rem;color:#e6b84d"></p>
-      <table>
-        <thead>
-          <tr>
-            <th>Endpoint</th>
-            <th>Lỗi</th>
-            <th class="hide-sm">Lần check</th>
-          </tr>
-        </thead>
-        <tbody id="dieRows">
-          <tr><td colspan="3" class="empty">—</td></tr>
-        </tbody>
-      </table>
+    <div data-norecord>
+      <a id="openPhone" href="/phone">Mở giả lập điện thoại trên PC</a>
     </div>
+  </header>
+  <p class="meta" id="phoneBanner" hidden>Chuột trên PC đang được ghi như ngón tay trên điện thoại. Chạm lệch 36px vẫn bấm đúng nút.</p>
+  <div id="err" class="err" hidden></div>
+  <nav class="tabs" data-norecord>
+    <button type="button" class="ghost on" data-tab="home">Tổng quan</button>
+    <button type="button" class="ghost" data-tab="journal">Nhật ký</button>
+    <button type="button" class="ghost" data-tab="script">Kịch bản</button>
+    <button type="button" class="ghost" data-tab="proxy">Proxy</button>
+    <button type="button" class="ghost" data-tab="comments">Comment</button>
+    <button type="button" class="ghost" data-tab="people">Đã lưu</button>
+  </nav>
+  </div>
+  <main>
+    <section data-view="home">
+      <p class="lead">Số liệu hub, máy đang nối, rồi chuyển tab để ghi nhớ, làm lại thao tác, xem proxy hoặc comment.</p>
+      <a class="iphone-go" href="/iphone">Lướt trên iPhone</a>
+      <div class="stats" id="stats"></div>
+      <div id="agents"></div>
+    </section>
 
-    <div class="panel ok-panel">
-      <h2>Proxy LIVE (rút gọn)</h2>
-      <p class="meta" id="liveMeta">—</p>
-      <div id="liveSample" class="meta"></div>
-    </div>
+    <section data-view="journal" hidden>
+      <div class="panel journal" id="journal">
+        <h2>Nhật ký thao tác</h2>
+        <p class="lead">Ghi việc vừa làm để tìm lại. Check proxy và upload gói được ghi tự động. Ô mật khẩu không lưu ký tự.</p>
+        <div class="toolbar">
+          <input id="actionText" type="text" maxlength="500" placeholder="Mình vừa làm gì? Ví dụ: import 300 URL rồi rebalance hot" />
+          <button id="saveAction" type="button">Ghi nhớ</button>
+        </div>
+        <div class="toolbar">
+          <input id="actionQ" type="search" placeholder="Tìm lại thao tác…" />
+          <button id="searchAction" class="ghost" type="button">Tìm</button>
+        </div>
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Thời gian</th>
+                <th>Loại</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="actionRows">
+              <tr><td colspan="3" class="empty">Chưa có thao tác</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
 
-    <h2>Comment mới đồng bộ</h2>
-    <div class="toolbar">
-      <input id="q" type="search" placeholder="Lọc theo text / author / post…" />
-      <select id="limit">
-        <option value="50">50</option>
-        <option value="100" selected>100</option>
-        <option value="200">200</option>
-      </select>
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th>Thời gian</th>
-          <th>Author</th>
-          <th>Comment</th>
-          <th class="hide-sm">Post / PC</th>
-        </tr>
-      </thead>
-      <tbody id="rows">
-        <tr><td colspan="4" class="empty">Nhập token rồi bấm Tải lại</td></tr>
-      </tbody>
-    </table>
+    <section data-view="script" hidden>
+      <div data-norecord>
+        <h2>Làm lại đúng phím và cảm ứng</h2>
+        <p class="lead">Ghi thao tác, sửa từng bước, đặt tên đoạn, rồi ghép thành kịch bản. Sửa đoạn thì mọi kịch bản đang dùng đoạn đó làm theo.</p>
+        <div class="subtabs">
+          <button type="button" class="ghost on" data-pane="record">Bản ghi</button>
+          <button type="button" class="ghost" data-pane="clips">Đoạn</button>
+          <button type="button" class="ghost" data-pane="scenarios">Ghép</button>
+        </div>
+        <div data-pane-view="record">
+          <p class="meta" id="recordState">Chưa ghi.</p>
+          <div class="toolbar">
+            <button id="recordToggle" type="button">Ghi bấm phím và cảm ứng</button>
+          </div>
+          <div class="scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Thời gian</th>
+                  <th>Các bước</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="recordingRows">
+                <tr><td colspan="3" class="empty">Chưa có bản ghi</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="scriptEditor" hidden>
+            <h2>Sửa kịch bản</h2>
+            <p class="lead" id="editorHint">Chọn một bước để thấy control trên trang. Đánh dấu vài bước rồi ghi đè cả đoạn đó, hoặc ghi thêm ngay sau bước đang chọn.</p>
+            <div class="toolbar">
+              <input id="editorTitle" type="text" maxlength="200" placeholder="Tên bản mới" />
+            </div>
+            <div id="editorSteps"></div>
+            <p id="editorDetail" class="meta"></p>
+            <div class="toolbar">
+              <button id="editorAddTouch" class="ghost" type="button">Thêm bước bằng một lần chạm</button>
+              <button id="editorRetarget" class="ghost" type="button">Đổi control</button>
+              <button id="editorReplace" class="ghost" type="button">Ghi đè đoạn đã chọn</button>
+              <button id="editorInsert" class="ghost" type="button">Ghi thêm sau bước này</button>
+              <button id="editorPreview" class="ghost" type="button">Xem chậm đoạn này</button>
+              <button id="editorSave" type="button">Lưu thành bản mới</button>
+              <button id="editorSaveClip" class="ghost" type="button">Lưu thành đoạn</button>
+              <button id="editorClose" class="ghost" type="button">Đóng</button>
+            </div>
+          </div>
+        </div>
+        <div data-pane-view="clips" hidden>
+          <p class="lead">Một đoạn là một khúc có tên. Cùng một tên chỗ trống trên nhiều bước thì điền một lần.</p>
+          <div class="scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tên đoạn</th>
+                  <th>Các bước</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="clipRows">
+                <tr><td colspan="3" class="empty">Chưa có đoạn</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div data-pane-view="scenarios" hidden>
+          <h2>Kịch bản ghép</h2>
+          <p class="lead" id="scenarioHint">Thêm từng đoạn, điền chỗ trống, rồi lưu. Làm theo luôn đọc bản đoạn mới nhất.</p>
+          <div class="toolbar">
+            <input id="scenarioName" type="text" maxlength="80" placeholder="Tên kịch bản" />
+          </div>
+          <div id="scenarioParts"></div>
+          <div class="toolbar">
+            <select id="scenarioClipPick"></select>
+            <button id="scenarioAdd" class="ghost" type="button">Thêm đoạn này</button>
+            <button id="scenarioPreview" class="ghost" type="button">Xem chậm kịch bản</button>
+            <button id="scenarioSave" type="button">Lưu kịch bản</button>
+            <button id="scenarioNew" class="ghost" type="button">Kịch bản mới</button>
+          </div>
+          <div class="scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tên kịch bản</th>
+                  <th>Thứ tự đoạn</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="scenarioRows">
+                <tr><td colspan="3" class="empty">Chưa có kịch bản ghép</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section data-view="proxy" hidden>
+      <div class="split">
+        <div class="panel" id="diePanel">
+          <h2>Proxy DIE</h2>
+          <p class="meta" id="dieMeta">Đang tải…</p>
+          <p class="meta" id="dieHint"></p>
+          <div class="scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Endpoint</th>
+                  <th>Lỗi</th>
+                  <th class="hide-sm">Lần check</th>
+                </tr>
+              </thead>
+              <tbody id="dieRows">
+                <tr><td colspan="3" class="empty">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel ok-panel">
+          <h2>Proxy LIVE</h2>
+          <p class="meta" id="liveMeta">—</p>
+          <div id="liveSample" class="meta"></div>
+        </div>
+      </div>
+    </section>
+
+    <section data-view="people" hidden>
+      <h2>Người trùng tên</h2>
+      <p class="lead">Mở điện thoại và lướt. Khi cùng một tên hiện ở danh bạ và trên hồ sơ, bảng này tự thêm một dòng. <a href="/phone">Mở điện thoại</a></p>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Tên</th>
+              <th>Tên trong danh bạ</th>
+              <th>Username</th>
+            </tr>
+          </thead>
+          <tbody id="peopleRows">
+            <tr><td colspan="3" class="empty">Chưa có người trùng tên</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section data-view="comments" hidden>
+      <h2>Comment mới đồng bộ</h2>
+      <div class="toolbar">
+        <input id="q" type="search" placeholder="Lọc theo text / author / post…" />
+        <select id="limit">
+          <option value="50">50</option>
+          <option value="100" selected>100</option>
+          <option value="200">200</option>
+        </select>
+      </div>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Thời gian</th>
+              <th>Author</th>
+              <th>Comment</th>
+              <th class="hide-sm">Post / PC</th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <tr><td colspan="4" class="empty">Nhập token rồi bấm Tải lại</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
+  <div id="replayCursor" data-norecord hidden></div>
+  <div id="replayAsk" data-norecord hidden>
+    <p id="replayAskText" style="margin:0">Hai control gần giống nhau.</p>
+    <div id="replayAskChoices"></div>
+  </div>
+  <script src="/static/version.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
+    const screenMode = new URLSearchParams(location.search).get("as") || "";
+    const emulateTouch = screenMode === "phone" || screenMode === "iphone";
     const tokenKey = "fb_poller_control_token";
     $("token").value = localStorage.getItem(tokenKey) || "";
 
@@ -188,19 +459,66 @@
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
       })[c]);
     }
+    const kindLabel = {
+      note: "Ghi chú",
+      cli: "Lệnh",
+      proxy_check: "Check proxy",
+      proxy_upload: "Cập nhật proxy",
+      package_upload: "Upload gói",
+      input_replay: "Phím / cảm ứng",
+    };
+    function fmtTime(iso) {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso || "";
+      return d.toLocaleString("vi-VN");
+    }
+    function renderPeople(items) {
+      const rows = $("peopleRows");
+      if (!items.length) {
+        rows.innerHTML = `<tr><td colspan="3" class="empty">Chưa có người trùng tên. Hãy lướt danh bạ và hồ sơ trong điện thoại.</td></tr>`;
+        return;
+      }
+      rows.innerHTML = items.map((person) => `<tr>
+        <td>${esc(person.name)}</td>
+        <td>${esc(person.contactName)}</td>
+        <td>${esc(person.username)}</td>
+      </tr>`).join("");
+    }
+
+    function renderActions(items) {
+      if (!items.length) {
+        $("actionRows").innerHTML = `<tr><td colspan="3" class="empty">Chưa có thao tác. Gõ việc vừa làm rồi bấm Ghi nhớ.</td></tr>`;
+        return;
+      }
+      $("actionRows").innerHTML = items.map((a) => `<tr>
+        <td class="meta">${esc(fmtTime(a.at))}</td>
+        <td><span class="pill">${esc(kindLabel[a.kind] || a.kind || "")}</span></td>
+        <td>${esc(a.summary || "")}${a.detail ? `<div class="meta">${esc(a.detail)}</div>` : ""}${a.actor && a.actor !== "me" ? `<div class="meta">${esc(a.actor)}</div>` : ""}</td>
+      </tr>`).join("");
+    }
 
     async function loadAll() {
       $("err").hidden = true;
       try {
         const lim = $("limit").value;
         const q = encodeURIComponent($("q").value.trim());
-        const [stats, agents, comments, die, proxies] = await Promise.all([
+        const actionQ = encodeURIComponent($("actionQ").value.trim());
+        const [stats, agents, comments, die, proxies, actions, recordings, clipList, scenarioList, people] = await Promise.all([
           fetch("/v1/server/stats", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("stats " + r.status); return r.json(); }),
           fetch("/v1/agents", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("agents " + r.status); return r.json(); }),
           fetch("/v1/comments?limit=" + lim + "&q=" + q, { headers: headers() }).then((r) => { if (!r.ok) throw new Error("comments " + r.status); return r.json(); }),
           fetch("/v1/proxies/die?limit=500", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("proxies/die " + r.status); return r.json(); }),
           fetch("/v1/proxies?status=live&limit=30", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("proxies " + r.status); return r.json(); }),
+          fetch("/v1/actions?limit=40&q=" + actionQ, { headers: headers() }).then((r) => { if (!r.ok) throw new Error("actions " + r.status); return r.json(); }),
+          fetch("/v1/recordings?limit=20", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("recordings " + r.status); return r.json(); }),
+          fetch("/v1/clips?limit=50", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("clips " + r.status); return r.json(); }),
+          fetch("/v1/scenarios?limit=50", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("scenarios " + r.status); return r.json(); }),
+          fetch("/v1/people", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("people " + r.status); return r.json(); }),
         ]);
+        renderActions(actions.items || []);
+        renderRecordings(recordings.items || []);
+        renderLibrary(clipList.items || [], scenarioList.items || []);
+        renderPeople(people.items || []);
 
         const px = stats.proxies || die.summary || {};
         $("stats").innerHTML = [
@@ -265,6 +583,7 @@
             </tr>`;
           }).join("");
         }
+        epochs.reload += 1;
       } catch (e) {
         $("err").hidden = false;
         $("err").textContent = "Lỗi: " + e.message + " — kiểm tra CONTROL_TOKEN";
@@ -282,6 +601,7 @@
         $("err").hidden = false;
         $("err").style.color = "#3ecf8e";
         $("err").textContent = `Check xong: live=${data.live} die=${data.die} (${data.elapsed_ms}ms)`;
+        epochs.recheck += 1;
         await loadAll();
       } catch (e) {
         $("err").hidden = false;
@@ -293,13 +613,1659 @@
       }
     }
 
+    async function saveAction() {
+      const summary = $("actionText").value.trim();
+      $("err").hidden = true;
+      if (!summary) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Nhập thao tác bạn vừa làm trước khi ghi.";
+        return;
+      }
+      $("saveAction").disabled = true;
+      try {
+        const r = await fetch("/v1/actions", {
+          method: "POST",
+          headers: { ...headers(), "Content-Type": "application/json" },
+          body: JSON.stringify({ summary, kind: "note", source: "manual" }),
+        });
+        if (!r.ok) throw new Error("actions " + r.status);
+        epochs.note += 1;
+        $("actionText").value = "";
+        await loadAll();
+        $("err").hidden = false;
+        $("err").style.color = "#3ecf8e";
+        $("err").textContent = "Đã ghi nhớ thao tác.";
+      } catch (e) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không ghi được: " + e.message;
+      } finally {
+        $("saveAction").disabled = false;
+      }
+    }
+
+    const recorder = { on: false, t0: 0, events: [], press: null, lastMove: 0, moves: 0 };
+    const editor = { open: false, sourceId: null, clipId: null, title: "", steps: [], selected: 0, checked: new Set(), capture: null };
+    const library = { clips: [], scenarios: [] };
+    const scenario = { id: null, name: "", parts: [], capture: null };
+    const epochs = { reload: 0, recheck: 0, note: 0 };
+    let replaying = false;
+
+    const TOUCH_SLOP = 36;
+
+    function selectorOf(node) {
+      const el = node instanceof Element ? node : node && node.parentElement;
+      if (!el || el === document.body || el === document.documentElement) return "body";
+      if (el.closest("[data-norecord]")) return "";
+      const withId = el.id ? el : el.closest("[id]");
+      if (!withId || !withId.id) return "body";
+      return "#" + CSS.escape(withId.id);
+    }
+
+    function labelOf(el) {
+      if (!(el instanceof Element)) return "";
+      const raw = el.getAttribute("aria-label") || el.innerText || el.getAttribute("placeholder") || "";
+      return raw.trim().replace(/\s+/g, " ").slice(0, 80);
+    }
+
+    function isControl(el) {
+      return el instanceof Element
+        && el.matches("button, a, input, textarea, select, [role='button']")
+        && !el.closest("[data-norecord]");
+    }
+
+    function isActionable(el) {
+      return isControl(el) && !el.disabled;
+    }
+
+    function roleOf(el) {
+      if (el instanceof HTMLTextAreaElement) return "textbox";
+      if (el instanceof HTMLSelectElement) return "select";
+      if (el instanceof HTMLInputElement) {
+        if (el.type === "search") return "search";
+        if (el.type === "checkbox" || el.type === "radio") return el.type;
+        return "textbox";
+      }
+      if (el instanceof HTMLAnchorElement) return "link";
+      return "button";
+    }
+
+    function groupOf(el) {
+      return el.closest(".toolbar, .token-row") || el.closest(".panel") || el.parentElement || document.body;
+    }
+
+    function hintOf(el) {
+      const toolbar = el.closest(".toolbar");
+      if (toolbar) {
+        const field = toolbar.querySelector("input, textarea");
+        if (field && field !== el) {
+          const placeholder = field.getAttribute("placeholder") || "";
+          if (placeholder.trim()) return placeholder.trim().replace(/\s+/g, " ").slice(0, 80);
+        }
+      }
+      const panel = el.closest(".panel");
+      const title = panel && panel.querySelector("h2");
+      return title ? title.textContent.trim().replace(/\s+/g, " ").slice(0, 80) : "";
+    }
+
+    function indexInGroup(el) {
+      const role = roleOf(el);
+      const peers = Array.from(groupOf(el).querySelectorAll("button, a, input, textarea, select, [role='button']"))
+        .filter((node) => isControl(node) && roleOf(node) === role);
+      return peers.indexOf(el);
+    }
+
+    function markControl(event, el) {
+      if (!isControl(el)) return;
+      event.role = roleOf(el);
+      const hint = hintOf(el);
+      const index = indexInGroup(el);
+      if (hint) event.hint = hint;
+      if (index >= 0) event.index = index;
+      if (!event.label) {
+        const label = labelOf(el);
+        if (label) event.label = label;
+      }
+    }
+
+    function distanceTo(el, x, y) {
+      const box = el.getBoundingClientRect();
+      const cx = Math.max(box.left, Math.min(x, box.right));
+      const cy = Math.max(box.top, Math.min(y, box.bottom));
+      return Math.hypot(x - cx, y - cy);
+    }
+
+    function nearestAction(x, y, radius) {
+      let best = null;
+      document.querySelectorAll("button, a, input, textarea, select, [role='button']").forEach((el) => {
+        if (!isActionable(el) || !el.getClientRects().length) return;
+        const distance = distanceTo(el, x, y);
+        if (distance <= radius && (!best || distance < best.distance)) best = { el: el, distance: distance };
+      });
+      return best;
+    }
+
+    function gestureIntent(el, moved, slop) {
+      if (!(el instanceof Element) || selectorOf(el) === "body") return "";
+      if (moved > slop) return "swipe";
+      if (el.matches("input, textarea, select")) return "focus";
+      return "tap";
+    }
+
+    function isSecret(el) {
+      return el instanceof HTMLInputElement && el.type === "password";
+    }
+
+    function stamp() {
+      return Math.max(0, Math.round(performance.now() - recorder.t0));
+    }
+
+    function pointerKind(e) {
+      if (emulateTouch) return "touch";
+      return e.pointerType || "mouse";
+    }
+
+    function pointOf(e, target) {
+      const nx = window.innerWidth ? e.clientX / window.innerWidth : 0;
+      const ny = window.innerHeight ? e.clientY / window.innerHeight : 0;
+      return {
+        t: stamp(),
+        kind: "pointer",
+        target: target,
+        x: Math.round(e.clientX),
+        y: Math.round(e.clientY),
+        nx: Math.max(0, Math.min(1, nx)),
+        ny: Math.max(0, Math.min(1, ny)),
+        pointerType: pointerKind(e),
+      };
+    }
+
+    function pushEvent(event) {
+      if (recorder.events.length >= 3000) {
+        stopRecording(true);
+        return;
+      }
+      recorder.events.push(event);
+      $("recordState").textContent = "Đang ghi " + recorder.events.length + " thao tác…";
+    }
+
+    function onPointerDown(e) {
+      if (!recorder.on || replaying) return;
+      if (e.target instanceof Element && e.target.closest("[data-norecord]")) {
+        recorder.press = null;
+        return;
+      }
+      const slop = pointerKind(e) === "mouse" ? 12 : TOUCH_SLOP;
+      const aimed = aimAt(e.clientX, e.clientY, e.target, slop);
+      if (!aimed.selector) { recorder.press = null; return; }
+      recorder.press = { id: e.pointerId, x: e.clientX, y: e.clientY, target: aimed.selector, slop: slop };
+      pushEvent(Object.assign(pointOf(e, aimed.selector), { phase: "down", click: false }));
+    }
+
+    function onPointerMove(e) {
+      if (!recorder.on || replaying || !recorder.press || e.pointerId !== recorder.press.id) return;
+      if (recorder.moves >= 400) return;
+      const now = performance.now();
+      if (now - recorder.lastMove < 50) return;
+      recorder.lastMove = now;
+      recorder.moves += 1;
+      const target = selectorOf(e.target) || recorder.press.target;
+      pushEvent(Object.assign(pointOf(e, target), { phase: "move", click: false }));
+    }
+
+    function aimAt(x, y, rawNode, slop) {
+      const direct = rawNode instanceof Element ? rawNode.closest("button, a, input, textarea, select, [role='button']") : null;
+      const hit = direct && isActionable(direct) && distanceTo(direct, x, y) <= slop ? direct : null;
+      const near = hit ? { el: hit, distance: distanceTo(hit, x, y) } : nearestAction(x, y, slop);
+      const el = near ? near.el : rawNode;
+      return {
+        el: el instanceof Element ? el : null,
+        selector: selectorOf(el),
+        snapped: Boolean(near && near.distance > 0),
+        label: near ? labelOf(near.el) : "",
+      };
+    }
+
+    function onPointerUp(e) {
+      if (scenario.capture && !replaying) {
+        if (e.target instanceof Element && e.target.closest("[data-norecord]")) return;
+        const pending = scenario.capture;
+        scenario.capture = null;
+        captureFill(e, pending).catch((err) => {
+          $("err").hidden = false;
+          $("err").style.color = "#ff7b7b";
+          $("err").textContent = "Không chọn được control: " + err.message;
+        });
+        return;
+      }
+      if ((editor.capture === "add" || editor.capture === "retarget") && !replaying) {
+        if (e.target instanceof Element && e.target.closest("[data-norecord]")) return;
+        const mode = editor.capture;
+        editor.capture = null;
+        capturePointerStep(e, mode).catch((err) => {
+          $("err").hidden = false;
+          $("err").style.color = "#ff7b7b";
+          $("err").textContent = "Không thêm được bước: " + err.message;
+        });
+        return;
+      }
+      if (!recorder.on || replaying || !recorder.press || e.pointerId !== recorder.press.id) return;
+      const slop = recorder.press.slop || TOUCH_SLOP;
+      const moved = Math.hypot(e.clientX - recorder.press.x, e.clientY - recorder.press.y);
+      const aimed = aimAt(e.clientX, e.clientY, e.target, slop);
+      const target = aimed.selector || recorder.press.target;
+      const intent = gestureIntent(aimed.el, moved, slop);
+      const click = (intent === "tap" || intent === "focus") && target !== "body";
+      recorder.press = null;
+      const event = Object.assign(pointOf(e, target), { phase: "up", click: click });
+      if (intent) event.intent = intent;
+      if (click && aimed.label) event.label = aimed.label;
+      if (click && aimed.snapped) event.snapped = true;
+      if (click) markControl(event, aimed.el);
+      pushEvent(event);
+    }
+
+    function onKeyDown(e) {
+      if (!recorder.on || replaying) return;
+      const el = e.target;
+      const target = selectorOf(el);
+      if (!target) return;
+      if (isSecret(el)) {
+        const last = recorder.events[recorder.events.length - 1];
+        if (last && last.redacted && last.target === target) return;
+        pushEvent({ t: stamp(), kind: "key", target: target, redacted: true });
+        return;
+      }
+      pushEvent({
+        t: stamp(),
+        kind: "key",
+        target: target,
+        key: e.key,
+        code: e.code,
+        shift: e.shiftKey,
+        ctrl: e.ctrlKey,
+        alt: e.altKey,
+        meta: e.metaKey,
+      });
+    }
+
+    function onInput(e) {
+      if (!recorder.on || replaying) return;
+      const el = e.target;
+      if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)) return;
+      if (isSecret(el)) return;
+      const target = selectorOf(el);
+      if (!target || target === "body") return;
+      const value = el.value;
+      const last = recorder.events[recorder.events.length - 1];
+      if (last && last.kind === "value" && last.target === target && last.value === value) return;
+      const event = { t: stamp(), kind: "value", target: target, value: value };
+      markControl(event, el);
+      pushEvent(event);
+    }
+
+    function renderRecordings(items) {
+      if (!items.length) {
+        $("recordingRows").innerHTML = `<tr><td colspan="3" class="empty">Chưa có bản ghi. Bấm «Ghi bấm phím và cảm ứng», làm thao tác, rồi bấm dừng.</td></tr>`;
+        return;
+      }
+      $("recordingRows").innerHTML = items.map((rec) => {
+        const steps = (rec.steps || []).join(" → ");
+        return `<tr>
+          <td class="meta">${esc(fmtTime(rec.at))}<div>${esc(rec.event_count)} sự kiện</div></td>
+          <td>${esc(rec.title || "")}<div class="meta">${esc(steps)}</div></td>
+          <td><button type="button" data-replay="${esc(rec.id)}">Làm theo</button> <button type="button" class="ghost" data-edit="${esc(rec.id)}">Sửa</button></td>
+        </tr>`;
+      }).join("");
+    }
+
+    function resolveTarget(sel) {
+      if (!sel || sel === "body") return document.body;
+      try { return document.querySelector(sel); }
+      catch (_err) { return null; }
+    }
+
+    function findByLabel(label, x, y) {
+      if (!label) return null;
+      let best = null;
+      document.querySelectorAll("button, a, input, textarea, select, [role='button']").forEach((el) => {
+        if (!isActionable(el) || labelOf(el) !== label) return;
+        const distance = distanceTo(el, x, y);
+        if (!best || distance < best.distance) best = { el: el, distance: distance };
+      });
+      return best ? best.el : null;
+    }
+
+    function pointFrom(ev) {
+      const x = typeof ev.nx === "number" ? ev.nx * window.innerWidth : ev.x;
+      const y = typeof ev.ny === "number" ? ev.ny * window.innerHeight : ev.y;
+      return { x: x || 0, y: y || 0 };
+    }
+
+    function moveCursorAt(x, y) {
+      const cursor = $("replayCursor");
+      cursor.hidden = false;
+      cursor.style.left = (x || 0) + "px";
+      cursor.style.top = (y || 0) + "px";
+    }
+
+    function moveCursor(ev, el) {
+      let x = typeof ev.nx === "number" ? ev.nx * window.innerWidth : ev.x;
+      let y = typeof ev.ny === "number" ? ev.ny * window.innerHeight : ev.y;
+      if ((x == null || y == null) && el && el.getBoundingClientRect) {
+        const box = el.getBoundingClientRect();
+        x = box.left + box.width / 2;
+        y = box.top + box.height / 2;
+      }
+      moveCursorAt(x, y);
+    }
+
+    function scoreMatch(wanted, candidate) {
+      let score = 0;
+      if (wanted.target && wanted.target !== "body" && wanted.target === candidate.target) score += 50;
+      const label = wanted.label || "";
+      const candidateLabel = candidate.label || "";
+      if (label && label === candidateLabel) score += 40;
+      else if (label.length >= 3 && candidateLabel.includes(label)) score += 15;
+      if (wanted.role && wanted.role === candidate.role) score += 20;
+      if (wanted.hint && wanted.hint === candidate.hint) score += 15;
+      if (typeof wanted.index === "number" && wanted.index === candidate.index && wanted.role && wanted.role === candidate.role) score += 10;
+      return score;
+    }
+
+    function describeControl(el) {
+      return {
+        el: el,
+        target: selectorOf(el),
+        label: labelOf(el),
+        role: roleOf(el),
+        hint: hintOf(el),
+        index: indexInGroup(el),
+      };
+    }
+
+    function showView(name) {
+      document.querySelectorAll("[data-view]").forEach((section) => {
+        section.hidden = section.getAttribute("data-view") !== name;
+      });
+      document.querySelectorAll("[data-tab]").forEach((button) => {
+        button.classList.toggle("on", button.getAttribute("data-tab") === name);
+      });
+    }
+
+    function showPane(name) {
+      document.querySelectorAll("[data-pane-view]").forEach((pane) => {
+        pane.hidden = pane.getAttribute("data-pane-view") !== name;
+      });
+      document.querySelectorAll("[data-pane]").forEach((button) => {
+        button.classList.toggle("on", button.getAttribute("data-pane") === name);
+      });
+    }
+
+    function reveal(el) {
+      if (!(el instanceof Element)) return;
+      const view = el.closest("[data-view]");
+      if (!view || !view.hidden) return;
+      view.hidden = false;
+      const script = document.querySelector('[data-view="script"]');
+      if (script && editor.open) script.hidden = false;
+    }
+
+    function rankControls(ev) {
+      if (ev.target && ev.target.charAt(0) === "#") {
+        const direct = document.getElementById(ev.target.slice(1));
+        if (direct) reveal(direct);
+      }
+      const wanted = {
+        target: ev.target,
+        label: ev.label || "",
+        role: ev.role || "",
+        hint: ev.hint || "",
+        index: typeof ev.index === "number" ? ev.index : null,
+      };
+      const ranked = [];
+      document.querySelectorAll("button, a, input, textarea, select, [role='button']").forEach((el) => {
+        if (!isControl(el) || !el.getClientRects().length) return;
+        const candidate = describeControl(el);
+        const score = scoreMatch(wanted, candidate);
+        if (score > 0) ranked.push({ el: el, score: score, label: candidate.label, index: candidate.index });
+      });
+      ranked.sort((a, b) => b.score - a.score);
+      if (!ranked.length) {
+        const point = pointFrom(ev);
+        const near = nearestAction(point.x, point.y, TOUCH_SLOP);
+        if (near) ranked.push({ el: near.el, score: 1, label: labelOf(near.el), index: indexInGroup(near.el) });
+      }
+      return ranked;
+    }
+
+    function clearMarks() {
+      document.querySelectorAll(".replay-target, .replay-choice").forEach((el) => {
+        el.classList.remove("replay-target", "replay-choice");
+      });
+    }
+
+    function choiceName(item, siblings) {
+      const same = siblings.filter((other) => other.label === item.label).length > 1;
+      return same ? item.label + " · vị trí " + (item.index + 1) : (item.label || "Control");
+    }
+
+    function askUser(options) {
+      return new Promise((resolve) => {
+        const box = $("replayAsk");
+        const choices = $("replayAskChoices");
+        $("replayAskText").textContent = "Hai control gần giống nhau. Chọn control sẽ làm.";
+        choices.replaceChildren();
+        clearMarks();
+        options.forEach((item) => {
+          item.el.classList.add("replay-choice");
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = choiceName(item, options);
+          button.addEventListener("click", () => {
+            box.hidden = true;
+            choices.replaceChildren();
+            clearMarks();
+            resolve(item.el);
+          });
+          choices.appendChild(button);
+        });
+        box.hidden = false;
+      });
+    }
+
+    function effectFor(ev, el) {
+      const label = ev.label || (el ? labelOf(el) : "");
+      const id = el && el.id;
+      if (id === "saveAction" || label === "Ghi nhớ") return "note";
+      if (id === "recheck" || label === "Check proxy ngay") return "recheck";
+      if (id === "refresh" || id === "searchAction" || id === "saveToken" || label === "Tải lại" || label === "Tìm" || label === "Lưu token") return "reload";
+      if ((ev.intent || "") === "focus") return "focus";
+      return "";
+    }
+
+    async function preview(el, sentence) {
+      clearMarks();
+      reveal(el);
+      el.classList.add("replay-target");
+      el.scrollIntoView({ block: "center", inline: "nearest" });
+      const box = el.getBoundingClientRect();
+      moveCursorAt(box.left + box.width / 2, box.top + box.height / 2);
+      $("recordState").textContent = sentence;
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    }
+
+    function sentenceFor(ev, el) {
+      const name = (ev.label || labelOf(el) || "control");
+      if ((ev.intent || "") === "focus") return "Sẽ chạm vào ô " + name;
+      return "Sẽ bấm " + name;
+    }
+
+    async function waitUntilReady(el) {
+      const pauses = [0, 120, 280, 500];
+      for (let i = 0; i < pauses.length; i++) {
+        if (pauses[i]) await new Promise((resolve) => setTimeout(resolve, pauses[i]));
+        if (el.isConnected && !el.disabled) return true;
+      }
+      return el.isConnected && !el.disabled;
+    }
+
+    async function effectLanded(effect, before, el) {
+      if (effect === "focus") return document.activeElement === el || el.contains(document.activeElement);
+      const limit = effect === "recheck" ? 4000 : 2000;
+      const start = performance.now();
+      while (performance.now() - start < limit) {
+        if (epochs[effect] > before) return true;
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      }
+      return epochs[effect] > before;
+    }
+
+    function proved(el, intent) {
+      return new Promise((resolve) => {
+        let done = false;
+        const finish = (ok) => {
+          if (done) return;
+          done = true;
+          el.removeEventListener("click", onClick, true);
+          resolve(ok);
+        };
+        const onClick = () => {
+          if (intent === "focus") finish(document.activeElement === el || el.contains(document.activeElement));
+          else finish(true);
+        };
+        el.addEventListener("click", onClick, true);
+        setTimeout(() => finish(intent === "focus" && (document.activeElement === el || el.contains(document.activeElement))), 80);
+      });
+    }
+
+    async function clickControl(el, intent) {
+      if (!(await waitUntilReady(el))) return false;
+      const proof = proved(el, intent);
+      if (intent === "focus") el.focus();
+      el.click();
+      return proof;
+    }
+
+    async function activate(ev) {
+      const intent = ev.intent || (ev.click ? "tap" : "");
+      if (intent !== "tap" && intent !== "focus") return { fixes: 0, asked: 0, retried: 0, ok: true };
+      const ranked = rankControls(ev);
+      if (!ranked.length) return { fixes: 0, asked: 0, retried: 0, ok: false };
+      let asked = 0;
+      let chosen = ranked[0].el;
+      const rival = ranked[1];
+      if (rival && ranked[0].score - rival.score < 15) {
+        const pool = ranked.filter((item, index) => index === 0 || ranked[0].score - item.score < 15).slice(0, 3);
+        chosen = await askUser(pool);
+        asked = 1;
+      } else {
+        await preview(chosen, sentenceFor(ev, chosen));
+      }
+      const effect = effectFor(ev, chosen);
+      const before = effect && effect !== "focus" ? epochs[effect] : 0;
+      const clicked = await clickControl(chosen, intent);
+      if (clicked && (!effect || await effectLanded(effect, before, chosen))) {
+        return { fixes: 0, asked: asked, retried: 0, ok: true };
+      }
+      const meaning = ev.label || labelOf(chosen);
+      for (let i = 0; i < ranked.length; i++) {
+        const other = ranked[i];
+        if (other.el === chosen) continue;
+        if (meaning && other.label !== meaning) continue;
+        await preview(other.el, "Chưa xong. Thử " + (other.label || "control khác"));
+        const beforeRetry = effect && effect !== "focus" ? epochs[effect] : 0;
+        if (await clickControl(other.el, intent) && (!effect || await effectLanded(effect, beforeRetry, other.el))) {
+          return { fixes: 0, asked: asked, retried: 1, ok: true };
+        }
+      }
+      return { fixes: 0, asked: asked, retried: 0, ok: false };
+    }
+
+    async function playEvents(events) {
+      replaying = true;
+      $("recordState").textContent = "Đang làm theo…";
+      let prev = 0;
+      let asked = 0;
+      let retried = 0;
+      let missed = 0;
+      try {
+        for (let i = 0; i < events.length; i++) {
+          const ev = events[i];
+          const wait = Math.min(250, Math.max(0, (ev.t || 0) - prev));
+          prev = ev.t || prev;
+          if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+          const ranked = rankControls(ev);
+          const el = (ranked[0] && ranked[0].el) || resolveTarget(ev.target);
+          if (ev.kind === "pointer") {
+            moveCursor(ev, el);
+            if (ev.phase === "up") {
+              const result = await activate(ev);
+              asked += result.asked;
+              retried += result.retried;
+              if (!result.ok) missed += 1;
+            }
+          } else if (ev.kind === "value" && el && !isSecret(el)) {
+            const field = el.matches("input, textarea, select") ? el : resolveTarget(ev.target);
+            if (field && !isSecret(field)) {
+              field.focus();
+              field.value = ev.value || "";
+              field.dispatchEvent(new Event("input", { bubbles: true }));
+              if (field instanceof HTMLSelectElement) field.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+          } else if (ev.kind === "key" && !ev.redacted && ev.key === "Enter" && !ev.ctrl && !ev.meta && !ev.alt && el) {
+            el.focus();
+            el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
+          }
+          $("recordState").textContent = "Đang làm theo " + (i + 1) + "/" + events.length;
+        }
+      } finally {
+        replaying = false;
+        $("replayCursor").hidden = true;
+        $("replayAsk").hidden = true;
+        clearMarks();
+        const notes = [];
+        if (asked) notes.push("Đã hỏi bạn " + asked + " lần");
+        if (retried) notes.push("Đã thử lại " + retried + " thao tác vì chưa xong");
+        if (missed) notes.push("Còn " + missed + " thao tác chưa làm được");
+        $("recordState").textContent = notes.length ? "Làm theo xong. " + notes.join(". ") + "." : "Làm theo xong.";
+      }
+    }
+
+    async function replayRecording(id) {
+      if (replaying || recorder.on) return;
+      $("err").hidden = true;
+      const response = await fetch("/v1/recordings/" + id, { headers: headers() });
+      if (!response.ok) throw new Error("recordings " + response.status);
+      const data = await response.json();
+      await playEvents(data.events || []);
+    }
+
+    function stepCaption(step) {
+      const name = step.label || step.target || "";
+      const touch = (step.pointerType || "touch") !== "mouse";
+      let text;
+      if (step.kind === "type") text = "Gõ vào " + name + ": " + (step.value || "");
+      else if (step.kind === "key") {
+        text = step.redacted
+          ? "Bấm phím trong ô mật khẩu " + name + " (không lưu ký tự)"
+          : "Phím " + (step.key || "") + " tại " + name;
+      } else if (step.kind === "swipe") text = "Vuốt tại " + name;
+      else {
+        const verb = step.kind === "focus" ? (touch ? "Chạm vào ô" : "Bấm vào ô") : (touch ? "Chạm" : "Bấm");
+        text = step.snapped ? verb + " lệch, hiểu là " + name : verb + " " + name;
+      }
+      const notes = [];
+      if (step.valueBlank) notes.push("chỗ trống chữ «" + step.valueBlank + "»");
+      if (step.targetBlank) notes.push("chỗ trống control «" + step.targetBlank + "»");
+      if (notes.length) return text + " · " + notes.join(", ");
+      return text;
+    }
+
+    function selectedRange() {
+      const indexes = Array.from(editor.checked).filter((index) => index >= 0 && index < editor.steps.length).sort((a, b) => a - b);
+      if (!indexes.length) {
+        if (editor.selected < 0 || editor.selected >= editor.steps.length) return null;
+        return { start: editor.selected, end: editor.selected };
+      }
+      return { start: indexes[0], end: indexes[indexes.length - 1] };
+    }
+
+    function illustrateStep() {
+      if (replaying) return;
+      clearMarks();
+      const step = editor.steps[editor.selected];
+      const box = $("editorDetail");
+      if (!step) {
+        box.textContent = "Chưa có bước. Thêm bằng một lần chạm, hoặc ghi thêm.";
+        return;
+      }
+      const ranked = rankControls(step);
+      const found = ranked[0];
+      if (found && found.el) {
+        found.el.classList.add("replay-target");
+        found.el.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+      const roleNames = {
+        button: "nút",
+        link: "liên kết",
+        textbox: "ô chữ",
+        search: "ô tìm",
+        select: "danh sách",
+        checkbox: "hộp chọn",
+        radio: "nút chọn",
+      };
+      const lines = [
+        step.caption || stepCaption(step),
+        "Nhãn: " + (step.label || "(không có)"),
+        "Selector: " + (step.target || ""),
+        "Vai trò: " + (roleNames[step.role] || step.role || "(không có)"),
+        "Gợi ý gần đó: " + (step.hint || "(không có)"),
+        "Vị trí trong nhóm: " + (typeof step.index === "number" ? String(step.index + 1) : "(không có)"),
+      ];
+      if (step.kind === "type") lines.push("Chữ sẽ gõ: " + (step.value || ""));
+      if (step.valueBlank) lines.push("Chỗ trống chữ: " + step.valueBlank);
+      if (step.targetBlank) lines.push("Chỗ trống control: " + step.targetBlank);
+      if (step.kind === "key" && !step.redacted) lines.push("Phím: " + (step.key || ""));
+      lines.push("Chạm lệch lúc ghi: " + (step.snapped ? "có" : "không"));
+      lines.push(found ? "Trên trang lúc này: " + (found.label || "control") : "Trên trang lúc này: không thấy control khớp");
+      box.textContent = lines.join("\n");
+    }
+
+    function renderEditor() {
+      const root = $("editorSteps");
+      $("scriptEditor").hidden = !editor.open;
+      if (!editor.open) return;
+      if (document.activeElement !== $("editorTitle")) $("editorTitle").value = editor.title;
+      root.replaceChildren();
+      if (!editor.steps.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Kịch bản chưa có bước.";
+        root.appendChild(empty);
+      }
+      editor.steps.forEach((step, index) => {
+        const row = document.createElement("div");
+        row.className = "editor-step" + (index === editor.selected ? " selected" : "");
+        const mark = document.createElement("input");
+        mark.type = "checkbox";
+        mark.checked = editor.checked.has(index);
+        mark.title = "Chọn vào đoạn";
+        mark.addEventListener("change", () => {
+          if (mark.checked) editor.checked.add(index);
+          else editor.checked.delete(index);
+          editor.selected = index;
+          renderEditor();
+        });
+        const body = document.createElement("div");
+        const caption = document.createElement("div");
+        caption.textContent = step.caption || stepCaption(step);
+        body.appendChild(caption);
+        if (step.kind === "type") {
+          const field = document.createElement("input");
+          field.type = "text";
+          field.maxLength = 500;
+          field.value = step.value || "";
+          field.placeholder = "Chữ sẽ gõ";
+          field.addEventListener("input", () => {
+            step.value = field.value.slice(0, 500);
+            step.caption = stepCaption(step);
+            caption.textContent = step.caption;
+            if (editor.selected === index) illustrateStep();
+          });
+          body.appendChild(field);
+          body.appendChild(blankInput(step, "valueBlank", "Tên chỗ trống của chữ, để trống nếu cố định", caption, index));
+        }
+        body.appendChild(blankInput(step, "targetBlank", "Tên chỗ trống của control, để trống nếu cố định", caption, index));
+        const actions = document.createElement("div");
+        actions.className = "editor-actions";
+        const up = document.createElement("button");
+        up.type = "button";
+        up.className = "ghost";
+        up.textContent = "Lên";
+        up.disabled = index === 0;
+        up.addEventListener("click", () => moveStep(index, index - 1));
+        const down = document.createElement("button");
+        down.type = "button";
+        down.className = "ghost";
+        down.textContent = "Xuống";
+        down.disabled = index === editor.steps.length - 1;
+        down.addEventListener("click", () => moveStep(index, index + 1));
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "ghost";
+        remove.textContent = "Xoá";
+        remove.addEventListener("click", () => deleteStep(index));
+        actions.appendChild(up);
+        actions.appendChild(down);
+        actions.appendChild(remove);
+        body.appendChild(actions);
+        row.appendChild(mark);
+        row.appendChild(body);
+        row.addEventListener("click", (event) => {
+          if (event.target.closest("button, input")) return;
+          editor.selected = index;
+          renderEditor();
+        });
+        root.appendChild(row);
+      });
+      const captureNote = editor.capture === "add"
+        ? " Chạm một control trên trang để thêm bước."
+        : editor.capture === "retarget"
+          ? " Chạm control mới cho bước đang chọn."
+          : "";
+      const clipNote = editor.clipId ? " Cập nhật đoạn sẽ đổi mọi kịch bản đang dùng đoạn này." : "";
+      $("editorHint").textContent = "Bước " + (editor.steps.length ? editor.selected + 1 : 0) + "/" + editor.steps.length + ". Đánh dấu vài ô để ghi đè cả đoạn từ ô đầu đến ô cuối." + captureNote + clipNote;
+      $("editorSaveClip").textContent = editor.clipId ? "Cập nhật đoạn" : "Lưu thành đoạn";
+      illustrateStep();
+    }
+
+    function blankInput(step, key, placeholder, caption, index) {
+      const field = document.createElement("input");
+      field.type = "text";
+      field.maxLength = 40;
+      field.value = step[key] || "";
+      field.placeholder = placeholder;
+      field.addEventListener("input", () => {
+        const name = field.value.replace(/\s+/g, " ").trim().slice(0, 40);
+        if (name) step[key] = name;
+        else delete step[key];
+        step.caption = stepCaption(step);
+        caption.textContent = step.caption;
+        if (editor.selected === index) illustrateStep();
+      });
+      return field;
+    }
+
+    function moveStep(from, to) {
+      if (to < 0 || to >= editor.steps.length) return;
+      const step = editor.steps.splice(from, 1)[0];
+      editor.steps.splice(to, 0, step);
+      const next = new Set();
+      editor.checked.forEach((index) => {
+        let moved = index;
+        if (index === from) moved = to;
+        else if (from < to && index > from && index <= to) moved -= 1;
+        else if (to < from && index >= to && index < from) moved += 1;
+        next.add(moved);
+      });
+      editor.checked = next;
+      editor.selected = to;
+      renderEditor();
+    }
+
+    function deleteStep(index) {
+      editor.steps.splice(index, 1);
+      const next = new Set();
+      editor.checked.forEach((item) => {
+        if (item === index) return;
+        next.add(item > index ? item - 1 : item);
+      });
+      editor.checked = next;
+      if (editor.selected >= editor.steps.length) editor.selected = Math.max(0, editor.steps.length - 1);
+      renderEditor();
+    }
+
+    function retargetStep(current, incoming) {
+      const ontoField = incoming.kind === "focus";
+      if (!current) return incoming;
+      let next;
+      if ((current.kind === "type" && !ontoField) || (current.kind === "tap" && ontoField)) {
+        next = Object.assign({}, incoming);
+      } else {
+        next = {
+          kind: current.kind,
+          target: incoming.target,
+          pointerType: incoming.pointerType || current.pointerType || "touch",
+        };
+        ["label", "role", "hint", "index"].forEach((key) => {
+          if (incoming[key] !== undefined && incoming[key] !== "") next[key] = incoming[key];
+        });
+        if (incoming.snapped) next.snapped = true;
+        if (current.kind === "type") next.value = current.value || "";
+        if (current.kind === "key") {
+          if (current.redacted) next.redacted = true;
+          else next.key = current.key;
+          ["shift", "ctrl", "alt", "meta"].forEach((flag) => {
+            if (current[flag]) next[flag] = true;
+          });
+        }
+      }
+      if (current.targetBlank) next.targetBlank = current.targetBlank;
+      if (next.kind === "type" && current.valueBlank) next.valueBlank = current.valueBlank;
+      next.caption = stepCaption(next);
+      return next;
+    }
+
+    async function capturePointerStep(e, mode) {
+      const slop = pointerKind(e) === "mouse" ? 12 : TOUCH_SLOP;
+      const aimed = aimAt(e.clientX, e.clientY, e.target, slop);
+      if (!aimed.selector) {
+        $("recordState").textContent = "Không thấy control. Chạm vào nút hoặc ô trên trang.";
+        renderEditor();
+        return;
+      }
+      const intent = gestureIntent(aimed.el, 0, slop) || "tap";
+      const event = {
+        t: 0,
+        kind: "pointer",
+        phase: "up",
+        target: aimed.selector,
+        pointerType: pointerKind(e),
+        click: intent !== "swipe",
+        intent: intent,
+      };
+      if (aimed.label) event.label = aimed.label;
+      if (aimed.snapped) event.snapped = true;
+      markControl(event, aimed.el);
+      const response = await fetch("/v1/recordings/parse", {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ events: [event] }),
+      });
+      if (!response.ok) throw new Error("parse " + response.status);
+      const fresh = (await response.json()).steps || [];
+      if (!fresh.length) {
+        $("recordState").textContent = "Chạm đó không thành một bước.";
+        renderEditor();
+        return;
+      }
+      const step = fresh[0];
+      if (mode === "retarget") {
+        editor.steps[editor.selected] = retargetStep(editor.steps[editor.selected], step);
+      } else {
+        const at = editor.steps.length ? editor.selected + 1 : 0;
+        editor.steps.splice(at, 0, step);
+        editor.selected = at;
+      }
+      renderEditor();
+      $("recordState").textContent = mode === "retarget" ? "Đã đổi control của bước đang chọn." : "Đã thêm một bước.";
+    }
+
+    async function openEditor(id) {
+      if (replaying || recorder.on) return;
+      const response = await fetch("/v1/recordings/" + id, { headers: headers() });
+      if (!response.ok) throw new Error("recordings " + response.status);
+      const data = await response.json();
+      const parsed = await fetch("/v1/recordings/parse", {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ events: data.events || [] }),
+      });
+      if (!parsed.ok) throw new Error("parse " + parsed.status);
+      editor.open = true;
+      editor.sourceId = id;
+      editor.clipId = null;
+      editor.title = ((data.title || "Kịch bản") + " (sửa)").slice(0, 200);
+      editor.steps = (await parsed.json()).steps || [];
+      editor.selected = 0;
+      editor.checked = new Set();
+      editor.capture = null;
+      showView("script");
+      showPane("record");
+      renderEditor();
+      $("recordState").textContent = "Đang sửa kịch bản. Bản gốc chưa đổi.";
+    }
+
+    function closeEditor() {
+      editor.open = false;
+      editor.capture = null;
+      editor.clipId = null;
+      editor.steps = [];
+      editor.checked = new Set();
+      $("scriptEditor").hidden = true;
+      clearMarks();
+    }
+
+    function beginSlice(mode) {
+      if (!editor.open || recorder.on || replaying) return;
+      editor.capture = mode;
+      startRecording();
+      $("recordToggle").textContent = "Dừng và ghép vào kịch bản";
+      $("recordState").textContent = mode === "replace"
+        ? "Đang ghi đè đoạn đã chọn. Làm thao tác rồi bấm dừng."
+        : "Đang ghi thêm sau bước đang chọn. Làm thao tác rồi bấm dừng.";
+    }
+
+    async function spliceParsed(events, mode) {
+      const response = await fetch("/v1/recordings/parse", {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ events: events }),
+      });
+      if (!response.ok) throw new Error("parse " + response.status);
+      const fresh = (await response.json()).steps || [];
+      if (!fresh.length) {
+        $("recordState").textContent = "Đoạn vừa ghi không có bước để ghép.";
+        renderEditor();
+        return;
+      }
+      if (mode === "insert") {
+        const at = Math.min(editor.steps.length, Math.max(0, editor.selected + 1));
+        editor.steps.splice(at, 0, ...fresh);
+        editor.selected = at;
+      } else {
+        const range = selectedRange();
+        if (!range) {
+          editor.steps.push(...fresh);
+          editor.selected = Math.max(0, editor.steps.length - fresh.length);
+        } else {
+          editor.steps.splice(range.start, range.end - range.start + 1, ...fresh);
+          editor.selected = range.start;
+          editor.checked = new Set();
+        }
+      }
+      renderEditor();
+      $("recordState").textContent = "Đã ghép " + fresh.length + " bước. Bản gốc chưa đổi. Bấm «Lưu thành bản mới» khi xong.";
+    }
+
+    async function previewSlice() {
+      if (!editor.open || replaying || recorder.on) return;
+      const range = selectedRange();
+      if (!range) return;
+      const slice = editor.steps.slice(range.start, range.end + 1);
+      const response = await fetch("/v1/recordings/compile", {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ title: editor.title, steps: slice }),
+      });
+      if (!response.ok) throw new Error("compile " + response.status);
+      const data = await response.json();
+      await playEvents(data.events || []);
+      if (editor.open) illustrateStep();
+    }
+
+    async function saveEdited() {
+      if (!editor.open || replaying || recorder.on) return;
+      editor.title = $("editorTitle").value.trim().slice(0, 200);
+      const response = await fetch("/v1/recordings/from-steps", {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ title: editor.title, steps: editor.steps }),
+      });
+      if (!response.ok) throw new Error("from-steps " + response.status);
+      const saved = await response.json();
+      await loadAll();
+      $("err").hidden = false;
+      $("err").style.color = "#3ecf8e";
+      $("err").textContent = "Đã lưu bản mới «" + (saved.title || "") + "». Bản gốc vẫn giữ.";
+      $("recordState").textContent = "Đã lưu thành bản mới.";
+      closeEditor();
+    }
+
+    function apiDetail(data, fallback) {
+      const detail = data && data.detail != null ? String(data.detail) : fallback;
+      const known = {
+        "blank used for text and control": "Cùng một tên chỗ trống đang dùng cho cả chữ và control",
+        "clip is used by a scenario": "Đoạn này đang nằm trong một kịch bản. Xoá kịch bản đó trước.",
+        "missing clip": "Kịch bản trỏ tới đoạn đã mất",
+        "no replayable steps": "Không có bước để làm theo",
+        "scenario has no clips": "Kịch bản chưa có đoạn",
+        "name is empty": "Tên đang trống",
+        "clip not found": "Không thấy đoạn",
+        "scenario not found": "Không thấy kịch bản",
+      };
+      return known[detail] || detail;
+    }
+
+    async function readDetail(response, fallback) {
+      let data = null;
+      try { data = await response.json(); } catch (err) { data = null; }
+      return apiDetail(data, fallback);
+    }
+
+    function clipById(id) {
+      return library.clips.find((clip) => clip.id === Number(id)) || null;
+    }
+
+    function renderLibrary(clips, scenarios) {
+      library.clips = clips || [];
+      library.scenarios = scenarios || [];
+      const rows = $("clipRows");
+      if (!library.clips.length) {
+        rows.innerHTML = `<tr><td colspan="3" class="empty">Chưa có đoạn</td></tr>`;
+      } else {
+        rows.innerHTML = library.clips.map((clip) => {
+          const steps = (clip.captions || []).map((line) => esc(line)).join("<br>");
+          const blanks = (clip.blanks || []).map((blank) => {
+            const kind = blank.kind === "text" ? "chữ" : "control";
+            return esc(blank.name) + " (" + kind + ")";
+          }).join(", ");
+          const used = clip.scenarioCount
+            ? `<div class="meta">Dùng trong ${clip.scenarioCount} kịch bản: ${esc((clip.scenarioNames || []).join(", "))}</div>`
+            : "";
+          return `<tr>
+            <td>${esc(clip.name)}${used}${blanks ? `<div class="meta">Chỗ trống: ${blanks}</div>` : ""}</td>
+            <td>${steps || "—"}</td>
+            <td>
+              <button type="button" class="ghost" data-edit-clip="${clip.id}">Sửa</button>
+              <button type="button" class="ghost" data-delete-clip="${clip.id}">Xoá</button>
+            </td>
+          </tr>`;
+        }).join("");
+      }
+      const pick = $("scenarioClipPick");
+      const current = pick.value;
+      pick.replaceChildren();
+      if (!library.clips.length) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "Chưa có đoạn";
+        pick.appendChild(option);
+      } else {
+        library.clips.forEach((clip) => {
+          const option = document.createElement("option");
+          option.value = String(clip.id);
+          option.textContent = clip.name;
+          pick.appendChild(option);
+        });
+        if (current && library.clips.some((clip) => String(clip.id) === current)) pick.value = current;
+      }
+      const scenarioBody = $("scenarioRows");
+      if (!library.scenarios.length) {
+        scenarioBody.innerHTML = `<tr><td colspan="3" class="empty">Chưa có kịch bản ghép</td></tr>`;
+      } else {
+        scenarioBody.innerHTML = library.scenarios.map((item) => {
+          const order = (item.parts || []).map((part) => esc(part.clipName || ("#" + part.clipId))).join(" → ");
+          return `<tr>
+            <td>${esc(item.name)}</td>
+            <td>${order || "—"}</td>
+            <td>
+              <button type="button" data-play-scenario="${item.id}">Làm theo</button>
+              <button type="button" class="ghost" data-edit-scenario="${item.id}">Sửa</button>
+              <button type="button" class="ghost" data-delete-scenario="${item.id}">Xoá</button>
+            </td>
+          </tr>`;
+        }).join("");
+      }
+      const focused = document.activeElement;
+      const keep = focused && (focused.closest("#scenarioParts") || focused.id === "scenarioName");
+      if (!keep) renderScenario();
+    }
+
+    function renderScenario() {
+      const root = $("scenarioParts");
+      root.replaceChildren();
+      if (document.activeElement !== $("scenarioName")) $("scenarioName").value = scenario.name;
+      $("scenarioSave").textContent = scenario.id ? "Cập nhật kịch bản" : "Lưu kịch bản";
+      if (!scenario.parts.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Chưa thêm đoạn vào kịch bản này.";
+        root.appendChild(empty);
+        return;
+      }
+      scenario.parts.forEach((part, index) => {
+        const clip = clipById(part.clipId);
+        const box = document.createElement("div");
+        box.className = "scenario-part";
+        const title = document.createElement("div");
+        title.textContent = (index + 1) + ". " + (clip ? clip.name : "Đoạn đã mất");
+        box.appendChild(title);
+        (clip ? (clip.blanks || []) : []).forEach((blank) => {
+          const label = document.createElement("div");
+          label.className = "meta";
+          label.textContent = blank.kind === "text"
+            ? "Chỗ trống chữ «" + blank.name + "»"
+            : "Chỗ trống control «" + blank.name + "»";
+          box.appendChild(label);
+          if (blank.kind === "text") {
+            const field = document.createElement("input");
+            field.type = "text";
+            field.maxLength = 500;
+            field.placeholder = "Chữ cho lần này. Để trống thì dùng mẫu.";
+            const current = part.fills[blank.name];
+            field.value = typeof current === "string" ? current : "";
+            field.addEventListener("input", () => {
+              part.fills[blank.name] = field.value.slice(0, 500);
+            });
+            box.appendChild(field);
+          } else {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "ghost";
+            const fill = part.fills[blank.name];
+            const waiting = scenario.capture && scenario.capture.partIndex === index && scenario.capture.blankName === blank.name;
+            const chosen = fill && typeof fill === "object" ? (fill.label || fill.target || "") : "";
+            button.textContent = waiting ? "Đang chờ chạm…" : (chosen ? "Đã chọn: " + chosen : "Chạm để chọn");
+            button.addEventListener("click", () => {
+              if (replaying || recorder.on) return;
+              if (waiting) scenario.capture = null;
+              else {
+                editor.capture = null;
+                scenario.capture = { partIndex: index, blankName: blank.name };
+              }
+              renderScenario();
+            });
+            box.appendChild(button);
+          }
+        });
+        const actions = document.createElement("div");
+        actions.className = "editor-actions";
+        const up = document.createElement("button");
+        up.type = "button";
+        up.className = "ghost";
+        up.textContent = "Lên";
+        up.disabled = index === 0;
+        up.addEventListener("click", () => moveScenarioPart(index, index - 1));
+        const down = document.createElement("button");
+        down.type = "button";
+        down.className = "ghost";
+        down.textContent = "Xuống";
+        down.disabled = index === scenario.parts.length - 1;
+        down.addEventListener("click", () => moveScenarioPart(index, index + 1));
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "ghost";
+        remove.textContent = "Xoá";
+        remove.addEventListener("click", () => {
+          scenario.parts.splice(index, 1);
+          if (scenario.capture && scenario.capture.partIndex === index) scenario.capture = null;
+          renderScenario();
+        });
+        actions.appendChild(up);
+        actions.appendChild(down);
+        actions.appendChild(remove);
+        box.appendChild(actions);
+        root.appendChild(box);
+      });
+    }
+
+    function moveScenarioPart(from, to) {
+      if (to < 0 || to >= scenario.parts.length) return;
+      const part = scenario.parts.splice(from, 1)[0];
+      scenario.parts.splice(to, 0, part);
+      scenario.capture = null;
+      renderScenario();
+    }
+
+    async function captureFill(e, pending) {
+      const slop = pointerKind(e) === "mouse" ? 12 : TOUCH_SLOP;
+      const aimed = aimAt(e.clientX, e.clientY, e.target, slop);
+      const part = scenario.parts[pending.partIndex];
+      if (!part || !aimed.selector) {
+        renderScenario();
+        $("recordState").textContent = "Không thấy control. Chạm vào nút hoặc ô trên trang.";
+        return;
+      }
+      const intent = gestureIntent(aimed.el, 0, slop) || "tap";
+      const event = {
+        t: 0,
+        kind: "pointer",
+        phase: "up",
+        target: aimed.selector,
+        pointerType: pointerKind(e),
+        click: intent !== "swipe",
+        intent: intent,
+      };
+      if (aimed.label) event.label = aimed.label;
+      if (aimed.snapped) event.snapped = true;
+      markControl(event, aimed.el);
+      const response = await fetch("/v1/recordings/parse", {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ events: [event] }),
+      });
+      if (!response.ok) throw new Error(await readDetail(response, "parse " + response.status));
+      const fresh = (await response.json()).steps || [];
+      if (!fresh.length) {
+        renderScenario();
+        $("recordState").textContent = "Chạm đó không thành một control.";
+        return;
+      }
+      const step = fresh[0];
+      const fill = { target: step.target };
+      ["label", "role", "hint", "index", "pointerType"].forEach((key) => {
+        if (step[key] !== undefined && step[key] !== "") fill[key] = step[key];
+      });
+      part.fills[pending.blankName] = fill;
+      renderScenario();
+      $("recordState").textContent = "Đã chọn control cho chỗ trống «" + pending.blankName + "».";
+    }
+
+    async function openClip(id) {
+      if (replaying || recorder.on) return;
+      const response = await fetch("/v1/clips/" + id, { headers: headers() });
+      if (!response.ok) throw new Error(await readDetail(response, "clips " + response.status));
+      const data = await response.json();
+      editor.open = true;
+      editor.clipId = data.id;
+      editor.sourceId = null;
+      editor.title = data.name || "";
+      editor.steps = data.steps || [];
+      editor.selected = 0;
+      editor.checked = new Set();
+      editor.capture = null;
+      showView("script");
+      showPane("record");
+      renderEditor();
+      const names = data.scenarioNames || [];
+      $("recordState").textContent = names.length
+        ? "Đang sửa đoạn «" + data.name + "». Đang được dùng trong: " + names.join(", ") + "."
+        : "Đang sửa đoạn «" + (data.name || "") + "».";
+    }
+
+    async function saveClip() {
+      if (!editor.open || replaying || recorder.on) return;
+      const name = ($("editorTitle").value.trim() || "Đoạn mới").slice(0, 80);
+      editor.title = name;
+      const updating = Boolean(editor.clipId);
+      const response = await fetch(updating ? "/v1/clips/" + editor.clipId : "/v1/clips", {
+        method: updating ? "PUT" : "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name, steps: editor.steps }),
+      });
+      if (!response.ok) throw new Error(await readDetail(response, "clips " + response.status));
+      const saved = await response.json();
+      await loadAll();
+      $("err").hidden = false;
+      $("err").style.color = "#3ecf8e";
+      $("err").textContent = (saved.scenarioCount || 0)
+        ? "Đã cập nhật đoạn «" + saved.name + "». Mọi kịch bản đang dùng đoạn này theo các bước mới."
+        : "Đã lưu đoạn «" + saved.name + "».";
+      $("recordState").textContent = "Đã lưu đoạn có tên.";
+      closeEditor();
+    }
+
+    async function deleteClip(id) {
+      const clip = clipById(id);
+      const name = clip ? clip.name : "đoạn này";
+      if (!confirm("Xoá đoạn «" + name + "»?")) return;
+      const response = await fetch("/v1/clips/" + id, { method: "DELETE", headers: headers() });
+      if (!response.ok) throw new Error(await readDetail(response, "clips " + response.status));
+      if (editor.clipId === Number(id)) closeEditor();
+      $("err").hidden = true;
+      await loadAll();
+      $("recordState").textContent = "Đã xoá đoạn «" + name + "».";
+    }
+
+    function newScenario() {
+      scenario.id = null;
+      scenario.name = "";
+      scenario.parts = [];
+      scenario.capture = null;
+      renderScenario();
+      $("recordState").textContent = "Kịch bản mới. Thêm đoạn rồi điền chỗ trống.";
+    }
+
+    async function openScenario(id) {
+      const response = await fetch("/v1/scenarios/" + id, { headers: headers() });
+      if (!response.ok) throw new Error(await readDetail(response, "scenarios " + response.status));
+      const data = await response.json();
+      scenario.id = data.id;
+      scenario.name = data.name || "";
+      scenario.parts = (data.parts || []).map((part) => ({
+        clipId: part.clipId,
+        fills: Object.assign({}, part.fills || {}),
+      }));
+      scenario.capture = null;
+      showView("script");
+      showPane("scenarios");
+      renderScenario();
+      $("recordState").textContent = "Đang sửa kịch bản «" + (data.name || "") + "».";
+    }
+
+    async function compileScenario(name, parts) {
+      const response = await fetch("/v1/scenarios/compile", {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: (name || "xem").slice(0, 80),
+          parts: parts.map((part) => ({ clipId: part.clipId, fills: part.fills || {} })),
+        }),
+      });
+      if (!response.ok) throw new Error(await readDetail(response, "compile " + response.status));
+      return response.json();
+    }
+
+    async function previewScenario() {
+      if (replaying || recorder.on || !scenario.parts.length) return;
+      const data = await compileScenario($("scenarioName").value.trim() || scenario.name || "xem", scenario.parts);
+      await playEvents(data.events || []);
+    }
+
+    async function playScenario(id) {
+      if (replaying || recorder.on) return;
+      const response = await fetch("/v1/scenarios/" + id, { headers: headers() });
+      if (!response.ok) throw new Error(await readDetail(response, "scenarios " + response.status));
+      const data = await response.json();
+      const compiled = await compileScenario(data.name, data.parts || []);
+      await playEvents(compiled.events || []);
+    }
+
+    async function saveScenario() {
+      if (replaying || recorder.on) return;
+      const name = ($("scenarioName").value.trim() || "Kịch bản mới").slice(0, 80);
+      scenario.name = name;
+      if (!scenario.parts.length) throw new Error("Kịch bản chưa có đoạn");
+      const updating = Boolean(scenario.id);
+      const response = await fetch(updating ? "/v1/scenarios/" + scenario.id : "/v1/scenarios", {
+        method: updating ? "PUT" : "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name,
+          parts: scenario.parts.map((part) => ({ clipId: part.clipId, fills: part.fills || {} })),
+        }),
+      });
+      if (!response.ok) throw new Error(await readDetail(response, "scenarios " + response.status));
+      const saved = await response.json();
+      scenario.id = saved.id;
+      scenario.name = saved.name || name;
+      await loadAll();
+      $("err").hidden = false;
+      $("err").style.color = "#3ecf8e";
+      $("err").textContent = "Đã lưu kịch bản «" + (saved.name || name) + "».";
+      $("recordState").textContent = "Đã lưu kịch bản ghép.";
+    }
+
+    async function deleteScenario(id) {
+      const item = library.scenarios.find((row) => row.id === Number(id));
+      const name = item ? item.name : "kịch bản này";
+      if (!confirm("Xoá kịch bản «" + name + "»?")) return;
+      const response = await fetch("/v1/scenarios/" + id, { method: "DELETE", headers: headers() });
+      if (!response.ok) throw new Error(await readDetail(response, "scenarios " + response.status));
+      if (scenario.id === Number(id)) newScenario();
+      $("err").hidden = true;
+      await loadAll();
+      $("recordState").textContent = "Đã xoá kịch bản «" + name + "».";
+    }
+
+    async function stopRecording(auto) {
+      const events = recorder.events.slice();
+      const capture = editor.capture;
+      recorder.on = false;
+      recorder.press = null;
+      recorder.events = [];
+      if (capture === "replace" || capture === "insert") editor.capture = null;
+      document.body.classList.remove("is-recording");
+      $("recordToggle").classList.remove("live");
+      $("recordToggle").textContent = "Ghi bấm phím và cảm ứng";
+      if (capture === "replace" || capture === "insert") {
+        if (!events.length) {
+          $("recordState").textContent = "Không có bước mới để ghép vào kịch bản.";
+          renderEditor();
+          return;
+        }
+        $("recordState").textContent = "Đang ghép đoạn vừa ghi…";
+        await spliceParsed(events, capture);
+        return;
+      }
+      if (!events.length) {
+        $("recordState").textContent = auto ? "Bản ghi đầy và trống." : "Không có phím hay chạm để lưu.";
+        return;
+      }
+      $("recordState").textContent = "Đang lưu " + events.length + " thao tác…";
+      let response;
+      try {
+        response = await fetch("/v1/recordings", {
+          method: "POST",
+          headers: { ...headers(), "Content-Type": "application/json" },
+          body: JSON.stringify({ events: events }),
+        });
+        if (!response.ok) throw new Error("recordings " + response.status);
+      } catch (err) {
+        recorder.on = true;
+        recorder.events = events;
+        recorder.t0 = performance.now();
+        document.body.classList.add("is-recording");
+        $("recordToggle").classList.add("live");
+        $("recordToggle").textContent = "Dừng và lưu bản ghi";
+        throw err;
+      }
+      const saved = await response.json();
+      await loadAll();
+      $("err").hidden = false;
+      $("err").style.color = "#3ecf8e";
+      $("err").textContent = "Đã lưu bản ghi để làm theo: " + (saved.title || "");
+      $("recordState").textContent = "Đã lưu. Bấm «Làm theo» để làm lại đúng thứ tự.";
+    }
+
+    function startRecording() {
+      recorder.on = true;
+      recorder.t0 = performance.now();
+      recorder.events = [];
+      recorder.press = null;
+      recorder.moves = 0;
+      document.body.classList.add("is-recording");
+      $("recordToggle").classList.add("live");
+      $("recordToggle").textContent = "Dừng và lưu bản ghi";
+      $("recordState").textContent = "Đang ghi. Làm thao tác bằng chuột, phím hoặc cảm ứng.";
+    }
+
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("pointermove", onPointerMove, true);
+    document.addEventListener("pointerup", onPointerUp, true);
+    document.addEventListener("pointercancel", onPointerUp, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    document.addEventListener("input", onInput, true);
+    document.addEventListener("change", onInput, true);
+
+    $("recordToggle").onclick = async () => {
+      $("err").hidden = true;
+      try {
+        if (recorder.on) await stopRecording(false);
+        else startRecording();
+      } catch (e) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không lưu bản ghi: " + e.message;
+      }
+    };
+    $("recordingRows").onclick = async (e) => {
+      const edit = e.target.closest("[data-edit]");
+      if (edit) {
+        try {
+          await openEditor(edit.getAttribute("data-edit"));
+        } catch (err) {
+          $("err").hidden = false;
+          $("err").style.color = "#ff7b7b";
+          $("err").textContent = "Không mở được kịch bản: " + err.message;
+        }
+        return;
+      }
+      const btn = e.target.closest("[data-replay]");
+      if (!btn) return;
+      try {
+        await replayRecording(btn.getAttribute("data-replay"));
+      } catch (err) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không làm theo được: " + err.message;
+      }
+    };
+    $("editorTitle").addEventListener("input", () => { editor.title = $("editorTitle").value; });
+    $("editorAddTouch").onclick = () => {
+      if (recorder.on || replaying) return;
+      editor.capture = editor.capture === "add" ? null : "add";
+      renderEditor();
+      $("recordState").textContent = editor.capture === "add"
+        ? "Chạm một control trên trang để thêm bước."
+        : "Đã huỷ thêm bước.";
+    };
+    $("editorRetarget").onclick = () => {
+      if (recorder.on || replaying || !editor.steps.length) return;
+      editor.capture = editor.capture === "retarget" ? null : "retarget";
+      renderEditor();
+      $("recordState").textContent = editor.capture === "retarget"
+        ? "Chạm control mới cho bước đang chọn."
+        : "Đã huỷ đổi control.";
+    };
+    $("editorReplace").onclick = () => beginSlice("replace");
+    $("editorInsert").onclick = () => beginSlice("insert");
+    $("editorPreview").onclick = async () => {
+      try {
+        await previewSlice();
+      } catch (err) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không xem được đoạn này: " + err.message;
+      }
+    };
+    $("editorSave").onclick = async () => {
+      try {
+        await saveEdited();
+      } catch (err) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không lưu được bản mới: " + err.message;
+      }
+    };
+    $("editorSaveClip").onclick = async () => {
+      try {
+        await saveClip();
+      } catch (err) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không lưu được đoạn: " + err.message;
+      }
+    };
+    $("clipRows").onclick = async (e) => {
+      const edit = e.target.closest("[data-edit-clip]");
+      const remove = e.target.closest("[data-delete-clip]");
+      try {
+        if (edit) await openClip(edit.getAttribute("data-edit-clip"));
+        else if (remove) await deleteClip(remove.getAttribute("data-delete-clip"));
+      } catch (err) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không xử lý được đoạn: " + err.message;
+      }
+    };
+    $("scenarioName").addEventListener("input", () => { scenario.name = $("scenarioName").value; });
+    $("scenarioAdd").onclick = () => {
+      const id = Number($("scenarioClipPick").value);
+      if (!id) return;
+      scenario.parts.push({ clipId: id, fills: {} });
+      renderScenario();
+    };
+    $("scenarioPreview").onclick = async () => {
+      try {
+        await previewScenario();
+      } catch (err) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không xem được kịch bản: " + err.message;
+      }
+    };
+    $("scenarioSave").onclick = async () => {
+      try {
+        await saveScenario();
+      } catch (err) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không lưu được kịch bản: " + err.message;
+      }
+    };
+    $("scenarioNew").onclick = () => newScenario();
+    $("scenarioRows").onclick = async (e) => {
+      const play = e.target.closest("[data-play-scenario]");
+      const edit = e.target.closest("[data-edit-scenario]");
+      const remove = e.target.closest("[data-delete-scenario]");
+      try {
+        if (play) await playScenario(play.getAttribute("data-play-scenario"));
+        else if (edit) await openScenario(edit.getAttribute("data-edit-scenario"));
+        else if (remove) await deleteScenario(remove.getAttribute("data-delete-scenario"));
+      } catch (err) {
+        $("err").hidden = false;
+        $("err").style.color = "#ff7b7b";
+        $("err").textContent = "Không xử lý được kịch bản: " + err.message;
+      }
+    };
+    $("editorClose").onclick = () => {
+      if (recorder.on && (editor.capture === "replace" || editor.capture === "insert")) {
+        editor.capture = null;
+        recorder.on = false;
+        recorder.events = [];
+        recorder.press = null;
+        document.body.classList.remove("is-recording");
+        $("recordToggle").classList.remove("live");
+        $("recordToggle").textContent = "Ghi bấm phím và cảm ứng";
+      }
+      closeEditor();
+      $("recordState").textContent = "Đã đóng phần sửa. Bản gốc không đổi.";
+    };
+
     $("saveToken").onclick = () => { localStorage.setItem(tokenKey, $("token").value.trim()); loadAll(); };
     $("refresh").onclick = loadAll;
     $("recheck").onclick = recheck;
+    $("saveAction").onclick = saveAction;
+    $("searchAction").onclick = loadAll;
+    $("actionText").addEventListener("keydown", (e) => { if (e.key === "Enter") saveAction(); });
+    $("actionQ").addEventListener("keydown", (e) => { if (e.key === "Enter") loadAll(); });
     $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") loadAll(); });
     $("limit").onchange = loadAll;
+    document.querySelectorAll("[data-tab]").forEach((button) => {
+      button.addEventListener("click", () => showView(button.getAttribute("data-tab")));
+    });
+    document.querySelectorAll("[data-pane]").forEach((button) => {
+      button.addEventListener("click", () => showPane(button.getAttribute("data-pane")));
+    });
+    if (emulateTouch) {
+      document.documentElement.dataset.emulate = "touch";
+      $("phoneBanner").hidden = false;
+      $("openPhone").hidden = true;
+      if (screenMode === "iphone") {
+        $("phoneBanner").textContent = "Chạm trên iPhone được ghi để làm lại.";
+        const go = document.querySelector(".iphone-go");
+        if (go) go.hidden = true;
+      }
+    }
+    if (/iPhone|iPod/.test(navigator.userAgent)) {
+      $("openPhone").href = "/iphone";
+      $("openPhone").textContent = "Mở trên iPhone";
+    }
     if ($("token").value) loadAll();
-    setInterval(() => { if ($("token").value) loadAll(); }, 20000);
+    setInterval(() => { if ($("token").value && !replaying && !recorder.on) loadAll(); }, 20000);
+    try {
+      const peopleChannel = new BroadcastChannel("fb-people");
+      peopleChannel.onmessage = (event) => {
+        const message = event.data || {};
+        if (message.type === "people-saved" && Array.isArray(message.items) && message.items.length) {
+          renderPeople(message.items);
+        }
+      };
+    } catch (err) { /* kênh không có thì tab Đã lưu cập nhật lúc Tải lại */ }
   </script>
 </body>
 </html>

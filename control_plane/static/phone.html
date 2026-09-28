@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="iphone-build" content="__IPHONE_BUILD__" />
+  <title>Giả lập điện thoại — fb-poller</title>
+  <script src="/static/version.js"></script>
+  <script>
+    if (/iPhone|iPod/.test(navigator.userAgent) && new URLSearchParams(location.search).get("screen") !== "pc") {
+      location.replace("/iphone");
+    }
+  </script>
+  <style>
+    :root {
+      --bg: #10141b;
+      --card: #171d27;
+      --line: #2c3848;
+      --text: #e7edf5;
+      --muted: #8b9bb0;
+      --accent: #4aa3f0;
+      --ok: #3dcc8e;
+      --bad: #f07178;
+      --font: "Segoe UI", system-ui, sans-serif;
+      --mono: ui-monospace, "Cascadia Mono", monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg);
+    }
+    .dock {
+      display: flex; flex-wrap: wrap; gap: 0.55rem 0.8rem;
+      align-items: center; justify-content: space-between;
+      padding: 0.6rem 0.9rem;
+      border-bottom: 1px solid var(--line);
+      background: #141922;
+    }
+    h1 { margin: 0; font-size: 1rem; font-weight: 650; }
+    p { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.8rem; }
+    .mono { font-family: var(--mono); font-size: 0.75rem; color: var(--text); word-break: break-all; }
+    .row { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+    button {
+      font: inherit; border-radius: 8px; border: 1px solid var(--line);
+      background: transparent; color: var(--text);
+      padding: 0.35rem 0.6rem; cursor: pointer; font-weight: 650;
+    }
+    button.on, button.primary { background: var(--accent); border-color: transparent; color: #041018; }
+    .status.ok { color: var(--ok); }
+    .status.bad { color: var(--bad); }
+    .stage { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; align-items: flex-start; padding: 1.1rem 0.8rem 2rem; }
+    .saved {
+      width: min(420px, 100%);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.7rem 0.8rem 0.85rem;
+    }
+    .saved h2 { margin: 0 0 0.25rem; font-size: 0.95rem; }
+    .saved p { margin: 0 0 0.55rem; }
+    .saved table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .saved th, .saved td { text-align: left; padding: 0.28rem 0.35rem 0.28rem 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+    .saved .empty { color: var(--muted); }
+    .phone {
+      width: 414px;
+      background: #0c0e12;
+      border-radius: 32px;
+      padding: 10px 12px 14px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45), inset 0 0 0 1px #2a2a2a;
+    }
+    .bar {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 26px; padding: 0 14px 4px;
+      color: #d7dde6; font-size: 0.72rem; font-weight: 650;
+    }
+    .notch { width: 84px; height: 16px; border-radius: 0 0 10px 10px; background: #050505; }
+    .screen {
+      width: 390px; height: 844px; border: 0; border-radius: 22px;
+      background: #10141b; display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="dock">
+    <div>
+      <h1>Giả lập điện thoại</h1>
+      <p>Kết nối PC · lướt màn hình là đủ. Tên trùng được lưu ngay.</p>
+      <p class="mono" id="origin">…</p>
+      <p id="health" class="status">Đang hỏi hub…</p>
+    </div>
+    <div>
+      <p class="mono" id="phoneUrl">…</p>
+      <div class="row">
+        <button type="button" data-w="360" data-h="780">360×780</button>
+        <button type="button" class="on" data-w="390" data-h="844">390×844</button>
+        <button type="button" data-w="412" data-h="915">412×915</button>
+        <button type="button" id="hubScreen">Hub</button>
+        <button class="primary" id="copy" type="button">Sao chép địa chỉ</button>
+      </div>
+    </div>
+  </div>
+  <div class="stage">
+    <div class="phone" id="bezel">
+      <div class="bar">
+        <span>Giả lập</span>
+        <span class="notch"></span>
+        <span id="clock">--:--</span>
+      </div>
+      <iframe class="screen" id="screen" title="Giả lập điện thoại" src="/sample-people"></iframe>
+    </div>
+    <aside class="saved">
+      <h2>Đã lưu</h2>
+      <p>Lướt danh bạ rồi hồ sơ. Bảng tự thêm dòng khi cùng một tên hiện ở cả hai chỗ.</p>
+      <table>
+        <thead>
+          <tr><th>Tên</th><th>Tên trong danh bạ</th><th>Username</th></tr>
+        </thead>
+        <tbody id="phoneSaved"><tr><td class="empty" colspan="3">Đang chờ tên trùng…</td></tr></tbody>
+      </table>
+    </aside>
+  </div>
+  <script>
+    const origin = location.origin;
+    const phoneUrl = origin + "/phone";
+    const screen = document.getElementById("screen");
+    const hubSrc = "/?as=phone";
+    if (new URLSearchParams(location.search).get("screen") === "hub") screen.src = hubSrc;
+    document.getElementById("hubScreen").addEventListener("click", () => {
+      screen.src = hubSrc;
+    });
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[ch]);
+    }
+    function drawSaved(items) {
+      const rows = document.getElementById("phoneSaved");
+      if (!items.length) {
+        rows.innerHTML = '<tr><td class="empty" colspan="3">Đang chờ tên trùng…</td></tr>';
+        return;
+      }
+      rows.innerHTML = items.map((person) =>
+        "<tr><td>" + esc(person.name) + "</td><td>" + esc(person.contactName) + "</td><td>" + esc(person.username) + "</td></tr>"
+      ).join("");
+    }
+    function authHeaders() {
+      const token = localStorage.getItem("fb_poller_control_token") || "";
+      const headers = {};
+      if (token) headers.Authorization = "Bearer " + token;
+      return headers;
+    }
+    async function loadSaved() {
+      const response = await fetch("/v1/people", { headers: authHeaders() });
+      if (response.status === 401) {
+        document.getElementById("phoneSaved").innerHTML = '<tr><td class="empty" colspan="3">Hãy lưu token trên hub rồi lướt lại.</td></tr>';
+        return;
+      }
+      if (!response.ok) return;
+      const data = await response.json();
+      drawSaved(data.items || []);
+    }
+    window.addEventListener("message", (event) => {
+      if (event.origin !== location.origin) return;
+      const message = event.data || {};
+      if (message.type === "people-saved" && message.items && message.items.length) drawSaved(message.items);
+      if (message.type === "people-auth") {
+        document.getElementById("phoneSaved").innerHTML = '<tr><td class="empty" colspan="3">Hãy lưu token trên hub rồi lướt lại.</td></tr>';
+      }
+    });
+    loadSaved();
+    setInterval(loadSaved, 1500);
+    document.getElementById("origin").textContent = origin;
+    document.getElementById("phoneUrl").textContent = phoneUrl;
+    const clock = document.getElementById("clock");
+    const tick = () => {
+      clock.textContent = new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+    };
+    tick();
+    setInterval(tick, 30000);
+    document.querySelectorAll("[data-w]").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.getElementById("bezel").style.width = (Number(button.dataset.w) + 24) + "px";
+        const screen = document.getElementById("screen");
+        screen.style.width = button.dataset.w + "px";
+        screen.style.height = button.dataset.h + "px";
+        document.querySelectorAll("[data-w]").forEach((other) => other.classList.remove("on"));
+        button.classList.add("on");
+      });
+    });
+    document.getElementById("copy").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(phoneUrl);
+        document.getElementById("copy").textContent = "Đã sao chép";
+      } catch (error) {
+        document.getElementById("phoneUrl").textContent = phoneUrl;
+      }
+    });
+    fetch("/health")
+      .then((response) => {
+        const line = document.getElementById("health");
+        if (!response.ok) {
+          line.textContent = "Hub không trả lời (" + response.status + ").";
+          line.className = "status bad";
+          return;
+        }
+        return response.json().then((body) => {
+          line.textContent = "Hub sống. " + (body.status || "ok");
+          line.className = "status ok";
+        });
+      })
+      .catch(() => {
+        const line = document.getElementById("health");
+        line.textContent = "Không nối được hub.";
+        line.className = "status bad";
+      });
+  </script>
+</body>
+</html>

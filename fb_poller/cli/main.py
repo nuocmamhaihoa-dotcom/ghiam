@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -10,6 +11,7 @@ from rich.table import Table
 from sqlalchemy import func, select
 
 from fb_poller.config import get_settings
+from fb_poller.journal import list_local, remember, remember_quietly
 from fb_poller.orchestrator.runner import run_poller
 from fb_poller.storage.db import init_db, session_scope
 from fb_poller.storage.models import Comment, PollRun, Post, PostStatus, Tier
@@ -28,6 +30,7 @@ console = Console()
 def init_db_cmd() -> None:
     """Create database tables."""
     settings = get_settings()
+    remember_quietly(summary="Tạo schema database", kind="cli", source="cli")
 
     async def _run() -> None:
         await init_db(settings)
@@ -43,6 +46,7 @@ def import_urls(
     """Import post URLs into the database."""
     settings = get_settings()
     urls = [ln.strip() for ln in file.read_text(encoding="utf-8").splitlines()]
+    remember_quietly(summary=f"Import URL từ {file} ({len(urls)} dòng)", kind="cli", source="cli")
 
     async def _run() -> None:
         await init_db(settings)
@@ -57,6 +61,7 @@ def import_urls(
 def import_proxies_cmd() -> None:
     """Import proxies from data/proxies_static.txt and data/proxies_4g.txt."""
     settings = get_settings()
+    remember_quietly(summary="Import proxy từ file static/4g", kind="cli", source="cli")
 
     async def _run() -> None:
         await init_db(settings)
@@ -74,6 +79,7 @@ def rebalance_hot(
     settings = get_settings()
     if hot_size is not None:
         settings.hot_size = hot_size
+    remember_quietly(summary=f"Rebalance hot size={settings.hot_size}", kind="cli", source="cli")
 
     async def _run() -> None:
         await init_db(settings)
@@ -93,6 +99,7 @@ def set_tier(
     if tier not in {t.value for t in Tier}:
         raise typer.BadParameter("tier must be hot|warm|cold")
     settings = get_settings()
+    remember_quietly(summary=f"Gán post {post_id} sang {tier}", kind="cli", source="cli")
 
     async def _run() -> None:
         await init_db(settings)
@@ -162,6 +169,7 @@ def probe_cmd(
     """Probe guest visibility for the first N active posts."""
     settings = get_settings()
     settings.workers = workers
+    remember_quietly(summary=f"Probe {limit} bài với {workers} worker", kind="cli", source="cli")
 
     async def _run() -> None:
         await init_db(settings)
@@ -263,6 +271,11 @@ def run_cmd(
         settings.workers = workers
     if hot_interval is not None:
         settings.hot_interval_sec = hot_interval
+    remember_quietly(
+        summary=f"Bật poller {settings.workers} worker, hot {settings.hot_interval_sec}s",
+        kind="cli",
+        source="cli",
+    )
     console.print(
         f"Starting PA1 poller workers={settings.workers} "
         f"hot_interval={settings.hot_interval_sec}s hot_size={settings.hot_size}"
@@ -284,6 +297,7 @@ def sync_push_cmd(
     from fb_poller.cli.sync_push import push_comments
 
     settings = get_settings()
+    remember_quietly(summary=f"Đẩy comment lên {control_url}", kind="cli", source="cli")
 
     async def _run() -> None:
         result = await push_comments(
@@ -296,6 +310,47 @@ def sync_push_cmd(
         console.print(result)
 
     asyncio.run(_run())
+
+
+@app.command("note")
+def note_cmd(
+    text: str = typer.Argument(..., help="What you just did, in your own words"),
+) -> None:
+    """Remember one action so you can look it up later."""
+    entry = remember(summary=text, kind="note", source="cli")
+    if entry.get("pushed"):
+        console.print(f"[green]Đã ghi[/green] {entry['at']} — {entry['summary']} (có trên hub)")
+        return
+    if os.environ.get("CONTROL_URL", "").strip():
+        console.print(
+            f"[green]Đã ghi trên máy này[/green] {entry['at']} — {entry['summary']}\n"
+            "[yellow]Hub chưa nhận. Kiểm tra CONTROL_URL và CONTROL_TOKEN.[/yellow]"
+        )
+        return
+    console.print(
+        f"[green]Đã ghi trên máy này[/green] {entry['at']} — {entry['summary']}\n"
+        "Xem lại: fb-poller actions"
+    )
+
+
+@app.command("actions")
+def actions_cmd(
+    q: str = typer.Option("", "--q", help="Filter by keyword"),
+    limit: int = typer.Option(30, help="How many recent actions to show"),
+) -> None:
+    """Show actions you recorded on this machine."""
+    rows = list_local(q=q, limit=limit)
+    if not rows:
+        console.print("[yellow]Chưa có thao tác nào được ghi.[/yellow]")
+        console.print("Ghi tay: fb-poller note \"đã import URL và rebalance hot\"")
+        return
+    table = Table(title="Nhật ký thao tác")
+    table.add_column("Thời gian")
+    table.add_column("Loại")
+    table.add_column("Thao tác")
+    for row in rows:
+        table.add_row(str(row.get("at") or ""), str(row.get("kind") or ""), str(row.get("summary") or ""))
+    console.print(table)
 
 
 if __name__ == "__main__":

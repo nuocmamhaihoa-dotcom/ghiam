@@ -65,6 +65,44 @@ def init_db(db_path: Path) -> None:
               fail_count INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS idx_proxies_status ON proxies(status);
+            CREATE TABLE IF NOT EXISTS operator_actions (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              at TEXT NOT NULL,
+              actor TEXT NOT NULL,
+              source TEXT NOT NULL,
+              kind TEXT NOT NULL,
+              summary TEXT NOT NULL,
+              detail TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_actions_at ON operator_actions(at);
+            CREATE TABLE IF NOT EXISTS input_recordings (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              at TEXT NOT NULL,
+              actor TEXT NOT NULL,
+              title TEXT NOT NULL,
+              event_count INTEGER NOT NULL,
+              steps_json TEXT NOT NULL,
+              events_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS script_clips (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              at TEXT NOT NULL,
+              name TEXT NOT NULL,
+              steps_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS script_scenarios (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              at TEXT NOT NULL,
+              name TEXT NOT NULL,
+              parts_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS saved_people (
+              name_key TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              contact_name TEXT NOT NULL DEFAULT '',
+              username TEXT NOT NULL DEFAULT '',
+              updated_at TEXT NOT NULL
+            );
             """
         )
         conn.commit()
@@ -164,6 +202,345 @@ def upsert_comments(db_path: Path, machine_id: str, comments: list[dict[str, Any
             if before is None:
                 inserted += 1
     return inserted
+
+
+def record_action(
+    db_path: Path,
+    *,
+    at: str,
+    actor: str,
+    source: str,
+    kind: str,
+    summary: str,
+    detail: str | None = None,
+) -> int:
+    with session(db_path) as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO operator_actions(at, actor, source, kind, summary, detail)
+            VALUES(?,?,?,?,?,?)
+            """,
+            (at, actor[:80], source[:40], kind[:40], summary[:500], (detail[:2000] if detail else None)),
+        )
+        conn.execute(
+            """
+            DELETE FROM operator_actions
+            WHERE id NOT IN (
+              SELECT id FROM operator_actions ORDER BY id DESC LIMIT 5000
+            )
+            """
+        )
+        return int(cur.lastrowid)
+
+
+def list_actions(
+    db_path: Path,
+    *,
+    limit: int = 50,
+    q: str = "",
+    kind: str | None = None,
+) -> list[dict[str, Any]]:
+    limit = max(1, min(int(limit), 200))
+    clauses: list[str] = []
+    params: list[Any] = []
+    needle = q.strip()
+    if needle:
+        escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like = f"%{escaped}%"
+        clauses.append(
+            "(summary LIKE ? ESCAPE '\\' OR IFNULL(detail,'') LIKE ? ESCAPE '\\' "
+            "OR kind LIKE ? ESCAPE '\\' OR actor LIKE ? ESCAPE '\\')"
+        )
+        params.extend([like, like, like, like])
+    if kind:
+        clauses.append("kind = ?")
+        params.append(kind)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    params.append(limit)
+    with session(db_path) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT id, at, actor, source, kind, summary, detail
+            FROM operator_actions
+            {where}
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def save_recording(
+    db_path: Path,
+    *,
+    at: str,
+    actor: str,
+    title: str,
+    steps: list[str],
+    events: list[dict[str, Any]],
+) -> int:
+    with session(db_path) as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO input_recordings(at, actor, title, event_count, steps_json, events_json)
+            VALUES(?,?,?,?,?,?)
+            """,
+            (
+                at,
+                actor[:80],
+                title[:200],
+                len(events),
+                json.dumps(steps, ensure_ascii=False),
+                json.dumps(events, ensure_ascii=False),
+            ),
+        )
+        conn.execute(
+            """
+            DELETE FROM input_recordings
+            WHERE id NOT IN (
+              SELECT id FROM input_recordings ORDER BY id DESC LIMIT 100
+            )
+            """
+        )
+        return int(cur.lastrowid)
+
+
+def list_recordings(db_path: Path, *, limit: int = 20) -> list[dict[str, Any]]:
+    limit = max(1, min(int(limit), 50))
+    with session(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, at, actor, title, event_count, steps_json
+            FROM input_recordings
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        try:
+            item["steps"] = json.loads(item.pop("steps_json") or "[]")
+        except json.JSONDecodeError:
+            item["steps"] = []
+            item.pop("steps_json", None)
+        items.append(item)
+    return items
+
+
+def get_recording(db_path: Path, recording_id: int) -> dict[str, Any] | None:
+    with session(db_path) as conn:
+        row = conn.execute(
+            "SELECT id, at, actor, title, event_count, steps_json, events_json FROM input_recordings WHERE id=?",
+            (recording_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    item = dict(row)
+    try:
+        item["steps"] = json.loads(item.pop("steps_json") or "[]")
+    except json.JSONDecodeError:
+        item["steps"] = []
+        item.pop("steps_json", None)
+    try:
+        item["events"] = json.loads(item.pop("events_json") or "[]")
+    except json.JSONDecodeError:
+        item["events"] = []
+        item.pop("events_json", None)
+    return item
+
+
+def _load_steps(raw: str) -> list[dict[str, Any]]:
+    try:
+        steps = json.loads(raw or "[]")
+    except json.JSONDecodeError:
+        return []
+    return steps if isinstance(steps, list) else []
+
+
+def _load_parts(raw: str) -> list[dict[str, Any]]:
+    try:
+        parts = json.loads(raw or "[]")
+    except json.JSONDecodeError:
+        return []
+    return parts if isinstance(parts, list) else []
+
+
+def _scenario_clip_ids(parts: list[dict[str, Any]]) -> set[int]:
+    ids: set[int] = set()
+    for part in parts:
+        if not isinstance(part, dict):
+            continue
+        try:
+            clip_id = int(part.get("clipId") or 0)
+        except (TypeError, ValueError):
+            continue
+        if clip_id > 0:
+            ids.add(clip_id)
+    return ids
+
+
+def save_clip(db_path: Path, *, at: str, name: str, steps: list[dict[str, Any]]) -> int:
+    with session(db_path) as conn:
+        cur = conn.execute(
+            "INSERT INTO script_clips(at, name, steps_json) VALUES(?,?,?)",
+            (at, name[:80], json.dumps(steps, ensure_ascii=False)),
+        )
+        return int(cur.lastrowid)
+
+
+def update_clip(db_path: Path, clip_id: int, *, at: str, name: str, steps: list[dict[str, Any]]) -> bool:
+    with session(db_path) as conn:
+        cur = conn.execute(
+            "UPDATE script_clips SET at=?, name=?, steps_json=? WHERE id=?",
+            (at, name[:80], json.dumps(steps, ensure_ascii=False), clip_id),
+        )
+        return cur.rowcount > 0
+
+
+def list_clips(db_path: Path, *, limit: int = 50) -> list[dict[str, Any]]:
+    limit = max(1, min(int(limit), 50))
+    with session(db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, at, name, steps_json FROM script_clips ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        scenarios = conn.execute("SELECT name, parts_json FROM script_scenarios").fetchall()
+    used: dict[int, list[str]] = {}
+    for scenario in scenarios:
+        for clip_id in _scenario_clip_ids(_load_parts(scenario["parts_json"])):
+            used.setdefault(clip_id, [])
+            if scenario["name"] not in used[clip_id]:
+                used[clip_id].append(scenario["name"])
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        steps = _load_steps(row["steps_json"])
+        clip_id = int(row["id"])
+        names = used.get(clip_id, [])
+        items.append(
+            {
+                "id": clip_id,
+                "at": row["at"],
+                "name": row["name"],
+                "steps": steps,
+                "scenarioCount": len(names),
+                "scenarioNames": names,
+            }
+        )
+    return items
+
+
+def get_clip(db_path: Path, clip_id: int) -> dict[str, Any] | None:
+    with session(db_path) as conn:
+        row = conn.execute(
+            "SELECT id, at, name, steps_json FROM script_clips WHERE id=?",
+            (clip_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    return {"id": int(row["id"]), "at": row["at"], "name": row["name"], "steps": _load_steps(row["steps_json"])}
+
+
+def delete_clip(db_path: Path, clip_id: int) -> str:
+    with session(db_path) as conn:
+        row = conn.execute("SELECT id FROM script_clips WHERE id=?", (clip_id,)).fetchone()
+        if row is None:
+            return "missing"
+        scenarios = conn.execute("SELECT name, parts_json FROM script_scenarios").fetchall()
+        for scenario in scenarios:
+            if clip_id in _scenario_clip_ids(_load_parts(scenario["parts_json"])):
+                return "used"
+        conn.execute("DELETE FROM script_clips WHERE id=?", (clip_id,))
+    return "deleted"
+
+
+def save_scenario(db_path: Path, *, at: str, name: str, parts: list[dict[str, Any]]) -> int:
+    with session(db_path) as conn:
+        cur = conn.execute(
+            "INSERT INTO script_scenarios(at, name, parts_json) VALUES(?,?,?)",
+            (at, name[:80], json.dumps(parts, ensure_ascii=False)),
+        )
+        return int(cur.lastrowid)
+
+
+def update_scenario(db_path: Path, scenario_id: int, *, at: str, name: str, parts: list[dict[str, Any]]) -> bool:
+    with session(db_path) as conn:
+        cur = conn.execute(
+            "UPDATE script_scenarios SET at=?, name=?, parts_json=? WHERE id=?",
+            (at, name[:80], json.dumps(parts, ensure_ascii=False), scenario_id),
+        )
+        return cur.rowcount > 0
+
+
+def list_scenarios(db_path: Path, *, limit: int = 50) -> list[dict[str, Any]]:
+    limit = max(1, min(int(limit), 50))
+    with session(db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, at, name, parts_json FROM script_scenarios ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        names = {int(row["id"]): row["name"] for row in conn.execute("SELECT id, name FROM script_clips")}
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        parts = []
+        for part in _load_parts(row["parts_json"]):
+            if not isinstance(part, dict):
+                continue
+            clip_id = int(part.get("clipId") or 0)
+            parts.append(
+                {
+                    "clipId": clip_id,
+                    "clipName": names.get(clip_id, ""),
+                    "fills": part.get("fills") or {},
+                }
+            )
+        items.append({"id": int(row["id"]), "at": row["at"], "name": row["name"], "parts": parts})
+    return items
+
+
+def get_scenario(db_path: Path, scenario_id: int) -> dict[str, Any] | None:
+    with session(db_path) as conn:
+        row = conn.execute(
+            "SELECT id, at, name, parts_json FROM script_scenarios WHERE id=?",
+            (scenario_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        names = {int(item["id"]): item["name"] for item in conn.execute("SELECT id, name FROM script_clips")}
+    parts = []
+    for part in _load_parts(row["parts_json"]):
+        if not isinstance(part, dict):
+            continue
+        clip_id = int(part.get("clipId") or 0)
+        parts.append(
+            {
+                "clipId": clip_id,
+                "clipName": names.get(clip_id, ""),
+                "fills": part.get("fills") or {},
+            }
+        )
+    return {"id": int(row["id"]), "at": row["at"], "name": row["name"], "parts": parts}
+
+
+def delete_scenario(db_path: Path, scenario_id: int) -> bool:
+    with session(db_path) as conn:
+        cur = conn.execute("DELETE FROM script_scenarios WHERE id=?", (scenario_id,))
+        return cur.rowcount > 0
+
+
+def clips_by_id(db_path: Path, clip_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
+    wanted = [clip_id for clip_id in clip_ids if clip_id > 0]
+    if not wanted:
+        return {}
+    placeholders = ",".join("?" for _ in wanted)
+    with session(db_path) as conn:
+        rows = conn.execute(
+            f"SELECT id, steps_json FROM script_clips WHERE id IN ({placeholders})",
+            wanted,
+        ).fetchall()
+    return {int(row["id"]): _load_steps(row["steps_json"]) for row in rows}
 
 
 def record_transfer(db_path: Path, machine_id: str, kind: str, nbytes: int, ms: int, at: str) -> None:
@@ -326,3 +703,58 @@ def proxy_summary(db_path: Path) -> dict[str, Any]:
         "unknown": unknown,
         "last_checked_at": last,
     }
+
+
+def list_people(db_path: Path) -> list[dict[str, str]]:
+    with session(db_path) as conn:
+        rows = conn.execute(
+            "SELECT name_key, name, contact_name, username FROM saved_people ORDER BY updated_at DESC"
+        ).fetchall()
+    return [
+        {
+            "nameKey": row["name_key"],
+            "name": row["name"],
+            "contactName": row["contact_name"],
+            "username": row["username"],
+        }
+        for row in rows
+    ]
+
+
+def save_people(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> None:
+    with session(db_path) as conn:
+        current = {
+            row["name_key"]: row
+            for row in conn.execute(
+                "SELECT name_key, name, contact_name, username FROM saved_people"
+            ).fetchall()
+        }
+        for row in rows:
+            old = current.get(row["nameKey"])
+            contact_name = row.get("contactName") or ""
+            username = row.get("username") or ""
+            if (
+                old
+                and old["name"] == row["name"]
+                and old["contact_name"] == contact_name
+                and old["username"] == username
+            ):
+                continue
+            conn.execute(
+                """
+                INSERT INTO saved_people(name_key, name, contact_name, username, updated_at)
+                VALUES(?,?,?,?,?)
+                ON CONFLICT(name_key) DO UPDATE SET
+                  name=excluded.name,
+                  contact_name=excluded.contact_name,
+                  username=excluded.username,
+                  updated_at=excluded.updated_at
+                """,
+                (
+                    row["nameKey"],
+                    row["name"],
+                    row.get("contactName") or "",
+                    row.get("username") or "",
+                    updated_at,
+                ),
+            )

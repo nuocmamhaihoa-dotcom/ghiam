@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Danh bạ</title>
+  <script>
+    if (window.parent === window && /iPhone|iPod/.test(navigator.userAgent)) {
+      location.replace("/iphone");
+    }
+  </script>
+  <style>
+    :root { --bg: #fff; --text: #111; --muted: #8a8f98; --pink: #fe2c55; --font: "Segoe UI", system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: var(--font); color: var(--text); background: var(--bg); touch-action: pan-y; }
+    header { position: sticky; top: 0; background: #fff; border-bottom: 1px solid #eee; padding: 0.7rem 0.9rem; text-align: center; font-weight: 700; }
+    ul { list-style: none; margin: 0; padding: 0; }
+    li, .profile { display: flex; gap: 0.7rem; align-items: center; padding: 0.75rem 0.9rem; border-bottom: 1px solid #f2f2f2; }
+    .avatar { width: 48px; height: 48px; border-radius: 50%; background: #eceff3; flex: none; }
+    .who { flex: 1; min-width: 0; }
+    .who b, .profile h1 { display: block; font-size: 1rem; margin: 0; }
+    .who span, .handle { color: var(--muted); font-size: 0.85rem; }
+    button.follow { border: 0; background: var(--pink); color: #fff; font-weight: 700; border-radius: 8px; padding: 0.45rem 0.9rem; }
+    .profile { display: block; min-height: 70vh; padding-top: 1.2rem; }
+    .profile h1 { font-size: 1.6rem; }
+    .gap { height: 110vh; }
+    #saved { position: sticky; bottom: 0; background: #10141b; color: #e7edf5; padding: 0.45rem 0.7rem 0.6rem; font-size: 0.78rem; }
+    #saved b { font-weight: 650; }
+    #saved table { width: 100%; border-collapse: collapse; }
+    #saved td { padding: 0.15rem 0.3rem 0.15rem 0; }
+  </style>
+</head>
+<body>
+  <header>Danh bạ</header>
+  <ul>
+    <li>
+      <div class="avatar"></div>
+      <div class="who"><b>A Tùng Bán Gạch</b><span>Trần Tùng</span></div>
+      <button class="follow" type="button">Follow</button>
+    </li>
+    <li>
+      <div class="avatar"></div>
+      <div class="who"><b>Chị Soi Xuân Trung</b><span>Bà soi</span></div>
+      <button class="follow" type="button">Follow</button>
+    </li>
+    <li>
+      <div class="avatar"></div>
+      <div class="who"><b>Hong@1978</b><span>Hồng</span></div>
+      <button class="follow" type="button">Follow</button>
+    </li>
+  </ul>
+  <div class="gap"></div>
+  <section class="profile">
+    <h1>Trần Tùng</h1>
+    <p class="handle">@trn.tng751</p>
+    <button class="follow" type="button">Follow</button>
+  </section>
+  <section class="profile">
+    <h1>Bà soi</h1>
+    <p class="handle">@b.soi22</p>
+    <button class="follow" type="button">Follow</button>
+  </section>
+  <div id="saved">
+    <b>Đã lưu khi tên trùng</b>
+    <table>
+      <tbody id="savedRows"><tr><td>Lướt tới hồ sơ để ghép với danh bạ.</td></tr></tbody>
+    </table>
+  </div>
+  <script src="/static/watch.js?v=__IPHONE_BUILD__"></script>
+  <script>
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[ch]);
+    }
+    function draw(items) {
+      const rows = document.getElementById("savedRows");
+      if (!items.length) return;
+      rows.innerHTML = items.map((person) =>
+        "<tr><td>" + esc(person.name) + "</td><td>" + esc(person.contactName) + "</td><td>" + esc(person.username) + "</td></tr>"
+      ).join("");
+    }
+    document.addEventListener("people-saved", (event) => draw(event.detail || []));
+    document.addEventListener("people-auth", () => {
+      document.getElementById("savedRows").innerHTML = "<tr><td>Hãy lưu token trên hub rồi lướt lại.</td></tr>";
+    });
+    let drag = null;
+    document.addEventListener("pointerdown", (event) => {
+      if (event.pointerType !== "mouse" || event.button !== 0) return;
+      if (event.target.closest("button, a, input, textarea")) return;
+      drag = { id: event.pointerId, y: event.clientY, top: window.scrollY };
+    });
+    document.addEventListener("pointermove", (event) => {
+      if (!drag || event.pointerId !== drag.id) return;
+      window.scrollTo(0, drag.top - (event.clientY - drag.y));
+    });
+    document.addEventListener("pointerup", (event) => {
+      if (drag && event.pointerId === drag.id) drag = null;
+    });
+    document.addEventListener("pointercancel", () => { drag = null; });
+    (async function loadSaved() {
+      const token = localStorage.getItem("fb_poller_control_token") || "";
+      const headers = {};
+      if (token) headers.Authorization = "Bearer " + token;
+      const response = await fetch("/v1/people", { headers: headers });
+      if (!response.ok) return;
+      const data = await response.json();
+      draw(data.items || []);
+    })();
+  </script>
+</body>
+</html>
