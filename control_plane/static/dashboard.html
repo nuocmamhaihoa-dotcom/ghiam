@@ -63,6 +63,16 @@
     input { flex: 1; min-width: 180px; }
     button { background: var(--accent); border-color: transparent; color: #041018; font-weight: 600; cursor: pointer; }
     button.ghost { background: transparent; color: var(--text); border-color: var(--line); }
+    a#openPhone {
+      display: inline-block;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--text);
+      padding: 0.55rem 0.75rem;
+      text-decoration: none;
+      font-weight: 600;
+    }
     button.danger { background: #a33; color: #fff; }
     table {
       width: 100%; border-collapse: collapse;
@@ -184,9 +194,11 @@
       <div data-norecord>
         <h2 style="margin-top:1.1rem">Làm lại đúng phím và cảm ứng</h2>
         <p class="meta">Chạm lệch trong 36px vẫn được hiểu là nút gần nhất. Khi làm lại, phần mềm đối chiếu chữ, vai trò và vị trí. Hai lựa chọn quá giống thì hỏi bạn. Thao tác chỉ tính là xong khi việc thực sự xảy ra. Bấm «Sửa» để thêm, xoá, đổi thứ tự, ghi lại một đoạn, và xem control của từng bước trên trang. Lưu ra bản mới, bản gốc giữ nguyên. Đặt tên một đoạn rồi ghép nhiều đoạn thành kịch bản. Sửa đoạn thì mọi kịch bản đang dùng đoạn đó làm theo bản mới. Chỗ trống chữ hoặc control được điền riêng trong từng kịch bản.</p>
+        <p class="meta" id="phoneBanner" hidden>Chuột trên PC đang được ghi như ngón tay trên điện thoại. Chạm lệch 36px vẫn bấm đúng nút.</p>
         <p class="meta" id="recordState" style="margin:0 0 0.6rem">Chưa ghi.</p>
         <div class="toolbar">
           <button id="recordToggle" type="button">Ghi bấm phím và cảm ứng</button>
+          <a id="openPhone" href="/phone">Mở giả lập điện thoại trên PC</a>
         </div>
         <table>
           <thead>
@@ -317,6 +329,7 @@
   </main>
   <script>
     const $ = (id) => document.getElementById(id);
+    const emulateTouch = new URLSearchParams(location.search).get("as") === "phone";
     const tokenKey = "fb_poller_control_token";
     $("token").value = localStorage.getItem(tokenKey) || "";
 
@@ -621,6 +634,11 @@
       return Math.max(0, Math.round(performance.now() - recorder.t0));
     }
 
+    function pointerKind(e) {
+      if (emulateTouch) return "touch";
+      return e.pointerType || "mouse";
+    }
+
     function pointOf(e, target) {
       const nx = window.innerWidth ? e.clientX / window.innerWidth : 0;
       const ny = window.innerHeight ? e.clientY / window.innerHeight : 0;
@@ -632,7 +650,7 @@
         y: Math.round(e.clientY),
         nx: Math.max(0, Math.min(1, nx)),
         ny: Math.max(0, Math.min(1, ny)),
-        pointerType: e.pointerType || "mouse",
+        pointerType: pointerKind(e),
       };
     }
 
@@ -651,7 +669,7 @@
         recorder.press = null;
         return;
       }
-      const slop = e.pointerType === "mouse" ? 12 : TOUCH_SLOP;
+      const slop = pointerKind(e) === "mouse" ? 12 : TOUCH_SLOP;
       const aimed = aimAt(e.clientX, e.clientY, e.target, slop);
       if (!aimed.selector) { recorder.press = null; return; }
       recorder.press = { id: e.pointerId, x: e.clientX, y: e.clientY, target: aimed.selector, slop: slop };
@@ -1302,7 +1320,7 @@
     }
 
     async function capturePointerStep(e, mode) {
-      const slop = e.pointerType === "mouse" ? 12 : TOUCH_SLOP;
+      const slop = pointerKind(e) === "mouse" ? 12 : TOUCH_SLOP;
       const aimed = aimAt(e.clientX, e.clientY, e.target, slop);
       if (!aimed.selector) {
         $("recordState").textContent = "Không thấy control. Chạm vào nút hoặc ô trên trang.";
@@ -1315,7 +1333,7 @@
         kind: "pointer",
         phase: "up",
         target: aimed.selector,
-        pointerType: e.pointerType || "touch",
+        pointerType: pointerKind(e),
         click: intent !== "swipe",
         intent: intent,
       };
@@ -1642,7 +1660,7 @@
     }
 
     async function captureFill(e, pending) {
-      const slop = e.pointerType === "mouse" ? 12 : TOUCH_SLOP;
+      const slop = pointerKind(e) === "mouse" ? 12 : TOUCH_SLOP;
       const aimed = aimAt(e.clientX, e.clientY, e.target, slop);
       const part = scenario.parts[pending.partIndex];
       if (!part || !aimed.selector) {
@@ -1656,7 +1674,7 @@
         kind: "pointer",
         phase: "up",
         target: aimed.selector,
-        pointerType: e.pointerType || "touch",
+        pointerType: pointerKind(e),
         click: intent !== "swipe",
         intent: intent,
       };
@@ -2052,6 +2070,11 @@
     $("actionQ").addEventListener("keydown", (e) => { if (e.key === "Enter") loadAll(); });
     $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") loadAll(); });
     $("limit").onchange = loadAll;
+    if (emulateTouch) {
+      document.documentElement.dataset.emulate = "touch";
+      $("phoneBanner").hidden = false;
+      $("openPhone").hidden = true;
+    }
     if ($("token").value) loadAll();
     setInterval(() => { if ($("token").value && !replaying && !recorder.on) loadAll(); }, 20000);
   </script>

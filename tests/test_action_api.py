@@ -123,6 +123,14 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Lưu thành bản mới", response.text)
         self.assertIn("Lưu thành đoạn", response.text)
         self.assertIn("Kịch bản ghép", response.text)
+        self.assertIn("Mở giả lập điện thoại trên PC", response.text)
+
+    def test_phone_emulator_page(self) -> None:
+        response = self.client.get("/phone")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Giả lập", response.text)
+        self.assertIn('src="/?as=phone"', response.text)
+        self.assertIn("Kết nối PC", response.text)
 
     def test_named_clip_updates_every_scenario(self) -> None:
         created = self.client.post(

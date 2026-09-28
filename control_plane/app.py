@@ -174,6 +174,15 @@ def dashboard() -> HTMLResponse:
     return HTMLResponse(path.read_text(encoding="utf-8"))
 
 
+@app.get("/phone", response_class=HTMLResponse)
+def phone() -> HTMLResponse:
+    """Khung điện thoại trên PC. Trang trong khung là dashboard, chuột được ghi như ngón tay."""
+    path = STATIC_DIR / "phone.html"
+    if not path.exists():
+        return HTMLResponse("<h1>fb-poller</h1><p>Phone page missing.</p>", status_code=404)
+    return HTMLResponse(path.read_text(encoding="utf-8"))
+
+
 @app.get("/v1/server/stats")
 def server_stats(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     _auth(authorization)
