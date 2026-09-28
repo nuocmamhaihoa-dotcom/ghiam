@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
+from control_plane.delivery import PACKAGE_NAME, ensure_package
 from control_plane.people import apply_novel, complete_rows
 from control_plane.version import IPHONE_BUILD
 from control_plane.recordings import (
@@ -165,6 +166,7 @@ def health() -> dict[str, Any]:
         "packages_dir": str(settings.packages_dir),
         "dashboard": "/",
         "iphoneBuild": IPHONE_BUILD,
+        "delivery": "/tai",
     }
 
 
@@ -192,6 +194,41 @@ def phone() -> HTMLResponse:
 def iphone_app() -> HTMLResponse:
     """App trên iPhone: lướt để lưu tên, điều khiển để ghi và làm lại thao tác."""
     return _html("iphone.html")
+
+
+@app.get("/tai", response_class=HTMLResponse)
+def delivery_page() -> HTMLResponse:
+    """Đường truyền tải: mở app trên iPhone hoặc tải gói zip."""
+    return _html("tai.html")
+
+
+@app.get("/v1/delivery")
+def delivery_info() -> dict[str, Any]:
+    pkg = ensure_package(STATIC_DIR, settings.data_dir)
+    return {
+        "iphoneBuild": IPHONE_BUILD,
+        "iphonePath": "/iphone",
+        "installPath": "/tai",
+        "package": {
+            "name": pkg.name,
+            "bytes": pkg.stat().st_size,
+            "sha256": _sha256(pkg),
+            "path": "/tai/goi.zip",
+        },
+    }
+
+
+@app.get("/tai/goi.zip")
+def delivery_package() -> FileResponse:
+    pkg = ensure_package(STATIC_DIR, settings.data_dir)
+    if pkg.name != PACKAGE_NAME:
+        raise HTTPException(status_code=404, detail="package missing")
+    return FileResponse(
+        pkg,
+        media_type="application/zip",
+        filename=pkg.name,
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @app.get("/manifest.webmanifest")
