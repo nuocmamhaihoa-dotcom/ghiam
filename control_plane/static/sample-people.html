@@ -2,8 +2,13 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Danh bạ</title>
+  <script>
+    if (window.parent === window && /iPhone|iPod/.test(navigator.userAgent)) {
+      location.replace("/iphone");
+    }
+  </script>
   <style>
     :root { --bg: #fff; --text: #111; --muted: #8a8f98; --pink: #fe2c55; --font: "Segoe UI", system-ui, sans-serif; }
     * { box-sizing: border-box; }
@@ -61,7 +66,7 @@
       <tbody id="savedRows"><tr><td>Lướt tới hồ sơ để ghép với danh bạ.</td></tr></tbody>
     </table>
   </div>
-  <script src="/static/watch.js"></script>
+  <script src="/static/watch.js?v=2"></script>
   <script>
     function esc(value) {
       return String(value ?? "").replace(/[&<>"']/g, (ch) => ({

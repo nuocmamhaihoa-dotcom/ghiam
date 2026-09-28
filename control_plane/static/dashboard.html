@@ -2,7 +2,13 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#10141b" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>fb-poller — Hub VPS</title>
   <style>
     :root {
@@ -155,10 +161,34 @@
     #phoneBanner {
       margin: 0; padding: 0.35rem 0.9rem; background: #16324a; color: #d5e9f8; font-size: 0.8rem;
     }
+    a.iphone-go {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 48px; margin: 0 0 0.7rem;
+      background: var(--accent); color: var(--accent-ink);
+      border-radius: 12px; font-weight: 700; text-decoration: none;
+    }
     @media (max-width: 800px) {
       .split { grid-template-columns: 1fr; }
       .hide-sm { display: none; }
       .tabs { padding-bottom: 0.4rem; }
+    }
+    @media (max-width: 640px) {
+      body { font-size: 16px; }
+      .shell { padding-top: env(safe-area-inset-top); }
+      .top, .tabs, #phoneBanner, .err {
+        padding-left: max(0.9rem, env(safe-area-inset-left));
+        padding-right: max(0.9rem, env(safe-area-inset-right));
+      }
+      .tabs {
+        flex-wrap: nowrap; overflow-x: auto;
+        -webkit-overflow-scrolling: touch; scrollbar-width: none;
+      }
+      .tabs button, .subtabs button, .token-row button, .toolbar button, a#openPhone {
+        min-height: 44px; flex: 0 0 auto;
+      }
+      input, select, textarea { font-size: 16px; }
+      main { padding-bottom: calc(1.4rem + env(safe-area-inset-bottom)); }
+      .editor-step { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -193,6 +223,7 @@
   <main>
     <section data-view="home">
       <p class="lead">Số liệu hub, máy đang nối, rồi chuyển tab để ghi nhớ, làm lại thao tác, xem proxy hoặc comment.</p>
+      <a class="iphone-go" href="/iphone">Lướt trên iPhone</a>
       <div class="stats" id="stats"></div>
       <div id="agents"></div>
     </section>
@@ -2209,6 +2240,10 @@
       document.documentElement.dataset.emulate = "touch";
       $("phoneBanner").hidden = false;
       $("openPhone").hidden = true;
+    }
+    if (/iPhone|iPod/.test(navigator.userAgent)) {
+      $("openPhone").href = "/iphone";
+      $("openPhone").textContent = "Mở trên iPhone";
     }
     if ($("token").value) loadAll();
     setInterval(() => { if ($("token").value && !replaying && !recorder.on) loadAll(); }, 20000);

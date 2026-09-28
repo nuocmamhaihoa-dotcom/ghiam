@@ -184,6 +184,31 @@ def phone() -> HTMLResponse:
     return HTMLResponse(path.read_text(encoding="utf-8"))
 
 
+@app.get("/iphone", response_class=HTMLResponse)
+def iphone_app() -> HTMLResponse:
+    """App full màn hình cho Safari trên iPhone. Lướt bằng ngón tay, tên trùng tự lưu."""
+    path = STATIC_DIR / "iphone.html"
+    if not path.exists():
+        return HTMLResponse("<p>Missing iPhone app.</p>", status_code=404)
+    return HTMLResponse(path.read_text(encoding="utf-8"))
+
+
+@app.get("/manifest.webmanifest")
+def web_manifest() -> FileResponse:
+    path = STATIC_DIR / "manifest.webmanifest"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="manifest missing")
+    return FileResponse(path, media_type="application/manifest+json")
+
+
+@app.get("/apple-touch-icon.png")
+def apple_touch_icon() -> FileResponse:
+    path = STATIC_DIR / "apple-touch-icon.png"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="icon missing")
+    return FileResponse(path, media_type="image/png")
+
+
 @app.get("/sample-people", response_class=HTMLResponse)
 def sample_people() -> HTMLResponse:
     """Trang lướt mẫu: danh bạ rồi hồ sơ, để khung điện thoại tự ghép tên trùng."""

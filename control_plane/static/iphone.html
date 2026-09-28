@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="theme-color" content="#ffffff" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <title>Danh bạ — fb-poller</title>
+  <style>
+    :root { --text: #111; --muted: #8a8f98; --pink: #fe2c55; --sheet: #10141b; --font: -apple-system, "Segoe UI", system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      background: #fff;
+      font-size: 16px;
+      touch-action: pan-y;
+      padding-bottom: calc(9.5rem + env(safe-area-inset-bottom));
+    }
+    header {
+      position: sticky; top: 0; z-index: 2;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: calc(0.55rem + env(safe-area-inset-top)) max(0.9rem, env(safe-area-inset-right)) 0.55rem max(0.9rem, env(safe-area-inset-left));
+      background: rgba(255, 255, 255, 0.94);
+      border-bottom: 1px solid #eee;
+      backdrop-filter: blur(10px);
+    }
+    header h1 { margin: 0; font-size: 1.05rem; }
+    header a {
+      color: #111; text-decoration: none; font-weight: 650;
+      min-height: 44px; display: inline-flex; align-items: center;
+    }
+    .install {
+      margin: 0;
+      padding: 0.65rem max(0.9rem, env(safe-area-inset-right)) 0.7rem max(0.9rem, env(safe-area-inset-left));
+      background: #f4f7fb; color: #243044; font-size: 0.92rem;
+    }
+    .install button {
+      margin-top: 0.4rem; min-height: 44px; border: 0; border-radius: 10px;
+      background: #111; color: #fff; font: inherit; font-weight: 700; padding: 0 0.9rem;
+    }
+    ul { list-style: none; margin: 0; padding: 0; }
+    li, .profile {
+      display: flex; gap: 0.75rem; align-items: center;
+      padding: 0.8rem max(0.9rem, env(safe-area-inset-right)) 0.8rem max(0.9rem, env(safe-area-inset-left));
+      border-bottom: 1px solid #f2f2f2;
+    }
+    .avatar { width: 52px; height: 52px; border-radius: 50%; background: #eceff3; flex: none; }
+    .who { flex: 1; min-width: 0; }
+    .who b, .profile h2 { display: block; font-size: 1.05rem; margin: 0; }
+    .who span, .handle { color: var(--muted); font-size: 0.95rem; }
+    button.follow {
+      border: 0; background: var(--pink); color: #fff; font-weight: 700;
+      border-radius: 8px; min-height: 44px; padding: 0 0.95rem; font-size: 1rem;
+    }
+    .profile { display: block; min-height: 78vh; padding-top: 1.3rem; }
+    .profile h2 { font-size: 1.7rem; font-weight: 750; }
+    .gap { height: 70vh; }
+    #saved {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 3;
+      background: var(--sheet); color: #e7edf5;
+      padding: 0.55rem max(0.85rem, env(safe-area-inset-right)) calc(0.55rem + env(safe-area-inset-bottom)) max(0.85rem, env(safe-area-inset-left));
+      font-size: 0.92rem;
+      border-radius: 16px 16px 0 0;
+      box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.18);
+    }
+    #saved b { display: block; margin-bottom: 0.2rem; }
+    #saved table { width: 100%; border-collapse: collapse; }
+    #saved td { padding: 0.18rem 0.35rem 0.18rem 0; vertical-align: top; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Danh bạ</h1>
+    <a href="/">Hub</a>
+  </header>
+  <p class="install" id="install">Trên Safari: bấm Chia sẻ, rồi Thêm vào Màn hình chính. Sau đó mở như một app.
+    <br /><button type="button" id="installHide">Đã hiểu</button>
+  </p>
+  <ul>
+    <li>
+      <div class="avatar"></div>
+      <div class="who"><b>A Tùng Bán Gạch</b><span>Trần Tùng</span></div>
+      <button class="follow" type="button">Follow</button>
+    </li>
+    <li>
+      <div class="avatar"></div>
+      <div class="who"><b>Chị Soi Xuân Trung</b><span>Bà soi</span></div>
+      <button class="follow" type="button">Follow</button>
+    </li>
+    <li>
+      <div class="avatar"></div>
+      <div class="who"><b>Hong@1978</b><span>Hồng</span></div>
+      <button class="follow" type="button">Follow</button>
+    </li>
+  </ul>
+  <div class="gap"></div>
+  <section class="profile">
+    <h2>Trần Tùng</h2>
+    <p class="handle">@trn.tng751</p>
+    <button class="follow" type="button">Follow</button>
+  </section>
+  <section class="profile">
+    <h2>Bà soi</h2>
+    <p class="handle">@b.soi22</p>
+    <button class="follow" type="button">Follow</button>
+  </section>
+  <div id="saved">
+    <b>Đã lưu khi tên trùng</b>
+    <table>
+      <tbody id="savedRows"><tr><td>Lướt tới hồ sơ để ghép với danh bạ.</td></tr></tbody>
+    </table>
+  </div>
+  <script src="/static/watch.js?v=2"></script>
+  <script>
+    const install = document.getElementById("install");
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+    if (standalone || localStorage.getItem("fb_poller_iphone_install") === "1") install.hidden = true;
+    document.getElementById("installHide").addEventListener("click", () => {
+      localStorage.setItem("fb_poller_iphone_install", "1");
+      install.hidden = true;
+    });
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[ch]);
+    }
+    function draw(items) {
+      const rows = document.getElementById("savedRows");
+      if (!items.length) return;
+      rows.innerHTML = items.map((person) =>
+        "<tr><td>" + esc(person.name) + "</td><td>" + esc(person.contactName) + "</td><td>" + esc(person.username) + "</td></tr>"
+      ).join("");
+    }
+    document.addEventListener("people-saved", (event) => draw(event.detail || []));
+    document.addEventListener("people-auth", () => {
+      document.getElementById("savedRows").innerHTML = "<tr><td>Hãy lưu token trên hub rồi lướt lại.</td></tr>";
+    });
+    let drag = null;
+    document.addEventListener("pointerdown", (event) => {
+      if (event.pointerType !== "mouse" || event.button !== 0) return;
+      if (event.target.closest("button, a, input, textarea")) return;
+      drag = { id: event.pointerId, y: event.clientY, top: window.scrollY };
+    });
+    document.addEventListener("pointermove", (event) => {
+      if (!drag || event.pointerId !== drag.id) return;
+      window.scrollTo(0, drag.top - (event.clientY - drag.y));
+    });
+    document.addEventListener("pointerup", (event) => {
+      if (drag && event.pointerId === drag.id) drag = null;
+    });
+    document.addEventListener("pointercancel", () => { drag = null; });
+    (async function loadSaved() {
+      const token = localStorage.getItem("fb_poller_control_token") || "";
+      const headers = {};
+      if (token) headers.Authorization = "Bearer " + token;
+      const response = await fetch("/v1/people", { headers: headers });
+      if (!response.ok) return;
+      const data = await response.json();
+      draw(data.items || []);
+    })();
+  </script>
+</body>
+</html>

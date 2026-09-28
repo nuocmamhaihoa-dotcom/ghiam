@@ -52,7 +52,6 @@
     const items = [];
     document.querySelectorAll("button, a").forEach((button) => {
       if (button.innerText.replace(/\s+/g, " ").trim().toLowerCase() !== "follow") return;
-      if (!visible(button)) return;
       const row = rowFor(button);
       if (!row || !visible(row)) return;
       const item = classify(linesOf(row, button));
@@ -65,8 +64,10 @@
     return items;
   }
 
+  const queue = [];
+
   async function publish() {
-    const items = scan();
+    const items = queue.splice(0, 40);
     if (!items.length) return;
     const token = localStorage.getItem("fb_poller_control_token") || "";
     const headers = { "Content-Type": "application/json" };
@@ -86,6 +87,10 @@
     const saved = data.items || [];
     document.dispatchEvent(new CustomEvent("people-saved", { detail: saved }));
     tell({ type: "people-saved", items: saved });
+    if (queue.length) {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => { publish(); }, 50);
+    }
   }
 
   function tell(message) {
@@ -101,11 +106,21 @@
 
   let timer = 0;
   function schedule() {
+    queue.push(...scan());
     window.clearTimeout(timer);
-    timer = window.setTimeout(() => { publish(); }, 400);
+    timer = window.setTimeout(() => { publish(); }, 250);
   }
 
   window.addEventListener("scroll", schedule, true);
   window.addEventListener("load", schedule);
+  if ("IntersectionObserver" in window) {
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) schedule();
+    }, { threshold: 0.15 });
+    document.querySelectorAll("button, a").forEach((button) => {
+      if (button.innerText.replace(/\s+/g, " ").trim().toLowerCase() !== "follow") return;
+      observer.observe(rowFor(button) || button);
+    });
+  }
   schedule();
 })();
