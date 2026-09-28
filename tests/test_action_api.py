@@ -157,6 +157,10 @@ class ActionApiTests(unittest.TestCase):
         self.assertNotIn('data-app="browse"', page.text)
         self.assertNotIn("followTung", page.text)
         self.assertIn("Chọn video", page.text)
+        self.assertIn("Lưu thông tin", page.text)
+        self.assertIn("Tên danh bạ", page.text)
+        self.assertIn("/v1/people/confirm", page.text)
+        self.assertIn('id="peopleBox"', page.text)
         self.assertIn("Bắt đầu ghi", page.text)
         self.assertIn("Dừng ghi", page.text)
         self.assertIn("liên tục", page.text)
@@ -252,12 +256,12 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "18")
+        self.assertEqual(build, "19")
 
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 18)
+        self.assertEqual(payload["iphoneBuild"], 19)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -333,6 +337,41 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(listed.json()["count"], 1)
         with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
             conn.execute("DELETE FROM saved_people WHERE username = ?", ("@nguyen.anh",))
+
+    def test_confirm_saves_chosen_rows_without_overwrite(self) -> None:
+        denied = self.client.post(
+            "/v1/people/confirm",
+            json={"rows": [{"name": "Lê Hoa", "contactName": "Chị Hoa", "username": "@le.hoa"}]},
+        )
+        self.assertEqual(denied.status_code, 401)
+        saved = self.client.post(
+            "/v1/people/confirm",
+            headers=self.headers,
+            json={"rows": [{"name": "Lê Hoa", "contactName": "Chị Hoa", "username": "le.hoa"}]},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(saved.json()["saved"], 2)
+        row = next(item for item in saved.json()["items"] if item["username"] == "@le.hoa")
+        self.assertEqual(row["name"], "Lê Hoa")
+        self.assertEqual(row["contactName"], "Chị Hoa")
+        repeat = self.client.post(
+            "/v1/people/confirm",
+            headers=self.headers,
+            json={"rows": [{"name": "Lê Hoa", "contactName": "Tên khác", "username": "@khac.hoa"}]},
+        )
+        self.assertEqual(repeat.status_code, 200, repeat.text)
+        self.assertEqual(repeat.json()["saved"], 0)
+        kept = next(item for item in repeat.json()["items"] if item["name"] == "Lê Hoa")
+        self.assertEqual(kept["contactName"], "Chị Hoa")
+        self.assertEqual(kept["username"], "@le.hoa")
+        skipped = self.client.post(
+            "/v1/people/confirm",
+            headers=self.headers,
+            json={"rows": [{"name": "Lê Hoa", "contactName": "Lê Hoa", "username": "@le.hoa"}]},
+        )
+        self.assertEqual(skipped.json()["saved"], 0)
+        with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
+            conn.execute("DELETE FROM saved_people WHERE username = ?", ("@le.hoa",))
 
 
 if __name__ == "__main__":

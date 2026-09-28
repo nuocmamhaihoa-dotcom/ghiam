@@ -11,6 +11,8 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageOps, ImageStat
 
+from control_plane.screen_people import propose_rows, sightings_from_image
+
 _MAX_SECONDS = 600
 _MAX_FRAMES = 120
 _MAX_READS = 30
@@ -212,8 +214,8 @@ def read_screen_image(path: Path) -> str:
     return seen_line(text)
 
 
-def read_screen_video(path: Path) -> list[dict[str, Any]]:
-    """Sample a video, keep frames that change, and read the words on them."""
+def analyze_screen_video(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    """Đọc chữ nhìn thấy và đề xuất người đủ ba cột. Chưa ghi vào bảng."""
     duration = _duration(path)
     if duration is not None and duration > _MAX_SECONDS:
         raise ScreenVideoError("Video dài quá 10 phút. Dừng ghi rồi chọn lại.")
@@ -225,7 +227,14 @@ def read_screen_video(path: Path) -> list[dict[str, Any]]:
             raise ScreenVideoError("Video không có hình.")
         chosen = _changed_frames(images)
         frames = [(seconds, _ocr(image)) for seconds, image in chosen]
-    return steps_from_text(frames)
+        sightings = [item for _seconds, image in chosen for item in sightings_from_image(image)]
+    return steps_from_text(frames), propose_rows(sightings)
+
+
+def read_screen_video(path: Path) -> list[dict[str, Any]]:
+    """Sample a video, keep frames that change, and read the words on them."""
+    steps, _people = analyze_screen_video(path)
+    return steps
 
 
 def _sample_rate(duration: float | None) -> float:

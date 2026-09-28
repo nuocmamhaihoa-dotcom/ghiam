@@ -32,9 +32,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
 from control_plane.delivery import PACKAGE_NAME, ensure_package
-from control_plane.people import apply_novel, complete_rows, profile_from_line
+from control_plane.people import apply_novel, clean_name, clean_username, complete_rows, fold_name, profile_from_line
 from control_plane.version import IPHONE_BUILD
-from control_plane.screen_steps import ScreenVideoError, clean_ocr, read_screen_image, read_screen_video, seen_line
+from control_plane.screen_steps import ScreenVideoError, analyze_screen_video, clean_ocr, read_screen_image, seen_line
 from control_plane.settings import settings
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -295,6 +295,16 @@ class SightingsBody(BaseModel):
     items: list[Sighting] = Field(default_factory=list)
 
 
+class PeopleRow(BaseModel):
+    name: str = ""
+    contactName: str = ""
+    username: str = ""
+
+
+class PeopleConfirmBody(BaseModel):
+    rows: list[PeopleRow] = Field(default_factory=list)
+
+
 @app.get("/v1/people")
 def people_list(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     _auth(authorization)
@@ -315,6 +325,29 @@ def people_sightings(
         db.save_people(settings.db_path, folded, utcnow())
     ready = complete_rows(folded)
     return {"count": len(ready), "items": ready, "saved": added, "known": folded}
+
+
+@app.post("/v1/people/confirm")
+def people_confirm(body: PeopleConfirmBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Ghi những dòng người dùng đã giữ. Cột đã có thì không ghi đè."""
+    _auth(authorization)
+    items: list[dict[str, str]] = []
+    for row in body.rows[:40]:
+        name = clean_name(row.name)
+        contact_name = clean_name(row.contactName)
+        username = clean_username(row.username)
+        if len(name) < 2 or not contact_name or not username:
+            continue
+        if fold_name(contact_name) == fold_name(name):
+            continue
+        items.append({"kind": "contact", "name": name, "contactName": contact_name, "username": ""})
+        items.append({"kind": "profile", "name": name, "contactName": "", "username": username})
+    stored = db.list_people(settings.db_path)
+    folded, added = apply_novel(stored, items)
+    if added:
+        db.save_people(settings.db_path, folded, utcnow())
+    ready = complete_rows(folded)
+    return {"ok": True, "saved": added, "count": len(ready), "items": ready}
 
 
 @app.get("/v1/server/stats")
@@ -698,15 +731,24 @@ async def recordings_from_video(
         suffix = ".mp4"
     dest = await _store_upload(file, suffix)
     try:
-        steps = read_screen_video(dest)
+        steps, people = analyze_screen_video(dest)
     except ScreenVideoError as error:
         raise HTTPException(400, str(error)) from error
     finally:
         dest.unlink(missing_ok=True)
     lines = [str(step["caption"]) for step in steps]
     if not save:
-        return {"ok": True, "id": None, "title": "Chữ trên màn hình", "steps": steps, "count": len(steps)}
-    return _store_seen(lines)
+        return {
+            "ok": True,
+            "id": None,
+            "title": "Chữ trên màn hình",
+            "steps": steps,
+            "count": len(steps),
+            "people": people,
+        }
+    stored = _store_seen(lines)
+    stored["people"] = people
+    return stored
 
 
 @app.post("/v1/recordings/from-frame")

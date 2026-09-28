@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 _HANDLE = re.compile(r"^@?[A-Za-z0-9._]{2,30}$")
 
 
 def name_key(name: str) -> str:
     return " ".join(name.casefold().split())
+
+
+def fold_name(name: str) -> str:
+    """So khớp khi OCR bỏ dấu. Khóa lưu trong bảng vẫn giữ dấu."""
+    normalized = unicodedata.normalize("NFD", name)
+    stripped = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    return " ".join(stripped.casefold().replace("đ", "d").split())
 
 
 def clean_name(value: str) -> str:
