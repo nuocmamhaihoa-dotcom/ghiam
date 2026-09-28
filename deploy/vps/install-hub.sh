@@ -15,9 +15,12 @@ fi
 export PATH="${HOME}/.local/bin:${PATH}"
 if ! command -v uv >/dev/null 2>&1; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
+fi
+if [[ -f "${HOME}/.local/bin/env" ]]; then
   # shellcheck disable=SC1090
   source "${HOME}/.local/bin/env"
 fi
+export PATH="${HOME}/.local/bin:${PATH}"
 
 uv python install 3.12
 cd "$APP_DIR"
@@ -64,6 +67,7 @@ CONTROL_PROXY_CHECK_SEC=300
 CONTROL_PROXY_CHECK_CONCURRENCY=40
 CONTROL_PROXY_CHECK_TIMEOUT=8
 EOF
+chmod 600 "$APP_DIR/control_data/server.env"
 
 cp -f "$APP_DIR/deploy/vps/fb-poller-hub.service" /etc/systemd/system/fb-poller-hub.service
 systemctl daemon-reload
