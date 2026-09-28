@@ -119,6 +119,8 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Ghi nhớ", response.text)
         self.assertIn("Làm theo", response.text)
         self.assertIn("Ghi bấm phím và cảm ứng", response.text)
+        self.assertIn('id="recordDock"', response.text)
+        self.assertIn("Sau 10 giây", response.text)
         self.assertIn("Sửa", response.text)
         self.assertIn("Lưu thành bản mới", response.text)
         self.assertIn("Lưu thành đoạn", response.text)

@@ -160,6 +160,15 @@
     .scenario-part { padding: 0.4rem 0; border-bottom: 1px solid var(--line); }
     .scenario-part input, .editor-step input { width: 100%; margin: 0.25rem 0; }
     body.is-recording { box-shadow: inset 0 0 0 3px rgba(240, 113, 120, 0.9); }
+    #recordDock {
+      position: fixed; z-index: 30; left: 0; right: 0; bottom: 0;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;
+      padding: 0.45rem max(0.7rem, env(safe-area-inset-right)) calc(0.45rem + env(safe-area-inset-bottom)) max(0.7rem, env(safe-area-inset-left));
+      background: #0e131b; border-top: 1px solid var(--line);
+    }
+    #recordDock p { grid-column: 1 / -1; margin: 0; font-size: 0.95rem; }
+    #recordDock button { min-height: 48px; font-size: 16px; justify-content: center; }
+    main { padding-bottom: calc(6.6rem + env(safe-area-inset-bottom)); }
     #phoneBanner {
       margin: 0; padding: 0.35rem 0.9rem; background: #16324a; color: #d5e9f8; font-size: 0.8rem;
     }
@@ -189,7 +198,9 @@
         min-height: 44px; flex: 0 0 auto;
       }
       input, select, textarea { font-size: 16px; }
-      main { padding-bottom: calc(1.4rem + env(safe-area-inset-bottom)); }
+      .lead, .desk-only { display: none; }
+      #openPhone { display: none; }
+      main { padding-bottom: calc(6.6rem + env(safe-area-inset-bottom)); }
       .editor-step { grid-template-columns: 1fr; }
     }
   </style>
@@ -214,6 +225,11 @@
   </header>
   <p class="meta" id="phoneBanner" hidden>Chuột trên PC đang được ghi như ngón tay trên điện thoại. Chạm lệch 36px vẫn bấm đúng nút.</p>
   <div id="err" class="err" hidden></div>
+  <div id="recordDock" data-norecord>
+    <p id="recordDockState">Chưa ghi. Bấm Ghi, hoặc Sau 10 giây.</p>
+    <button id="recordNow" type="button">Ghi</button>
+    <button id="recordDelay" class="ghost" type="button">Sau 10 giây</button>
+  </div>
   <nav class="tabs" data-norecord>
     <button type="button" class="ghost on" data-tab="home">Tổng quan</button>
     <button type="button" class="ghost" data-tab="journal">Nhật ký</button>
@@ -262,7 +278,7 @@
 
     <section data-view="script" hidden>
       <div data-norecord>
-        <h2>Làm lại đúng phím và cảm ứng</h2>
+        <h2 class="desk-only">Làm lại đúng phím và cảm ứng</h2>
         <p class="lead">Ghi thao tác, sửa từng bước, đặt tên đoạn, rồi ghép thành kịch bản. Sửa đoạn thì mọi kịch bản đang dùng đoạn đó làm theo.</p>
         <div class="subtabs">
           <button type="button" class="ghost on" data-pane="record">Bản ghi</button>
@@ -270,7 +286,7 @@
           <button type="button" class="ghost" data-pane="scenarios">Ghép</button>
         </div>
         <div data-pane-view="record">
-          <p class="meta" id="recordState">Chưa ghi.</p>
+          <p class="meta" id="recordState">Chưa ghi. Bấm Ghi, hoặc Sau 10 giây.</p>
           <div class="toolbar">
             <button id="recordToggle" type="button">Ghi bấm phím và cảm ứng</button>
           </div>
@@ -326,7 +342,7 @@
           </div>
         </div>
         <div data-pane-view="scenarios" hidden>
-          <h2>Kịch bản ghép</h2>
+          <h2 class="desk-only">Kịch bản ghép</h2>
           <p class="lead" id="scenarioHint">Thêm từng đoạn, điền chỗ trống, rồi lưu. Làm theo luôn đọc bản đoạn mới nhất.</p>
           <div class="toolbar">
             <input id="scenarioName" type="text" maxlength="80" placeholder="Tên kịch bản" />
@@ -788,6 +804,7 @@
       }
       recorder.events.push(event);
       $("recordState").textContent = "Đang ghi " + recorder.events.length + " thao tác…";
+      paintRecord();
     }
 
     function onPointerDown(e) {
@@ -1560,8 +1577,8 @@
 
     function beginSlice(mode) {
       if (!editor.open || recorder.on || replaying) return;
+      if (!startRecording()) return;
       editor.capture = mode;
-      startRecording();
       $("recordToggle").textContent = "Dừng và ghép vào kịch bản";
       $("recordState").textContent = mode === "replace"
         ? "Đang ghi đè đoạn đã chọn. Làm thao tác rồi bấm dừng."
@@ -2011,6 +2028,63 @@
       $("recordState").textContent = "Đã xoá kịch bản «" + name + "».";
     }
 
+    let delayTimer = 0;
+
+    function clearRecordDelay() {
+      if (delayTimer) window.clearInterval(delayTimer);
+      delayTimer = 0;
+    }
+
+    function paintRecord() {
+      const now = $("recordNow");
+      const delay = $("recordDelay");
+      const dock = $("recordDockState");
+      if (dock && $("recordState")) dock.textContent = $("recordState").textContent;
+      if (!now || !delay) return;
+      if (recorder.on) {
+        now.classList.add("live");
+        now.textContent = "Dừng";
+        delay.disabled = true;
+        delay.classList.remove("live");
+        delay.textContent = "Sau 10 giây";
+        return;
+      }
+      now.classList.remove("live");
+      now.textContent = "Ghi";
+      delay.disabled = false;
+      delay.classList.toggle("live", Boolean(delayTimer));
+      delay.textContent = delayTimer ? "Huỷ" : "Sau 10 giây";
+    }
+
+    function armRecordDelay() {
+      if (recorder.on || replaying) return;
+      if (!$("token").value.trim()) {
+        $("recordState").textContent = "Dán token ở trên, bấm Lưu token, rồi ghi.";
+        paintRecord();
+        return;
+      }
+      if (delayTimer) {
+        clearRecordDelay();
+        $("recordState").textContent = "Đã huỷ. Chưa ghi.";
+        paintRecord();
+        return;
+      }
+      const ends = Date.now() + 10000;
+      $("recordState").textContent = "Bắt đầu ghi sau 10 giây.";
+      delayTimer = window.setInterval(() => {
+        if (document.hidden) return;
+        const left = Math.ceil((ends - Date.now()) / 1000);
+        if (left > 0) {
+          $("recordState").textContent = "Bắt đầu ghi sau " + left + " giây.";
+          paintRecord();
+          return;
+        }
+        clearRecordDelay();
+        startRecording();
+      }, 250);
+      paintRecord();
+    }
+
     async function stopRecording(auto) {
       const events = recorder.events.slice();
       const capture = editor.capture;
@@ -2021,6 +2095,7 @@
       document.body.classList.remove("is-recording");
       $("recordToggle").classList.remove("live");
       $("recordToggle").textContent = "Ghi bấm phím và cảm ứng";
+      paintRecord();
       if (capture === "replace" || capture === "insert") {
         if (!events.length) {
           $("recordState").textContent = "Không có bước mới để ghép vào kịch bản.";
@@ -2051,6 +2126,7 @@
         document.body.classList.add("is-recording");
         $("recordToggle").classList.add("live");
         $("recordToggle").textContent = "Dừng và lưu bản ghi";
+        paintRecord();
         throw err;
       }
       const saved = await response.json();
@@ -2059,9 +2135,16 @@
       $("err").style.color = "#3ecf8e";
       $("err").textContent = "Đã lưu bản ghi để làm theo: " + (saved.title || "");
       $("recordState").textContent = "Đã lưu. Bấm «Làm theo» để làm lại đúng thứ tự.";
+      paintRecord();
     }
 
     function startRecording() {
+      if (!$("token").value.trim()) {
+        $("recordState").textContent = "Dán token ở trên, bấm Lưu token, rồi ghi.";
+        paintRecord();
+        return false;
+      }
+      clearRecordDelay();
       recorder.on = true;
       recorder.t0 = performance.now();
       recorder.events = [];
@@ -2071,6 +2154,8 @@
       $("recordToggle").classList.add("live");
       $("recordToggle").textContent = "Dừng và lưu bản ghi";
       $("recordState").textContent = "Đang ghi. Làm thao tác bằng chuột, phím hoặc cảm ứng.";
+      paintRecord();
+      return true;
     }
 
     document.addEventListener("pointerdown", onPointerDown, true);
@@ -2083,6 +2168,8 @@
 
     $("recordToggle").onclick = async () => {
       $("err").hidden = true;
+      clearRecordDelay();
+      paintRecord();
       try {
         if (recorder.on) await stopRecording(false);
         else startRecording();
@@ -2091,6 +2178,11 @@
         $("err").style.color = "#ff7b7b";
         $("err").textContent = "Không lưu bản ghi: " + e.message;
       }
+    };
+    $("recordNow").onclick = () => { $("recordToggle").click(); };
+    $("recordDelay").onclick = () => {
+      $("err").hidden = true;
+      armRecordDelay();
     };
     $("recordingRows").onclick = async (e) => {
       const edit = e.target.closest("[data-edit]");
@@ -2221,6 +2313,7 @@
         document.body.classList.remove("is-recording");
         $("recordToggle").classList.remove("live");
         $("recordToggle").textContent = "Ghi bấm phím và cảm ứng";
+        paintRecord();
       }
       closeEditor();
       $("recordState").textContent = "Đã đóng phần sửa. Bản gốc không đổi.";
@@ -2252,11 +2345,11 @@
       }
     }
     if (/iPhone|iPod/.test(navigator.userAgent)) {
-      $("openPhone").href = "/iphone";
-      $("openPhone").textContent = "Mở trên iPhone";
+      $("openPhone").hidden = true;
     }
     if ($("token").value) loadAll();
-    setInterval(() => { if ($("token").value && !replaying && !recorder.on) loadAll(); }, 20000);
+    setInterval(() => { if ($("token").value && !replaying && !recorder.on && !delayTimer) loadAll(); }, 20000);
+    paintRecord();
     try {
       const peopleChannel = new BroadcastChannel("fb-people");
       peopleChannel.onmessage = (event) => {
