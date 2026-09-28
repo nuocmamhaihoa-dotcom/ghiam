@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,6 +32,7 @@ from control_plane import db
 from control_plane.delivery import PACKAGE_NAME, ensure_package
 from control_plane.people import apply_novel, complete_rows
 from control_plane.version import IPHONE_BUILD
+from control_plane.screen_steps import ScreenVideoError, read_screen_video
 from control_plane.recordings import (
     blanks_of,
     default_title,
@@ -637,6 +639,49 @@ def _events_from_steps(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if not events:
         raise HTTPException(400, "no replayable steps")
     return events
+
+
+@app.post("/v1/recordings/from-video")
+async def recordings_from_video(
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Read an iPhone screen recording and list the words that appear."""
+    _auth(authorization)
+    suffix = Path(file.filename or "clip.mp4").suffix.lower()
+    if suffix not in {".mp4", ".mov", ".m4v", ".webm"}:
+        suffix = ".mp4"
+    with tempfile.NamedTemporaryFile(prefix="fb-video-", suffix=suffix, delete=False) as tmp:
+        dest = Path(tmp.name)
+        total = 0
+        limit = settings.max_upload_mb * 1024 * 1024
+        while True:
+            chunk = await file.read(1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > limit:
+                dest.unlink(missing_ok=True)
+                raise HTTPException(413, "video is too large")
+            tmp.write(chunk)
+    try:
+        steps = read_screen_video(dest)
+    except ScreenVideoError as error:
+        raise HTTPException(400, str(error)) from error
+    finally:
+        dest.unlink(missing_ok=True)
+    lines = [str(step["caption"]) for step in steps]
+    title = "Video màn hình"
+    recording_id = db.save_recording(
+        settings.db_path,
+        at=utcnow(),
+        actor="me",
+        title=title,
+        steps=lines,
+        events=[],
+    )
+    _remember_hub("screen_video", title, detail=" → ".join(lines[:12]) or None)
+    return {"ok": True, "id": recording_id, "title": title, "steps": steps, "count": len(steps)}
 
 
 @app.post("/v1/recordings")

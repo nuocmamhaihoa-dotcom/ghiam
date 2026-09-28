@@ -345,13 +345,10 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("/static/version.js", page.text)
         self.assertNotIn('data-app="browse"', page.text)
         self.assertNotIn("followTung", page.text)
-        self.assertIn('id="startBtn"', page.text)
-        self.assertIn('id="endBtn"', page.text)
-        self.assertIn("Bắt đầu", page.text)
-        self.assertIn("Kết thúc", page.text)
-        self.assertIn("/v1/recordings/parse", page.text)
-        self.assertIn("pointerup", page.text)
-        self.assertIn("touchend", page.text)
+        self.assertIn("Chọn video", page.text)
+        self.assertIn("/v1/recordings/from-video", page.text)
+        self.assertIn("Trung tâm điều khiển", page.text)
+        self.assertIn('accept="video/*"', page.text)
         self.assertNotIn("confirmOk", page.text)
         self.assertNotIn("beginPhoneUse", page.text)
         self.assertNotIn('src="/?as=iphone"', page.text)
@@ -380,6 +377,19 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("pointercancel", home.text)
         self.assertNotIn('href="/tai"', page.text)
 
+    def test_screen_video_requires_token(self) -> None:
+        denied = self.client.post(
+            "/v1/recordings/from-video",
+            files={"file": ("clip.mp4", b"not-a-video", "video/mp4")},
+        )
+        self.assertEqual(denied.status_code, 401)
+        opened = self.client.post(
+            "/v1/recordings/from-video",
+            headers=self.headers,
+            files={"file": ("clip.mp4", b"not-a-video", "video/mp4")},
+        )
+        self.assertEqual(opened.status_code, 400, opened.text)
+
         missing = self.client.get("/khong-co-trang-nay")
         self.assertEqual(missing.status_code, 404)
         self.assertIn("Mở app", missing.text)
@@ -394,12 +404,12 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "12")
+        self.assertEqual(build, "13")
 
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 12)
+        self.assertEqual(payload["iphoneBuild"], 13)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]

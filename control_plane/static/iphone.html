@@ -24,37 +24,32 @@
       flex-direction: column;
       height: 100dvh;
       overflow: hidden;
-      touch-action: manipulation;
     }
     #updateNote[hidden] { display: none !important; }
-    #updateNote { margin: 0; padding: 0.4rem 1rem 0; color: #0a7a32; font-weight: 700; }
-    #pad { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; }
-    #stepList { margin: 0; padding: 1.1rem 1.3rem 0.6rem; }
-    #stepList li { margin: 0.45rem 0; }
-    #stepList p { margin: 1.2rem 0.2rem; color: #666; }
-    #actions {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;
-      padding: 0.7rem max(0.8rem, env(safe-area-inset-right)) calc(0.7rem + env(safe-area-inset-bottom)) max(0.8rem, env(safe-area-inset-left));
-      background: #fff;
+    #updateNote { margin: 0; padding: 0.7rem 1rem 0; color: #0a7a32; font-weight: 700; }
+    main { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; padding: 1rem 1.1rem 0.6rem; }
+    p.lead { margin: 0.2rem 0 0.8rem; line-height: 1.45; }
+    #stepList { margin: 0.4rem 0 0; padding-left: 1.3rem; }
+    #stepList li { margin: 0.55rem 0; }
+    #pick {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 64px; margin: 0.7rem max(0.8rem, env(safe-area-inset-right)) calc(0.7rem + env(safe-area-inset-bottom)) max(0.8rem, env(safe-area-inset-left));
+      border-radius: 16px; background: #111; color: #fff;
+      font-size: 20px; font-weight: 800;
     }
-    #startBtn, #endBtn {
-      min-height: 64px; border-radius: 16px; border: 2px solid #111;
-      font: inherit; font-size: 20px; font-weight: 800;
-    }
-    #startBtn { background: #111; color: #fff; }
-    #endBtn { background: #fff; color: #111; }
-    #startBtn:disabled, #endBtn:disabled { opacity: 0.35; }
+    #pick input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    #pick.busy { opacity: 0.45; }
   </style>
 </head>
 <body>
   <p id="updateNote" hidden></p>
-  <main id="pad">
-    <div id="stepList"><p>Bấm Bắt đầu, rồi chạm hoặc kéo trên màn hình.</p></div>
+  <main>
+    <p class="lead">Vuốt mở Trung tâm điều khiển, bấm nút ghi hình, dùng các ứng dụng, rồi bấm thanh đỏ để dừng.</p>
+    <ol id="stepList"></ol>
   </main>
-  <div id="actions" data-norecord>
-    <button id="startBtn" type="button">Bắt đầu</button>
-    <button id="endBtn" type="button" disabled>Kết thúc</button>
-  </div>
+  <label id="pick">Chọn video
+    <input id="videoFile" type="file" accept="video/*" />
+  </label>
   <script>
     const hubToken = __CONTROL_TOKEN_JSON__;
     if (hubToken) localStorage.setItem("fb_poller_control_token", hubToken);
@@ -62,160 +57,62 @@
   <script src="/static/version.js"></script>
   <script src="/static/watch.js?v=__IPHONE_BUILD__"></script>
   <script>
-    const startBtn = document.getElementById("startBtn");
-    const endBtn = document.getElementById("endBtn");
-    const capture = { on: false, t0: 0, events: [], down: null };
-    let lastGesture = 0;
-    let saving = false;
+    const pick = document.getElementById("pick");
+    const fileInput = document.getElementById("videoFile");
+    const list = document.getElementById("stepList");
+    let busy = false;
 
-    function authHeaders() {
-      const token = localStorage.getItem("fb_poller_control_token") || "";
-      const headers = { "Content-Type": "application/json" };
-      if (token) headers.Authorization = "Bearer " + token;
-      return headers;
+    function showMessage(text) {
+      list.replaceChildren();
+      const item = document.createElement("li");
+      item.textContent = text;
+      list.appendChild(item);
     }
 
-    function captionOf(event) {
-      const name = event.label || "màn hình";
-      if (event.intent === "swipe") return "Vuốt tại " + name;
-      return "Chạm " + name;
-    }
-
-    function showLines(lines) {
-      const root = document.getElementById("stepList");
-      root.replaceChildren();
-      if (!lines.length) {
-        const empty = document.createElement("p");
-        empty.textContent = "Chưa có bước. Bấm Bắt đầu, chạm hoặc kéo trên màn hình, rồi bấm Kết thúc.";
-        root.appendChild(empty);
+    function showSteps(steps) {
+      list.replaceChildren();
+      if (!steps.length) {
+        showMessage("Không đọc được chữ trên video. Quay rõ hơn rồi chọn lại.");
         return;
       }
-      const list = document.createElement("ol");
-      lines.forEach((line) => {
+      steps.forEach((step) => {
         const item = document.createElement("li");
-        item.textContent = line;
+        item.textContent = step.caption || "Bước";
         list.appendChild(item);
       });
-      root.appendChild(list);
     }
 
-    function paint() {
-      showLines(capture.events.map(captionOf));
-    }
-
-    function ignored(target) {
-      return target instanceof Element && Boolean(target.closest("[data-norecord]"));
-    }
-
-    function pointerDown(x, y, target) {
-      if (!capture.on || ignored(target)) {
-        capture.down = null;
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files && fileInput.files[0];
+      fileInput.value = "";
+      if (!file || busy) return;
+      busy = true;
+      pick.classList.add("busy");
+      showMessage("Đang đọc video...");
+      const body = new FormData();
+      body.append("file", file, file.name || "man-hinh.mp4");
+      const headers = {};
+      const token = localStorage.getItem("fb_poller_control_token") || "";
+      if (token) headers.Authorization = "Bearer " + token;
+      let response;
+      try {
+        response = await fetch("/v1/recordings/from-video", { method: "POST", headers: headers, body: body });
+      } catch (error) {
+        showMessage("Chưa gửi được video. Mở lại trang rồi chọn lại.");
+        pick.classList.remove("busy");
+        busy = false;
         return;
       }
-      capture.down = { x: x, y: y };
-    }
-
-    function pointerUp(x, y, target) {
-      if (!capture.on || !capture.down) return;
-      const now = performance.now();
-      if (now - lastGesture < 80) {
-        capture.down = null;
+      if (!response.ok) {
+        showMessage("Chưa đọc được video. Chọn đúng bản ghi màn hình.");
+        pick.classList.remove("busy");
+        busy = false;
         return;
       }
-      if (ignored(target)) {
-        capture.down = null;
-        return;
-      }
-      const start = capture.down;
-      capture.down = null;
-      lastGesture = now;
-      const moved = Math.hypot(x - start.x, y - start.y);
-      capture.events.push({
-        t: Math.max(0, Math.round(now - capture.t0)),
-        kind: "pointer",
-        phase: "up",
-        target: "body",
-        x: Math.round(x),
-        y: Math.round(y),
-        pointerType: "touch",
-        click: false,
-        intent: moved > 36 ? "swipe" : "tap",
-        label: "màn hình",
-      });
-      paint();
-    }
-
-    document.addEventListener("pointerdown", (event) => {
-      pointerDown(event.clientX, event.clientY, event.target);
-    }, true);
-    document.addEventListener("pointerup", (event) => {
-      pointerUp(event.clientX, event.clientY, event.target);
-    }, true);
-    document.addEventListener("pointercancel", (event) => {
-      pointerUp(event.clientX, event.clientY, event.target);
-    }, true);
-    document.addEventListener("touchstart", (event) => {
-      const touch = event.changedTouches && event.changedTouches[0];
-      if (!touch) return;
-      pointerDown(touch.clientX, touch.clientY, event.target);
-    }, true);
-    document.addEventListener("touchend", (event) => {
-      const touch = event.changedTouches && event.changedTouches[0];
-      if (!touch) return;
-      pointerUp(touch.clientX, touch.clientY, event.target);
-    }, true);
-    document.addEventListener("touchcancel", (event) => {
-      const touch = event.changedTouches && event.changedTouches[0];
-      if (!touch) return;
-      pointerUp(touch.clientX, touch.clientY, event.target);
-    }, true);
-
-    startBtn.addEventListener("click", () => {
-      if (capture.on || saving) return;
-      capture.on = true;
-      capture.t0 = performance.now();
-      capture.events = [];
-      capture.down = null;
-      startBtn.disabled = true;
-      endBtn.disabled = false;
-      document.getElementById("stepList").replaceChildren();
-    });
-
-    endBtn.addEventListener("click", async () => {
-      if (!capture.on || saving) return;
-      capture.on = false;
-      capture.down = null;
-      saving = true;
-      startBtn.disabled = false;
-      endBtn.disabled = true;
-      const events = capture.events.slice();
-      if (!events.length) {
-        showLines([]);
-        startBtn.disabled = false;
-        saving = false;
-        return;
-      }
-      const headers = authHeaders();
-      const saved = await fetch("/v1/recordings", {
-        method: "POST",
-        headers: headers,
-        body: JSON.stringify({ title: "Thao tác trên điện thoại", events: events }),
-      });
-      const parsed = await fetch("/v1/recordings/parse", {
-        method: "POST",
-        headers: headers,
-        body: JSON.stringify({ events: events }),
-      });
-      if (!saved.ok || !parsed.ok) {
-        const note = document.createElement("p");
-        note.textContent = "Chưa lưu được. Bấm Bắt đầu rồi làm lại.";
-        document.getElementById("stepList").appendChild(note);
-        saving = false;
-        return;
-      }
-      const steps = (await parsed.json()).steps || [];
-      showLines(steps.map((step) => step.caption || step.kind || "Bước"));
-      saving = false;
+      const data = await response.json();
+      showSteps(data.steps || []);
+      pick.classList.remove("busy");
+      busy = false;
     });
   </script>
 </body>

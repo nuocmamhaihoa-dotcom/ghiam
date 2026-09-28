@@ -23,6 +23,7 @@ control = [
   "uvicorn[standard]>=0.32.0",
   "python-multipart>=0.0.12",
   "httptools>=0.6.0",
+  "pillow>=10.4.0",
 ]
 
 [project.scripts]
