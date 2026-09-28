@@ -129,8 +129,10 @@ class ActionApiTests(unittest.TestCase):
         response = self.client.get("/phone")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Giả lập", response.text)
-        self.assertIn('src="/?as=phone"', response.text)
+        self.assertIn('src="/sample-people"', response.text)
+        self.assertIn("/?as=phone", response.text)
         self.assertIn("Kết nối PC", response.text)
+        self.assertIn("Tên trong danh bạ", response.text)
 
     def test_named_clip_updates_every_scenario(self) -> None:
         created = self.client.post(
@@ -304,8 +306,8 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("A Tùng Bán Gạch", sample.text)
         self.assertIn("/static/watch.js", sample.text)
         phone = self.client.get("/phone")
-        self.assertIn('src="/?as=phone"', phone.text)
-        self.assertIn("Lướt danh bạ", phone.text)
+        self.assertIn('src="/sample-people"', phone.text)
+        self.assertIn("Tên trong danh bạ", phone.text)
 
 
 if __name__ == "__main__":

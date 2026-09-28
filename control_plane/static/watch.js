@@ -1,5 +1,7 @@
 /* Đọc chữ đang hiện khi dừng lướt. Danh bạ cho hai dòng. Hồ sơ cho tên và @. */
 (function () {
+  if (window.__peopleWatch) return;
+  window.__peopleWatch = true;
   const skip = /^(follow|tin nhắn|đã follow|follower|thích|từ các liên hệ của bạn|danh bạ)$/i;
   const handle = /^@[A-Za-z0-9._]{2,30}$/;
   const sent = new Set();
@@ -76,11 +78,25 @@
     });
     if (response.status === 401) {
       document.dispatchEvent(new CustomEvent("people-auth"));
+      tell({ type: "people-auth" });
       return;
     }
     if (!response.ok) return;
     const data = await response.json();
-    document.dispatchEvent(new CustomEvent("people-saved", { detail: data.items || [] }));
+    const saved = data.items || [];
+    document.dispatchEvent(new CustomEvent("people-saved", { detail: saved }));
+    tell({ type: "people-saved", items: saved });
+  }
+
+  function tell(message) {
+    try {
+      if (window.parent && window.parent !== window) window.parent.postMessage(message, location.origin);
+    } catch (err) { /* khung khác nguồn thì bỏ qua */ }
+    try {
+      const channel = new BroadcastChannel("fb-people");
+      channel.postMessage(message);
+      channel.close();
+    } catch (err) { /* trình duyệt không có kênh */ }
   }
 
   let timer = 0;

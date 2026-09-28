@@ -7,7 +7,7 @@
   <style>
     :root { --bg: #fff; --text: #111; --muted: #8a8f98; --pink: #fe2c55; --font: "Segoe UI", system-ui, sans-serif; }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: var(--font); color: var(--text); background: var(--bg); }
+    body { margin: 0; font-family: var(--font); color: var(--text); background: var(--bg); touch-action: pan-y; }
     header { position: sticky; top: 0; background: #fff; border-bottom: 1px solid #eee; padding: 0.7rem 0.9rem; text-align: center; font-weight: 700; }
     ul { list-style: none; margin: 0; padding: 0; }
     li, .profile { display: flex; gap: 0.7rem; align-items: center; padding: 0.75rem 0.9rem; border-bottom: 1px solid #f2f2f2; }
@@ -79,6 +79,29 @@
     document.addEventListener("people-auth", () => {
       document.getElementById("savedRows").innerHTML = "<tr><td>Hãy lưu token trên hub rồi lướt lại.</td></tr>";
     });
+    let drag = null;
+    document.addEventListener("pointerdown", (event) => {
+      if (event.pointerType !== "mouse" || event.button !== 0) return;
+      if (event.target.closest("button, a, input, textarea")) return;
+      drag = { id: event.pointerId, y: event.clientY, top: window.scrollY };
+    });
+    document.addEventListener("pointermove", (event) => {
+      if (!drag || event.pointerId !== drag.id) return;
+      window.scrollTo(0, drag.top - (event.clientY - drag.y));
+    });
+    document.addEventListener("pointerup", (event) => {
+      if (drag && event.pointerId === drag.id) drag = null;
+    });
+    document.addEventListener("pointercancel", () => { drag = null; });
+    (async function loadSaved() {
+      const token = localStorage.getItem("fb_poller_control_token") || "";
+      const headers = {};
+      if (token) headers.Authorization = "Bearer " + token;
+      const response = await fetch("/v1/people", { headers: headers });
+      if (!response.ok) return;
+      const data = await response.json();
+      draw(data.items || []);
+    })();
   </script>
 </body>
 </html>

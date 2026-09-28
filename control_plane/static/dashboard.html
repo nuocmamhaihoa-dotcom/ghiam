@@ -354,7 +354,7 @@
 
     <section data-view="people" hidden>
       <h2>Người trùng tên</h2>
-      <p class="lead">Lướt danh bạ rồi lướt hồ sơ trong điện thoại. Khi cùng một tên hiện ở cả hai chỗ, bảng tự thêm một dòng. <a href="/phone?screen=people">Mở trong điện thoại</a></p>
+      <p class="lead">Mở điện thoại và lướt. Khi cùng một tên hiện ở danh bạ và trên hồ sơ, bảng này tự thêm một dòng. <a href="/phone">Mở điện thoại</a></p>
       <div class="scroll">
         <table>
           <thead>
@@ -2212,6 +2212,15 @@
     }
     if ($("token").value) loadAll();
     setInterval(() => { if ($("token").value && !replaying && !recorder.on) loadAll(); }, 20000);
+    try {
+      const peopleChannel = new BroadcastChannel("fb-people");
+      peopleChannel.onmessage = (event) => {
+        const message = event.data || {};
+        if (message.type === "people-saved" && Array.isArray(message.items) && message.items.length) {
+          renderPeople(message.items);
+        }
+      };
+    } catch (err) { /* kênh không có thì tab Đã lưu cập nhật lúc Tải lại */ }
   </script>
 </body>
 </html>
