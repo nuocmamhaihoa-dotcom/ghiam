@@ -366,6 +366,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("/static/version.js", home.text)
         self.assertIn('location.replace("/iphone")', home.text)
         self.assertIn('href="/iphone">Mở trên iPhone', home.text)
+        self.assertIn("deliver.hidden = true", home.text)
         self.assertNotIn('href="/tai"', page.text)
 
         missing = self.client.get("/khong-co-trang-nay")
