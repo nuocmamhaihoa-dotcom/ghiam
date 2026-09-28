@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from control_plane.screen_steps import clean_ocr, read_screen_video, same_caption, steps_from_text
+from control_plane.screen_steps import clean_ocr, read_screen_video, same_caption, scenario_line, steps_from_text
 
 
 class ScreenStepTextTests(unittest.TestCase):
@@ -23,6 +23,26 @@ class ScreenStepTextTests(unittest.TestCase):
     def test_steps_drop_repeated_screens(self) -> None:
         steps = steps_from_text([(0, "Open Notes"), (1, "Open Notes"), (2, "Save Note")])
         self.assertEqual([step["caption"] for step in steps], ["0:00 — Open Notes", "0:02 — Save Note"])
+
+    def test_noise_lines_are_dropped(self) -> None:
+        self.assertEqual(clean_ocr("aQo* ở 7.06 c7a8O Selag"), "")
+
+    def test_scenario_names_the_app_and_account(self) -> None:
+        self.assertEqual(scenario_line("TikTok"), "Mở TikTok")
+        self.assertIn("monaco.daily6", scenario_line("Da follow @monaco.daily6"))
+        steps = steps_from_text(
+            [
+                (0, "aQo* o 7.06 c7a8O Selag"),
+                (2, "Danh ba\nBa Thanh Xuan Trung"),
+                (7, "TikTok"),
+                (12, "Da follow\n@monaco.daily6"),
+                (13, "Da follow @monaco.daily6"),
+            ]
+        )
+        captions = [step["caption"] for step in steps]
+        self.assertTrue(any("Danh bạ" in caption for caption in captions))
+        self.assertTrue(any("TikTok" in caption for caption in captions))
+        self.assertEqual(sum("monaco.daily6" in caption for caption in captions), 1)
 
 
 class ScreenVideoTests(unittest.TestCase):
