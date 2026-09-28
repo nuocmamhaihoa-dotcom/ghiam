@@ -62,11 +62,35 @@
       position: fixed; z-index: 50;
       top: calc(0.55rem + env(safe-area-inset-top));
       right: max(0.55rem, env(safe-area-inset-right));
+      display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem;
     }
-    #cornerEnd {
+    #cornerStatus, #cornerEnd {
       min-height: 40px; padding: 0 0.8rem; border: 0; border-radius: 999px;
-      background: #111; color: #fff; font: inherit; font-size: 14px; font-weight: 700;
+      font: inherit; font-size: 14px; font-weight: 700;
     }
+    #cornerStatus { background: #fff; color: #111; border: 1px solid #111; }
+    #cornerStatus.on { background: #0a7a32; color: #fff; border-color: #0a7a32; }
+    #cornerEnd { background: #111; color: #fff; }
+    #stepSheet[hidden] { display: none !important; }
+    #stepSheet {
+      position: fixed; z-index: 45; left: 0; right: 0; bottom: 0;
+      max-height: 72dvh; overflow: auto;
+      padding: 0.8rem max(0.8rem, env(safe-area-inset-right)) calc(0.8rem + env(safe-area-inset-bottom)) max(0.8rem, env(safe-area-inset-left));
+      background: #fff; border-top: 1px solid #e6e6e6; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.08);
+    }
+    #stepSheet h2 { margin: 0 0 0.4rem; font-size: 1.05rem; }
+    .step-row {
+      display: grid; grid-template-columns: 1fr auto; gap: 0.35rem; align-items: center;
+      padding: 0.45rem 0; border-bottom: 1px solid #f0f0f0;
+    }
+    .step-row button { min-height: 36px; border: 0; border-radius: 8px; background: #f4f5f7; font: inherit; font-weight: 650; }
+    #stepSave, #stepClose {
+      display: flex; align-items: center; justify-content: center; width: 100%;
+      min-height: 48px; margin-top: 0.45rem; border: 0; border-radius: 12px;
+      font: inherit; font-weight: 700;
+    }
+    #stepSave { background: #111; color: #fff; }
+    #stepClose { background: #f4f5f7; color: #111; }
     #endVideo {
       position: fixed; width: 2px; height: 2px; left: 0; bottom: 0;
       opacity: 0.01; pointer-events: none;
@@ -93,8 +117,15 @@
     </section>
   </main>
   <div id="cornerDock" data-norecord hidden>
+    <button id="cornerStatus" type="button">Chưa ghi</button>
     <button id="cornerEnd" type="button">Kết thúc</button>
   </div>
+  <section id="stepSheet" data-norecord hidden>
+    <h2>Kịch bản</h2>
+    <div id="stepList"></div>
+    <button id="stepSave" type="button">Lưu các bước đã sửa</button>
+    <button id="stepClose" type="button">Đóng</button>
+  </section>
   <video id="endVideo" playsinline webkit-playsinline loop src="/static/ket-thuc.mp4"></video>
   <nav class="app">
     <button type="button" data-app="controls" class="on">Điều khiển</button>
@@ -157,19 +188,28 @@
     })();
 
     const endVideo = document.getElementById("endVideo");
+    const capture = { phase: "", t0: 0, events: [], press: null, steps: [] };
     let quietTimer = 0;
     let closing = false;
     let pipSeen = false;
 
-    function endPhoneUse() {
-      if (closing) return;
-      closing = true;
+    function authHeaders() {
+      const token = localStorage.getItem("fb_poller_control_token") || "";
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = "Bearer " + token;
+      return headers;
+    }
+
+    function paintStatus() {
+      const status = document.getElementById("cornerStatus");
+      if (capture.phase !== "record") return;
+      const count = capture.events.length;
+      status.textContent = count ? "Đã ghi " + count : "Chưa ghi";
+      status.classList.toggle("on", count > 0);
+    }
+
+    function closeFloat() {
       pipSeen = false;
-      if (quietTimer) window.clearInterval(quietTimer);
-      quietTimer = 0;
-      document.body.classList.remove("is-quiet");
-      document.getElementById("cornerDock").hidden = true;
-      document.getElementById("cornerEnd").textContent = "Kết thúc";
       try {
         if (document.pictureInPictureElement === endVideo) document.exitPictureInPicture();
         if (endVideo.webkitPresentationMode === "picture-in-picture" && endVideo.webkitSetPresentationMode) {
@@ -179,8 +219,19 @@
         /* PiP đã đóng */
       }
       endVideo.pause();
+    }
+
+    function stopQuiet() {
+      if (quietTimer) window.clearInterval(quietTimer);
+      quietTimer = 0;
+      capture.phase = "";
+      capture.press = null;
+      document.body.classList.remove("is-quiet");
+      document.getElementById("cornerDock").hidden = true;
+      document.getElementById("cornerStatus").classList.remove("on");
+      document.getElementById("cornerStatus").textContent = "Chưa ghi";
+      closeFloat();
       showApp("controls");
-      closing = false;
     }
 
     function floatEnd() {
@@ -205,22 +256,147 @@
       }
     }
 
+    function startRecording() {
+      capture.phase = "record";
+      capture.t0 = performance.now();
+      capture.events = [];
+      capture.press = null;
+      capture.steps = [];
+      paintStatus();
+      floatEnd();
+    }
+
+    function selectorOf(node) {
+      if (!(node instanceof Element)) return "body";
+      const withId = node.closest("[id]");
+      if (!withId || withId.closest("[data-norecord]")) return "body";
+      if (!/^[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(withId.id)) return "body";
+      return "#" + withId.id;
+    }
+
+    function renderSteps() {
+      const root = document.getElementById("stepList");
+      const save = document.getElementById("stepSave");
+      root.replaceChildren();
+      if (!capture.steps.length) {
+        const empty = document.createElement("p");
+        empty.textContent = "Chưa ghi được hành động nào. Chạm trên màn hình, rồi bấm Kết thúc.";
+        root.appendChild(empty);
+        save.hidden = true;
+        return;
+      }
+      save.hidden = false;
+      capture.steps.forEach((step, index) => {
+        const row = document.createElement("div");
+        row.className = "step-row";
+        const label = document.createElement("div");
+        label.textContent = (index + 1) + ". " + (step.caption || step.kind || "Bước");
+        const actions = document.createElement("div");
+        const up = document.createElement("button");
+        up.type = "button";
+        up.textContent = "Lên";
+        up.disabled = index === 0;
+        up.addEventListener("click", () => {
+          const item = capture.steps.splice(index, 1)[0];
+          capture.steps.splice(index - 1, 0, item);
+          renderSteps();
+        });
+        const down = document.createElement("button");
+        down.type = "button";
+        down.textContent = "Xuống";
+        down.disabled = index === capture.steps.length - 1;
+        down.addEventListener("click", () => {
+          const item = capture.steps.splice(index, 1)[0];
+          capture.steps.splice(index + 1, 0, item);
+          renderSteps();
+        });
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "Xoá";
+        remove.addEventListener("click", () => {
+          capture.steps.splice(index, 1);
+          renderSteps();
+        });
+        actions.appendChild(up);
+        actions.appendChild(down);
+        actions.appendChild(remove);
+        row.appendChild(label);
+        row.appendChild(actions);
+        root.appendChild(row);
+      });
+    }
+
+    function showSheet() {
+      document.body.classList.remove("is-quiet");
+      document.getElementById("cornerDock").hidden = true;
+      document.getElementById("stepSheet").hidden = false;
+      showApp("controls");
+    }
+
+    async function finishRecording() {
+      if (closing) return;
+      closing = true;
+      const events = capture.events.slice();
+      capture.phase = "";
+      capture.press = null;
+      if (quietTimer) window.clearInterval(quietTimer);
+      quietTimer = 0;
+      closeFloat();
+      showSheet();
+      const list = document.getElementById("stepList");
+      if (!events.length) {
+        capture.steps = [];
+        renderSteps();
+        closing = false;
+        return;
+      }
+      list.textContent = "Đang lưu và tách bước...";
+      const headers = authHeaders();
+      const saved = await fetch("/v1/recordings", {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify({ title: "Thao tác trên điện thoại", events: events }),
+      });
+      const parsed = await fetch("/v1/recordings/parse", {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify({ events: events }),
+      });
+      if (!saved.ok || !parsed.ok) {
+        capture.steps = [];
+        list.textContent = "Không lưu được. Mở lại trang rồi ghi tiếp.";
+        document.getElementById("stepSave").hidden = true;
+        closing = false;
+        return;
+      }
+      capture.steps = (await parsed.json()).steps || [];
+      renderSteps();
+      closing = false;
+    }
+
     function beginPhoneUse(delay) {
+      if (capture.phase === "record") return;
       closing = false;
       if (quietTimer) window.clearInterval(quietTimer);
       quietTimer = 0;
+      capture.events = [];
+      capture.steps = [];
+      document.getElementById("stepSheet").hidden = true;
       document.body.classList.add("is-quiet");
       document.getElementById("cornerDock").hidden = false;
-      const button = document.getElementById("cornerEnd");
+      document.getElementById("cornerEnd").textContent = "Kết thúc";
+      const status = document.getElementById("cornerStatus");
+      status.classList.remove("on");
       if (!delay) {
-        button.textContent = "Kết thúc";
-        floatEnd();
+        status.textContent = "Chưa ghi";
+        startRecording();
         return;
       }
+      capture.phase = "wait";
       const ends = Date.now() + 10000;
-      button.textContent = "10";
+      status.textContent = "10";
       quietTimer = window.setInterval(() => {
-        if (!document.body.classList.contains("is-quiet")) {
+        if (capture.phase !== "wait") {
           window.clearInterval(quietTimer);
           quietTimer = 0;
           return;
@@ -228,27 +404,86 @@
         if (document.hidden) return;
         const left = Math.ceil((ends - Date.now()) / 1000);
         if (left > 0) {
-          button.textContent = String(left);
+          status.textContent = String(left);
           return;
         }
         window.clearInterval(quietTimer);
         quietTimer = 0;
-        button.textContent = "Kết thúc";
-        floatEnd();
+        startRecording();
       }, 250);
     }
     window.beginPhoneUse = beginPhoneUse;
 
-    document.getElementById("cornerEnd").addEventListener("click", () => endPhoneUse());
+    document.getElementById("cornerStatus").addEventListener("click", (event) => {
+      event.preventDefault();
+    });
+    document.getElementById("cornerEnd").addEventListener("click", () => {
+      if (capture.phase === "record") finishRecording();
+      else stopQuiet();
+    });
+    document.getElementById("stepClose").addEventListener("click", () => {
+      document.getElementById("stepSheet").hidden = true;
+      stopQuiet();
+    });
+    document.getElementById("stepSave").addEventListener("click", async () => {
+      const save = document.getElementById("stepSave");
+      if (!capture.steps.length) return;
+      save.disabled = true;
+      const response = await fetch("/v1/recordings/from-steps", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ title: "Thao tác trên điện thoại", steps: capture.steps }),
+      });
+      save.disabled = false;
+      save.textContent = response.ok ? "Đã lưu kịch bản" : "Chưa lưu được";
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (capture.phase !== "record") return;
+      if (event.target instanceof Element && event.target.closest("[data-norecord]")) {
+        capture.press = null;
+        return;
+      }
+      capture.press = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    }, true);
+    document.addEventListener("pointerup", (event) => {
+      if (capture.phase !== "record" || !capture.press || event.pointerId !== capture.press.id) return;
+      const start = capture.press;
+      capture.press = null;
+      if (event.target instanceof Element && event.target.closest("[data-norecord]")) return;
+      const moved = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+      const t = Math.max(0, Math.round(performance.now() - capture.t0));
+      if (moved > 36) {
+        capture.events.push({
+          t: t, kind: "pointer", phase: "up", target: "body",
+          x: Math.round(event.clientX), y: Math.round(event.clientY),
+          pointerType: "touch", click: false, intent: "swipe", label: "màn hình",
+        });
+        paintStatus();
+        return;
+      }
+      const control = event.target instanceof Element ? event.target.closest("button, a") : null;
+      const target = control ? selectorOf(control) : "body";
+      const label = control
+        ? (control.innerText || "").trim().replace(/\s+/g, " ").slice(0, 80)
+        : "Màn hình";
+      capture.events.push({
+        t: t, kind: "pointer", phase: "up", target: target,
+        x: Math.round(event.clientX), y: Math.round(event.clientY),
+        pointerType: "touch", click: target !== "body", intent: "tap",
+        label: label || "Màn hình",
+        role: control ? (control.tagName === "A" ? "link" : "button") : undefined,
+      });
+      paintStatus();
+    }, true);
     endVideo.addEventListener("leavepictureinpicture", () => {
-      if (pipSeen) endPhoneUse();
+      if (pipSeen && capture.phase === "record") finishRecording();
     });
     endVideo.addEventListener("webkitpresentationmodechanged", () => {
       if (endVideo.webkitPresentationMode === "picture-in-picture") {
         pipSeen = true;
         return;
       }
-      if (pipSeen) endPhoneUse();
+      if (pipSeen && capture.phase === "record") finishRecording();
     });
     window.addEventListener("message", (event) => {
       if (event.origin !== location.origin) return;
