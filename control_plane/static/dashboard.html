@@ -2193,10 +2193,41 @@
         $("err").textContent = "Không lưu bản ghi: " + e.message;
       }
     };
-    $("recordNow").onclick = () => { $("recordToggle").click(); };
+    function phoneShell() {
+      return screenMode === "iphone" && window.parent !== window;
+    }
+
+    $("recordNow").onclick = () => {
+      $("err").hidden = true;
+      if (!phoneShell()) {
+        $("recordToggle").click();
+        return;
+      }
+      if (!$("token").value.trim()) {
+        $("recordState").textContent = "Dán token ở trên, bấm Lưu token, rồi ghi.";
+        paintRecord();
+        return;
+      }
+      clearRecordDelay();
+      window.parent.postMessage({ type: "fb-arm", delay: false }, location.origin);
+      $("recordState").textContent = "Đã ẩn phần mềm. Bấm Bắt đầu ở góc màn hình.";
+      paintRecord();
+    };
     $("recordDelay").onclick = () => {
       $("err").hidden = true;
-      armRecordDelay();
+      if (!phoneShell()) {
+        armRecordDelay();
+        return;
+      }
+      if (!$("token").value.trim()) {
+        $("recordState").textContent = "Dán token ở trên, bấm Lưu token, rồi ghi.";
+        paintRecord();
+        return;
+      }
+      clearRecordDelay();
+      window.parent.postMessage({ type: "fb-arm", delay: true }, location.origin);
+      $("recordState").textContent = "Phần mềm đã ẩn. Ghi bắt đầu sau 10 giây.";
+      paintRecord();
     };
     $("recordingRows").onclick = async (e) => {
       const edit = e.target.closest("[data-edit]");

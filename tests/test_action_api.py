@@ -348,6 +348,10 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Đã lưu", page.text)
         self.assertIn("/?as=iphone", page.text)
         self.assertIn("Thêm vào Màn hình chính", page.text)
+        self.assertIn('id="cornerStart"', page.text)
+        self.assertIn("Bắt đầu", page.text)
+        self.assertIn("Chốt và chạy liên tục", page.text)
+        self.assertIn('id="followTung"', page.text)
         self.assertIn("A Tùng Bán Gạch", page.text)
         self.assertIn("Tên trong danh bạ", page.text)
         icon = self.client.get("/apple-touch-icon.png")
@@ -367,6 +371,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn('location.replace("/iphone")', home.text)
         self.assertIn('href="/iphone">Mở trên iPhone', home.text)
         self.assertIn("deliver.hidden = true", home.text)
+        self.assertIn('type: "fb-arm"', home.text)
         self.assertNotIn('href="/tai"', page.text)
 
         missing = self.client.get("/khong-co-trang-nay")
@@ -383,12 +388,12 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "6")
+        self.assertEqual(build, "7")
 
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 6)
+        self.assertEqual(payload["iphoneBuild"], 7)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
