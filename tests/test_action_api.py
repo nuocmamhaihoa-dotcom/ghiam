@@ -272,6 +272,41 @@ class ActionApiTests(unittest.TestCase):
         denied = self.client.post("/v1/recordings/from-steps", json={"steps": steps})
         self.assertEqual(denied.status_code, 401)
 
+    def test_scroll_sightings_merge_into_saved_people(self) -> None:
+        denied = self.client.get("/v1/people")
+        self.assertEqual(denied.status_code, 401)
+        contact = self.client.post(
+            "/v1/people/sightings",
+            headers=self.headers,
+            json={"items": [{"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"}]},
+        )
+        self.assertEqual(contact.status_code, 200, contact.text)
+        self.assertEqual(contact.json()["count"], 0)
+        profile = self.client.post(
+            "/v1/people/sightings",
+            headers=self.headers,
+            json={"items": [{"kind": "profile", "name": "Trần Tùng", "username": "trn.tng751"}]},
+        )
+        self.assertEqual(profile.status_code, 200, profile.text)
+        self.assertEqual(profile.json()["count"], 1)
+        row = profile.json()["items"][0]
+        self.assertEqual(row["name"], "Trần Tùng")
+        self.assertEqual(row["contactName"], "A Tùng Bán Gạch")
+        self.assertEqual(row["username"], "@trn.tng751")
+        listed = self.client.get("/v1/people", headers=self.headers)
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json()["count"], 1)
+        page = self.client.get("/")
+        self.assertIn("Đã lưu", page.text)
+        self.assertIn("Tên trong danh bạ", page.text)
+        sample = self.client.get("/sample-people")
+        self.assertEqual(sample.status_code, 200)
+        self.assertIn("A Tùng Bán Gạch", sample.text)
+        self.assertIn("/static/watch.js", sample.text)
+        phone = self.client.get("/phone")
+        self.assertIn('src="/?as=phone"', phone.text)
+        self.assertIn("Lướt danh bạ", phone.text)
+
 
 if __name__ == "__main__":
     unittest.main()

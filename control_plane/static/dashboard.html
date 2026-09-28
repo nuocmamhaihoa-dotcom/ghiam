@@ -187,6 +187,7 @@
     <button type="button" class="ghost" data-tab="script">Kịch bản</button>
     <button type="button" class="ghost" data-tab="proxy">Proxy</button>
     <button type="button" class="ghost" data-tab="comments">Comment</button>
+    <button type="button" class="ghost" data-tab="people">Đã lưu</button>
   </nav>
   </div>
   <main>
@@ -351,6 +352,25 @@
       </div>
     </section>
 
+    <section data-view="people" hidden>
+      <h2>Người trùng tên</h2>
+      <p class="lead">Lướt danh bạ rồi lướt hồ sơ trong điện thoại. Khi cùng một tên hiện ở cả hai chỗ, bảng tự thêm một dòng. <a href="/phone?screen=people">Mở trong điện thoại</a></p>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Tên</th>
+              <th>Tên trong danh bạ</th>
+              <th>Username</th>
+            </tr>
+          </thead>
+          <tbody id="peopleRows">
+            <tr><td colspan="3" class="empty">Chưa có người trùng tên</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <section data-view="comments" hidden>
       <h2>Comment mới đồng bộ</h2>
       <div class="toolbar">
@@ -416,6 +436,19 @@
       if (Number.isNaN(d.getTime())) return iso || "";
       return d.toLocaleString("vi-VN");
     }
+    function renderPeople(items) {
+      const rows = $("peopleRows");
+      if (!items.length) {
+        rows.innerHTML = `<tr><td colspan="3" class="empty">Chưa có người trùng tên. Hãy lướt danh bạ và hồ sơ trong điện thoại.</td></tr>`;
+        return;
+      }
+      rows.innerHTML = items.map((person) => `<tr>
+        <td>${esc(person.name)}</td>
+        <td>${esc(person.contactName)}</td>
+        <td>${esc(person.username)}</td>
+      </tr>`).join("");
+    }
+
     function renderActions(items) {
       if (!items.length) {
         $("actionRows").innerHTML = `<tr><td colspan="3" class="empty">Chưa có thao tác. Gõ việc vừa làm rồi bấm Ghi nhớ.</td></tr>`;
@@ -434,7 +467,7 @@
         const lim = $("limit").value;
         const q = encodeURIComponent($("q").value.trim());
         const actionQ = encodeURIComponent($("actionQ").value.trim());
-        const [stats, agents, comments, die, proxies, actions, recordings, clipList, scenarioList] = await Promise.all([
+        const [stats, agents, comments, die, proxies, actions, recordings, clipList, scenarioList, people] = await Promise.all([
           fetch("/v1/server/stats", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("stats " + r.status); return r.json(); }),
           fetch("/v1/agents", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("agents " + r.status); return r.json(); }),
           fetch("/v1/comments?limit=" + lim + "&q=" + q, { headers: headers() }).then((r) => { if (!r.ok) throw new Error("comments " + r.status); return r.json(); }),
@@ -444,10 +477,12 @@
           fetch("/v1/recordings?limit=20", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("recordings " + r.status); return r.json(); }),
           fetch("/v1/clips?limit=50", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("clips " + r.status); return r.json(); }),
           fetch("/v1/scenarios?limit=50", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("scenarios " + r.status); return r.json(); }),
+          fetch("/v1/people", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("people " + r.status); return r.json(); }),
         ]);
         renderActions(actions.items || []);
         renderRecordings(recordings.items || []);
         renderLibrary(clipList.items || [], scenarioList.items || []);
+        renderPeople(people.items || []);
 
         const px = stats.proxies || die.summary || {};
         $("stats").innerHTML = [

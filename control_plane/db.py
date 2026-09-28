@@ -96,6 +96,13 @@ def init_db(db_path: Path) -> None:
               name TEXT NOT NULL,
               parts_json TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS saved_people (
+              name_key TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              contact_name TEXT NOT NULL DEFAULT '',
+              username TEXT NOT NULL DEFAULT '',
+              updated_at TEXT NOT NULL
+            );
             """
         )
         conn.commit()
@@ -696,3 +703,42 @@ def proxy_summary(db_path: Path) -> dict[str, Any]:
         "unknown": unknown,
         "last_checked_at": last,
     }
+
+
+def list_people(db_path: Path) -> list[dict[str, str]]:
+    with session(db_path) as conn:
+        rows = conn.execute(
+            "SELECT name_key, name, contact_name, username FROM saved_people ORDER BY updated_at DESC"
+        ).fetchall()
+    return [
+        {
+            "nameKey": row["name_key"],
+            "name": row["name"],
+            "contactName": row["contact_name"],
+            "username": row["username"],
+        }
+        for row in rows
+    ]
+
+
+def save_people(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> None:
+    with session(db_path) as conn:
+        for row in rows:
+            conn.execute(
+                """
+                INSERT INTO saved_people(name_key, name, contact_name, username, updated_at)
+                VALUES(?,?,?,?,?)
+                ON CONFLICT(name_key) DO UPDATE SET
+                  name=excluded.name,
+                  contact_name=excluded.contact_name,
+                  username=excluded.username,
+                  updated_at=excluded.updated_at
+                """,
+                (
+                    row["nameKey"],
+                    row["name"],
+                    row.get("contactName") or "",
+                    row.get("username") or "",
+                    updated_at,
+                ),
+            )

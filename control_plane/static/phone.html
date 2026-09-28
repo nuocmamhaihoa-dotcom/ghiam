@@ -78,6 +78,7 @@
         <button type="button" data-w="360" data-h="780">360×780</button>
         <button type="button" class="on" data-w="390" data-h="844">390×844</button>
         <button type="button" data-w="412" data-h="915">412×915</button>
+        <button type="button" id="samplePeople">Lướt danh bạ</button>
         <button class="primary" id="copy" type="button">Sao chép địa chỉ</button>
       </div>
     </div>
@@ -95,6 +96,16 @@
   <script>
     const origin = location.origin;
     const phoneUrl = origin + "/phone";
+    const screen = document.getElementById("screen");
+    const sampleButton = document.getElementById("samplePeople");
+    if (new URLSearchParams(location.search).get("screen") === "people") {
+      screen.src = "/sample-people";
+      sampleButton.classList.add("on");
+    }
+    sampleButton.addEventListener("click", () => {
+      screen.src = "/sample-people";
+      sampleButton.classList.add("on");
+    });
     document.getElementById("origin").textContent = origin;
     document.getElementById("phoneUrl").textContent = phoneUrl;
     const clock = document.getElementById("clock");

@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
+from control_plane.people import complete_rows, fold_sightings
 from control_plane.recordings import (
     blanks_of,
     default_title,
@@ -181,6 +182,46 @@ def phone() -> HTMLResponse:
     if not path.exists():
         return HTMLResponse("<h1>fb-poller</h1><p>Phone page missing.</p>", status_code=404)
     return HTMLResponse(path.read_text(encoding="utf-8"))
+
+
+@app.get("/sample-people", response_class=HTMLResponse)
+def sample_people() -> HTMLResponse:
+    """Trang lướt mẫu: danh bạ rồi hồ sơ, để khung điện thoại tự ghép tên trùng."""
+    path = STATIC_DIR / "sample-people.html"
+    if not path.exists():
+        return HTMLResponse("<p>Missing sample.</p>", status_code=404)
+    return HTMLResponse(path.read_text(encoding="utf-8"))
+
+
+class Sighting(BaseModel):
+    kind: str
+    name: str
+    contactName: str = ""
+    username: str = ""
+
+
+class SightingsBody(BaseModel):
+    items: list[Sighting] = Field(default_factory=list)
+
+
+@app.get("/v1/people")
+def people_list(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    rows = complete_rows(db.list_people(settings.db_path))
+    return {"count": len(rows), "items": rows}
+
+
+@app.post("/v1/people/sightings")
+def people_sightings(
+    body: SightingsBody,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _auth(authorization)
+    stored = db.list_people(settings.db_path)
+    folded = fold_sightings(stored, [item.model_dump() for item in body.items])
+    db.save_people(settings.db_path, folded, utcnow())
+    ready = complete_rows(folded)
+    return {"count": len(ready), "items": ready}
 
 
 @app.get("/v1/server/stats")
