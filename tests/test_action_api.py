@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import io
 import os
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 _TMP = tempfile.mkdtemp(prefix="fb-actions-")
@@ -362,6 +364,55 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Mở giả lập điện thoại trên PC", home.text)
         self.assertIn("Chạm trên iPhone được ghi để làm lại.", home.text)
         self.assertIn("/static/version.js", home.text)
+        self.assertIn('href="/tai"', page.text)
+        self.assertIn("Tải phần mềm", home.text)
+
+    def test_public_delivery_package(self) -> None:
+        page = self.client.get("/tai")
+        self.assertEqual(page.status_code, 200, page.text)
+        self.assertEqual(page.headers["cache-control"], "no-cache")
+        health = self.client.get("/health")
+        self.assertEqual(health.status_code, 200)
+        body = health.json()
+        build = str(body["iphoneBuild"])
+        self.assertEqual(body["delivery"], "/tai")
+        self.assertEqual(build, "5")
+        self.assertIn("Mở app", page.text)
+        self.assertIn('href="/iphone"', page.text)
+        self.assertIn("Tải gói zip", page.text)
+        self.assertIn(f'content="{build}"', page.text)
+        self.assertIn(f"Bản {build}", page.text)
+
+        info = self.client.get("/v1/delivery")
+        self.assertEqual(info.status_code, 200, info.text)
+        payload = info.json()
+        self.assertEqual(payload["iphoneBuild"], 5)
+        self.assertEqual(payload["iphonePath"], "/iphone")
+        self.assertEqual(payload["installPath"], "/tai")
+        package = payload["package"]
+        self.assertEqual(package["path"], "/tai/goi.zip")
+        self.assertEqual(package["name"], f"fb-poller-iphone-{build}.zip")
+        self.assertGreater(package["bytes"], 0)
+        self.assertEqual(len(package["sha256"]), 64)
+
+        downloaded = self.client.get("/tai/goi.zip")
+        self.assertEqual(downloaded.status_code, 200, downloaded.text)
+        self.assertEqual(downloaded.headers["cache-control"], "no-cache")
+        self.assertTrue(downloaded.content.startswith(b"PK"))
+        self.assertIn(package["name"], downloaded.headers["content-disposition"])
+        with zipfile.ZipFile(io.BytesIO(downloaded.content)) as archive:
+            names = archive.namelist()
+            self.assertIn("fb-poller/HUONG-DAN.txt", names)
+            self.assertIn("fb-poller/iphone.html", names)
+            self.assertNotIn("server.env", " ".join(names))
+            joined = " ".join(names)
+            self.assertNotIn(".db", joined)
+            guide = archive.read("fb-poller/HUONG-DAN.txt").decode("utf-8")
+            self.assertIn("/tai", guide)
+            self.assertIn("Không có token", guide)
+        self.assertFalse(any(Path(_TMP, "packages").glob("*.zip")))
+        denied = self.client.get(f"/v1/updates/packages/{package['name']}")
+        self.assertEqual(denied.status_code, 401)
 
 
 if __name__ == "__main__":
