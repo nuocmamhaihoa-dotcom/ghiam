@@ -29,6 +29,7 @@
     #updateNote { margin: 0; padding: 0.7rem 1rem 0; color: #0a7a32; font-weight: 700; }
     main { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; padding: 1rem 1.1rem 0.6rem; }
     p.lead { margin: 0.2rem 0 0.8rem; line-height: 1.45; }
+    p.lead a { color: #111; }
     #status { margin: 0 0 0.7rem; font-weight: 700; line-height: 1.4; }
     #status[hidden] { display: none !important; }
     #status.live { color: #b42318; }
@@ -55,7 +56,7 @@
 <body>
   <p id="updateNote" hidden></p>
   <main>
-    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi.</p>
+    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
     <p id="status" hidden></p>
     <video id="playback" controls playsinline hidden></video>
     <ol id="stepList"></ol>
@@ -319,7 +320,7 @@
       if (busy || recording) return;
       const devices = screenCapture();
       if (!devices) {
-        setStatus("Máy này không cho trang web tự ghi màn hình. Vuốt Trung tâm điều khiển, bấm nút ghi hình. Ghi chạy liên tục đến khi bạn bấm thanh đỏ, rồi chọn video.", false);
+        setStatus("Trang web không đọc được ứng dụng khác. Bấm Cài app, cài fb-poller lên iPhone, rồi bấm Bắt đầu ghi trong app.", false);
         return;
       }
       try {
