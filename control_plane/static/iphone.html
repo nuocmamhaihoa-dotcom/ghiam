@@ -29,6 +29,9 @@
     #updateNote { margin: 0; padding: 0.7rem 1rem 0; color: #0a7a32; font-weight: 700; }
     main { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; padding: 1rem 1.1rem 0.6rem; }
     p.lead { margin: 0.2rem 0 0.8rem; line-height: 1.45; }
+    #status { margin: 0 0 0.7rem; font-weight: 700; line-height: 1.4; }
+    #status[hidden] { display: none !important; }
+    #status.live { color: #b42318; }
     #playback { width: 100%; border-radius: 12px; background: #000; margin-bottom: 0.8rem; }
     #playback[hidden] { display: none !important; }
     #stepList { margin: 0.4rem 0 0; padding-left: 1.3rem; }
@@ -52,12 +55,13 @@
 <body>
   <p id="updateNote" hidden></p>
   <main>
-    <p class="lead">Chọn video vừa quay. Trang ghi lại tên, tài khoản và chữ nhìn thấy trên màn hình.</p>
+    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi.</p>
+    <p id="status" hidden></p>
     <video id="playback" controls playsinline hidden></video>
     <ol id="stepList"></ol>
   </main>
   <div id="actions">
-    <button id="recordBtn" type="button">Quay màn hình</button>
+    <button id="recordBtn" type="button">Bắt đầu ghi</button>
     <label id="pick">Chọn video
       <input id="videoFile" type="file" accept="video/*" />
     </label>
@@ -74,14 +78,36 @@
     const recordBtn = document.getElementById("recordBtn");
     const list = document.getElementById("stepList");
     const playback = document.getElementById("playback");
+    const status = document.getElementById("status");
+    const SAMPLE_MS = 4000;
+    const MAX_MS = 600000;
     let busy = false;
     let recording = false;
     let stopping = false;
+    let sampling = false;
     let recorder = null;
     let stream = null;
     let chunks = [];
+    let seen = [];
+    let startedAt = 0;
     let stopTimer = 0;
+    let sampleTimer = 0;
+    let firstSample = 0;
     let playbackUrl = "";
+    let closed = false;
+
+    function authHeaders() {
+      const headers = {};
+      const token = localStorage.getItem("fb_poller_control_token") || "";
+      if (token) headers.Authorization = "Bearer " + token;
+      return headers;
+    }
+
+    function setStatus(text, live) {
+      status.textContent = text || "";
+      status.hidden = !text;
+      status.classList.toggle("live", !!live);
+    }
 
     function showMessage(text) {
       list.replaceChildren();
@@ -90,7 +116,17 @@
       list.appendChild(item);
     }
 
+    function renderSeen() {
+      list.replaceChildren();
+      seen.forEach((item) => {
+        const row = document.createElement("li");
+        row.textContent = item.caption;
+        list.appendChild(row);
+      });
+    }
+
     function showSteps(steps) {
+      seen = [];
       list.replaceChildren();
       if (!steps.length) {
         showMessage("Không đọc được chữ chắc. Để màn hình đứng yên lâu hơn rồi chọn lại.");
@@ -105,8 +141,10 @@
 
     function showClip(file) {
       if (playbackUrl) URL.revokeObjectURL(playbackUrl);
+      playback.srcObject = null;
       playbackUrl = URL.createObjectURL(file);
       playback.hidden = false;
+      playback.muted = false;
       playback.src = playbackUrl;
     }
 
@@ -116,20 +154,39 @@
       return devices;
     }
 
+    function clockLabel() {
+      const total = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+      return Math.floor(total / 60) + ":" + String(total % 60).padStart(2, "0");
+    }
+
+    function addLine(line) {
+      const body = (line || "").trim();
+      if (!body || seen.length >= 20) return;
+      for (let index = 0; index < seen.length; index += 1) {
+        const previous = seen[index].body;
+        if (previous === body || previous.includes(body)) return;
+        if (body.includes(previous)) {
+          seen[index] = { body: body, caption: clockLabel() + " — " + body };
+          renderSeen();
+          return;
+        }
+      }
+      seen.push({ body: body, caption: clockLabel() + " — " + body });
+      renderSeen();
+    }
+
     async function sendVideo(file) {
       busy = true;
       pick.classList.add("busy");
       recordBtn.disabled = true;
-      showMessage("Đang đọc chữ trên màn hình...");
+      setStatus("Đang đọc chữ trên màn hình...", false);
       const body = new FormData();
       body.append("file", file, file.name || "man-hinh.mp4");
-      const headers = {};
-      const token = localStorage.getItem("fb_poller_control_token") || "";
-      if (token) headers.Authorization = "Bearer " + token;
       let response;
       try {
-        response = await fetch("/v1/recordings/from-video", { method: "POST", headers: headers, body: body });
+        response = await fetch("/v1/recordings/from-video", { method: "POST", headers: authHeaders(), body: body });
       } catch (error) {
+        setStatus("", false);
         showMessage("Chưa gửi được video. Mở lại trang rồi chọn lại.");
         pick.classList.remove("busy");
         recordBtn.disabled = false;
@@ -137,6 +194,7 @@
         return;
       }
       if (!response.ok) {
+        setStatus("", false);
         showMessage("Chưa đọc được video. Chọn đúng bản ghi màn hình.");
         pick.classList.remove("busy");
         recordBtn.disabled = false;
@@ -144,6 +202,7 @@
         return;
       }
       const data = await response.json();
+      setStatus("", false);
       showSteps(data.steps || []);
       pick.classList.remove("busy");
       recordBtn.disabled = false;
@@ -156,19 +215,83 @@
       stream = null;
     }
 
+    function frameBlob() {
+      const width = playback.videoWidth;
+      const height = playback.videoHeight;
+      if (!width || !height) return Promise.resolve(null);
+      const target = Math.min(720, width);
+      const canvas = document.createElement("canvas");
+      canvas.width = target;
+      canvas.height = Math.max(1, Math.round(height * (target / width)));
+      const context = canvas.getContext("2d");
+      if (!context) return Promise.resolve(null);
+      context.drawImage(playback, 0, 0, canvas.width, canvas.height);
+      return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.72));
+    }
+
+    async function sampleFrame() {
+      if (!recording || sampling) return;
+      const blob = await frameBlob();
+      if (!blob || !recording) return;
+      sampling = true;
+      const body = new FormData();
+      body.append("file", blob, "khung.jpg");
+      try {
+        const response = await fetch("/v1/recordings/from-frame", { method: "POST", headers: authHeaders(), body: body });
+        if (response.ok && recording) {
+          const data = await response.json();
+          addLine(data.line || "");
+        }
+      } catch (error) {
+        // Keep the recording running if one frame fails to send.
+      } finally {
+        sampling = false;
+      }
+    }
+
+    async function saveSeen() {
+      if (!seen.length) return false;
+      const response = await fetch("/v1/recordings/seen", {
+        method: "POST",
+        headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+        body: JSON.stringify({ lines: seen.map((item) => item.caption) }),
+      });
+      return response.ok;
+    }
+
     async function finishRecording() {
-      if (!recording) return;
+      if (closed) return;
+      closed = true;
       recording = false;
-      stopping = false;
+      stopping = true;
       window.clearTimeout(stopTimer);
+      window.clearTimeout(firstSample);
+      window.clearInterval(sampleTimer);
       const type = (recorder && recorder.mimeType) || "video/webm";
       const blob = new Blob(chunks, { type: type });
       recorder = null;
       chunks = [];
+      playback.srcObject = null;
       stopTracks();
-      recordBtn.textContent = "Quay màn hình";
+      recordBtn.textContent = "Bắt đầu ghi";
       recordBtn.classList.remove("live");
+      setStatus("Đang lưu chữ đã đọc...", false);
+      if (seen.length) {
+        let stored = false;
+        try {
+          stored = await saveSeen();
+        } catch (error) {
+          stored = false;
+        }
+        renderSeen();
+        if (blob.size) showClip(blob);
+        setStatus(stored ? "" : "Đã đọc trên máy này. Chưa lưu được lên hub.", false);
+        stopping = false;
+        return;
+      }
+      stopping = false;
       if (!blob.size) {
+        setStatus("", false);
         showMessage("Bản quay trống. Thử lại.");
         return;
       }
@@ -181,7 +304,10 @@
     function stopRecording() {
       if (!recording || stopping) return;
       stopping = true;
+      recording = false;
       window.clearTimeout(stopTimer);
+      window.clearTimeout(firstSample);
+      window.clearInterval(sampleTimer);
       if (recorder && recorder.state === "recording") {
         recorder.stop();
         return;
@@ -193,35 +319,55 @@
       if (busy || recording) return;
       const devices = screenCapture();
       if (!devices) {
-        showMessage("Máy này không cho trang web tự ghi màn hình. Vuốt Trung tâm điều khiển, bấm nút ghi hình, rồi chọn video.");
+        setStatus("Máy này không cho trang web tự ghi màn hình. Vuốt Trung tâm điều khiển, bấm nút ghi hình. Ghi chạy liên tục đến khi bạn bấm thanh đỏ, rồi chọn video.", false);
         return;
       }
       try {
-        stream = await devices.getDisplayMedia({ video: true, audio: false });
+        stream = await devices.getDisplayMedia({ video: { frameRate: 5 }, audio: false });
       } catch (error) {
-        showMessage("Chưa bật được ghi hình. Cho phép chia sẻ màn hình, hoặc ghi ở Trung tâm điều khiển rồi chọn video.");
+        setStatus("Chưa bật được ghi hình. Cho phép chia sẻ màn hình, hoặc ghi ở Trung tâm điều khiển rồi chọn video.", false);
         return;
       }
       const mime = ["video/webm;codecs=vp8", "video/webm", "video/mp4"].find((type) => {
         return window.MediaRecorder && MediaRecorder.isTypeSupported(type);
       }) || "";
-      recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
       chunks = [];
+      seen = [];
+      startedAt = Date.now();
       recording = true;
-      recorder.ondataavailable = (event) => {
-        if (event.data && event.data.size) chunks.push(event.data);
-      };
-      recorder.onstop = () => { finishRecording(); };
-      stream.getVideoTracks().forEach((track) => {
-        track.onended = () => {
-          if (recording && !stopping) stopRecording();
+      stopping = false;
+      closed = false;
+      try {
+        recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+        recorder.ondataavailable = (event) => {
+          if (event.data && event.data.size) chunks.push(event.data);
         };
-      });
-      recorder.start(1000);
-      recordBtn.textContent = "Dừng";
+        recorder.onstop = () => { finishRecording(); };
+        stream.getVideoTracks().forEach((track) => {
+          track.onended = () => {
+            if (recording && !stopping) stopRecording();
+          };
+        });
+        recorder.start(1000);
+      } catch (error) {
+        recording = false;
+        closed = true;
+        recorder = null;
+        stopTracks();
+        setStatus("Chưa bật được ghi hình. Cho phép chia sẻ màn hình, hoặc ghi ở Trung tâm điều khiển rồi chọn video.", false);
+        return;
+      }
+      playback.hidden = false;
+      playback.srcObject = stream;
+      playback.muted = true;
+      try { await playback.play(); } catch (error) { /* The frame sampler retries until a frame exists. */ }
+      recordBtn.textContent = "Dừng ghi";
       recordBtn.classList.add("live");
-      showMessage("Đang quay. Bấm Dừng khi xong.");
-      stopTimer = window.setTimeout(stopRecording, 170000);
+      list.replaceChildren();
+      setStatus("Đang ghi liên tục. Bấm Dừng ghi khi xong.", true);
+      sampleTimer = window.setInterval(sampleFrame, SAMPLE_MS);
+      firstSample = window.setTimeout(sampleFrame, 1200);
+      stopTimer = window.setTimeout(stopRecording, MAX_MS);
     }
 
     recordBtn.addEventListener("click", () => {

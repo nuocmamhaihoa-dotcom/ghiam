@@ -156,10 +156,14 @@ class ActionApiTests(unittest.TestCase):
         self.assertNotIn('data-app="browse"', page.text)
         self.assertNotIn("followTung", page.text)
         self.assertIn("Chọn video", page.text)
-        self.assertIn("Quay màn hình", page.text)
+        self.assertIn("Bắt đầu ghi", page.text)
+        self.assertIn("Dừng ghi", page.text)
+        self.assertIn("liên tục", page.text)
         self.assertIn("getDisplayMedia", page.text)
         self.assertIn('id="playback"', page.text)
         self.assertIn("/v1/recordings/from-video", page.text)
+        self.assertIn("/v1/recordings/from-frame", page.text)
+        self.assertNotIn("Quay màn hình", page.text)
         self.assertIn("Trung tâm điều khiển", page.text)
         self.assertIn("nhìn thấy", page.text)
         self.assertNotIn("kịch bản", page.text)
@@ -202,6 +206,34 @@ class ActionApiTests(unittest.TestCase):
             files={"file": ("clip.mp4", b"not-a-video", "video/mp4")},
         )
         self.assertEqual(opened.status_code, 400, opened.text)
+        frame = self.client.post(
+            "/v1/recordings/from-frame",
+            files={"file": ("khung.jpg", b"not-a-photo", "image/jpeg")},
+        )
+        self.assertEqual(frame.status_code, 401)
+        blank = self.client.post(
+            "/v1/recordings/from-frame",
+            headers=self.headers,
+            files={"file": ("khung.jpg", b"not-a-photo", "image/jpeg")},
+        )
+        self.assertEqual(blank.status_code, 200, blank.text)
+        self.assertEqual(blank.json()["line"], "")
+        denied_lines = self.client.post("/v1/recordings/seen", json={"lines": ["0:01 — TikTok"]})
+        self.assertEqual(denied_lines.status_code, 401)
+        empty_lines = self.client.post(
+            "/v1/recordings/seen",
+            headers=self.headers,
+            json={"lines": ["   "]},
+        )
+        self.assertEqual(empty_lines.status_code, 400, empty_lines.text)
+        saved = self.client.post(
+            "/v1/recordings/seen",
+            headers=self.headers,
+            json={"lines": ["0:01 — TikTok", "0:01 — TikTok"]},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(saved.json()["count"], 1)
+        self.assertEqual(saved.json()["steps"][0]["caption"], "0:01 — TikTok")
 
         missing = self.client.get("/khong-co-trang-nay")
         self.assertEqual(missing.status_code, 404)
@@ -217,12 +249,12 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "16")
+        self.assertEqual(build, "17")
 
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 16)
+        self.assertEqual(payload["iphoneBuild"], 17)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]

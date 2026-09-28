@@ -11,7 +11,7 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageOps, ImageStat
 
-_MAX_SECONDS = 180
+_MAX_SECONDS = 600
 _MAX_FRAMES = 120
 _MAX_READS = 30
 _MIN_DIFF = 1.8
@@ -204,19 +204,35 @@ def steps_from_text(frames: list[tuple[float, str]]) -> list[dict[str, Any]]:
     return steps
 
 
+def read_screen_image(path: Path) -> str:
+    """Read the names and words visible in one screen photo."""
+    text = clean_ocr(_ocr(path))
+    if not text:
+        return ""
+    return seen_line(text)
+
+
 def read_screen_video(path: Path) -> list[dict[str, Any]]:
     """Sample a video, keep frames that change, and read the words on them."""
     duration = _duration(path)
     if duration is not None and duration > _MAX_SECONDS:
-        raise ScreenVideoError("Video dài quá 3 phút. Quay ngắn hơn rồi chọn lại.")
+        raise ScreenVideoError("Video dài quá 10 phút. Dừng ghi rồi chọn lại.")
+    rate = _sample_rate(duration)
     with tempfile.TemporaryDirectory(prefix="fb-screen-") as folder:
         work = Path(folder)
-        images = _extract_frames(path, work)
+        images = _extract_frames(path, work, rate)
         if not images:
             raise ScreenVideoError("Video không có hình.")
         chosen = _changed_frames(images)
         frames = [(seconds, _ocr(image)) for seconds, image in chosen]
     return steps_from_text(frames)
+
+
+def _sample_rate(duration: float | None) -> float:
+    """Spread a fixed number of frames across a long recording."""
+    if duration is None or duration <= 0 or duration <= _MAX_FRAMES:
+        return 1.0
+    return _MAX_FRAMES / duration
 
 
 def _duration(path: Path) -> float | None:
@@ -248,7 +264,7 @@ def _duration(path: Path) -> float | None:
         return None
 
 
-def _extract_frames(path: Path, work: Path) -> list[tuple[float, Path]]:
+def _extract_frames(path: Path, work: Path, rate: float) -> list[tuple[float, Path]]:
     pattern = work / "f-%03d.png"
     try:
         subprocess.run(
@@ -262,19 +278,19 @@ def _extract_frames(path: Path, work: Path) -> list[tuple[float, Path]]:
                 "-i",
                 str(path),
                 "-vf",
-                "fps=1,scale=720:-2",
+                f"fps={rate:.4f},scale=720:-2",
                 "-frames:v",
                 str(_MAX_FRAMES),
                 str(pattern),
             ],
             capture_output=True,
-            timeout=60,
+            timeout=90,
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise ScreenVideoError("Không đọc được video.") from error
     images = sorted(work.glob("f-*.png"))
-    return [(float(index), image) for index, image in enumerate(images)]
+    return [(index / rate, image) for index, image in enumerate(images)]
 
 
 def _changed_frames(images: list[tuple[float, Path]]) -> list[tuple[float, Path]]:
@@ -300,10 +316,13 @@ def _changed_frames(images: list[tuple[float, Path]]) -> list[tuple[float, Path]
 
 def _ocr(image: Path) -> str:
     prepared = image.with_name(image.stem + "-ocr.png")
-    with Image.open(image) as full:
-        width, height = full.size
-        cropped = full.crop((0, int(height * 0.08), width, int(height * 0.92)))
-        ImageOps.autocontrast(cropped.convert("L")).save(prepared)
+    try:
+        with Image.open(image) as full:
+            width, height = full.size
+            cropped = full.crop((0, int(height * 0.08), width, int(height * 0.92)))
+            ImageOps.autocontrast(cropped.convert("L")).save(prepared)
+    except OSError:
+        return ""
     for lang in ("vie+eng", "eng"):
         try:
             result = subprocess.run(
