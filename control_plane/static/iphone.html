@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>fb-poller</title>
   <style>
-    :root { --text: #111; --muted: #8a8f98; --pink: #fe2c55; --font: -apple-system, "Segoe UI", system-ui, sans-serif; }
+    :root { --text: #111; --muted: #8a8f98; --font: -apple-system, "Segoe UI", system-ui, sans-serif; }
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; }
     body {
@@ -32,40 +32,19 @@
       border-bottom: 1px solid #eee;
     }
     h1 { font-size: 1.05rem; margin: 0; }
-    header a { color: #111; font-weight: 700; min-height: 44px; display: inline-flex; align-items: center; }
-    #updateNote {
-      margin: 0; color: #0a7a32; font-weight: 700; font-size: 0.95rem;
-    }
+    #updateNote { margin: 0; color: #0a7a32; font-weight: 700; font-size: 0.95rem; }
     main { flex: 1; min-height: 0; position: relative; }
-    .view { height: 100%; overflow: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+    .view { height: 100%; overflow: auto; -webkit-overflow-scrolling: touch; }
     #view-controls { overflow: hidden; }
     #controls { width: 100%; height: 100%; border: 0; background: #10141b; }
-    .install { margin: 0.8rem 0.9rem; padding: 0.75rem 0.85rem; background: #f4f7fb; border-radius: 12px; color: #243044; }
+    .install { margin: 0; padding: 0.65rem 0.9rem; background: #f4f7fb; color: #243044; }
     .install button { margin-top: 0.45rem; min-height: 44px; font-size: 16px; }
-    ul { list-style: none; margin: 0; padding: 0; }
-    li { display: flex; gap: 0.75rem; align-items: center; padding: 0.85rem 0.9rem; border-bottom: 1px solid #f0f0f0; }
-    .avatar { width: 52px; height: 52px; border-radius: 50%; background: #eceff3; flex: none; }
-    .who { flex: 1; min-width: 0; }
-    .who b, .profile h2 { display: block; font-size: 1.05rem; margin: 0; }
-    .who span, .handle { color: var(--muted); font-size: 0.95rem; }
-    button.follow {
-      border: 0; background: var(--pink); color: #fff; font-weight: 700;
-      border-radius: 8px; min-height: 44px; padding: 0 0.95rem; font-size: 1rem;
-    }
-    .profile { display: block; min-height: 78vh; padding: 1.3rem 0.9rem 2rem; }
-    .profile h2 { font-size: 1.7rem; font-weight: 750; }
-    .gap { height: 70vh; }
-    .saved-count {
-      display: block; width: calc(100% - 1.8rem); margin: 0.8rem 0.9rem 1.2rem;
-      min-height: 48px; border: 0; border-radius: 12px; background: #10141b; color: #fff;
-      font-size: 16px; font-weight: 700;
-    }
     #view-saved { padding: 0.4rem 0.7rem 1rem; }
     #view-saved table { width: 100%; border-collapse: collapse; }
     #view-saved th, #view-saved td { text-align: left; padding: 0.55rem 0.35rem; border-bottom: 1px solid #eee; vertical-align: top; font-size: 0.95rem; }
     #view-saved th { color: var(--muted); font-weight: 650; }
     nav.app {
-      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.35rem;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem;
       padding: 0.4rem max(0.6rem, env(safe-area-inset-right)) calc(0.4rem + env(safe-area-inset-bottom)) max(0.6rem, env(safe-area-inset-left));
       background: #fff; border-top: 1px solid #eee;
     }
@@ -76,42 +55,22 @@
     nav.app button.on { background: #111; color: #fff; }
     body.is-quiet header,
     body.is-quiet nav.app,
-    body.is-quiet .install { display: none !important; }
-    body.is-quiet #view-controls { display: none !important; }
-    body.is-quiet #view-browse { display: block !important; padding-top: 3.4rem; }
-    #cornerDock[hidden], #stepSheet[hidden] { display: none !important; }
+    body.is-quiet .install,
+    body.is-quiet main { display: none !important; }
+    #cornerDock[hidden] { display: none !important; }
     #cornerDock {
       position: fixed; z-index: 50;
       top: calc(0.55rem + env(safe-area-inset-top));
       right: max(0.55rem, env(safe-area-inset-right));
-      display: flex; flex-direction: row; align-items: center; gap: 0.15rem;
     }
-    #cornerStart {
+    #cornerEnd {
       min-height: 40px; padding: 0 0.8rem; border: 0; border-radius: 999px;
       background: #111; color: #fff; font: inherit; font-size: 14px; font-weight: 700;
     }
-    #cornerCancel {
-      border: 0; background: transparent; color: #111; font: inherit; font-size: 13px; min-height: 32px;
+    #endVideo {
+      position: fixed; width: 2px; height: 2px; left: 0; bottom: 0;
+      opacity: 0.01; pointer-events: none;
     }
-    #stepSheet {
-      position: fixed; z-index: 45; left: 0; right: 0; bottom: 0;
-      max-height: 72dvh; overflow: auto;
-      padding: 0.8rem max(0.8rem, env(safe-area-inset-right)) calc(0.8rem + env(safe-area-inset-bottom)) max(0.8rem, env(safe-area-inset-left));
-      background: #fff; border-top: 1px solid #e6e6e6; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.08);
-    }
-    #stepSheet h2 { margin: 0 0 0.4rem; font-size: 1.05rem; }
-    .step-row {
-      display: grid; grid-template-columns: 1fr auto; gap: 0.35rem; align-items: center;
-      padding: 0.45rem 0; border-bottom: 1px solid #f0f0f0;
-    }
-    .step-row button { min-height: 36px; border: 0; border-radius: 8px; background: #f4f5f7; font: inherit; font-weight: 650; }
-    #stepLock, #stepClose {
-      display: flex; align-items: center; justify-content: center; width: 100%;
-      min-height: 48px; margin-top: 0.45rem; border: 0; border-radius: 12px;
-      font: inherit; font-weight: 700;
-    }
-    #stepLock { background: #111; color: #fff; }
-    #stepClose { background: #f4f5f7; color: #111; }
   </style>
 </head>
 <body>
@@ -119,66 +78,32 @@
     <h1>fb-poller</h1>
     <p id="updateNote" hidden></p>
   </header>
+  <p class="install" id="install">Bấm Chia sẻ, rồi Thêm vào Màn hình chính.
+    <br /><button type="button" id="installHide">Đã hiểu</button>
+  </p>
   <main>
-    <section class="view" id="view-browse">
-      <p class="install" id="install">Bấm Chia sẻ, rồi Thêm vào Màn hình chính.
-        <br /><button type="button" id="installHide">Đã hiểu</button>
-      </p>
-      <ul>
-        <li>
-          <div class="avatar"></div>
-          <div class="who"><b>A Tùng Bán Gạch</b><span>Trần Tùng</span></div>
-          <button id="followTung" class="follow" type="button">Follow</button>
-        </li>
-        <li>
-          <div class="avatar"></div>
-          <div class="who"><b>Chị Soi Xuân Trung</b><span>Bà soi</span></div>
-          <button id="followSoi" class="follow" type="button">Follow</button>
-        </li>
-        <li>
-          <div class="avatar"></div>
-          <div class="who"><b>Hong@1978</b><span>Hồng</span></div>
-          <button id="followHong" class="follow" type="button">Follow</button>
-        </li>
-      </ul>
-      <div class="gap"></div>
-      <section class="profile">
-        <h2>Trần Tùng</h2>
-        <p class="handle">@trn.tng751</p>
-        <button id="followProfileTung" class="follow" type="button">Follow</button>
-      </section>
-      <section class="profile">
-        <h2>Bà soi</h2>
-        <p class="handle">@b.soi22</p>
-        <button id="followProfileSoi" class="follow" type="button">Follow</button>
-      </section>
-      <button class="saved-count" id="openSaved" type="button">Đã lưu 0 người</button>
-    </section>
-    <section class="view" id="view-controls" hidden>
-      <iframe id="controls" title="Điều khiển"></iframe>
+    <section class="view" id="view-controls">
+      <iframe id="controls" title="Điều khiển" src="/?as=iphone"></iframe>
     </section>
     <section class="view" id="view-saved" hidden>
       <table>
         <thead><tr><th>Tên</th><th>Tên trong danh bạ</th><th>Username</th></tr></thead>
-        <tbody id="savedRows"><tr><td colspan="3">Lướt tới hồ sơ để ghép với danh bạ.</td></tr></tbody>
+        <tbody id="savedRows"><tr><td colspan="3">Chưa có người đã lưu.</td></tr></tbody>
       </table>
     </section>
   </main>
   <div id="cornerDock" data-norecord hidden>
-    <button id="cornerStart" type="button">Bắt đầu</button>
-    <button id="cornerCancel" type="button">Huỷ</button>
+    <button id="cornerEnd" type="button">Kết thúc</button>
   </div>
-  <section id="stepSheet" data-norecord hidden>
-    <h2>Các bước</h2>
-    <div id="stepList"></div>
-    <button id="stepLock" type="button">Chốt và chạy liên tục</button>
-    <button id="stepClose" type="button">Đóng</button>
-  </section>
+  <video id="endVideo" playsinline webkit-playsinline loop src="/static/ket-thuc.mp4"></video>
   <nav class="app">
-    <button type="button" data-app="browse" class="on">Lướt</button>
-    <button type="button" data-app="controls">Điều khiển</button>
+    <button type="button" data-app="controls" class="on">Điều khiển</button>
     <button type="button" data-app="saved">Đã lưu</button>
   </nav>
+  <script>
+    const hubToken = __CONTROL_TOKEN_JSON__;
+    if (hubToken) localStorage.setItem("fb_poller_control_token", hubToken);
+  </script>
   <script src="/static/version.js"></script>
   <script src="/static/watch.js?v=__IPHONE_BUILD__"></script>
   <script>
@@ -190,25 +115,18 @@
       install.hidden = true;
     });
     const views = {
-      browse: document.getElementById("view-browse"),
       controls: document.getElementById("view-controls"),
       saved: document.getElementById("view-saved"),
     };
-    let controlsReady = false;
     function showApp(name) {
       Object.entries(views).forEach(([key, node]) => { node.hidden = key !== name; });
       document.querySelectorAll("[data-app]").forEach((button) => {
         button.classList.toggle("on", button.getAttribute("data-app") === name);
       });
-      if (name === "controls" && !controlsReady) {
-        controlsReady = true;
-        document.getElementById("controls").src = "/?as=iphone";
-      }
     }
     document.querySelectorAll("[data-app]").forEach((button) => {
       button.addEventListener("click", () => showApp(button.getAttribute("data-app")));
     });
-    document.getElementById("openSaved").addEventListener("click", () => showApp("saved"));
     function esc(value) {
       return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -216,10 +134,8 @@
     }
     function draw(items) {
       const rows = document.getElementById("savedRows");
-      const count = document.getElementById("openSaved");
-      count.textContent = "Đã lưu " + items.length + " người";
       if (!items.length) {
-        rows.innerHTML = "<tr><td colspan=\"3\">Lướt tới hồ sơ để ghép với danh bạ.</td></tr>";
+        rows.innerHTML = "<tr><td colspan=\"3\">Chưa có người đã lưu.</td></tr>";
         return;
       }
       rows.innerHTML = items.map((person) =>
@@ -228,22 +144,8 @@
     }
     document.addEventListener("people-saved", (event) => draw(event.detail || []));
     document.addEventListener("people-auth", () => {
-      document.getElementById("savedRows").innerHTML = "<tr><td colspan=\"3\">Mở Điều khiển, lưu token, rồi lướt lại.</td></tr>";
+      document.getElementById("savedRows").innerHTML = "<tr><td colspan=\"3\">Chưa lưu được danh sách.</td></tr>";
     });
-    let drag = null;
-    document.getElementById("view-browse").addEventListener("pointerdown", (event) => {
-      if (event.pointerType !== "mouse" || event.button !== 0) return;
-      if (event.target.closest("button, a, input, textarea")) return;
-      drag = { id: event.pointerId, y: event.clientY, top: event.currentTarget.scrollTop };
-    });
-    document.getElementById("view-browse").addEventListener("pointermove", (event) => {
-      if (!drag || event.pointerId !== drag.id) return;
-      event.currentTarget.scrollTop = drag.top - (event.clientY - drag.y);
-    });
-    document.addEventListener("pointerup", (event) => {
-      if (drag && event.pointerId === drag.id) drag = null;
-    });
-    document.addEventListener("pointercancel", () => { drag = null; });
     (async function loadSaved() {
       const token = localStorage.getItem("fb_poller_control_token") || "";
       const headers = {};
@@ -253,268 +155,106 @@
       const data = await response.json();
       draw(data.items || []);
     })();
-  </script>
-  <script>
-    const capture = { phase: "", t0: 0, events: [], press: null, steps: [], loop: 0, timer: 0 };
 
-    function authHeaders() {
-      const token = localStorage.getItem("fb_poller_control_token") || "";
-      const headers = { "Content-Type": "application/json" };
-      if (token) headers.Authorization = "Bearer " + token;
-      return headers;
-    }
+    const endVideo = document.getElementById("endVideo");
+    let quietTimer = 0;
+    let closing = false;
+    let pipSeen = false;
 
-    function showCorner(label, cancel) {
-      document.body.classList.add("is-quiet");
-      showApp("browse");
-      document.getElementById("cornerDock").hidden = false;
-      document.getElementById("stepSheet").hidden = true;
-      document.getElementById("cornerStart").textContent = label;
-      document.getElementById("cornerCancel").hidden = !cancel;
-    }
-
-    function hideCaptureUi() {
-      if (capture.timer) window.clearInterval(capture.timer);
-      capture.timer = 0;
-      showApp("browse");
+    function endPhoneUse() {
+      if (closing) return;
+      closing = true;
+      pipSeen = false;
+      if (quietTimer) window.clearInterval(quietTimer);
+      quietTimer = 0;
       document.body.classList.remove("is-quiet");
       document.getElementById("cornerDock").hidden = true;
-      document.getElementById("stepSheet").hidden = true;
+      document.getElementById("cornerEnd").textContent = "Kết thúc";
+      try {
+        if (document.pictureInPictureElement === endVideo) document.exitPictureInPicture();
+        if (endVideo.webkitPresentationMode === "picture-in-picture" && endVideo.webkitSetPresentationMode) {
+          endVideo.webkitSetPresentationMode("inline");
+        }
+      } catch (error) {
+        /* PiP đã đóng */
+      }
+      endVideo.pause();
+      showApp("controls");
+      closing = false;
     }
 
-    function armCapture(delay) {
-      capture.phase = "armed";
-      capture.events = [];
-      capture.loop += 1;
-      showCorner(delay ? "10" : "Bắt đầu", true);
-      if (!delay) return;
+    function floatEnd() {
+      try {
+        endVideo.muted = false;
+        const playing = endVideo.play();
+        if (typeof endVideo.webkitSetPresentationMode === "function") {
+          endVideo.webkitSetPresentationMode("picture-in-picture");
+        } else if (document.pictureInPictureEnabled && document.pictureInPictureElement !== endVideo) {
+          const request = endVideo.requestPictureInPicture();
+          if (request && typeof request.catch === "function") request.catch(() => {});
+        }
+        if (playing && typeof playing.then === "function") {
+          playing.then(() => {
+            const floating = endVideo.webkitPresentationMode === "picture-in-picture"
+              || document.pictureInPictureElement === endVideo;
+            if (!floating) endVideo.pause();
+          }).catch(() => {});
+        }
+      } catch (error) {
+        /* Nút Kết thúc trên trang vẫn bấm được */
+      }
+    }
+
+    function beginPhoneUse(delay) {
+      closing = false;
+      if (quietTimer) window.clearInterval(quietTimer);
+      quietTimer = 0;
+      document.body.classList.add("is-quiet");
+      document.getElementById("cornerDock").hidden = false;
+      const button = document.getElementById("cornerEnd");
+      if (!delay) {
+        button.textContent = "Kết thúc";
+        floatEnd();
+        return;
+      }
       const ends = Date.now() + 10000;
-      capture.timer = window.setInterval(() => {
-        if (capture.phase !== "armed") {
-          window.clearInterval(capture.timer);
-          capture.timer = 0;
+      button.textContent = "10";
+      quietTimer = window.setInterval(() => {
+        if (!document.body.classList.contains("is-quiet")) {
+          window.clearInterval(quietTimer);
+          quietTimer = 0;
           return;
         }
         if (document.hidden) return;
         const left = Math.ceil((ends - Date.now()) / 1000);
         if (left > 0) {
-          document.getElementById("cornerStart").textContent = String(left);
+          button.textContent = String(left);
           return;
         }
-        window.clearInterval(capture.timer);
-        capture.timer = 0;
-        beginCapture();
+        window.clearInterval(quietTimer);
+        quietTimer = 0;
+        button.textContent = "Kết thúc";
+        floatEnd();
       }, 250);
     }
+    window.beginPhoneUse = beginPhoneUse;
 
-    function beginCapture() {
-      capture.phase = "recording";
-      capture.t0 = performance.now();
-      capture.events = [];
-      capture.press = null;
-      showCorner("Xong", false);
-    }
-
-    function selectorOf(node) {
-      if (!(node instanceof Element) || node.closest("[data-norecord]")) return "";
-      const withId = node.closest("[id]");
-      if (!withId || !/^[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(withId.id)) return "";
-      return "#" + withId.id;
-    }
-
-    function renderSteps() {
-      const root = document.getElementById("stepList");
-      const lock = document.getElementById("stepLock");
-      root.replaceChildren();
-      if (!capture.steps.length) {
-        const empty = document.createElement("p");
-        empty.textContent = "Chưa có bước.";
-        root.appendChild(empty);
-        lock.disabled = true;
-        return;
-      }
-      lock.disabled = false;
-      capture.steps.forEach((step, index) => {
-        const row = document.createElement("div");
-        row.className = "step-row";
-        const label = document.createElement("div");
-        label.textContent = (index + 1) + ". " + (step.caption || step.kind || "Bước");
-        const actions = document.createElement("div");
-        const up = document.createElement("button");
-        up.type = "button";
-        up.textContent = "Lên";
-        up.disabled = index === 0;
-        up.addEventListener("click", () => {
-          const item = capture.steps.splice(index, 1)[0];
-          capture.steps.splice(index - 1, 0, item);
-          renderSteps();
-        });
-        const down = document.createElement("button");
-        down.type = "button";
-        down.textContent = "Xuống";
-        down.disabled = index === capture.steps.length - 1;
-        down.addEventListener("click", () => {
-          const item = capture.steps.splice(index, 1)[0];
-          capture.steps.splice(index + 1, 0, item);
-          renderSteps();
-        });
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.textContent = "Xoá";
-        remove.addEventListener("click", () => {
-          capture.steps.splice(index, 1);
-          renderSteps();
-        });
-        actions.appendChild(up);
-        actions.appendChild(down);
-        actions.appendChild(remove);
-        row.appendChild(label);
-        row.appendChild(actions);
-        root.appendChild(row);
-      });
-    }
-
-    async function finishCapture() {
-      const events = capture.events.slice();
-      capture.phase = "edit";
-      document.getElementById("cornerDock").hidden = true;
-      const sheet = document.getElementById("stepSheet");
-      const list = document.getElementById("stepList");
-      if (!events.length) {
-        hideCaptureUi();
-        return;
-      }
-      const response = await fetch("/v1/recordings/parse", {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ events: events }),
-      });
-      sheet.hidden = false;
-      if (!response.ok) {
-        capture.steps = [];
-        list.textContent = "Không tách được bước. Mở Điều khiển, lưu token, rồi ghi lại.";
-        document.getElementById("stepLock").disabled = true;
-        return;
-      }
-      capture.steps = (await response.json()).steps || [];
-      renderSteps();
-    }
-
-    function sleep(ms) {
-      return new Promise((resolve) => setTimeout(resolve, ms));
-    }
-
-    async function runEvent(ev) {
-      if (ev.kind !== "pointer" || ev.phase !== "up") return;
-      if (ev.intent === "swipe") {
-        const view = document.getElementById("view-browse");
-        if (view) view.scrollBy({ top: 480, behavior: "smooth" });
-        return;
-      }
-      if (!ev.click && ev.intent !== "tap" && ev.intent !== "focus") return;
-      const el = ev.target ? document.querySelector(ev.target) : null;
-      if (!el) return;
-      el.scrollIntoView({ block: "center" });
-      el.click();
-    }
-
-    async function lockAndLoop() {
-      if (!capture.steps.length) return;
-      const headers = authHeaders();
-      const saved = await fetch("/v1/recordings/from-steps", {
-        method: "POST",
-        headers: headers,
-        body: JSON.stringify({ title: "Thao tác trên điện thoại", steps: capture.steps }),
-      });
-      if (!saved.ok) {
-        const note = document.createElement("p");
-        note.textContent = "Không chốt được. Mở Điều khiển, lưu token, rồi bấm Chốt lại.";
-        document.getElementById("stepList").appendChild(note);
-        return;
-      }
-      const compiled = await fetch("/v1/recordings/compile", {
-        method: "POST",
-        headers: headers,
-        body: JSON.stringify({ title: "Thao tác trên điện thoại", steps: capture.steps }),
-      });
-      if (!compiled.ok) {
-        const note = document.createElement("p");
-        note.textContent = "Không chạy được các bước. Sửa lại rồi bấm Chốt.";
-        document.getElementById("stepList").appendChild(note);
-        return;
-      }
-      const events = (await compiled.json()).events || [];
-      capture.phase = "loop";
-      capture.loop += 1;
-      const token = capture.loop;
-      showCorner("Dừng", false);
-      while (capture.phase === "loop" && capture.loop === token) {
-        for (let i = 0; i < events.length; i++) {
-          if (capture.phase !== "loop" || capture.loop !== token) return;
-          await runEvent(events[i]);
-          await sleep(700);
-        }
-        await sleep(900);
-      }
-    }
-
-    document.getElementById("cornerStart").addEventListener("click", () => {
-      if (capture.phase === "armed") beginCapture();
-      else if (capture.phase === "recording") finishCapture();
-      else if (capture.phase === "loop") {
-        capture.phase = "";
-        capture.loop += 1;
-        hideCaptureUi();
-      }
+    document.getElementById("cornerEnd").addEventListener("click", () => endPhoneUse());
+    endVideo.addEventListener("leavepictureinpicture", () => {
+      if (pipSeen) endPhoneUse();
     });
-    document.getElementById("cornerCancel").addEventListener("click", () => {
-      capture.phase = "";
-      capture.loop += 1;
-      hideCaptureUi();
-    });
-    document.getElementById("stepClose").addEventListener("click", () => {
-      capture.phase = "";
-      hideCaptureUi();
-    });
-    document.getElementById("stepLock").addEventListener("click", () => {
-      lockAndLoop();
-    });
-    document.addEventListener("pointerdown", (event) => {
-      if (capture.phase !== "recording") return;
-      if (event.target instanceof Element && event.target.closest("[data-norecord]")) {
-        capture.press = null;
+    endVideo.addEventListener("webkitpresentationmodechanged", () => {
+      if (endVideo.webkitPresentationMode === "picture-in-picture") {
+        pipSeen = true;
         return;
       }
-      capture.press = { id: event.pointerId, x: event.clientX, y: event.clientY };
-    }, true);
-    document.addEventListener("pointerup", (event) => {
-      if (capture.phase !== "recording" || !capture.press || event.pointerId !== capture.press.id) return;
-      const moved = Math.hypot(event.clientX - capture.press.x, event.clientY - capture.press.y);
-      capture.press = null;
-      const t = Math.max(0, Math.round(performance.now() - capture.t0));
-      if (moved > 36) {
-        capture.events.push({
-          t: t, kind: "pointer", phase: "up", target: "#view-browse",
-          pointerType: "touch", click: false, intent: "swipe",
-        });
-        return;
-      }
-      const control = event.target instanceof Element ? event.target.closest("button, a") : null;
-      if (!control || control.closest("[data-norecord]")) return;
-      const target = selectorOf(control);
-      if (!target || target === "#view-browse") return;
-      const label = (control.innerText || "").trim().replace(/\s+/g, " ").slice(0, 80);
-      capture.events.push({
-        t: t, kind: "pointer", phase: "up", target: target, pointerType: "touch",
-        click: true, intent: "tap", label: label, role: control.tagName === "A" ? "link" : "button",
-      });
-    }, true);
+      if (pipSeen) endPhoneUse();
+    });
     window.addEventListener("message", (event) => {
       if (event.origin !== location.origin) return;
       const data = event.data || {};
       if (data.type !== "fb-arm") return;
-      if (capture.phase === "recording" || capture.phase === "loop") return;
-      armCapture(Boolean(data.delay));
+      beginPhoneUse(Boolean(data.delay));
     });
   </script>
 </body>

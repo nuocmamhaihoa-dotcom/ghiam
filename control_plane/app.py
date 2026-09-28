@@ -176,6 +176,8 @@ def _html(name: str, status_code: int = 200) -> HTMLResponse:
     if not path.exists():
         return HTMLResponse("<p>Missing page.</p>", status_code=404)
     text = path.read_text(encoding="utf-8").replace("__IPHONE_BUILD__", str(IPHONE_BUILD))
+    if name == "iphone.html":
+        text = text.replace("__CONTROL_TOKEN_JSON__", json.dumps(settings.token or ""))
     return HTMLResponse(text, status_code=status_code, headers={"Cache-Control": "no-cache"})
 
 
@@ -201,7 +203,7 @@ def phone() -> HTMLResponse:
 
 @app.get("/iphone", response_class=HTMLResponse)
 def iphone_app() -> HTMLResponse:
-    """App trên iPhone: lướt để lưu tên, điều khiển để ghi và làm lại thao tác."""
+    """App trên iPhone. Token được gắn sẵn. Ghi thì ẩn app và chỉ còn nút Kết thúc."""
     return _html("iphone.html")
 
 

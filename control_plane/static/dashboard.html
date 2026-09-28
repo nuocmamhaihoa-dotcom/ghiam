@@ -256,7 +256,7 @@
   <main>
     <section data-view="home">
       <p class="lead">Số liệu hub, máy đang nối, rồi chuyển tab để ghi nhớ, làm lại thao tác, xem proxy hoặc comment.</p>
-      <a class="iphone-go" href="/iphone">Lướt trên iPhone</a>
+      <a class="iphone-go" href="/iphone">Mở app iPhone</a>
       <div class="stats" id="stats"></div>
       <div id="agents"></div>
     </section>
@@ -2197,20 +2197,24 @@
       return screenMode === "iphone" && window.parent !== window;
     }
 
+    function armPhone(delay) {
+      const parent = window.parent;
+      if (parent && typeof parent.beginPhoneUse === "function") {
+        parent.beginPhoneUse(delay);
+        return;
+      }
+      window.parent.postMessage({ type: "fb-arm", delay: delay }, location.origin);
+    }
+
     $("recordNow").onclick = () => {
       $("err").hidden = true;
       if (!phoneShell()) {
         $("recordToggle").click();
         return;
       }
-      if (!$("token").value.trim()) {
-        $("recordState").textContent = "Dán token ở trên, bấm Lưu token, rồi ghi.";
-        paintRecord();
-        return;
-      }
       clearRecordDelay();
-      window.parent.postMessage({ type: "fb-arm", delay: false }, location.origin);
-      $("recordState").textContent = "Đã ẩn phần mềm. Bấm Bắt đầu ở góc màn hình.";
+      armPhone(false);
+      $("recordState").textContent = "Đã ẩn. Về màn hình điện thoại, dùng máy, rồi bấm Kết thúc.";
       paintRecord();
     };
     $("recordDelay").onclick = () => {
@@ -2219,14 +2223,9 @@
         armRecordDelay();
         return;
       }
-      if (!$("token").value.trim()) {
-        $("recordState").textContent = "Dán token ở trên, bấm Lưu token, rồi ghi.";
-        paintRecord();
-        return;
-      }
       clearRecordDelay();
-      window.parent.postMessage({ type: "fb-arm", delay: true }, location.origin);
-      $("recordState").textContent = "Phần mềm đã ẩn. Ghi bắt đầu sau 10 giây.";
+      armPhone(true);
+      $("recordState").textContent = "Đã ẩn. Kết thúc hiện sau 10 giây.";
       paintRecord();
     };
     $("recordingRows").onclick = async (e) => {
