@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from control_plane.screen_steps import clean_ocr, read_screen_video, same_caption, scenario_line, steps_from_text
+from control_plane.screen_steps import clean_ocr, read_screen_video, same_caption, seen_line, steps_from_text
 
 
 class ScreenStepTextTests(unittest.TestCase):
@@ -27,12 +27,18 @@ class ScreenStepTextTests(unittest.TestCase):
     def test_noise_lines_are_dropped(self) -> None:
         self.assertEqual(clean_ocr("aQo* ở 7.06 c7a8O Selag"), "")
 
-    def test_scenario_names_the_app_and_account(self) -> None:
-        self.assertEqual(scenario_line("TikTok"), "Mở TikTok")
-        self.assertIn("monaco.daily6", scenario_line("Da follow @monaco.daily6"))
+    def test_seen_line_keeps_place_and_account(self) -> None:
+        self.assertEqual(seen_line("TikTok"), "TikTok")
+        self.assertNotIn("Mở", seen_line("TikTok"))
+        line = seen_line("Da follow @monaco.daily6")
+        self.assertIn("@monaco.daily6", line)
+        self.assertIn("Đã follow", line)
+        self.assertEqual(clean_ocr("topcv beko ecord"), "")
+        self.assertEqual(clean_ocr("panh ban dang foal"), "")
         steps = steps_from_text(
             [
                 (0, "aQo* o 7.06 c7a8O Selag"),
+                (1, "topcv beko ecord"),
                 (2, "Danh ba\nBa Thanh Xuan Trung"),
                 (7, "TikTok"),
                 (12, "Da follow\n@monaco.daily6"),
@@ -40,9 +46,11 @@ class ScreenStepTextTests(unittest.TestCase):
             ]
         )
         captions = [step["caption"] for step in steps]
-        self.assertTrue(any("Danh bạ" in caption for caption in captions))
-        self.assertTrue(any("TikTok" in caption for caption in captions))
+        self.assertTrue(any("Danh bạ" in caption and "Thanh Xuan Trung" in caption for caption in captions))
+        self.assertTrue(any(caption.endswith("TikTok") or "— TikTok" in caption for caption in captions))
         self.assertEqual(sum("monaco.daily6" in caption for caption in captions), 1)
+        self.assertFalse(any("Mở " in caption for caption in captions))
+        self.assertFalse(any("topcv" in caption or "panh" in caption for caption in captions))
 
 
 class ScreenVideoTests(unittest.TestCase):
@@ -53,8 +61,8 @@ class ScreenVideoTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "clip.mp4"
             draw = (
-                "drawtext=fontfile=%s:text='Open Notes':fontsize=42:fontcolor=black:x=30:y=180:enable='lt(t,1.2)',"
-                "drawtext=fontfile=%s:text='Save Note':fontsize=42:fontcolor=black:x=30:y=180:enable='gte(t,1.2)'"
+                "drawtext=fontfile=%s:text='Thanh Xuan':fontsize=42:fontcolor=black:x=30:y=180:enable='lt(t,1.2)',"
+                "drawtext=fontfile=%s:text='@monaco.daily6':fontsize=36:fontcolor=black:x=30:y=180:enable='gte(t,1.2)'"
             ) % (font, font)
             subprocess.run(
                 [
@@ -68,5 +76,5 @@ class ScreenVideoTests(unittest.TestCase):
             )
             steps = read_screen_video(path)
         captions = " ".join(step["caption"] for step in steps)
-        self.assertIn("Open", captions)
-        self.assertIn("Save", captions)
+        self.assertIn("Thanh", captions)
+        self.assertIn("monaco.daily6", captions)

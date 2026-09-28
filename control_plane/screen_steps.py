@@ -1,4 +1,4 @@
-"""Turn an iPhone screen recording into a short scenario of visible steps."""
+"""Read the names, accounts, and words visible in an iPhone screen recording."""
 
 from __future__ import annotations
 
@@ -17,7 +17,19 @@ _MAX_READS = 30
 _MIN_DIFF = 1.8
 _APP_WORDS = {"tiktok", "facebook", "instagram", "zalo", "danh", "ba", "follow", "da", "thich", "follower"}
 _MIXED_OK = {"tiktok", "iphone", "facebook", "instagram", "youtube", "zalo"}
+_KEEP_LOWER = {"tiktok", "facebook", "instagram", "zalo", "follow", "follower"}
 _STOP = {"though", "there", "which", "would", "could", "should", "about", "their", "other", "these", "those"}
+_JUNK = {
+    "bank", "block", "digibank", "topcv", "beko", "ecord", "panh", "foal", "eral",
+    "recgen", "though", "daily", "record", "screen",
+}
+_PLACES = (
+    ("danhba", "Danh bạ"),
+    ("tiktok", "TikTok"),
+    ("facebook", "Facebook"),
+    ("instagram", "Instagram"),
+    ("zalo", "Zalo"),
+)
 
 
 class ScreenVideoError(ValueError):
@@ -27,29 +39,50 @@ class ScreenVideoError(ValueError):
 def _fold(text: str) -> str:
     normalized = unicodedata.normalize("NFD", text)
     stripped = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
-    return stripped.casefold()
+    return stripped.casefold().replace("đ", "d")
+
+
+def _marked(word: str) -> bool:
+    return _fold(word) != word.casefold()
 
 
 def _strong(word: str) -> bool:
     if re.fullmatch(r"@[A-Za-z0-9._]{3,30}", word):
         return True
     folded = _fold(word)
-    if folded in _STOP:
+    if folded in _STOP or folded in _JUNK:
         return False
-    if folded in _MIXED_OK or folded in {"follow", "follower", "thich"}:
+    if folded in _MIXED_OK or folded in _KEEP_LOWER or folded == "thich":
         return True
     letters = [ch for ch in word if ch.isalpha()]
-    if len(letters) < 4 or len(letters) != len(word):
+    if len(letters) != len(word):
         return False
-    if any(ch.isupper() for ch in word[1:]):
-        return word.isupper() and len(word) >= 6
-    return True
+    if _marked(word) and len(letters) >= 2:
+        return True
+    if len(letters) < 4:
+        return False
+    if word.isupper():
+        return len(word) >= 4
+    return word[0].isupper() and word[1:].islower()
 
 
 _SHORT_OK = {
     "anh", "ban", "ba", "be", "cho", "cua", "da", "doi", "ma", "moi", "nam",
-    "suc", "ten", "thi", "tim", "tru", "van", "voi", "xem", "xung", "quanh",
+    "suc", "ten", "thi", "tim", "tru", "van", "voi", "xem", "xung", "quanh", "he",
 }
+
+
+def _plain(word: str) -> bool:
+    letters = [ch for ch in word if ch.isalpha()]
+    folded = _fold(word)
+    return (
+        len(letters) >= 4
+        and len(letters) == len(word)
+        and word.islower()
+        and not _marked(word)
+        and folded not in _JUNK
+        and folded not in _STOP
+    )
 
 
 def _short(word: str) -> bool:
@@ -68,7 +101,12 @@ def clean_ocr(raw: str) -> str:
         found = _words(line)
         if not any(_strong(word) for word in found):
             continue
-        kept = [word for word in found if _strong(word) or _short(word)]
+        marked_line = any(_marked(word) for word in found)
+        kept = [
+            word
+            for word in found
+            if _strong(word) or _short(word) or (marked_line and _plain(word))
+        ]
         if not kept:
             continue
         text = " ".join(kept[:10])
@@ -84,15 +122,19 @@ def clean_ocr(raw: str) -> str:
 
 
 def _has_signal(text: str) -> bool:
-    strong = [word for word in text.replace("·", " ").split() if _strong(word)]
+    words = text.replace("·", " ").split()
     folded = _fold(text).replace(" ", "")
-    if any(name in folded for name in ("tiktok", "facebook", "instagram", "zalo", "danhba", "follow", "thich")):
+    if any(word.startswith("@") for word in words):
         return True
-    if any(word.startswith("@") for word in strong):
+    if any(key in folded for key, _label in _PLACES):
         return True
-    if len(strong) >= 2:
+    if sum(1 for word in words if _marked(word)) >= 3:
         return True
-    return len(strong) == 1 and len(strong[0]) >= 10
+    titled = [
+        word for word in words
+        if len(word) >= 4 and word[0].isupper() and (word[1:].islower() or word.isupper())
+    ]
+    return len(titled) >= 2
 
 
 def same_caption(left: str, right: str) -> bool:
@@ -109,38 +151,36 @@ def clock_label(seconds: float) -> str:
     return f"{total // 60}:{total % 60:02d}"
 
 
-def scenario_line(text: str) -> str:
-    """Turn readable screen words into one action line."""
+def seen_line(text: str) -> str:
+    """Keep the place, account, and words that were on screen."""
     folded = _fold(text)
     compact = folded.replace(" ", "")
-    labels: list[str] = []
-    if "danhba" in compact or "danh ba" in folded:
-        labels.append("Mở Danh bạ")
-    for key, label in (
-        ("tiktok", "Mở TikTok"),
-        ("facebook", "Mở Facebook"),
-        ("instagram", "Mở Instagram"),
-        ("zalo", "Mở Zalo"),
-    ):
-        if key in compact:
-            labels.append(label)
-    handles = re.findall(r"@[A-Za-z0-9._]{3,30}", text)
-    if "foll" in compact:
-        labels.append("Follow " + " ".join(handles) if handles else "Follow")
-    elif handles:
-        labels.append(" ".join(handles))
-    if "thich" in compact:
-        labels.append("Thích")
+    parts: list[str] = []
+    for key, label in _PLACES:
+        if key in compact and label not in parts:
+            parts.append(label)
+    handles = list(dict.fromkeys(re.findall(r"@[A-Za-z0-9._]{3,30}", text)))
+    if handles:
+        parts.append(" ".join(handles))
+    if "dafoll" in compact or "dafollow" in compact:
+        parts.append("Đã follow")
+    pieces = text.replace("·", " ").split()
+    marked_text = any(_marked(word) for word in pieces)
     extra_words = [
         word
-        for word in text.replace("·", " ").split()
-        if _fold(word) not in _APP_WORDS and not _fold(word).startswith("foll") and word not in handles
+        for word in pieces
+        if _fold(word) not in _APP_WORDS
+        and not _fold(word).startswith("foll")
+        and _fold(word) not in {"thich", "da"}
+        and word not in handles
+        and (
+            _strong(word)
+            or _marked(word)
+            or (word[:1].isupper() and _short(word))
+            or (marked_text and _plain(word))
+        )
     ]
     extra = " ".join(extra_words[:8])
-    parts: list[str] = []
-    for label in labels:
-        if label not in parts:
-            parts.append(label)
     if extra and extra not in " ".join(parts):
         parts.append(extra)
     if not parts:
@@ -149,12 +189,12 @@ def scenario_line(text: str) -> str:
 
 
 def steps_from_text(frames: list[tuple[float, str]]) -> list[dict[str, Any]]:
-    """Collapse OCR text from successive frames into a scenario."""
+    """Collapse OCR text from successive frames into what was visible."""
     steps: list[dict[str, Any]] = []
     previous = ""
     for seconds, raw in frames:
         text = clean_ocr(raw)
-        line = scenario_line(text) if text else ""
+        line = seen_line(text) if text else ""
         if not line or same_caption(line, previous):
             continue
         previous = line

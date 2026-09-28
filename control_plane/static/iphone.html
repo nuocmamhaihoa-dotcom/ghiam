@@ -52,7 +52,7 @@
 <body>
   <p id="updateNote" hidden></p>
   <main>
-    <p class="lead">Chọn video vừa quay. Trang lập kịch bản từ chữ trên màn hình để bạn làm lại. Trang không bấm hộ vào ứng dụng khác.</p>
+    <p class="lead">Chọn video vừa quay. Trang ghi lại tên, tài khoản và chữ nhìn thấy trên màn hình.</p>
     <video id="playback" controls playsinline hidden></video>
     <ol id="stepList"></ol>
   </main>
@@ -98,7 +98,7 @@
       }
       steps.forEach((step) => {
         const item = document.createElement("li");
-        item.textContent = step.caption || "Bước";
+        item.textContent = step.caption || "";
         list.appendChild(item);
       });
     }
@@ -120,7 +120,7 @@
       busy = true;
       pick.classList.add("busy");
       recordBtn.disabled = true;
-      showMessage("Đang lập kịch bản...");
+      showMessage("Đang đọc chữ trên màn hình...");
       const body = new FormData();
       body.append("file", file, file.name || "man-hinh.mp4");
       const headers = {};
