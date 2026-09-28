@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="iphone-build" content="__IPHONE_BUILD__" />
   <title>Giả lập điện thoại — fb-poller</title>
+  <script src="/static/version.js"></script>
   <script>
     if (/iPhone|iPod/.test(navigator.userAgent) && new URLSearchParams(location.search).get("screen") !== "pc") {
       location.replace("/iphone");

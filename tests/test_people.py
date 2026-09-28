@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import unittest
 
-from control_plane.people import clean_username, complete_rows, fold_sightings, name_key
+from control_plane.people import (
+    apply_novel,
+    clean_username,
+    complete_rows,
+    fold_sightings,
+    name_key,
+    sighting_adds,
+)
 
 
 class PeopleMergeTests(unittest.TestCase):
@@ -61,3 +68,36 @@ class PeopleMergeTests(unittest.TestCase):
         self.assertEqual(len(ready), 1)
         self.assertEqual(ready[0]["name"], "Trần Tùng")
         self.assertEqual(ready[0]["username"], "@b.soi22")
+
+    def test_saved_column_is_not_written_again(self) -> None:
+        stored, added = apply_novel(
+            [],
+            [
+                {"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"},
+                {"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"},
+            ],
+        )
+        self.assertEqual(added, 2)
+        again, added_again = apply_novel(
+            stored,
+            [
+                {"kind": "contact", "name": "Trần Tùng", "contactName": "Tên khác"},
+                {"kind": "profile", "name": "Trần Tùng", "username": "@khac"},
+            ],
+        )
+        self.assertEqual(added_again, 0)
+        self.assertEqual(again[0]["contactName"], "A Tùng Bán Gạch")
+        self.assertEqual(again[0]["username"], "@trn.tng751")
+
+    def test_empty_column_can_still_be_filled(self) -> None:
+        stored, added = apply_novel(
+            [],
+            [{"kind": "contact", "name": "Bà soi", "contactName": "Chị Soi Xuân Trung"}],
+        )
+        self.assertEqual(added, 1)
+        self.assertTrue(
+            sighting_adds(stored[0], {"kind": "profile", "name": "Bà soi", "username": "@b.soi22"})
+        )
+        self.assertFalse(
+            sighting_adds(stored[0], {"kind": "contact", "name": "Bà soi", "contactName": "Khác"})
+        )

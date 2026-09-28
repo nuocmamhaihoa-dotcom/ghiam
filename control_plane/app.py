@@ -27,7 +27,8 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
-from control_plane.people import complete_rows, fold_sightings
+from control_plane.people import apply_novel, complete_rows
+from control_plane.version import IPHONE_BUILD
 from control_plane.recordings import (
     blanks_of,
     default_title,
@@ -163,34 +164,34 @@ def health() -> dict[str, Any]:
         "max_upload_mb": settings.max_upload_mb,
         "packages_dir": str(settings.packages_dir),
         "dashboard": "/",
+        "iphoneBuild": IPHONE_BUILD,
     }
+
+
+def _html(name: str) -> HTMLResponse:
+    path = STATIC_DIR / name
+    if not path.exists():
+        return HTMLResponse("<p>Missing page.</p>", status_code=404)
+    text = path.read_text(encoding="utf-8").replace("__IPHONE_BUILD__", str(IPHONE_BUILD))
+    return HTMLResponse(text, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard() -> HTMLResponse:
     """Web UI — hiển thị comment đã sync từ các PC scanner."""
-    path = STATIC_DIR / "dashboard.html"
-    if not path.exists():
-        return HTMLResponse("<h1>fb-poller</h1><p>Dashboard missing.</p>", status_code=404)
-    return HTMLResponse(path.read_text(encoding="utf-8"))
+    return _html("dashboard.html")
 
 
 @app.get("/phone", response_class=HTMLResponse)
 def phone() -> HTMLResponse:
     """Khung điện thoại trên PC. Trang trong khung là dashboard, chuột được ghi như ngón tay."""
-    path = STATIC_DIR / "phone.html"
-    if not path.exists():
-        return HTMLResponse("<h1>fb-poller</h1><p>Phone page missing.</p>", status_code=404)
-    return HTMLResponse(path.read_text(encoding="utf-8"))
+    return _html("phone.html")
 
 
 @app.get("/iphone", response_class=HTMLResponse)
 def iphone_app() -> HTMLResponse:
-    """App full màn hình cho Safari trên iPhone. Lướt bằng ngón tay, tên trùng tự lưu."""
-    path = STATIC_DIR / "iphone.html"
-    if not path.exists():
-        return HTMLResponse("<p>Missing iPhone app.</p>", status_code=404)
-    return HTMLResponse(path.read_text(encoding="utf-8"))
+    """App trên iPhone: lướt để lưu tên, điều khiển để ghi và làm lại thao tác."""
+    return _html("iphone.html")
 
 
 @app.get("/manifest.webmanifest")
@@ -212,10 +213,7 @@ def apple_touch_icon() -> FileResponse:
 @app.get("/sample-people", response_class=HTMLResponse)
 def sample_people() -> HTMLResponse:
     """Trang lướt mẫu: danh bạ rồi hồ sơ, để khung điện thoại tự ghép tên trùng."""
-    path = STATIC_DIR / "sample-people.html"
-    if not path.exists():
-        return HTMLResponse("<p>Missing sample.</p>", status_code=404)
-    return HTMLResponse(path.read_text(encoding="utf-8"))
+    return _html("sample-people.html")
 
 
 class Sighting(BaseModel):
@@ -232,8 +230,9 @@ class SightingsBody(BaseModel):
 @app.get("/v1/people")
 def people_list(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     _auth(authorization)
-    rows = complete_rows(db.list_people(settings.db_path))
-    return {"count": len(rows), "items": rows}
+    rows = db.list_people(settings.db_path)
+    ready = complete_rows(rows)
+    return {"count": len(ready), "items": ready, "known": rows}
 
 
 @app.post("/v1/people/sightings")
@@ -243,10 +242,11 @@ def people_sightings(
 ) -> dict[str, Any]:
     _auth(authorization)
     stored = db.list_people(settings.db_path)
-    folded = fold_sightings(stored, [item.model_dump() for item in body.items])
-    db.save_people(settings.db_path, folded, utcnow())
+    folded, added = apply_novel(stored, [item.model_dump() for item in body.items])
+    if added:
+        db.save_people(settings.db_path, folded, utcnow())
     ready = complete_rows(folded)
-    return {"count": len(ready), "items": ready}
+    return {"count": len(ready), "items": ready, "saved": added, "known": folded}
 
 
 @app.get("/v1/server/stats")

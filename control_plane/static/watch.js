@@ -5,6 +5,27 @@
   const skip = /^(follow|tin nhắn|đã follow|follower|thích|từ các liên hệ của bạn|danh bạ)$/i;
   const handle = /^@[A-Za-z0-9._]{2,30}$/;
   const sent = new Set();
+  const known = new Map();
+  let ready = false;
+
+  function nameKey(name) {
+    return String(name || "").replace(/\s+/g, " ").trim().toLocaleLowerCase();
+  }
+
+  function remember(rows) {
+    (rows || []).forEach((row) => {
+      if (!row || !row.name) return;
+      known.set(nameKey(row.name), row);
+    });
+  }
+
+  function fresh(item) {
+    const row = known.get(nameKey(item.name));
+    if (!row) return true;
+    if (item.kind === "contact") return !row.contactName;
+    if (item.kind === "profile") return !row.username;
+    return false;
+  }
 
   function visible(el) {
     const box = el.getBoundingClientRect();
@@ -55,7 +76,7 @@
       const row = rowFor(button);
       if (!row || !visible(row)) return;
       const item = classify(linesOf(row, button));
-      if (!item) return;
+      if (!item || !fresh(item)) return;
       const key = item.kind + "|" + item.name + "|" + item.contactName + "|" + item.username;
       if (sent.has(key)) return;
       sent.add(key);
@@ -84,6 +105,7 @@
     }
     if (!response.ok) return;
     const data = await response.json();
+    remember(data.known || []);
     const saved = data.items || [];
     document.dispatchEvent(new CustomEvent("people-saved", { detail: saved }));
     tell({ type: "people-saved", items: saved });
@@ -106,6 +128,7 @@
 
   let timer = 0;
   function schedule() {
+    if (!ready) return;
     queue.push(...scan());
     window.clearTimeout(timer);
     timer = window.setTimeout(() => { publish(); }, 250);
@@ -122,5 +145,19 @@
       observer.observe(rowFor(button) || button);
     });
   }
-  schedule();
+  async function prime() {
+    const token = localStorage.getItem("fb_poller_control_token") || "";
+    const headers = {};
+    if (token) headers.Authorization = "Bearer " + token;
+    try {
+      const response = await fetch("/v1/people", { headers: headers, cache: "no-store" });
+      if (response.ok) {
+        const data = await response.json();
+        remember(data.known || data.items || []);
+      }
+    } catch (err) { /* mất mạng thì vẫn đọc màn hình, hub lọc phần đã lưu */ }
+    ready = true;
+    schedule();
+  }
+  prime();
 })();

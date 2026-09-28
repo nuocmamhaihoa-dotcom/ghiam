@@ -723,7 +723,23 @@ def list_people(db_path: Path) -> list[dict[str, str]]:
 
 def save_people(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> None:
     with session(db_path) as conn:
+        current = {
+            row["name_key"]: row
+            for row in conn.execute(
+                "SELECT name_key, name, contact_name, username FROM saved_people"
+            ).fetchall()
+        }
         for row in rows:
+            old = current.get(row["nameKey"])
+            contact_name = row.get("contactName") or ""
+            username = row.get("username") or ""
+            if (
+                old
+                and old["name"] == row["name"]
+                and old["contact_name"] == contact_name
+                and old["username"] == username
+            ):
+                continue
             conn.execute(
                 """
                 INSERT INTO saved_people(name_key, name, contact_name, username, updated_at)

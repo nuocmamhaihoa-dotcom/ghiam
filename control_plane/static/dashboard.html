@@ -9,8 +9,10 @@
   <meta name="theme-color" content="#10141b" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta name="iphone-build" content="__IPHONE_BUILD__" />
   <title>fb-poller — Hub VPS</title>
   <style>
+    [hidden] { display: none !important; }
     :root {
       --bg: #10141b;
       --card: #171d27;
@@ -198,6 +200,7 @@
     <div class="brand">
       <h1>fb-poller</h1>
       <p class="sub">Hub</p>
+      <p class="sub" id="updateNote" hidden></p>
     </div>
     <div class="token-row">
       <input id="token" type="password" placeholder="Token hub" autocomplete="off" />
@@ -434,9 +437,11 @@
     <p id="replayAskText" style="margin:0">Hai control gần giống nhau.</p>
     <div id="replayAskChoices"></div>
   </div>
+  <script src="/static/version.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
-    const emulateTouch = new URLSearchParams(location.search).get("as") === "phone";
+    const screenMode = new URLSearchParams(location.search).get("as") || "";
+    const emulateTouch = screenMode === "phone" || screenMode === "iphone";
     const tokenKey = "fb_poller_control_token";
     $("token").value = localStorage.getItem(tokenKey) || "";
 
@@ -2240,6 +2245,11 @@
       document.documentElement.dataset.emulate = "touch";
       $("phoneBanner").hidden = false;
       $("openPhone").hidden = true;
+      if (screenMode === "iphone") {
+        $("phoneBanner").textContent = "Chạm trên iPhone được ghi để làm lại.";
+        const go = document.querySelector(".iphone-go");
+        if (go) go.hidden = true;
+      }
     }
     if (/iPhone|iPod/.test(navigator.userAgent)) {
       $("openPhone").href = "/iphone";

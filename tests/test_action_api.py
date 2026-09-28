@@ -284,6 +284,7 @@ class ActionApiTests(unittest.TestCase):
         )
         self.assertEqual(contact.status_code, 200, contact.text)
         self.assertEqual(contact.json()["count"], 0)
+        self.assertEqual(contact.json()["saved"], 1)
         profile = self.client.post(
             "/v1/people/sightings",
             headers=self.headers,
@@ -291,10 +292,25 @@ class ActionApiTests(unittest.TestCase):
         )
         self.assertEqual(profile.status_code, 200, profile.text)
         self.assertEqual(profile.json()["count"], 1)
+        self.assertEqual(profile.json()["saved"], 1)
         row = profile.json()["items"][0]
         self.assertEqual(row["name"], "Trần Tùng")
         self.assertEqual(row["contactName"], "A Tùng Bán Gạch")
         self.assertEqual(row["username"], "@trn.tng751")
+        repeat = self.client.post(
+            "/v1/people/sightings",
+            headers=self.headers,
+            json={
+                "items": [
+                    {"kind": "contact", "name": "Trần Tùng", "contactName": "Tên khác"},
+                    {"kind": "profile", "name": "Trần Tùng", "username": "@khac"},
+                ]
+            },
+        )
+        self.assertEqual(repeat.status_code, 200, repeat.text)
+        self.assertEqual(repeat.json()["saved"], 0)
+        self.assertEqual(repeat.json()["items"][0]["contactName"], "A Tùng Bán Gạch")
+        self.assertEqual(repeat.json()["items"][0]["username"], "@trn.tng751")
         listed = self.client.get("/v1/people", headers=self.headers)
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(listed.json()["count"], 1)
@@ -304,7 +320,9 @@ class ActionApiTests(unittest.TestCase):
         sample = self.client.get("/sample-people")
         self.assertEqual(sample.status_code, 200)
         self.assertIn("A Tùng Bán Gạch", sample.text)
-        self.assertIn("/static/watch.js?v=2", sample.text)
+        health = self.client.get("/health")
+        build = str(health.json()["iphoneBuild"])
+        self.assertIn(f"/static/watch.js?v={build}", sample.text)
         phone = self.client.get("/phone")
         self.assertIn('src="/sample-people"', phone.text)
         self.assertIn("Tên trong danh bạ", phone.text)
@@ -315,10 +333,19 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(page.status_code, 200, page.text)
         self.assertIn("apple-mobile-web-app-capable", page.text)
         self.assertIn("viewport-fit=cover", page.text)
-        self.assertIn("/static/watch.js?v=2", page.text)
+        health = self.client.get("/health")
+        build = str(health.json()["iphoneBuild"])
+        self.assertEqual(page.headers["cache-control"], "no-cache")
+        self.assertIn(f'content="{build}"', page.text)
+        self.assertIn(f"/static/watch.js?v={build}", page.text)
+        self.assertIn("/static/version.js", page.text)
+        self.assertIn("Lướt", page.text)
+        self.assertIn("Điều khiển", page.text)
+        self.assertIn("Đã lưu", page.text)
+        self.assertIn("/?as=iphone", page.text)
         self.assertIn("Thêm vào Màn hình chính", page.text)
         self.assertIn("A Tùng Bán Gạch", page.text)
-        self.assertIn('href="/"', page.text)
+        self.assertIn("Tên trong danh bạ", page.text)
         icon = self.client.get("/apple-touch-icon.png")
         self.assertEqual(icon.status_code, 200)
         self.assertIn("image/png", icon.headers["content-type"])
@@ -331,6 +358,8 @@ class ActionApiTests(unittest.TestCase):
         home = self.client.get("/")
         self.assertIn("Lướt trên iPhone", home.text)
         self.assertIn("Mở giả lập điện thoại trên PC", home.text)
+        self.assertIn("Chạm trên iPhone được ghi để làm lại.", home.text)
+        self.assertIn("/static/version.js", home.text)
 
 
 if __name__ == "__main__":

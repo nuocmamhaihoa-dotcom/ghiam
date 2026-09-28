@@ -7,49 +7,42 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="theme-color" content="#ffffff" />
+  <meta name="iphone-build" content="__IPHONE_BUILD__" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-  <title>Danh bạ — fb-poller</title>
+  <title>fb-poller</title>
   <style>
-    :root { --text: #111; --muted: #8a8f98; --pink: #fe2c55; --sheet: #10141b; --font: -apple-system, "Segoe UI", system-ui, sans-serif; }
+    :root { --text: #111; --muted: #8a8f98; --pink: #fe2c55; --font: -apple-system, "Segoe UI", system-ui, sans-serif; }
     * { box-sizing: border-box; }
-    html, body { margin: 0; min-height: 100%; }
+    html, body { margin: 0; height: 100%; }
     body {
       font-family: var(--font);
       color: var(--text);
       background: #fff;
       font-size: 16px;
-      touch-action: pan-y;
-      padding-bottom: calc(9.5rem + env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      overflow: hidden;
     }
     header {
-      position: sticky; top: 0; z-index: 2;
-      display: flex; align-items: center; justify-content: space-between;
+      display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
       padding: calc(0.55rem + env(safe-area-inset-top)) max(0.9rem, env(safe-area-inset-right)) 0.55rem max(0.9rem, env(safe-area-inset-left));
-      background: rgba(255, 255, 255, 0.94);
+      background: #fff;
       border-bottom: 1px solid #eee;
-      backdrop-filter: blur(10px);
     }
-    header h1 { margin: 0; font-size: 1.05rem; }
-    header a {
-      color: #111; text-decoration: none; font-weight: 650;
-      min-height: 44px; display: inline-flex; align-items: center;
+    h1 { font-size: 1.05rem; margin: 0; }
+    #updateNote {
+      margin: 0; color: #0a7a32; font-weight: 700; font-size: 0.95rem;
     }
-    .install {
-      margin: 0;
-      padding: 0.65rem max(0.9rem, env(safe-area-inset-right)) 0.7rem max(0.9rem, env(safe-area-inset-left));
-      background: #f4f7fb; color: #243044; font-size: 0.92rem;
-    }
-    .install button {
-      margin-top: 0.4rem; min-height: 44px; border: 0; border-radius: 10px;
-      background: #111; color: #fff; font: inherit; font-weight: 700; padding: 0 0.9rem;
-    }
+    main { flex: 1; min-height: 0; position: relative; }
+    .view { height: 100%; overflow: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+    #view-controls { overflow: hidden; }
+    #controls { width: 100%; height: 100%; border: 0; background: #10141b; }
+    .install { margin: 0.8rem 0.9rem; padding: 0.75rem 0.85rem; background: #f4f7fb; border-radius: 12px; color: #243044; }
+    .install button { margin-top: 0.45rem; min-height: 44px; font-size: 16px; }
     ul { list-style: none; margin: 0; padding: 0; }
-    li, .profile {
-      display: flex; gap: 0.75rem; align-items: center;
-      padding: 0.8rem max(0.9rem, env(safe-area-inset-right)) 0.8rem max(0.9rem, env(safe-area-inset-left));
-      border-bottom: 1px solid #f2f2f2;
-    }
+    li { display: flex; gap: 0.75rem; align-items: center; padding: 0.85rem 0.9rem; border-bottom: 1px solid #f0f0f0; }
     .avatar { width: 52px; height: 52px; border-radius: 50%; background: #eceff3; flex: none; }
     .who { flex: 1; min-width: 0; }
     .who b, .profile h2 { display: block; font-size: 1.05rem; margin: 0; }
@@ -58,65 +51,87 @@
       border: 0; background: var(--pink); color: #fff; font-weight: 700;
       border-radius: 8px; min-height: 44px; padding: 0 0.95rem; font-size: 1rem;
     }
-    .profile { display: block; min-height: 78vh; padding-top: 1.3rem; }
+    .profile { display: block; min-height: 78vh; padding: 1.3rem 0.9rem 2rem; }
     .profile h2 { font-size: 1.7rem; font-weight: 750; }
     .gap { height: 70vh; }
-    #saved {
-      position: fixed; left: 0; right: 0; bottom: 0; z-index: 3;
-      background: var(--sheet); color: #e7edf5;
-      padding: 0.55rem max(0.85rem, env(safe-area-inset-right)) calc(0.55rem + env(safe-area-inset-bottom)) max(0.85rem, env(safe-area-inset-left));
-      font-size: 0.92rem;
-      border-radius: 16px 16px 0 0;
-      box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.18);
+    .saved-count {
+      display: block; width: calc(100% - 1.8rem); margin: 0.8rem 0.9rem 1.2rem;
+      min-height: 48px; border: 0; border-radius: 12px; background: #10141b; color: #fff;
+      font-size: 16px; font-weight: 700;
     }
-    #saved b { display: block; margin-bottom: 0.2rem; }
-    #saved table { width: 100%; border-collapse: collapse; }
-    #saved td { padding: 0.18rem 0.35rem 0.18rem 0; vertical-align: top; }
+    #view-saved { padding: 0.4rem 0.7rem 1rem; }
+    #view-saved table { width: 100%; border-collapse: collapse; }
+    #view-saved th, #view-saved td { text-align: left; padding: 0.55rem 0.35rem; border-bottom: 1px solid #eee; vertical-align: top; font-size: 0.95rem; }
+    #view-saved th { color: var(--muted); font-weight: 650; }
+    nav.app {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.35rem;
+      padding: 0.4rem max(0.6rem, env(safe-area-inset-right)) calc(0.4rem + env(safe-area-inset-bottom)) max(0.6rem, env(safe-area-inset-left));
+      background: #fff; border-top: 1px solid #eee;
+    }
+    nav.app button {
+      min-height: 48px; border: 0; border-radius: 10px; background: #f4f5f7;
+      font-size: 16px; font-weight: 700; color: #111;
+    }
+    nav.app button.on { background: #111; color: #fff; }
   </style>
 </head>
 <body>
   <header>
-    <h1>Danh bạ</h1>
-    <a href="/">Hub</a>
+    <h1>fb-poller</h1>
+    <p id="updateNote" hidden></p>
   </header>
-  <p class="install" id="install">Trên Safari: bấm Chia sẻ, rồi Thêm vào Màn hình chính. Sau đó mở như một app.
-    <br /><button type="button" id="installHide">Đã hiểu</button>
-  </p>
-  <ul>
-    <li>
-      <div class="avatar"></div>
-      <div class="who"><b>A Tùng Bán Gạch</b><span>Trần Tùng</span></div>
-      <button class="follow" type="button">Follow</button>
-    </li>
-    <li>
-      <div class="avatar"></div>
-      <div class="who"><b>Chị Soi Xuân Trung</b><span>Bà soi</span></div>
-      <button class="follow" type="button">Follow</button>
-    </li>
-    <li>
-      <div class="avatar"></div>
-      <div class="who"><b>Hong@1978</b><span>Hồng</span></div>
-      <button class="follow" type="button">Follow</button>
-    </li>
-  </ul>
-  <div class="gap"></div>
-  <section class="profile">
-    <h2>Trần Tùng</h2>
-    <p class="handle">@trn.tng751</p>
-    <button class="follow" type="button">Follow</button>
-  </section>
-  <section class="profile">
-    <h2>Bà soi</h2>
-    <p class="handle">@b.soi22</p>
-    <button class="follow" type="button">Follow</button>
-  </section>
-  <div id="saved">
-    <b>Đã lưu khi tên trùng</b>
-    <table>
-      <tbody id="savedRows"><tr><td>Lướt tới hồ sơ để ghép với danh bạ.</td></tr></tbody>
-    </table>
-  </div>
-  <script src="/static/watch.js?v=2"></script>
+  <main>
+    <section class="view" id="view-browse">
+      <p class="install" id="install">Trên Safari: bấm Chia sẻ, rồi Thêm vào Màn hình chính. Sau đó mở như một app.
+        <br /><button type="button" id="installHide">Đã hiểu</button>
+      </p>
+      <ul>
+        <li>
+          <div class="avatar"></div>
+          <div class="who"><b>A Tùng Bán Gạch</b><span>Trần Tùng</span></div>
+          <button class="follow" type="button">Follow</button>
+        </li>
+        <li>
+          <div class="avatar"></div>
+          <div class="who"><b>Chị Soi Xuân Trung</b><span>Bà soi</span></div>
+          <button class="follow" type="button">Follow</button>
+        </li>
+        <li>
+          <div class="avatar"></div>
+          <div class="who"><b>Hong@1978</b><span>Hồng</span></div>
+          <button class="follow" type="button">Follow</button>
+        </li>
+      </ul>
+      <div class="gap"></div>
+      <section class="profile">
+        <h2>Trần Tùng</h2>
+        <p class="handle">@trn.tng751</p>
+        <button class="follow" type="button">Follow</button>
+      </section>
+      <section class="profile">
+        <h2>Bà soi</h2>
+        <p class="handle">@b.soi22</p>
+        <button class="follow" type="button">Follow</button>
+      </section>
+      <button class="saved-count" id="openSaved" type="button">Đã lưu 0 người</button>
+    </section>
+    <section class="view" id="view-controls" hidden>
+      <iframe id="controls" title="Điều khiển"></iframe>
+    </section>
+    <section class="view" id="view-saved" hidden>
+      <table>
+        <thead><tr><th>Tên</th><th>Tên trong danh bạ</th><th>Username</th></tr></thead>
+        <tbody id="savedRows"><tr><td colspan="3">Lướt tới hồ sơ để ghép với danh bạ.</td></tr></tbody>
+      </table>
+    </section>
+  </main>
+  <nav class="app">
+    <button type="button" data-app="browse" class="on">Lướt</button>
+    <button type="button" data-app="controls">Điều khiển</button>
+    <button type="button" data-app="saved">Đã lưu</button>
+  </nav>
+  <script src="/static/version.js"></script>
+  <script src="/static/watch.js?v=__IPHONE_BUILD__"></script>
   <script>
     const install = document.getElementById("install");
     const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
@@ -125,6 +140,26 @@
       localStorage.setItem("fb_poller_iphone_install", "1");
       install.hidden = true;
     });
+    const views = {
+      browse: document.getElementById("view-browse"),
+      controls: document.getElementById("view-controls"),
+      saved: document.getElementById("view-saved"),
+    };
+    let controlsReady = false;
+    function showApp(name) {
+      Object.entries(views).forEach(([key, node]) => { node.hidden = key !== name; });
+      document.querySelectorAll("[data-app]").forEach((button) => {
+        button.classList.toggle("on", button.getAttribute("data-app") === name);
+      });
+      if (name === "controls" && !controlsReady) {
+        controlsReady = true;
+        document.getElementById("controls").src = "/?as=iphone";
+      }
+    }
+    document.querySelectorAll("[data-app]").forEach((button) => {
+      button.addEventListener("click", () => showApp(button.getAttribute("data-app")));
+    });
+    document.getElementById("openSaved").addEventListener("click", () => showApp("saved"));
     function esc(value) {
       return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -132,24 +167,29 @@
     }
     function draw(items) {
       const rows = document.getElementById("savedRows");
-      if (!items.length) return;
+      const count = document.getElementById("openSaved");
+      count.textContent = "Đã lưu " + items.length + " người";
+      if (!items.length) {
+        rows.innerHTML = "<tr><td colspan=\"3\">Lướt tới hồ sơ để ghép với danh bạ.</td></tr>";
+        return;
+      }
       rows.innerHTML = items.map((person) =>
         "<tr><td>" + esc(person.name) + "</td><td>" + esc(person.contactName) + "</td><td>" + esc(person.username) + "</td></tr>"
       ).join("");
     }
     document.addEventListener("people-saved", (event) => draw(event.detail || []));
     document.addEventListener("people-auth", () => {
-      document.getElementById("savedRows").innerHTML = "<tr><td>Hãy lưu token trên hub rồi lướt lại.</td></tr>";
+      document.getElementById("savedRows").innerHTML = "<tr><td colspan=\"3\">Mở Điều khiển, lưu token, rồi lướt lại.</td></tr>";
     });
     let drag = null;
-    document.addEventListener("pointerdown", (event) => {
+    document.getElementById("view-browse").addEventListener("pointerdown", (event) => {
       if (event.pointerType !== "mouse" || event.button !== 0) return;
       if (event.target.closest("button, a, input, textarea")) return;
-      drag = { id: event.pointerId, y: event.clientY, top: window.scrollY };
+      drag = { id: event.pointerId, y: event.clientY, top: event.currentTarget.scrollTop };
     });
-    document.addEventListener("pointermove", (event) => {
+    document.getElementById("view-browse").addEventListener("pointermove", (event) => {
       if (!drag || event.pointerId !== drag.id) return;
-      window.scrollTo(0, drag.top - (event.clientY - drag.y));
+      event.currentTarget.scrollTop = drag.top - (event.clientY - drag.y);
     });
     document.addEventListener("pointerup", (event) => {
       if (drag && event.pointerId === drag.id) drag = null;
