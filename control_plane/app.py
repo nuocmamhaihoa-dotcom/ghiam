@@ -32,7 +32,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
 from control_plane.delivery import PACKAGE_NAME, ensure_package
-from control_plane.people import apply_novel, clean_name, clean_username, complete_rows, fold_name, profile_from_line
+from control_plane.people import apply_novel, complete_rows, complete_sightings, profile_from_line
 from control_plane.version import IPHONE_BUILD
 from control_plane.screen_steps import ScreenVideoError, analyze_screen_video, clean_ocr, read_screen_image, seen_line
 from control_plane.settings import settings
@@ -327,26 +327,31 @@ def people_sightings(
     return {"count": len(ready), "items": ready, "saved": added, "known": folded}
 
 
+def _save_proposed(rows: list[dict[str, str]]) -> tuple[int, int]:
+    """Ghi dòng đủ ba cột. Cột đã có thì giữ nguyên. Trả về (lần nhìn thấy mới, số người mới)."""
+    stored = db.list_people(settings.db_path)
+    current = stored
+    sightings_saved = 0
+    people_saved = 0
+    for row in rows:
+        items = complete_sightings([row])
+        if not items:
+            continue
+        current, added = apply_novel(current, items)
+        if added:
+            people_saved += 1
+            sightings_saved += added
+    if sightings_saved:
+        db.save_people(settings.db_path, current, utcnow())
+    return sightings_saved, people_saved
+
+
 @app.post("/v1/people/confirm")
 def people_confirm(body: PeopleConfirmBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     """Ghi những dòng người dùng đã giữ. Cột đã có thì không ghi đè."""
     _auth(authorization)
-    items: list[dict[str, str]] = []
-    for row in body.rows[:40]:
-        name = clean_name(row.name)
-        contact_name = clean_name(row.contactName)
-        username = clean_username(row.username)
-        if len(name) < 2 or not contact_name or not username:
-            continue
-        if fold_name(contact_name) == fold_name(name):
-            continue
-        items.append({"kind": "contact", "name": name, "contactName": contact_name, "username": ""})
-        items.append({"kind": "profile", "name": name, "contactName": "", "username": username})
-    stored = db.list_people(settings.db_path)
-    folded, added = apply_novel(stored, items)
-    if added:
-        db.save_people(settings.db_path, folded, utcnow())
-    ready = complete_rows(folded)
+    added, _people = _save_proposed([row.model_dump() for row in body.rows])
+    ready = complete_rows(db.list_people(settings.db_path))
     return {"ok": True, "saved": added, "count": len(ready), "items": ready}
 
 
@@ -745,9 +750,14 @@ async def recordings_from_video(
             "steps": steps,
             "count": len(steps),
             "people": people,
+            "saved": 0,
+            "savedPeople": 0,
         }
     stored = _store_seen(lines)
+    added, people_saved = _save_proposed(people)
     stored["people"] = people
+    stored["saved"] = added
+    stored["savedPeople"] = people_saved
     return stored
 
 

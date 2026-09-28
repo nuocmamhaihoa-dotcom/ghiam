@@ -8,6 +8,7 @@ from control_plane.people import (
     apply_novel,
     clean_username,
     complete_rows,
+    complete_sightings,
     fold_sightings,
     name_key,
     sighting_adds,
@@ -101,3 +102,12 @@ class PeopleMergeTests(unittest.TestCase):
         self.assertFalse(
             sighting_adds(stored[0], {"kind": "contact", "name": "Bà soi", "contactName": "Khác"})
         )
+
+    def test_many_complete_rows_are_kept(self) -> None:
+        rows = [
+            {"name": f"Nguoi {index:02d} Aa", "contactName": f"Danh {index:02d}", "username": f"@n{index:02d}aa"}
+            for index in range(50)
+        ]
+        folded, added = apply_novel([], complete_sightings(rows))
+        self.assertEqual(added, 100)
+        self.assertEqual(len(complete_rows(folded)), 50)

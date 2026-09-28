@@ -8,7 +8,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from control_plane.screen_steps import clean_ocr, read_screen_video, same_caption, seen_line, steps_from_text
+from control_plane.screen_steps import (
+    clean_ocr,
+    read_screen_video,
+    same_caption,
+    seen_line,
+    steps_from_text,
+    visible_steps,
+)
 
 
 class ScreenStepTextTests(unittest.TestCase):
@@ -51,6 +58,15 @@ class ScreenStepTextTests(unittest.TestCase):
         self.assertEqual(sum("monaco.daily6" in caption for caption in captions), 1)
         self.assertFalse(any("Mở " in caption for caption in captions))
         self.assertFalse(any("topcv" in caption or "panh" in caption for caption in captions))
+
+    def test_visible_steps_keep_each_row(self) -> None:
+        frames = [
+            (index / 8, [f"Danh bạ · Danh {index:03d} · Nguoi {index:03d} Xx"])
+            for index in range(30)
+        ]
+        steps = visible_steps(frames)
+        self.assertEqual(len(steps), 30)
+        self.assertIn("Nguoi 029 Xx", steps[-1]["caption"])
 
 
 class ScreenVideoTests(unittest.TestCase):

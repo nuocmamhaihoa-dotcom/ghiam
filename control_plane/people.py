@@ -48,6 +48,26 @@ def sighting_adds(row: dict[str, str] | None, item: dict[str, str]) -> bool:
     return False
 
 
+_ROW_LIMIT = 200
+_SIGHTING_LIMIT = 400
+
+
+def complete_sightings(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Mỗi dòng đủ ba cột thành một lần danh bạ và một lần hồ sơ."""
+    items: list[dict[str, str]] = []
+    for row in rows[:_ROW_LIMIT]:
+        name = clean_name(row.get("name") or "")
+        contact_name = clean_name(row.get("contactName") or "")
+        username = clean_username(row.get("username") or "")
+        if len(name) < 2 or not contact_name or not username:
+            continue
+        if fold_name(contact_name) == fold_name(name):
+            continue
+        items.append({"kind": "contact", "name": name, "contactName": contact_name, "username": ""})
+        items.append({"kind": "profile", "name": name, "contactName": "", "username": username})
+    return items
+
+
 def apply_novel(
     stored: list[dict[str, str]], items: list[dict[str, str]]
 ) -> tuple[list[dict[str, str]], int]:
@@ -64,7 +84,7 @@ def apply_novel(
             "username": clean_username(row.get("username") or ""),
         }
     added = 0
-    for item in items[:40]:
+    for item in items[:_SIGHTING_LIMIT]:
         key = name_key(clean_name(item.get("name") or ""))
         if not sighting_adds(by_key.get(key), item):
             continue
@@ -87,7 +107,7 @@ def fold_sightings(stored: list[dict[str, str]], items: list[dict[str, str]]) ->
             "contactName": clean_name(row.get("contactName") or ""),
             "username": clean_username(row.get("username") or ""),
         }
-    for item in items[:40]:
+    for item in items[:_SIGHTING_LIMIT]:
         kind = item.get("kind") or ""
         name = clean_name(item.get("name") or "")
         key = name_key(name)

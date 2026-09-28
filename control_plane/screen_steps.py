@@ -2,21 +2,31 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import tempfile
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageChops, ImageOps, ImageStat
 
-from control_plane.screen_people import propose_rows, sightings_from_image
+from control_plane.screen_people import (
+    captions_from_sightings,
+    lines_from_tsv,
+    propose_rows,
+    read_frame_tsv,
+    sightings_from_lines,
+)
 
 _MAX_SECONDS = 600
-_MAX_FRAMES = 120
-_MAX_READS = 30
-_MIN_DIFF = 1.8
+_MAX_FRAMES = 2400
+_MAX_READS = 1000
+_MIN_DIFF = 0.18
+_SAMPLE_FPS = 8.0
+_STEP_LIMIT = 400
 _APP_WORDS = {"tiktok", "facebook", "instagram", "zalo", "danh", "ba", "follow", "da", "thich", "follower"}
 _MIXED_OK = {"tiktok", "iphone", "facebook", "instagram", "youtube", "zalo"}
 _KEEP_LOWER = {"tiktok", "facebook", "instagram", "zalo", "follow", "follower"}
@@ -214,6 +224,22 @@ def read_screen_image(path: Path) -> str:
     return seen_line(text)
 
 
+def visible_steps(frames: list[tuple[float, list[str]]]) -> list[dict[str, Any]]:
+    """Giữ từng dòng người. Dòng lặp của cùng một màn thì bỏ."""
+    steps: list[dict[str, Any]] = []
+    previous = ""
+    for seconds, lines in frames:
+        for raw in lines:
+            line = " ".join(raw.split())[:180]
+            if not line or same_caption(line, previous):
+                continue
+            previous = line
+            steps.append({"t": round(float(seconds), 1), "caption": f"{clock_label(seconds)} — {line}"})
+            if len(steps) == _STEP_LIMIT:
+                return steps
+    return steps
+
+
 def analyze_screen_video(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     """Đọc chữ nhìn thấy và đề xuất người đủ ba cột. Chưa ghi vào bảng."""
     duration = _duration(path)
@@ -226,9 +252,10 @@ def analyze_screen_video(path: Path) -> tuple[list[dict[str, Any]], list[dict[st
         if not images:
             raise ScreenVideoError("Video không có hình.")
         chosen = _changed_frames(images)
-        frames = [(seconds, _ocr(image)) for seconds, image in chosen]
-        sightings = [item for _seconds, image in chosen for item in sightings_from_image(image)]
-    return steps_from_text(frames), propose_rows(sightings)
+        readings = _read_frames(chosen)
+    frames = [(seconds, lines) for seconds, lines, _sightings in readings]
+    sightings = [item for _seconds, _lines, found in readings for item in found]
+    return visible_steps(frames), propose_rows(sightings)
 
 
 def read_screen_video(path: Path) -> list[dict[str, Any]]:
@@ -238,9 +265,11 @@ def read_screen_video(path: Path) -> list[dict[str, Any]]:
 
 
 def _sample_rate(duration: float | None) -> float:
-    """Spread a fixed number of frames across a long recording."""
-    if duration is None or duration <= 0 or duration <= _MAX_FRAMES:
-        return 1.0
+    """Đọc 8 hình mỗi giây. Video dài thì dàn đều trong giới hạn khung."""
+    if duration is None or duration <= 0:
+        return _SAMPLE_FPS
+    if duration * _SAMPLE_FPS <= _MAX_FRAMES:
+        return _SAMPLE_FPS
     return _MAX_FRAMES / duration
 
 
@@ -274,7 +303,7 @@ def _duration(path: Path) -> float | None:
 
 
 def _extract_frames(path: Path, work: Path, rate: float) -> list[tuple[float, Path]]:
-    pattern = work / "f-%03d.png"
+    pattern = work / "f-%05d.png"
     try:
         subprocess.run(
             [
@@ -293,34 +322,66 @@ def _extract_frames(path: Path, work: Path, rate: float) -> list[tuple[float, Pa
                 str(pattern),
             ],
             capture_output=True,
-            timeout=90,
+            timeout=180,
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise ScreenVideoError("Không đọc được video.") from error
-    images = sorted(work.glob("f-*.png"))
+    images = sorted(path for path in work.glob("f-*.png") if path.stem[2:].isdigit())
     return [(index / rate, image) for index, image in enumerate(images)]
 
 
 def _changed_frames(images: list[tuple[float, Path]]) -> list[tuple[float, Path]]:
-    chosen: list[tuple[float, Image.Image, Path]] = []
+    chosen: list[tuple[float, Path]] = []
     previous: Image.Image | None = None
     for seconds, image in images:
-        full = Image.open(image).convert("L")
-        width, height = full.size
-        small = full.crop((0, int(height * 0.08), width, int(height * 0.92))).resize((80, 130))
-        if previous is None:
-            chosen.append((seconds, small, image))
-            previous = small
+        small = _thumb(image)
+        if small is None:
             continue
-        score = ImageStat.Stat(ImageChops.difference(previous, small)).mean[0]
-        if score < _MIN_DIFF:
-            continue
-        chosen.append((seconds, small, image))
+        if previous is not None:
+            score = ImageStat.Stat(ImageChops.difference(previous, small)).mean[0]
+            if score < _MIN_DIFF:
+                continue
+        chosen.append((seconds, image))
         previous = small
         if len(chosen) == _MAX_READS:
             break
-    return [(seconds, image) for seconds, _small, image in chosen]
+    return chosen
+
+
+def _thumb(image: Path) -> Image.Image | None:
+    try:
+        with Image.open(image) as full:
+            gray = full.convert("L")
+            width, height = gray.size
+            small = gray.crop((0, int(height * 0.08), width, int(height * 0.92))).resize((80, 130))
+            small.load()
+            return small
+    except OSError:
+        return None
+
+
+def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str, str]]]:
+    seconds, image = item
+    tsv = read_frame_tsv(image)
+    text_lines = lines_from_tsv(tsv) if tsv else []
+    sightings = sightings_from_lines(text_lines)
+    captions = captions_from_sightings(sightings)
+    if not captions:
+        raw = "\n".join(line.text for line in text_lines)
+        text = clean_ocr(raw)
+        fallback = seen_line(text) if text else ""
+        if fallback:
+            captions = [fallback]
+    return seconds, captions, sightings
+
+
+def _read_frames(chosen: list[tuple[float, Path]]) -> list[tuple[float, list[str], list[dict[str, str]]]]:
+    if not chosen:
+        return []
+    workers = min(8, os.cpu_count() or 1, len(chosen))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(_read_one, chosen))
 
 
 def _ocr(image: Path) -> str:

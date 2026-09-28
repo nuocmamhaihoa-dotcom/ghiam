@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -236,17 +237,37 @@ def propose_rows(sightings: list[dict[str, str]]) -> list[dict[str, str]]:
                 "username": next(iter(usernames)),
             }
         )
-    return rows[:40]
+    return rows[:200]
 
 
-def sightings_from_image(path: Path) -> list[dict[str, str]]:
-    """Đọc vị trí chữ trên một khung hình."""
+def captions_from_sightings(sightings: list[dict[str, str]]) -> list[str]:
+    """Một dòng chữ cho mỗi người nhìn thấy trên khung hình."""
+    lines: list[str] = []
+    for item in sightings:
+        kind = item.get("kind") or ""
+        if kind == "contact":
+            contact_name = clean_name(item.get("contactName") or "")
+            name = clean_name(item.get("name") or "")
+            if contact_name and name:
+                lines.append(f"Danh bạ · {contact_name} · {name}")
+        elif kind == "profile":
+            name = clean_name(item.get("name") or "")
+            username = clean_username(item.get("username") or "")
+            if name and username:
+                lines.append(f"{name} · {username}")
+    return lines
+
+
+def read_frame_tsv(path: Path) -> str:
+    """Một lần Tesseract cho cả danh bạ và dòng chữ nhìn thấy."""
     prepared = path.with_name(path.stem + "-people.png")
     try:
         with Image.open(path) as full:
             ImageOps.autocontrast(full.convert("L")).save(prepared)
     except OSError:
-        return []
+        return ""
+    env = os.environ.copy()
+    env["OMP_THREAD_LIMIT"] = "1"
     for lang in ("vie+eng", "eng"):
         try:
             result = subprocess.run(
@@ -255,9 +276,18 @@ def sightings_from_image(path: Path) -> list[dict[str, str]]:
                 text=True,
                 timeout=25,
                 check=False,
+                env=env,
             )
         except (OSError, subprocess.TimeoutExpired):
-            return []
+            return ""
         if result.returncode == 0 and result.stdout:
-            return sightings_from_lines(lines_from_tsv(result.stdout))
-    return []
+            return result.stdout
+    return ""
+
+
+def sightings_from_image(path: Path) -> list[dict[str, str]]:
+    """Đọc vị trí chữ trên một khung hình."""
+    tsv = read_frame_tsv(path)
+    if not tsv:
+        return []
+    return sightings_from_lines(lines_from_tsv(tsv))
