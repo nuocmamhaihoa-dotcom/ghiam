@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import re
 import secrets
 import sqlite3
+import zipfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -350,13 +352,21 @@ def render_vcard(books: list[dict[str, object]]) -> str:
                     f"FN:{name}",
                     f"ORG:{group}",
                     f"TEL;TYPE=CELL:{phone}",
-                    f"NOTE:{group}. {escape_vcard('Bấm nút chia sẻ góc trên. Chọn Danh bạ. Bấm Thêm tất cả.')}",
+                    f"NOTE:{group}",
                     "END:VCARD",
                 ]
             )
     if not lines:
         return ""
     return "\r\n".join(lines) + "\r\n"
+
+
+def pack_vcard_zip(body: str) -> bytes:
+    """Gói cả file .vcf vào zip để iPhone lưu file, không mở thẻ một liên hệ."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED) as archive:
+        archive.writestr("DanhBa.vcf", body)
+    return buffer.getvalue()
 
 
 def _safe_filename(name: str) -> str:
@@ -405,7 +415,7 @@ def issue_vcard(db_path: Path, book_id: str | None, created_at: str) -> dict[str
         )
     filename = _safe_filename(str(chosen[0]["name"])) if len(chosen) == 1 else "Danh ba.vcf"
     return {
-        "url": f"/danhba/xuat/{ticket}.vcf",
+        "url": f"/danhba/xuat/{ticket}.zip",
         "filename": filename,
         "count": sum(int(item["count"]) for item in chosen),
         "books": chosen,

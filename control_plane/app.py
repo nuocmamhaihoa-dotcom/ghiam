@@ -33,6 +33,7 @@ from control_plane.danhba_store import (
     issue_vcard,
     list_books,
     mark_used,
+    pack_vcard_zip,
     read_vcard,
     reconcile,
 )
@@ -409,18 +410,17 @@ def danhba_issue_vcard(
     return issued
 
 
-@app.get("/danhba/xuat/{ticket}.vcf")
-def danhba_vcard(ticket: str) -> Response:
-    """File danh bạ. iPhone nhận text/x-vcard và hỏi Thêm tất cả."""
+@app.get("/danhba/xuat/{ticket}.zip")
+def danhba_vcard_zip(ticket: str) -> Response:
+    """File zip chứa cả danh sách. iPhone mở từ app Tệp rồi hiện Thêm tất cả."""
     card = read_vcard(settings.db_path, ticket, utcnow())
     if card is None:
         raise HTTPException(status_code=404, detail="Liên kết nạp đã hết hạn")
-    filename = card["filename"].replace('"', "").replace("\r", "").replace("\n", "")
     return Response(
-        content=card["body"],
-        media_type="text/x-vcard; charset=utf-8",
+        content=pack_vcard_zip(card["body"]),
+        media_type="application/zip",
         headers={
-            "Content-Disposition": f'inline; filename="{filename}"',
+            "Content-Disposition": 'attachment; filename="DanhBa.zip"',
             "Cache-Control": "no-store",
         },
     )

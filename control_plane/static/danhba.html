@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="Danh bạ" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="theme-color" content="#ffffff" />
-  <meta name="danhba-build" content="10" />
+  <meta name="danhba-build" content="11" />
   <link rel="manifest" href="/danhba/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>Danh bạ</title>
@@ -56,12 +56,20 @@
       background: rgba(255,255,255,0.92); backdrop-filter: blur(12px);
     }
     #syncFile, #file { display: none; }
+    ol.steps { margin: 0 0 0.8rem; padding-left: 1.25rem; }
+    ol.steps li { margin: 0 0 0.35rem; line-height: 1.4; }
   </style>
   <script>document.documentElement.classList.toggle("on-hub", location.pathname === "/danhba" || location.pathname.indexOf("/danhba/") === 0);</script>
 </head>
 <body>
   <h1>Danh bạ</h1>
-  <p class="hint" id="install">Dán danh sách, rồi bấm Nạp lên iPhone. Thẻ chỉ hiện số đầu. Đừng bấm Tạo liên hệ mới. Bấm nút chia sẻ góc trên bên phải, chọn Danh bạ, rồi Thêm tất cả. Mỗi danh bạ tối đa 5000 số.</p>
+  <p class="hint" id="install">Dán danh sách, rồi bấm Nạp lên iPhone. Mỗi danh bạ tối đa 5000 số. Mỗi số chỉ nằm trong một danh bạ.</p>
+  <ol class="steps">
+    <li>Bấm Nạp lên iPhone. Máy tải file DanhBa.zip chứa cả danh sách.</li>
+    <li>Mở app Tệp, vào mục Tải về.</li>
+    <li>Bấm DanhBa.zip, rồi bấm DanhBa.vcf.</li>
+    <li>Bấm Thêm tất cả.</li>
+  </ol>
   <p class="note" id="upgrade" hidden>Có bản mới trên hub.</p>
   <p id="status" class="hint">Dán số, rồi bấm Nạp lên iPhone.</p>
   <div id="local">
@@ -83,14 +91,14 @@
     <div id="used"></div>
   </div>
   <p id="message" class="note" hidden></p>
-  <p class="build" id="buildLine">Phiên bản 10</p>
+  <p class="build" id="buildLine">Phiên bản 11</p>
   <div class="bar">
     <a id="go" class="btn" href="#">Nạp lên iPhone</a>
     <button id="sync" class="ghost" type="button">Đối chiếu iPhone</button>
   </div>
   <input id="syncFile" type="file" accept=".vcf,.vcard,.txt,text/vcard,text/x-vcard,text/plain" />
   <script>
-    window.DANHBA_BUILD = 10;
+    window.DANHBA_BUILD = 11;
   </script>
   <script>
 (function (root) {
@@ -329,7 +337,7 @@
       lines.push("FN:" + name);
       lines.push("ORG:" + group);
       lines.push("TEL;TYPE=CELL:" + entries[i].phone);
-      lines.push("NOTE:" + group + ". " + escapeValue("Bấm nút chia sẻ góc trên. Chọn Danh bạ. Bấm Thêm tất cả."));
+      lines.push("NOTE:" + group);
       lines.push("END:VCARD");
     }
     return lines.join("\r\n") + "\r\n";
@@ -475,6 +483,7 @@
         return;
       }
       rememberToken();
+      showMessage("Đã tải DanhBa.zip gồm " + payload.count + " số. Mở app Tệp, vào Tải về, bấm DanhBa.zip, bấm DanhBa.vcf. Bấm Thêm tất cả.", false);
       window.location.assign(payload.url);
     }
 
@@ -548,39 +557,124 @@
       };
     }
 
+    function concatBytes(parts) {
+      var total = 0;
+      var index;
+      for (index = 0; index < parts.length; index += 1) total += parts[index].length;
+      var out = new Uint8Array(total);
+      var offset = 0;
+      for (index = 0; index < parts.length; index += 1) {
+        out.set(parts[index], offset);
+        offset += parts[index].length;
+      }
+      return out;
+    }
+
+    function leBytes(value, size) {
+      var out = new Uint8Array(size);
+      var rest = value >>> 0;
+      var index;
+      for (index = 0; index < size; index += 1) {
+        out[index] = rest & 255;
+        rest = Math.floor(rest / 256);
+      }
+      return out;
+    }
+
+    function crc32(bytes) {
+      var table = crc32.table;
+      var index;
+      var bit;
+      var code;
+      if (!table) {
+        table = [];
+        for (index = 0; index < 256; index += 1) {
+          code = index;
+          for (bit = 0; bit < 8; bit += 1) {
+            code = (code & 1) ? (0xedb88320 ^ (code >>> 1)) : (code >>> 1);
+          }
+          table[index] = code >>> 0;
+        }
+        crc32.table = table;
+      }
+      code = 0xffffffff;
+      for (index = 0; index < bytes.length; index += 1) {
+        code = table[(code ^ bytes[index]) & 255] ^ (code >>> 8);
+      }
+      return (code ^ 0xffffffff) >>> 0;
+    }
+
+    function zipStore(filename, text) {
+      var encoder = new TextEncoder();
+      var name = encoder.encode(filename);
+      var data = encoder.encode(text);
+      var crc = crc32(data);
+      var local = concatBytes([
+        leBytes(0x04034b50, 4),
+        leBytes(20, 2),
+        leBytes(0, 2),
+        leBytes(0, 2),
+        leBytes(0, 2),
+        leBytes(0, 2),
+        leBytes(crc, 4),
+        leBytes(data.length, 4),
+        leBytes(data.length, 4),
+        leBytes(name.length, 2),
+        leBytes(0, 2),
+        name,
+        data
+      ]);
+      var central = concatBytes([
+        leBytes(0x02014b50, 4),
+        leBytes(20, 2),
+        leBytes(20, 2),
+        leBytes(0, 2),
+        leBytes(0, 2),
+        leBytes(0, 2),
+        leBytes(0, 2),
+        leBytes(crc, 4),
+        leBytes(data.length, 4),
+        leBytes(data.length, 4),
+        leBytes(name.length, 2),
+        leBytes(0, 2),
+        leBytes(0, 2),
+        leBytes(0, 2),
+        leBytes(0, 2),
+        leBytes(0, 4),
+        leBytes(0, 4),
+        name
+      ]);
+      var end = concatBytes([
+        leBytes(0x06054b50, 4),
+        leBytes(0, 2),
+        leBytes(0, 2),
+        leBytes(1, 2),
+        leBytes(1, 2),
+        leBytes(central.length, 4),
+        leBytes(local.length, 4),
+        leBytes(0, 2)
+      ]);
+      return concatBytes([local, central, end]);
+    }
+
     function armLocalCard() {
       var prepared = pendingCard();
       if (!prepared) {
         goButton.href = "#";
         goButton.removeAttribute("download");
+        armedBody = "";
+        if (armedUrl) URL.revokeObjectURL(armedUrl);
+        armedUrl = "";
         return null;
       }
       if (prepared.body !== armedBody) {
+        if (armedUrl) URL.revokeObjectURL(armedUrl);
         armedBody = prepared.body;
-        armedUrl = URL.createObjectURL(new Blob([prepared.body], { type: "text/x-vcard" }));
+        armedUrl = URL.createObjectURL(new Blob([zipStore("DanhBa.vcf", prepared.body)], { type: "application/zip" }));
       }
       goButton.href = armedUrl;
-      goButton.removeAttribute("download");
+      goButton.setAttribute("download", "DanhBa.zip");
       return prepared;
-    }
-
-    function importHint(count) {
-      if (count > 1) {
-        return "Thẻ này chỉ hiện số đầu trong " + count + " số. Bấm nút chia sẻ góc trên bên phải, chọn Danh bạ, rồi Thêm tất cả. Nút Tạo liên hệ mới chỉ lưu 1 số.";
-      }
-      return "Trên thẻ iPhone bấm Tạo liên hệ mới, rồi dấu tick xanh.";
-    }
-
-    function openCard() {
-      var prepared = armLocalCard();
-      if (!prepared) {
-        showMessage("Dán số hoặc chọn file.", true);
-        renderLocal();
-        return;
-      }
-      var count = prepared.opened.reduce(function (sum, book) { return sum + book.entries.length; }, 0);
-      showMessage(importHint(count), false);
-      window.location.assign(armedUrl);
     }
 
     function blurField() {
@@ -628,13 +722,24 @@
       if (!onHub) armLocalCard();
     });
     goButton.addEventListener("click", function (event) {
-      event.preventDefault();
-      if (running || goButton.getAttribute("aria-disabled") === "true") return;
-      blurField();
-      if (!onHub) {
-        openCard();
+      if (running || goButton.getAttribute("aria-disabled") === "true") {
+        event.preventDefault();
         return;
       }
+      blurField();
+      if (!onHub) {
+        var prepared = armLocalCard();
+        if (!prepared) {
+          event.preventDefault();
+          showMessage("Dán số hoặc chọn file.", true);
+          renderLocal();
+          return;
+        }
+        var count = prepared.opened.reduce(function (sum, book) { return sum + book.entries.length; }, 0);
+        showMessage("Đã tải DanhBa.zip gồm " + count + " số. Mở app Tệp, vào Tải về, bấm DanhBa.zip, bấm DanhBa.vcf. Bấm Thêm tất cả.", false);
+        return;
+      }
+      event.preventDefault();
       rememberToken();
       running = true;
       loadAll().then(function () {
@@ -684,7 +789,7 @@
         return;
       }
       var count = prepared.opened.reduce(function (sum, book) { return sum + book.entries.length; }, 0);
-      showMessage("Đã nhận " + count + " số. Bấm Nạp lên iPhone. Trên thẻ đừng bấm Tạo liên hệ mới.", false);
+      showMessage("Đã nhận " + count + " số. Bấm Nạp lên iPhone để tải DanhBa.zip.", false);
     });
     numbersInput.addEventListener("input", function () {
       renderLocal();

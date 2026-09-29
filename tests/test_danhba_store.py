@@ -118,8 +118,8 @@ class DanhBaStoreTests(unittest.TestCase):
         self.assertNotIn("0901234567", str(issued))
         self.assertEqual(issued["count"], 2)
         self.assertTrue(str(issued["url"]).startswith("/danhba/xuat/"))
-        self.assertTrue(str(issued["url"]).endswith(".vcf"))
-        ticket = str(issued["url"]).rsplit("/", 1)[-1].removesuffix(".vcf")
+        self.assertTrue(str(issued["url"]).endswith(".zip"))
+        ticket = str(issued["url"]).rsplit("/", 1)[-1].removesuffix(".zip")
         early = read_vcard(self.db_path, ticket, "2026-09-29T00:01:00+00:00")
         self.assertIsNotNone(early)
         assert early is not None
