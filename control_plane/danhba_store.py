@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import sqlite3
 from pathlib import Path
@@ -31,6 +32,7 @@ _HEADER_WORDS = {
     "tên ghi nhớ",
 }
 _BOOK_ID = re.compile(r"^book-(\d+)$")
+_TEL_LINE = re.compile(r"^(?:[A-Za-z0-9-]+\.)?TEL(?:;[^:]*)?:(.*)$", re.IGNORECASE)
 
 
 def clean_name(value: str) -> str:
@@ -177,7 +179,7 @@ def _book_row(row: sqlite3.Row, count: int) -> dict[str, object]:
     return item
 
 
-def list_books(db_path: Path) -> dict[str, list[dict[str, object]]]:
+def list_books(db_path: Path) -> dict[str, object]:
     ready: list[dict[str, object]] = []
     used: list[dict[str, object]] = []
     with db.session(db_path) as conn:
@@ -194,7 +196,7 @@ def list_books(db_path: Path) -> dict[str, list[dict[str, object]]]:
             used.append(item)
         else:
             ready.append(item)
-    return {"ready": ready, "used": used}
+    return {"ready": ready, "used": used, "revision": _revision(ready + used)}
 
 
 def get_book(db_path: Path, book_id: str) -> dict[str, object] | None:
@@ -214,6 +216,103 @@ def get_book(db_path: Path, book_id: str) -> dict[str, object] | None:
     item = _book_row(row, len(entries))
     item["entries"] = [{"name": entry["name"], "phone": entry["phone"]} for entry in entries]
     return item
+
+
+def unfold_vcard(text: str) -> str:
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return re.sub(r"\n[ \t]", "", normalized)
+
+
+def _tel_phones(text: str) -> set[str]:
+    found: set[str] = set()
+    for line in unfold_vcard(text).split("\n"):
+        match = _TEL_LINE.match(line.strip())
+        if match is None:
+            continue
+        phone = normalize_phone(match.group(1))
+        if phone:
+            found.add(phone)
+    return found
+
+
+def phones_in_text(text: str) -> set[str]:
+    """Số trong danh sách thường, hoặc TEL của vCard. +84 và 090 là một số."""
+    if "BEGIN:VCARD" in text.upper():
+        return _tel_phones(text)
+    found = _tel_phones(text)
+    people, _, _ = parse_people(text)
+    for person in people:
+        found.add(str(person["phone"]))
+    return found
+
+
+def reconcile(
+    db_path: Path,
+    text: str,
+    extra_phones: list[str],
+    full: bool,
+    used_at: str,
+) -> dict[str, object]:
+    """Khớp số đang có trên iPhone với từng danh bạ. Không thêm số lạ vào hub."""
+    if len(text) > MAX_CHARS:
+        text = text[:MAX_CHARS]
+    seen = phones_in_text(text)
+    for raw in extra_phones[:MAX_LINES]:
+        phone = normalize_phone(str(raw))
+        if phone:
+            seen.add(phone)
+    if not seen:
+        raise ValueError("empty")
+    moved_used = 0
+    moved_ready = 0
+    reports: list[dict[str, object]] = []
+    with db.session(db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, name, seq, status, used_at FROM contact_books ORDER BY seq"
+        ).fetchall()
+        grouped: dict[str, list[str]] = {}
+        for entry in conn.execute("SELECT book_id, phone FROM contact_entries").fetchall():
+            grouped.setdefault(str(entry["book_id"]), []).append(str(entry["phone"]))
+        known: set[str] = set()
+        for row in rows:
+            phones = grouped.get(str(row["id"]), [])
+            known.update(phones)
+            matched = sum(1 for phone in phones if phone in seen)
+            status = str(row["status"])
+            if phones and matched == len(phones) and status != "used":
+                conn.execute(
+                    "UPDATE contact_books SET status='used', used_at=? WHERE id=?",
+                    (used_at, row["id"]),
+                )
+                status = "used"
+                moved_used += 1
+            elif full and phones and matched == 0 and status == "used":
+                conn.execute(
+                    "UPDATE contact_books SET status='ready', used_at=NULL WHERE id=?",
+                    (row["id"],),
+                )
+                status = "ready"
+                moved_ready += 1
+            reports.append(
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "count": len(phones),
+                    "matched": matched,
+                    "status": status,
+                }
+            )
+    listed = list_books(db_path)
+    return {
+        "seenPhones": len(seen),
+        "unknownPhones": len(seen - known),
+        "movedToUsed": moved_used,
+        "movedToReady": moved_ready,
+        "books": reports,
+        "ready": listed["ready"],
+        "used": listed["used"],
+        "revision": listed["revision"],
+    }
 
 
 def mark_used(db_path: Path, book_id: str, used_at: str) -> dict[str, object] | None:
@@ -293,6 +392,14 @@ def import_people(
         "ready": listed["ready"],
         "used": listed["used"],
     }
+
+
+def _revision(items: list[dict[str, object]]) -> str:
+    parts = [
+        f"{item['id']}|{item['status']}|{item['count']}|{item.get('usedAt', '')}"
+        for item in items
+    ]
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:16]
 
 
 def _existing_phones(conn: sqlite3.Connection, phones: list[str]) -> set[str]:

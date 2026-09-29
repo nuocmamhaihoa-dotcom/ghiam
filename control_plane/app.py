@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
-from control_plane.danhba_store import get_book, import_people, list_books, mark_used
+from control_plane.danhba_store import get_book, import_people, list_books, mark_used, reconcile
 from control_plane.delivery import DANHBA_NAME, PACKAGE_NAME, ensure_danhba_package, ensure_package
 from control_plane.people import apply_novel, complete_rows
 from control_plane.version import DANHBA_BUILD, IPHONE_BUILD
@@ -329,6 +329,12 @@ class DanhBaImportBody(BaseModel):
     text: str = ""
 
 
+class DanhBaSyncBody(BaseModel):
+    text: str = ""
+    phones: list[str] = Field(default_factory=list)
+    full: bool = False
+
+
 def _danhba_books() -> dict[str, Any]:
     return list_books(settings.db_path)
 
@@ -365,6 +371,18 @@ def danhba_import(body: DanhBaImportBody, authorization: str | None = Header(def
     if not body.text.strip():
         raise HTTPException(status_code=400, detail="Dán danh sách gồm tên ghi nhớ và số điện thoại")
     return import_people(settings.db_path, body.text, body.title, utcnow())
+
+
+@app.post("/v1/danhba/sync")
+def danhba_sync(body: DanhBaSyncBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Khớp danh bạ đã lưu với số đang có trên iPhone. Không ghi số lạ vào hub."""
+    _auth(authorization)
+    if len(body.text) > 20_000_000:
+        raise HTTPException(status_code=413, detail="Danh sách quá lớn")
+    try:
+        return reconcile(settings.db_path, body.text, body.phones[:200_000], body.full, utcnow())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Không thấy số điện thoại để đối chiếu") from None
 
 
 @app.get("/danhba/version")

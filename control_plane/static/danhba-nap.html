@@ -15,6 +15,8 @@
     h2 { font-size: 1rem; margin: 1rem 0 0.4rem; }
     p { margin: 0 0 0.8rem; line-height: 1.4; }
     label { display: block; font-weight: 650; margin: 0 0 0.35rem; }
+    label.check { display: flex; align-items: flex-start; gap: 0.6rem; font-weight: 650; }
+    label.check input { width: 1.25rem; height: 1.25rem; margin-top: 0.15rem; }
     input, textarea {
       width: 100%; font: inherit; color: inherit; border: 1px solid #d5d8de; border-radius: 12px;
       padding: 0.75rem 0.8rem; background: #fff;
@@ -45,7 +47,7 @@
 </head>
 <body>
   <h1>Nạp danh bạ</h1>
-  <p class="hint">Mỗi dòng một người: tên ghi nhớ, rồi số điện thoại. Hub chia mỗi 5000 số một danh bạ. Một số chỉ nằm trong một danh bạ. Danh bạ đã nạp trên iPhone chuyển sang Đã dùng.</p>
+  <p class="hint">Mỗi dòng một người: tên ghi nhớ, rồi số điện thoại. Hub chia mỗi 5000 số một danh bạ. Một số chỉ nằm trong một danh bạ. Trang này và trang iPhone cùng một danh sách.</p>
   <label for="token">Token hub</label>
   <input id="token" type="password" autocomplete="off" />
   <label for="title">Tên danh bạ</label>
@@ -53,7 +55,8 @@
   <label for="paste">Tên và số</label>
   <textarea id="paste" placeholder="Lan, 0901234567"></textarea>
   <button id="fileButton" class="ghost" type="button">Chọn file</button>
-  <input id="file" type="file" accept=".txt,.csv,text/plain,text/csv" />
+  <input id="file" type="file" accept=".txt,.csv,.vcf,.vcard,text/plain,text/csv,text/vcard" />
+  <label class="check" for="full"><input id="full" type="checkbox" /> File .vcf là toàn bộ danh bạ trên iPhone</label>
   <p id="message" class="note" hidden></p>
   <h2>Chưa dùng</h2>
   <div id="ready"></div>
@@ -72,7 +75,9 @@
     var readyBox = document.getElementById("ready");
     var usedBox = document.getElementById("used");
     var goButton = document.getElementById("go");
+    var fullInput = document.getElementById("full");
     var running = false;
+    var revision = "";
     tokenInput.value = localStorage.getItem("fb_poller_control_token") || "";
 
     function showMessage(text, isError) {
@@ -82,11 +87,14 @@
     }
 
     function authHeaders() {
-      var token = tokenInput.value.trim();
-      localStorage.setItem("fb_poller_control_token", token);
       var headers = { Accept: "application/json" };
+      var token = tokenInput.value.trim();
       if (token) headers.Authorization = "Bearer " + token;
       return headers;
+    }
+
+    function rememberToken() {
+      localStorage.setItem("fb_poller_control_token", tokenInput.value.trim());
     }
 
     function paint(payload) {
@@ -110,10 +118,12 @@
       });
     }
 
-    async function refresh() {
+    async function refresh(force) {
+      if (running && !force) return;
       var response = await fetch("/v1/danhba/books", { headers: authHeaders(), cache: "no-store" });
       if (response.status === 401) {
         showMessage("Dán token hub rồi bấm Nạp lên VPS.", true);
+        revision = "";
         paint({ ready: [], used: [] });
         return;
       }
@@ -121,7 +131,12 @@
         showMessage("Không lấy được danh bạ trên hub.", true);
         return;
       }
-      paint(await response.json());
+      var payload = await response.json();
+      rememberToken();
+      var next = payload.revision || "";
+      if (!force && next && next === revision) return;
+      revision = next;
+      paint(payload);
     }
 
     async function upload(text) {
@@ -146,11 +161,40 @@
       if (payload.skippedExisting) summary += " Bỏ " + payload.skippedExisting + " số đã có trên hub.";
       if (payload.truncated) summary += " Danh sách quá dài, chỉ lấy phần đầu.";
       showMessage(summary, false);
+      revision = payload.revision || "";
+      paint(payload);
+    }
+
+    async function reconcile(text) {
+      var headers = authHeaders();
+      headers["Content-Type"] = "application/json";
+      var response = await fetch("/v1/danhba/sync", {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify({ text: text, full: fullInput.checked })
+      });
+      if (response.status === 401) {
+        showMessage("Dán token hub rồi chọn file danh bạ.", true);
+        return;
+      }
+      var payload = await response.json();
+      if (!response.ok) {
+        showMessage(payload.detail || "Không đối chiếu được.", true);
+        return;
+      }
+      rememberToken();
+      var summary = "Đã đối chiếu " + payload.seenPhones + " số.";
+      if (payload.movedToUsed) summary += " Chuyển " + payload.movedToUsed + " danh bạ sang Đã dùng.";
+      if (payload.movedToReady) summary += " Trả " + payload.movedToReady + " danh bạ về Chưa dùng.";
+      if (!payload.movedToUsed && !payload.movedToReady) summary += " Chưa có danh bạ nào khớp đủ số.";
+      showMessage(summary, false);
+      revision = payload.revision || "";
       paint(payload);
     }
 
     goButton.addEventListener("click", function () {
       if (running) return;
+      rememberToken();
       var text = pasteInput.value.trim();
       if (!text) {
         showMessage("Dán danh sách: mỗi dòng tên ghi nhớ và số điện thoại.", true);
@@ -181,7 +225,21 @@
       }
       var reader = new FileReader();
       reader.onload = function () {
-        pasteInput.value = String(reader.result || "");
+        var text = String(reader.result || "");
+        if (text.indexOf("BEGIN:VCARD") !== -1) {
+          running = true;
+          goButton.disabled = true;
+          reconcile(text).then(function () {
+            running = false;
+            goButton.disabled = false;
+          }, function () {
+            running = false;
+            goButton.disabled = false;
+            showMessage("Không đối chiếu được.", true);
+          });
+          return;
+        }
+        pasteInput.value = text;
         goButton.click();
       };
       reader.onerror = function () {
@@ -190,7 +248,10 @@
       reader.readAsText(file);
     });
 
-    refresh();
+    refresh(true);
+    setInterval(function () {
+      refresh(false);
+    }, 5000);
   </script>
 </body>
 </html>
