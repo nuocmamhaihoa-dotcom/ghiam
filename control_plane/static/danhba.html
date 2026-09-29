@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="Danh bạ" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="theme-color" content="#ffffff" />
-  <meta name="danhba-build" content="9" />
+  <meta name="danhba-build" content="10" />
   <link rel="manifest" href="/danhba/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>Danh bạ</title>
@@ -31,7 +31,7 @@
     }
     textarea { min-height: 140px; resize: vertical; }
     label.check input { width: 1.25rem; height: 1.25rem; margin-top: 0.15rem; }
-    html.on-hub #local, html:not(.on-hub) #hub, html:not(.on-hub) #sync, html.on-hub #cardGo { display: none; }
+    html.on-hub #local, html:not(.on-hub) #hub, html:not(.on-hub) #sync { display: none; }
     button, a.btn {
       display: flex; align-items: center; justify-content: center;
       width: 100%; min-height: 48px; margin: 0 0 0.55rem;
@@ -61,7 +61,7 @@
 </head>
 <body>
   <h1>Danh bạ</h1>
-  <p class="hint" id="install">Dán danh sách. Lần đầu bấm Cài phím tắt và cho phép Danh bạ một lần. Sau đó chỉ cần dán: cả danh sách vào Danh bạ. Mỗi danh bạ tối đa 5000 số.</p>
+  <p class="hint" id="install">Dán danh sách, rồi bấm Nạp lên iPhone. Thẻ chỉ hiện số đầu. Đừng bấm Tạo liên hệ mới. Bấm nút chia sẻ góc trên bên phải, chọn Danh bạ, rồi Thêm tất cả. Mỗi danh bạ tối đa 5000 số.</p>
   <p class="note" id="upgrade" hidden>Có bản mới trên hub.</p>
   <p id="status" class="hint">Dán số, rồi bấm Nạp lên iPhone.</p>
   <div id="local">
@@ -83,15 +83,14 @@
     <div id="used"></div>
   </div>
   <p id="message" class="note" hidden></p>
-  <p class="build" id="buildLine">Phiên bản 9</p>
+  <p class="build" id="buildLine">Phiên bản 10</p>
   <div class="bar">
     <a id="go" class="btn" href="#">Nạp lên iPhone</a>
-    <a id="cardGo" class="btn ghost" href="#">Mở thẻ Thêm tất cả</a>
     <button id="sync" class="ghost" type="button">Đối chiếu iPhone</button>
   </div>
   <input id="syncFile" type="file" accept=".vcf,.vcard,.txt,text/vcard,text/x-vcard,text/plain" />
   <script>
-    window.DANHBA_BUILD = 9;
+    window.DANHBA_BUILD = 10;
   </script>
   <script>
 (function (root) {
@@ -330,7 +329,7 @@
       lines.push("FN:" + name);
       lines.push("ORG:" + group);
       lines.push("TEL;TYPE=CELL:" + entries[i].phone);
-      lines.push("NOTE:" + group);
+      lines.push("NOTE:" + group + ". " + escapeValue("Bấm nút chia sẻ góc trên. Chọn Danh bạ. Bấm Thêm tất cả."));
       lines.push("END:VCARD");
     }
     return lines.join("\r\n") + "\r\n";
@@ -350,9 +349,6 @@
 </script>
   <script>
     var BUILD = window.DANHBA_BUILD;
-    var SHORTCUT_NAME = "NapDanhBa";
-    var SHORTCUT_KEY = "danhbaShortcutReady";
-    var SHORTCUT_XML = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>WFWorkflowName</key>\n\t<string>NapDanhBa</string>\n\t<key>WFWorkflowClientVersion</key>\n\t<string>900</string>\n\t<key>WFWorkflowClientRelease</key>\n\t<string>2.1.2</string>\n\t<key>WFWorkflowMinimumClientVersion</key>\n\t<integer>900</integer>\n\t<key>WFWorkflowMinimumClientVersionString</key>\n\t<string>900</string>\n\t<key>WFWorkflowIcon</key>\n\t<dict>\n\t\t<key>WFWorkflowIconGlyphNumber</key>\n\t\t<integer>61440</integer>\n\t\t<key>WFWorkflowIconStartColor</key>\n\t\t<integer>431817727</integer>\n\t</dict>\n\t<key>WFWorkflowImportQuestions</key>\n\t<array/>\n\t<key>WFWorkflowInputContentItemClasses</key>\n\t<array>\n\t\t<string>WFStringContentItem</string>\n\t</array>\n\t<key>WFWorkflowOutputContentItemClasses</key>\n\t<array/>\n\t<key>WFWorkflowTypes</key>\n\t<array/>\n\t<key>WFWorkflowHasOutputFallback</key>\n\t<false/>\n\t<key>WFWorkflowActions</key>\n\t<array>\n\t\t<dict>\n\t\t\t<key>WFWorkflowActionIdentifier</key>\n\t\t\t<string>is.workflow.actions.getclipboard</string>\n\t\t\t<key>WFWorkflowActionParameters</key>\n\t\t\t<dict>\n\t\t\t\t<key>UUID</key>\n\t\t\t\t<string>11111111-1111-4111-8111-111111111111</string>\n\t\t\t</dict>\n\t\t</dict>\n\t\t<dict>\n\t\t\t<key>WFWorkflowActionIdentifier</key>\n\t\t\t<string>is.workflow.actions.text.split</string>\n\t\t\t<key>WFWorkflowActionParameters</key>\n\t\t\t<dict>\n\t\t\t\t<key>UUID</key>\n\t\t\t\t<string>22222222-2222-4222-8222-222222222222</string>\n\t\t\t\t<key>WFTextSeparator</key>\n\t\t\t\t<string>New Lines</string>\n\t\t\t\t<key>text</key>\n\t\t\t\t<dict>\n\t\t\t\t\t<key>Value</key>\n\t\t\t\t\t<dict>\n\t\t\t\t\t\t<key>attachmentsByRange</key>\n\t\t\t\t\t\t<dict>\n\t\t\t\t\t\t\t<key>{0, 1}</key>\n\t\t\t\t\t\t\t<dict>\n\t\t\t\t\t\t\t\t<key>OutputName</key>\n\t\t\t\t\t\t\t\t<string>Clipboard</string>\n\t\t\t\t\t\t\t\t<key>OutputUUID</key>\n\t\t\t\t\t\t\t\t<string>11111111-1111-4111-8111-111111111111</string>\n\t\t\t\t\t\t\t\t<key>Type</key>\n\t\t\t\t\t\t\t\t<string>ActionOutput</string>\n\t\t\t\t\t\t\t</dict>\n\t\t\t\t\t\t</dict>\n\t\t\t\t\t\t<key>string</key>\n\t\t\t\t\t\t<string>\ufffc</string>\n\t\t\t\t\t</dict>\n\t\t\t\t\t<key>WFSerializationType</key>\n\t\t\t\t\t<string>WFTextTokenString</string>\n\t\t\t\t</dict>\n\t\t\t</dict>\n\t\t</dict>\n\t\t<dict>\n\t\t\t<key>WFWorkflowActionIdentifier</key>\n\t\t\t<string>is.workflow.actions.repeat.each</string>\n\t\t\t<key>WFWorkflowActionParameters</key>\n\t\t\t<dict>\n\t\t\t\t<key>UUID</key>\n\t\t\t\t<string>33333333-3333-4333-8333-333333333333</string>\n\t\t\t\t<key>GroupingIdentifier</key>\n\t\t\t\t<string>44444444-4444-4444-8444-444444444444</string>\n\t\t\t\t<key>WFControlFlowMode</key>\n\t\t\t\t<integer>0</integer>\n\t\t\t\t<key>WFInput</key>\n\t\t\t\t<dict>\n\t\t\t\t\t<key>Value</key>\n\t\t\t\t\t<dict>\n\t\t\t\t\t\t<key>OutputName</key>\n\t\t\t\t\t\t<string>Split Text</string>\n\t\t\t\t\t\t<key>OutputUUID</key>\n\t\t\t\t\t\t<string>22222222-2222-4222-8222-222222222222</string>\n\t\t\t\t\t\t<key>Type</key>\n\t\t\t\t\t\t<string>ActionOutput</string>\n\t\t\t\t\t</dict>\n\t\t\t\t\t<key>WFSerializationType</key>\n\t\t\t\t\t<string>WFTextTokenAttachment</string>\n\t\t\t\t</dict>\n\t\t\t</dict>\n\t\t</dict>\n\t\t<dict>\n\t\t\t<key>WFWorkflowActionIdentifier</key>\n\t\t\t<string>is.workflow.actions.text.split</string>\n\t\t\t<key>WFWorkflowActionParameters</key>\n\t\t\t<dict>\n\t\t\t\t<key>UUID</key>\n\t\t\t\t<string>55555555-5555-4555-8555-555555555555</string>\n\t\t\t\t<key>WFTextSeparator</key>\n\t\t\t\t<string>Custom</string>\n\t\t\t\t<key>WFTextCustomSeparator</key>\n\t\t\t\t<string>\t</string>\n\t\t\t\t<key>text</key>\n\t\t\t\t<dict>\n\t\t\t\t\t<key>Value</key>\n\t\t\t\t\t<dict>\n\t\t\t\t\t\t<key>attachmentsByRange</key>\n\t\t\t\t\t\t<dict>\n\t\t\t\t\t\t\t<key>{0, 1}</key>\n\t\t\t\t\t\t\t<dict>\n\t\t\t\t\t\t\t\t<key>Type</key>\n\t\t\t\t\t\t\t\t<string>Variable</string>\n\t\t\t\t\t\t\t\t<key>VariableName</key>\n\t\t\t\t\t\t\t\t<string>Repeat Item</string>\n\t\t\t\t\t\t\t</dict>\n\t\t\t\t\t\t</dict>\n\t\t\t\t\t\t<key>string</key>\n\t\t\t\t\t\t<string>\ufffc</string>\n\t\t\t\t\t</dict>\n\t\t\t\t\t<key>WFSerializationType</key>\n\t\t\t\t\t<string>WFTextTokenString</string>\n\t\t\t\t</dict>\n\t\t\t</dict>\n\t\t</dict>\n\t\t<dict>\n\t\t\t<key>WFWorkflowActionIdentifier</key>\n\t\t\t<string>is.workflow.actions.getitemfromlist</string>\n\t\t\t<key>WFWorkflowActionParameters</key>\n\t\t\t<dict>\n\t\t\t\t<key>UUID</key>\n\t\t\t\t<string>66666666-6666-4666-8666-666666666666</string>\n\t\t\t\t<key>WFItemSpecifier</key>\n\t\t\t\t<string>Item At Index</string>\n\t\t\t\t<key>WFItemIndex</key>\n\t\t\t\t<integer>1</integer>\n\t\t\t\t<key>WFInput</key>\n\t\t\t\t<dict>\n\t\t\t\t\t<key>Value</key>\n\t\t\t\t\t<dict>\n\t\t\t\t\t\t<key>OutputName</key>\n\t\t\t\t\t\t<string>Split Text</string>\n\t\t\t\t\t\t<key>OutputUUID</key>\n\t\t\t\t\t\t<string>55555555-5555-4555-8555-555555555555</string>\n\t\t\t\t\t\t<key>Type</key>\n\t\t\t\t\t\t<string>ActionOutput</string>\n\t\t\t\t\t</dict>\n\t\t\t\t\t<key>WFSerializationType</key>\n\t\t\t\t\t<string>WFTextTokenAttachment</string>\n\t\t\t\t</dict>\n\t\t\t</dict>\n\t\t</dict>\n\t\t<dict>\n\t\t\t<key>WFWorkflowActionIdentifier</key>\n\t\t\t<string>is.workflow.actions.getitemfromlist</string>\n\t\t\t<key>WFWorkflowActionParameters</key>\n\t\t\t<dict>\n\t\t\t\t<key>UUID</key>\n\t\t\t\t<string>77777777-7777-4777-8777-777777777777</string>\n\t\t\t\t<key>WFItemSpecifier</key>\n\t\t\t\t<string>Item At Index</string>\n\t\t\t\t<key>WFItemIndex</key>\n\t\t\t\t<integer>2</integer>\n\t\t\t\t<key>WFInput</key>\n\t\t\t\t<dict>\n\t\t\t\t\t<key>Value</key>\n\t\t\t\t\t<dict>\n\t\t\t\t\t\t<key>OutputName</key>\n\t\t\t\t\t\t<string>Split Text</string>\n\t\t\t\t\t\t<key>OutputUUID</key>\n\t\t\t\t\t\t<string>55555555-5555-4555-8555-555555555555</string>\n\t\t\t\t\t\t<key>Type</key>\n\t\t\t\t\t\t<string>ActionOutput</string>\n\t\t\t\t\t</dict>\n\t\t\t\t\t<key>WFSerializationType</key>\n\t\t\t\t\t<string>WFTextTokenAttachment</string>\n\t\t\t\t</dict>\n\t\t\t</dict>\n\t\t</dict>\n\t\t<dict>\n\t\t\t<key>WFWorkflowActionIdentifier</key>\n\t\t\t<string>is.workflow.actions.getitemfromlist</string>\n\t\t\t<key>WFWorkflowActionParameters</key>\n\t\t\t<dict>\n\t\t\t\t<key>UUID</key>\n\t\t\t\t<string>88888888-8888-4888-8888-888888888888</string>\n\t\t\t\t<key>WFItemSpecifier</key>\n\t\t\t\t<string>Item At Index</string>\n\t\t\t\t<key>WFItemIndex</key>\n\t\t\t\t<integer>3</integer>\n\t\t\t\t<key>WFInput</key>\n\t\t\t\t<dict>\n\t\t\t\t\t<key>Value</key>\n\t\t\t\t\t<dict>\n\t\t\t\t\t\t<key>OutputName</key>\n\t\t\t\t\t\t<string>Split Text</string>\n\t\t\t\t\t\t<key>OutputUUID</key>\n\t\t\t\t\t\t<string>55555555-5555-4555-8555-555555555555</string>\n\t\t\t\t\t\t<key>Type</key>\n\t\t\t\t\t\t<string>ActionOutput</string>\n\t\t\t\t\t</dict>\n\t\t\t\t\t<key>WFSerializationType</key>\n\t\t\t\t\t<string>WFTextTokenAttachment</string>\n\t\t\t\t</dict>\n\t\t\t</dict>\n\t\t</dict>\n\t\t<dict>\n\t\t\t<key>WFWorkflowActionIdentifier</key>\n\t\t\t<string>is.workflow.actions.addnewcontact</string>\n\t\t\t<key>WFWorkflowActionParameters</key>\n\t\t\t<dict>\n\t\t\t\t<key>UUID</key>\n\t\t\t\t<string>99999999-9999-4999-8999-999999999999</string>\n\t\t\t\t<key>ShowWhenRun</key>\n\t\t\t\t<false/>\n\t\t\t\t<key>WFContactFirstName</key>\n\t\t\t\t<dict>\n\t\t\t\t\t<key>Value</key>\n\t\t\t\t\t<dict>\n\t\t\t\t\t\t<key>attachmentsByRange</key>\n\t\t\t\t\t\t<dict>\n\t\t\t\t\t\t\t<key>{0, 1}</key>\n\t\t\t\t\t\t\t<dict>\n\t\t\t\t\t\t\t\t<key>OutputName</key>\n\t\t\t\t\t\t\t\t<string>Item from List</string>\n\t\t\t\t\t\t\t\t<key>OutputUUID</key>\n\t\t\t\t\t\t\t\t<string>66666666-6666-4666-8666-666666666666</string>\n\t\t\t\t\t\t\t\t<key>Type</key>\n\t\t\t\t\t\t\t\t<string>ActionOutput</string>\n\t\t\t\t\t\t\t</dict>\n\t\t\t\t\t\t</dict>\n\t\t\t\t\t\t<key>string</key>\n\t\t\t\t\t\t<string>\ufffc</string>\n\t\t\t\t\t</dict>\n\t\t\t\t\t<key>WFSerializationType</key>\n\t\t\t\t\t<string>WFTextTokenString</string>\n\t\t\t\t</dict>\n\t\t\t\t<key>WFContactPhoneNumbers</key>\n\t\t\t\t<dict>\n\t\t\t\t\t<key>Value</key>\n\t\t\t\t\t<dict>\n\t\t\t\t\t\t<key>attachmentsByRange</key>\n\t\t\t\t\t\t<dict>\n\t\t\t\t\t\t\t<key>{0, 1}</key>\n\t\t\t\t\t\t\t<dict>\n\t\t\t\t\t\t\t\t<key>OutputName</key>\n\t\t\t\t\t\t\t\t<string>Item from List</string>\n\t\t\t\t\t\t\t\t<key>OutputUUID</key>\n\t\t\t\t\t\t\t\t<string>77777777-7777-4777-8777-777777777777</string>\n\t\t\t\t\t\t\t\t<key>Type</key>\n\t\t\t\t\t\t\t\t<string>ActionOutput</string>\n\t\t\t\t\t\t\t</dict>\n\t\t\t\t\t\t</dict>\n\t\t\t\t\t\t<key>string</key>\n\t\t\t\t\t\t<string>\ufffc</string>\n\t\t\t\t\t</dict>\n\t\t\t\t\t<key>WFSerializationType</key>\n\t\t\t\t\t<string>WFTextTokenString</string>\n\t\t\t\t</dict>\n\t\t\t\t<key>WFContactCompany</key>\n\t\t\t\t<dict>\n\t\t\t\t\t<key>Value</key>\n\t\t\t\t\t<dict>\n\t\t\t\t\t\t<key>attachmentsByRange</key>\n\t\t\t\t\t\t<dict>\n\t\t\t\t\t\t\t<key>{0, 1}</key>\n\t\t\t\t\t\t\t<dict>\n\t\t\t\t\t\t\t\t<key>OutputName</key>\n\t\t\t\t\t\t\t\t<string>Item from List</string>\n\t\t\t\t\t\t\t\t<key>OutputUUID</key>\n\t\t\t\t\t\t\t\t<string>88888888-8888-4888-8888-888888888888</string>\n\t\t\t\t\t\t\t\t<key>Type</key>\n\t\t\t\t\t\t\t\t<string>ActionOutput</string>\n\t\t\t\t\t\t\t</dict>\n\t\t\t\t\t\t</dict>\n\t\t\t\t\t\t<key>string</key>\n\t\t\t\t\t\t<string>\ufffc</string>\n\t\t\t\t\t</dict>\n\t\t\t\t\t<key>WFSerializationType</key>\n\t\t\t\t\t<string>WFTextTokenString</string>\n\t\t\t\t</dict>\n\t\t\t\t<key>WFContactNotes</key>\n\t\t\t\t<dict>\n\t\t\t\t\t<key>Value</key>\n\t\t\t\t\t<dict>\n\t\t\t\t\t\t<key>attachmentsByRange</key>\n\t\t\t\t\t\t<dict>\n\t\t\t\t\t\t\t<key>{0, 1}</key>\n\t\t\t\t\t\t\t<dict>\n\t\t\t\t\t\t\t\t<key>OutputName</key>\n\t\t\t\t\t\t\t\t<string>Item from List</string>\n\t\t\t\t\t\t\t\t<key>OutputUUID</key>\n\t\t\t\t\t\t\t\t<string>88888888-8888-4888-8888-888888888888</string>\n\t\t\t\t\t\t\t\t<key>Type</key>\n\t\t\t\t\t\t\t\t<string>ActionOutput</string>\n\t\t\t\t\t\t\t</dict>\n\t\t\t\t\t\t</dict>\n\t\t\t\t\t\t<key>string</key>\n\t\t\t\t\t\t<string>\ufffc</string>\n\t\t\t\t\t</dict>\n\t\t\t\t\t<key>WFSerializationType</key>\n\t\t\t\t\t<string>WFTextTokenString</string>\n\t\t\t\t</dict>\n\t\t\t</dict>\n\t\t</dict>\n\t\t<dict>\n\t\t\t<key>WFWorkflowActionIdentifier</key>\n\t\t\t<string>is.workflow.actions.repeat.each</string>\n\t\t\t<key>WFWorkflowActionParameters</key>\n\t\t\t<dict>\n\t\t\t\t<key>UUID</key>\n\t\t\t\t<string>AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA</string>\n\t\t\t\t<key>GroupingIdentifier</key>\n\t\t\t\t<string>44444444-4444-4444-8444-444444444444</string>\n\t\t\t\t<key>WFControlFlowMode</key>\n\t\t\t\t<integer>2</integer>\n\t\t\t</dict>\n\t\t</dict>\n\t</array>\n</dict>\n</plist>\n";
     var onHub = location.pathname === "/danhba" || location.pathname.indexOf("/danhba/") === 0;
     var tokenInput = document.getElementById("token");
     var statusLine = document.getElementById("status");
@@ -360,7 +356,6 @@
     var readyBox = document.getElementById("ready");
     var usedBox = document.getElementById("used");
     var goButton = document.getElementById("go");
-    var cardGo = document.getElementById("cardGo");
     var syncButton = document.getElementById("sync");
     var syncFile = document.getElementById("syncFile");
     var fullInput = document.getElementById("full");
@@ -374,8 +369,6 @@
     var revision = "";
     var loaded = false;
     var sentLocal = {};
-    var installStep = false;
-    var shortcutUrl = "";
     if (tokenInput) tokenInput.value = localStorage.getItem("fb_poller_control_token") || "";
 
     function showMessage(text, isError) {
@@ -424,7 +417,7 @@
       }
       if (!known) activeId = ready.length ? ready[0].id : null;
       statusLine.textContent = ready.length
-        ? ready.length + " danh bạ chưa dùng. Bấm Nạp lên iPhone. iPhone hỏi thì bấm Tạo liên hệ mới hoặc Thêm tất cả."
+        ? ready.length + " danh bạ chưa dùng. Bấm Nạp lên iPhone. Trên thẻ bấm nút chia sẻ góc trên, chọn Danh bạ, rồi Thêm tất cả."
         : "Chưa có danh bạ chờ. Nạp danh sách từ máy tính.";
       goButton.setAttribute("aria-disabled", loaded && !ready.length ? "true" : "false");
       goButton.textContent = "Nạp lên iPhone";
@@ -528,7 +521,7 @@
         localBooks.appendChild(row);
       });
       goButton.setAttribute("aria-disabled", "false");
-      paintAction();
+      goButton.textContent = "Nạp lên iPhone";
     }
 
     var armedBody = "";
@@ -557,133 +550,18 @@
 
     function armLocalCard() {
       var prepared = pendingCard();
-      if (!cardGo) return prepared;
       if (!prepared) {
-        cardGo.href = "#";
-        cardGo.removeAttribute("download");
+        goButton.href = "#";
+        goButton.removeAttribute("download");
         return null;
       }
       if (prepared.body !== armedBody) {
         armedBody = prepared.body;
         armedUrl = URL.createObjectURL(new Blob([prepared.body], { type: "text/x-vcard" }));
       }
-      cardGo.href = armedUrl;
-      cardGo.removeAttribute("download");
+      goButton.href = armedUrl;
+      goButton.removeAttribute("download");
       return prepared;
-    }
-
-    function shortcutReady() {
-      try {
-        return localStorage.getItem(SHORTCUT_KEY) === "1";
-      } catch (err) {
-        return false;
-      }
-    }
-
-    function paintAction() {
-      if (onHub) {
-        goButton.textContent = "Nạp lên iPhone";
-        goButton.removeAttribute("download");
-        return;
-      }
-      if (shortcutReady()) {
-        goButton.textContent = "Nạp lên iPhone";
-        goButton.removeAttribute("download");
-        goButton.href = "#";
-        return;
-      }
-      if (installStep) {
-        goButton.textContent = "Đã cài, nạp danh sách";
-        goButton.removeAttribute("download");
-        goButton.href = "#";
-        return;
-      }
-      goButton.textContent = "Cài phím tắt một lần";
-    }
-
-    function armShortcut() {
-      if (!shortcutUrl) {
-        shortcutUrl = URL.createObjectURL(new Blob([SHORTCUT_XML], { type: "application/octet-stream" }));
-      }
-      goButton.href = shortcutUrl;
-      goButton.setAttribute("download", "NapDanhBa.shortcut");
-    }
-
-    function contactLines() {
-      var split = localSplit();
-      var list = (split && split.books) || [];
-      var lines = [];
-      list.forEach(function (book) {
-        (book.entries || []).forEach(function (entry) {
-          var phone = entry.phone;
-          if (!phone) return;
-          var name = String(entry.name || phone).replace(/[\t\r\n]/g, " ").trim() || phone;
-          var group = String(book.name || "Khach").replace(/[\t\r\n]/g, " ").trim() || "Khach";
-          lines.push(name + "\t" + phone + "\t" + group);
-        });
-      });
-      return lines;
-    }
-
-    function copyText(text) {
-      var area = document.createElement("textarea");
-      area.value = text;
-      area.setAttribute("readonly", "");
-      area.style.position = "fixed";
-      area.style.left = "0";
-      area.style.top = "0";
-      area.style.width = "1px";
-      area.style.height = "1px";
-      area.style.opacity = "0";
-      document.body.appendChild(area);
-      area.focus();
-      area.select();
-      try {
-        area.setSelectionRange(0, area.value.length);
-      } catch (err) {}
-      var ok = false;
-      try {
-        ok = document.execCommand("copy");
-      } catch (err) {
-        ok = false;
-      }
-      document.body.removeChild(area);
-      return ok;
-    }
-
-    function openShortcutApp() {
-      var left = false;
-      function onHide() {
-        if (document.hidden) left = true;
-      }
-      document.addEventListener("visibilitychange", onHide);
-      window.location.assign("shortcuts://run-shortcut?name=NapDanhBa");
-      setTimeout(function () {
-        document.removeEventListener("visibilitychange", onHide);
-        if (left || document.hidden) return;
-        try {
-          localStorage.removeItem(SHORTCUT_KEY);
-        } catch (err) {}
-        installStep = false;
-        paintAction();
-        showMessage("iPhone chưa mở phím tắt NapDanhBa. Bấm Cài phím tắt một lần. Nếu bị chặn: Cài đặt, Phím tắt, Nâng cao, bật Cho phép phím tắt không tin cậy.", true);
-      }, 1500);
-    }
-
-    function runShortcutImport() {
-      var lines = contactLines();
-      if (!lines.length) {
-        showMessage("Dán số hoặc chọn file.", true);
-        renderLocal();
-        paintAction();
-        return;
-      }
-      if (!copyText(lines.join("\n"))) {
-        showMessage("Không chép được danh sách. Bấm Nạp lên iPhone lần nữa.", true);
-        return;
-      }
-      showMessage("Đang đưa " + lines.length + " số vào Danh bạ. Giữ máy mở đến khi Phím tắt chạy xong. Đừng bấm lại nếu số đã đủ, kẻo bị trùng.", false);
-      openShortcutApp();
     }
 
     function importHint(count) {
@@ -743,37 +621,20 @@
 
     goButton.addEventListener("touchstart", function () {
       blurField();
-      if (!onHub && !shortcutReady() && !installStep) armShortcut();
+      if (!onHub) armLocalCard();
     }, { passive: true });
     goButton.addEventListener("pointerdown", function () {
       blurField();
-      if (!onHub && !shortcutReady() && !installStep) armShortcut();
+      if (!onHub) armLocalCard();
     });
     goButton.addEventListener("click", function (event) {
-      if (running || goButton.getAttribute("aria-disabled") === "true") {
-        event.preventDefault();
-        return;
-      }
+      event.preventDefault();
+      if (running || goButton.getAttribute("aria-disabled") === "true") return;
       blurField();
       if (!onHub) {
-        if (!shortcutReady() && !installStep) {
-          armShortcut();
-          installStep = true;
-          goButton.textContent = "Đã cài, nạp danh sách";
-          showMessage("Mở tệp NapDanhBa vừa tải, bấm Thêm phím tắt. Nếu iPhone chặn: Cài đặt, Phím tắt, Nâng cao, bật Cho phép phím tắt không tin cậy. Xong thì bấm Đã cài, nạp danh sách.", false);
-          return;
-        }
-        event.preventDefault();
-        if (!shortcutReady()) {
-          try {
-            localStorage.setItem(SHORTCUT_KEY, "1");
-          } catch (err) {}
-        }
-        runShortcutImport();
-        paintAction();
+        openCard();
         return;
       }
-      event.preventDefault();
       rememberToken();
       running = true;
       loadAll().then(function () {
@@ -783,21 +644,6 @@
         showMessage("Không nạp được danh bạ.", true);
       });
     });
-    if (cardGo) {
-      cardGo.addEventListener("touchstart", function () {
-        blurField();
-        if (!onHub) armLocalCard();
-      }, { passive: true });
-      cardGo.addEventListener("pointerdown", function () {
-        blurField();
-        if (!onHub) armLocalCard();
-      });
-      cardGo.addEventListener("click", function (event) {
-        event.preventDefault();
-        blurField();
-        openCard();
-      });
-    }
 
     document.getElementById("pick").addEventListener("click", function () {
       fileInput.click();
@@ -832,17 +678,13 @@
       if (end == null) end = start;
       numbersInput.value = numbersInput.value.slice(0, start) + clip + numbersInput.value.slice(end);
       renderLocal();
-      armLocalCard();
-      if (!contactLines().length) {
+      var prepared = armLocalCard();
+      if (!prepared) {
         showMessage("Không thấy số điện thoại trong phần vừa dán.", true);
         return;
       }
-      if (!shortcutReady()) {
-        paintAction();
-        showMessage("Đã nhận " + contactLines().length + " số. Bấm Cài phím tắt một lần. iPhone hỏi thì bấm Thêm phím tắt, rồi Cho phép Danh bạ.", false);
-        return;
-      }
-      runShortcutImport();
+      var count = prepared.opened.reduce(function (sum, book) { return sum + book.entries.length; }, 0);
+      showMessage("Đã nhận " + count + " số. Bấm Nạp lên iPhone. Trên thẻ đừng bấm Tạo liên hệ mới.", false);
     });
     numbersInput.addEventListener("input", function () {
       renderLocal();
@@ -920,17 +762,14 @@
       render();
       refresh(true);
     } else {
+      try { localStorage.removeItem("danhbaShortcutReady"); } catch (err) {}
       renderLocal();
       armLocalCard();
-      paintAction();
       window.addEventListener("pageshow", function () {
         if (!numbersInput.value.trim()) return;
-        armLocalCard();
-        paintAction();
-        if (!shortcutReady()) return;
-        var count = contactLines().length;
-        if (!count) return;
-        showMessage("Nếu Danh bạ chưa đủ " + count + " số, bấm Nạp lên iPhone lần nữa. Bấm lại khi đã đủ sẽ tạo số trùng.", false);
+        var prepared = armLocalCard();
+        if (!prepared) return;
+        showMessage(importHint(prepared.opened.reduce(function (sum, book) { return sum + book.entries.length; }, 0)), false);
       });
     }
     if (onHub) {
