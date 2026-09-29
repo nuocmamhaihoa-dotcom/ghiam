@@ -12,6 +12,7 @@ from typing import NamedTuple
 from PIL import Image, ImageFilter, ImageOps
 
 from control_plane.people import clean_name, clean_username, fold_name
+from control_plane.tesseract_keep import read_tsv
 
 _HANDLE = re.compile(r"@[A-Za-z0-9._]{3,30}")
 _TIME = re.compile(r"\d{1,2}:\d{2}")
@@ -362,7 +363,7 @@ def captions_from_sightings(sightings: list[dict[str, str]]) -> list[str]:
     return lines
 
 
-def _prepare_people_image(path: Path, prepared: Path) -> bool:
+def _prepared_image(path: Path) -> Image.Image | None:
     """Làm nét chữ đúng kích thước gốc. Phóng to dễ đọc nhầm số."""
     try:
         with Image.open(path) as full:
@@ -372,17 +373,25 @@ def _prepare_people_image(path: Path, prepared: Path) -> bool:
             bottom = int(height * 0.92)
             if bottom - top > 40:
                 gray = gray.crop((0, top, width, bottom))
-            gray.filter(ImageFilter.SHARPEN).save(prepared)
+            sharpened = gray.filter(ImageFilter.SHARPEN)
+            sharpened.load()
+            return sharpened
+    except OSError:
+        return None
+
+
+def _prepare_people_image(path: Path, prepared: Path) -> bool:
+    image = _prepared_image(path)
+    if image is None:
+        return False
+    try:
+        image.save(prepared)
     except OSError:
         return False
     return True
 
 
-def read_frame_tsv(path: Path) -> str:
-    """Một lần Tesseract cho cả danh bạ và dòng chữ nhìn thấy."""
-    prepared = path.with_name(path.stem + "-people.png")
-    if not _prepare_people_image(path, prepared):
-        return ""
+def _tesseract_cli(prepared: Path) -> str:
     env = os.environ.copy()
     env["OMP_THREAD_LIMIT"] = "1"
     for lang in ("vie+eng", "eng"):
@@ -413,6 +422,22 @@ def read_frame_tsv(path: Path) -> str:
         if result.returncode == 0 and result.stdout:
             return result.stdout
     return ""
+
+
+def read_frame_tsv(path: Path) -> str:
+    """Một lần Tesseract cho cả danh bạ và dòng chữ nhìn thấy."""
+    image = _prepared_image(path)
+    if image is None:
+        return ""
+    kept = read_tsv(image)
+    if kept is not None:
+        return kept
+    prepared = path.with_name(path.stem + "-people.png")
+    try:
+        image.save(prepared)
+    except OSError:
+        return ""
+    return _tesseract_cli(prepared)
 
 
 def sightings_from_image(path: Path) -> list[dict[str, str]]:

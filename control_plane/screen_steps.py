@@ -338,6 +338,13 @@ def _sample_rate(duration: float | None) -> float:
     return _MAX_FRAMES / duration
 
 
+def _media_env() -> dict[str, str]:
+    """ffmpeg dùng hết lõi. Giới hạn một luồng chỉ dành cho từng bộ đọc chữ."""
+    env = os.environ.copy()
+    env.pop("OMP_THREAD_LIMIT", None)
+    return env
+
+
 def _duration(path: Path) -> float | None:
     try:
         result = subprocess.run(
@@ -355,6 +362,7 @@ def _duration(path: Path) -> float | None:
             text=True,
             timeout=60,
             check=False,
+            env=_media_env(),
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise ScreenVideoError("Không đọc được video.") from error
@@ -382,6 +390,7 @@ def _extract_frames(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            env=_media_env(),
         )
     except OSError as error:
         raise ScreenVideoError("Không đọc được video.") from error

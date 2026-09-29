@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -11,6 +12,7 @@ from pathlib import Path
 from control_plane.screen_steps import (
     ReadProgress,
     _ffmpeg_extract_command,
+    _media_env,
     _media_seconds,
     _sample_rate,
     analyze_screen_video,
@@ -106,6 +108,17 @@ class ScreenVideoTests(unittest.TestCase):
         self.assertEqual(ocr_workers(4, 12, reserve=1), 4)
         self.assertEqual(ocr_workers(10, 1, reserve=1), 1)
         self.assertEqual(ocr_workers(100, 16, reserve=0), 16)
+
+    def test_frame_extract_is_not_limited_to_one_thread(self) -> None:
+        previous = os.environ.get("OMP_THREAD_LIMIT")
+        os.environ["OMP_THREAD_LIMIT"] = "1"
+        try:
+            self.assertNotIn("OMP_THREAD_LIMIT", _media_env())
+        finally:
+            if previous is None:
+                os.environ.pop("OMP_THREAD_LIMIT", None)
+            else:
+                os.environ["OMP_THREAD_LIMIT"] = previous
 
     def test_frame_extract_uses_every_core_without_enlarging(self) -> None:
         argv = _ffmpeg_extract_command(Path("clip.mp4"), Path("f-%05d.png"), 8)
