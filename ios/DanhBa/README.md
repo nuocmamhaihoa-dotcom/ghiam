@@ -2,15 +2,15 @@
 
 App nạp liên hệ vào iPhone của bạn và xoá liên hệ bạn chọn. Máy tin nhà phát triển một lần. App hỏi quyền Danh bạ một lần.
 
-## Cài trên iPhone để tự chạy và tự cập nhật
+## Mở trên iPhone
 
-File zip không chạy trên iPhone. App cài từ Safari:
+File zip không chạy trên iPhone. Mở Safari và vào đúng đường này:
 
-1. Mở Safari trên iPhone, vào `/tai` của hub, bấm **Cài Danh bạ trên iPhone**. Đường thẳng là `/danhba/`.
-2. Bấm Chia sẻ, rồi Thêm vào Màn hình chính.
-3. Mở icon **Danh bạ**.
+https://htmlpreview.github.io/?https://github.com/nuocmamhaihoa-dotcom/ghiam/blob/cursor/ios-danh-ba-66a3/control_plane/static/danhba.html
 
-Lần sau phần mềm có bản mới, mở lại icon. iPhone tự lấy phiên bản đó khi có mạng. Không cần App Store, không cần Xcode, không cần cài lại.
+Phần mềm chạy ngay. Không cần tải file, không cần Thêm vào Màn hình chính, không cần App Store, không cần Xcode.
+
+Lần sau phần mềm có bản mới, mở lại đúng đường dẫn đó.
 
 Trong app: tên mặc định `Khach`. Dán số hoặc chọn file, bấm **Nạp lên iPhone**. App chia mỗi 5000 số một nhóm và đưa nhóm đó sang Danh bạ của máy. Một số chỉ nằm trong một nhóm. iPhone hỏi thì bấm **Thêm tất cả**.
 

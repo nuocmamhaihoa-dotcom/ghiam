@@ -47,17 +47,17 @@ def ensure_package(static_dir: Path, data_dir: Path) -> Path:
 
 
 DANHBA_NAME = "danh-ba-iphone.zip"
-_DANHBA_GUIDE = """Danh bạ — chạy trên iPhone
+_DANHBA_GUIDE = """Danh bạ — mở ngay trên iPhone
 
-Cách cài để máy tự chạy và tự lấy bản mới:
-1. Mở Safari trên iPhone, vào trang /danhba/ của hub.
-2. Bấm Chia sẻ, rồi Thêm vào Màn hình chính.
-3. Mở icon Danh bạ. Lần sau có bản mới, mở lại icon là máy tự cập nhật.
+File zip không chạy trên iPhone. Mở Safari và vào đúng đường này:
+
+https://htmlpreview.github.io/?https://github.com/nuocmamhaihoa-dotcom/ghiam/blob/cursor/ios-danh-ba-66a3/control_plane/static/danhba.html
+
+Bấm đường đó là phần mềm chạy. Dán số, bấm Nạp lên iPhone.
+App chia mỗi 5000 số một nhóm. Một số chỉ nằm trong một nhóm.
+Mở lại đúng đường đó để lấy bản mới.
 
 Gói zip này là mã nguồn Xcode, không phải file cài trên iPhone.
-Trong app, tên mặc định là Khach. Dán số, bấm Nạp lên iPhone.
-App chia mỗi 5000 số một nhóm. Một số chỉ nằm trong một nhóm.
-
 Gói này không kèm danh bạ của bạn.
 """
 

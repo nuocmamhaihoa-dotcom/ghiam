@@ -2,5 +2,6 @@
 
 IPHONE_BUILD = 5
 
-# Bản Danh bạ cài trên màn hình chính. Tăng số này mỗi lần đổi tính năng để iPhone tự lấy bản mới.
-DANHBA_BUILD = 1
+# Bản Danh bạ. Tăng số này cùng với số trong control_plane/static/danhba.html
+# (meta danhba-build và window.DANHBA_BUILD) để hub và link Safari khớp nhau.
+DANHBA_BUILD = 2
