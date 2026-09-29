@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 import json
 import os
-import plistlib
 import tempfile
 import unittest
 import zipfile
@@ -425,9 +424,9 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Nạp từ máy tính", page.text)
         self.assertIn('href="/danhba/nap"', page.text)
         self.assertEqual(payload["danhbaPath"], "/danhba/")
-        self.assertEqual(payload["danhbaBuild"], 9)
+        self.assertEqual(payload["danhbaBuild"], 10)
         self.assertEqual(body["danhba"], "/danhba/")
-        self.assertEqual(body["danhbaBuild"], 9)
+        self.assertEqual(body["danhbaBuild"], 10)
 
         install = self.client.get("/danhba", follow_redirects=False)
         self.assertEqual(install.status_code, 302, install.text)
@@ -436,20 +435,10 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(screen.status_code, 200, screen.text)
         self.assertEqual(screen.headers["cache-control"], "no-cache")
         self.assertIn("Nạp lên iPhone", screen.text)
-        self.assertIn('content="9"', screen.text)
-        self.assertIn("shortcuts://run-shortcut?name=NapDanhBa", screen.text)
-        self.assertIn("is.workflow.actions.addnewcontact", screen.text)
-        self.assertIn("is.workflow.actions.getclipboard", screen.text)
-        self.assertIn("is.workflow.actions.repeat.each", screen.text)
-        self.assertIn("ShowWhenRun", screen.text)
-        self.assertIn("WFContactPhoneNumbers", screen.text)
-        start = screen.text.index("var SHORTCUT_XML = ") + len("var SHORTCUT_XML = ")
-        end = screen.text.index(";", start)
-        shortcut = plistlib.loads(json.loads(screen.text[start:end]).encode("utf-8"))
-        self.assertEqual(shortcut["WFWorkflowName"], "NapDanhBa")
-        add_contact = shortcut["WFWorkflowActions"][7]["WFWorkflowActionParameters"]
-        self.assertIs(add_contact["ShowWhenRun"], False)
-        self.assertIn("WFContactPhoneNumbers", add_contact)
+        self.assertIn('content="10"', screen.text)
+        self.assertIn("Bấm Thêm tất cả.", screen.text)
+        self.assertNotIn("shortcuts://", screen.text)
+        self.assertNotIn("NapDanhBa", screen.text)
         self.assertIn("Đối chiếu iPhone", screen.text)
         self.assertIn("/v1/danhba/sync", screen.text)
         self.assertIn("/v1/danhba/xuat", screen.text)
@@ -466,7 +455,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertNotIn("/danhba/app.js", screen.text)
         version = self.client.get("/danhba/version")
         self.assertEqual(version.status_code, 200, version.text)
-        self.assertEqual(version.json()["build"], 9)
+        self.assertEqual(version.json()["build"], 10)
         nap = self.client.get("/danhba/nap")
         self.assertEqual(nap.status_code, 200, nap.text)
         self.assertIn("Nạp lên VPS", nap.text)
@@ -476,7 +465,7 @@ class ActionApiTests(unittest.TestCase):
         worker = self.client.get("/danhba/sw.js")
         self.assertEqual(worker.status_code, 200, worker.text)
         self.assertIn("javascript", worker.headers["content-type"])
-        self.assertIn('var BUILD = "9";', worker.text)
+        self.assertIn('var BUILD = "10";', worker.text)
         self.assertIn('var CACHE = "danhba-" + BUILD;', worker.text)
         self.assertEqual(worker.headers["service-worker-allowed"], "/danhba/")
         manifest = self.client.get("/danhba/manifest.webmanifest")

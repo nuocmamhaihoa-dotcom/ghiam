@@ -350,7 +350,7 @@ def render_vcard(books: list[dict[str, object]]) -> str:
                     f"FN:{name}",
                     f"ORG:{group}",
                     f"TEL;TYPE=CELL:{phone}",
-                    f"NOTE:{group}",
+                    f"NOTE:{group}. {escape_vcard('Bấm nút chia sẻ góc trên. Chọn Danh bạ. Bấm Thêm tất cả.')}",
                     "END:VCARD",
                 ]
             )

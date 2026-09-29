@@ -4,4 +4,4 @@ IPHONE_BUILD = 5
 
 # Bản Danh bạ. Tăng số này cùng với số trong control_plane/static/danhba.html
 # (meta danhba-build và window.DANHBA_BUILD) để hub và link Safari khớp nhau.
-DANHBA_BUILD = 9
+DANHBA_BUILD = 10
