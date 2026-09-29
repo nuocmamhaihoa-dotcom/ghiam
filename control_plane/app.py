@@ -1403,6 +1403,37 @@ class UploadStartBody(BaseModel):
     size: int = Field(ge=1, le=1024 * 1024 * 1024 * 1024)
 
 
+def _upload_frontier(ranges: list[tuple[int, int]]) -> int:
+    if ranges and ranges[0][0] == 0:
+        return ranges[0][1]
+    return 0
+
+
+def _upload_overlaps(ranges: list[tuple[int, int]], start: int, end: int) -> bool:
+    return any(start < stop and end > begin for begin, stop in ranges)
+
+
+def _upload_add(ranges: list[tuple[int, int]], start: int, end: int) -> list[tuple[int, int]]:
+    merged: list[tuple[int, int]] = []
+    for begin, stop in sorted([*ranges, (start, end)]):
+        if not merged or begin > merged[-1][1]:
+            merged.append((begin, stop))
+            continue
+        merged[-1] = (merged[-1][0], max(merged[-1][1], stop))
+    return merged
+
+
+def _close_upload(item: dict[str, Any]) -> None:
+    fd = item.get("fd")
+    if not isinstance(fd, int) or fd < 0:
+        return
+    item["fd"] = -1
+    try:
+        os.close(fd)
+    except OSError:
+        return
+
+
 def _drop_old_uploads() -> None:
     now = time.monotonic()
     stale: list[dict[str, Any]] = []
@@ -1411,6 +1442,7 @@ def _drop_old_uploads() -> None:
             if now - float(item["created"]) > 6 * 3600:
                 stale.append(_uploads.pop(key))
     for item in stale:
+        _close_upload(item)
         Path(item["path"]).unlink(missing_ok=True)
 
 
@@ -1433,7 +1465,9 @@ def start_video_upload(body: UploadStartBody, authorization: str | None = Header
         _uploads[upload_id] = {
             "path": path,
             "size": body.size,
-            "written": 0,
+            "fd": os.open(path, os.O_RDWR),
+            "ranges": [],
+            "spans": set(),
             "created": time.monotonic(),
             "lock": threading.Lock(),
         }
@@ -1463,22 +1497,29 @@ async def write_video_chunk(
     raw = await request.body()
     if len(raw) > _CHUNK_MAX:
         raise HTTPException(413, "chunk is too large")
+    if not raw:
+        raise HTTPException(400, "chunk trống")
     lock = item["lock"]
     with lock:
-        written = int(item["written"])
         size = int(item["size"])
-        if offset != written:
-            return JSONResponse({"ok": False, "offset": written}, status_code=409)
-        if written + len(raw) > size:
+        end = offset + len(raw)
+        if end > size:
             raise HTTPException(400, "chunk vượt quá dung lượng video")
-        path = Path(item["path"])
+        spans: set[tuple[int, int]] = item["spans"]
+        ranges: list[tuple[int, int]] = item["ranges"]
+        if (offset, end) in spans:
+            return JSONResponse({"ok": True, "offset": _upload_frontier(ranges), "end": end})
+        if _upload_overlaps(ranges, offset, end):
+            return JSONResponse({"ok": False, "offset": _upload_frontier(ranges)}, status_code=409)
         try:
-            with path.open("ab") as handle:
-                handle.write(raw)
+            stored = os.pwrite(int(item["fd"]), raw, offset)
         except OSError as error:
             raise HTTPException(507, "Hết chỗ trống trên máy chủ.") from error
-        item["written"] = written + len(raw)
-        return JSONResponse({"ok": True, "offset": int(item["written"])})
+        if stored != len(raw):
+            raise HTTPException(507, "Hết chỗ trống trên máy chủ.")
+        spans.add((offset, end))
+        item["ranges"] = _upload_add(ranges, offset, end)
+        return JSONResponse({"ok": True, "offset": _upload_frontier(item["ranges"]), "end": end})
 
 
 @app.post("/v1/recordings/uploads/{upload_id}/finish")
@@ -1490,9 +1531,11 @@ def finish_video_upload(upload_id: str, authorization: str | None = Header(defau
         raise HTTPException(404, "không thấy lần gửi")
     lock = item["lock"]
     with lock:
-        if int(item["written"]) != int(item["size"]):
-            return JSONResponse({"ok": False, "offset": int(item["written"])}, status_code=409)
+        frontier = _upload_frontier(item["ranges"])
+        if frontier != int(item["size"]):
+            return JSONResponse({"ok": False, "offset": frontier}, status_code=409)
         path = Path(item["path"])
+        _close_upload(item)
         with _uploads_lock:
             _uploads.pop(upload_id, None)
     return _begin_video_job(path)

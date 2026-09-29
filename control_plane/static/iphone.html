@@ -563,7 +563,8 @@
     }
 
     async function postJobChunked(file, onUpload) {
-      const chunkSize = 1024 * 1024;
+      const chunkSize = 4 * 1024 * 1024;
+      const lanes = 4;
       let started = null;
       for (let attempt = 0; attempt < 4 && !started; attempt += 1) {
         try {
@@ -581,39 +582,55 @@
         }
       }
       if (!started || !started.uploadId) return { ok: false, error: "Không gửi được video." };
-      let offset = started.offset || 0;
-      if (onUpload) onUpload(offset, file.size);
-      while (offset < file.size) {
-        const end = Math.min(file.size, offset + chunkSize);
-        const blob = file.slice(offset, end);
-        let advanced = false;
-        for (let attempt = 0; attempt < 6; attempt += 1) {
-          const sent = await sendChunk(
-            "/v1/recordings/uploads/" + started.uploadId + "?offset=" + offset,
-            blob,
-            Object.assign({ "Content-Type": "application/octet-stream" }, authHeaders()),
-            (loaded) => { if (onUpload) onUpload(offset + loaded, file.size); }
-          );
-          if (sent.status === 409) {
-            const data = sent.data || {};
-            if (typeof data.offset === "number" && data.offset > offset && data.offset <= file.size) {
-              offset = data.offset;
-              advanced = true;
-              if (onUpload) onUpload(offset, file.size);
-              break;
-            }
-          }
-          if (sent.status === 507) return { ok: false, error: "Hết chỗ trống trên máy chủ." };
-          if (sent.status >= 200 && sent.status < 300 && typeof sent.data.offset === "number") {
-            offset = sent.data.offset;
-            advanced = true;
-            if (onUpload) onUpload(offset, file.size);
-            break;
-          }
-          await sleep(400 * (attempt + 1));
-        }
-        if (!advanced) return { ok: false, error: "Mất kết nối khi đang gửi video." };
+      const pieces = [];
+      for (let offset = 0; offset < file.size; offset += chunkSize) {
+        pieces.push({ offset: offset, end: Math.min(file.size, offset + chunkSize), done: false, loaded: 0 });
       }
+      const report = () => {
+        let bytes = 0;
+        pieces.forEach((piece) => { bytes += piece.done ? piece.end - piece.offset : piece.loaded; });
+        if (onUpload) onUpload(Math.min(file.size, bytes), file.size);
+      };
+      report();
+      let cursor = 0;
+      let failure = "";
+      const pump = async () => {
+        while (!failure) {
+          const piece = pieces[cursor];
+          cursor += 1;
+          if (!piece) return;
+          let payload = null;
+          try {
+            payload = await file.slice(piece.offset, piece.end).arrayBuffer();
+          } catch (error) {
+            failure = "Không gửi được video.";
+            return;
+          }
+          let landed = false;
+          for (let attempt = 0; attempt < 6 && !landed && !failure; attempt += 1) {
+            const sent = await sendChunk(
+              "/v1/recordings/uploads/" + started.uploadId + "?offset=" + piece.offset,
+              payload,
+              Object.assign({ "Content-Type": "application/octet-stream" }, authHeaders()),
+              (loaded) => { piece.loaded = loaded; report(); }
+            );
+            const data = sent.data || {};
+            const mark = typeof data.end === "number" ? data.end : data.offset;
+            if (sent.status === 507) { failure = "Hết chỗ trống trên máy chủ."; return; }
+            if (sent.status >= 200 && sent.status < 300 && typeof mark === "number" && mark >= piece.end) landed = true;
+            else if (sent.status === 409 && typeof data.offset === "number" && data.offset >= piece.end) landed = true;
+            else await sleep(300 * (attempt + 1));
+          }
+          if (!landed) { failure = failure || "Mất kết nối khi đang gửi video."; return; }
+          piece.done = true;
+          piece.loaded = piece.end - piece.offset;
+          report();
+        }
+      };
+      const workers = [];
+      for (let lane = 0; lane < lanes; lane += 1) workers.push(pump());
+      await Promise.all(workers);
+      if (failure) return { ok: false, error: failure };
       for (let attempt = 0; attempt < 4; attempt += 1) {
         try {
           const response = await fetch("/v1/recordings/uploads/" + started.uploadId + "/finish", {

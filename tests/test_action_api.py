@@ -453,7 +453,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "32")
+        self.assertEqual(build, "33")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -463,7 +463,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 32)
+        self.assertEqual(payload["iphoneBuild"], 33)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -931,6 +931,75 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(video.content, b"0123456789")
         self.client.post(
             f"/v1/recordings/jobs/{big_id}/fail",
+            headers=self.headers,
+            json={"workerId": worker_id, "error": "Không đọc được video."},
+        )
+
+    def test_later_chunk_can_arrive_before_the_first(self) -> None:
+        beat = self.client.post(
+            "/v1/video-workers/heartbeat",
+            headers=self.headers,
+            json={"name": "pc-song", "cpus": 4},
+        )
+        self.assertEqual(beat.status_code, 200, beat.text)
+        worker_id = beat.json()["workerId"]
+        started = self.client.post(
+            "/v1/recordings/uploads",
+            headers=self.headers,
+            json={"name": "lon.mp4", "size": 10},
+        )
+        self.assertEqual(started.status_code, 200, started.text)
+        upload_id = started.json()["uploadId"]
+        later = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}?offset=5",
+            headers=self.headers,
+            content=b"56789",
+        )
+        self.assertEqual(later.status_code, 200, later.text)
+        self.assertEqual(later.json()["end"], 10)
+        self.assertEqual(later.json()["offset"], 0)
+        early = self.client.post(f"/v1/recordings/uploads/{upload_id}/finish", headers=self.headers)
+        self.assertEqual(early.status_code, 409, early.text)
+        self.assertEqual(early.json()["offset"], 0)
+        again = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}?offset=5",
+            headers=self.headers,
+            content=b"56789",
+        )
+        self.assertEqual(again.status_code, 200, again.text)
+        self.assertEqual(again.json()["end"], 10)
+        first = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}?offset=0",
+            headers=self.headers,
+            content=b"01234",
+        )
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(first.json()["offset"], 10)
+        self.assertEqual(first.json()["end"], 5)
+        finished = self.client.post(f"/v1/recordings/uploads/{upload_id}/finish", headers=self.headers)
+        self.assertEqual(finished.status_code, 200, finished.text)
+        job_id = finished.json()["jobId"]
+        claimed_id = ""
+        for _ in range(40):
+            claimed = self.client.post(
+                "/v1/recordings/jobs/claim",
+                headers=self.headers,
+                json={"workerId": worker_id},
+            )
+            claimed_id = claimed.json()["jobId"]
+            if claimed_id:
+                break
+            time.sleep(0.05)
+        self.assertEqual(claimed_id, job_id)
+        video = self.client.get(
+            f"/v1/recordings/jobs/{job_id}/video",
+            headers=self.headers,
+            params={"workerId": worker_id},
+        )
+        self.assertEqual(video.status_code, 200, video.text)
+        self.assertEqual(video.content, b"0123456789")
+        self.client.post(
+            f"/v1/recordings/jobs/{job_id}/fail",
             headers=self.headers,
             json={"workerId": worker_id, "error": "Không đọc được video."},
         )
