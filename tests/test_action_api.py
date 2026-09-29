@@ -26,7 +26,7 @@ from control_plane import db as people_db  # noqa: E402
 from control_plane import video_helpers  # noqa: E402
 from control_plane.app import app  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
-from control_plane.video_jobs import VideoJob  # noqa: E402
+from control_plane.video_jobs import VideoJob, jobs  # noqa: E402
 
 
 class ActionApiTests(unittest.TestCase):
@@ -207,6 +207,9 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn('id="progressFill"', page.text)
         self.assertIn('id="problemList"', page.text)
         self.assertIn("Vấn đề khi xử lý", page.text)
+        self.assertIn('id="continueBtn"', page.text)
+        self.assertIn("Tiếp tục đọc nối", page.text)
+        self.assertIn("/continue", page.text)
         self.assertIn("/v1/recordings/from-frame", page.text)
         self.assertNotIn("Quay màn hình", page.text)
         self.assertIn("Trung tâm điều khiển", page.text)
@@ -349,6 +352,49 @@ class ActionApiTests(unittest.TestCase):
         problems = body.get("problems")
         self.assertIsInstance(problems, list)
         self.assertIn(body["error"], problems)
+        self.assertTrue(body.get("canContinue"))
+        denied_continue = self.client.post(f"/v1/recordings/jobs/{job_id}/continue")
+        self.assertEqual(denied_continue.status_code, 401)
+        continued = self.client.post(f"/v1/recordings/jobs/{job_id}/continue", headers=self.headers)
+        self.assertEqual(continued.status_code, 200, continued.text)
+        again = self._wait_job(job_id)
+        self.assertTrue(again.get("done"))
+        self.assertTrue(again.get("error"))
+        self.assertTrue(again.get("canContinue"))
+        missing_continue = self.client.post("/v1/recordings/jobs/khong-co/continue", headers=self.headers)
+        self.assertEqual(missing_continue.status_code, 404, missing_continue.text)
+
+    def test_continue_keeps_frames_already_read(self) -> None:
+        folder = Path(_TMP)
+        video = folder / "tiep.mp4"
+        video.write_bytes(b"x")
+        job = jobs.create()
+        job.bind(video)
+        job.remember_frame(
+            1.25,
+            ["Tran Tung"],
+            [{"kind": "profile", "name": "Tran Tung", "contactName": "", "username": "@trn.tng751"}],
+        )
+        job.stage_people([{"name": "Tran Tung", "contactName": "A Tung Ban Gach", "username": "@trn.tng751"}])
+        job.update(70, "Đọc chữ, khung 4/8")
+        job.fail("Không xử lý được video.")
+        body = job.public()
+        self.assertTrue(body["canContinue"])
+        self.assertEqual(body["percent"], 70)
+        self.assertTrue(job.reopen())
+        self.assertFalse(job.public()["done"])
+        self.assertEqual(job.public()["task"], "Đọc tiếp")
+        self.assertEqual(job.public()["percent"], 70)
+        self.assertEqual(job.remembered()["1.250"][0], ["Tran Tung"])
+        staged = job.staged_people()
+        self.assertIsNotNone(staged)
+        assert staged is not None
+        self.assertEqual(staged[0]["username"], "@trn.tng751")
+        self.assertFalse(job.reopen())
+        job.finish([], 0, [])
+        blocked = self.client.post(f"/v1/recordings/jobs/{job.id}/continue", headers=self.headers)
+        self.assertEqual(blocked.status_code, 409, blocked.text)
+        job.discard()
 
     def test_upload_size_is_open_unless_a_cap_is_set(self) -> None:
         previous = settings.max_upload_mb
@@ -380,7 +426,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "28")
+        self.assertEqual(build, "29")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -390,7 +436,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 28)
+        self.assertEqual(payload["iphoneBuild"], 29)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]

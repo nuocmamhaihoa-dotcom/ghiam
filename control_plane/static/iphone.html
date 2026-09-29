@@ -36,13 +36,18 @@
     #playback { width: 100%; border-radius: 12px; background: #000; margin-bottom: 0.8rem; }
     #playback[hidden] { display: none !important; }
     #progressBox { margin: 0 0 0.8rem; }
-    #progressBox[hidden], #problemLead[hidden], #problemList[hidden] { display: none !important; }
+    #progressBox[hidden], #problemLead[hidden], #problemList[hidden], #continueBtn[hidden] { display: none !important; }
     #progressTrack { height: 14px; border-radius: 8px; background: #eee; overflow: hidden; border: 1px solid #ddd; }
     #progressFill { height: 100%; width: 0%; background: #111; transition: width 0.2s linear; }
     #progressLabel { margin: 0.4rem 0 0; font-weight: 700; line-height: 1.35; font-size: 16px; word-break: break-word; }
     #helperLine { margin: 0 0 0.8rem; line-height: 1.4; font-size: 16px; color: #333; }
     #problemLead { margin: 0.6rem 0 0.25rem; color: #b42318; font-weight: 800; }
     #problemList { margin: 0; padding-left: 1.15rem; color: #b42318; font-size: 15px; overflow-wrap: anywhere; }
+    #continueBtn {
+      display: block; width: 100%; margin: 0.7rem 0 0; min-height: 48px;
+      border-radius: 12px; border: 2px solid #111; background: #111; color: #fff;
+      font: inherit; font-weight: 800; font-size: 16px;
+    }
     #peopleBox, #savedBox, #dupBox { margin-top: 0.4rem; }
     #peopleBox[hidden] { display: none !important; }
     #dupBox { margin-top: 1.1rem; }
@@ -89,6 +94,7 @@
       <p id="progressLabel"></p>
       <p id="problemLead" hidden>Vấn đề khi xử lý</p>
       <ul id="problemList" hidden></ul>
+      <button id="continueBtn" type="button" hidden>Tiếp tục đọc nối</button>
     </section>
     <section id="savedBox">
       <p id="savedLead">Kết quả đã lưu. Kho chứa được 50 triệu kết quả. Hub tự ghi ngay sau mỗi video. Mở lại trang vẫn còn.</p>
@@ -171,6 +177,7 @@
     const progressLabel = document.getElementById("progressLabel");
     const problemLead = document.getElementById("problemLead");
     const problemList = document.getElementById("problemList");
+    const continueBtn = document.getElementById("continueBtn");
     const SAMPLE_MS = 4000;
     const MAX_MS = 600000;
     let busy = false;
@@ -193,6 +200,7 @@
     let carried = [];
     let shownOverall = 0;
     let batchJobs = [];
+    let resumeSlots = [];
 
     function authHeaders() {
       const headers = {};
@@ -526,6 +534,7 @@
       job.percent = Math.max(job.percent || 0, data.percent || 0);
       job.task = data.task || job.task;
       job.problems = data.problems || [];
+      job.canContinue = !!data.canContinue;
       if (!data.done) return;
       job.done = true;
       if (data.error) {
@@ -594,6 +603,8 @@
       renderProblems([]);
       shownOverall = 0;
       batchJobs = [];
+      resumeSlots = [];
+      continueBtn.hidden = true;
       hidePlayback();
       hidePeople();
       await uploadRest();
@@ -625,15 +636,23 @@
       await loadSaved();
       await loadDuplicates();
       if (fresh.length) showPeople(fresh);
+      resumeSlots = batchJobs.filter((job) => job.jobId && job.ok === false && job.canContinue);
+      continueBtn.hidden = resumeSlots.length === 0;
       if (batchTotal) {
-        shownOverall = 100;
-        const task = failed ? "Gặp vấn đề" : "Đã ghi xong";
-        progressFill.style.width = "100%";
-        progressLabel.textContent = "100% — Video " + batchTotal + "/" + batchTotal + " — " + task;
         progressBox.hidden = false;
+        if (resumeSlots.length) {
+          paintBatch();
+          progressLabel.textContent = shownOverall + "% — Gặp vấn đề. Bấm Tiếp tục để đọc nối.";
+        } else {
+          shownOverall = 100;
+          const task = failed ? "Gặp vấn đề" : "Đã ghi xong";
+          progressFill.style.width = "100%";
+          progressLabel.textContent = "100% — Video " + batchTotal + "/" + batchTotal + " — " + task;
+        }
       }
       if (failed && added) setStatus("Đã lưu " + added + " người. " + failed + " video chưa đọc được.", false);
       else if (failed && duplicated) setStatus(duplicated + " người trùng dữ liệu đã có. " + failed + " video chưa đọc được.", false);
+      else if (failed && resumeSlots.length) setStatus(failed + " video chưa đọc được. Bấm Tiếp tục để đọc nối.", false);
       else if (failed) setStatus(failed + " video chưa đọc được. Kết quả đã lưu vẫn còn.", false);
       else if (added && duplicated) setStatus("Đã lưu " + added + " người. " + duplicated + " người trùng dữ liệu đã có.", false);
       else if (added) setStatus("Đã lưu " + added + " người vào mục kết quả.", false);
@@ -641,14 +660,128 @@
       else if (found) setStatus("Cột đã có sẵn được giữ nguyên.", false);
       else setStatus("Không thấy người đủ ba cột.", false);
       const leftover = queue.splice(0, queue.length);
-      batchTotal = 0;
+      if (!resumeSlots.length) {
+        batchTotal = 0;
+        shownOverall = 0;
+      }
       batchJobs = [];
-      shownOverall = 0;
       pumping = false;
       busy = false;
       pick.classList.remove("busy");
       recordBtn.disabled = recording;
       if (leftover.length) enqueue(leftover);
+    }
+
+    async function resumeFailed() {
+      if (pumping || !resumeSlots.length) return;
+      pumping = true;
+      busy = true;
+      continueBtn.hidden = true;
+      pick.classList.add("busy");
+      recordBtn.disabled = true;
+      const slots = resumeSlots;
+      batchJobs = slots;
+      batchTotal = slots.length;
+      for (let index = 0; index < slots.length; index += 1) {
+        const slot = slots[index];
+        let response;
+        try {
+          response = await fetch("/v1/recordings/jobs/" + slot.jobId + "/continue", {
+            method: "POST",
+            headers: authHeaders(),
+          });
+        } catch (error) {
+          slot.done = true;
+          slot.ok = false;
+          slot.canContinue = false;
+          slot.error = "Mất kết nối khi đang xử lý.";
+          continue;
+        }
+        if (response.status === 404) {
+          slot.done = true;
+          slot.ok = false;
+          slot.canContinue = false;
+          slot.error = "Mất tiến trình xử lý.";
+          continue;
+        }
+        if (!response.ok) {
+          slot.done = true;
+          slot.ok = false;
+          slot.error = "Chưa đọc tiếp được.";
+          continue;
+        }
+        const data = await response.json();
+        slot.done = !!data.done;
+        slot.ok = !data.error;
+        slot.percent = Math.max(slot.percent || 0, data.percent || 0);
+        slot.task = data.task || "Đọc tiếp";
+        slot.problems = data.problems || slot.problems || [];
+        slot.canContinue = !!data.canContinue;
+        slot.error = data.error || "";
+        slot.misses = 0;
+        if (data.done && !data.error) {
+          slot.people = data.people || [];
+          slot.savedPeople = data.savedPeople || 0;
+          slot.duplicates = data.duplicates || [];
+        }
+      }
+      paintBatch();
+      setStatus("Đang đọc tiếp. Không đọc lại phần đã xong.", false);
+      while (batchJobs.some((job) => !job.done)) {
+        const pending = batchJobs.filter((job) => job.jobId && !job.done);
+        await Promise.all(pending.map((job) => pollOnce(job)));
+        paintBatch();
+        await sleep(400);
+      }
+      let failed = 0;
+      let added = 0;
+      let found = 0;
+      let duplicated = 0;
+      const fresh = [];
+      batchJobs.forEach((job) => {
+        rememberProblems(job.problems);
+        if (!job.ok) {
+          failed += 1;
+          rememberProblems(job.error ? [job.error] : []);
+          return;
+        }
+        added += job.savedPeople || 0;
+        found += (job.people || []).length;
+        duplicated += (job.duplicates || []).length;
+        (job.people || []).forEach((row) => fresh.push(row));
+      });
+      await loadSaved();
+      await loadDuplicates();
+      if (fresh.length) showPeople(fresh);
+      resumeSlots = batchJobs.filter((job) => job.jobId && job.ok === false && job.canContinue);
+      continueBtn.hidden = resumeSlots.length === 0;
+      if (batchTotal) {
+        progressBox.hidden = false;
+        if (resumeSlots.length) {
+          paintBatch();
+          progressLabel.textContent = shownOverall + "% — Gặp vấn đề. Bấm Tiếp tục để đọc nối.";
+        } else {
+          shownOverall = 100;
+          progressFill.style.width = "100%";
+          progressLabel.textContent = "100% — Video " + batchTotal + "/" + batchTotal + " — Đã ghi xong";
+        }
+      }
+      if (failed && resumeSlots.length) setStatus(failed + " video chưa đọc được. Bấm Tiếp tục để đọc nối.", false);
+      else if (failed) setStatus(failed + " video chưa đọc được. Kết quả đã lưu vẫn còn.", false);
+      else if (added && duplicated) setStatus("Đã lưu " + added + " người. " + duplicated + " người trùng dữ liệu đã có.", false);
+      else if (added) setStatus("Đã lưu " + added + " người vào mục kết quả.", false);
+      else if (duplicated) setStatus(duplicated + " người trùng dữ liệu đã có.", false);
+      else if (found) setStatus("Cột đã có sẵn được giữ nguyên.", false);
+      else setStatus("Không thấy người đủ ba cột.", false);
+      if (!resumeSlots.length) {
+        batchTotal = 0;
+        shownOverall = 0;
+      }
+      batchJobs = [];
+      pumping = false;
+      busy = false;
+      pick.classList.remove("busy");
+      recordBtn.disabled = recording;
     }
 
     function stopTracks() {
@@ -809,6 +942,10 @@
       firstSample = window.setTimeout(sampleFrame, 1200);
       stopTimer = window.setTimeout(stopRecording, MAX_MS);
     }
+
+    continueBtn.addEventListener("click", () => {
+      resumeFailed();
+    });
 
     recordBtn.addEventListener("click", () => {
       if (recording) stopRecording();

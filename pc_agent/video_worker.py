@@ -67,10 +67,24 @@ class HubClient:
         found = body.get("workerId")
         return found if isinstance(found, str) and found else worker_id
 
-    def claim(self, worker_id: str) -> str:
+    def claim(self, worker_id: str) -> tuple[str, dict[str, object]]:
         body = self._request("POST", "/v1/recordings/jobs/claim", {"workerId": worker_id}, timeout=30)
         found = body.get("jobId")
-        return found if isinstance(found, str) else ""
+        job_id = found if isinstance(found, str) else ""
+        resume = body.get("resume")
+        return job_id, resume if isinstance(resume, dict) else {}
+
+    def checkpoint(
+        self,
+        job_id: str,
+        worker_id: str,
+        frames: list[dict[str, object]],
+        people: list[dict[str, str]] | None = None,
+    ) -> None:
+        payload: dict[str, object] = {"workerId": worker_id, "frames": frames}
+        if people is not None:
+            payload["people"] = people
+        self._request("POST", f"/v1/recordings/jobs/{job_id}/checkpoint", payload, timeout=30)
 
     def download(self, job_id: str, worker_id: str, dest: Path) -> None:
         request = urllib.request.Request(
@@ -114,7 +128,7 @@ class HubClient:
 class RemoteProgress(ReadProgress):
     """Gửi phần trăm ở luồng riêng để lần đọc chữ không chờ mạng."""
 
-    def __init__(self, client: HubClient, job_id: str, worker_id: str) -> None:
+    def __init__(self, client: HubClient, job_id: str, worker_id: str, resume: dict[str, object] | None = None) -> None:
         self._client = client
         self._job_id = job_id
         self._worker_id = worker_id
@@ -122,6 +136,27 @@ class RemoteProgress(ReadProgress):
         self._percent = 8
         self._task = "PC phụ đang đọc"
         self._problems: list[str] = []
+        self._known: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
+        self._pending: list[dict[str, object]] = []
+        self._staged: list[dict[str, str]] | None = None
+        saved = resume or {}
+        frames = saved.get("frames")
+        if isinstance(frames, list):
+            for frame in frames:
+                if not isinstance(frame, dict):
+                    continue
+                raw_t = frame.get("t")
+                if isinstance(raw_t, bool) or not isinstance(raw_t, (int, float)):
+                    continue
+                captions = frame.get("captions") if isinstance(frame.get("captions"), list) else []
+                sightings = frame.get("sightings") if isinstance(frame.get("sightings"), list) else []
+                self._known[f"{float(raw_t):.3f}"] = (
+                    [str(item) for item in captions],
+                    [item for item in sightings if isinstance(item, dict)],
+                )
+        people = saved.get("people")
+        if isinstance(people, list):
+            self._staged = [item for item in people if isinstance(item, dict)]
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
@@ -139,19 +174,53 @@ class RemoteProgress(ReadProgress):
             if cleaned not in self._problems:
                 self._problems.append(cleaned)
 
-    def _snapshot(self) -> tuple[int, str, list[str]]:
+    def remembered(self) -> dict[str, tuple[list[str], list[dict[str, str]]]]:
+        with self._lock:
+            return {key: (list(captions), [dict(item) for item in sightings]) for key, (captions, sightings) in self._known.items()}
+
+    def remember_frame(self, seconds: float, captions: list[str], sightings: list[dict[str, str]]) -> None:
+        key = f"{float(seconds):.3f}"
+        with self._lock:
+            self._known[key] = (list(captions), [dict(item) for item in sightings])
+            self._pending.append({"t": float(seconds), "captions": list(captions), "sightings": [dict(item) for item in sightings]})
+
+    def staged_people(self) -> list[dict[str, str]] | None:
+        with self._lock:
+            if self._staged is None:
+                return None
+            return [dict(row) for row in self._staged]
+
+    def stage_people(self, people: list[dict[str, str]]) -> None:
+        with self._lock:
+            self._staged = [dict(row) for row in people]
+            pending = self._pending
+            self._pending = []
+        try:
+            self._client.checkpoint(self._job_id, self._worker_id, pending, people)
+        except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            with self._lock:
+                self._pending = pending + self._pending
+
+    def _snapshot(self) -> tuple[int, str, list[str], list[dict[str, object]]]:
         with self._lock:
             problems = list(self._problems)
             self._problems.clear()
-            return self._percent, self._task, problems
+            frames = self._pending
+            self._pending = []
+            return self._percent, self._task, problems, frames
 
     def _send(self) -> None:
-        percent, task, problems = self._snapshot()
+        percent, task, problems, frames = self._snapshot()
         try:
+            if frames:
+                self._client.checkpoint(self._job_id, self._worker_id, frames)
             self._client.progress(self._job_id, self._worker_id, percent, task, problems)
         except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
             for item in problems:
                 self.problem(item)
+            if frames:
+                with self._lock:
+                    self._pending = frames + self._pending
 
     def _loop(self) -> None:
         while not self._stop.wait(0.4):
@@ -163,12 +232,16 @@ class RemoteProgress(ReadProgress):
         self._thread.join(timeout=2)
 
 
-def _read_one(client: HubClient, worker_id: str, job_id: str) -> None:
+def _read_one(client: HubClient, worker_id: str, job_id: str, resume: dict[str, object] | None = None) -> None:
+    ready = (resume or {}).get("people")
+    if isinstance(ready, list):
+        client.complete(job_id, worker_id, [row for row in ready if isinstance(row, dict)])
+        return
     with tempfile.TemporaryDirectory(prefix="fb-pc-") as folder:
         dest = Path(folder) / "clip.mp4"
         client.progress(job_id, worker_id, 8, "PC phụ đang tải video", [])
         client.download(job_id, worker_id, dest)
-        sink = RemoteProgress(client, job_id, worker_id)
+        sink = RemoteProgress(client, job_id, worker_id, resume)
         try:
             _steps, people = analyze_screen_video(dest, sink)
         except ScreenVideoError as error:
@@ -231,12 +304,12 @@ def main() -> None:
     threading.Thread(target=beat, daemon=True).start()
     while True:
         try:
-            job_id = client.claim(state["worker_id"])
+            job_id, resume = client.claim(state["worker_id"])
             if not job_id:
                 time.sleep(0.4)
                 continue
             print(f"Nhận video {job_id}.", flush=True)
-            _read_one(client, state["worker_id"], job_id)
+            _read_one(client, state["worker_id"], job_id, resume)
             print(f"Xong video {job_id}.", flush=True)
         except KeyboardInterrupt:
             state["stop"].set()

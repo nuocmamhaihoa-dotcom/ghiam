@@ -44,7 +44,14 @@ from control_plane.people import (
 )
 from control_plane.version import IPHONE_BUILD
 from control_plane import video_helpers
-from control_plane.screen_steps import ScreenVideoError, analyze_screen_video, clean_ocr, read_screen_image, seen_line
+from control_plane.screen_steps import (
+    ScreenVideoError,
+    analyze_screen_video,
+    clean_ocr,
+    discard_video_work,
+    read_screen_image,
+    seen_line,
+)
 from control_plane.settings import settings
 from control_plane.video_jobs import JobProgress, VideoJob, jobs
 
@@ -922,7 +929,7 @@ async def recordings_from_video(
     except ScreenVideoError as error:
         raise HTTPException(400, str(error)) from error
     finally:
-        dest.unlink(missing_ok=True)
+        discard_video_work(dest)
     if not save:
         return {
             "ok": True,
@@ -982,7 +989,7 @@ def _run_video_job(job_id: str, path: Path) -> None:
     """Đọc video ở luồng riêng để trang hỏi được phần trăm."""
     job = jobs.get(job_id)
     if job is None:
-        path.unlink(missing_ok=True)
+        discard_video_work(path)
         return
     try:
         if job.done:
@@ -999,19 +1006,21 @@ def _run_video_job(job_id: str, path: Path) -> None:
     except Exception:
         job.fail("Không xử lý được video.")
     finally:
-        path.unlink(missing_ok=True)
+        if job.succeeded():
+            job.discard()
 
 
 def _watch_helper_job(job_id: str, path: Path) -> None:
     """PC đang giữ video. Hết hạn giữ thì hub đọc tiếp."""
     job = jobs.get(job_id)
     if job is None:
-        path.unlink(missing_ok=True)
+        discard_video_work(path)
         return
     while True:
         if job.done:
             video_helpers.helpers.mark_idle(job.owner_id())
-            path.unlink(missing_ok=True)
+            if job.succeeded():
+                job.discard()
             return
         owner = job.owner_id()
         if not owner:
@@ -1032,7 +1041,7 @@ def _schedule_video_job(job_id: str, path: Path) -> None:
     """Có PC rảnh thì chờ PC nhận. Không có thì hub đọc ngay."""
     job = jobs.get(job_id)
     if job is None:
-        path.unlink(missing_ok=True)
+        discard_video_work(path)
         return
     if video_helpers.helpers.has_idle() and not job.owner_id():
         job.update(4, "Chờ PC phụ nhận video")
@@ -1041,7 +1050,8 @@ def _schedule_video_job(job_id: str, path: Path) -> None:
             time.sleep(0.1)
     if job.done:
         video_helpers.helpers.mark_idle(job.owner_id())
-        path.unlink(missing_ok=True)
+        if job.succeeded():
+            job.discard()
         return
     owner = job.owner_id()
     if owner and owner != "hub":
@@ -1121,7 +1131,7 @@ def claim_video_job(body: WorkerJobBody, authorization: str | None = Header(defa
     if job is None:
         return {"ok": True, "jobId": ""}
     video_helpers.helpers.mark_busy(body.workerId)
-    return {"ok": True, "jobId": job.id}
+    return {"ok": True, "jobId": job.id, "resume": job.resume_public()}
 
 
 @app.get("/v1/recordings/jobs/{job_id}/video")
@@ -1182,13 +1192,62 @@ def video_job_complete(
     return job.public()
 
 
+class WorkerCheckpointBody(BaseModel):
+    workerId: str
+    frames: list[dict[str, Any]] = Field(default_factory=list)
+    people: list[dict[str, str]] | None = None
+
+
+@app.post("/v1/recordings/jobs/{job_id}/checkpoint")
+def video_job_checkpoint(
+    job_id: str,
+    body: WorkerCheckpointBody,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """PC gửi khung đã đọc để lần bấm Tiếp tục không đọc lại."""
+    _auth(authorization)
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, "không thấy tiến trình")
+    if not job.note_worker(body.workerId):
+        raise HTTPException(409, "PC phụ không giữ video này")
+    for frame in body.frames[:80]:
+        raw_t = frame.get("t")
+        if isinstance(raw_t, bool) or not isinstance(raw_t, (int, float)):
+            continue
+        captions = frame.get("captions")
+        sightings = frame.get("sightings")
+        job.remember_frame(
+            float(raw_t),
+            list(captions) if isinstance(captions, list) else [],
+            list(sightings) if isinstance(sightings, list) else [],
+        )
+    if body.people is not None:
+        job.stage_people(body.people)
+    return {"ok": True}
+
+
+@app.post("/v1/recordings/jobs/{job_id}/continue")
+def continue_video_job(job_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Đọc nối video đã lỗi. Khung và người đã xong được giữ."""
+    _auth(authorization)
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, "không thấy tiến trình")
+    path = job.source_path()
+    if path is None or not job.reopen():
+        raise HTTPException(409, "Video này không đọc tiếp được.")
+    threading.Thread(target=_schedule_video_job, args=(job.id, path), daemon=True).start()
+    return job.public()
+
+
 @app.post("/v1/recordings/jobs/{job_id}/fail")
 def video_job_fail(
     job_id: str,
     body: WorkerFailBody,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    """Video hỏng thì dừng. Hub không đọc lại cùng file."""
+    """Video hỏng thì dừng. Hub không tự đọc lại. Trang bấm Tiếp tục thì đọc nối."""
     _auth(authorization)
     job = jobs.get(job_id)
     if job is None:

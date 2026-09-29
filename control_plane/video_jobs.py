@@ -8,7 +8,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from control_plane.screen_steps import ReadProgress
+from control_plane.screen_steps import ReadProgress, discard_video_work
+
+_FRAME_LIMIT = 1000
+_PEOPLE_LIMIT = 20_000
 
 
 class VideoJob:
@@ -27,11 +30,96 @@ class VideoJob:
         self.path: Path | None = None
         self.owner = ""
         self.lease = 0.0
+        self._frames: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
+        self._staged: list[dict[str, str]] | None = None
         self._lock = threading.Lock()
 
     def bind(self, path: Path) -> None:
         with self._lock:
             self.path = path
+
+    def source_path(self) -> Path | None:
+        with self._lock:
+            return self.path
+
+    def succeeded(self) -> bool:
+        with self._lock:
+            return self.done and not self.error
+
+    def discard(self) -> None:
+        with self._lock:
+            path = self.path
+            self.path = None
+        if path is not None:
+            discard_video_work(path)
+
+    def remember_frame(self, seconds: float, captions: list[str], sightings: list[dict[str, str]]) -> None:
+        key = f"{float(seconds):.3f}"
+        kept_captions = [" ".join(str(item).split())[:180] for item in captions[:20] if str(item).strip()]
+        kept_sightings: list[dict[str, str]] = []
+        for item in sightings[:30]:
+            if not isinstance(item, dict):
+                continue
+            kept_sightings.append(
+                {
+                    "kind": " ".join(str(item.get("kind") or "").split())[:40],
+                    "name": " ".join(str(item.get("name") or "").split())[:80],
+                    "contactName": " ".join(str(item.get("contactName") or "").split())[:80],
+                    "username": " ".join(str(item.get("username") or "").split())[:40],
+                }
+            )
+        with self._lock:
+            if key not in self._frames and len(self._frames) >= _FRAME_LIMIT:
+                return
+            self._frames[key] = (kept_captions, kept_sightings)
+
+    def remembered(self) -> dict[str, tuple[list[str], list[dict[str, str]]]]:
+        with self._lock:
+            return {key: (list(captions), [dict(item) for item in sightings]) for key, (captions, sightings) in self._frames.items()}
+
+    def stage_people(self, people: list[dict[str, str]]) -> None:
+        cleaned: list[dict[str, str]] = []
+        for row in people[:_PEOPLE_LIMIT]:
+            if not isinstance(row, dict):
+                continue
+            cleaned.append(
+                {
+                    "name": " ".join(str(row.get("name") or "").split())[:80],
+                    "contactName": " ".join(str(row.get("contactName") or "").split())[:80],
+                    "username": " ".join(str(row.get("username") or "").split())[:40],
+                }
+            )
+        with self._lock:
+            self._staged = cleaned
+
+    def staged_people(self) -> list[dict[str, str]] | None:
+        with self._lock:
+            if self._staged is None:
+                return None
+            return [dict(row) for row in self._staged]
+
+    def resume_public(self) -> dict[str, Any]:
+        with self._lock:
+            frames = [
+                {"t": float(key), "captions": list(captions), "sightings": [dict(item) for item in sightings]}
+                for key, (captions, sightings) in self._frames.items()
+            ]
+            body: dict[str, Any] = {"frames": frames}
+            if self._staged is not None:
+                body["people"] = [dict(row) for row in self._staged]
+            return body
+
+    def reopen(self) -> bool:
+        """Lỗi xong mà file còn thì đọc nối. Phần đã đọc được giữ."""
+        with self._lock:
+            if not self.done or not self.error or self.path is None or not self.path.is_file():
+                return False
+            self.done = False
+            self.error = ""
+            self.owner = ""
+            self.lease = 0.0
+            self.task = "Đọc tiếp"
+            return True
 
     def owner_id(self) -> str:
         with self._lock:
@@ -188,7 +276,10 @@ class VideoJob:
                 body["archive"] = list(self.archive)
                 body["archiveCount"] = self.archive_count
                 body["duplicates"] = list(self.duplicates)
-            return body
+            path = self.path
+            failed = self.done and bool(self.error)
+        body["canContinue"] = failed and path is not None and path.is_file()
+        return body
 
 
 class JobStore:
@@ -198,11 +289,16 @@ class JobStore:
 
     def create(self) -> VideoJob:
         job = VideoJob(uuid.uuid4().hex)
+        dropped: list[VideoJob] = []
         with self._lock:
             done_ids = [key for key, item in self._jobs.items() if item.done]
             while len(self._jobs) >= 40 and done_ids:
-                self._jobs.pop(done_ids.pop(), None)
+                old = self._jobs.pop(done_ids.pop(), None)
+                if old is not None:
+                    dropped.append(old)
             self._jobs[job.id] = job
+        for old in dropped:
+            old.discard()
         return job
 
     def get(self, job_id: str) -> VideoJob | None:
@@ -229,3 +325,15 @@ class JobProgress(ReadProgress):
 
     def problem(self, text: str) -> None:
         self._job.add_problem(text)
+
+    def remembered(self) -> dict[str, tuple[list[str], list[dict[str, str]]]]:
+        return self._job.remembered()
+
+    def remember_frame(self, seconds: float, captions: list[str], sightings: list[dict[str, str]]) -> None:
+        self._job.remember_frame(seconds, captions, sightings)
+
+    def staged_people(self) -> list[dict[str, str]] | None:
+        return self._job.staged_people()
+
+    def stage_people(self, people: list[dict[str, str]]) -> None:
+        self._job.stage_people(people)

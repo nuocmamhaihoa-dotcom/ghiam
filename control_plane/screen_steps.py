@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 import queue
 import re
+import shutil
 import subprocess
-import tempfile
 import threading
 import time
 import unicodedata
@@ -59,6 +59,20 @@ class ReadProgress:
 
     def problem(self, text: str) -> None:
         del text
+
+    def remembered(self) -> dict[str, tuple[list[str], list[dict[str, str]]]]:
+        """Khung đã đọc, khóa là giây làm tròn 3 số. Đọc tiếp thì bỏ qua các khóa này."""
+        return {}
+
+    def remember_frame(self, seconds: float, captions: list[str], sightings: list[dict[str, str]]) -> None:
+        del seconds, captions, sightings
+
+    def staged_people(self) -> list[dict[str, str]] | None:
+        """Người đã ghép xong. Có danh sách thì lần tiếp chỉ ghi lại, không đọc video."""
+        return None
+
+    def stage_people(self, people: list[dict[str, str]]) -> None:
+        del people
 
 
 def ocr_workers(frame_count: int, cpu_count: int, reserve: int | None = None) -> int:
@@ -301,26 +315,74 @@ def visible_steps(frames: list[tuple[float, list[str]]]) -> list[dict[str, Any]]
     return steps
 
 
+def _frame_key(seconds: float) -> str:
+    return f"{float(seconds):.3f}"
+
+
+def _work_dir(path: Path) -> Path:
+    return path.with_name(path.name + "-frames")
+
+
+def discard_video_work(path: Path) -> None:
+    """Xóa video và khung đã tách sau khi ghi xong, hoặc khi bỏ tiến trình."""
+    work = _work_dir(path)
+    if work.is_dir():
+        shutil.rmtree(work, ignore_errors=True)
+    path.unlink(missing_ok=True)
+
+
+def _saved_frames(work: Path, rate: float) -> list[tuple[float, Path]] | None:
+    """Khung đã tách ở lần trước. Khác tốc độ mẫu thì tách lại."""
+    marker = work / "extract.done"
+    if not marker.is_file():
+        return None
+    try:
+        saved_rate = float(marker.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+    if abs(saved_rate - rate) > 0.0001:
+        return None
+    images = sorted(image for image in work.glob("f-*.png") if len(image.stem) > 2 and image.stem[2:].isdigit())
+    if not images:
+        return None
+    return [(index / saved_rate, image) for index, image in enumerate(images)]
+
+
 def analyze_screen_video(
     path: Path,
     progress: ReadProgress | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     """Đọc chữ nhìn thấy và đề xuất người đủ ba cột. Chưa ghi vào bảng."""
     sink = progress if progress is not None else ReadProgress()
+    staged = sink.staged_people()
+    if staged is not None:
+        sink.report(94, "Ghép tên")
+        return [], list(staged)
     sink.report(8, "Đọc thời lượng")
     duration = _duration(path)
     rate = _sample_rate(duration)
-    with tempfile.TemporaryDirectory(prefix="fb-screen-") as folder:
-        work = Path(folder)
+    work = _work_dir(path)
+    work.mkdir(parents=True, exist_ok=True)
+    images = _saved_frames(work, rate)
+    if images is None:
+        for old in work.glob("f-*.png"):
+            old.unlink(missing_ok=True)
+        marker = work / "extract.done"
+        marker.unlink(missing_ok=True)
         images = _extract_frames(path, work, rate, duration, sink)
         if not images:
             raise ScreenVideoError("Video không có hình.")
-        chosen = _changed_frames(images, sink)
-        readings = _read_frames(chosen, sink)
+        marker.write_text(f"{rate:.6f}", encoding="utf-8")
+    else:
+        sink.report(40, "Tách khung hình")
+    chosen = _changed_frames(images, sink)
+    readings = _read_frames(chosen, sink)
     sink.report(94, "Ghép tên")
     frames = [(seconds, lines) for seconds, lines, _sightings in readings]
     sightings = [item for _seconds, _lines, found in readings for item in found]
-    return visible_steps(frames), propose_rows(sightings)
+    rows = propose_rows(sightings)
+    sink.stage_people(rows)
+    return visible_steps(frames), rows
 
 
 def read_screen_video(path: Path) -> list[dict[str, Any]]:
@@ -564,29 +626,49 @@ def _read_frames(
         progress.report(92, "Đọc chữ")
         return []
     total = len(chosen)
-    workers = 1 if prefers_single_worker() else ocr_workers(total, os.cpu_count() or 1)
+    known = progress.remembered()
     results: list[tuple[float, list[str], list[dict[str, str]]] | None] = [None] * total
     blank = 0
     failed = 0
     done_count = 0
-    progress.report(48, "Đọc chữ")
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(_read_one, item): index for index, item in enumerate(chosen)}
-        for future in as_completed(futures):
-            index = futures[future]
-            done_count += 1
-            try:
-                reading = future.result()
-            except Exception:
-                failed += 1
-                results[index] = (chosen[index][0], [], [])
-            else:
-                _seconds, captions, sightings = reading
-                if not captions and not sightings:
-                    blank += 1
-                results[index] = reading
-            percent = 48 + int((done_count / total) * 44)
-            progress.report(min(92, percent), f"Đọc chữ, khung {done_count}/{total}")
+    for index, (seconds, _image) in enumerate(chosen):
+        saved = known.get(_frame_key(seconds))
+        if saved is None:
+            continue
+        captions, sightings = saved
+        if not captions and not sightings:
+            blank += 1
+        results[index] = (seconds, list(captions), [dict(item) for item in sightings])
+        done_count += 1
+    pending = [index for index, item in enumerate(results) if item is None]
+    if done_count:
+        progress.report(
+            min(92, 48 + int((done_count / total) * 44)),
+            f"Đọc tiếp, khung {done_count}/{total}",
+        )
+    else:
+        progress.report(48, "Đọc chữ")
+    if pending:
+        workers = 1 if prefers_single_worker() else ocr_workers(len(pending), os.cpu_count() or 1)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(_read_one, chosen[index]): index for index in pending}
+            for future in as_completed(futures):
+                index = futures[future]
+                done_count += 1
+                try:
+                    reading = future.result()
+                except Exception:
+                    failed += 1
+                    results[index] = (chosen[index][0], [], [])
+                else:
+                    seconds, captions, sightings = reading
+                    if not captions and not sightings:
+                        blank += 1
+                    results[index] = reading
+                    progress.remember_frame(seconds, captions, sightings)
+                percent = 48 + int((done_count / total) * 44)
+                label = "Đọc tiếp" if known else "Đọc chữ"
+                progress.report(min(92, percent), f"{label}, khung {done_count}/{total}")
     if failed:
         progress.problem(f"{failed} khung không đọc được.")
     if blank == total:

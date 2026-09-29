@@ -14,7 +14,9 @@ from control_plane.screen_steps import (
     _ffmpeg_extract_command,
     _media_env,
     _media_seconds,
+    _read_frames,
     _sample_rate,
+    _saved_frames,
     analyze_screen_video,
     clean_ocr,
     ocr_workers,
@@ -173,3 +175,49 @@ class ScreenVideoTests(unittest.TestCase):
         self.assertEqual(percents, sorted(percents))
         self.assertGreaterEqual(percents[-1], 90)
         self.assertTrue(capture.problems)
+
+    def test_a_saved_frame_is_not_read_again(self) -> None:
+        class Memory(ReadProgress):
+            def __init__(self) -> None:
+                self.frames = {
+                    "0.125": (["Tran Tung"], [{"kind": "profile", "name": "Tran Tung", "contactName": "", "username": "@trn.tng751"}])
+                }
+                self.read_again: list[float] = []
+
+            def remembered(self) -> dict[str, tuple[list[str], list[dict[str, str]]]]:
+                return self.frames
+
+            def remember_frame(self, seconds: float, captions: list[str], sightings: list[dict[str, str]]) -> None:
+                self.read_again.append(seconds)
+                self.frames[f"{float(seconds):.3f}"] = (captions, sightings)
+
+        sink = Memory()
+        readings = _read_frames(
+            [(0.125, Path("/tmp/khong-co-khung-a.png")), (0.250, Path("/tmp/khong-co-khung-b.png"))],
+            sink,
+        )
+        self.assertEqual(readings[0][1], ["Tran Tung"])
+        self.assertEqual(readings[0][2][0]["username"], "@trn.tng751")
+        self.assertNotIn(0.125, sink.read_again)
+        self.assertIn(0.250, sink.read_again)
+
+    def test_saved_extract_is_reused_at_the_same_rate(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            work = Path(folder)
+            image = work / "f-00001.png"
+            image.write_bytes(b"png")
+            (work / "extract.done").write_text("8.000000", encoding="utf-8")
+            saved = _saved_frames(work, 8.0)
+            self.assertIsNotNone(saved)
+            assert saved is not None
+            self.assertEqual(saved[0][0], 0.0)
+            self.assertEqual(saved[0][1], image)
+            self.assertIsNone(_saved_frames(work, 4.0))
+
+    def test_staged_people_skip_the_video(self) -> None:
+        class Staged(ReadProgress):
+            def staged_people(self) -> list[dict[str, str]] | None:
+                return [{"name": "Tran Tung", "contactName": "A Tung", "username": "@trn.tng751"}]
+
+        _steps, people = analyze_screen_video(Path("/tmp/khong-co-video.mp4"), Staged())
+        self.assertEqual(people, [{"name": "Tran Tung", "contactName": "A Tung", "username": "@trn.tng751"}])
