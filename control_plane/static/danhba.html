@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="Danh bạ" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="theme-color" content="#ffffff" />
-  <meta name="danhba-build" content="2" />
+  <meta name="danhba-build" content="3" />
   <link rel="manifest" href="/danhba/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>Danh bạ</title>
@@ -66,13 +66,13 @@
   <input id="file" type="file" accept=".txt,.csv,.vcf,.vcard,.json,text/plain,text/csv,text/vcard" />
   <div id="books"></div>
   <p id="message" class="note" hidden></p>
-  <p class="build" id="buildLine">Phiên bản 2</p>
+  <p class="build" id="buildLine">Phiên bản 3</p>
   <div class="bar">
     <button id="go" type="button">Nạp lên iPhone</button>
     <button id="remove" class="ghost" type="button" hidden>Xoá nhóm đang dùng</button>
   </div>
   <script>
-    window.DANHBA_BUILD = 2;
+    window.DANHBA_BUILD = 3;
   </script>
   <script>
 (function (root) {
@@ -387,8 +387,10 @@
         statusLine.textContent = books.length + " danh bạ đã chia. Bấm Nạp lên iPhone.";
       }
       var upcoming = nextUnsent();
-      goButton.textContent = upcoming ? "Nạp " + upcoming.name : "Đã nạp hết";
-      goButton.disabled = !upcoming && !pasteInput.value.trim();
+      var pendingText = (pasteInput.value || "").trim();
+      var finished = books.length > 0 && !upcoming && !pendingText;
+      goButton.textContent = finished ? "Đã nạp hết" : "Nạp lên iPhone";
+      goButton.disabled = finished;
       removeButton.hidden = !(current && current.sent);
       removeButton.textContent = current && current.sent ? "Xoá " + current.name : "Xoá nhóm đang dùng";
       booksBox.textContent = "";
@@ -421,20 +423,22 @@
       return clean;
     }
 
-    async function handOff(book) {
-      var file = new File([DanhBa.vcard(book)], book.name + ".vcf", { type: "text/vcard" });
+    async function handOff(books) {
+      var body = books.map(function (book) { return DanhBa.vcard(book); }).join("");
+      var fileName = (library.title || "Khach") + ".vcf";
+      var file = new File([body], fileName, { type: "text/vcard" });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
-          await navigator.share({ files: [file], title: book.name });
+          await navigator.share({ files: [file], title: library.title || "Khach" });
           return true;
         } catch (err) {
           if (err && err.name === "AbortError") return false;
         }
       }
-      var url = URL.createObjectURL(new Blob([DanhBa.vcard(book)], { type: "text/vcard" }));
+      var url = URL.createObjectURL(new Blob([body], { type: "text/vcard" }));
       var link = document.createElement("a");
       link.href = url;
-      link.download = book.name + ".vcf";
+      link.download = fileName;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -465,29 +469,39 @@
         if (batch.truncated) summary += " Danh sách quá dài, chỉ lấy phần đầu.";
         showMessage(summary, false);
       }
-      var book = nextUnsent();
-      if (!book) {
+      var queue = (library.books || []).filter(function (item) { return !item.sent; });
+      if (!queue.length) {
         if (!(library.books || []).length) showMessage("Dán số hoặc chọn file.", true);
         render();
         return;
       }
-      var handed = await handOff(book);
+      var handed = await handOff(queue);
       if (!handed) {
         render();
         return;
       }
-      book.sent = true;
-      library.activeId = book.id;
-      var following = nextUnsent();
-      if (following) library.activeId = book.id;
+      var count = 0;
+      queue.forEach(function (item) {
+        item.sent = true;
+        count += item.entries.length;
+      });
+      library.activeId = queue[0].id;
       saveLibrary();
-      showMessage("iPhone sẽ hỏi thêm " + book.entries.length + " số của " + book.name + ". Bấm Thêm tất cả. Số nằm ở mục " + book.name + " để sau này tìm và xoá.", false);
+      showMessage("iPhone sẽ hỏi thêm " + count + " số, chia trong " + queue.length + " nhóm. Bấm Thêm tất cả. Mỗi số chỉ nằm trong một nhóm.", false);
       render();
     }
 
+    var running = false;
     goButton.addEventListener("click", function () {
-      start(pasteInput.value);
+      if (running) return;
+      running = true;
+      start(pasteInput.value).then(function () {
+        running = false;
+      }, function () {
+        running = false;
+      });
     });
+    pasteInput.addEventListener("input", render);
 
     document.getElementById("fileButton").addEventListener("click", function () {
       document.getElementById("file").click();
