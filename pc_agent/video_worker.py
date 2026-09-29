@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """PC kéo video từ hub, đọc bằng mọi lõi của máy này, rồi gửi kết quả về.
 
+Mỗi máy nhận một video. Máy có card NVIDIA và đã cài bộ đọc GPU thì đọc bằng GPU.
+Chưa cài thì đọc bằng CPU (Tesseract), cùng cách với hub.
+
 Đặt CONTROL_TOKEN bằng token của hub, rồi chạy:
 
     python pc_agent/video_worker.py
 
 Hub mặc định là http://222.255.214.202:8088. Đổi bằng --hub hoặc CONTROL_HUB.
+Card NVIDIA mà chưa có thư viện: pip install easyocr
+hoặc pip install paddlepaddle-gpu paddleocr
 """
 
 from __future__ import annotations
@@ -25,6 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from control_plane.gpu_read import nvidia_name, reader_ready
 from control_plane.screen_steps import ReadProgress, ScreenVideoError, analyze_screen_video
 
 
@@ -51,11 +57,11 @@ class HubClient:
             return {}
         return loaded
 
-    def heartbeat(self, worker_id: str, name: str, cpus: int) -> str:
+    def heartbeat(self, worker_id: str, name: str, cpus: int, gpu: bool = False, gpu_name: str = "") -> str:
         body = self._request(
             "POST",
             "/v1/video-workers/heartbeat",
-            {"workerId": worker_id, "name": name, "cpus": cpus},
+            {"workerId": worker_id, "name": name, "cpus": cpus, "gpu": gpu, "gpuName": gpu_name},
             timeout=30,
         )
         found = body.get("workerId")
@@ -175,6 +181,25 @@ def _read_one(client: HubClient, worker_id: str, job_id: str) -> None:
         client.complete(job_id, worker_id, people)
 
 
+def _prepare_gpu() -> tuple[bool, str]:
+    """Bật GPU chỉ khi card NVIDIA có thật và bộ đọc nạp được."""
+    card = nvidia_name()
+    if not card:
+        print("Máy này đọc bằng CPU.", flush=True)
+        return False, ""
+    os.environ["CONTROL_OCR_ENGINE"] = "gpu"
+    if reader_ready():
+        print(f"Đọc bằng GPU {card}.", flush=True)
+        return True, card
+    os.environ.pop("CONTROL_OCR_ENGINE", None)
+    print(
+        "PC có card NVIDIA nhưng chưa cài bộ đọc GPU. Đang đọc bằng CPU. "
+        "Cài bằng pip install easyocr hoặc pip install paddlepaddle-gpu paddleocr.",
+        flush=True,
+    )
+    return False, ""
+
+
 def main() -> None:
     os.environ.setdefault("CONTROL_OCR_RESERVE", "0")
     parser = argparse.ArgumentParser(description="PC phụ đọc video màn hình cho hub")
@@ -184,6 +209,7 @@ def main() -> None:
     if not token:
         print("Đặt CONTROL_TOKEN rồi chạy lại.", file=sys.stderr)
         sys.exit(2)
+    use_gpu, gpu_name = _prepare_gpu()
     cpus = os.cpu_count() or 1
     name = os.environ.get("COMPUTERNAME") or os.environ.get("HOSTNAME") or "PC"
     client = HubClient(args.hub, token)
@@ -192,12 +218,12 @@ def main() -> None:
     def beat() -> None:
         while not state["stop"].wait(5):
             try:
-                state["worker_id"] = client.heartbeat(state["worker_id"], name, cpus)
+                state["worker_id"] = client.heartbeat(state["worker_id"], name, cpus, use_gpu, gpu_name)
             except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
                 pass
 
     try:
-        state["worker_id"] = client.heartbeat("", name, cpus)
+        state["worker_id"] = client.heartbeat("", name, cpus, use_gpu, gpu_name)
     except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
         print("Chưa nối được hub.", file=sys.stderr)
         raise SystemExit(1) from error

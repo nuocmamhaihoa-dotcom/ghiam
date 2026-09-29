@@ -187,6 +187,8 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("nhiều video", page.text)
         self.assertIn("Không giới hạn số video, dung lượng hay thời lượng", page.text)
         self.assertIn("mọi lõi của PC", page.text)
+        self.assertIn("Mỗi máy đọc một video", page.text)
+        self.assertIn("máy đọc bằng GPU", page.text)
         self.assertIn('id="helperLine"', page.text)
         self.assertIn("PC phụ chưa nối", page.text)
         self.assertIn("PC phụ đang nối", page.text)
@@ -378,14 +380,17 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "27")
+        self.assertEqual(build, "28")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
+        self.assertEqual(body["videoHelper"]["count"], 0)
+        self.assertEqual(body["videoHelper"]["cores"], 0)
+        self.assertEqual(body["videoHelper"]["gpu"], 0)
 
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 27)
+        self.assertEqual(payload["iphoneBuild"], 28)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -625,6 +630,9 @@ class ActionApiTests(unittest.TestCase):
         self.assertTrue(helper["connected"])
         self.assertEqual(helper["cpus"], 16)
         self.assertEqual(helper["name"], "pc-nha")
+        self.assertEqual(helper["count"], 1)
+        self.assertEqual(helper["cores"], 16)
+        self.assertEqual(helper["gpu"], 0)
         empty = self.client.post(
             "/v1/recordings/jobs/claim",
             headers=self.headers,
@@ -727,6 +735,67 @@ class ActionApiTests(unittest.TestCase):
         stayed = self._wait_job(failed_id)
         self.assertEqual(stayed.get("error"), "Không đọc được video.")
         self.assertTrue(all("Máy chủ đọc tiếp" not in str(item) for item in stayed.get("problems", [])))
+
+    def test_two_pcs_each_take_one_video(self) -> None:
+        first = self.client.post(
+            "/v1/video-workers/heartbeat",
+            headers=self.headers,
+            json={"name": "pc-a", "cpus": 8, "gpu": True, "gpuName": "RTX 4060"},
+        )
+        second = self.client.post(
+            "/v1/video-workers/heartbeat",
+            headers=self.headers,
+            json={"name": "pc-b", "cpus": 16},
+        )
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(second.status_code, 200, second.text)
+        worker_a = first.json()["workerId"]
+        worker_b = second.json()["workerId"]
+        self.assertNotEqual(worker_a, worker_b)
+        helper = self.client.get("/health").json()["videoHelper"]
+        self.assertEqual(helper["count"], 2)
+        self.assertEqual(helper["cores"], 24)
+        self.assertEqual(helper["gpu"], 1)
+        self.assertEqual(helper["cpus"], 16)
+        self.assertTrue(helper["connected"])
+        opened = [
+            self.client.post(
+                "/v1/recordings/from-video/job",
+                headers=self.headers,
+                files={"file": ("clip.mp4", body, "video/mp4")},
+            )
+            for body in (b"video-a", b"video-b")
+        ]
+        job_ids = [item.json()["jobId"] for item in opened]
+        self.assertEqual(len(set(job_ids)), 2)
+        claimed: dict[str, str] = {}
+        for worker_id in (worker_a, worker_b):
+            claimed_id = ""
+            for _ in range(40):
+                response = self.client.post(
+                    "/v1/recordings/jobs/claim",
+                    headers=self.headers,
+                    json={"workerId": worker_id},
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                claimed_id = response.json()["jobId"]
+                if claimed_id:
+                    break
+                time.sleep(0.05)
+            self.assertTrue(claimed_id)
+            claimed[worker_id] = claimed_id
+        self.assertEqual(set(claimed.values()), set(job_ids))
+        for worker_id, job_id in claimed.items():
+            failed = self.client.post(
+                f"/v1/recordings/jobs/{job_id}/fail",
+                headers=self.headers,
+                json={"workerId": worker_id, "error": "Không đọc được video."},
+            )
+            self.assertEqual(failed.status_code, 200, failed.text)
+        time.sleep(0.4)
+        for job_id in job_ids:
+            body = self._wait_job(job_id)
+            self.assertEqual(body.get("error"), "Không đọc được video.")
 
     def test_hub_reads_when_the_pc_does_not_take_the_video(self) -> None:
         previous = video_helpers.OFFER_SECONDS

@@ -1057,6 +1057,8 @@ class HelperBeatBody(BaseModel):
     name: str = ""
     cpus: int = Field(default=1, ge=1, le=256)
     workerId: str = ""
+    gpu: bool = False
+    gpuName: str = ""
 
 
 class WorkerJobBody(BaseModel):
@@ -1085,9 +1087,9 @@ def video_worker_heartbeat(
     body: HelperBeatBody,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    """PC phụ báo còn sống và số lõi. Hub chỉ chờ PC khi còn một máy rảnh."""
+    """PC phụ báo còn sống, số lõi, và có đọc bằng GPU hay không."""
     _auth(authorization)
-    worker_id = video_helpers.helpers.beat(body.workerId, body.name, body.cpus)
+    worker_id = video_helpers.helpers.beat(body.workerId, body.name, body.cpus, body.gpu, body.gpuName)
     return {"ok": True, "workerId": worker_id, "videoHelper": video_helpers.helpers.public()}
 
 

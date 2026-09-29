@@ -16,6 +16,7 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageOps, ImageStat
 
+from control_plane.gpu_read import fallback_note, prefers_single_worker, read_lines
 from control_plane.screen_people import (
     captions_from_sightings,
     lines_from_tsv,
@@ -528,8 +529,13 @@ def _thumb(image: Path) -> Image.Image | None:
 
 def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str, str]]]:
     seconds, image = item
-    tsv = read_frame_tsv(image)
-    text_lines = lines_from_tsv(tsv) if tsv else []
+    try:
+        text_lines = read_lines(image)
+    except Exception:
+        text_lines = None
+    if text_lines is None:
+        tsv = read_frame_tsv(image)
+        text_lines = lines_from_tsv(tsv) if tsv else []
     sightings = sightings_from_lines(text_lines)
     captions = captions_from_sightings(sightings)
     if not captions:
@@ -549,7 +555,7 @@ def _read_frames(
         progress.report(92, "Đọc chữ")
         return []
     total = len(chosen)
-    workers = ocr_workers(total, os.cpu_count() or 1)
+    workers = 1 if prefers_single_worker() else ocr_workers(total, os.cpu_count() or 1)
     results: list[tuple[float, list[str], list[dict[str, str]]] | None] = [None] * total
     blank = 0
     failed = 0
@@ -578,6 +584,9 @@ def _read_frames(
         progress.problem("Không đọc được chữ trên video.")
     elif blank:
         progress.problem(f"{blank} khung không có chữ.")
+    note = fallback_note()
+    if note:
+        progress.problem(note)
     return [item for item in results if item is not None]
 
 

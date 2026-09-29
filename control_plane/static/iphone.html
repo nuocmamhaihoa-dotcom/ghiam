@@ -80,7 +80,7 @@
 <body>
   <p id="updateNote" hidden></p>
   <main>
-    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. PC phụ nối vào hub thì PC đó đọc video bằng mọi lõi của PC. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
+    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. Nhiều PC phụ nối vào hub thì mỗi máy đọc một video bằng mọi lõi của PC. PC có card NVIDIA thì đọc bằng GPU. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
     <p id="helperLine">PC phụ chưa nối. Video được máy chủ đọc bằng các lõi còn lại.</p>
     <p id="status" hidden></p>
     <video id="playback" controls playsinline hidden></video>
@@ -189,10 +189,10 @@
     let closed = false;
     const queue = [];
     let pumping = false;
-    let batchDone = 0;
     let batchTotal = 0;
     let carried = [];
-    let shownPercent = 0;
+    let shownOverall = 0;
+    let batchJobs = [];
 
     function authHeaders() {
       const headers = {};
@@ -319,14 +319,23 @@
         if (!response.ok) return;
         const body = await response.json();
         const helper = body.videoHelper || {};
-        if (helper.connected) {
-          const cores = Number(helper.cpus) || 0;
-          helperLine.textContent = cores > 0
-            ? "PC phụ đang nối, " + cores + " lõi. Video sẽ do PC đó đọc."
-            : "PC phụ đang nối. Video sẽ do PC đó đọc.";
-        } else {
+        const count = Number(helper.count) || (helper.connected ? 1 : 0);
+        const cores = Number(helper.cores) || Number(helper.cpus) || 0;
+        const gpu = Number(helper.gpu) || 0;
+        if (!helper.connected || count < 1) {
           helperLine.textContent = "PC phụ chưa nối. Video được máy chủ đọc bằng các lõi còn lại.";
+          return;
         }
+        let line;
+        if (count >= 2) {
+          line = count + " PC phụ đang nối, " + cores + " lõi. Mỗi máy đọc một video.";
+        } else if (cores > 0) {
+          line = "PC phụ đang nối, " + cores + " lõi. Video sẽ do PC đó đọc.";
+        } else {
+          line = "PC phụ đang nối. Video sẽ do PC đó đọc.";
+        }
+        if (gpu > 0) line += " " + gpu + " máy đọc bằng GPU.";
+        helperLine.textContent = line;
       } catch (error) {
         /* Giữ dòng đang hiện. */
       }
@@ -422,22 +431,32 @@
       renderProblems(carried);
     }
 
-    function paintProgress(videoPercent, task) {
-      const safe = Math.max(0, Math.min(100, videoPercent));
-      shownPercent = Math.max(shownPercent, safe);
-      const overall = batchTotal
-        ? Math.round((((batchDone - 1) + shownPercent / 100) / batchTotal) * 100)
-        : Math.round(shownPercent);
-      progressFill.style.width = overall + "%";
-      progressLabel.textContent = overall + "% — Video " + batchDone + "/" + batchTotal + (task ? " — " + task : "");
+    function paintBatch() {
+      const total = batchTotal;
+      if (!total) return;
+      const sum = batchJobs.reduce((acc, job) => acc + Math.max(0, Math.min(100, job.percent || 0)), 0);
+      const average = Math.round(sum / total);
+      shownOverall = Math.max(shownOverall, average);
+      const active = batchJobs.find((job) => !job.done) || batchJobs[batchJobs.length - 1];
+      const index = Math.max(1, batchJobs.indexOf(active) + 1);
+      const task = active && active.task ? " — " + active.task : "";
+      progressFill.style.width = shownOverall + "%";
+      progressLabel.textContent = shownOverall + "% — Video " + index + "/" + total + task;
       progressBox.hidden = false;
+      const live = carried.slice();
+      batchJobs.forEach((job) => {
+        (job.problems || []).forEach((text) => {
+          if (text && live.indexOf(text) === -1) live.push(text);
+        });
+      });
+      renderProblems(live);
     }
 
     function sleep(ms) {
       return new Promise((resolve) => window.setTimeout(resolve, ms));
     }
 
-    function postJob(file) {
+    function postJob(file, onUpload) {
       return new Promise((resolve) => {
         const body = new FormData();
         body.append("file", file, file.name || "man-hinh.mp4");
@@ -446,8 +465,8 @@
         const headers = authHeaders();
         Object.keys(headers).forEach((key) => request.setRequestHeader(key, headers[key]));
         request.upload.onprogress = (event) => {
-          if (!event.lengthComputable || !event.total) return;
-          paintProgress(Math.round((event.loaded / event.total) * 8), "Đang gửi video");
+          if (!event.lengthComputable || !event.total || !onUpload) return;
+          onUpload(Math.round((event.loaded / event.total) * 8));
         };
         request.onload = () => {
           if (request.status === 413) {
@@ -473,58 +492,96 @@
       });
     }
 
-    async function pollJob(jobId) {
-      let misses = 0;
-      while (true) {
-        let response;
-        try {
-          response = await fetch("/v1/recordings/jobs/" + jobId, { headers: authHeaders() });
-        } catch (error) {
-          misses += 1;
-          if (misses >= 8) return { ok: false, error: "Mất kết nối khi đang xử lý." };
-          await sleep(400);
-          continue;
+    async function pollOnce(job) {
+      if (!job.jobId || job.done) return;
+      let response;
+      try {
+        response = await fetch("/v1/recordings/jobs/" + job.jobId, { headers: authHeaders() });
+      } catch (error) {
+        job.misses += 1;
+        if (job.misses >= 8) {
+          job.done = true;
+          job.ok = false;
+          job.error = "Mất kết nối khi đang xử lý.";
         }
-        if (response.status === 404) return { ok: false, error: "Mất tiến trình xử lý." };
-        if (!response.ok) {
-          misses += 1;
-          if (misses >= 8) return { ok: false, error: "Mất kết nối khi đang xử lý." };
-          await sleep(400);
-          continue;
-        }
-        misses = 0;
-        const data = await response.json();
-        paintProgress(data.percent || 0, data.task || "");
-        renderProblems(carried.concat(data.problems || []));
-        if (!data.done) {
-          await sleep(400);
-          continue;
-        }
-        if (data.error) return { ok: false, error: data.error, problems: data.problems || [] };
-        return {
-          ok: true,
-          people: data.people || [],
-          savedPeople: data.savedPeople || 0,
-          duplicates: data.duplicates || [],
-          archive: data.archive,
-          problems: data.problems || [],
-        };
+        return;
       }
-    }
-
-    async function sendVideo(file) {
-      shownPercent = 0;
-      paintProgress(0, "Đang gửi video");
-      const posted = await postJob(file);
-      if (!posted.ok) return posted;
-      return pollJob(posted.jobId);
+      if (response.status === 404) {
+        job.done = true;
+        job.ok = false;
+        job.error = "Mất tiến trình xử lý.";
+        return;
+      }
+      if (!response.ok) {
+        job.misses += 1;
+        if (job.misses >= 8) {
+          job.done = true;
+          job.ok = false;
+          job.error = "Mất kết nối khi đang xử lý.";
+        }
+        return;
+      }
+      job.misses = 0;
+      const data = await response.json();
+      job.percent = Math.max(job.percent || 0, data.percent || 0);
+      job.task = data.task || job.task;
+      job.problems = data.problems || [];
+      if (!data.done) return;
+      job.done = true;
+      if (data.error) {
+        job.ok = false;
+        job.error = data.error;
+        return;
+      }
+      job.ok = true;
+      job.people = data.people || [];
+      job.savedPeople = data.savedPeople || 0;
+      job.duplicates = data.duplicates || [];
     }
 
     function enqueue(files) {
       const accepted = Array.from(files).filter((file) => file);
+      if (!accepted.length) return;
       accepted.forEach((file) => queue.push(file));
+      if (!pumping) batchTotal = 0;
       batchTotal += accepted.length;
       pumpQueue();
+    }
+
+    async function uploadRest() {
+      while (queue.length) {
+        const file = queue.shift();
+        const slot = {
+          percent: 0,
+          task: "Đang gửi video",
+          done: false,
+          ok: true,
+          problems: [],
+          misses: 0,
+          people: [],
+          savedPeople: 0,
+          duplicates: [],
+        };
+        batchJobs.push(slot);
+        paintBatch();
+        setStatus("Đang đọc " + batchTotal + " video. Không cần bấm phát.", false);
+        const posted = await postJob(file, (percent) => {
+          slot.percent = Math.max(slot.percent, percent);
+          slot.task = "Đang gửi video";
+          paintBatch();
+        });
+        if (!posted.ok) {
+          slot.done = true;
+          slot.ok = false;
+          slot.error = posted.error;
+          slot.task = "Gặp vấn đề";
+        } else {
+          slot.jobId = posted.jobId;
+          slot.percent = Math.max(slot.percent, 8);
+          slot.task = "Đã nhận video";
+        }
+        paintBatch();
+      }
     }
 
     async function pumpQueue() {
@@ -535,31 +592,46 @@
       recordBtn.disabled = true;
       carried = [];
       renderProblems([]);
+      shownOverall = 0;
+      batchJobs = [];
+      hidePlayback();
+      hidePeople();
+      await uploadRest();
+      while (batchJobs.some((job) => !job.done) || queue.length) {
+        await uploadRest();
+        const pending = batchJobs.filter((job) => job.jobId && !job.done);
+        if (!pending.length) break;
+        await Promise.all(pending.map((job) => pollOnce(job)));
+        paintBatch();
+        if (batchJobs.some((job) => !job.done) || queue.length) await sleep(400);
+      }
       let failed = 0;
       let added = 0;
       let found = 0;
       let duplicated = 0;
-      while (queue.length) {
-        const file = queue.shift();
-        batchDone += 1;
-        setStatus("Đang đọc video " + batchDone + "/" + batchTotal + ". Không cần bấm phát.", false);
-        hidePlayback();
-        hidePeople();
-        const result = await sendVideo(file);
-        rememberProblems(result.problems);
-        if (!result.ok) {
+      const fresh = [];
+      batchJobs.forEach((job) => {
+        rememberProblems(job.problems);
+        if (!job.ok) {
           failed += 1;
-          rememberProblems(result.error ? [result.error] : []);
-          continue;
+          rememberProblems(job.error ? [job.error] : []);
+          return;
         }
-        added += result.savedPeople || 0;
-        found += result.people.length;
-        duplicated += (result.duplicates || []).length;
-        await loadSaved();
-        await loadDuplicates();
-        showPeople(result.people);
+        added += job.savedPeople || 0;
+        found += (job.people || []).length;
+        duplicated += (job.duplicates || []).length;
+        (job.people || []).forEach((row) => fresh.push(row));
+      });
+      await loadSaved();
+      await loadDuplicates();
+      if (fresh.length) showPeople(fresh);
+      if (batchTotal) {
+        shownOverall = 100;
+        const task = failed ? "Gặp vấn đề" : "Đã ghi xong";
+        progressFill.style.width = "100%";
+        progressLabel.textContent = "100% — Video " + batchTotal + "/" + batchTotal + " — " + task;
+        progressBox.hidden = false;
       }
-      if (batchTotal) paintProgress(100, failed ? "Gặp vấn đề" : "Đã ghi xong");
       if (failed && added) setStatus("Đã lưu " + added + " người. " + failed + " video chưa đọc được.", false);
       else if (failed && duplicated) setStatus(duplicated + " người trùng dữ liệu đã có. " + failed + " video chưa đọc được.", false);
       else if (failed) setStatus(failed + " video chưa đọc được. Kết quả đã lưu vẫn còn.", false);
@@ -568,12 +640,15 @@
       else if (duplicated) setStatus(duplicated + " người trùng dữ liệu đã có.", false);
       else if (found) setStatus("Cột đã có sẵn được giữ nguyên.", false);
       else setStatus("Không thấy người đủ ba cột.", false);
-      batchDone = 0;
+      const leftover = queue.splice(0, queue.length);
       batchTotal = 0;
+      batchJobs = [];
+      shownOverall = 0;
       pumping = false;
       busy = false;
       pick.classList.remove("busy");
       recordBtn.disabled = recording;
+      if (leftover.length) enqueue(leftover);
     }
 
     function stopTracks() {
