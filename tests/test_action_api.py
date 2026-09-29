@@ -87,6 +87,14 @@ class ActionApiTests(unittest.TestCase):
         self.assertNotIn('id="recordDock"', response.text)
         self.assertIn("Đã lưu", response.text)
         self.assertIn("Mở giả lập điện thoại trên PC", response.text)
+        self.assertIn("Thả video vào đây", response.text)
+        self.assertIn("/v1/recordings/from-video/job", response.text)
+        self.assertIn("Tiếp tục đọc nối", response.text)
+        self.assertIn('id="videoFile"', response.text)
+        self.assertIn("multiple", response.text)
+        self.assertIn("người trong danh bạ", response.text)
+        self.assertIn("Kết quả đã lưu", response.text)
+        self.assertNotIn("test-token", (self.client.get("/static/dashboard.html")).text)
 
     def test_phone_emulator_page(self) -> None:
         response = self.client.get("/phone")

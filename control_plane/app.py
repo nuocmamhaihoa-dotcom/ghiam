@@ -197,7 +197,7 @@ def _html(name: str, status_code: int = 200) -> HTMLResponse:
     if not path.exists():
         return HTMLResponse("<p>Missing page.</p>", status_code=404)
     text = path.read_text(encoding="utf-8").replace("__IPHONE_BUILD__", str(IPHONE_BUILD))
-    if name == "iphone.html":
+    if name in {"iphone.html", "dashboard.html"}:
         text = text.replace("__CONTROL_TOKEN_JSON__", json.dumps(settings.token or ""))
     return HTMLResponse(text, status_code=status_code, headers={"Cache-Control": "no-cache"})
 
