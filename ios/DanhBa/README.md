@@ -2,19 +2,21 @@
 
 App nạp liên hệ vào iPhone của bạn và xoá liên hệ bạn chọn. Máy tin nhà phát triển một lần. App hỏi quyền Danh bạ một lần.
 
-## Tải phần mềm
+## Cài trên iPhone để tự chạy và tự cập nhật
 
-Trên hub, mở `/tai` và bấm **Tải phần mềm Danh bạ**, hoặc tải thẳng:
+File zip không chạy trên iPhone. App cài từ Safari:
 
-`/tai/danhba.zip`
+1. Mở Safari trên iPhone, vào `/tai` của hub, bấm **Cài Danh bạ trên iPhone**. Đường thẳng là `/danhba/`.
+2. Bấm Chia sẻ, rồi Thêm vào Màn hình chính.
+3. Mở icon **Danh bạ**.
 
-Đường dẫn đầy đủ là địa chỉ hub cộng `/tai/danhba.zip`. Trang `/tai` hiện sẵn đường dẫn đó.
+Lần sau phần mềm có bản mới, mở lại icon. iPhone tự lấy phiên bản đó khi có mạng. Không cần App Store, không cần Xcode, không cần cài lại.
 
-Không có hub thì tải mã nguồn:
+Trong app: tên mặc định `Khach`. Dán số hoặc chọn file, bấm **Nạp lên iPhone**. App chia mỗi 5000 số một nhóm và đưa nhóm đó sang Danh bạ của máy. Một số chỉ nằm trong một nhóm. iPhone hỏi thì bấm **Thêm tất cả**.
 
-https://github.com/nuocmamhaihoa-dotcom/ghiam/archive/refs/heads/cursor/ios-danh-ba-66a3.zip
+Xoá một nhóm trên máy: trang web không được phép xoá số trong app Danh bạ. Bấm Xoá trong phần mềm để chuyển sang nhóm kế, rồi trong app Danh bạ của iPhone tìm đúng tên nhóm, ví dụ `Khach 1`, và xoá các số đó.
 
-Gói là project Xcode. iPhone không cài file zip như App Store. Giải nén, mở `DanhBa.xcodeproj`, rồi làm các bước cài bên dưới.
+Gói `/tai/danhba.zip` là mã nguồn Xcode, dùng khi cần nhóm danh bạ thật và nút xoá xoá đúng nhóm trên máy. Cách cài Xcode nằm ở mục dưới.
 
 ## Cài để máy tin được ngay
 
