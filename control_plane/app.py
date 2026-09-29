@@ -197,7 +197,7 @@ def _html(name: str, status_code: int = 200) -> HTMLResponse:
     if not path.exists():
         return HTMLResponse("<p>Missing page.</p>", status_code=404)
     text = path.read_text(encoding="utf-8").replace("__IPHONE_BUILD__", str(IPHONE_BUILD))
-    if name in {"iphone.html", "tai-pc.html"}:
+    if name == "iphone.html":
         text = text.replace("__CONTROL_TOKEN_JSON__", json.dumps(settings.token or ""))
     return HTMLResponse(text, status_code=status_code, headers={"Cache-Control": "no-cache"})
 
@@ -236,21 +236,32 @@ def install_ios_app() -> HTMLResponse:
 
 @app.get("/tai-pc", response_class=HTMLResponse)
 def pc_download_page() -> HTMLResponse:
-    """Trang tải phần mềm nối PC. Token hiện trên trang để dán một lần lúc cài."""
+    """Trang tải phần mềm nối PC. File zip đã kèm token."""
     return _html("tai-pc.html")
 
 
 @app.get("/tai-pc/FbPollerVideo.zip")
-def pc_setup_zip() -> FileResponse:
+def pc_setup_zip(request: Request) -> Response:
     repo = Path(__file__).resolve().parents[1]
     path = ensure_pc_setup_package(repo, settings.data_dir / "delivery")
     if path.name != SETUP_NAME or not path.is_file():
         raise HTTPException(404, "package missing")
-    return FileResponse(
-        path,
+    hub = str(request.base_url).rstrip("/")
+    config = json.dumps({"hub": hub, "token": settings.token or ""}, ensure_ascii=False)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(path, "r") as source, zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as dest:
+        for info in source.infolist():
+            if info.filename == "config.json":
+                continue
+            dest.writestr(info, source.read(info.filename))
+        dest.writestr("config.json", config)
+    return Response(
+        content=buffer.getvalue(),
         media_type="application/zip",
-        filename=SETUP_NAME,
-        headers={"Cache-Control": "no-cache", "Content-Disposition": f'attachment; filename="{SETUP_NAME}"'},
+        headers={
+            "Cache-Control": "no-cache",
+            "Content-Disposition": 'attachment; filename="FbPollerVideo.zip"',
+        },
     )
 
 

@@ -13,6 +13,8 @@ $env:OMP_THREAD_LIMIT = "1"
 
 $dirs = New-Object System.Collections.Generic.List[string]
 foreach ($dir in @(
+  (Join-Path $Root "tools\ffmpeg"),
+  (Join-Path $Root "Tesseract-OCR"),
   "C:\Program Files\Tesseract-OCR",
   "C:\Program Files (x86)\Tesseract-OCR",
   (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links")

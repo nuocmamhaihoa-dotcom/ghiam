@@ -22,12 +22,12 @@ _SETUP_GUIDE = """FbPollerVideo
 
 1. Giải nén thư mục này.
 2. Bấm đúp Cai-dat.bat.
-3. Dán token hiện trên trang tải, rồi Enter.
-4. Đợi cửa sổ báo đã cài. Có thể đóng cửa sổ.
+3. Đợi cửa sổ chạy xong. Không nhập token.
 
+File tải về đã có token và địa chỉ hub.
+Máy tự cài Python, ffmpeg và Tesseract nếu chưa có.
 Máy tự chạy khi đăng nhập. Mất mạng thì tự nối lại.
 Khi hub nâng cấp, máy tự lấy bản mới lúc không đang đọc video.
-Không cần tải lại file này.
 """
 _SOURCES = (
     "pc_agent/video_worker.py",

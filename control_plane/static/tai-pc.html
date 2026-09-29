@@ -24,46 +24,21 @@
       min-height: 64px; margin: 1rem 0; border-radius: 16px;
       background: #111; color: #fff; font-weight: 800; text-decoration: none;
     }
-    #token {
-      width: 100%; min-height: 48px; font: inherit; font-size: 16px;
-      border: 2px solid #111; border-radius: 12px; padding: 0.4rem 0.6rem;
-    }
-    #copyToken {
-      display: block; width: 100%; min-height: 48px; margin-top: 0.6rem;
-      border-radius: 12px; border: 2px solid #111; background: #fff;
-      font: inherit; font-weight: 800;
-    }
   </style>
 </head>
 <body>
   <main>
     <h1>Phần mềm nối PC với hub</h1>
-    <p>Tải một lần trên máy tính Windows. Máy tự nối hub, tự nối lại khi mất mạng, và tự cập nhật tính năng khi hub nâng cấp. Không cài lại.</p>
+    <p>Tải một lần trên máy tính Windows. Không cần nhập token. Máy tự nối hub, tự nối lại khi mất mạng, và tự cập nhật tính năng khi hub nâng cấp. Không cài lại.</p>
     <a id="download" href="/tai-pc/FbPollerVideo.zip">Tải FbPollerVideo.zip</a>
     <ol>
-      <li>Giải nén file vừa tải.</li>
+      <li>Giải nén file vừa tải. Xóa thư mục giải nén cũ nếu còn.</li>
       <li>Bấm đúp <strong>Cai-dat.bat</strong>.</li>
-      <li>Dán token ở ô dưới vào cửa sổ đen, rồi Enter.</li>
-      <li>Đợi dòng báo đã cài. Có thể đóng cửa sổ.</li>
+      <li>Đợi đến khi cửa sổ tự đóng. Không nhập gì.</li>
     </ol>
-    <p>Token của hub:</p>
-    <input id="token" readonly value="" />
-    <button id="copyToken" type="button">Chép token</button>
-    <p>Sau khi cài, PC chạy ngầm khi bạn đăng nhập. Lúc đang đọc video thì bản mới chờ. Xong video thì máy tự đổi mã. Token nằm trên PC, bản cập nhật không xóa token.</p>
+    <p>File này đã có token. Máy tự tải Python, ffmpeg và Tesseract nếu chưa có, rồi tự chạy ngầm khi bạn đăng nhập. Lúc đang đọc video thì bản mới chờ. Xong video thì máy tự đổi mã.</p>
     <p>Nếu Windows hỏi có cho chạy file không, chọn Vẫn chạy.</p>
     <p><a href="/iphone">Quay lại trang trên iPhone</a></p>
   </main>
-  <script>
-    const hubToken = __CONTROL_TOKEN_JSON__;
-    const box = document.getElementById("token");
-    box.value = hubToken;
-    document.getElementById("copyToken").addEventListener("click", function () {
-      box.select();
-      if (navigator.clipboard && hubToken) {
-        navigator.clipboard.writeText(hubToken);
-      }
-      document.getElementById("copyToken").textContent = "Đã chép";
-    });
-  </script>
 </body>
 </html>

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import os
 import sqlite3
 import tempfile
@@ -979,7 +980,7 @@ class ActionApiTests(unittest.TestCase):
         body = manifest.json()
         self.assertIn("comment-agent.zip", body["agent"]["package_url"])
         worker = body["video_worker"]
-        self.assertEqual(worker["version"], "2")
+        self.assertEqual(worker["version"], "3")
         self.assertEqual(worker["package_url"], "/v1/updates/video-worker.zip")
         self.assertEqual(worker["engine"], "cpu")
         self.assertEqual(len(worker["sha256"]), 64)
@@ -998,7 +999,7 @@ class ActionApiTests(unittest.TestCase):
             self.assertIn("pc_agent/windows/Run-VideoWorker.ps1", names)
             self.assertIn("control_plane/screen_steps.py", names)
             self.assertEqual(archive.read("requirements-cpu.txt").decode("utf-8").strip(), "pillow")
-            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "2")
+            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "3")
             guide = archive.read("HUONG-DAN.txt").decode("utf-8")
             self.assertNotIn("test-token", guide)
             self.assertNotIn(".db", " ".join(names))
@@ -1006,9 +1007,10 @@ class ActionApiTests(unittest.TestCase):
         installer = self.client.get("/cai-video.ps1")
         self.assertEqual(installer.status_code, 200, installer.text)
         script = installer.text
-        self.assertIn("Python.Python.3.12", script)
-        self.assertIn("Gyan.FFmpeg", script)
-        self.assertIn("UB-Mannheim.TesseractOCR", script)
+        self.assertIn("python-3.12.10-amd64.exe", script)
+        self.assertIn("ffmpeg-release-essentials.zip", script)
+        self.assertIn("tesseract-ocr-w64-setup-5.4.0.20240606.exe", script)
+        self.assertNotIn("winget", script.lower())
         self.assertIn("FbPollerVideoWorker", script)
         self.assertIn("FbPollerVideoUpdate", script)
         self.assertIn("RestartCount", script)
@@ -1022,6 +1024,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(runner.status_code, 200)
         self.assertIn("FB_VIDEO_STATE", runner.text)
         self.assertIn("TESSDATA_PREFIX", runner.text)
+        self.assertIn("tools\\ffmpeg", runner.text)
         watchdog = self.client.get("/cai-video-watchdog.py")
         self.assertEqual(watchdog.status_code, 200)
         self.assertIn("upgrade_allowed", watchdog.text)
@@ -1032,7 +1035,8 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("/tai-pc/FbPollerVideo.zip", page.text)
         self.assertIn("Cai-dat.bat", page.text)
         self.assertIn("tự cập nhật", page.text)
-        self.assertIn("test-token", page.text)
+        self.assertIn("Không cần nhập token", page.text)
+        self.assertNotIn("test-token", page.text)
         downloaded_setup = self.client.get("/tai-pc/FbPollerVideo.zip")
         self.assertEqual(downloaded_setup.status_code, 200, downloaded_setup.text)
         self.assertEqual(downloaded_setup.headers["cache-control"], "no-cache")
@@ -1044,9 +1048,14 @@ class ActionApiTests(unittest.TestCase):
             self.assertIn("Install-VideoWorker.ps1", setup_names)
             self.assertIn("Run-VideoWorker.ps1", setup_names)
             self.assertIn("video_watchdog.py", setup_names)
-            joined_setup = "\n".join(archive.read(name).decode("utf-8") for name in setup_names)
-            self.assertNotIn("test-token", joined_setup)
-            self.assertIn("upgrade_allowed", joined_setup)
+            config = json.loads(archive.read("config.json").decode("utf-8"))
+            self.assertEqual(config["token"], "test-token")
+            self.assertTrue(str(config["hub"]).startswith("http"))
+            bat = archive.read("Cai-dat.bat").decode("utf-8").lower()
+            self.assertNotIn("set /p", bat)
+            self.assertNotIn("test-token", bat)
+            self.assertIn("upgrade_allowed", archive.read("video_watchdog.py").decode("utf-8"))
+            self.assertNotIn("winget", archive.read("Install-VideoWorker.ps1").decode("utf-8").lower())
 
 
 if __name__ == "__main__":

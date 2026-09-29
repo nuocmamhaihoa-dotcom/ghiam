@@ -31,59 +31,116 @@ function Find-PythonExe {
 
 function Find-TesseractExe {
   foreach ($path in @(
+    (Join-Path $Root "Tesseract-OCR\tesseract.exe"),
     "C:\Program Files\Tesseract-OCR\tesseract.exe",
     "C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"
   )) {
-    if (Test-Path $path) { return $path }
+    if ($path -and (Test-Path $path)) { return $path }
   }
   $cmd = Get-Command tesseract -ErrorAction SilentlyContinue
   if ($cmd) { return $cmd.Source }
   return $null
 }
 
-function Install-Winget {
-  param([string]$Id, [string]$Scope)
-  if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-    throw "May chua co winget. Cai App Installer tu Microsoft Store roi chay lai lenh."
+function Save-FirstWorkingUrl {
+  param([string[]]$Urls, [string]$Dest, [int]$MinBytes)
+  foreach ($url in $Urls) {
+    try {
+      Write-Host "Tai $url"
+      Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $Dest
+      if ((Test-Path $Dest) -and ((Get-Item $Dest).Length -ge $MinBytes)) { return }
+    } catch {
+      if (Test-Path $Dest) { Remove-Item $Dest -Force -ErrorAction SilentlyContinue }
+    }
   }
-  & winget install --id $Id -e --scope $Scope --accept-package-agreements --accept-source-agreements --disable-interactivity
-  Update-SessionPath
+  throw "Chua tai duoc file ve may."
+}
+
+function Read-HubConfig {
+  param([string]$Path)
+  if (-not (Test-Path $Path)) { return $null }
+  $raw = [System.IO.File]::ReadAllText($Path)
+  if (-not $raw) { return $null }
+  return $raw | ConvertFrom-Json
 }
 
 $cfgPath = Join-Path $Root "config.json"
 $token = [string]$env:CONTROL_TOKEN
-if (-not $token -and (Test-Path $cfgPath)) {
-  $existing = Get-Content -Raw -Encoding UTF8 $cfgPath | ConvertFrom-Json
-  $token = [string]$existing.token
-  if (-not $env:CONTROL_HUB -and $existing.hub) { $Hub = ([string]$existing.hub).TrimEnd("/") }
+$besideCfg = $null
+if ($PSScriptRoot) { $besideCfg = Join-Path $PSScriptRoot "config.json" }
+if (-not $token -and $besideCfg) {
+  $bundled = Read-HubConfig $besideCfg
+  if ($bundled) {
+    $token = [string]$bundled.token
+    if (-not $env:CONTROL_HUB -and $bundled.hub) { $Hub = ([string]$bundled.hub).TrimEnd("/") }
+  }
 }
-if (-not $token) { throw "Dat CONTROL_TOKEN bang token cua hub roi chay lai lenh." }
+if (-not $token -and (Test-Path $cfgPath)) {
+  $existing = Read-HubConfig $cfgPath
+  if ($existing) {
+    $token = [string]$existing.token
+    if (-not $env:CONTROL_HUB -and $existing.hub) { $Hub = ([string]$existing.hub).TrimEnd("/") }
+  }
+}
+if (-not $token) { throw "Goi cai thieu token. Tai lai FbPollerVideo.zip tu trang hub roi chay Cai-dat.bat." }
 
 Write-Host "Cai cong cu doc video vao $Root"
 Write-Host "Hub $Hub"
 
+$ffmpegDir = Join-Path $Root "tools\ffmpeg"
+if (Test-Path (Join-Path $ffmpegDir "ffmpeg.exe")) {
+  $env:Path = "$ffmpegDir;" + $env:Path
+}
+$tesseractDir = Join-Path $Root "Tesseract-OCR"
+if (Test-Path (Join-Path $tesseractDir "tesseract.exe")) {
+  $env:Path = "$tesseractDir;" + $env:Path
+}
+
 if (-not (Find-PythonExe)) {
   Write-Host "Cai Python"
-  Install-Winget -Id "Python.Python.3.12" -Scope "user"
+  $pythonSetup = Join-Path $env:TEMP "python-3.12.10-amd64.exe"
+  Save-FirstWorkingUrl -Urls @(
+    "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe"
+  ) -Dest $pythonSetup -MinBytes 10000000
+  $pythonInstall = Start-Process -FilePath $pythonSetup -ArgumentList "/quiet","InstallAllUsers=0","PrependPath=1","Include_test=0","Include_pip=1","Include_launcher=0" -Wait -PassThru
+  if ($pythonInstall.ExitCode -ne 0) { throw "Chua cai duoc Python." }
+  Update-SessionPath
 }
 $python = Find-PythonExe
 if (-not $python) { throw "Chua cai duoc Python." }
 
 if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
   Write-Host "Cai ffmpeg"
-  Install-Winget -Id "Gyan.FFmpeg" -Scope "user"
+  New-Item -ItemType Directory -Force -Path $ffmpegDir | Out-Null
+  $ffmpegZip = Join-Path $env:TEMP "ffmpeg-release-essentials.zip"
+  Save-FirstWorkingUrl -Urls @(
+    "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+    "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+  ) -Dest $ffmpegZip -MinBytes 20000000
+  $unpack = Join-Path $env:TEMP "ffmpeg-unpack"
+  if (Test-Path $unpack) { Remove-Item $unpack -Recurse -Force }
+  Expand-Archive -Path $ffmpegZip -DestinationPath $unpack -Force
+  $ffmpegExe = Get-ChildItem $unpack -Filter ffmpeg.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $ffmpegExe) { throw "Chua tai duoc ffmpeg." }
+  Copy-Item (Join-Path $ffmpegExe.DirectoryName "*") $ffmpegDir -Force
+  $env:Path = "$ffmpegDir;" + $env:Path
 }
-Update-SessionPath
 if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { throw "Chua cai duoc ffmpeg." }
 
 if (-not (Find-TesseractExe)) {
   Write-Host "Cai Tesseract"
-  Install-Winget -Id "UB-Mannheim.TesseractOCR" -Scope "machine"
+  New-Item -ItemType Directory -Force -Path $tesseractDir | Out-Null
+  $tesseractSetup = Join-Path $env:TEMP "tesseract-ocr-w64-setup.exe"
+  Save-FirstWorkingUrl -Urls @(
+    "https://github.com/UB-Mannheim/tesseract/releases/download/v5.4.0.20240606/tesseract-ocr-w64-setup-5.4.0.20240606.exe"
+  ) -Dest $tesseractSetup -MinBytes 20000000
+  $tesseractInstall = Start-Process -FilePath $tesseractSetup -ArgumentList "/VERYSILENT /NORESTART /DIR=`"$tesseractDir`"" -Wait -PassThru
+  if ($tesseractInstall.ExitCode -ne 0 -and -not (Test-Path (Join-Path $tesseractDir "tesseract.exe"))) {
+    throw "Chua cai duoc Tesseract."
+  }
+  $env:Path = "$tesseractDir;" + $env:Path
 }
-if (-not (Find-TesseractExe)) {
-  Install-Winget -Id "UB-Mannheim.TesseractOCR" -Scope "user"
-}
-if (-not (Find-TesseractExe)) { throw "Chua cai duoc Tesseract. Chay lai cua so PowerShell bang quyen quan tri." }
+if (-not (Find-TesseractExe)) { throw "Chua cai duoc Tesseract." }
 
 function Save-TrainedData {
   param([string]$Name, [int]$MinBytes)
