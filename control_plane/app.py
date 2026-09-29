@@ -21,12 +21,21 @@ from typing import Any
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
+from control_plane.carddav import (
+    carddav_password,
+    issue_profile_ticket,
+    list_contacts,
+    profile_ticket_open,
+    render_profile,
+    serve_carddav,
+)
 from control_plane.danhba_store import (
     get_book,
     import_people,
@@ -57,7 +66,14 @@ from control_plane.settings import ROOT, settings
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 app = FastAPI(title="fb-poller high-bandwidth control plane", version="1.3.0")
-app.add_middleware(GZipMiddleware, minimum_size=500)
+app.add_middleware(
+    GZipMiddleware,
+    minimum_size=500,
+    exclude_content_types=(
+        *DEFAULT_EXCLUDED_CONTENT_TYPES,
+        "application/x-apple-aspen-config",
+    ),
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -424,6 +440,84 @@ def danhba_vcard_zip(ticket: str) -> Response:
             "Cache-Control": "no-store",
         },
     )
+
+
+def _public_endpoint(request: Request) -> tuple[str, int, bool]:
+    forwarded = request.headers.get("x-forwarded-proto", request.url.scheme)
+    use_ssl = forwarded == "https"
+    host_header = request.headers.get("host") or request.url.netloc
+    if host_header.startswith("[") and "]" in host_header:
+        end = host_header.find("]")
+        host = host_header[: end + 1]
+        rest = host_header[end + 1 :]
+        port = int(rest[1:]) if rest.startswith(":") and rest[1:].isdigit() else (443 if use_ssl else 80)
+        return host, port, use_ssl
+    if host_header.count(":") == 1:
+        host, port_text = host_header.rsplit(":", 1)
+        if port_text.isdigit():
+            return host, int(port_text), use_ssl
+    return host_header, 443 if use_ssl else 80, use_ssl
+
+
+@app.post("/v1/danhba/dongbo")
+def danhba_issue_profile(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Vé để Safari tải hồ sơ. iPhone tự đồng bộ số sau khi cài hồ sơ."""
+    _auth(authorization)
+    count = len(list_contacts(settings.db_path))
+    if count == 0:
+        raise HTTPException(status_code=404, detail="Dán số, rồi bấm Nạp lên iPhone.")
+    ticket = issue_profile_ticket(settings.db_path, utcnow())
+    return {"url": f"/danhba/dongbo/{ticket}.mobileconfig", "count": count}
+
+
+@app.get("/danhba/dongbo/{ticket}.mobileconfig")
+def danhba_profile(ticket: str, request: Request) -> Response:
+    if not profile_ticket_open(settings.db_path, ticket, utcnow()):
+        raise HTTPException(status_code=404, detail="Liên kết cài hồ sơ đã hết hạn")
+    host, port, use_ssl = _public_endpoint(request)
+    token = settings.token or os.environ.get("CONTROL_TOKEN") or ""
+    xml = render_profile(host, port, use_ssl, carddav_password(token))
+    return Response(
+        content=xml,
+        media_type="application/x-apple-aspen-config",
+        headers={
+            "Content-Disposition": 'inline; filename="DanhBa.mobileconfig"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+async def _carddav(request: Request, rest: str = "") -> Response:
+    del rest
+    status, headers, payload = serve_carddav(
+        method=request.method,
+        path=request.url.path,
+        authorization=request.headers.get("authorization"),
+        depth=request.headers.get("depth", "0"),
+        body=await request.body(),
+        db_path=settings.db_path,
+        token=settings.token or os.environ.get("CONTROL_TOKEN") or "",
+    )
+    if request.method == "HEAD":
+        payload = b""
+    return Response(content=payload, status_code=status, headers=headers)
+
+
+app.add_api_route(
+    "/.well-known/carddav",
+    _carddav,
+    methods=["GET", "HEAD", "OPTIONS", "PROPFIND", "REPORT"],
+)
+app.add_api_route(
+    "/carddav",
+    _carddav,
+    methods=["GET", "HEAD", "OPTIONS", "PROPFIND", "REPORT"],
+)
+app.add_api_route(
+    "/carddav/{rest:path}",
+    _carddav,
+    methods=["GET", "HEAD", "OPTIONS", "PROPFIND", "REPORT"],
+)
 
 
 @app.get("/danhba/version")

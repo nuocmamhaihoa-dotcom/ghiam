@@ -122,6 +122,10 @@ def init_db(db_path: Path) -> None:
               book_ids TEXT NOT NULL,
               expires_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS carddav_tickets (
+              ticket TEXT PRIMARY KEY,
+              expires_at TEXT NOT NULL
+            );
             """
         )
         conn.commit()

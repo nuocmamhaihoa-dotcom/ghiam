@@ -27,6 +27,7 @@ self.addEventListener("fetch", function (event) {
   var url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.indexOf("/danhba") !== 0) return;
+  if (url.pathname.indexOf(".mobileconfig") !== -1) return;
   event.respondWith(
     fetch(event.request, { cache: "no-store" })
       .then(function (fresh) {
