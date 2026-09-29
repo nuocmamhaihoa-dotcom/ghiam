@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import re
+import secrets
 import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from control_plane import db
@@ -32,7 +34,9 @@ _HEADER_WORDS = {
     "tên ghi nhớ",
 }
 _BOOK_ID = re.compile(r"^book-(\d+)$")
+_TICKET = re.compile(r"^[A-Za-z0-9_-]{16,80}$")
 _TEL_LINE = re.compile(r"^(?:[A-Za-z0-9-]+\.)?TEL(?:;[^:]*)?:(.*)$", re.IGNORECASE)
+_EXPORT_TTL = timedelta(minutes=10)
 
 
 def clean_name(value: str) -> str:
@@ -313,6 +317,136 @@ def reconcile(
         "used": listed["used"],
         "revision": listed["revision"],
     }
+
+
+def escape_vcard(value: str) -> str:
+    return (
+        str(value or "")
+        .replace("\\", "\\\\")
+        .replace("\n", "\\n")
+        .replace(",", "\\,")
+        .replace(";", "\\;")
+    )
+
+
+def render_vcard(books: list[dict[str, object]]) -> str:
+    """Một file .vcf. ORG và NOTE giữ tên từng danh bạ. Một số chỉ xuất hiện một lần."""
+    lines: list[str] = []
+    for book in books:
+        group = escape_vcard(str(book["name"]))
+        entries = book.get("entries")
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            phone = str(entry.get("phone") or "")
+            name = escape_vcard(str(entry.get("name") or phone))
+            lines.extend(
+                [
+                    "BEGIN:VCARD",
+                    "VERSION:3.0",
+                    f"FN:{name}",
+                    f"ORG:{group}",
+                    f"TEL;TYPE=CELL:{phone}",
+                    f"NOTE:{group}",
+                    "END:VCARD",
+                ]
+            )
+    if not lines:
+        return ""
+    return "\r\n".join(lines) + "\r\n"
+
+
+def _safe_filename(name: str) -> str:
+    cleaned = "".join(ch if ch.isascii() and (ch.isalnum() or ch in " -_") else " " for ch in name)
+    cleaned = " ".join(cleaned.split())
+    return (cleaned or "Danh ba") + ".vcf"
+
+
+def _book_entries(conn: sqlite3.Connection, book_id: str) -> list[dict[str, str]]:
+    rows = conn.execute(
+        "SELECT name, phone FROM contact_entries WHERE book_id=? ORDER BY rowid",
+        (book_id,),
+    ).fetchall()
+    return [{"name": str(row["name"]), "phone": str(row["phone"])} for row in rows]
+
+
+def issue_vcard(db_path: Path, book_id: str | None, created_at: str) -> dict[str, object] | None:
+    """Vé ngắn hạn để Safari mở file .vcf. Không trả số điện thoại."""
+    moment = datetime.fromisoformat(created_at)
+    expires_at = (moment + _EXPORT_TTL).isoformat()
+    with db.session(db_path) as conn:
+        conn.execute("DELETE FROM contact_exports WHERE expires_at <= ?", (created_at,))
+        if book_id:
+            if not _BOOK_ID.match(book_id):
+                return None
+            rows = conn.execute(
+                "SELECT id, name FROM contact_books WHERE id=? AND status='ready'",
+                (book_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id, name FROM contact_books WHERE status='ready' ORDER BY seq"
+            ).fetchall()
+        chosen: list[dict[str, object]] = []
+        for row in rows:
+            entries = _book_entries(conn, str(row["id"]))
+            if not entries:
+                continue
+            chosen.append({"id": str(row["id"]), "name": str(row["name"]), "count": len(entries)})
+        if not chosen:
+            return None
+        ticket = secrets.token_urlsafe(24)
+        conn.execute(
+            "INSERT INTO contact_exports(ticket, book_ids, expires_at) VALUES(?,?,?)",
+            (ticket, ",".join(str(item["id"]) for item in chosen), expires_at),
+        )
+    filename = _safe_filename(str(chosen[0]["name"])) if len(chosen) == 1 else "Danh ba.vcf"
+    return {
+        "url": f"/danhba/xuat/{ticket}.vcf",
+        "filename": filename,
+        "count": sum(int(item["count"]) for item in chosen),
+        "books": chosen,
+    }
+
+
+def read_vcard(db_path: Path, ticket: str, now: str) -> dict[str, str] | None:
+    """Đọc vé và chuyển các danh bạ đó sang đã dùng. Lần mở lại trong hạn vẫn trả cùng file."""
+    if not _TICKET.match(ticket):
+        return None
+    moment = datetime.fromisoformat(now)
+    with db.session(db_path) as conn:
+        row = conn.execute(
+            "SELECT book_ids, expires_at FROM contact_exports WHERE ticket=?",
+            (ticket,),
+        ).fetchone()
+        if row is None or moment > datetime.fromisoformat(str(row["expires_at"])):
+            return None
+        books: list[dict[str, object]] = []
+        for book_id in str(row["book_ids"]).split(","):
+            if not _BOOK_ID.match(book_id):
+                continue
+            stored = conn.execute(
+                "SELECT id, name, status FROM contact_books WHERE id=?",
+                (book_id,),
+            ).fetchone()
+            if stored is None:
+                continue
+            entries = _book_entries(conn, book_id)
+            if not entries:
+                continue
+            if stored["status"] != "used":
+                conn.execute(
+                    "UPDATE contact_books SET status='used', used_at=? WHERE id=?",
+                    (now, book_id),
+                )
+            books.append({"name": str(stored["name"]), "entries": entries})
+    body = render_vcard(books)
+    if not body:
+        return None
+    filename = _safe_filename(str(books[0]["name"])) if len(books) == 1 else "Danh ba.vcf"
+    return {"filename": filename, "body": body}
 
 
 def mark_used(db_path: Path, book_id: str, used_at: str) -> dict[str, object] | None:

@@ -7,8 +7,8 @@ App nạp liên hệ vào iPhone của bạn và xoá liên hệ bạn chọn. M
 Danh sách nằm trên hub, mỗi người một dòng gồm tên ghi nhớ và số điện thoại. Không gom mọi số vào một file chung.
 
 1. Trên máy tính, mở `/danhba/nap` của hub. Dán danh sách hoặc chọn file, bấm **Nạp lên VPS**. Hub chia mỗi 5000 số một danh bạ. Một số chỉ nằm trong một danh bạ.
-2. Trên iPhone, mở Safari vào `/danhba/`. Trang tự lấy danh sách trên hub. Bấm **Nạp lên iPhone**. iPhone hỏi thì bấm **Thêm tất cả**, rồi bấm **Đã thêm vào iPhone**.
-3. Danh bạ vừa xác nhận chuyển sang mục **Đã dùng**. Các danh bạ chưa nạp ở mục **Chưa dùng**.
+2. Trên iPhone, mở Safari vào `/danhba/`. Bấm **Nạp lên iPhone**. iPhone hỏi thì bấm **Thêm tất cả**.
+3. Danh bạ vừa nạp chuyển sang mục **Đã dùng**. Các danh bạ chưa nạp ở mục **Chưa dùng**. Nếu bạn bấm Huỷ trên hộp của iPhone, xuất file danh bạ rồi bấm **Đối chiếu iPhone** và tick file toàn bộ để trả danh bạ về **Chưa dùng**.
 
 ## Khớp danh sách đã lưu với danh bạ trên iPhone
 

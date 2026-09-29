@@ -117,6 +117,11 @@ def init_db(db_path: Path) -> None:
               name TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_contact_entries_book ON contact_entries(book_id);
+            CREATE TABLE IF NOT EXISTS contact_exports (
+              ticket TEXT PRIMARY KEY,
+              book_ids TEXT NOT NULL,
+              expires_at TEXT NOT NULL
+            );
             """
         )
         conn.commit()

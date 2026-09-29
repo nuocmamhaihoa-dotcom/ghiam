@@ -27,7 +27,15 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
-from control_plane.danhba_store import get_book, import_people, list_books, mark_used, reconcile
+from control_plane.danhba_store import (
+    get_book,
+    import_people,
+    issue_vcard,
+    list_books,
+    mark_used,
+    read_vcard,
+    reconcile,
+)
 from control_plane.delivery import DANHBA_NAME, PACKAGE_NAME, ensure_danhba_package, ensure_package
 from control_plane.people import apply_novel, complete_rows
 from control_plane.version import DANHBA_BUILD, IPHONE_BUILD
@@ -383,6 +391,39 @@ def danhba_sync(body: DanhBaSyncBody, authorization: str | None = Header(default
         return reconcile(settings.db_path, body.text, body.phones[:200_000], body.full, utcnow())
     except ValueError:
         raise HTTPException(status_code=400, detail="Không thấy số điện thoại để đối chiếu") from None
+
+
+class DanhBaExportBody(BaseModel):
+    bookId: str = ""
+
+
+@app.post("/v1/danhba/xuat")
+def danhba_issue_vcard(
+    body: DanhBaExportBody, authorization: str | None = Header(default=None)
+) -> dict[str, Any]:
+    """Vé để Safari mở thẳng hộp thêm liên hệ. Không kèm số điện thoại."""
+    _auth(authorization)
+    issued = issue_vcard(settings.db_path, body.bookId.strip() or None, utcnow())
+    if issued is None:
+        raise HTTPException(status_code=404, detail="Chưa có danh bạ chờ")
+    return issued
+
+
+@app.get("/danhba/xuat/{ticket}.vcf")
+def danhba_vcard(ticket: str) -> Response:
+    """File danh bạ. iPhone nhận text/vcard và hỏi Thêm tất cả."""
+    card = read_vcard(settings.db_path, ticket, utcnow())
+    if card is None:
+        raise HTTPException(status_code=404, detail="Liên kết nạp đã hết hạn")
+    filename = card["filename"].replace('"', "").replace("\r", "").replace("\n", "")
+    return Response(
+        content=card["body"],
+        media_type="text/vcard; charset=utf-8",
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @app.get("/danhba/version")
