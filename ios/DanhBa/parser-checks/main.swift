@@ -98,6 +98,29 @@ let exact = (1 ... 4).map { ContactDraft(name: "N\($0)", phone: "090000000\($0)"
 let oneBook = BookSplitter.split(drafts: exact, title: "Đủ", pageSize: 4)
 check(oneBook?.books.count == 1 && oneBook?.books[0].entries.count == 4, "exact page", failures: &failures)
 
+let numbersOnly = ImportParser.parse(text: """
+0901234567
+0912345678
+0901234567
+""")
+check(numbersOnly.drafts.count == 2, "phone lines \(numbersOnly.drafts.count)", failures: &failures)
+check(numbersOnly.drafts[0].phone == "0901234567" && numbersOnly.drafts[0].name == "0901234567", "bare phone", failures: &failures)
+check(numbersOnly.drafts[1].phone == "0912345678", "second bare phone", failures: &failures)
+let twoPhones = ImportParser.parse(text: "An, 0901111111, 0902222222")
+check(twoPhones.drafts.count == 2, "two phones one row \(twoPhones.drafts.count)", failures: &failures)
+check(twoPhones.drafts.allSatisfy { $0.name == "An" }, "shared name", failures: &failures)
+check(BookSplitter.phonesAreUnique(BookSplitter.split(drafts: twoPhones.drafts, title: "An")?.books ?? []), "row phones stay apart", failures: &failures)
+let oldBook = """
+{"id":"1","name":"A 1","entries":[{"name":"A","phone":"0901234567"}],"onPhone":false,"contactIdentifiers":[]}
+""".data(using: .utf8)!
+if let decoded = try? JSONDecoder().decode(PhoneBook.self, from: oldBook) {
+    check(decoded.linkedIdentifiers.isEmpty && decoded.entries.count == 1, "old book still opens", failures: &failures)
+} else {
+    failures.append("old book still opens")
+}
+let sample = "0901234567".data(using: .utf8)!
+check(ImportParser.text(from: sample)?.contains("0901234567") == true, "read text file", failures: &failures)
+
 if !failures.isEmpty {
     for failure in failures {
         fputs(failure + "\n", stderr)

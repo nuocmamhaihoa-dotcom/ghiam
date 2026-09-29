@@ -184,10 +184,7 @@ enum ImportParser {
             if isHeader(fields) {
                 continue
             }
-            let (name, phone) = nameAndPhone(from: trimmed, fields: fields)
-            let cleaned = cleanName(name)
-            guard !cleaned.isEmpty else { continue }
-            raw.append(ContactDraft(name: cleaned, phone: phone, facebook: nil))
+            raw.append(contentsOf: drafts(fromLine: trimmed, fields: fields))
         }
         var batch = unique(raw, limit: maxDrafts)
         if extra {
@@ -196,19 +193,51 @@ enum ImportParser {
         return batch
     }
 
-    private static func nameAndPhone(from line: String, fields: [String]) -> (String, String?) {
-        if fields.count >= 2 {
-            let phone = normalizePhone(fields[1])
-            if phone != nil {
-                return (fields[0], phone)
+    static func text(from data: Data) -> String? {
+        let encodings: [String.Encoding] = [.utf8, .utf16, .utf16LittleEndian, .utf16BigEndian, .isoLatin1]
+        for encoding in encodings {
+            if let text = String(data: data, encoding: encoding) {
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    return text
+                }
             }
-            return (fields.joined(separator: " "), nil)
         }
-        let parts = line.split { $0.isWhitespace }.map(String.init)
-        if parts.count >= 2, let phone = normalizePhone(parts[parts.count - 1]) {
-            return (parts.dropLast().joined(separator: " "), phone)
+        return nil
+    }
+
+    private static func drafts(fromLine line: String, fields: [String]) -> [ContactDraft] {
+        var phones: [String] = []
+        var nameParts: [String] = []
+        for field in fields {
+            if let phone = normalizePhone(field) {
+                phones.append(phone)
+            } else {
+                let name = cleanName(field)
+                if !name.isEmpty {
+                    nameParts.append(name)
+                }
+            }
         }
-        return (line, nil)
+        if phones.isEmpty {
+            let parts = line.split { $0.isWhitespace }.map(String.init)
+            if parts.count >= 2, let phone = normalizePhone(parts[parts.count - 1]) {
+                let name = cleanName(parts.dropLast().joined(separator: " "))
+                if !name.isEmpty {
+                    return [ContactDraft(name: name, phone: phone, facebook: nil)]
+                }
+            }
+            if let phone = normalizePhone(line) {
+                return [ContactDraft(name: phone, phone: phone, facebook: nil)]
+            }
+            let name = cleanName(fields.joined(separator: " "))
+            guard !name.isEmpty else { return [] }
+            return [ContactDraft(name: name, phone: nil, facebook: nil)]
+        }
+        let name = nameParts.joined(separator: " ")
+        return phones.map { phone in
+            ContactDraft(name: name.isEmpty ? phone : name, phone: phone, facebook: nil)
+        }
     }
 
     private static func isHeader(_ fields: [String]) -> Bool {
@@ -246,7 +275,7 @@ enum ImportParser {
     private static func draft(fromVCard lines: [String]) -> ContactDraft? {
         var formatted = ""
         var structured = ""
-        var phone: String?
+        var phones: [String] = []
         for line in lines {
             guard let property = vcardProperty(line) else { continue }
             switch property.name {
@@ -255,8 +284,8 @@ enum ImportParser {
             case "N":
                 structured = nameFromN(property.value)
             case "TEL":
-                if phone == nil {
-                    phone = normalizePhone(property.value)
+                if let phone = normalizePhone(property.value), phones.contains(phone) == false {
+                    phones.append(phone)
                 }
             default:
                 break
@@ -264,7 +293,10 @@ enum ImportParser {
         }
         let name = formatted.isEmpty ? structured : formatted
         guard !name.isEmpty else { return nil }
-        return ContactDraft(name: name, phone: phone, facebook: nil)
+        if phones.isEmpty {
+            return ContactDraft(name: name, phone: nil, facebook: nil)
+        }
+        return ContactDraft(name: name, phone: phones[0], facebook: nil)
     }
 
     private static func nameFromN(_ value: String) -> String {

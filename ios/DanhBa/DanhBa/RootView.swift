@@ -14,9 +14,11 @@ struct RootView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Nạp danh sách, chia mỗi 5000 số thành một danh bạ, rồi đưa hết lên iPhone. Một số chỉ nằm trong một danh bạ.")
+                    Text("Mỗi dòng một số, hoặc Tên, số. App chia mỗi 5000 số thành một nhóm. Một số chỉ nằm trong một nhóm.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    Text(statusLine)
+                        .font(.subheadline.weight(.semibold))
 
                     TextField("Tên danh bạ", text: $title)
                         .textFieldStyle(.roundedBorder)
@@ -70,20 +72,8 @@ struct RootView: View {
                         }
                     }
 
-                    Button("Nạp vào iPhone") {
-                        confirmPush = true
-                    }
-                    .buttonStyle(BigButtonStyle())
-                    .disabled(model.busy || model.library.books.isEmpty)
-
-                    Button("Xoá danh bạ đang dùng") {
-                        confirmDelete = true
-                    }
-                    .buttonStyle(BigButtonStyle(prominent: false))
-                    .disabled(model.busy || model.activeBook?.onPhone != true)
-
-                    if model.access == .denied {
-                        Text("Quyền Danh bạ đang tắt. Vào Cài đặt, bật Danh bạ cho app này. App không hỏi lại.")
+                    if model.access == .denied || model.access == .limited {
+                        Text("Cần quyền Danh bạ đầy đủ. Vào Cài đặt, chọn Cho phép đầy đủ. App không hỏi lại.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                         Button("Mở Cài đặt") {
@@ -114,6 +104,25 @@ struct RootView: View {
             }
             .navigationTitle("Danh bạ")
             .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 10) {
+                    Button(pushTitle) {
+                        confirmPush = true
+                    }
+                    .buttonStyle(BigButtonStyle())
+                    .disabled(model.busy || model.library.books.isEmpty)
+
+                    Button(deleteTitle) {
+                        confirmDelete = true
+                    }
+                    .buttonStyle(BigButtonStyle(prominent: false))
+                    .disabled(model.busy || model.activeBook?.onPhone != true)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+                .padding(.bottom, 8)
+                .background(.ultraThinMaterial)
+            }
         }
         .onAppear {
             if title.isEmpty {
@@ -139,7 +148,7 @@ struct RootView: View {
             }
             Button("Huỷ", role: .cancel) {}
         } message: {
-            Text("Mỗi cuốn thành một nhóm. Số đã có ở danh bạ khác sẽ không được thêm lần nữa.")
+            Text("Khi iPhone hỏi, chọn Cho phép đầy đủ. Mỗi cuốn thành một nhóm. Số đã ở nhóm khác sẽ không được thêm.")
         }
         .confirmationDialog("Xoá danh bạ đang dùng trên iPhone?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Xoá", role: .destructive) {
@@ -149,6 +158,37 @@ struct RootView: View {
         } message: {
             Text(deletePrompt)
         }
+    }
+
+    private var statusLine: String {
+        let books = model.library.books
+        let phones = model.library.source.filter { $0.phone?.isEmpty == false }.count
+        if books.isEmpty {
+            if phones == 0 {
+                return "Dán số hoặc chọn file, rồi bấm Chia danh bạ."
+            }
+            return "Trong phần mềm: \(phones) số. Bấm Chia danh bạ."
+        }
+        let ready = books.filter(\.onPhone).count
+        if let active = model.activeBook, active.onPhone {
+            return "\(books.count) danh bạ, \(ready) trên iPhone. Đang dùng: \(active.name)."
+        }
+        return "\(books.count) danh bạ đã chia. Bấm Nạp vào iPhone."
+    }
+
+    private var pushTitle: String {
+        let count = model.library.books.count
+        if count == 0 {
+            return "Nạp vào iPhone"
+        }
+        return "Nạp \(count) danh bạ vào iPhone"
+    }
+
+    private var deleteTitle: String {
+        if let book = model.activeBook, book.onPhone {
+            return "Xoá \(book.name)"
+        }
+        return "Xoá danh bạ đang dùng"
     }
 
     private var deletePrompt: String {
@@ -169,7 +209,7 @@ struct RootView: View {
                 }
             }
             guard let data = try? Data(contentsOf: url), data.count <= 12_000_000,
-                  let text = String(data: data, encoding: .utf8)
+                  let text = ImportParser.text(from: data)
             else {
                 model.note("File quá lớn hoặc không đọc được.", error: true)
                 return

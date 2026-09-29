@@ -12,6 +12,57 @@ struct PhoneBook: Codable, Equatable, Identifiable {
     var onPhone: Bool
     var groupIdentifier: String?
     var contactIdentifiers: [String]
+    var linkedIdentifiers: [String]
+
+    init(
+        id: String,
+        name: String,
+        entries: [PhoneEntry],
+        onPhone: Bool,
+        groupIdentifier: String?,
+        contactIdentifiers: [String],
+        linkedIdentifiers: [String] = []
+    ) {
+        self.id = id
+        self.name = name
+        self.entries = entries
+        self.onPhone = onPhone
+        self.groupIdentifier = groupIdentifier
+        self.contactIdentifiers = contactIdentifiers
+        self.linkedIdentifiers = linkedIdentifiers
+    }
+
+    init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        id = try box.decode(String.self, forKey: .id)
+        name = try box.decode(String.self, forKey: .name)
+        entries = try box.decode([PhoneEntry].self, forKey: .entries)
+        onPhone = try box.decode(Bool.self, forKey: .onPhone)
+        groupIdentifier = try box.decodeIfPresent(String.self, forKey: .groupIdentifier)
+        contactIdentifiers = try box.decodeIfPresent([String].self, forKey: .contactIdentifiers) ?? []
+        linkedIdentifiers = try box.decodeIfPresent([String].self, forKey: .linkedIdentifiers) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var box = encoder.container(keyedBy: CodingKeys.self)
+        try box.encode(id, forKey: .id)
+        try box.encode(name, forKey: .name)
+        try box.encode(entries, forKey: .entries)
+        try box.encode(onPhone, forKey: .onPhone)
+        try box.encodeIfPresent(groupIdentifier, forKey: .groupIdentifier)
+        try box.encode(contactIdentifiers, forKey: .contactIdentifiers)
+        try box.encode(linkedIdentifiers, forKey: .linkedIdentifiers)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case entries
+        case onPhone
+        case groupIdentifier
+        case contactIdentifiers
+        case linkedIdentifiers
+    }
 }
 
 struct PhoneLibrary: Codable, Equatable {

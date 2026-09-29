@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>vi</string>
 	<key>NSContactsUsageDescription</key>
-	<string>Ứng dụng cần quyền Danh bạ để nạp liên hệ vào iPhone này và xoá những liên hệ bạn chọn.</string>
+	<string>Ứng dụng nạp từng nhóm danh bạ vào iPhone này và xoá nhóm bạn chọn. Hãy chọn Cho phép đầy đủ.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Ứng dụng kết nối tới hub trong mạng nội bộ khi bạn nạp danh sách đã lưu.</string>
 	<key>NSAppTransportSecurity</key>
