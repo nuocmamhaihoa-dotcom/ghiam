@@ -25,6 +25,22 @@ STALE_AFTER_SEC = 180.0
 _TASK = "FbPollerVideoWorker"
 
 
+def say(text: str, *, err: bool = False) -> None:
+    """In ra console mà không chết khi Windows dùng bảng mã cũ."""
+    stream = sys.stderr if err else sys.stdout
+    payload = (text + "\n").encode("utf-8", errors="replace")
+    buffer = getattr(stream, "buffer", None)
+    try:
+        if buffer is not None:
+            buffer.write(payload)
+            buffer.flush()
+            return
+        stream.write(text + "\n")
+        stream.flush()
+    except Exception:
+        return
+
+
 _SUPPORT = (
     ("pc_agent/video_watchdog.py", "video_watchdog.py"),
     ("pc_agent/windows/Run-VideoWorker.ps1", "Run-VideoWorker.ps1"),
@@ -207,21 +223,25 @@ def fetch_manifest(hub: str, token: str) -> dict[str, object]:
     return data
 
 
+def _quiet(command: list[str]) -> None:
+    subprocess.run(command, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def _stop_worker(pid: int) -> None:
     if os.name == "nt":
-        subprocess.run(["schtasks", "/End", "/TN", _TASK], check=False)
+        _quiet(["schtasks", "/End", "/TN", _TASK])
     if pid == os.getpid() or not process_alive(pid):
         return
     if process_alive(pid):
         if os.name == "nt":
-            subprocess.run(["taskkill", "/PID", str(pid), "/F"], check=False)
+            _quiet(["taskkill", "/PID", str(pid), "/F"])
         else:
             os.kill(pid, 15)
 
 
 def _start_worker() -> None:
     if os.name == "nt":
-        subprocess.run(["schtasks", "/Run", "/TN", _TASK], check=False)
+        _quiet(["schtasks", "/Run", "/TN", _TASK])
 
 
 def run_once(root: Path, *, installing: bool) -> int:
@@ -229,7 +249,7 @@ def run_once(root: Path, *, installing: bool) -> int:
     try:
         manifest = fetch_manifest(config["hub"], config["token"])
     except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
-        print("Chưa hỏi được bản mới.", file=sys.stderr)
+        say("Chưa hỏi được bản mới.", err=True)
         return 1 if installing else 0
     try:
         remote = int(str(manifest.get("version") or "0"))
@@ -242,29 +262,29 @@ def run_once(root: Path, *, installing: bool) -> int:
     choice = upgrade_allowed(local=local, remote=remote, reading=reading, age_sec=age, pid_alive=process_alive(pid))
     if choice == "current":
         if installing:
-            print(f"Đang ở bản {local}.", flush=True)
+            say(f"Đang ở bản {local}.")
             return 0
         if should_start_worker(pid_alive=process_alive(pid)):
             _start_worker()
-            print("PC chưa chạy. Đã khởi động lại.", flush=True)
+            say("PC chưa chạy. Đã khởi động lại.")
         else:
-            print(f"Đang ở bản {local}.", flush=True)
+            say(f"Đang ở bản {local}.")
         return 0
     if choice == "busy":
-        print("Đang đọc video. Sẽ cập nhật khi xong.", flush=True)
+        say("Đang đọc video. Sẽ cập nhật khi xong.")
         return 0
     try:
         blob = _request(absolute_url(config["hub"], package_url), config["token"], 180)
     except (OSError, urllib.error.URLError, TimeoutError):
-        print("Chưa tải được gói mới.", file=sys.stderr)
+        say("Chưa tải được gói mới.", err=True)
         return 1 if installing else 0
     if not verify_sha256(blob, expected):
-        print("Gói mới không khớp checksum.", file=sys.stderr)
+        say("Gói mới không khớp checksum.", err=True)
         return 1
     if not installing:
         reading, age, pid = read_reading_state(root / "state.json")
         if upgrade_allowed(local=local, remote=remote, reading=reading, age_sec=age, pid_alive=process_alive(pid)) == "busy":
-            print("Đang đọc video. Sẽ cập nhật khi xong.", flush=True)
+            say("Đang đọc video. Sẽ cập nhật khi xong.")
             return 0
         _stop_worker(pid)
         for _ in range(20):
@@ -272,7 +292,7 @@ def run_once(root: Path, *, installing: bool) -> int:
                 break
             time.sleep(0.25)
         if process_alive(pid):
-            print("Chưa dừng được lần đọc. Giữ bản hiện tại.", flush=True)
+            say("Chưa dừng được lần đọc. Giữ bản hiện tại.")
             _start_worker()
             return 0
     replace_tree(root / "current", blob)
@@ -280,7 +300,7 @@ def run_once(root: Path, *, installing: bool) -> int:
     install_cpu_requirements(root)
     if not installing:
         _start_worker()
-    print(f"Đã đặt bản {remote}.", flush=True)
+    say(f"Đã đặt bản {remote}.")
     return 0
 
 
@@ -294,8 +314,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return run_once(root, installing=bool(args.install))
     except (OSError, ValueError) as error:
-        print("Chưa cập nhật được.", file=sys.stderr)
-        print(str(error), file=sys.stderr)
+        say("Chưa cập nhật được.", err=True)
+        say(str(error), err=True)
         return 1
 
 

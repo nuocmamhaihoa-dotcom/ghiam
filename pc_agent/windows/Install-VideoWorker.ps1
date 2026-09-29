@@ -44,6 +44,7 @@ function Find-TesseractExe {
 
 function Save-FirstWorkingUrl {
   param([string[]]$Urls, [string]$Dest, [int]$MinBytes)
+  if ((Test-Path $Dest) -and ((Get-Item $Dest).Length -ge $MinBytes)) { return }
   foreach ($url in $Urls) {
     try {
       Write-Host "Tai $url"
@@ -88,13 +89,35 @@ Write-Host "Cai cong cu doc video vao $Root"
 Write-Host "Hub $Hub"
 
 $ffmpegDir = Join-Path $Root "tools\ffmpeg"
-if (Test-Path (Join-Path $ffmpegDir "ffmpeg.exe")) {
-  $env:Path = "$ffmpegDir;" + $env:Path
-}
 $tesseractDir = Join-Path $Root "Tesseract-OCR"
-if (Test-Path (Join-Path $tesseractDir "tesseract.exe")) {
-  $env:Path = "$tesseractDir;" + $env:Path
+
+function Add-DirToPath {
+  param([string]$Dir)
+  if (-not $Dir -or -not (Test-Path $Dir)) { return }
+  $prefix = $Dir.TrimEnd("\")
+  if ($env:Path -like "$prefix;*") { return }
+  $env:Path = "$prefix;" + $env:Path
 }
+
+function Restore-ToolPath {
+  # Find-PythonExe goi Update-SessionPath va xoa duong dan vua them. Dat lai sau moi lan tim Python.
+  $nested = $null
+  if (Test-Path $ffmpegDir) {
+    $nested = Get-ChildItem $ffmpegDir -Filter ffmpeg.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+  }
+  if ($nested) { Add-DirToPath $nested.DirectoryName } else { Add-DirToPath $ffmpegDir }
+  Add-DirToPath $tesseractDir
+}
+
+function Find-LocalFfmpeg {
+  if (Test-Path $ffmpegDir) {
+    $found = Get-ChildItem $ffmpegDir -Filter ffmpeg.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($found) { return $found.FullName }
+  }
+  return $null
+}
+
+Restore-ToolPath
 
 if (-not (Find-PythonExe)) {
   Write-Host "Cai Python"
@@ -108,8 +131,9 @@ if (-not (Find-PythonExe)) {
 }
 $python = Find-PythonExe
 if (-not $python) { throw "Chua cai duoc Python." }
+Restore-ToolPath
 
-if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+if (-not (Find-LocalFfmpeg)) {
   Write-Host "Cai ffmpeg"
   New-Item -ItemType Directory -Force -Path $ffmpegDir | Out-Null
   $ffmpegZip = Join-Path $env:TEMP "ffmpeg-release-essentials.zip"
@@ -123,9 +147,10 @@ if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
   $ffmpegExe = Get-ChildItem $unpack -Filter ffmpeg.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $ffmpegExe) { throw "Chua tai duoc ffmpeg." }
   Copy-Item (Join-Path $ffmpegExe.DirectoryName "*") $ffmpegDir -Force
-  $env:Path = "$ffmpegDir;" + $env:Path
+  Restore-ToolPath
 }
-if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { throw "Chua cai duoc ffmpeg." }
+if (-not (Find-LocalFfmpeg) -and -not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { throw "Chua cai duoc ffmpeg." }
+Restore-ToolPath
 
 if (-not (Find-TesseractExe)) {
   Write-Host "Cai Tesseract"
@@ -192,14 +217,17 @@ if (-not $pillowReady) {
   if ($LASTEXITCODE -ne 0) { throw "Chua cai duoc pillow." }
 }
 
-try { schtasks /End /TN FbPollerVideoWorker | Out-Null } catch { }
-try { schtasks /Delete /TN FbPollerVideoWorker /F | Out-Null } catch { }
+cmd.exe /c "schtasks /End /TN FbPollerVideoWorker >nul 2>&1 & exit /b 0"
+cmd.exe /c "schtasks /Delete /TN FbPollerVideoWorker /F >nul 2>&1 & exit /b 0"
 Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -like "*video_worker.py*" } | ForEach-Object {
   Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
 }
 Write-Host "Tai ma doc video"
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
 & $venvPy (Join-Path $Root "video_watchdog.py") --install --root $Root
-if ($LASTEXITCODE -ne 0) { throw "Chua tai duoc ma doc video." }
+$workerFile = Join-Path $Root "current\pc_agent\video_worker.py"
+if ($LASTEXITCODE -ne 0 -and -not (Test-Path $workerFile)) { throw "Chua tai duoc ma doc video." }
 
 @'
 $ErrorActionPreference = "Stop"

@@ -1,6 +1,9 @@
 # Mo file la chay. Khong hoi token. Cua so nay giu ket noi voi hub.
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
+try { chcp 65001 > $null } catch { }
 
 $Root = Join-Path $env:LOCALAPPDATA "FbPollerVideo"
 New-Item -ItemType Directory -Force -Path $Root, (Join-Path $Root "logs") | Out-Null

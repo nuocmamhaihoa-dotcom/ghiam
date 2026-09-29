@@ -33,8 +33,24 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from control_plane.gpu_read import nvidia_name, reader_ready
+from control_plane.gpu_read import fallback_note, nvidia_name, reader_ready
 from control_plane.screen_steps import ReadProgress, ScreenVideoError, analyze_screen_video
+
+
+def say(text: str, *, err: bool = False) -> None:
+    """In ra console mà không chết khi Windows dùng bảng mã cũ."""
+    stream = sys.stderr if err else sys.stdout
+    payload = (text + "\n").encode("utf-8", errors="replace")
+    buffer = getattr(stream, "buffer", None)
+    try:
+        if buffer is not None:
+            buffer.write(payload)
+            buffer.flush()
+            return
+        stream.write(text + "\n")
+        stream.flush()
+    except Exception:
+        return
 
 
 class HubClient:
@@ -325,21 +341,25 @@ def refresh_worker_state() -> None:
 
 
 def _prepare_gpu() -> tuple[bool, str]:
-    """Bật GPU chỉ khi card NVIDIA có thật và bộ đọc nạp được."""
-    card = nvidia_name()
+    """Bật GPU chỉ khi card NVIDIA có thật và bộ đọc nạp được. Lỗi thì đọc bằng CPU."""
+    try:
+        card = nvidia_name()
+    except Exception:
+        say("Máy này đọc bằng CPU.")
+        return False, ""
     if not card:
-        print("Máy này đọc bằng CPU.", flush=True)
+        say("Máy này đọc bằng CPU.")
         return False, ""
     os.environ["CONTROL_OCR_ENGINE"] = "gpu"
-    if reader_ready():
-        print(f"Đọc bằng GPU {card}.", flush=True)
+    try:
+        ready = reader_ready()
+    except Exception:
+        ready = False
+    if ready:
+        say(f"Đọc bằng GPU {card}.")
         return True, card
     os.environ.pop("CONTROL_OCR_ENGINE", None)
-    print(
-        "PC có card NVIDIA nhưng chưa cài bộ đọc GPU. Đang đọc bằng CPU. "
-        "Cài bằng pip install easyocr hoặc pip install paddlepaddle-gpu paddleocr.",
-        flush=True,
-    )
+    say(fallback_note())
     return False, ""
 
 
@@ -350,7 +370,7 @@ def main() -> None:
     args = parser.parse_args()
     token = os.environ.get("CONTROL_TOKEN", "")
     if not token:
-        print("Đặt CONTROL_TOKEN rồi chạy lại.", file=sys.stderr)
+        say("Đặt CONTROL_TOKEN rồi chạy lại.", err=True)
         sys.exit(2)
     use_gpu, gpu_name = _prepare_gpu()
     cpus = os.cpu_count() or 1
@@ -371,9 +391,9 @@ def main() -> None:
             state["worker_id"] = client.heartbeat("", name, cpus, use_gpu, gpu_name)
             break
         except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
-            print("Chưa nối được hub. Thử lại.", file=sys.stderr)
+            say("Chưa nối được hub. Thử lại.", err=True)
             time.sleep(5)
-    print(f"Đã nối hub. Máy này có {cpus} lõi, dùng hết để đọc video.", flush=True)
+    say(f"Đã nối hub. Máy này có {cpus} lõi, dùng hết để đọc video.")
     refresh_worker_state()
     threading.Thread(target=beat, daemon=True).start()
     while True:
@@ -382,21 +402,21 @@ def main() -> None:
             if not job_id:
                 time.sleep(0.4)
                 continue
-            print(f"Nhận video {job_id}.", flush=True)
+            say(f"Nhận video {job_id}.")
             set_reading(True)
             try:
                 _read_one(client, state["worker_id"], job_id, resume)
             finally:
                 set_reading(False)
-            print(f"Xong video {job_id}.", flush=True)
+            say(f"Xong video {job_id}.")
         except KeyboardInterrupt:
             state["stop"].set()
             raise
         except urllib.error.HTTPError as error:
-            print(f"Hub trả {error.code}. Thử video sau.", file=sys.stderr)
+            say(f"Hub trả {error.code}. Thử video sau.", err=True)
             time.sleep(1)
         except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
-            print("Mất kết nối hub, thử lại.", file=sys.stderr)
+            say("Mất kết nối hub, thử lại.", err=True)
             time.sleep(2)
 
 

@@ -27,7 +27,6 @@ def nvidia_name() -> str:
         result = subprocess.run(
             ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
             capture_output=True,
-            text=True,
             timeout=5,
             check=False,
         )
@@ -35,7 +34,8 @@ def nvidia_name() -> str:
         return ""
     if result.returncode != 0:
         return ""
-    lines = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+    text = (result.stdout or b"").decode("utf-8", errors="replace")
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
     if not lines:
         return ""
     return " ".join(lines[0].split())[:80]

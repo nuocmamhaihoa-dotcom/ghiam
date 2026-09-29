@@ -107,6 +107,35 @@ class VideoWatchdogTests(unittest.TestCase):
             self.assertFalse(reading)
             self.assertEqual(pid, os.getpid())
 
+    def test_say_utf8_when_stdout_is_charmap(self) -> None:
+        import sys
+
+        from pc_agent.video_watchdog import say as watchdog_say
+        from pc_agent.video_worker import say as worker_say
+
+        raw = io.BytesIO()
+
+        class Stream:
+            encoding = "cp1252"
+            buffer = raw
+
+            def write(self, text: str) -> int:
+                text.encode("cp1252")
+                return len(text)
+
+            def flush(self) -> None:
+                return None
+
+        old = sys.stdout
+        sys.stdout = Stream()
+        try:
+            message = "PC có card NVIDIA nhưng chưa cài bộ đọc GPU. Đang đọc bằng CPU."
+            worker_say(message)
+            watchdog_say(message)
+        finally:
+            sys.stdout = old
+        self.assertGreaterEqual(raw.getvalue().count("đ".encode("utf-8")), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

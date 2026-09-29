@@ -10,6 +10,11 @@ $tessdata = Join-Path $Root "tessdata"
 if (-not $tessdata.EndsWith("\")) { $tessdata = $tessdata + "\" }
 $env:TESSDATA_PREFIX = $tessdata
 $env:OMP_THREAD_LIMIT = "1"
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
+$utf8 = New-Object System.Text.UTF8Encoding $false
+try { [Console]::OutputEncoding = $utf8 } catch { }
+$OutputEncoding = $utf8
 
 $dirs = New-Object System.Collections.Generic.List[string]
 foreach ($dir in @(
@@ -38,8 +43,7 @@ if (-not (Test-Path $worker)) { throw "Chua co ma doc video" }
 Set-Location $code
 $log = Join-Path $Root "logs\worker.log"
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $log) | Out-Null
-$utf8 = New-Object System.Text.UTF8Encoding $false
-cmd.exe /v:on /c "call `"$py`" -u `"$worker`" --hub `"$env:CONTROL_HUB`" 2>&1 & exit /b !ERRORLEVEL!" | ForEach-Object {
+cmd.exe /v:on /c "chcp 65001 >nul & call `"$py`" -u `"$worker`" --hub `"$env:CONTROL_HUB`" 2>&1 & exit /b !ERRORLEVEL!" | ForEach-Object {
   $line = "$_"
   [System.IO.File]::AppendAllText($log, ($line + "`r`n"), $utf8)
   Write-Host $line
