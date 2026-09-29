@@ -22,6 +22,7 @@ Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from control_plane import db as people_db  # noqa: E402
 from control_plane import video_helpers  # noqa: E402
 from control_plane.app import app  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
@@ -173,6 +174,9 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn('id="savedBox"', page.text)
         self.assertIn('id="savedTable"', page.text)
         self.assertIn("Kết quả đã lưu", page.text)
+        self.assertIn("50 triệu", page.text)
+        self.assertIn('id="savedMore"', page.text)
+        self.assertIn("Xem thêm", page.text)
         self.assertIn("/v1/people", page.text)
         self.assertIn("multiple", page.text)
         self.assertIn("nhiều video", page.text)
@@ -369,14 +373,14 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "25")
+        self.assertEqual(build, "26")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
 
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 25)
+        self.assertEqual(payload["iphoneBuild"], 26)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -452,6 +456,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(listed.json()["count"], 1)
         with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
             conn.execute("DELETE FROM saved_people WHERE username = ?", ("@nguyen.anh",))
+            conn.execute("DELETE FROM people_meta")
 
     def test_confirm_saves_chosen_rows_without_overwrite(self) -> None:
         denied = self.client.post(
@@ -490,6 +495,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(skipped.json()["saved"], 0)
         with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
             conn.execute("DELETE FROM saved_people WHERE username = ?", ("@le.hoa",))
+            conn.execute("DELETE FROM people_meta")
 
     def _wait_job(self, job_id: str) -> dict[str, object]:
         deadline = time.time() + 20
@@ -593,6 +599,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertTrue(any(item["username"] == "@mai.lan.pc" for item in listed.json()["items"]))
         with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
             conn.execute("DELETE FROM saved_people WHERE username = ?", ("@mai.lan.pc",))
+            conn.execute("DELETE FROM people_meta")
         failed_open = self.client.post(
             "/v1/recordings/from-video/job",
             headers=self.headers,
@@ -681,6 +688,54 @@ class ActionApiTests(unittest.TestCase):
         problems = body.get("problems")
         self.assertIsInstance(problems, list)
         self.assertTrue(any("Máy chủ đọc tiếp" in str(item) for item in problems), problems)
+
+    def test_people_store_pages_and_stops_at_fifty_million(self) -> None:
+        total, ready = people_db.people_counts(Path(os.environ["CONTROL_DB"]))
+        previous = people_db.PEOPLE_CAPACITY
+        people_db.PEOPLE_CAPACITY = total + 2
+        names = (
+            ("Một A", "Danh Một", "@mot.aa"),
+            ("Hai B", "Danh Hai", "@hai.bb"),
+            ("Ba C", "Danh Ba", "@ba.cc"),
+        )
+        try:
+            for name, contact, username in names:
+                saved = self.client.post(
+                    "/v1/people/confirm",
+                    headers=self.headers,
+                    json={"rows": [{"name": name, "contactName": contact, "username": username}]},
+                )
+                self.assertEqual(saved.status_code, 200, saved.text)
+            listed = self.client.get("/v1/people", headers=self.headers, params={"limit": 1})
+            self.assertEqual(listed.status_code, 200, listed.text)
+            body = listed.json()
+            self.assertEqual(body["count"], ready + 2)
+            self.assertEqual(body["capacity"], total + 2)
+            self.assertEqual(len(body["items"]), 1)
+            seen = {item["username"] for item in body["items"]}
+            cursor = body["cursor"]
+            self.assertTrue(cursor)
+            for _ in range(20):
+                if not cursor:
+                    break
+                page = self.client.get(
+                    "/v1/people",
+                    headers=self.headers,
+                    params={"limit": 1, "cursor": cursor},
+                )
+                self.assertEqual(page.status_code, 200, page.text)
+                seen.update(item["username"] for item in page.json()["items"])
+                cursor = page.json()["cursor"]
+            self.assertIn("@mot.aa", seen)
+            self.assertIn("@hai.bb", seen)
+            self.assertNotIn("@ba.cc", seen)
+        finally:
+            people_db.PEOPLE_CAPACITY = previous
+            with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
+                conn.execute(
+                    "DELETE FROM saved_people WHERE username IN ('@mot.aa', '@hai.bb', '@ba.cc')"
+                )
+                conn.execute("DELETE FROM people_meta")
 
 
 if __name__ == "__main__":

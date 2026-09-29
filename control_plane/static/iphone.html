@@ -47,7 +47,12 @@
     #peopleBox[hidden] { display: none !important; }
     #peopleLead, #savedLead { margin: 0 0 0.6rem; line-height: 1.4; }
     #savedEmpty { margin: 0; color: #444; }
-    #savedEmpty[hidden], #savedTable[hidden] { display: none !important; }
+    #savedEmpty[hidden], #savedTable[hidden], #savedMore[hidden] { display: none !important; }
+    #savedMore {
+      display: block; width: 100%; margin: 0.7rem 0 0.2rem; min-height: 48px;
+      border-radius: 12px; border: 2px solid #111; background: #fff;
+      font: inherit; font-weight: 800; font-size: 16px;
+    }
     #peopleTable, #savedTable { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
     #peopleTable th, #peopleTable td, #savedTable th, #savedTable td {
       border-bottom: 1px solid #ddd; padding: 0.45rem 0.2rem;
@@ -84,7 +89,7 @@
       <ul id="problemList" hidden></ul>
     </section>
     <section id="savedBox">
-      <p id="savedLead">Kết quả đã lưu. Hub tự ghi ngay sau mỗi video. Mở lại trang vẫn còn.</p>
+      <p id="savedLead">Kết quả đã lưu. Kho chứa được 50 triệu kết quả. Hub tự ghi ngay sau mỗi video. Mở lại trang vẫn còn.</p>
       <p id="savedEmpty">Chưa có người đủ ba cột.</p>
       <table id="savedTable" hidden>
         <thead>
@@ -96,6 +101,7 @@
         </thead>
         <tbody id="savedBody"></tbody>
       </table>
+      <button id="savedMore" type="button" hidden>Xem thêm</button>
     </section>
     <section id="peopleBox" hidden>
       <p id="peopleLead">Video vừa đọc. Cột đã có sẵn được giữ nguyên.</p>
@@ -132,6 +138,9 @@
     const savedTable = document.getElementById("savedTable");
     const savedBody = document.getElementById("savedBody");
     const savedEmpty = document.getElementById("savedEmpty");
+    const savedLead = document.getElementById("savedLead");
+    const savedMore = document.getElementById("savedMore");
+    let savedCursor = "";
     const playback = document.getElementById("playback");
     const status = document.getElementById("status");
     const progressBox = document.getElementById("progressBox");
@@ -214,6 +223,26 @@
       fillTable(savedBody, list);
     }
 
+    function appendSaved(rows) {
+      (rows || []).forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.appendChild(cell(row.name));
+        tr.appendChild(cell(row.contactName));
+        tr.appendChild(cell(row.username));
+        savedBody.appendChild(tr);
+      });
+      if (savedBody.children.length) {
+        savedEmpty.hidden = true;
+        savedTable.hidden = false;
+      }
+    }
+
+    function paintSavedCount(count) {
+      const n = Number(count) || 0;
+      savedLead.textContent = "Kết quả đã lưu: " + n.toLocaleString("vi-VN")
+        + " người. Kho chứa được 50 triệu kết quả.";
+    }
+
     const helperLine = document.getElementById("helperLine");
 
     async function refreshHelper() {
@@ -235,16 +264,28 @@
       }
     }
 
-    async function loadSaved() {
+    async function loadSaved(cursor) {
       try {
-        const response = await fetch("/v1/people", { headers: authHeaders() });
+        const params = new URLSearchParams();
+        params.set("limit", "50");
+        if (cursor) params.set("cursor", cursor);
+        const response = await fetch("/v1/people?" + params.toString(), { headers: authHeaders() });
         if (!response.ok) return;
         const data = await response.json();
-        showSaved(data.items || []);
+        paintSavedCount(data.count);
+        const rows = data.items || [];
+        if (cursor) appendSaved(rows);
+        else showSaved(rows);
+        savedCursor = data.cursor || "";
+        savedMore.hidden = !savedCursor;
       } catch (error) {
         setStatus("Chưa mở được kết quả đã lưu. Mở lại trang.", false);
       }
     }
+
+    savedMore.addEventListener("click", () => {
+      if (savedCursor) loadSaved(savedCursor);
+    });
 
     function showClip(file) {
       if (playbackUrl) URL.revokeObjectURL(playbackUrl);
@@ -439,7 +480,7 @@
         }
         added += result.savedPeople || 0;
         found += result.people.length;
-        if (Array.isArray(result.archive)) showSaved(result.archive);
+        await loadSaved();
         showPeople(result.people);
       }
       if (batchTotal) paintProgress(100, failed ? "Gặp vấn đề" : "Đã ghi xong");

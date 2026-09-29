@@ -187,3 +187,15 @@ class ScreenPeopleTests(unittest.TestCase):
                 {"name": "Ba soi", "contactName": "Chi Soi Xuan Trung", "username": "@b.soi22"},
             ],
         )
+
+    def test_every_consistent_person_is_kept(self) -> None:
+        contacts = []
+        profiles = []
+        for index in range(201):
+            name = f"Ten {index:04d}"
+            contacts.append({"kind": "contact", "name": name, "contactName": f"Danh ba {index:04d}"})
+            profiles.append({"kind": "profile", "name": name, "username": f"user{index:04d}x"})
+        rows = propose_rows(contacts + profiles)
+        self.assertEqual(len(rows), 201)
+        self.assertEqual(rows[0]["username"], "@user0000x")
+        self.assertEqual(rows[-1]["username"], "@user0200x")

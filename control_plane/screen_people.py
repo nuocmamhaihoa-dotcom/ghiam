@@ -341,7 +341,7 @@ def propose_rows(sightings: list[dict[str, str]]) -> list[dict[str, str]]:
                 "username": _mode(chosen_usernames),
             }
         )
-    return rows[:200]
+    return rows
 
 
 def captions_from_sightings(sightings: list[dict[str, str]]) -> list[str]:

@@ -22,6 +22,7 @@ class VideoJob:
         self.people: list[dict[str, str]] = []
         self.saved_people = 0
         self.archive: list[dict[str, str]] = []
+        self.archive_count = 0
         self.path: Path | None = None
         self.owner = ""
         self.lease = 0.0
@@ -106,11 +107,12 @@ class VideoJob:
         people: list[dict[str, str]],
         saved_people: int,
         archive: list[dict[str, str]],
+        archive_count: int = 0,
     ) -> None:
         with self._lock:
             if self.done:
                 return
-            self._finish_locked(people, saved_people, archive)
+            self._finish_locked(people, saved_people, archive, archive_count)
 
     def finish_from_worker(
         self,
@@ -118,11 +120,12 @@ class VideoJob:
         people: list[dict[str, str]],
         saved_people: int,
         archive: list[dict[str, str]],
+        archive_count: int = 0,
     ) -> bool:
         with self._lock:
             if self.done or self.owner != worker_id or not worker_id:
                 return False
-            self._finish_locked(people, saved_people, archive)
+            self._finish_locked(people, saved_people, archive, archive_count)
             return True
 
     def _finish_locked(
@@ -130,6 +133,7 @@ class VideoJob:
         people: list[dict[str, str]],
         saved_people: int,
         archive: list[dict[str, str]],
+        archive_count: int = 0,
     ) -> None:
         self.percent = 100
         self.task = "Đã ghi xong"
@@ -138,6 +142,7 @@ class VideoJob:
         self.people = people
         self.saved_people = saved_people
         self.archive = archive
+        self.archive_count = archive_count
 
     def fail(self, message: str) -> None:
         cleaned = " ".join(str(message).split())[:180] or "Gặp vấn đề"
@@ -176,6 +181,7 @@ class VideoJob:
                 body["people"] = list(self.people)
                 body["savedPeople"] = self.saved_people
                 body["archive"] = list(self.archive)
+                body["archiveCount"] = self.archive_count
             return body
 
 

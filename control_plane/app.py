@@ -33,7 +33,14 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
 from control_plane.delivery import PACKAGE_NAME, ensure_package
-from control_plane.people import apply_novel, complete_rows, complete_sightings, profile_from_line
+from control_plane.people import (
+    apply_novel,
+    clean_name,
+    complete_rows,
+    complete_sightings,
+    name_key,
+    profile_from_line,
+)
 from control_plane.version import IPHONE_BUILD
 from control_plane import video_helpers
 from control_plane.screen_steps import ScreenVideoError, analyze_screen_video, clean_ocr, read_screen_image, seen_line
@@ -317,12 +324,26 @@ class PeopleConfirmBody(BaseModel):
     rows: list[PeopleRow] = Field(default_factory=list)
 
 
+_VIDEO_RESULT_LIMIT = 20_000
+_STORE_FULL = "Kho đã đủ 50 triệu kết quả. Người mới chưa ghi."
+
+
 @app.get("/v1/people")
-def people_list(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+def people_list(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    cursor: str = Query(default=""),
+) -> dict[str, Any]:
     _auth(authorization)
-    rows = db.list_people(settings.db_path)
-    ready = complete_rows(rows)
-    return {"count": len(ready), "items": ready, "known": rows}
+    items, next_cursor = db.list_people_page(settings.db_path, limit=limit, cursor=cursor)
+    _total, ready = db.people_counts(settings.db_path)
+    return {
+        "count": ready,
+        "capacity": db.PEOPLE_CAPACITY,
+        "items": items,
+        "known": items,
+        "cursor": next_cursor,
+    }
 
 
 @app.post("/v1/people/sightings")
@@ -331,36 +352,52 @@ def people_sightings(
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     _auth(authorization)
-    stored = db.list_people(settings.db_path)
-    folded, added = apply_novel(stored, [item.model_dump() for item in body.items])
-    if added:
-        db.save_people(settings.db_path, folded, utcnow())
+    items = [item.model_dump() for item in body.items]
+    keys = [name_key(clean_name(item.get("name") or "")) for item in items]
+    with db.people_write_lock:
+        stored = list(db.people_by_keys(settings.db_path, keys).values())
+        folded, added = apply_novel(stored, items)
+        skipped: list[str] = []
+        if added:
+            skipped = db.save_people(settings.db_path, folded, utcnow())
+    if skipped:
+        blocked = set(skipped)
+        folded = [row for row in folded if row.get("nameKey") not in blocked]
+        added = 0
     ready = complete_rows(folded)
     return {"count": len(ready), "items": ready, "saved": added, "known": folded}
 
 
-def _people_archive() -> list[dict[str, str]]:
-    """Đọc lại đúng những dòng đủ ba cột đang nằm trong bảng."""
+def _video_archive(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Các dòng đủ ba cột của video vừa đọc, không phải cả kho."""
     return [
-        {"name": row["name"], "contactName": row["contactName"], "username": row["username"]}
-        for row in complete_rows(db.list_people(settings.db_path))
+        {
+            "name": row.get("name") or "",
+            "contactName": row.get("contactName") or "",
+            "username": row.get("username") or "",
+        }
+        for row in rows
+        if row.get("contactName") and row.get("username")
     ]
 
 
-def _write_people(rows: list[dict[str, str]]) -> None:
-    """Ghi rồi đọc lại. Lần ghi không thấy trên đĩa thì ghi một lần nữa."""
-    db.save_people(settings.db_path, rows, utcnow())
-    if _people_match(rows):
-        return
-    db.save_people(settings.db_path, rows, utcnow())
-    if not _people_match(rows):
+def _write_people(rows: list[dict[str, str]]) -> list[str]:
+    """Ghi rồi đọc lại đúng các khóa này. Lần ghi không thấy trên đĩa thì ghi một lần nữa."""
+    skipped = set(db.save_people(settings.db_path, rows, utcnow()))
+    pending = [row for row in rows if row.get("nameKey") not in skipped]
+    if _people_match(pending):
+        return list(skipped)
+    skipped.update(db.save_people(settings.db_path, pending, utcnow()))
+    pending = [row for row in rows if row.get("nameKey") not in skipped]
+    if not _people_match(pending):
         raise HTTPException(500, "Chưa ghi được kết quả. Chọn lại video.")
+    return list(skipped)
 
 
 def _people_match(rows: list[dict[str, str]]) -> bool:
-    saved = {row["nameKey"]: row for row in db.list_people(settings.db_path)}
+    saved = db.people_by_keys(settings.db_path, [row.get("nameKey") or "" for row in rows])
     for row in rows:
-        found = saved.get(row["nameKey"])
+        found = saved.get(row.get("nameKey") or "")
         if found is None:
             return False
         if found.get("contactName") != (row.get("contactName") or ""):
@@ -370,32 +407,56 @@ def _people_match(rows: list[dict[str, str]]) -> bool:
     return True
 
 
-def _save_proposed(rows: list[dict[str, str]]) -> tuple[int, int]:
-    """Ghi dòng đủ ba cột. Cột đã có thì giữ nguyên. Trả về (lần nhìn thấy mới, số người mới)."""
-    stored = db.list_people(settings.db_path)
-    current = stored
-    sightings_saved = 0
-    people_saved = 0
+def _save_proposed(rows: list[dict[str, str]]) -> tuple[int, int, list[str]]:
+    """Ghi dòng đủ ba cột. Cột đã có thì giữ nguyên. Trả về (lần nhìn thấy mới, số người mới, khóa bị bỏ)."""
+    prepared: list[dict[str, str]] = []
+    keys: list[str] = []
     for row in rows:
-        items = complete_sightings([row])
-        if not items:
+        if not complete_sightings([row]):
             continue
-        current, added = apply_novel(current, items)
-        if added:
-            people_saved += 1
-            sightings_saved += added
-    if sightings_saved:
-        _write_people(current)
-    return sightings_saved, people_saved
+        prepared.append(row)
+        key = name_key(clean_name(row.get("name") or ""))
+        if key:
+            keys.append(key)
+    if not prepared:
+        return 0, 0, []
+    with db.people_write_lock:
+        stored = db.people_by_keys(settings.db_path, keys)
+        before = {
+            key: (row["name"], row["contactName"], row["username"])
+            for key, row in stored.items()
+        }
+        current = list(stored.values())
+        sightings_saved = 0
+        people_saved = 0
+        for row in prepared:
+            items = complete_sightings([row])
+            current, added = apply_novel(current, items)
+            if added:
+                people_saved += 1
+                sightings_saved += added
+        if not sightings_saved:
+            return 0, 0, []
+        to_write = [
+            row
+            for row in current
+            if before.get(row["nameKey"])
+            != (row["name"], row.get("contactName") or "", row.get("username") or "")
+        ]
+        if not to_write:
+            return sightings_saved, people_saved, []
+        skipped = _write_people(to_write)
+    return sightings_saved, people_saved, skipped
 
 
 @app.post("/v1/people/confirm")
 def people_confirm(body: PeopleConfirmBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     """Ghi những dòng người dùng đã giữ. Cột đã có thì không ghi đè."""
     _auth(authorization)
-    added, _people = _save_proposed([row.model_dump() for row in body.rows])
-    ready = complete_rows(db.list_people(settings.db_path))
-    return {"ok": True, "saved": added, "count": len(ready), "items": ready}
+    added, _people, _skipped = _save_proposed([row.model_dump() for row in body.rows])
+    items, _cursor = db.list_people_page(settings.db_path, limit=50)
+    _total, ready = db.people_counts(settings.db_path)
+    return {"ok": True, "saved": added, "count": ready, "items": items}
 
 
 @app.get("/v1/server/stats")
@@ -802,26 +863,35 @@ async def recordings_from_video(
             "savedPeople": 0,
         }
     stored = _store_seen([f"{len(people)} người"] if people else ["Đã đọc video"])
-    added, people_saved = _save_proposed(people)
-    archive = _people_archive()
+    added, people_saved, skipped = _save_proposed(people)
+    archive = _video_archive(people)
+    _total, ready = db.people_counts(settings.db_path)
     stored["steps"] = []
     stored["count"] = len(people)
     stored["people"] = people
     stored["saved"] = added
     stored["savedPeople"] = people_saved
     stored["archive"] = archive
-    stored["archiveCount"] = len(archive)
+    stored["archiveCount"] = ready
+    if skipped:
+        stored["problems"] = [_STORE_FULL]
     return stored
 
 
 def _commit_people(job: VideoJob, people: list[dict[str, str]], worker_id: str | None) -> bool:
     """Ghi dòng đủ ba cột. PC phụ chỉ ghi khi vẫn đang giữ video."""
-    rows = people[:200]
+    rows = list(people)
+    if len(rows) > _VIDEO_RESULT_LIMIT:
+        job.add_problem(f"Video có hơn {_VIDEO_RESULT_LIMIT} người. Phần sau chưa ghi.")
+        rows = rows[:_VIDEO_RESULT_LIMIT]
     job.update(97, "Ghi kết quả")
     try:
         _store_seen([f"{len(rows)} người"] if rows else ["Đã đọc video"])
-        _added, people_saved = _save_proposed(rows)
-        archive = _people_archive()
+        _added, people_saved, skipped = _save_proposed(rows)
+        if skipped:
+            job.add_problem(_STORE_FULL)
+        archive = _video_archive(rows)
+        _total, ready = db.people_counts(settings.db_path)
     except HTTPException as error:
         detail = error.detail if isinstance(error.detail, str) else "Chưa ghi được kết quả. Chọn lại video."
         if worker_id:
@@ -830,8 +900,8 @@ def _commit_people(job: VideoJob, people: list[dict[str, str]], worker_id: str |
             job.fail(detail)
         raise
     if worker_id:
-        return job.finish_from_worker(worker_id, rows, people_saved, archive)
-    job.finish(rows, people_saved, archive)
+        return job.finish_from_worker(worker_id, rows, people_saved, archive, ready)
+    job.finish(rows, people_saved, archive, ready)
     return True
 
 
@@ -1121,10 +1191,14 @@ def screen_live_post(body: LiveTextBody, authorization: str | None = Header(defa
     added = 0
     sighting = profile_from_line(line)
     if sighting is not None:
-        stored = db.list_people(settings.db_path)
-        folded, added = apply_novel(stored, [sighting])
-        if added:
-            db.save_people(settings.db_path, folded, utcnow())
+        key = name_key(clean_name(sighting.get("name") or ""))
+        with db.people_write_lock:
+            stored = list(db.people_by_keys(settings.db_path, [key]).values())
+            _folded, added = apply_novel(stored, [sighting])
+            if added:
+                skipped = db.save_people(settings.db_path, _folded, utcnow())
+                if key in skipped:
+                    added = 0
     if saved:
         _remember_hub("screen", line)
     return {"ok": True, "line": line, "saved": saved, "people": added}
