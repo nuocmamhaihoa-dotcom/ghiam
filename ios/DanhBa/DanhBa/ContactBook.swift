@@ -84,27 +84,27 @@ final class ContactBookModel: ObservableObject {
         if batch.truncated {
             summary += " Danh sách quá dài, chỉ lấy \(ImportParser.maxDrafts) số đầu."
         }
-        summary += " Bấm Chia danh bạ."
         note(summary, error: false)
         return true
     }
 
-    func splitBooks() {
+    @discardableResult
+    func splitBooks() -> Bool {
         guard BookSplitter.cleanTitle(library.title).isEmpty == false else {
             note(BookError.missingTitle.localizedDescription, error: true)
-            return
+            return false
         }
         guard !library.source.isEmpty else {
             note(BookError.missingSource.localizedDescription, error: true)
-            return
+            return false
         }
         guard let result = BookSplitter.split(drafts: library.source, title: library.title) else {
             note(BookError.missingTitle.localizedDescription, error: true)
-            return
+            return false
         }
         guard !result.books.isEmpty else {
             note(BookError.empty.localizedDescription, error: true)
-            return
+            return false
         }
         let previous = library.books
         var books = result.books
@@ -135,8 +135,27 @@ final class ContactBookModel: ObservableObject {
         if result.duplicatePhones > 0 {
             text += " Bỏ \(result.duplicatePhones) số trùng."
         }
-        text += " Mỗi số chỉ nằm trong một danh bạ. Bấm Nạp vào iPhone."
+        text += " Mỗi số chỉ nằm trong một danh bạ."
         note(text, error: false)
+        return true
+    }
+
+    func runAll(text: String) async {
+        guard !busy else { return }
+        let clean = BookSplitter.cleanTitle(library.title)
+        library.title = clean.isEmpty ? "Khach" : clean
+        LibraryStore.save(library)
+        let pending = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !pending.isEmpty {
+            guard importBulk(text: pending) else { return }
+        }
+        if !library.source.isEmpty {
+            guard splitBooks() else { return }
+        } else if library.books.isEmpty {
+            note("Dán số hoặc chọn file.", error: true)
+            return
+        }
+        await loadOntoPhone()
     }
 
     func loadOntoPhone() async {

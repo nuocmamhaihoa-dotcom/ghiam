@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
-from control_plane.delivery import PACKAGE_NAME, ensure_package
+from control_plane.delivery import DANHBA_NAME, PACKAGE_NAME, ensure_danhba_package, ensure_package
 from control_plane.people import apply_novel, complete_rows
 from control_plane.version import IPHONE_BUILD
 from control_plane.recordings import (
@@ -42,7 +42,7 @@ from control_plane.recordings import (
     script_lines,
     steps_to_events,
 )
-from control_plane.settings import settings
+from control_plane.settings import ROOT, settings
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -205,7 +205,7 @@ def delivery_page() -> HTMLResponse:
 @app.get("/v1/delivery")
 def delivery_info() -> dict[str, Any]:
     pkg = ensure_package(STATIC_DIR, settings.data_dir)
-    return {
+    body: dict[str, Any] = {
         "iphoneBuild": IPHONE_BUILD,
         "iphonePath": "/iphone",
         "installPath": "/tai",
@@ -216,12 +216,34 @@ def delivery_info() -> dict[str, Any]:
             "path": "/tai/goi.zip",
         },
     }
+    danhba = ensure_danhba_package(ROOT / "ios" / "DanhBa", settings.data_dir)
+    if danhba is not None and danhba.is_file():
+        body["danhba"] = {
+            "name": danhba.name,
+            "bytes": danhba.stat().st_size,
+            "sha256": _sha256(danhba),
+            "path": "/tai/danhba.zip",
+        }
+    return body
 
 
 @app.get("/tai/goi.zip")
 def delivery_package() -> FileResponse:
     pkg = ensure_package(STATIC_DIR, settings.data_dir)
     if pkg.name != PACKAGE_NAME:
+        raise HTTPException(status_code=404, detail="package missing")
+    return FileResponse(
+        pkg,
+        media_type="application/zip",
+        filename=pkg.name,
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/tai/danhba.zip")
+def danhba_package() -> FileResponse:
+    pkg = ensure_danhba_package(ROOT / "ios" / "DanhBa", settings.data_dir)
+    if pkg is None or not pkg.is_file() or pkg.name != DANHBA_NAME:
         raise HTTPException(status_code=404, detail="package missing")
     return FileResponse(
         pkg,

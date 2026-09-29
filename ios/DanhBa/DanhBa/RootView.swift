@@ -7,14 +7,13 @@ struct RootView: View {
     @State private var title = ""
     @State private var paste = ""
     @State private var pickingFile = false
-    @State private var confirmPush = false
     @State private var confirmDelete = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Mỗi dòng một số, hoặc Tên, số. App chia mỗi 5000 số thành một nhóm. Một số chỉ nằm trong một nhóm.")
+                    Text("Dán số hoặc chọn file, rồi bấm Nạp lên iPhone. App tự chia mỗi 5000 số thành một nhóm. Một số chỉ nằm trong một nhóm.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     Text(statusLine)
@@ -25,8 +24,6 @@ struct RootView: View {
                         .textInputAutocapitalization(.words)
                         .disabled(model.busy)
 
-                    Text("Dán danh sách")
-                        .font(.headline)
                     TextEditor(text: $paste)
                         .frame(minHeight: 140)
                         .padding(8)
@@ -36,28 +33,22 @@ struct RootView: View {
                         }
                         .disabled(model.busy)
 
-                    Button("Nạp hàng loạt") {
-                        model.importBulk(text: paste)
+                    Button("Nạp lên iPhone") {
+                        if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            title = "Khach"
+                        }
+                        model.setTitle(title)
+                        Task { await model.runAll(text: paste) }
                     }
                     .buttonStyle(BigButtonStyle())
-                    .disabled(model.busy || paste.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(model.busy || !canStart)
 
                     Button("Chọn file") {
                         pickingFile = true
                     }
-                    .buttonStyle(BigButtonStyle(prominent: false))
+                    .buttonStyle(.borderless)
+                    .frame(maxWidth: .infinity)
                     .disabled(model.busy)
-
-                    Button("Chia danh bạ") {
-                        model.setTitle(title)
-                        let pending = paste.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !pending.isEmpty, model.importBulk(text: pending) == false {
-                            return
-                        }
-                        model.splitBooks()
-                    }
-                    .buttonStyle(BigButtonStyle())
-                    .disabled(model.busy || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                     if !model.library.books.isEmpty {
                         Text("Danh bạ")
@@ -105,28 +96,23 @@ struct RootView: View {
             .navigationTitle("Danh bạ")
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 10) {
-                    Button(pushTitle) {
-                        confirmPush = true
-                    }
-                    .buttonStyle(BigButtonStyle())
-                    .disabled(model.busy || model.library.books.isEmpty)
-
+                if model.activeBook?.onPhone == true {
                     Button(deleteTitle) {
                         confirmDelete = true
                     }
                     .buttonStyle(BigButtonStyle(prominent: false))
-                    .disabled(model.busy || model.activeBook?.onPhone != true)
+                    .disabled(model.busy)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                    .padding(.bottom, 8)
+                    .background(.ultraThinMaterial)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 10)
-                .padding(.bottom, 8)
-                .background(.ultraThinMaterial)
             }
         }
         .onAppear {
             if title.isEmpty {
-                title = model.library.title
+                let saved = model.library.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                title = saved.isEmpty ? "Khach" : saved
             }
             model.refreshAccess()
         }
@@ -142,14 +128,6 @@ struct RootView: View {
         ) { result in
             openFile(result)
         }
-        .confirmationDialog("Nạp mọi danh bạ lên iPhone?", isPresented: $confirmPush, titleVisibility: .visible) {
-            Button("Nạp") {
-                Task { await model.loadOntoPhone() }
-            }
-            Button("Huỷ", role: .cancel) {}
-        } message: {
-            Text("Khi iPhone hỏi, chọn Cho phép đầy đủ. Mỗi cuốn thành một nhóm. Số đã ở nhóm khác sẽ không được thêm.")
-        }
         .confirmationDialog("Xoá danh bạ đang dùng trên iPhone?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Xoá", role: .destructive) {
                 Task { await model.deleteActiveFromPhone() }
@@ -160,28 +138,21 @@ struct RootView: View {
         }
     }
 
+    private var canStart: Bool {
+        let pending = !paste.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return pending || !model.library.source.isEmpty || !model.library.books.isEmpty
+    }
+
     private var statusLine: String {
         let books = model.library.books
-        let phones = model.library.source.filter { $0.phone?.isEmpty == false }.count
         if books.isEmpty {
-            if phones == 0 {
-                return "Dán số hoặc chọn file, rồi bấm Chia danh bạ."
-            }
-            return "Trong phần mềm: \(phones) số. Bấm Chia danh bạ."
+            return "Tên mặc định Khach. Dán số, rồi bấm Nạp lên iPhone."
         }
         let ready = books.filter(\.onPhone).count
         if let active = model.activeBook, active.onPhone {
-            return "\(books.count) danh bạ, \(ready) trên iPhone. Đang dùng: \(active.name)."
+            return "Đang dùng \(active.name). \(ready)/\(books.count) nhóm trên iPhone."
         }
-        return "\(books.count) danh bạ đã chia. Bấm Nạp vào iPhone."
-    }
-
-    private var pushTitle: String {
-        let count = model.library.books.count
-        if count == 0 {
-            return "Nạp vào iPhone"
-        }
-        return "Nạp \(count) danh bạ vào iPhone"
+        return "\(books.count) danh bạ đã chia. Bấm Nạp lên iPhone."
     }
 
     private var deleteTitle: String {
@@ -215,7 +186,11 @@ struct RootView: View {
                 return
             }
             paste = text
-            model.importBulk(text: text)
+            if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                title = "Khach"
+            }
+            model.setTitle(title)
+            Task { await model.runAll(text: text) }
         }
     }
 }

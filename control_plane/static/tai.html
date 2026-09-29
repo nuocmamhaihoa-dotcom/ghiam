@@ -44,11 +44,23 @@
     <li>Bấm Mở app.</li>
     <li>Bấm Chia sẻ, rồi Thêm vào Màn hình chính.</li>
   </ol>
+  <h2>Phần mềm Danh bạ</h2>
+  <p>App trên iPhone. Dán số, bấm một nút: app tự chia mỗi 5000 số thành một nhóm và nạp lên máy. Một số chỉ nằm trong một nhóm.</p>
+  <p class="url" id="danhbaUrl">/tai/danhba.zip</p>
+  <a class="btn" id="danhba" href="/tai/danhba.zip">Tải phần mềm Danh bạ</a>
+  <a class="btn ghost" href="https://github.com/nuocmamhaihoa-dotcom/ghiam/archive/refs/heads/cursor/ios-danh-ba-66a3.zip">Tải mã nguồn từ GitHub</a>
+  <ol>
+    <li>Tải gói về máy Mac và giải nén.</li>
+    <li>Mở DanhBa.xcodeproj bằng Xcode, chọn Apple ID của bạn.</li>
+    <li>Cắm iPhone, bấm Run. Tin nhà phát triển một lần trong Cài đặt.</li>
+  </ol>
   <p class="build" id="buildLine">Bản __IPHONE_BUILD__</p>
   <script src="/static/version.js"></script>
   <script>
     const appUrl = location.origin + "/iphone";
+    const danhbaUrl = location.origin + "/tai/danhba.zip";
     document.getElementById("appUrl").textContent = appUrl;
+    document.getElementById("danhbaUrl").textContent = danhbaUrl;
     document.getElementById("copyUrl").addEventListener("click", async () => {
       const button = document.getElementById("copyUrl");
       try {

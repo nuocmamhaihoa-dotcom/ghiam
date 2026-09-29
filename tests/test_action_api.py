@@ -414,6 +414,31 @@ class ActionApiTests(unittest.TestCase):
         denied = self.client.get(f"/v1/updates/packages/{package['name']}")
         self.assertEqual(denied.status_code, 401)
 
+        self.assertIn("Tải phần mềm Danh bạ", page.text)
+        self.assertIn('href="/tai/danhba.zip"', page.text)
+        danhba = payload["danhba"]
+        self.assertEqual(danhba["path"], "/tai/danhba.zip")
+        self.assertEqual(danhba["name"], "danh-ba-iphone.zip")
+        self.assertGreater(danhba["bytes"], 0)
+        self.assertEqual(len(danhba["sha256"]), 64)
+        downloaded_app = self.client.get("/tai/danhba.zip")
+        self.assertEqual(downloaded_app.status_code, 200)
+        self.assertEqual(downloaded_app.headers["cache-control"], "no-cache")
+        self.assertTrue(downloaded_app.content.startswith(b"PK"))
+        self.assertIn("danh-ba-iphone.zip", downloaded_app.headers["content-disposition"])
+        with zipfile.ZipFile(io.BytesIO(downloaded_app.content)) as archive:
+            names = archive.namelist()
+            self.assertIn("DanhBa/HUONG-DAN.txt", names)
+            self.assertIn("DanhBa/README.md", names)
+            self.assertTrue(any(name.endswith("DanhBa.xcodeproj/project.pbxproj") for name in names))
+            joined = " ".join(names)
+            self.assertNotIn("server.env", joined)
+            self.assertNotIn(".db", joined)
+            self.assertNotIn("xcuserdata", joined)
+            guide = archive.read("DanhBa/HUONG-DAN.txt").decode("utf-8")
+            self.assertIn("Nạp lên iPhone", guide)
+            self.assertNotIn("token", guide.lower())
+
 
 if __name__ == "__main__":
     unittest.main()
