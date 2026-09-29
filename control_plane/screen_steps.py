@@ -26,7 +26,6 @@ from control_plane.screen_people import (
 )
 
 _MAX_FRAMES = 2400
-_MAX_READS = 1000
 _MIN_DIFF = 0.08
 _SAMPLE_FPS = 8.0
 _STEP_LIMIT = 400
@@ -576,10 +575,6 @@ def _changed_frames(images: list[tuple[float, Path]], progress: ReadProgress) ->
                 continue
         chosen.append((seconds, image))
         previous = small
-        if len(chosen) == _MAX_READS:
-            if index + 1 < total:
-                progress.problem("Đã đọc 1000 khung đổi. Phần sau của video chưa xử lý.")
-            break
     if unopened:
         progress.problem(f"{unopened} khung không mở được.")
     progress.report(47, "Chọn khung đổi")

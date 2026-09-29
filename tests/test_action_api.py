@@ -386,6 +386,9 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(job.public()["task"], "Đọc tiếp")
         self.assertEqual(job.public()["percent"], 70)
         self.assertEqual(job.remembered()["1.250"][0], ["Tran Tung"])
+        for index in range(1, 1002):
+            job.remember_frame(float(index), ["a"], [])
+        self.assertIn("1001.000", job.remembered())
         staged = job.staged_people()
         self.assertIsNotNone(staged)
         assert staged is not None

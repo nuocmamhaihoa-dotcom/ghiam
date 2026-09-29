@@ -9,6 +9,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from control_plane.people import clean_username
 from control_plane.screen_people import TextLine, propose_rows, sightings_from_image, sightings_from_lines
 
 
@@ -43,7 +44,7 @@ class ScreenPeopleTests(unittest.TestCase):
                 _line("@b.soi22", 140, 28),
             ]
         )
-        rows = propose_rows(contacts + profiles)
+        rows = propose_rows(contacts + contacts + profiles + profiles)
         self.assertEqual(
             rows,
             [
@@ -53,12 +54,11 @@ class ScreenPeopleTests(unittest.TestCase):
         )
 
     def test_ocr_without_diacritics_keeps_the_spelled_name(self) -> None:
-        rows = propose_rows(
-            [
-                {"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"},
-                {"kind": "profile", "name": "Tran Tung", "username": "@trn.tng751"},
-            ]
-        )
+        seen = [
+            {"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"},
+            {"kind": "profile", "name": "Tran Tung", "username": "@trn.tng751"},
+        ]
+        rows = propose_rows(seen + seen)
         self.assertEqual(rows[0]["name"], "Trần Tùng")
         self.assertEqual(rows[0]["username"], "@trn.tng751")
 
@@ -68,6 +68,7 @@ class ScreenPeopleTests(unittest.TestCase):
                 {"kind": "contact", "name": "Ba soi", "contactName": "Chi Soi Xuan Trung"},
                 {"kind": "contact", "name": "Bà soi", "contactName": "Chị Soi Xuân Trung"},
                 {"kind": "profile", "name": "Bà soi", "username": "@b.soi22"},
+                {"kind": "profile", "name": "Bà soi", "username": "@b.soi22"},
             ]
         )
         self.assertEqual(rows[0]["name"], "Bà soi")
@@ -76,6 +77,7 @@ class ScreenPeopleTests(unittest.TestCase):
     def test_repeated_handle_wins_over_one_character_drift(self) -> None:
         rows = propose_rows(
             [
+                {"kind": "contact", "name": "Dịu 93", "contactName": "user7457244303237"},
                 {"kind": "contact", "name": "Dịu 93", "contactName": "user7457244303237"},
                 {"kind": "profile", "name": "Dịu 93", "username": "@daodiu100693"},
                 {"kind": "profile", "name": "Dịu 93", "username": "@daodiu100693"},
@@ -101,7 +103,8 @@ class ScreenPeopleTests(unittest.TestCase):
             for _index in range(3)
         ]
         contacts.append({"kind": "contact", "name": "Trần Tùng", "contactName": "Tên khác"})
-        rows = propose_rows(contacts + [{"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"}])
+        profile = {"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"}
+        rows = propose_rows(contacts + [profile, profile])
         self.assertEqual(rows[0]["contactName"], "A Tùng Bán Gạch")
         self.assertEqual(rows[0]["username"], "@trn.tng751")
 
@@ -177,9 +180,12 @@ class ScreenPeopleTests(unittest.TestCase):
             )
             profile_tung = save(folder, 2, [("Tran Tung", 80, font), ("@trn.tng751", 150, small)])
             profile_soi = save(folder, 3, [("Ba soi", 80, font), ("@b.soi22", 150, small)])
-            rows = propose_rows(
-                sightings_from_image(contacts) + sightings_from_image(profile_tung) + sightings_from_image(profile_soi)
+            seen = (
+                sightings_from_image(contacts)
+                + sightings_from_image(profile_tung)
+                + sightings_from_image(profile_soi)
             )
+            rows = propose_rows(seen + seen)
         self.assertEqual(
             rows,
             [
@@ -193,9 +199,48 @@ class ScreenPeopleTests(unittest.TestCase):
         profiles = []
         for index in range(201):
             name = f"Ten {index:04d}"
-            contacts.append({"kind": "contact", "name": name, "contactName": f"Danh ba {index:04d}"})
-            profiles.append({"kind": "profile", "name": name, "username": f"user{index:04d}x"})
+            contact = {"kind": "contact", "name": name, "contactName": f"Danh ba {index:04d}"}
+            profile = {"kind": "profile", "name": name, "username": f"user{index:04d}x"}
+            contacts.extend((contact, contact))
+            profiles.extend((profile, profile))
         rows = propose_rows(contacts + profiles)
         self.assertEqual(len(rows), 201)
         self.assertEqual(rows[0]["username"], "@user0000x")
         self.assertEqual(rows[-1]["username"], "@user0200x")
+
+    def test_one_reading_is_not_saved(self) -> None:
+        once = [
+            {"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"},
+            {"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"},
+        ]
+        self.assertEqual(propose_rows(once), [])
+        self.assertEqual(
+            propose_rows(once + once),
+            [{"name": "Trần Tùng", "contactName": "A Tùng Bán Gạch", "username": "@trn.tng751"}],
+        )
+
+    def test_instruction_text_and_short_handle_are_not_saved(self) -> None:
+        found = sightings_from_lines(
+            [
+                _line("Bấm nút ba lần để dừng", 80),
+                _line("Cấu hình không hợp lệ", 120),
+                _line("@kol", 170),
+            ]
+        )
+        self.assertEqual(found, [])
+        self.assertEqual(clean_username("@kol"), "")
+        junk = [
+            {"kind": "contact", "name": "Bấm nút ba lần để dừng", "contactName": "Cấu hình không hợp lệ"},
+            {"kind": "profile", "name": "Bấm nút ba lần để dừng", "username": "@kol"},
+        ]
+        self.assertEqual(propose_rows(junk + junk), [])
+
+    def test_dung_is_a_name(self) -> None:
+        pair = [
+            {"kind": "contact", "name": "Dũng", "contactName": "Bạn Dũng Xin Việc"},
+            {"kind": "profile", "name": "Dũng", "username": "@dung.ok1"},
+        ]
+        rows = propose_rows(pair + pair)
+        self.assertEqual(rows[0]["name"], "Dũng")
+        self.assertEqual(rows[0]["contactName"], "Bạn Dũng Xin Việc")
+        self.assertEqual(rows[0]["username"], "@dung.ok1")

@@ -14,7 +14,7 @@ from PIL import Image, ImageFilter, ImageOps
 from control_plane.people import clean_name, clean_username, fold_name
 from control_plane.tesseract_keep import read_tsv
 
-_HANDLE = re.compile(r"@[A-Za-z0-9._]{3,30}")
+_HANDLE = re.compile(r"@[A-Za-z0-9._]{5,30}")
 _TIME = re.compile(r"\d{1,2}:\d{2}")
 _LABELS = {
     "danh ba",
@@ -69,9 +69,19 @@ def _is_label(text: str) -> bool:
     return compact.startswith("videodo") and "dangtai" in compact
 
 
+def _is_instruction(text: str) -> bool:
+    """Câu hướng dẫn trên màn hình, không phải tên người."""
+    folded = fold_name(text)
+    if "cau hinh" in folded or "khong hop le" in folded:
+        return True
+    if "bam" in folded.split():
+        return True
+    return "dừng" in text.casefold()
+
+
 def _is_name_line(text: str) -> bool:
     stripped = text.strip()
-    if _is_label(stripped) or _TIME.match(stripped) or "@" in stripped:
+    if _is_instruction(stripped) or _is_label(stripped) or _TIME.match(stripped) or "@" in stripped:
         return False
     if re.fullmatch(r"[\d.\s]+", stripped):
         return False
@@ -287,6 +297,8 @@ def _winning_spellings(values: list[str], near: Callable[[str, str], bool]) -> l
         return None
     groups.sort(key=len, reverse=True)
     if len(groups) == 1:
+        if len(groups[0]) < 2:
+            return None
         return groups[0]
     leader = len(groups[0])
     runner = len(groups[1])
@@ -307,12 +319,18 @@ def propose_rows(sightings: list[dict[str, str]]) -> list[dict[str, str]]:
     for item in sightings:
         name = clean_name(item.get("name") or "")
         key = fold_name(name)
-        if not key:
+        if not key or _is_instruction(name):
             continue
         kind = item.get("kind") or ""
         if kind == "contact":
             contact_name = clean_name(item.get("contactName") or "")
-            if not contact_name or "@" in contact_name or "@" in name or fold_name(contact_name) == key:
+            if (
+                not contact_name
+                or _is_instruction(contact_name)
+                or "@" in contact_name
+                or "@" in name
+                or fold_name(contact_name) == key
+            ):
                 continue
             if key not in contacts and key not in profiles:
                 order.append(key)

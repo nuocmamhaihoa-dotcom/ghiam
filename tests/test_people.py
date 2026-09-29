@@ -46,7 +46,10 @@ class PeopleMergeTests(unittest.TestCase):
     def test_username_prefix_and_invalid_drop(self) -> None:
         self.assertEqual(clean_username("trn.tng751"), "@trn.tng751")
         self.assertEqual(clean_username("@b.soi22"), "@b.soi22")
+        self.assertEqual(clean_username("@hoanganh1116"), "@hoanganh1116")
         self.assertEqual(clean_username("Hong@1978"), "")
+        self.assertEqual(clean_username("@kol"), "")
+        self.assertEqual(clean_username("@khac"), "")
         folded = fold_sightings(
             [],
             [{"kind": "profile", "name": "Hồng", "username": "không hợp lệ"}],

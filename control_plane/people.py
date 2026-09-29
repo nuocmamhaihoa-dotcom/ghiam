@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-_HANDLE = re.compile(r"^@?[A-Za-z0-9._]{2,30}$")
+_HANDLE = re.compile(r"^@?[A-Za-z0-9._]{5,30}$")
 
 
 def name_key(name: str) -> str:
@@ -137,7 +137,7 @@ _PROFILE_LABELS = ("TikTok", "Facebook", "Instagram", "Zalo", "Danh bạ", "Đã
 
 def profile_from_line(line: str) -> dict[str, str] | None:
     """A profile screen names one person and one @account."""
-    handles = re.findall(r"@[A-Za-z0-9._]{3,30}", line)
+    handles = re.findall(r"@[A-Za-z0-9._]{5,30}", line)
     if len(handles) != 1:
         return None
     name = line

@@ -9,6 +9,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from PIL import Image
+
 from control_plane.screen_steps import (
     ReadProgress,
     _ffmpeg_extract_command,
@@ -17,6 +19,7 @@ from control_plane.screen_steps import (
     _read_frames,
     _sample_rate,
     _saved_frames,
+    _changed_frames,
     analyze_screen_video,
     clean_ocr,
     ocr_workers,
@@ -133,6 +136,30 @@ class ScreenVideoTests(unittest.TestCase):
     def test_media_seconds_are_microseconds(self) -> None:
         self.assertEqual(_media_seconds("960000"), 0.96)
         self.assertIsNone(_media_seconds("N/A"))
+
+    def test_every_changed_frame_is_read(self) -> None:
+        class Sink:
+            def __init__(self) -> None:
+                self.problems: list[str] = []
+
+            def report(self, _percent: int, _task: str) -> None:
+                return None
+
+            def problem(self, text: str) -> None:
+                self.problems.append(text)
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            images: list[tuple[float, Path]] = []
+            for index in range(1001):
+                path = root / f"{index:04d}.png"
+                color = (0, 0, 0) if index % 2 == 0 else (255, 255, 255)
+                Image.new("RGB", (40, 40), color).save(path)
+                images.append((index / 8, path))
+            sink = Sink()
+            chosen = _changed_frames(images, sink)
+        self.assertEqual(len(chosen), 1001)
+        self.assertFalse(any("1000" in text for text in sink.problems))
 
     def test_a_long_video_is_sampled_across_its_whole_length(self) -> None:
         rate = _sample_rate(7200)

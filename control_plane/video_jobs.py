@@ -10,7 +10,8 @@ from typing import Any
 
 from control_plane.screen_steps import ReadProgress, discard_video_work
 
-_FRAME_LIMIT = 1000
+# Mỗi khung đã tách đều được nhớ để đọc nối. Video được tách tối đa 2400 khung.
+_FRAME_LIMIT = 2400
 _PEOPLE_LIMIT = 20_000
 
 
