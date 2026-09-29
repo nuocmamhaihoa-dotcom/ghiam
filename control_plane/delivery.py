@@ -47,15 +47,16 @@ def ensure_package(static_dir: Path, data_dir: Path) -> Path:
 
 
 DANHBA_NAME = "danh-ba-iphone.zip"
-_DANHBA_GUIDE = """Danh bạ — mở ngay trên iPhone
+_DANHBA_GUIDE = """Danh bạ — nạp từ máy tính, dùng trên iPhone
 
-File zip không chạy trên iPhone. Mở Safari và vào đúng đường này:
+Danh sách nằm trên hub, không nằm trong một file chung.
 
-https://htmlpreview.github.io/?https://github.com/nuocmamhaihoa-dotcom/ghiam/blob/cursor/ios-danh-ba-66a3/control_plane/static/danhba.html
+Từ máy tính, mở /danhba/nap.
+Mỗi dòng một người: tên ghi nhớ, rồi số điện thoại.
+Hub chia mỗi 5000 số một danh bạ. Một số chỉ nằm trong một danh bạ.
 
-Bấm đường đó là phần mềm chạy. Dán số, bấm Nạp lên iPhone.
-App chia mỗi 5000 số một nhóm. Một số chỉ nằm trong một nhóm.
-Mở lại đúng đường đó để lấy bản mới.
+Trên iPhone, mở /danhba/ bằng Safari rồi bấm Nạp lên iPhone.
+Danh bạ vừa nạp chuyển sang mục Đã dùng.
 
 Gói zip này là mã nguồn Xcode, không phải file cài trên iPhone.
 Gói này không kèm danh bạ của bạn.

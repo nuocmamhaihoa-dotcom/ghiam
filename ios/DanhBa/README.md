@@ -2,15 +2,15 @@
 
 App nạp liên hệ vào iPhone của bạn và xoá liên hệ bạn chọn. Máy tin nhà phát triển một lần. App hỏi quyền Danh bạ một lần.
 
-## Mở trên iPhone
+## Nạp từ máy tính, dùng trên iPhone
 
-File zip không chạy trên iPhone. Mở Safari và vào đúng đường này:
+Danh sách nằm trên hub, mỗi người một dòng gồm tên ghi nhớ và số điện thoại. Không gom mọi số vào một file chung.
 
-https://htmlpreview.github.io/?https://github.com/nuocmamhaihoa-dotcom/ghiam/blob/cursor/ios-danh-ba-66a3/control_plane/static/danhba.html
+1. Trên máy tính, mở `/danhba/nap` của hub. Dán danh sách hoặc chọn file, bấm **Nạp lên VPS**. Hub chia mỗi 5000 số một danh bạ. Một số chỉ nằm trong một danh bạ.
+2. Trên iPhone, mở Safari vào `/danhba/`. Bấm **Nạp lên iPhone**. iPhone hỏi thì bấm **Thêm tất cả**.
+3. Danh bạ vừa nạp chuyển sang mục **Đã dùng**. Các danh bạ chưa nạp ở mục **Chưa dùng**.
 
-Phần mềm chạy ngay. Không cần tải file, không cần Thêm vào Màn hình chính, không cần App Store, không cần Xcode.
-
-Lần sau phần mềm có bản mới, mở lại đúng đường dẫn đó.
+File zip không chạy trên iPhone.
 
 Trong app: tên mặc định `Khach`. Dán số hoặc chọn file, bấm **Nạp lên iPhone**. App chia mỗi 5000 số một nhóm và đưa nhóm đó sang Danh bạ của máy. Một số chỉ nằm trong một nhóm. iPhone hỏi thì bấm **Thêm tất cả**.
 

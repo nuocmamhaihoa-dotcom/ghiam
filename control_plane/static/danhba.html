@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="Danh bạ" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="theme-color" content="#ffffff" />
-  <meta name="danhba-build" content="3" />
+  <meta name="danhba-build" content="4" />
   <link rel="manifest" href="/danhba/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>Danh bạ</title>
@@ -20,6 +20,7 @@
       padding: calc(1rem + env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) calc(5.5rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
     }
     h1 { font-size: 1.35rem; margin: 0 0 0.35rem; }
+    h2 { font-size: 1rem; margin: 1rem 0 0.4rem; }
     p { margin: 0 0 0.8rem; line-height: 1.4; }
     label { display: block; font-weight: 650; margin: 0 0 0.35rem; }
     input, textarea {
@@ -55,24 +56,22 @@
 </head>
 <body>
   <h1>Danh bạ</h1>
-  <p class="hint" id="install">Phần mềm đang chạy. Dán số, rồi bấm Nạp lên iPhone. App tự chia mỗi 5000 số. Một số chỉ nằm trong một nhóm. Mở lại đúng đường dẫn này để lấy bản mới.</p>
+  <p class="hint" id="install">Danh sách nằm trên hub. Mỗi danh bạ 5000 số, mỗi người một tên và một số. Danh bạ đã nạp chuyển sang Đã dùng.</p>
   <p class="note" id="upgrade" hidden>Có bản mới trên hub.</p>
-  <p id="status" class="hint">Tên mặc định Khach.</p>
-  <label for="title">Tên danh bạ</label>
-  <input id="title" value="Khach" autocomplete="off" />
-  <label for="paste">Danh sách số</label>
-  <textarea id="paste" placeholder="0901234567"></textarea>
-  <button id="fileButton" class="ghost" type="button">Chọn file</button>
-  <input id="file" type="file" accept=".txt,.csv,.vcf,.vcard,.json,text/plain,text/csv,text/vcard" />
-  <div id="books"></div>
+  <p id="status" class="hint">Đang lấy danh bạ trên hub.</p>
+  <label for="token">Token hub</label>
+  <input id="token" type="password" autocomplete="off" />
+  <h2>Chưa dùng</h2>
+  <div id="ready"></div>
+  <h2>Đã dùng</h2>
+  <div id="used"></div>
   <p id="message" class="note" hidden></p>
-  <p class="build" id="buildLine">Phiên bản 3</p>
+  <p class="build" id="buildLine">Phiên bản 4</p>
   <div class="bar">
     <button id="go" type="button">Nạp lên iPhone</button>
-    <button id="remove" class="ghost" type="button" hidden>Xoá nhóm đang dùng</button>
   </div>
   <script>
-    window.DANHBA_BUILD = 3;
+    window.DANHBA_BUILD = 4;
   </script>
   <script>
 (function (root) {
@@ -330,28 +329,16 @@
 </script>
   <script>
     var BUILD = window.DANHBA_BUILD;
-    var titleInput = document.getElementById("title");
-    var pasteInput = document.getElementById("paste");
+    var tokenInput = document.getElementById("token");
     var statusLine = document.getElementById("status");
     var message = document.getElementById("message");
-    var booksBox = document.getElementById("books");
+    var readyBox = document.getElementById("ready");
+    var usedBox = document.getElementById("used");
     var goButton = document.getElementById("go");
-    var removeButton = document.getElementById("remove");
-    var library = loadLibrary();
-
-    function loadLibrary() {
-      try {
-        var saved = JSON.parse(localStorage.getItem("danhba-library") || "null");
-        if (saved && Array.isArray(saved.books)) return saved;
-      } catch (err) {}
-      return { title: "Khach", books: [], activeId: null };
-    }
-
-    function saveLibrary() {
-      try {
-        localStorage.setItem("danhba-library", JSON.stringify(library));
-      } catch (err) {}
-    }
+    var books = { ready: [], used: [] };
+    var activeId = null;
+    var running = false;
+    tokenInput.value = localStorage.getItem("fb_poller_control_token") || "";
 
     function showMessage(text, isError) {
       message.hidden = !text;
@@ -359,77 +346,88 @@
       message.className = isError ? "note error" : "note";
     }
 
-    function activeBook() {
-      var books = library.books || [];
-      for (var i = 0; i < books.length; i += 1) {
-        if (books[i].id === library.activeId) return books[i];
-      }
-      return books[0] || null;
+    function authHeaders() {
+      var token = tokenInput.value.trim();
+      localStorage.setItem("fb_poller_control_token", token);
+      var headers = { Accept: "application/json" };
+      if (token) headers.Authorization = "Bearer " + token;
+      return headers;
     }
 
-    function nextUnsent() {
-      var books = library.books || [];
-      for (var i = 0; i < books.length; i += 1) {
-        if (!books[i].sent) return books[i];
+    function selectedReady() {
+      var list = books.ready || [];
+      for (var i = 0; i < list.length; i += 1) {
+        if (list[i].id === activeId) return list[i];
       }
-      return null;
+      return list[0] || null;
+    }
+
+    function card(book, box, current) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "card" + (book.id === current ? " active" : "");
+      var name = document.createElement("span");
+      name.textContent = book.name + " · " + book.count + " số";
+      var mark = document.createElement("span");
+      mark.textContent = book.status === "used" ? "Đã dùng" : "Chưa dùng";
+      button.appendChild(name);
+      button.appendChild(mark);
+      if (book.status !== "used") {
+        button.addEventListener("click", function () {
+          activeId = book.id;
+          render();
+        });
+      }
+      box.appendChild(button);
     }
 
     function render() {
-      var books = library.books || [];
-      var ready = books.filter(function (book) { return book.sent; }).length;
-      var current = activeBook();
-      if (!books.length) {
-        statusLine.textContent = "Tên mặc định Khach. Dán số, rồi bấm Nạp lên iPhone.";
-      } else if (current && current.sent) {
-        statusLine.textContent = "Đang dùng " + current.name + ". " + ready + "/" + books.length + " nhóm đã đưa sang Danh bạ.";
-      } else {
-        statusLine.textContent = books.length + " danh bạ đã chia. Bấm Nạp lên iPhone.";
-      }
-      var upcoming = nextUnsent();
-      var pendingText = (pasteInput.value || "").trim();
-      var finished = books.length > 0 && !upcoming && !pendingText;
-      goButton.textContent = finished ? "Đã nạp hết" : "Nạp lên iPhone";
-      goButton.disabled = finished;
-      removeButton.hidden = !(current && current.sent);
-      removeButton.textContent = current && current.sent ? "Xoá " + current.name : "Xoá nhóm đang dùng";
-      booksBox.textContent = "";
-      books.forEach(function (book) {
-        var button = document.createElement("button");
-        button.type = "button";
-        button.className = "card" + (book.id === (current && current.id) ? " active" : "");
-        var name = document.createElement("span");
-        name.textContent = book.name + " · " + book.entries.length + " số";
-        var mark = document.createElement("span");
-        mark.textContent = book.sent ? "Đã nạp" : "Chưa nạp";
-        button.appendChild(name);
-        button.appendChild(mark);
-        button.addEventListener("click", function () {
-          library.activeId = book.id;
-          saveLibrary();
-          render();
-        });
-        booksBox.appendChild(button);
-      });
+      var ready = books.ready || [];
+      var used = books.used || [];
+      var current = selectedReady();
+      activeId = current ? current.id : null;
+      statusLine.textContent = ready.length
+        ? ready.length + " danh bạ chưa dùng. Bấm Nạp lên iPhone."
+        : "Chưa có danh bạ chờ. Nạp danh sách từ máy tính.";
+      goButton.disabled = !current;
+      goButton.textContent = current ? "Nạp " + current.name : "Nạp lên iPhone";
+      readyBox.textContent = "";
+      usedBox.textContent = "";
+      if (!ready.length) readyBox.textContent = "Chưa có danh bạ.";
+      ready.forEach(function (book) { card(book, readyBox, activeId); });
+      if (!used.length) usedBox.textContent = "Chưa có danh bạ đã dùng.";
+      used.forEach(function (book) { card(book, usedBox, null); });
     }
 
-    function titleNow() {
-      var clean = DanhBa.cleanTitle(titleInput.value);
-      if (!clean) {
-        clean = "Khach";
-        titleInput.value = clean;
+    async function refresh() {
+      if (location.pathname.indexOf("/danhba") !== 0) {
+        showMessage("Mở trang này trên hub của VPS. Danh sách nạp từ máy tính, không nằm trong file chung.", true);
+        render();
+        return;
       }
-      library.title = clean;
-      return clean;
+      var response = await fetch("/v1/danhba/books", { headers: authHeaders(), cache: "no-store" });
+      if (response.status === 401) {
+        showMessage("Dán token hub, rồi bấm Nạp lên iPhone.", true);
+        books = { ready: [], used: [] };
+        render();
+        return;
+      }
+      if (!response.ok) {
+        showMessage("Không lấy được danh bạ trên hub.", true);
+        render();
+        return;
+      }
+      books = await response.json();
+      render();
     }
 
-    async function handOff(books) {
-      var body = books.map(function (book) { return DanhBa.vcard(book); }).join("");
-      var fileName = (library.title || "Khach") + ".vcf";
+    async function handOff(book) {
+      var fileName = book.name + ".vcf";
+      var body = DanhBa.vcard(book);
       var file = new File([body], fileName, { type: "text/vcard" });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
-          await navigator.share({ files: [file], title: library.title || "Khach" });
+          await navigator.share({ files: [file], title: book.name });
           return true;
         } catch (err) {
           if (err && err.name === "AbortError") return false;
@@ -445,99 +443,49 @@
       return true;
     }
 
-    async function start(text) {
-      titleNow();
-      var pending = (text || "").trim();
-      if (pending) {
-        var batch = DanhBa.parseLines(pending);
-        var phones = batch.drafts.filter(function (row) { return row.phone; }).length;
-        if (!phones) {
-          showMessage("Không thấy số điện thoại nào trong danh sách.", true);
-          return;
-        }
-        var result = DanhBa.split(batch.drafts, library.title);
-        if (!result || !result.books.length) {
-          showMessage("Không có số điện thoại hợp lệ.", true);
-          return;
-        }
-        library.books = result.books;
-        library.activeId = result.books[0].id;
-        saveLibrary();
-        var summary = "Đã chia " + result.books.length + " danh bạ, mỗi cuốn tối đa " + DanhBa.pageSize + " số.";
-        if (result.duplicatePhones) summary += " Bỏ " + result.duplicatePhones + " số trùng.";
-        summary += " Mỗi số chỉ nằm trong một danh bạ.";
-        if (batch.truncated) summary += " Danh sách quá dài, chỉ lấy phần đầu.";
-        showMessage(summary, false);
-      }
-      var queue = (library.books || []).filter(function (item) { return !item.sent; });
-      if (!queue.length) {
-        if (!(library.books || []).length) showMessage("Dán số hoặc chọn file.", true);
-        render();
+    async function loadSelected() {
+      var summary = selectedReady();
+      if (!summary) {
+        showMessage("Chưa có danh bạ chờ. Nạp danh sách từ máy tính.", true);
         return;
       }
-      var handed = await handOff(queue);
-      if (!handed) {
-        render();
-        return;
-      }
-      var count = 0;
-      queue.forEach(function (item) {
-        item.sent = true;
-        count += item.entries.length;
+      var response = await fetch("/v1/danhba/books/" + encodeURIComponent(summary.id), {
+        headers: authHeaders(),
+        cache: "no-store"
       });
-      library.activeId = queue[0].id;
-      saveLibrary();
-      showMessage("iPhone sẽ hỏi thêm " + count + " số, chia trong " + queue.length + " nhóm. Bấm Thêm tất cả. Mỗi số chỉ nằm trong một nhóm.", false);
-      render();
+      if (response.status === 401) {
+        showMessage("Dán token hub, rồi bấm Nạp lên iPhone.", true);
+        return;
+      }
+      if (!response.ok) {
+        showMessage("Không mở được danh bạ.", true);
+        return;
+      }
+      var book = await response.json();
+      var handed = await handOff(book);
+      if (!handed) return;
+      var marked = await fetch("/v1/danhba/books/" + encodeURIComponent(book.id) + "/use", {
+        method: "POST",
+        headers: authHeaders()
+      });
+      if (!marked.ok) {
+        showMessage("Đã đưa sang iPhone nhưng hub chưa chuyển danh bạ sang Đã dùng.", true);
+        return;
+      }
+      showMessage("iPhone sẽ hỏi thêm " + book.entries.length + " số của " + book.name + ". Bấm Thêm tất cả. Danh bạ này chuyển sang Đã dùng.", false);
+      activeId = null;
+      await refresh();
     }
 
-    var running = false;
     goButton.addEventListener("click", function () {
       if (running) return;
       running = true;
-      start(pasteInput.value).then(function () {
+      loadSelected().then(function () {
         running = false;
       }, function () {
         running = false;
+        showMessage("Không nạp được danh bạ.", true);
       });
-    });
-    pasteInput.addEventListener("input", render);
-
-    document.getElementById("fileButton").addEventListener("click", function () {
-      document.getElementById("file").click();
-    });
-
-    document.getElementById("file").addEventListener("change", function (event) {
-      var file = event.target.files && event.target.files[0];
-      event.target.value = "";
-      if (!file) return;
-      if (file.size > 12000000) {
-        showMessage("File quá lớn hoặc không đọc được.", true);
-        return;
-      }
-      var reader = new FileReader();
-      reader.onload = function () {
-        var text = String(reader.result || "");
-        pasteInput.value = text;
-        start(text);
-      };
-      reader.onerror = function () {
-        showMessage("Không mở được file.", true);
-      };
-      reader.readAsText(file);
-    });
-
-    removeButton.addEventListener("click", function () {
-      var book = activeBook();
-      if (!book || !book.sent) return;
-      var accepted = window.confirm("Bỏ " + book.name + " trong phần mềm và chuyển sang nhóm kế. iPhone không cho trang web xoá số đã thêm. Trong app Danh bạ, tìm " + book.name + " rồi xoá các số đó.");
-      if (!accepted) return;
-      library.books = library.books.filter(function (item) { return item.id !== book.id; });
-      var next = library.books.filter(function (item) { return item.sent; })[0] || library.books[0] || null;
-      library.activeId = next ? next.id : null;
-      saveLibrary();
-      showMessage(next ? "Đã bỏ " + book.name + ". Đang dùng " + next.name + "." : "Đã bỏ " + book.name + ".", false);
-      render();
     });
 
     if (location.pathname.indexOf("/danhba") === 0 && "serviceWorker" in navigator) {
@@ -574,8 +522,8 @@
       location.replace(current.toString());
     }).catch(function () {});
 
-    if (library.title) titleInput.value = library.title;
     render();
+    refresh();
   </script>
 </body>
 </html>

@@ -21,6 +21,8 @@ Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from control_plane.app import app  # noqa: E402
+from control_plane.db import session  # noqa: E402
+from control_plane.settings import settings  # noqa: E402
 
 
 class ActionApiTests(unittest.TestCase):
@@ -417,15 +419,13 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Tải phần mềm Danh bạ", page.text)
         self.assertIn('href="/tai/danhba.zip"', page.text)
         self.assertIn("Mở Danh bạ", page.text)
-        self.assertIn(
-            'href="https://htmlpreview.github.io/?https://github.com/nuocmamhaihoa-dotcom/ghiam/blob/cursor/ios-danh-ba-66a3/control_plane/static/danhba.html"',
-            page.text,
-        )
         self.assertIn('href="/danhba/"', page.text)
+        self.assertIn("Nạp từ máy tính", page.text)
+        self.assertIn('href="/danhba/nap"', page.text)
         self.assertEqual(payload["danhbaPath"], "/danhba/")
-        self.assertEqual(payload["danhbaBuild"], 3)
+        self.assertEqual(payload["danhbaBuild"], 4)
         self.assertEqual(body["danhba"], "/danhba/")
-        self.assertEqual(body["danhbaBuild"], 3)
+        self.assertEqual(body["danhbaBuild"], 4)
 
         install = self.client.get("/danhba", follow_redirects=False)
         self.assertEqual(install.status_code, 302, install.text)
@@ -434,17 +434,23 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(screen.status_code, 200, screen.text)
         self.assertEqual(screen.headers["cache-control"], "no-cache")
         self.assertIn("Nạp lên iPhone", screen.text)
-        self.assertIn('content="3"', screen.text)
-        self.assertIn("DanhBa.parseLines", screen.text)
+        self.assertIn('content="4"', screen.text)
+        self.assertIn("Đã dùng", screen.text)
+        self.assertIn("Chưa dùng", screen.text)
+        self.assertIn("parseLines: parseLines", screen.text)
         self.assertIn("/danhba/sw.js", screen.text)
         self.assertNotIn("/danhba/app.js", screen.text)
         version = self.client.get("/danhba/version")
         self.assertEqual(version.status_code, 200, version.text)
-        self.assertEqual(version.json()["build"], 3)
+        self.assertEqual(version.json()["build"], 4)
+        nap = self.client.get("/danhba/nap")
+        self.assertEqual(nap.status_code, 200, nap.text)
+        self.assertIn("Nạp lên VPS", nap.text)
+        self.assertIn("tên ghi nhớ", nap.text)
         worker = self.client.get("/danhba/sw.js")
         self.assertEqual(worker.status_code, 200, worker.text)
         self.assertIn("javascript", worker.headers["content-type"])
-        self.assertIn('var BUILD = "3";', worker.text)
+        self.assertIn('var BUILD = "4";', worker.text)
         self.assertIn('var CACHE = "danhba-" + BUILD;', worker.text)
         self.assertEqual(worker.headers["service-worker-allowed"], "/danhba/")
         manifest = self.client.get("/danhba/manifest.webmanifest")
@@ -472,7 +478,49 @@ class ActionApiTests(unittest.TestCase):
             self.assertNotIn("xcuserdata", joined)
             guide = archive.read("DanhBa/HUONG-DAN.txt").decode("utf-8")
             self.assertIn("Nạp lên iPhone", guide)
+            self.assertIn("Đã dùng", guide)
             self.assertNotIn("token", guide.lower())
+
+    def test_danhba_books_split_and_move_used(self) -> None:
+        with session(settings.db_path) as conn:
+            conn.execute("DELETE FROM contact_entries")
+            conn.execute("DELETE FROM contact_books")
+        denied = self.client.get("/v1/danhba/books")
+        self.assertEqual(denied.status_code, 401)
+        created = self.client.post(
+            "/v1/danhba/import",
+            headers=self.headers,
+            json={
+                "title": "Khach",
+                "text": "Lan, +84 901-234-567\n0901234567\nMinh, 0902222222\n",
+            },
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        body = created.json()
+        self.assertEqual(body["added"], 2)
+        self.assertEqual(body["duplicatePhones"], 1)
+        self.assertEqual(len(body["ready"]), 1)
+        self.assertEqual(body["ready"][0]["name"], "Khach 1")
+        self.assertEqual(body["ready"][0]["count"], 2)
+        self.assertEqual(body["used"], [])
+        listed = self.client.get("/v1/danhba/books", headers=self.headers)
+        self.assertNotIn("0901234567", listed.text)
+        book_id = body["ready"][0]["id"]
+        one = self.client.get(f"/v1/danhba/books/{book_id}", headers=self.headers)
+        self.assertEqual(one.status_code, 200, one.text)
+        entries = one.json()["entries"]
+        self.assertEqual(entries, [
+            {"name": "Lan", "phone": "0901234567"},
+            {"name": "Minh", "phone": "0902222222"},
+        ])
+        used = self.client.post(f"/v1/danhba/books/{book_id}/use", headers=self.headers)
+        self.assertEqual(used.status_code, 200, used.text)
+        self.assertEqual(used.json()["status"], "used")
+        self.assertNotIn("entries", used.json())
+        again = self.client.get("/v1/danhba/books", headers=self.headers).json()
+        self.assertEqual(again["ready"], [])
+        self.assertEqual(again["used"][0]["id"], book_id)
+        self.assertEqual(again["used"][0]["status"], "used")
 
 
 if __name__ == "__main__":

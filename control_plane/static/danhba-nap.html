@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Nạp danh bạ</title>
+  <style>
+    :root { --font: -apple-system, "Segoe UI", system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: var(--font); font-size: 16px; color: #111; background: #fff;
+      padding: calc(1rem + env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) calc(5.5rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    }
+    h1 { font-size: 1.35rem; margin: 0 0 0.35rem; }
+    h2 { font-size: 1rem; margin: 1rem 0 0.4rem; }
+    p { margin: 0 0 0.8rem; line-height: 1.4; }
+    label { display: block; font-weight: 650; margin: 0 0 0.35rem; }
+    input, textarea {
+      width: 100%; font: inherit; color: inherit; border: 1px solid #d5d8de; border-radius: 12px;
+      padding: 0.75rem 0.8rem; background: #fff;
+    }
+    textarea { min-height: 180px; resize: vertical; }
+    button, a.btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 100%; min-height: 48px; margin: 0 0 0.55rem;
+      border: 0; border-radius: 12px; font-size: 16px; font-weight: 700;
+      text-decoration: none; color: #fff; background: #111;
+    }
+    button.ghost, a.ghost { background: #f4f5f7; color: #111; }
+    button:disabled { opacity: 0.45; }
+    .hint { color: #5c6570; }
+    .card {
+      margin: 0 0 0.55rem; padding: 0.75rem 0.8rem; border-radius: 12px; background: #f4f5f7;
+      display: flex; justify-content: space-between; gap: 0.6rem; font-weight: 650;
+    }
+    .note { padding: 0.75rem 0.8rem; border-radius: 12px; background: #f4f5f7; margin: 0 0 0.8rem; }
+    .note.error { background: #fde8e8; }
+    .bar {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      padding: 0.6rem max(1rem, env(safe-area-inset-right)) calc(0.6rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+      background: rgba(255,255,255,0.92);
+    }
+    #file { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Nạp danh bạ</h1>
+  <p class="hint">Mỗi dòng một người: tên ghi nhớ, rồi số điện thoại. Hub chia mỗi 5000 số một danh bạ. Một số chỉ nằm trong một danh bạ. Danh bạ đã nạp trên iPhone chuyển sang Đã dùng.</p>
+  <label for="token">Token hub</label>
+  <input id="token" type="password" autocomplete="off" />
+  <label for="title">Tên danh bạ</label>
+  <input id="title" value="Khach" autocomplete="off" />
+  <label for="paste">Tên và số</label>
+  <textarea id="paste" placeholder="Lan, 0901234567"></textarea>
+  <button id="fileButton" class="ghost" type="button">Chọn file</button>
+  <input id="file" type="file" accept=".txt,.csv,text/plain,text/csv" />
+  <p id="message" class="note" hidden></p>
+  <h2>Chưa dùng</h2>
+  <div id="ready"></div>
+  <h2>Đã dùng</h2>
+  <div id="used"></div>
+  <p class="hint">Phiên bản __DANHBA_BUILD__</p>
+  <div class="bar">
+    <button id="go" type="button">Nạp lên VPS</button>
+    <a class="btn ghost" href="/danhba/">Mở trên iPhone</a>
+  </div>
+  <script>
+    var tokenInput = document.getElementById("token");
+    var titleInput = document.getElementById("title");
+    var pasteInput = document.getElementById("paste");
+    var message = document.getElementById("message");
+    var readyBox = document.getElementById("ready");
+    var usedBox = document.getElementById("used");
+    var goButton = document.getElementById("go");
+    var running = false;
+    tokenInput.value = localStorage.getItem("fb_poller_control_token") || "";
+
+    function showMessage(text, isError) {
+      message.hidden = !text;
+      message.textContent = text || "";
+      message.className = isError ? "note error" : "note";
+    }
+
+    function authHeaders() {
+      var token = tokenInput.value.trim();
+      localStorage.setItem("fb_poller_control_token", token);
+      var headers = { Accept: "application/json" };
+      if (token) headers.Authorization = "Bearer " + token;
+      return headers;
+    }
+
+    function paint(payload) {
+      readyBox.textContent = "";
+      usedBox.textContent = "";
+      var ready = (payload && payload.ready) || [];
+      var used = (payload && payload.used) || [];
+      if (!ready.length) readyBox.textContent = "Chưa có danh bạ.";
+      ready.forEach(function (book) {
+        var row = document.createElement("div");
+        row.className = "card";
+        row.textContent = book.name + " · " + book.count + " số";
+        readyBox.appendChild(row);
+      });
+      if (!used.length) usedBox.textContent = "Chưa có danh bạ đã dùng.";
+      used.forEach(function (book) {
+        var row = document.createElement("div");
+        row.className = "card";
+        row.textContent = book.name + " · " + book.count + " số";
+        usedBox.appendChild(row);
+      });
+    }
+
+    async function refresh() {
+      var response = await fetch("/v1/danhba/books", { headers: authHeaders(), cache: "no-store" });
+      if (response.status === 401) {
+        showMessage("Dán token hub rồi bấm Nạp lên VPS.", true);
+        paint({ ready: [], used: [] });
+        return;
+      }
+      if (!response.ok) {
+        showMessage("Không lấy được danh bạ trên hub.", true);
+        return;
+      }
+      paint(await response.json());
+    }
+
+    async function upload(text) {
+      var headers = authHeaders();
+      headers["Content-Type"] = "application/json";
+      var response = await fetch("/v1/danhba/import", {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify({ title: titleInput.value, text: text })
+      });
+      if (response.status === 401) {
+        showMessage("Dán token hub rồi bấm Nạp lên VPS.", true);
+        return;
+      }
+      var payload = await response.json();
+      if (!response.ok) {
+        showMessage(payload.detail || "Không nạp được danh sách.", true);
+        return;
+      }
+      var summary = "Đã thêm " + payload.added + " người. Mỗi người một tên và một số.";
+      if (payload.duplicatePhones) summary += " Bỏ " + payload.duplicatePhones + " số trùng trong danh sách.";
+      if (payload.skippedExisting) summary += " Bỏ " + payload.skippedExisting + " số đã có trên hub.";
+      if (payload.truncated) summary += " Danh sách quá dài, chỉ lấy phần đầu.";
+      showMessage(summary, false);
+      paint(payload);
+    }
+
+    goButton.addEventListener("click", function () {
+      if (running) return;
+      var text = pasteInput.value.trim();
+      if (!text) {
+        showMessage("Dán danh sách: mỗi dòng tên ghi nhớ và số điện thoại.", true);
+        return;
+      }
+      running = true;
+      goButton.disabled = true;
+      upload(text).then(function () {
+        running = false;
+        goButton.disabled = false;
+      }, function () {
+        running = false;
+        goButton.disabled = false;
+        showMessage("Không nạp được danh sách.", true);
+      });
+    });
+
+    document.getElementById("fileButton").addEventListener("click", function () {
+      document.getElementById("file").click();
+    });
+    document.getElementById("file").addEventListener("change", function (event) {
+      var file = event.target.files && event.target.files[0];
+      event.target.value = "";
+      if (!file) return;
+      if (file.size > 20000000) {
+        showMessage("File quá lớn.", true);
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        pasteInput.value = String(reader.result || "");
+        goButton.click();
+      };
+      reader.onerror = function () {
+        showMessage("Không mở được file.", true);
+      };
+      reader.readAsText(file);
+    });
+
+    refresh();
+  </script>
+</body>
+</html>
