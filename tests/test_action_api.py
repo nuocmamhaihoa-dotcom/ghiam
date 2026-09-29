@@ -22,6 +22,7 @@ Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from control_plane import video_helpers  # noqa: E402
 from control_plane.app import app  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
 from control_plane.video_jobs import VideoJob  # noqa: E402
@@ -29,6 +30,7 @@ from control_plane.video_jobs import VideoJob  # noqa: E402
 
 class ActionApiTests(unittest.TestCase):
     def setUp(self) -> None:
+        video_helpers.helpers.clear()
         self._client_cm = TestClient(app)
         self.client = self._client_cm.__enter__()
         self.headers = {"Authorization": "Bearer test-token"}
@@ -175,6 +177,10 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("multiple", page.text)
         self.assertIn("nhiều video", page.text)
         self.assertIn("Không giới hạn số video, dung lượng hay thời lượng", page.text)
+        self.assertIn("mọi lõi của PC", page.text)
+        self.assertIn('id="helperLine"', page.text)
+        self.assertIn("PC phụ chưa nối", page.text)
+        self.assertIn("PC phụ đang nối", page.text)
         self.assertNotIn("40 - queue.length", page.text)
         self.assertNotIn('id="stepList"', page.text)
         self.assertNotIn("Lưu thông tin", page.text)
@@ -287,6 +293,19 @@ class ActionApiTests(unittest.TestCase):
         self.assertNotIn("people", body)
         job.update(90, "không nhận nữa")
         self.assertEqual(job.percent, 40)
+        job.finish([], 3, [])
+        self.assertEqual(job.error, "Video không có hình.")
+        self.assertNotIn("people", job.public())
+        held = VideoJob("giu")
+        self.assertFalse(held.claim("pc"))
+        held.bind(Path("a.mp4"))
+        self.assertTrue(held.claim("pc"))
+        self.assertFalse(held.claim("khac"))
+        self.assertFalse(held.stale(30))
+        held.lease = 0
+        self.assertTrue(held.stale(1))
+        self.assertTrue(held.release("pc"))
+        self.assertTrue(held.take_hub())
 
     def test_video_job_reports_a_problem(self) -> None:
         denied = self.client.post(
@@ -350,12 +369,14 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "24")
+        self.assertEqual(build, "25")
+        self.assertEqual(body["videoHelper"]["connected"], False)
+        self.assertEqual(body["videoHelper"]["cpus"], 0)
 
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 24)
+        self.assertEqual(payload["iphoneBuild"], 25)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -469,6 +490,197 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(skipped.json()["saved"], 0)
         with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
             conn.execute("DELETE FROM saved_people WHERE username = ?", ("@le.hoa",))
+
+    def _wait_job(self, job_id: str) -> dict[str, object]:
+        deadline = time.time() + 20
+        body: dict[str, object] = {}
+        while time.time() < deadline:
+            polled = self.client.get(f"/v1/recordings/jobs/{job_id}", headers=self.headers)
+            self.assertEqual(polled.status_code, 200, polled.text)
+            body = polled.json()
+            if body.get("done"):
+                return body
+            time.sleep(0.1)
+        self.fail(f"job did not finish: {body}")
+        return body
+
+    def test_a_connected_pc_saves_the_rows_it_reads(self) -> None:
+        denied = self.client.post("/v1/video-workers/heartbeat", json={"name": "pc-nha", "cpus": 16})
+        self.assertEqual(denied.status_code, 401)
+        denied_claim = self.client.post("/v1/recordings/jobs/claim", json={"workerId": "pc"})
+        self.assertEqual(denied_claim.status_code, 401)
+        beat = self.client.post(
+            "/v1/video-workers/heartbeat",
+            headers=self.headers,
+            json={"name": "pc-nha", "cpus": 16},
+        )
+        self.assertEqual(beat.status_code, 200, beat.text)
+        worker_id = beat.json()["workerId"]
+        self.assertTrue(worker_id)
+        health = self.client.get("/health")
+        helper = health.json()["videoHelper"]
+        self.assertTrue(helper["connected"])
+        self.assertEqual(helper["cpus"], 16)
+        self.assertEqual(helper["name"], "pc-nha")
+        empty = self.client.post(
+            "/v1/recordings/jobs/claim",
+            headers=self.headers,
+            json={"workerId": worker_id},
+        )
+        self.assertEqual(empty.status_code, 200, empty.text)
+        self.assertEqual(empty.json()["jobId"], "")
+        stranger = self.client.post(
+            "/v1/recordings/jobs/claim",
+            headers=self.headers,
+            json={"workerId": "khong-co"},
+        )
+        self.assertEqual(stranger.status_code, 409, stranger.text)
+        opened = self.client.post(
+            "/v1/recordings/from-video/job",
+            headers=self.headers,
+            files={"file": ("clip.mp4", b"not-a-video", "video/mp4")},
+        )
+        self.assertEqual(opened.status_code, 200, opened.text)
+        job_id = opened.json()["jobId"]
+        claimed_id = ""
+        for _ in range(30):
+            claimed = self.client.post(
+                "/v1/recordings/jobs/claim",
+                headers=self.headers,
+                json={"workerId": worker_id},
+            )
+            self.assertEqual(claimed.status_code, 200, claimed.text)
+            claimed_id = claimed.json()["jobId"]
+            if claimed_id:
+                break
+            time.sleep(0.05)
+        self.assertEqual(claimed_id, job_id)
+        video = self.client.get(
+            f"/v1/recordings/jobs/{job_id}/video",
+            headers=self.headers,
+            params={"workerId": worker_id},
+        )
+        self.assertEqual(video.status_code, 200, video.text)
+        self.assertEqual(video.content, b"not-a-video")
+        progress = self.client.post(
+            f"/v1/recordings/jobs/{job_id}/progress",
+            headers=self.headers,
+            json={"workerId": worker_id, "percent": 48, "task": "Đọc chữ, khung 1/1", "problems": []},
+        )
+        self.assertEqual(progress.status_code, 200, progress.text)
+        self.assertGreaterEqual(progress.json()["percent"], 48)
+        done = self.client.post(
+            f"/v1/recordings/jobs/{job_id}/complete",
+            headers=self.headers,
+            json={
+                "workerId": worker_id,
+                "people": [
+                    {"name": "Mai Lan", "contactName": "Chị Mai", "username": "@mai.lan.pc"},
+                ],
+            },
+        )
+        self.assertEqual(done.status_code, 200, done.text)
+        self.assertTrue(done.json()["done"])
+        self.assertEqual(done.json()["error"], "")
+        self.assertEqual(done.json()["savedPeople"], 1)
+        self.assertEqual(done.json()["percent"], 100)
+        time.sleep(0.4)
+        again = self._wait_job(job_id)
+        self.assertEqual(again.get("error"), "")
+        self.assertEqual(again.get("task"), "Đã ghi xong")
+        self.assertTrue(any(item.get("username") == "@mai.lan.pc" for item in again.get("archive", [])))
+        listed = self.client.get("/v1/people", headers=self.headers)
+        self.assertTrue(any(item["username"] == "@mai.lan.pc" for item in listed.json()["items"]))
+        with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
+            conn.execute("DELETE FROM saved_people WHERE username = ?", ("@mai.lan.pc",))
+        failed_open = self.client.post(
+            "/v1/recordings/from-video/job",
+            headers=self.headers,
+            files={"file": ("clip.mp4", b"still-not-a-video", "video/mp4")},
+        )
+        failed_id = failed_open.json()["jobId"]
+        claimed_id = ""
+        for _ in range(30):
+            claimed = self.client.post(
+                "/v1/recordings/jobs/claim",
+                headers=self.headers,
+                json={"workerId": worker_id},
+            )
+            claimed_id = claimed.json()["jobId"]
+            if claimed_id:
+                break
+            time.sleep(0.05)
+        self.assertEqual(claimed_id, failed_id)
+        failed = self.client.post(
+            f"/v1/recordings/jobs/{failed_id}/fail",
+            headers=self.headers,
+            json={"workerId": worker_id, "error": "Không đọc được video."},
+        )
+        self.assertEqual(failed.status_code, 200, failed.text)
+        self.assertTrue(failed.json()["done"])
+        self.assertEqual(failed.json()["error"], "Không đọc được video.")
+        time.sleep(0.4)
+        stayed = self._wait_job(failed_id)
+        self.assertEqual(stayed.get("error"), "Không đọc được video.")
+        self.assertTrue(all("Máy chủ đọc tiếp" not in str(item) for item in stayed.get("problems", [])))
+
+    def test_hub_reads_when_the_pc_does_not_take_the_video(self) -> None:
+        previous = video_helpers.OFFER_SECONDS
+        video_helpers.OFFER_SECONDS = 0.2
+        try:
+            beat = self.client.post(
+                "/v1/video-workers/heartbeat",
+                headers=self.headers,
+                json={"name": "pc-ban", "cpus": 8},
+            )
+            self.assertEqual(beat.status_code, 200, beat.text)
+            opened = self.client.post(
+                "/v1/recordings/from-video/job",
+                headers=self.headers,
+                files={"file": ("clip.mp4", b"not-a-video", "video/mp4")},
+            )
+            job_id = opened.json()["jobId"]
+            body = self._wait_job(job_id)
+        finally:
+            video_helpers.OFFER_SECONDS = previous
+        self.assertTrue(body.get("error"), body)
+        self.assertLess(int(body.get("percent") or 0), 100)
+
+    def test_hub_reads_when_the_pc_stops_reporting(self) -> None:
+        previous = video_helpers.LEASE_SECONDS
+        video_helpers.LEASE_SECONDS = 0.2
+        try:
+            beat = self.client.post(
+                "/v1/video-workers/heartbeat",
+                headers=self.headers,
+                json={"name": "pc-dut", "cpus": 4},
+            )
+            worker_id = beat.json()["workerId"]
+            opened = self.client.post(
+                "/v1/recordings/from-video/job",
+                headers=self.headers,
+                files={"file": ("clip.mp4", b"not-a-video", "video/mp4")},
+            )
+            job_id = opened.json()["jobId"]
+            claimed_id = ""
+            for _ in range(30):
+                claimed = self.client.post(
+                    "/v1/recordings/jobs/claim",
+                    headers=self.headers,
+                    json={"workerId": worker_id},
+                )
+                claimed_id = claimed.json()["jobId"]
+                if claimed_id:
+                    break
+                time.sleep(0.05)
+            self.assertEqual(claimed_id, job_id)
+            body = self._wait_job(job_id)
+        finally:
+            video_helpers.LEASE_SECONDS = previous
+        self.assertTrue(body.get("error"), body)
+        problems = body.get("problems")
+        self.assertIsInstance(problems, list)
+        self.assertTrue(any("Máy chủ đọc tiếp" in str(item) for item in problems), problems)
 
 
 if __name__ == "__main__":

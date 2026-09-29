@@ -60,6 +60,46 @@ class ReadProgress:
         del text
 
 
+def ocr_workers(frame_count: int, cpu_count: int, reserve: int | None = None) -> int:
+    """Số tiến trình Tesseract. Hub giữ một lõi cho trang hỏi tiến trình. PC đặt reserve 0."""
+    if reserve is None:
+        raw = os.environ.get("CONTROL_OCR_RESERVE", "1")
+        try:
+            reserve = int(raw)
+        except ValueError:
+            reserve = 1
+    kept = max(0, reserve)
+    cores = max(1, max(1, cpu_count) - kept)
+    return max(1, min(max(1, frame_count), cores))
+
+
+def _ffmpeg_extract_command(path: Path, pattern: Path, rate: float) -> list[str]:
+    """PNG nén nhẹ, dùng hết lõi để tách. Không phóng to khung."""
+    return [
+        "ffmpeg",
+        "-nostdin",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-threads",
+        "0",
+        "-i",
+        str(path),
+        "-vf",
+        f"fps={rate:.4f},scale=min(1080\\,iw):-2",
+        "-frames:v",
+        str(_MAX_FRAMES),
+        "-c:v",
+        "png",
+        "-compression_level",
+        "1",
+        "-progress",
+        "pipe:1",
+        str(pattern),
+    ]
+
+
 def _media_seconds(raw: str) -> float | None:
     """ffmpeg ghi out_time_us và out_time_ms bằng micro giây."""
     try:
@@ -337,23 +377,7 @@ def _extract_frames(
     progress.report(12, "Tách khung hình")
     try:
         proc = subprocess.Popen(
-            [
-                "ffmpeg",
-                "-nostdin",
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-y",
-                "-i",
-                str(path),
-                "-vf",
-                f"fps={rate:.4f},scale=min(1080\\,iw):-2",
-                "-frames:v",
-                str(_MAX_FRAMES),
-                "-progress",
-                "pipe:1",
-                str(pattern),
-            ],
+            _ffmpeg_extract_command(path, pattern, rate),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -443,16 +467,34 @@ def _extract_frames(
     return [(index / rate, image) for index, image in enumerate(images)]
 
 
+def _load_thumbs(images: list[Path]) -> list[Image.Image | None]:
+    total = len(images)
+    if not total:
+        return []
+    workers = ocr_workers(total, os.cpu_count() or 1)
+    found: list[Image.Image | None] = [None] * total
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(_thumb, image): index for index, image in enumerate(images)}
+        for future in as_completed(futures):
+            index = futures[future]
+            try:
+                found[index] = future.result()
+            except Exception:
+                found[index] = None
+    return found
+
+
 def _changed_frames(images: list[tuple[float, Path]], progress: ReadProgress) -> list[tuple[float, Path]]:
     chosen: list[tuple[float, Path]] = []
     previous: Image.Image | None = None
     unopened = 0
     total = len(images)
     progress.report(42, "Chọn khung đổi")
+    thumbs = _load_thumbs([image for _seconds, image in images])
     for index, (seconds, image) in enumerate(images):
         if index % 8 == 0:
             progress.report(42 + int((index / max(total, 1)) * 5), "Chọn khung đổi")
-        small = _thumb(image)
+        small = thumbs[index]
         if small is None:
             unopened += 1
             continue
@@ -507,7 +549,7 @@ def _read_frames(
         progress.report(92, "Đọc chữ")
         return []
     total = len(chosen)
-    workers = min(8, os.cpu_count() or 1, total)
+    workers = ocr_workers(total, os.cpu_count() or 1)
     results: list[tuple[float, list[str], list[dict[str, str]]] | None] = [None] * total
     blank = 0
     failed = 0

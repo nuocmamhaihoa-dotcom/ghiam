@@ -35,9 +35,10 @@ from control_plane import db
 from control_plane.delivery import PACKAGE_NAME, ensure_package
 from control_plane.people import apply_novel, complete_rows, complete_sightings, profile_from_line
 from control_plane.version import IPHONE_BUILD
+from control_plane import video_helpers
 from control_plane.screen_steps import ScreenVideoError, analyze_screen_video, clean_ocr, read_screen_image, seen_line
 from control_plane.settings import settings
-from control_plane.video_jobs import JobProgress, jobs
+from control_plane.video_jobs import JobProgress, VideoJob, jobs
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 IOS_DIR = Path(__file__).resolve().parents[1] / "ios"
@@ -171,6 +172,7 @@ def health() -> dict[str, Any]:
         "dashboard": "/",
         "iphoneBuild": IPHONE_BUILD,
         "delivery": "/tai",
+        "videoHelper": video_helpers.helpers.public(),
     }
 
 
@@ -812,6 +814,27 @@ async def recordings_from_video(
     return stored
 
 
+def _commit_people(job: VideoJob, people: list[dict[str, str]], worker_id: str | None) -> bool:
+    """Ghi dòng đủ ba cột. PC phụ chỉ ghi khi vẫn đang giữ video."""
+    rows = people[:200]
+    job.update(97, "Ghi kết quả")
+    try:
+        _store_seen([f"{len(rows)} người"] if rows else ["Đã đọc video"])
+        _added, people_saved = _save_proposed(rows)
+        archive = _people_archive()
+    except HTTPException as error:
+        detail = error.detail if isinstance(error.detail, str) else "Chưa ghi được kết quả. Chọn lại video."
+        if worker_id:
+            job.fail_from_worker(worker_id, detail)
+        else:
+            job.fail(detail)
+        raise
+    if worker_id:
+        return job.finish_from_worker(worker_id, rows, people_saved, archive)
+    job.finish(rows, people_saved, archive)
+    return True
+
+
 def _run_video_job(job_id: str, path: Path) -> None:
     """Đọc video ở luồng riêng để trang hỏi được phần trăm."""
     job = jobs.get(job_id)
@@ -819,11 +842,12 @@ def _run_video_job(job_id: str, path: Path) -> None:
         path.unlink(missing_ok=True)
         return
     try:
+        if job.done:
+            return
         _steps, people = analyze_screen_video(path, JobProgress(job))
-        job.update(97, "Ghi kết quả")
-        _store_seen([f"{len(people)} người"] if people else ["Đã đọc video"])
-        _added, people_saved = _save_proposed(people)
-        job.finish(people, people_saved, _people_archive())
+        if job.done:
+            return
+        _commit_people(job, people, None)
     except ScreenVideoError as error:
         job.fail(str(error))
     except HTTPException as error:
@@ -833,6 +857,95 @@ def _run_video_job(job_id: str, path: Path) -> None:
         job.fail("Không xử lý được video.")
     finally:
         path.unlink(missing_ok=True)
+
+
+def _watch_helper_job(job_id: str, path: Path) -> None:
+    """PC đang giữ video. Hết hạn giữ thì hub đọc tiếp."""
+    job = jobs.get(job_id)
+    if job is None:
+        path.unlink(missing_ok=True)
+        return
+    while True:
+        if job.done:
+            video_helpers.helpers.mark_idle(job.owner_id())
+            path.unlink(missing_ok=True)
+            return
+        owner = job.owner_id()
+        if not owner:
+            if job.take_hub():
+                _run_video_job(job_id, path)
+                return
+            time.sleep(0.2)
+            continue
+        if owner != "hub" and job.stale(video_helpers.LEASE_SECONDS):
+            if job.release(owner):
+                video_helpers.helpers.mark_idle(owner)
+                job.add_problem("PC phụ ngừng gửi tiến trình. Máy chủ đọc tiếp.")
+            continue
+        time.sleep(0.4)
+
+
+def _schedule_video_job(job_id: str, path: Path) -> None:
+    """Có PC rảnh thì chờ PC nhận. Không có thì hub đọc ngay."""
+    job = jobs.get(job_id)
+    if job is None:
+        path.unlink(missing_ok=True)
+        return
+    if video_helpers.helpers.has_idle() and not job.owner_id():
+        job.update(4, "Chờ PC phụ nhận video")
+        deadline = time.monotonic() + video_helpers.OFFER_SECONDS
+        while time.monotonic() < deadline and not job.owner_id() and not job.done:
+            time.sleep(0.1)
+    if job.done:
+        video_helpers.helpers.mark_idle(job.owner_id())
+        path.unlink(missing_ok=True)
+        return
+    owner = job.owner_id()
+    if owner and owner != "hub":
+        _watch_helper_job(job_id, path)
+        return
+    if job.take_hub():
+        _run_video_job(job_id, path)
+        return
+    _watch_helper_job(job_id, path)
+
+
+class HelperBeatBody(BaseModel):
+    name: str = ""
+    cpus: int = Field(default=1, ge=1, le=256)
+    workerId: str = ""
+
+
+class WorkerJobBody(BaseModel):
+    workerId: str
+
+
+class WorkerProgressBody(BaseModel):
+    workerId: str
+    percent: int = 0
+    task: str = ""
+    problems: list[str] = Field(default_factory=list)
+
+
+class WorkerPeopleBody(BaseModel):
+    workerId: str
+    people: list[dict[str, str]] = Field(default_factory=list)
+
+
+class WorkerFailBody(BaseModel):
+    workerId: str
+    error: str = ""
+
+
+@app.post("/v1/video-workers/heartbeat")
+def video_worker_heartbeat(
+    body: HelperBeatBody,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """PC phụ báo còn sống và số lõi. Hub chỉ chờ PC khi còn một máy rảnh."""
+    _auth(authorization)
+    worker_id = video_helpers.helpers.beat(body.workerId, body.name, body.cpus)
+    return {"ok": True, "workerId": worker_id, "videoHelper": video_helpers.helpers.public()}
 
 
 @app.post("/v1/recordings/from-video/job")
@@ -847,9 +960,116 @@ async def recordings_from_video_job(
         suffix = ".mp4"
     dest = await _store_upload(file, suffix)
     job = jobs.create()
+    job.bind(dest)
     job.update(8, "Đã nhận video")
-    threading.Thread(target=_run_video_job, args=(job.id, dest), daemon=True).start()
+    threading.Thread(target=_schedule_video_job, args=(job.id, dest), daemon=True).start()
     return {"ok": True, "jobId": job.id}
+
+
+@app.post("/v1/recordings/jobs/claim")
+def claim_video_job(body: WorkerJobBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """PC kéo một video chưa ai giữ. Không có video thì jobId rỗng."""
+    _auth(authorization)
+    if not video_helpers.helpers.fresh(body.workerId):
+        raise HTTPException(409, "PC phụ chưa nối")
+    job = jobs.claim_next(body.workerId)
+    if job is None:
+        return {"ok": True, "jobId": ""}
+    video_helpers.helpers.mark_busy(body.workerId)
+    return {"ok": True, "jobId": job.id}
+
+
+@app.get("/v1/recordings/jobs/{job_id}/video")
+def download_job_video(
+    job_id: str,
+    workerId: str = "",
+    authorization: str | None = Header(default=None),
+) -> FileResponse:
+    """PC đã nhận thì tải đúng file video đó."""
+    _auth(authorization)
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, "không thấy tiến trình")
+    path = job.video_path(workerId)
+    if path is None or not path.is_file():
+        raise HTTPException(404, "không thấy video")
+    return FileResponse(path, media_type="application/octet-stream", filename=path.name)
+
+
+@app.post("/v1/recordings/jobs/{job_id}/progress")
+def video_job_progress(
+    job_id: str,
+    body: WorkerProgressBody,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _auth(authorization)
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, "không thấy tiến trình")
+    if not job.note_worker(body.workerId):
+        raise HTTPException(409, "PC phụ không giữ video này")
+    if body.task:
+        job.update(body.percent, body.task)
+    for item in body.problems[:20]:
+        job.add_problem(item)
+    return job.public()
+
+
+@app.post("/v1/recordings/jobs/{job_id}/complete")
+def video_job_complete(
+    job_id: str,
+    body: WorkerPeopleBody,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """PC gửi dòng đã đọc. Hub ghi bảng, giữ cột đã có."""
+    _auth(authorization)
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, "không thấy tiến trình")
+    if not job.note_worker(body.workerId):
+        raise HTTPException(409, "PC phụ không giữ video này")
+    try:
+        kept = _commit_people(job, list(body.people), body.workerId)
+    finally:
+        video_helpers.helpers.mark_idle(body.workerId)
+    if not kept:
+        raise HTTPException(409, "PC phụ không giữ video này")
+    return job.public()
+
+
+@app.post("/v1/recordings/jobs/{job_id}/fail")
+def video_job_fail(
+    job_id: str,
+    body: WorkerFailBody,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Video hỏng thì dừng. Hub không đọc lại cùng file."""
+    _auth(authorization)
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, "không thấy tiến trình")
+    if not job.fail_from_worker(body.workerId, body.error or "Không đọc được video."):
+        raise HTTPException(409, "PC phụ không giữ video này")
+    video_helpers.helpers.mark_idle(body.workerId)
+    return job.public()
+
+
+@app.post("/v1/recordings/jobs/{job_id}/release")
+def video_job_release(
+    job_id: str,
+    body: WorkerJobBody,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """PC trả video. Hub đọc tiếp."""
+    _auth(authorization)
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, "không thấy tiến trình")
+    if not job.release(body.workerId):
+        raise HTTPException(409, "PC phụ không giữ video này")
+    video_helpers.helpers.mark_idle(body.workerId)
+    job.add_problem("PC phụ trả video. Máy chủ đọc tiếp.")
+    return job.public()
 
 
 @app.get("/v1/recordings/jobs/{job_id}")

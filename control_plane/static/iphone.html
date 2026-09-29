@@ -40,6 +40,7 @@
     #progressTrack { height: 14px; border-radius: 8px; background: #eee; overflow: hidden; border: 1px solid #ddd; }
     #progressFill { height: 100%; width: 0%; background: #111; transition: width 0.2s linear; }
     #progressLabel { margin: 0.4rem 0 0; font-weight: 700; line-height: 1.35; font-size: 16px; word-break: break-word; }
+    #helperLine { margin: 0 0 0.8rem; line-height: 1.4; font-size: 16px; color: #333; }
     #problemLead { margin: 0.6rem 0 0.25rem; color: #b42318; font-weight: 800; }
     #problemList { margin: 0; padding-left: 1.15rem; color: #b42318; font-size: 15px; overflow-wrap: anywhere; }
     #peopleBox, #savedBox { margin-top: 0.4rem; }
@@ -72,7 +73,8 @@
 <body>
   <p id="updateNote" hidden></p>
   <main>
-    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
+    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. PC phụ nối vào hub thì PC đó đọc video bằng mọi lõi của PC. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
+    <p id="helperLine">PC phụ chưa nối. Video được máy chủ đọc bằng các lõi còn lại.</p>
     <p id="status" hidden></p>
     <video id="playback" controls playsinline hidden></video>
     <section id="progressBox" hidden>
@@ -210,6 +212,27 @@
       savedEmpty.hidden = list.length > 0;
       savedTable.hidden = list.length === 0;
       fillTable(savedBody, list);
+    }
+
+    const helperLine = document.getElementById("helperLine");
+
+    async function refreshHelper() {
+      try {
+        const response = await fetch("/health", { cache: "no-store" });
+        if (!response.ok) return;
+        const body = await response.json();
+        const helper = body.videoHelper || {};
+        if (helper.connected) {
+          const cores = Number(helper.cpus) || 0;
+          helperLine.textContent = cores > 0
+            ? "PC phụ đang nối, " + cores + " lõi. Video sẽ do PC đó đọc."
+            : "PC phụ đang nối. Video sẽ do PC đó đọc.";
+        } else {
+          helperLine.textContent = "PC phụ chưa nối. Video được máy chủ đọc bằng các lõi còn lại.";
+        }
+      } catch (error) {
+        /* Giữ dòng đang hiện. */
+      }
     }
 
     async function loadSaved() {
@@ -605,6 +628,8 @@
     });
 
     loadSaved();
+    refreshHelper();
+    window.setInterval(refreshHelper, 8000);
   </script>
 </body>
 </html>

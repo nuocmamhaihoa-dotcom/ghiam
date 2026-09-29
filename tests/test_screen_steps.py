@@ -10,10 +10,12 @@ from pathlib import Path
 
 from control_plane.screen_steps import (
     ReadProgress,
+    _ffmpeg_extract_command,
     _media_seconds,
     _sample_rate,
     analyze_screen_video,
     clean_ocr,
+    ocr_workers,
     read_screen_video,
     same_caption,
     seen_line,
@@ -98,6 +100,20 @@ class ScreenVideoTests(unittest.TestCase):
         captions = " ".join(step["caption"] for step in steps)
         self.assertIn("Thanh", captions)
         self.assertIn("monaco.daily6", captions)
+
+    def test_ocr_workers_use_the_remaining_cores(self) -> None:
+        self.assertEqual(ocr_workers(100, 12, reserve=1), 11)
+        self.assertEqual(ocr_workers(4, 12, reserve=1), 4)
+        self.assertEqual(ocr_workers(10, 1, reserve=1), 1)
+        self.assertEqual(ocr_workers(100, 16, reserve=0), 16)
+
+    def test_frame_extract_uses_every_core_without_enlarging(self) -> None:
+        argv = _ffmpeg_extract_command(Path("clip.mp4"), Path("f-%05d.png"), 8)
+        self.assertEqual(argv[argv.index("-threads") + 1], "0")
+        self.assertLess(argv.index("-threads"), argv.index("-i"))
+        self.assertEqual(argv[argv.index("-compression_level") + 1], "1")
+        scale = next(item for item in argv if item.startswith("fps="))
+        self.assertIn(r"scale=min(1080\,iw):-2", scale)
 
     def test_media_seconds_are_microseconds(self) -> None:
         self.assertEqual(_media_seconds("960000"), 0.96)
