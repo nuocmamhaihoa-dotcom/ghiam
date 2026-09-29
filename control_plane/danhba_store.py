@@ -346,7 +346,7 @@ def render_vcard(books: list[dict[str, object]]) -> str:
                 [
                     "BEGIN:VCARD",
                     "VERSION:3.0",
-                    f"N:;{name};;;",
+                    f"N:{name};;;;",
                     f"FN:{name}",
                     f"ORG:{group}",
                     f"TEL;TYPE=CELL:{phone}",

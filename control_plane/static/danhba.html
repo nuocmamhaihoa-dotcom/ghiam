@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="Danh bạ" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="theme-color" content="#ffffff" />
-  <meta name="danhba-build" content="7" />
+  <meta name="danhba-build" content="8" />
   <link rel="manifest" href="/danhba/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>Danh bạ</title>
@@ -61,7 +61,7 @@
 </head>
 <body>
   <h1>Danh bạ</h1>
-  <p class="hint" id="install">Bấm Nạp lên iPhone. iPhone mở thẻ liên hệ thì bấm Tạo liên hệ mới hoặc Thêm tất cả, rồi bấm Xong. Mỗi danh bạ tối đa 5000 số. Một số chỉ nằm trong một danh bạ.</p>
+  <p class="hint" id="install">Dán danh sách là máy mở thẻ. Nhiều số thì iPhone chỉ hiện số đầu: bấm nút chia sẻ góc trên, chọn Danh bạ, rồi Thêm tất cả. Mỗi danh bạ tối đa 5000 số.</p>
   <p class="note" id="upgrade" hidden>Có bản mới trên hub.</p>
   <p id="status" class="hint">Dán số, rồi bấm Nạp lên iPhone.</p>
   <div id="local">
@@ -83,14 +83,14 @@
     <div id="used"></div>
   </div>
   <p id="message" class="note" hidden></p>
-  <p class="build" id="buildLine">Phiên bản 7</p>
+  <p class="build" id="buildLine">Phiên bản 8</p>
   <div class="bar">
     <a id="go" class="btn" href="#">Nạp lên iPhone</a>
     <button id="sync" class="ghost" type="button">Đối chiếu iPhone</button>
   </div>
   <input id="syncFile" type="file" accept=".vcf,.vcard,.txt,text/vcard,text/x-vcard,text/plain" />
   <script>
-    window.DANHBA_BUILD = 7;
+    window.DANHBA_BUILD = 8;
   </script>
   <script>
 (function (root) {
@@ -325,7 +325,7 @@
       var group = escapeValue(book.name);
       lines.push("BEGIN:VCARD");
       lines.push("VERSION:3.0");
-      lines.push("N:;" + name + ";;;");
+      lines.push("N:" + name + ";;;;");
       lines.push("FN:" + name);
       lines.push("ORG:" + group);
       lines.push("TEL;TYPE=CELL:" + entries[i].phone);
@@ -564,6 +564,13 @@
       return prepared;
     }
 
+    function importHint(count) {
+      if (count > 1) {
+        return "iPhone chỉ hiện số đầu trong " + count + " số. Trên thẻ đó bấm nút chia sẻ góc trên bên phải, chọn Danh bạ, rồi Thêm tất cả. Nút Tạo liên hệ mới chỉ lưu 1 số.";
+      }
+      return "Trên thẻ iPhone bấm Tạo liên hệ mới, rồi dấu tick xanh.";
+    }
+
     function openLocal() {
       var prepared = armLocalCard();
       if (!prepared) {
@@ -574,14 +581,10 @@
       var opened = prepared.opened;
       opened.forEach(function (book) { sentLocal[book.id] = true; });
       var count = opened.reduce(function (sum, book) { return sum + book.entries.length; }, 0);
-      var extra = "";
       var split = localSplit();
       var waiting = ((split && split.books) || []).filter(function (book) { return !sentLocal[book.id]; });
-      if (waiting.length) extra = " Bấm Nạp lên iPhone lần nữa cho danh bạ kế.";
-      showMessage(
-        "Nếu iPhone mở thẻ " + count + " số, bấm Tạo liên hệ mới hoặc Thêm tất cả, rồi bấm Xong. Số chỉ vào Danh bạ sau bước đó." + extra,
-        false
-      );
+      var extra = waiting.length ? " Bấm Nạp lên iPhone lần nữa cho danh bạ kế." : "";
+      showMessage(importHint(count) + extra, false);
       window.location.assign(armedUrl);
     }
 
@@ -679,6 +682,23 @@
       };
       reader.readAsText(file);
     });
+    numbersInput.addEventListener("paste", function (event) {
+      if (onHub) return;
+      var clip = event.clipboardData ? event.clipboardData.getData("text") : "";
+      if (!clip) return;
+      event.preventDefault();
+      var start = numbersInput.selectionStart;
+      var end = numbersInput.selectionEnd;
+      if (start == null) start = numbersInput.value.length;
+      if (end == null) end = start;
+      numbersInput.value = numbersInput.value.slice(0, start) + clip + numbersInput.value.slice(end);
+      renderLocal();
+      if (!armLocalCard()) {
+        showMessage("Không thấy số điện thoại trong phần vừa dán.", true);
+        return;
+      }
+      openLocal();
+    });
     numbersInput.addEventListener("input", function () {
       renderLocal();
       armLocalCard();
@@ -755,6 +775,13 @@
       refresh(true);
     } else {
       renderLocal();
+      window.addEventListener("pageshow", function () {
+        if (!numbersInput.value.trim()) return;
+        var prepared = armLocalCard();
+        if (!prepared) return;
+        var count = prepared.opened.reduce(function (sum, book) { return sum + book.entries.length; }, 0);
+        showMessage(importHint(count), false);
+      });
     }
     if (onHub) {
       document.addEventListener("visibilitychange", function () {

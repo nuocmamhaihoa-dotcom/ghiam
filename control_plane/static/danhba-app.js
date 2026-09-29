@@ -230,7 +230,7 @@
       var group = escapeValue(book.name);
       lines.push("BEGIN:VCARD");
       lines.push("VERSION:3.0");
-      lines.push("N:;" + name + ";;;");
+      lines.push("N:" + name + ";;;;");
       lines.push("FN:" + name);
       lines.push("ORG:" + group);
       lines.push("TEL;TYPE=CELL:" + entries[i].phone);
