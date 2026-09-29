@@ -19,8 +19,10 @@ hoặc pip install paddlepaddle-gpu paddleocr
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
+import socket
 import sys
 import tempfile
 import threading
@@ -108,28 +110,60 @@ class HubClient:
             payload["seenContacts"] = tally["contacts"]
             payload["seenAccounts"] = tally["accounts"]
             payload["readSaved"] = tally["saved"]
-        self._request("POST", f"/v1/recordings/jobs/{job_id}/checkpoint", payload, timeout=30)
+        self._request("POST", f"/v1/recordings/jobs/{job_id}/checkpoint", payload, timeout=180)
 
     def download(self, job_id: str, worker_id: str, dest: Path) -> None:
-        request = urllib.request.Request(
-            f"{self.hub}/v1/recordings/jobs/{job_id}/video?workerId={worker_id}",
-            headers={"Authorization": f"Bearer {self.token}"},
-            method="GET",
-        )
-        with urllib.request.urlopen(request, timeout=None) as response:
-            with dest.open("wb") as handle:
-                while True:
-                    chunk = response.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    handle.write(chunk)
+        """Tải video theo từng khúc. Mạng đứt thì nối từ byte đã ghi, không tải lại từ đầu."""
+        url = f"{self.hub}/v1/recordings/jobs/{job_id}/video?workerId={worker_id}"
+        last_error: Exception | None = None
+        for attempt in range(8):
+            have = dest.stat().st_size if dest.is_file() else 0
+            headers = {"Authorization": f"Bearer {self.token}"}
+            if have:
+                headers["Range"] = f"bytes={have}-"
+            request = urllib.request.Request(url, headers=headers, method="GET")
+            try:
+                with urllib.request.urlopen(request, timeout=_READ_STALL_SEC) as response:
+                    code = int(getattr(response, "status", 200) or 200)
+                    if have and code == 200:
+                        have = 0
+                    total = _declared_total(response.headers, have, code)
+                    mode = "ab" if have and code == 206 else "wb"
+                    written = have if mode == "ab" else 0
+                    with dest.open(mode) as handle:
+                        while True:
+                            try:
+                                chunk = response.read(1024 * 1024)
+                            except http.client.IncompleteRead as error:
+                                if error.partial:
+                                    handle.write(error.partial)
+                                    written += len(error.partial)
+                                break
+                            if not chunk:
+                                break
+                            handle.write(chunk)
+                            written += len(chunk)
+                    if total is None or written >= total:
+                        return
+            except urllib.error.HTTPError as error:
+                last_error = error
+                if error.code == 416 and have:
+                    return
+                if error.code in {401, 404, 409}:
+                    raise
+            except (OSError, urllib.error.URLError, TimeoutError, socket.timeout, http.client.IncompleteRead) as error:
+                last_error = error
+            time.sleep(min(8.0, 0.4 * (2**attempt)))
+        if last_error is not None:
+            raise OSError("Chưa tải hết video.") from last_error
+        raise OSError("Chưa tải hết video.")
 
     def progress(self, job_id: str, worker_id: str, percent: int, task: str, problems: list[str]) -> None:
         self._request(
             "POST",
             f"/v1/recordings/jobs/{job_id}/progress",
             {"workerId": worker_id, "percent": percent, "task": task, "problems": problems},
-            timeout=30,
+            timeout=60,
         )
 
     def complete(
@@ -283,6 +317,34 @@ class RemoteProgress(ReadProgress):
         self._thread.join(timeout=2)
 
 
+_READ_STALL_SEC = 45
+
+
+def _declared_total(headers: object, have: int, code: int) -> int | None:
+    getter = getattr(headers, "get", None)
+    if not callable(getter):
+        return None
+    ranged = str(getter("Content-Range") or "")
+    if "/" in ranged:
+        total = ranged.rsplit("/", 1)[-1].strip()
+        if total.isdigit():
+            return int(total)
+    length = str(getter("Content-Length") or "")
+    if not length.isdigit():
+        return None
+    if code == 206:
+        return have + int(length)
+    return int(length)
+
+
+def _hold_while_downloading(client: HubClient, job_id: str, worker_id: str, stop: threading.Event) -> None:
+    while not stop.wait(8):
+        try:
+            client.progress(job_id, worker_id, 8, "PC phụ đang tải video", [])
+        except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            return
+
+
 def _read_one(client: HubClient, worker_id: str, job_id: str, resume: dict[str, object] | None = None) -> None:
     ready = (resume or {}).get("people")
     if isinstance(ready, list):
@@ -291,7 +353,21 @@ def _read_one(client: HubClient, worker_id: str, job_id: str, resume: dict[str, 
     with tempfile.TemporaryDirectory(prefix="fb-pc-") as folder:
         dest = Path(folder) / "clip.mp4"
         client.progress(job_id, worker_id, 8, "PC phụ đang tải video", [])
-        client.download(job_id, worker_id, dest)
+        holding = threading.Event()
+        holder = threading.Thread(
+            target=_hold_while_downloading,
+            args=(client, job_id, worker_id, holding),
+            daemon=True,
+        )
+        holder.start()
+        try:
+            client.download(job_id, worker_id, dest)
+        except OSError:
+            holding.set()
+            client.fail(job_id, worker_id, "Mất kết nối khi đang tải video. Bấm Tiếp tục để đọc nối.")
+            return
+        finally:
+            holding.set()
         sink = RemoteProgress(client, job_id, worker_id, resume)
         try:
             _steps, people = analyze_screen_video(dest, sink)

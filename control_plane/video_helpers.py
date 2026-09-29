@@ -74,6 +74,16 @@ class HelperBook:
             item = self._items.get(worker_id)
             return item is not None and (now - item.seen) <= FRESH_SECONDS
 
+    def touch(self, worker_id: str) -> None:
+        """Giữ PC trong danh sách đang nối khi nó đang tải hoặc đang đọc, không chỉ khi heartbeat."""
+        if not worker_id:
+            return
+        now = time.monotonic()
+        with self._lock:
+            item = self._items.get(worker_id)
+            if item is not None:
+                item.seen = now
+
     def has_idle(self) -> bool:
         now = time.monotonic()
         with self._lock:

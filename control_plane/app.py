@@ -17,6 +17,7 @@ import os
 import tempfile
 import threading
 import time
+import uuid
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,11 +26,18 @@ from typing import Any
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
 from control_plane.delivery import PACKAGE_NAME, ensure_package
@@ -71,16 +79,38 @@ if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
-class LimitUploadSizeMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
-        cl = request.headers.get("content-length")
-        limit = _upload_limit_bytes()
-        if cl and limit is not None and int(cl) > limit:
-            return JSONResponse({"detail": "upload too large"}, status_code=413)
-        return await call_next(request)
+class _TransferGuard:
+    """Chặn body quá cỡ mà không gom cả file video vào bộ nhớ. Video trả về không nén gzip."""
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope.get("type") == "http":
+            path = str(scope.get("path") or "")
+            method = str(scope.get("method") or "")
+            headers = list(scope.get("headers") or [])
+            if method == "GET" and path.endswith("/video"):
+                scope["headers"] = [(key, value) for key, value in headers if key != b"accept-encoding"]
+            else:
+                limit = _upload_limit_bytes()
+                if limit is not None:
+                    for key, value in headers:
+                        if key != b"content-length":
+                            continue
+                        try:
+                            size = int(value)
+                        except ValueError:
+                            size = 0
+                        if size > limit:
+                            response = JSONResponse({"detail": "upload too large"}, status_code=413)
+                            await response(scope, receive, send)
+                            return
+                        break
+        await self.app(scope, receive, send)
 
 
-app.add_middleware(LimitUploadSizeMiddleware)
+app.add_middleware(_TransferGuard)
 
 
 def _upload_limit_bytes() -> int | None:
@@ -1242,11 +1272,7 @@ async def recordings_from_video_job(
     if suffix not in {".mp4", ".mov", ".m4v", ".webm"}:
         suffix = ".mp4"
     dest = await _store_upload(file, suffix)
-    job = jobs.create()
-    job.bind(dest)
-    job.update(8, "Đã nhận video")
-    threading.Thread(target=_schedule_video_job, args=(job.id, dest), daemon=True).start()
-    return {"ok": True, "jobId": job.id}
+    return _begin_video_job(dest)
 
 
 @app.post("/v1/recordings/jobs/claim")
@@ -1262,13 +1288,71 @@ def claim_video_job(body: WorkerJobBody, authorization: str | None = Header(defa
     return {"ok": True, "jobId": job.id, "resume": job.resume_public()}
 
 
+def _begin_video_job(dest: Path) -> dict[str, Any]:
+    job = jobs.create()
+    job.bind(dest)
+    job.update(8, "Đã nhận video")
+    threading.Thread(target=_schedule_video_job, args=(job.id, dest), daemon=True).start()
+    return {"ok": True, "jobId": job.id}
+
+
+def _byte_range(header: str, size: int) -> tuple[int, int] | None:
+    text = header.strip().lower()
+    if not text.startswith("bytes=") or "," in text or size <= 0:
+        return None
+    spec = text[6:]
+    if spec.startswith("-"):
+        try:
+            count = int(spec[1:])
+        except ValueError:
+            return None
+        if count <= 0:
+            return None
+        return max(0, size - count), size - 1
+    start_text, _, end_text = spec.partition("-")
+    try:
+        start = int(start_text)
+    except ValueError:
+        return None
+    if start < 0 or start >= size:
+        return None
+    if not end_text:
+        return start, size - 1
+    try:
+        end = int(end_text)
+    except ValueError:
+        return None
+    end = min(end, size - 1)
+    if end < start:
+        return None
+    return start, end
+
+
+_VIDEO_BLOCK = 64 * 1024
+
+
+def _video_chunks(path: Path, job: Any, worker_id: str, start: int, length: int) -> Any:
+    sent = 0
+    with path.open("rb") as handle:
+        handle.seek(start)
+        while sent < length:
+            block = handle.read(min(_VIDEO_BLOCK, length - sent))
+            if not block:
+                break
+            sent += len(block)
+            job.note_worker(worker_id)
+            video_helpers.helpers.touch(worker_id)
+            yield block
+
+
 @app.get("/v1/recordings/jobs/{job_id}/video")
 def download_job_video(
     job_id: str,
     workerId: str = "",
+    range_header: str | None = Header(default=None, alias="range"),
     authorization: str | None = Header(default=None),
-) -> FileResponse:
-    """PC đã nhận thì tải đúng file video đó."""
+) -> Response:
+    """PC đã nhận thì tải đúng file video đó. Đứt giữa chừng thì tải tiếp từ byte đã có."""
     _auth(authorization)
     job = jobs.get(job_id)
     if job is None:
@@ -1276,7 +1360,142 @@ def download_job_video(
     path = job.video_path(workerId)
     if path is None or not path.is_file():
         raise HTTPException(404, "không thấy video")
-    return FileResponse(path, media_type="application/octet-stream", filename=path.name)
+    size = path.stat().st_size
+    start = 0
+    end = max(0, size - 1)
+    status = 200
+    if range_header:
+        if size <= 0:
+            return Response(status_code=416, headers={"Content-Range": "bytes */0", "Accept-Ranges": "bytes"})
+        found = _byte_range(range_header, size)
+        if found is None:
+            return Response(
+                status_code=416,
+                headers={"Content-Range": f"bytes */{size}", "Accept-Ranges": "bytes"},
+            )
+        start, end = found
+        status = 206
+    length = 0 if size <= 0 else end - start + 1
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(length),
+        "Cache-Control": "no-transform",
+    }
+    if status == 206:
+        headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+    if length <= 0:
+        return Response(b"", status_code=status, media_type="application/octet-stream", headers=headers)
+    return StreamingResponse(
+        _video_chunks(path, job, workerId, start, length),
+        status_code=status,
+        media_type="application/octet-stream",
+        headers=headers,
+    )
+
+
+_CHUNK_MAX = 8 * 1024 * 1024
+_uploads: dict[str, dict[str, Any]] = {}
+_uploads_lock = threading.Lock()
+
+
+class UploadStartBody(BaseModel):
+    name: str = "video.mp4"
+    size: int = Field(ge=1, le=1024 * 1024 * 1024 * 1024)
+
+
+def _drop_old_uploads() -> None:
+    now = time.monotonic()
+    stale: list[dict[str, Any]] = []
+    with _uploads_lock:
+        for key, item in list(_uploads.items()):
+            if now - float(item["created"]) > 6 * 3600:
+                stale.append(_uploads.pop(key))
+    for item in stale:
+        Path(item["path"]).unlink(missing_ok=True)
+
+
+@app.post("/v1/recordings/uploads")
+def start_video_upload(body: UploadStartBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Mở một lần gửi video theo từng khúc, để mạng đứt thì gửi tiếp khúc chưa xong."""
+    _auth(authorization)
+    limit = _upload_limit_bytes()
+    if limit is not None and body.size > limit:
+        raise HTTPException(413, "file is too large")
+    suffix = Path(body.name or "clip.mp4").suffix.lower()
+    if suffix not in {".mp4", ".mov", ".m4v", ".webm"}:
+        suffix = ".mp4"
+    _drop_old_uploads()
+    handle = tempfile.NamedTemporaryFile(prefix="fb-video-", suffix=suffix, delete=False)
+    path = Path(handle.name)
+    handle.close()
+    upload_id = uuid.uuid4().hex
+    with _uploads_lock:
+        _uploads[upload_id] = {
+            "path": path,
+            "size": body.size,
+            "written": 0,
+            "created": time.monotonic(),
+            "lock": threading.Lock(),
+        }
+    return {"ok": True, "uploadId": upload_id, "offset": 0}
+
+
+@app.put("/v1/recordings/uploads/{upload_id}")
+async def write_video_chunk(
+    upload_id: str,
+    request: Request,
+    offset: int = Query(ge=0),
+    authorization: str | None = Header(default=None),
+) -> JSONResponse:
+    _auth(authorization)
+    with _uploads_lock:
+        item = _uploads.get(upload_id)
+    if item is None:
+        raise HTTPException(404, "không thấy lần gửi")
+    declared = request.headers.get("content-length")
+    if declared is not None:
+        try:
+            announced = int(declared)
+        except ValueError:
+            announced = _CHUNK_MAX + 1
+        if announced > _CHUNK_MAX:
+            raise HTTPException(413, "chunk is too large")
+    raw = await request.body()
+    if len(raw) > _CHUNK_MAX:
+        raise HTTPException(413, "chunk is too large")
+    lock = item["lock"]
+    with lock:
+        written = int(item["written"])
+        size = int(item["size"])
+        if offset != written:
+            return JSONResponse({"ok": False, "offset": written}, status_code=409)
+        if written + len(raw) > size:
+            raise HTTPException(400, "chunk vượt quá dung lượng video")
+        path = Path(item["path"])
+        try:
+            with path.open("ab") as handle:
+                handle.write(raw)
+        except OSError as error:
+            raise HTTPException(507, "Hết chỗ trống trên máy chủ.") from error
+        item["written"] = written + len(raw)
+        return JSONResponse({"ok": True, "offset": int(item["written"])})
+
+
+@app.post("/v1/recordings/uploads/{upload_id}/finish")
+def finish_video_upload(upload_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    with _uploads_lock:
+        item = _uploads.get(upload_id)
+    if item is None:
+        raise HTTPException(404, "không thấy lần gửi")
+    lock = item["lock"]
+    with lock:
+        if int(item["written"]) != int(item["size"]):
+            return JSONResponse({"ok": False, "offset": int(item["written"])}, status_code=409)
+        path = Path(item["path"])
+        with _uploads_lock:
+            _uploads.pop(upload_id, None)
+    return _begin_video_job(path)
 
 
 @app.post("/v1/recordings/jobs/{job_id}/progress")
@@ -1291,6 +1510,7 @@ def video_job_progress(
         raise HTTPException(404, "không thấy tiến trình")
     if not job.note_worker(body.workerId):
         raise HTTPException(409, "PC phụ không giữ video này")
+    video_helpers.helpers.touch(body.workerId)
     if body.task:
         job.update(body.percent, body.task)
     for item in body.problems[:20]:
@@ -1344,6 +1564,7 @@ def video_job_checkpoint(
         raise HTTPException(404, "không thấy tiến trình")
     if not job.note_worker(body.workerId):
         raise HTTPException(409, "PC phụ không giữ video này")
+    video_helpers.helpers.touch(body.workerId)
     for frame in body.frames[:80]:
         raw_t = frame.get("t")
         if isinstance(raw_t, bool) or not isinstance(raw_t, (int, float)):

@@ -89,6 +89,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Mở giả lập điện thoại trên PC", response.text)
         self.assertIn("Thả video vào đây", response.text)
         self.assertIn("/v1/recordings/from-video/job", response.text)
+        self.assertIn("/v1/recordings/uploads", response.text)
         self.assertIn("Tiếp tục đọc nối", response.text)
         self.assertIn('id="videoFile"', response.text)
         self.assertIn("multiple", response.text)
@@ -219,6 +220,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn('id="playback"', page.text)
         self.assertIn("/v1/recordings/from-video", page.text)
         self.assertIn("/v1/recordings/from-video/job", page.text)
+        self.assertIn("/v1/recordings/uploads", page.text)
         self.assertIn('id="progressBox"', page.text)
         self.assertIn('id="progressFill"', page.text)
         self.assertIn('id="problemList"', page.text)
@@ -807,6 +809,132 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(stayed.get("error"), "Không đọc được video.")
         self.assertTrue(all("Máy chủ đọc tiếp" not in str(item) for item in stayed.get("problems", [])))
 
+    def test_a_pc_can_resume_a_large_video_without_losing_the_lease(self) -> None:
+        beat = self.client.post(
+            "/v1/video-workers/heartbeat",
+            headers=self.headers,
+            json={"name": "pc-tai", "cpus": 8},
+        )
+        worker_id = beat.json()["workerId"]
+        payload = b"abcdefghijklmnopqrstuvwxyz"
+        opened = self.client.post(
+            "/v1/recordings/from-video/job",
+            headers=self.headers,
+            files={"file": ("clip.mp4", payload, "video/mp4")},
+        )
+        job_id = opened.json()["jobId"]
+        claimed_id = ""
+        for _ in range(30):
+            claimed = self.client.post(
+                "/v1/recordings/jobs/claim",
+                headers=self.headers,
+                json={"workerId": worker_id},
+            )
+            claimed_id = claimed.json()["jobId"]
+            if claimed_id:
+                break
+            time.sleep(0.05)
+        self.assertEqual(claimed_id, job_id)
+        job = jobs.get(job_id)
+        assert job is not None
+        time.sleep(0.05)
+        before = job.lease
+        part = self.client.get(
+            f"/v1/recordings/jobs/{job_id}/video",
+            headers={**self.headers, "Range": "bytes=0-3", "Accept-Encoding": "gzip"},
+            params={"workerId": worker_id},
+        )
+        self.assertEqual(part.status_code, 206, part.text)
+        self.assertEqual(part.content, b"abcd")
+        self.assertEqual(part.headers.get("content-length"), "4")
+        self.assertEqual(part.headers.get("accept-ranges"), "bytes")
+        self.assertIn("bytes 0-3/26", part.headers.get("content-range", ""))
+        self.assertNotEqual(part.headers.get("content-encoding"), "gzip")
+        self.assertGreater(job.lease, before)
+        self.assertTrue(self.client.get("/health").json()["videoHelper"]["connected"])
+        rest = self.client.get(
+            f"/v1/recordings/jobs/{job_id}/video",
+            headers={**self.headers, "Range": "bytes=4-"},
+            params={"workerId": worker_id},
+        )
+        self.assertEqual(rest.status_code, 206, rest.text)
+        self.assertEqual(rest.content, payload[4:])
+        whole = self.client.get(
+            f"/v1/recordings/jobs/{job_id}/video",
+            headers=self.headers,
+            params={"workerId": worker_id},
+        )
+        self.assertEqual(whole.status_code, 200, whole.text)
+        self.assertEqual(whole.content, payload)
+        too_far = self.client.get(
+            f"/v1/recordings/jobs/{job_id}/video",
+            headers={**self.headers, "Range": "bytes=999-1000"},
+            params={"workerId": worker_id},
+        )
+        self.assertEqual(too_far.status_code, 416, too_far.text)
+        started = self.client.post(
+            "/v1/recordings/uploads",
+            headers=self.headers,
+            json={"name": "lon.mp4", "size": 10},
+        )
+        self.assertEqual(started.status_code, 200, started.text)
+        upload_id = started.json()["uploadId"]
+        early = self.client.post(f"/v1/recordings/uploads/{upload_id}/finish", headers=self.headers)
+        self.assertEqual(early.status_code, 409, early.text)
+        first = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}?offset=0",
+            headers=self.headers,
+            content=b"01234",
+        )
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(first.json()["offset"], 5)
+        clash = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}?offset=0",
+            headers=self.headers,
+            content=b"xx",
+        )
+        self.assertEqual(clash.status_code, 409, clash.text)
+        self.assertEqual(clash.json()["offset"], 5)
+        second = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}?offset=5",
+            headers=self.headers,
+            content=b"56789",
+        )
+        self.assertEqual(second.status_code, 200, second.text)
+        released = self.client.post(
+            f"/v1/recordings/jobs/{job_id}/fail",
+            headers=self.headers,
+            json={"workerId": worker_id, "error": "Không đọc được video."},
+        )
+        self.assertEqual(released.status_code, 200, released.text)
+        finished = self.client.post(f"/v1/recordings/uploads/{upload_id}/finish", headers=self.headers)
+        self.assertEqual(finished.status_code, 200, finished.text)
+        big_id = finished.json()["jobId"]
+        claimed_big = ""
+        for _ in range(40):
+            claimed = self.client.post(
+                "/v1/recordings/jobs/claim",
+                headers=self.headers,
+                json={"workerId": worker_id},
+            )
+            claimed_big = claimed.json()["jobId"]
+            if claimed_big:
+                break
+            time.sleep(0.05)
+        self.assertEqual(claimed_big, big_id)
+        video = self.client.get(
+            f"/v1/recordings/jobs/{big_id}/video",
+            headers=self.headers,
+            params={"workerId": worker_id},
+        )
+        self.assertEqual(video.status_code, 200, video.text)
+        self.assertEqual(video.content, b"0123456789")
+        self.client.post(
+            f"/v1/recordings/jobs/{big_id}/fail",
+            headers=self.headers,
+            json={"workerId": worker_id, "error": "Không đọc được video."},
+        )
+
     def test_two_pcs_each_take_one_video(self) -> None:
         first = self.client.post(
             "/v1/video-workers/heartbeat",
@@ -988,7 +1116,7 @@ class ActionApiTests(unittest.TestCase):
         body = manifest.json()
         self.assertIn("comment-agent.zip", body["agent"]["package_url"])
         worker = body["video_worker"]
-        self.assertEqual(worker["version"], "5")
+        self.assertEqual(worker["version"], "6")
         self.assertEqual(worker["package_url"], "/v1/updates/video-worker.zip")
         self.assertEqual(worker["engine"], "cpu")
         self.assertEqual(len(worker["sha256"]), 64)
@@ -1007,7 +1135,7 @@ class ActionApiTests(unittest.TestCase):
             self.assertIn("pc_agent/windows/Run-VideoWorker.ps1", names)
             self.assertIn("control_plane/screen_steps.py", names)
             self.assertEqual(archive.read("requirements-cpu.txt").decode("utf-8").strip(), "pillow")
-            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "5")
+            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "6")
             self.assertIn("pc_agent/windows/Open-FbPoller.ps1", names)
             guide = archive.read("HUONG-DAN.txt").decode("utf-8")
             self.assertNotIn("test-token", guide)
