@@ -30,6 +30,7 @@ _SUPPORT = (
     ("pc_agent/windows/Run-VideoWorker.ps1", "Run-VideoWorker.ps1"),
     ("pc_agent/windows/Install-VideoWorker.ps1", "Install-VideoWorker.ps1"),
     ("pc_agent/windows/Cai-dat.bat", "Cai-dat.bat"),
+    ("pc_agent/windows/Open-FbPoller.ps1", "Open-FbPoller.ps1"),
 )
 
 
@@ -240,6 +241,9 @@ def run_once(root: Path, *, installing: bool) -> int:
     reading, age, pid = read_reading_state(root / "state.json")
     choice = upgrade_allowed(local=local, remote=remote, reading=reading, age_sec=age, pid_alive=process_alive(pid))
     if choice == "current":
+        if installing:
+            print(f"Đang ở bản {local}.", flush=True)
+            return 0
         if should_start_worker(pid_alive=process_alive(pid)):
             _start_worker()
             print("PC chưa chạy. Đã khởi động lại.", flush=True)

@@ -18,16 +18,16 @@ Thư viện GPU không nằm trong gói. Card NVIDIA vẫn đọc bằng CPU cho
 Token và địa chỉ hub nằm ngoài thư mục current, nên bản cập nhật không xóa chúng.
 Gói có kèm chương trình nối hub. PC rảnh thì chép chương trình mới ra ngoài current và giữ bản cũ trong file .prev.
 """
-_SETUP_GUIDE = """FbPollerVideo
+_SETUP_GUIDE = """FbPoller
 
-1. Giải nén thư mục này.
-2. Bấm đúp Cai-dat.bat.
-3. Đợi cửa sổ chạy xong. Không nhập token.
+1. Bấm đúp FbPoller.bat.
+2. Để cửa sổ mở. Không nhập token. Không cần giải nén.
 
 File tải về đã có token và địa chỉ hub.
 Máy tự cài Python, ffmpeg và Tesseract nếu chưa có.
-Máy tự chạy khi đăng nhập. Mất mạng thì tự nối lại.
-Khi hub nâng cấp, máy tự lấy bản mới lúc không đang đọc video.
+Cửa sổ này là phần mềm đang nối hub. Tắt cửa sổ là ngắt kết nối.
+Lần đăng nhập sau máy tự mở lại.
+Khi hub nâng cấp, máy tự cập nhật lúc không đang đọc video.
 """
 _SOURCES = (
     "pc_agent/video_worker.py",
@@ -35,6 +35,8 @@ _SOURCES = (
     "pc_agent/windows/Install-VideoWorker.ps1",
     "pc_agent/windows/Run-VideoWorker.ps1",
     "pc_agent/windows/Cai-dat.bat",
+    "pc_agent/windows/FbPoller.bat",
+    "pc_agent/windows/Open-FbPoller.ps1",
     "control_plane/__init__.py",
     "control_plane/gpu_read.py",
     "control_plane/screen_steps.py",
@@ -44,10 +46,21 @@ _SOURCES = (
 )
 _SETUP_FILES = (
     ("pc_agent/windows/Cai-dat.bat", "Cai-dat.bat"),
+    ("pc_agent/windows/FbPoller.bat", "FbPoller.bat"),
+    ("pc_agent/windows/Open-FbPoller.ps1", "Open-FbPoller.ps1"),
     ("pc_agent/windows/Install-VideoWorker.ps1", "Install-VideoWorker.ps1"),
     ("pc_agent/windows/Run-VideoWorker.ps1", "Run-VideoWorker.ps1"),
     ("pc_agent/video_watchdog.py", "video_watchdog.py"),
 )
+
+
+def render_pc_launcher(template: str, *, hub: str, token: str) -> str:
+    """Điền hub và token vào file mở là chạy. Dấu % trong cmd phải thành %%."""
+
+    def clean(value: str) -> str:
+        return value.replace("\r", "").replace("\n", "").replace("%", "%%").replace('"', "")
+
+    return template.replace("__CONTROL_HUB__", clean(hub)).replace("__CONTROL_TOKEN__", clean(token))
 
 
 def ensure_video_package(repo_root: Path, dest_dir: Path) -> Path:

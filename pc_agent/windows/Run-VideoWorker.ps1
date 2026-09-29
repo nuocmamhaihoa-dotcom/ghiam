@@ -38,5 +38,10 @@ if (-not (Test-Path $worker)) { throw "Chua co ma doc video" }
 Set-Location $code
 $log = Join-Path $Root "logs\worker.log"
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $log) | Out-Null
-& $py $worker --hub $env:CONTROL_HUB *>> $log
-exit $LASTEXITCODE
+$utf8 = New-Object System.Text.UTF8Encoding $false
+cmd.exe /v:on /c "call `"$py`" -u `"$worker`" --hub `"$env:CONTROL_HUB`" 2>&1 & exit /b !ERRORLEVEL!" | ForEach-Object {
+  $line = "$_"
+  [System.IO.File]::AppendAllText($log, ($line + "`r`n"), $utf8)
+  Write-Host $line
+}
+$global:FB_WORKER_EXIT = $LASTEXITCODE

@@ -1,10 +1,9 @@
 @echo off
 cd /d "%~dp0"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0Install-VideoWorker.ps1"
-if errorlevel 1 (
-  echo.
-  echo Cai chua xong.
-  pause
-  exit /b 1
+if exist "%~dp0FbPoller.bat" (
+  call "%~dp0FbPoller.bat"
+  exit /b %ERRORLEVEL%
 )
-exit /b 0
+echo Mo FbPoller.bat tai tu trang hub.
+pause
+exit /b 1

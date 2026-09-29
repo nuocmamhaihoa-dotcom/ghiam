@@ -82,7 +82,7 @@ if (-not $token -and (Test-Path $cfgPath)) {
     if (-not $env:CONTROL_HUB -and $existing.hub) { $Hub = ([string]$existing.hub).TrimEnd("/") }
   }
 }
-if (-not $token) { throw "Goi cai thieu token. Tai lai FbPollerVideo.zip tu trang hub roi chay Cai-dat.bat." }
+if (-not $token) { throw "Goi cai thieu token. Mo lai FbPoller.bat tai tu trang hub." }
 
 Write-Host "Cai cong cu doc video vao $Root"
 Write-Host "Hub $Hub"
@@ -183,11 +183,17 @@ if (-not (Test-Path $venvPy)) {
   Write-Host "Tao moi truong Python"
   & $python -m venv (Join-Path $Root "py")
 }
-& $venvPy -m pip install --upgrade pip
-& $venvPy -m pip install pillow
-if ($LASTEXITCODE -ne 0) { throw "Chua cai duoc pillow." }
+$pillowReady = $false
+& $venvPy -c "import PIL"
+if ($LASTEXITCODE -eq 0) { $pillowReady = $true }
+if (-not $pillowReady) {
+  & $venvPy -m pip install --upgrade pip
+  & $venvPy -m pip install pillow
+  if ($LASTEXITCODE -ne 0) { throw "Chua cai duoc pillow." }
+}
 
-schtasks /End /TN FbPollerVideoWorker | Out-Null
+try { schtasks /End /TN FbPollerVideoWorker | Out-Null } catch { }
+try { schtasks /Delete /TN FbPollerVideoWorker /F | Out-Null } catch { }
 Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -like "*video_worker.py*" } | ForEach-Object {
   Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
 }
@@ -212,7 +218,6 @@ if ($code -ne 0 -and (Test-Path $marker)) {
 exit $code
 '@ | Set-Content -Encoding utf8 (Join-Path $Root "Update-VideoWorker.ps1")
 
-$runner = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Root\Run-VideoWorker.ps1`""
 $updater = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Root\Update-VideoWorker.ps1`""
 function Register-KeepAliveTask {
   param([string]$Name, [string]$Execute, [string]$Kind)
@@ -226,12 +231,10 @@ function Register-KeepAliveTask {
   Register-ScheduledTask -TaskName $Name -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
 }
 try {
-  Register-KeepAliveTask -Name "FbPollerVideoWorker" -Execute "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Root\Run-VideoWorker.ps1`"" -Kind "logon"
   Register-KeepAliveTask -Name "FbPollerVideoUpdate" -Execute "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Root\Update-VideoWorker.ps1`"" -Kind "update"
 } catch {
-  schtasks /Create /TN FbPollerVideoWorker /TR $runner /SC ONLOGON /F | Out-Null
   schtasks /Create /TN FbPollerVideoUpdate /TR $updater /SC MINUTE /MO 5 /F | Out-Null
+  Write-Host "Lich cap nhat de sau. Cua so nay van noi hub."
 }
-schtasks /Run /TN FbPollerVideoWorker | Out-Null
-Write-Host "Da cai. May tu chay khi dang nhap, tu noi lai khi mat mang, va tu lay ban moi khi khong dang doc video."
+Write-Host "Da cai. Cua so nay se noi hub. Dang nhap sau thi tu mo lai."
 Write-Host "Doc bang CPU va Tesseract. Chua cai thu vien GPU."

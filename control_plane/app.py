@@ -43,7 +43,7 @@ from control_plane.people import (
     profile_from_line,
 )
 from control_plane.version import IPHONE_BUILD, VIDEO_WORKER_BUILD
-from control_plane.video_package import SETUP_NAME, ensure_pc_setup_package, ensure_video_package
+from control_plane.video_package import SETUP_NAME, ensure_pc_setup_package, ensure_video_package, render_pc_launcher
 from control_plane import video_helpers
 from control_plane.screen_steps import (
     ScreenVideoError,
@@ -234,10 +234,31 @@ def install_ios_app() -> HTMLResponse:
     return _html("cai-app.html")
 
 
+def _pc_launcher_bat(hub: str, token: str) -> str:
+    root = Path(__file__).resolve().parents[1]
+    template = (root / "pc_agent" / "windows" / "FbPoller.bat").read_text(encoding="utf-8")
+    return render_pc_launcher(template, hub=hub, token=token)
+
+
 @app.get("/tai-pc", response_class=HTMLResponse)
 def pc_download_page() -> HTMLResponse:
-    """Trang tải phần mềm nối PC. File zip đã kèm token."""
+    """Trang tải phần mềm nối PC. File mở là chạy, token nằm trong file."""
     return _html("tai-pc.html")
+
+
+@app.get("/tai-pc/FbPoller.bat")
+def pc_launcher_bat(request: Request) -> Response:
+    """File người dùng bấm đúp. Hub và token được gắn lúc tải, không lưu trong git."""
+    hub = str(request.base_url).rstrip("/")
+    body = _pc_launcher_bat(hub, settings.token or "")
+    return Response(
+        content=body.encode("utf-8"),
+        media_type="application/octet-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Content-Disposition": 'attachment; filename="FbPoller.bat"',
+        },
+    )
 
 
 @app.get("/tai-pc/FbPollerVideo.zip")
@@ -248,13 +269,15 @@ def pc_setup_zip(request: Request) -> Response:
         raise HTTPException(404, "package missing")
     hub = str(request.base_url).rstrip("/")
     config = json.dumps({"hub": hub, "token": settings.token or ""}, ensure_ascii=False)
+    launcher = _pc_launcher_bat(hub, settings.token or "")
     buffer = io.BytesIO()
     with zipfile.ZipFile(path, "r") as source, zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as dest:
         for info in source.infolist():
-            if info.filename == "config.json":
+            if info.filename in {"config.json", "FbPoller.bat"}:
                 continue
             dest.writestr(info, source.read(info.filename))
         dest.writestr("config.json", config)
+        dest.writestr("FbPoller.bat", launcher)
     return Response(
         content=buffer.getvalue(),
         media_type="application/zip",
@@ -842,6 +865,12 @@ def video_worker_zip(authorization: str | None = Header(default=None)) -> FileRe
         filename=path.name,
         headers={"Cache-Control": "no-cache"},
     )
+
+
+@app.get("/cai-video-open.ps1")
+def cai_video_open() -> PlainTextResponse:
+    root = Path(__file__).resolve().parents[1]
+    return _public_script(root / "pc_agent" / "windows" / "Open-FbPoller.ps1", bom=True)
 
 
 @app.get("/cai-video.ps1")
