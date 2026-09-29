@@ -6,7 +6,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from control_plane.danhba_store import import_people, list_books, mark_used, reconcile
+from control_plane.danhba_store import (
+    import_people,
+    issue_vcard,
+    list_books,
+    mark_used,
+    read_vcard,
+    reconcile,
+    render_vcard,
+)
 from control_plane.db import init_db
 
 
@@ -94,6 +102,46 @@ class DanhBaStoreTests(unittest.TestCase):
         )
         self.assertEqual(again["skippedExisting"], 1)
         self.assertEqual(again["added"], 0)
+
+    def test_vcard_ticket_marks_ready_books_used_and_hides_phones(self) -> None:
+        imported = import_people(
+            self.db_path,
+            "Lan, An, 0901234567\nMinh, 0902222222\n",
+            "Khach",
+            "2026-09-29T00:00:00+00:00",
+            page_size=1,
+        )
+        self.assertEqual([book["name"] for book in imported["ready"]], ["Khach 1", "Khach 2"])
+        issued = issue_vcard(self.db_path, None, "2026-09-29T00:00:00+00:00")
+        self.assertIsNotNone(issued)
+        assert issued is not None
+        self.assertNotIn("0901234567", str(issued))
+        self.assertEqual(issued["count"], 2)
+        self.assertTrue(str(issued["url"]).startswith("/danhba/xuat/"))
+        self.assertTrue(str(issued["url"]).endswith(".vcf"))
+        ticket = str(issued["url"]).rsplit("/", 1)[-1].removesuffix(".vcf")
+        early = read_vcard(self.db_path, ticket, "2026-09-29T00:01:00+00:00")
+        self.assertIsNotNone(early)
+        assert early is not None
+        self.assertIn("FN:Lan An", early["body"])
+        self.assertIn("TEL;TYPE=CELL:0901234567", early["body"])
+        self.assertIn("TEL;TYPE=CELL:0902222222", early["body"])
+        self.assertIn("ORG:Khach 1", early["body"])
+        self.assertIn("ORG:Khach 2", early["body"])
+        self.assertEqual(early["filename"], "Danh ba.vcf")
+        listed = list_books(self.db_path)
+        self.assertEqual(listed["ready"], [])
+        self.assertEqual(len(listed["used"]), 2)
+        again = read_vcard(self.db_path, ticket, "2026-09-29T00:02:00+00:00")
+        self.assertIsNotNone(again)
+        assert again is not None
+        self.assertIn("TEL;TYPE=CELL:0902222222", again["body"])
+        self.assertIsNone(read_vcard(self.db_path, ticket, "2026-09-29T00:11:00+00:00"))
+        self.assertIsNone(issue_vcard(self.db_path, None, "2026-09-29T00:12:00+00:00"))
+        escaped = render_vcard(
+            [{"name": "Khach 1", "entries": [{"name": "A, B", "phone": "0901234567"}]}]
+        )
+        self.assertIn("FN:A\\, B", escaped)
 
 
 if __name__ == "__main__":

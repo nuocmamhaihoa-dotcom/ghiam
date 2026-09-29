@@ -56,7 +56,7 @@ Mỗi dòng một người: tên ghi nhớ, rồi số điện thoại.
 Hub chia mỗi 5000 số một danh bạ. Một số chỉ nằm trong một danh bạ.
 
 Trên iPhone, mở /danhba/ bằng Safari rồi bấm Nạp lên iPhone.
-iPhone hỏi thì bấm Thêm tất cả, rồi bấm Đã thêm vào iPhone.
+iPhone hỏi thì bấm Thêm tất cả.
 Danh bạ đó chuyển sang mục Đã dùng.
 Trang iPhone tự lấy danh sách trên hub.
 Muốn khớp với số đang có trong máy, xuất file danh bạ rồi bấm Đối chiếu iPhone.

@@ -423,9 +423,9 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Nạp từ máy tính", page.text)
         self.assertIn('href="/danhba/nap"', page.text)
         self.assertEqual(payload["danhbaPath"], "/danhba/")
-        self.assertEqual(payload["danhbaBuild"], 5)
+        self.assertEqual(payload["danhbaBuild"], 6)
         self.assertEqual(body["danhba"], "/danhba/")
-        self.assertEqual(body["danhbaBuild"], 5)
+        self.assertEqual(body["danhbaBuild"], 6)
 
         install = self.client.get("/danhba", follow_redirects=False)
         self.assertEqual(install.status_code, 302, install.text)
@@ -434,9 +434,12 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(screen.status_code, 200, screen.text)
         self.assertEqual(screen.headers["cache-control"], "no-cache")
         self.assertIn("Nạp lên iPhone", screen.text)
-        self.assertIn('content="5"', screen.text)
+        self.assertIn('content="6"', screen.text)
         self.assertIn("Đối chiếu iPhone", screen.text)
         self.assertIn("/v1/danhba/sync", screen.text)
+        self.assertIn("/v1/danhba/xuat", screen.text)
+        self.assertIn("data:text/vcard", screen.text)
+        self.assertNotIn("navigator.share", screen.text)
         self.assertIn("Đã dùng", screen.text)
         self.assertIn("Chưa dùng", screen.text)
         self.assertIn("parseLines: parseLines", screen.text)
@@ -444,7 +447,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertNotIn("/danhba/app.js", screen.text)
         version = self.client.get("/danhba/version")
         self.assertEqual(version.status_code, 200, version.text)
-        self.assertEqual(version.json()["build"], 5)
+        self.assertEqual(version.json()["build"], 6)
         nap = self.client.get("/danhba/nap")
         self.assertEqual(nap.status_code, 200, nap.text)
         self.assertIn("Nạp lên VPS", nap.text)
@@ -454,7 +457,7 @@ class ActionApiTests(unittest.TestCase):
         worker = self.client.get("/danhba/sw.js")
         self.assertEqual(worker.status_code, 200, worker.text)
         self.assertIn("javascript", worker.headers["content-type"])
-        self.assertIn('var BUILD = "5";', worker.text)
+        self.assertIn('var BUILD = "6";', worker.text)
         self.assertIn('var CACHE = "danhba-" + BUILD;', worker.text)
         self.assertEqual(worker.headers["service-worker-allowed"], "/danhba/")
         manifest = self.client.get("/danhba/manifest.webmanifest")
@@ -569,6 +572,44 @@ class ActionApiTests(unittest.TestCase):
         self.assertNotIn("0902222222", matched.text)
         stored = self.client.get(f"/v1/danhba/books/{book_id}", headers=self.headers)
         self.assertEqual(len(stored.json()["entries"]), 2)
+
+    def test_danhba_vcard_opens_without_share_and_marks_used(self) -> None:
+        with session(settings.db_path) as conn:
+            conn.execute("DELETE FROM contact_entries")
+            conn.execute("DELETE FROM contact_books")
+            conn.execute("DELETE FROM contact_exports")
+        denied = self.client.post("/v1/danhba/xuat", json={})
+        self.assertEqual(denied.status_code, 401)
+        created = self.client.post(
+            "/v1/danhba/import",
+            headers=self.headers,
+            json={"title": "Khach", "text": "Lan, 0901234567\nMinh, 0902222222\n"},
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        book_id = created.json()["ready"][0]["id"]
+        issued = self.client.post("/v1/danhba/xuat", headers=self.headers, json={})
+        self.assertEqual(issued.status_code, 200, issued.text)
+        payload = issued.json()
+        self.assertNotIn("0901234567", issued.text)
+        self.assertEqual(payload["count"], 2)
+        self.assertTrue(payload["url"].endswith(".vcf"))
+        card = self.client.get(payload["url"])
+        self.assertEqual(card.status_code, 200, card.text)
+        self.assertIn("text/vcard", card.headers["content-type"])
+        self.assertIn("inline", card.headers["content-disposition"])
+        self.assertIn('filename="Khach 1.vcf"', card.headers["content-disposition"])
+        self.assertIn("BEGIN:VCARD", card.text)
+        self.assertIn("FN:Lan", card.text)
+        self.assertIn("TEL;TYPE=CELL:0901234567", card.text)
+        self.assertIn("TEL;TYPE=CELL:0902222222", card.text)
+        listed = self.client.get("/v1/danhba/books", headers=self.headers).json()
+        self.assertEqual(listed["ready"], [])
+        self.assertEqual(listed["used"][0]["id"], book_id)
+        repeat = self.client.get(payload["url"])
+        self.assertEqual(repeat.status_code, 200, repeat.text)
+        self.assertIn("TEL;TYPE=CELL:0902222222", repeat.text)
+        missing = self.client.get("/danhba/xuat/not-a-real-ticket.vcf")
+        self.assertEqual(missing.status_code, 404)
 
 
 if __name__ == "__main__":
