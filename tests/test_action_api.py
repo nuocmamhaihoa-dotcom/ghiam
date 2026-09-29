@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import os
@@ -22,6 +23,7 @@ Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from control_plane.app import app  # noqa: E402
+from control_plane.carddav import carddav_password  # noqa: E402
 from control_plane.db import session  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
 
@@ -424,9 +426,9 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Nạp từ máy tính", page.text)
         self.assertIn('href="/danhba/nap"', page.text)
         self.assertEqual(payload["danhbaPath"], "/danhba/")
-        self.assertEqual(payload["danhbaBuild"], 10)
+        self.assertEqual(payload["danhbaBuild"], 12)
         self.assertEqual(body["danhba"], "/danhba/")
-        self.assertEqual(body["danhbaBuild"], 10)
+        self.assertEqual(body["danhbaBuild"], 12)
 
         install = self.client.get("/danhba", follow_redirects=False)
         self.assertEqual(install.status_code, 302, install.text)
@@ -435,14 +437,18 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(screen.status_code, 200, screen.text)
         self.assertEqual(screen.headers["cache-control"], "no-cache")
         self.assertIn("Nạp lên iPhone", screen.text)
-        self.assertIn('content="10"', screen.text)
-        self.assertIn("Bấm Thêm tất cả.", screen.text)
+        self.assertIn('content="12"', screen.text)
+        self.assertIn("bấm Cài đặt", screen.text)
+        self.assertIn("/v1/danhba/dongbo", screen.text)
+        self.assertNotIn("location.assign(armedUrl)", screen.text)
+        self.assertNotIn("DanhBa.zip", screen.text)
         self.assertNotIn("shortcuts://", screen.text)
         self.assertNotIn("NapDanhBa", screen.text)
         self.assertIn("Đối chiếu iPhone", screen.text)
         self.assertIn("/v1/danhba/sync", screen.text)
-        self.assertIn("/v1/danhba/xuat", screen.text)
-        self.assertIn("createObjectURL", screen.text)
+        self.assertNotIn("/v1/danhba/xuat", screen.text)
+        self.assertIn("Đã tải hồ sơ về", screen.text)
+        self.assertIn("napPhone", screen.text)
         self.assertIn("clipboardData", screen.text)
         self.assertIn("text/x-vcard", screen.text)
         self.assertNotIn("data:text/vcard", screen.text)
@@ -455,7 +461,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertNotIn("/danhba/app.js", screen.text)
         version = self.client.get("/danhba/version")
         self.assertEqual(version.status_code, 200, version.text)
-        self.assertEqual(version.json()["build"], 10)
+        self.assertEqual(version.json()["build"], 12)
         nap = self.client.get("/danhba/nap")
         self.assertEqual(nap.status_code, 200, nap.text)
         self.assertIn("Nạp lên VPS", nap.text)
@@ -465,7 +471,7 @@ class ActionApiTests(unittest.TestCase):
         worker = self.client.get("/danhba/sw.js")
         self.assertEqual(worker.status_code, 200, worker.text)
         self.assertIn("javascript", worker.headers["content-type"])
-        self.assertIn('var BUILD = "10";', worker.text)
+        self.assertIn('var BUILD = "12";', worker.text)
         self.assertIn('var CACHE = "danhba-" + BUILD;', worker.text)
         self.assertEqual(worker.headers["service-worker-allowed"], "/danhba/")
         manifest = self.client.get("/danhba/manifest.webmanifest")
@@ -600,25 +606,128 @@ class ActionApiTests(unittest.TestCase):
         payload = issued.json()
         self.assertNotIn("0901234567", issued.text)
         self.assertEqual(payload["count"], 2)
-        self.assertTrue(payload["url"].endswith(".vcf"))
+        self.assertTrue(payload["url"].endswith(".zip"))
         card = self.client.get(payload["url"])
-        self.assertEqual(card.status_code, 200, card.text)
-        self.assertIn("text/x-vcard", card.headers["content-type"])
-        self.assertIn("inline", card.headers["content-disposition"])
-        self.assertIn('filename="Khach 1.vcf"', card.headers["content-disposition"])
-        self.assertIn("BEGIN:VCARD", card.text)
-        self.assertIn("N:Lan;;;;", card.text)
-        self.assertIn("FN:Lan", card.text)
-        self.assertIn("TEL;TYPE=CELL:0901234567", card.text)
-        self.assertIn("TEL;TYPE=CELL:0902222222", card.text)
+        self.assertEqual(card.status_code, 200)
+        self.assertIn("application/zip", card.headers["content-type"])
+        self.assertIn("attachment", card.headers["content-disposition"])
+        self.assertIn('filename="DanhBa.zip"', card.headers["content-disposition"])
+        with zipfile.ZipFile(io.BytesIO(card.content)) as archive:
+            self.assertEqual(archive.namelist(), ["DanhBa.vcf"])
+            packed = archive.read("DanhBa.vcf").decode("utf-8")
+        self.assertIn("BEGIN:VCARD", packed)
+        self.assertIn("N:Lan;;;;", packed)
+        self.assertIn("FN:Lan", packed)
+        self.assertIn("TEL;TYPE=CELL:0901234567", packed)
+        self.assertIn("TEL;TYPE=CELL:0902222222", packed)
         listed = self.client.get("/v1/danhba/books", headers=self.headers).json()
         self.assertEqual(listed["ready"], [])
         self.assertEqual(listed["used"][0]["id"], book_id)
         repeat = self.client.get(payload["url"])
         self.assertEqual(repeat.status_code, 200, repeat.text)
-        self.assertIn("TEL;TYPE=CELL:0902222222", repeat.text)
-        missing = self.client.get("/danhba/xuat/not-a-real-ticket.vcf")
+        with zipfile.ZipFile(io.BytesIO(repeat.content)) as archive:
+            self.assertIn("TEL;TYPE=CELL:0902222222", archive.read("DanhBa.vcf").decode("utf-8"))
+        missing = self.client.get("/danhba/xuat/not-a-real-ticket.zip")
         self.assertEqual(missing.status_code, 404)
+
+    def test_carddav_profile_pulls_every_saved_number(self) -> None:
+        with session(settings.db_path) as conn:
+            conn.execute("DELETE FROM contact_entries")
+            conn.execute("DELETE FROM contact_books")
+            conn.execute("DELETE FROM carddav_tickets")
+        empty = self.client.post("/v1/danhba/dongbo", headers=self.headers)
+        self.assertEqual(empty.status_code, 404, empty.text)
+        created = self.client.post(
+            "/v1/danhba/import",
+            headers=self.headers,
+            json={"title": "Khach", "text": "Lan, 0901234567\nMinh, 0902222222\n"},
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        denied = self.client.post("/v1/danhba/dongbo")
+        self.assertEqual(denied.status_code, 401)
+        issued = self.client.post("/v1/danhba/dongbo", headers=self.headers)
+        self.assertEqual(issued.status_code, 200, issued.text)
+        self.assertEqual(issued.json()["count"], 2)
+        self.assertNotIn("0901234567", issued.text)
+        profile = self.client.get(issued.json()["url"])
+        self.assertEqual(profile.status_code, 200, profile.text)
+        self.assertIn("application/x-apple-aspen-config", profile.headers["content-type"])
+        self.assertNotIn("gzip", profile.headers.get("content-encoding", ""))
+        self.assertTrue(profile.content.startswith(b"<?xml"))
+        self.assertIn("inline", profile.headers["content-disposition"])
+        self.assertIn("com.apple.carddav.account", profile.text)
+        self.assertIn("/carddav/principals/danhba/", profile.text)
+        self.assertNotIn("test-token", profile.text)
+        password = carddav_password("test-token")
+        self.assertIn(password, profile.text)
+        basic = base64.b64encode(f"danhba:{password}".encode()).decode()
+        auth = {"Authorization": f"Basic {basic}"}
+        locked = self.client.request("PROPFIND", "/carddav/principals/danhba/", headers={"Depth": "0"})
+        self.assertEqual(locked.status_code, 401)
+        principal = self.client.request(
+            "PROPFIND",
+            "/carddav/principals/danhba/",
+            headers={**auth, "Depth": "0"},
+        )
+        self.assertEqual(principal.status_code, 207, principal.text)
+        self.assertIn("/carddav/books/danhba/", principal.text)
+        home = self.client.request(
+            "PROPFIND",
+            "/carddav/books/danhba/",
+            headers={**auth, "Depth": "1"},
+        )
+        self.assertEqual(home.status_code, 207, home.text)
+        self.assertIn("/carddav/books/danhba/contacts/", home.text)
+        listing = self.client.request(
+            "PROPFIND",
+            "/carddav/books/danhba/contacts/",
+            headers={**auth, "Depth": "1"},
+        )
+        self.assertEqual(listing.status_code, 207, listing.text)
+        self.assertEqual(listing.text.count(".vcf"), 2)
+        report = (
+            '<?xml version="1.0" encoding="utf-8"?>'
+            '<card:addressbook-multiget xmlns:d="DAV:" xmlns:card="urn:ietf:params:xml:ns:carddav">'
+            "<d:prop><d:getetag/><card:address-data/></d:prop>"
+            "</card:addressbook-multiget>"
+        )
+        fetched = self.client.request(
+            "REPORT",
+            "/carddav/books/danhba/contacts/",
+            headers={**auth, "Depth": "1", "Content-Type": "application/xml"},
+            content=report,
+        )
+        self.assertEqual(fetched.status_code, 207, fetched.text)
+        self.assertIn("TEL;TYPE=CELL:0901234567", fetched.text)
+        self.assertIn("TEL;TYPE=CELL:0902222222", fetched.text)
+        self.assertIn("FN:Lan", fetched.text)
+        self.assertIn("FN:Minh", fetched.text)
+        sync = self.client.request(
+            "REPORT",
+            "/carddav/books/danhba/contacts/",
+            headers={**auth, "Content-Type": "application/xml"},
+            content=(
+                '<?xml version="1.0" encoding="utf-8"?>'
+                '<d:sync-collection xmlns:d="DAV:"><d:sync-token></d:sync-token></d:sync-collection>'
+            ),
+        )
+        self.assertEqual(sync.status_code, 207, sync.text)
+        self.assertIn("sync-token", sync.text)
+        token = sync.text.split("<d:sync-token>", 1)[1].split("</d:sync-token>", 1)[0]
+        quiet = self.client.request(
+            "REPORT",
+            "/carddav/books/danhba/contacts/",
+            headers={**auth, "Content-Type": "application/xml"},
+            content=(
+                '<?xml version="1.0" encoding="utf-8"?>'
+                f'<d:sync-collection xmlns:d="DAV:"><d:sync-token>{token}</d:sync-token></d:sync-collection>'
+            ),
+        )
+        self.assertEqual(quiet.status_code, 207, quiet.text)
+        self.assertNotIn("TEL;TYPE=CELL", quiet.text)
+        listed = self.client.get("/v1/danhba/books", headers=self.headers).json()
+        self.assertEqual(len(listed["ready"]), 1)
+        self.assertEqual(listed["used"], [])
 
 
 if __name__ == "__main__":
