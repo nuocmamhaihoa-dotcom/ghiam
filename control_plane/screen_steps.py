@@ -24,7 +24,6 @@ from control_plane.screen_people import (
     sightings_from_lines,
 )
 
-_MAX_SECONDS = 600
 _MAX_FRAMES = 2400
 _MAX_READS = 1000
 _MIN_DIFF = 0.08
@@ -269,8 +268,6 @@ def analyze_screen_video(
     sink = progress if progress is not None else ReadProgress()
     sink.report(8, "Đọc thời lượng")
     duration = _duration(path)
-    if duration is not None and duration > _MAX_SECONDS:
-        raise ScreenVideoError("Video dài quá 10 phút. Dừng ghi rồi chọn lại.")
     rate = _sample_rate(duration)
     with tempfile.TemporaryDirectory(prefix="fb-screen-") as folder:
         work = Path(folder)
@@ -315,7 +312,7 @@ def _duration(path: Path) -> float | None:
             ],
             capture_output=True,
             text=True,
-            timeout=20,
+            timeout=60,
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
@@ -385,13 +382,15 @@ def _extract_frames(
     drain.start()
     crept = 12
     shown = 12
-    deadline = time.monotonic() + 180
+    # Video dài bao lâu cũng được. Chỉ dừng khi ffmpeg im 3 phút.
+    stall_seconds = 180
+    deadline = time.monotonic() + stall_seconds
     try:
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 proc.kill()
-                raise ScreenVideoError("Không đọc được video.")
+                raise ScreenVideoError("Tách hình dừng vì không tiến thêm.")
             try:
                 line = lines.get(timeout=min(1.0, remaining))
             except queue.Empty:
@@ -400,6 +399,7 @@ def _extract_frames(
                 continue
             if line is None:
                 break
+            deadline = time.monotonic() + stall_seconds
             raw = line.strip()
             seconds: float | None = None
             if raw.startswith("out_time_us="):
@@ -416,7 +416,7 @@ def _extract_frames(
             shown = max(shown, min(40, percent))
             progress.report(shown, "Tách khung hình")
         try:
-            proc.wait(timeout=max(1.0, deadline - time.monotonic()))
+            proc.wait(timeout=30)
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait(timeout=5)

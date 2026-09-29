@@ -23,6 +23,7 @@ Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from control_plane.app import app  # noqa: E402
+from control_plane.settings import settings  # noqa: E402
 from control_plane.video_jobs import VideoJob  # noqa: E402
 
 
@@ -173,6 +174,8 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("/v1/people", page.text)
         self.assertIn("multiple", page.text)
         self.assertIn("nhiều video", page.text)
+        self.assertIn("Không giới hạn số video, dung lượng hay thời lượng", page.text)
+        self.assertNotIn("40 - queue.length", page.text)
         self.assertNotIn('id="stepList"', page.text)
         self.assertNotIn("Lưu thông tin", page.text)
         self.assertNotIn("/v1/people/confirm", page.text)
@@ -317,6 +320,27 @@ class ActionApiTests(unittest.TestCase):
         self.assertIsInstance(problems, list)
         self.assertIn(body["error"], problems)
 
+    def test_upload_size_is_open_unless_a_cap_is_set(self) -> None:
+        previous = settings.max_upload_mb
+        payload = b"x" * (2 * 1024 * 1024)
+        try:
+            settings.max_upload_mb = 1
+            blocked = self.client.post(
+                "/v1/recordings/from-video",
+                headers=self.headers,
+                files={"file": ("clip.mp4", payload, "video/mp4")},
+            )
+            self.assertEqual(blocked.status_code, 413, blocked.text)
+            settings.max_upload_mb = 0
+            opened = self.client.post(
+                "/v1/recordings/from-video",
+                headers=self.headers,
+                files={"file": ("clip.mp4", payload, "video/mp4")},
+            )
+            self.assertEqual(opened.status_code, 400, opened.text)
+        finally:
+            settings.max_upload_mb = previous
+
     def test_public_delivery_package(self) -> None:
         opened = self.client.get("/tai", follow_redirects=False)
         self.assertEqual(opened.status_code, 302)
@@ -326,12 +350,12 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "23")
+        self.assertEqual(build, "24")
 
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 23)
+        self.assertEqual(payload["iphoneBuild"], 24)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]

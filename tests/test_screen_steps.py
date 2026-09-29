@@ -11,6 +11,7 @@ from pathlib import Path
 from control_plane.screen_steps import (
     ReadProgress,
     _media_seconds,
+    _sample_rate,
     analyze_screen_video,
     clean_ocr,
     read_screen_video,
@@ -101,6 +102,11 @@ class ScreenVideoTests(unittest.TestCase):
     def test_media_seconds_are_microseconds(self) -> None:
         self.assertEqual(_media_seconds("960000"), 0.96)
         self.assertIsNone(_media_seconds("N/A"))
+
+    def test_a_long_video_is_sampled_across_its_whole_length(self) -> None:
+        rate = _sample_rate(7200)
+        self.assertGreater(rate, 0)
+        self.assertAlmostEqual(rate * 7200, 2400, places=3)
 
     def test_progress_names_the_work(self) -> None:
         if shutil.which("ffmpeg") is None or shutil.which("tesseract") is None:

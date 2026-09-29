@@ -72,7 +72,7 @@
 <body>
   <p id="updateNote" hidden></p>
   <main>
-    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
+    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
     <p id="status" hidden></p>
     <video id="playback" controls playsinline hidden></video>
     <section id="progressBox" hidden>
@@ -281,7 +281,7 @@
 
     function rememberProblems(items) {
       (items || []).forEach((text) => {
-        if (text && carried.indexOf(text) === -1 && carried.length < 40) carried.push(text);
+        if (text && carried.indexOf(text) === -1) carried.push(text);
       });
       renderProblems(carried);
     }
@@ -316,6 +316,10 @@
         request.onload = () => {
           if (request.status === 413) {
             resolve({ ok: false, error: "Video quá lớn." });
+            return;
+          }
+          if (request.status === 507) {
+            resolve({ ok: false, error: "Hết chỗ trống trên máy chủ." });
             return;
           }
           if (request.status < 200 || request.status >= 300) {
@@ -380,8 +384,7 @@
     }
 
     function enqueue(files) {
-      const room = Math.max(0, 40 - queue.length);
-      const accepted = Array.from(files).filter((file) => file).slice(0, room);
+      const accepted = Array.from(files).filter((file) => file);
       accepted.forEach((file) => queue.push(file));
       batchTotal += accepted.length;
       pumpQueue();

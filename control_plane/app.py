@@ -57,12 +57,20 @@ if STATIC_DIR.is_dir():
 class LimitUploadSizeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
         cl = request.headers.get("content-length")
-        if cl and int(cl) > settings.max_upload_mb * 1024 * 1024:
+        limit = _upload_limit_bytes()
+        if cl and limit is not None and int(cl) > limit:
             return JSONResponse({"detail": "upload too large"}, status_code=413)
         return await call_next(request)
 
 
 app.add_middleware(LimitUploadSizeMiddleware)
+
+
+def _upload_limit_bytes() -> int | None:
+    """0 nghĩa là không chặn dung lượng từng video."""
+    if settings.max_upload_mb <= 0:
+        return None
+    return settings.max_upload_mb * 1024 * 1024
 
 
 def utcnow() -> str:
@@ -743,16 +751,22 @@ async def _store_upload(file: UploadFile, suffix: str) -> Path:
     with tempfile.NamedTemporaryFile(prefix="fb-video-", suffix=suffix, delete=False) as tmp:
         dest = Path(tmp.name)
         total = 0
-        limit = settings.max_upload_mb * 1024 * 1024
-        while True:
-            chunk = await file.read(1024 * 1024)
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > limit:
-                dest.unlink(missing_ok=True)
-                raise HTTPException(413, "file is too large")
-            tmp.write(chunk)
+        limit = _upload_limit_bytes()
+        try:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if limit is not None and total > limit:
+                    raise HTTPException(413, "file is too large")
+                tmp.write(chunk)
+        except HTTPException:
+            dest.unlink(missing_ok=True)
+            raise
+        except OSError as error:
+            dest.unlink(missing_ok=True)
+            raise HTTPException(507, "Hết chỗ trống trên máy chủ.") from error
     return dest
 
 
