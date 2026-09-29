@@ -1,0 +1,21 @@
+{
+  "name": "Danh bạ",
+  "short_name": "Danh bạ",
+  "description": "Chia danh bạ mỗi 5000 số và nạp lên iPhone.",
+  "id": "/danhba/",
+  "start_url": "/danhba/",
+  "scope": "/danhba/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "lang": "vi",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

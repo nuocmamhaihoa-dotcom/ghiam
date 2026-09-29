@@ -44,11 +44,23 @@
     <li>Bấm Mở app.</li>
     <li>Bấm Chia sẻ, rồi Thêm vào Màn hình chính.</li>
   </ol>
+  <h2>Phần mềm Danh bạ</h2>
+  <p>Cài bằng Safari. Icon trên màn hình chính tự chạy. Lần sau có bản mới, mở lại icon là iPhone tự lấy bản đó.</p>
+  <p class="url" id="danhbaUrl">/danhba/</p>
+  <a class="btn" id="danhba" href="/danhba/">Cài Danh bạ trên iPhone</a>
+  <a class="btn ghost" href="/tai/danhba.zip">Tải phần mềm Danh bạ</a>
+  <ol>
+    <li>Mở đường dẫn trên bằng Safari trên iPhone.</li>
+    <li>Bấm Chia sẻ, rồi Thêm vào Màn hình chính.</li>
+    <li>Mở icon Danh bạ. Không cần App Store và không cần Xcode.</li>
+  </ol>
   <p class="build" id="buildLine">Bản __IPHONE_BUILD__</p>
   <script src="/static/version.js"></script>
   <script>
     const appUrl = location.origin + "/iphone";
+    const danhbaUrl = location.origin + "/danhba/";
     document.getElementById("appUrl").textContent = appUrl;
+    document.getElementById("danhbaUrl").textContent = danhbaUrl;
     document.getElementById("copyUrl").addEventListener("click", async () => {
       const button = document.getElementById("copyUrl");
       try {

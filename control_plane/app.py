@@ -21,15 +21,15 @@ from typing import Any
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
-from control_plane.delivery import PACKAGE_NAME, ensure_package
+from control_plane.delivery import DANHBA_NAME, PACKAGE_NAME, ensure_danhba_package, ensure_package
 from control_plane.people import apply_novel, complete_rows
-from control_plane.version import IPHONE_BUILD
+from control_plane.version import DANHBA_BUILD, IPHONE_BUILD
 from control_plane.recordings import (
     blanks_of,
     default_title,
@@ -42,7 +42,7 @@ from control_plane.recordings import (
     script_lines,
     steps_to_events,
 )
-from control_plane.settings import settings
+from control_plane.settings import ROOT, settings
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -166,6 +166,8 @@ def health() -> dict[str, Any]:
         "packages_dir": str(settings.packages_dir),
         "dashboard": "/",
         "iphoneBuild": IPHONE_BUILD,
+        "danhbaBuild": DANHBA_BUILD,
+        "danhba": "/danhba/",
         "delivery": "/tai",
     }
 
@@ -205,10 +207,12 @@ def delivery_page() -> HTMLResponse:
 @app.get("/v1/delivery")
 def delivery_info() -> dict[str, Any]:
     pkg = ensure_package(STATIC_DIR, settings.data_dir)
-    return {
+    body: dict[str, Any] = {
         "iphoneBuild": IPHONE_BUILD,
         "iphonePath": "/iphone",
         "installPath": "/tai",
+        "danhbaBuild": DANHBA_BUILD,
+        "danhbaPath": "/danhba/",
         "package": {
             "name": pkg.name,
             "bytes": pkg.stat().st_size,
@@ -216,6 +220,15 @@ def delivery_info() -> dict[str, Any]:
             "path": "/tai/goi.zip",
         },
     }
+    danhba = ensure_danhba_package(ROOT / "ios" / "DanhBa", settings.data_dir)
+    if danhba is not None and danhba.is_file():
+        body["danhba"] = {
+            "name": danhba.name,
+            "bytes": danhba.stat().st_size,
+            "sha256": _sha256(danhba),
+            "path": "/tai/danhba.zip",
+        }
+    return body
 
 
 @app.get("/tai/goi.zip")
@@ -229,6 +242,80 @@ def delivery_package() -> FileResponse:
         filename=pkg.name,
         headers={"Cache-Control": "no-cache"},
     )
+
+
+@app.get("/tai/danhba.zip")
+def danhba_package() -> FileResponse:
+    pkg = ensure_danhba_package(ROOT / "ios" / "DanhBa", settings.data_dir)
+    if pkg is None or not pkg.is_file() or pkg.name != DANHBA_NAME:
+        raise HTTPException(status_code=404, detail="package missing")
+    return FileResponse(
+        pkg,
+        media_type="application/zip",
+        filename=pkg.name,
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/danhba")
+def danhba_open() -> RedirectResponse:
+    """Đường cài app Danh bạ. Dấu / cuối để iPhone cập nhật đúng thư mục."""
+    return RedirectResponse(url="/danhba/", status_code=302)
+
+
+@app.get("/danhba/")
+def danhba_app() -> HTMLResponse:
+    """App Danh bạ chạy trên iPhone. Bản mới có hiệu lực lần mở sau."""
+    path = STATIC_DIR / "danhba.html"
+    if not path.exists():
+        return HTMLResponse("<p>Missing page.</p>", status_code=404)
+    text = path.read_text(encoding="utf-8").replace("__DANHBA_BUILD__", str(DANHBA_BUILD))
+    return HTMLResponse(text, headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/danhba/app.js")
+def danhba_script() -> FileResponse:
+    path = STATIC_DIR / "danhba-app.js"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="script missing")
+    return FileResponse(
+        path,
+        media_type="text/javascript",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/danhba/sw.js")
+def danhba_worker() -> HTMLResponse:
+    path = STATIC_DIR / "danhba-sw.js"
+    if not path.exists():
+        return HTMLResponse("missing", status_code=404)
+    text = path.read_text(encoding="utf-8").replace("__DANHBA_BUILD__", str(DANHBA_BUILD))
+    return Response(
+        content=text,
+        media_type="text/javascript",
+        headers={
+            "Cache-Control": "no-cache",
+            "Service-Worker-Allowed": "/danhba/",
+        },
+    )
+
+
+@app.get("/danhba/manifest.webmanifest")
+def danhba_manifest() -> FileResponse:
+    path = STATIC_DIR / "danhba-manifest.webmanifest"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="manifest missing")
+    return FileResponse(
+        path,
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/danhba/version")
+def danhba_version() -> dict[str, int]:
+    return {"build": DANHBA_BUILD}
 
 
 @app.get("/manifest.webmanifest")
