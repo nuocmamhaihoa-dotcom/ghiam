@@ -103,6 +103,20 @@ def init_db(db_path: Path) -> None:
               username TEXT NOT NULL DEFAULT '',
               updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS contact_books (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              seq INTEGER NOT NULL UNIQUE,
+              status TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              used_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS contact_entries (
+              phone TEXT PRIMARY KEY,
+              book_id TEXT NOT NULL,
+              name TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_contact_entries_book ON contact_entries(book_id);
             """
         )
         conn.commit()

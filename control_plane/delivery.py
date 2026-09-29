@@ -47,17 +47,21 @@ def ensure_package(static_dir: Path, data_dir: Path) -> Path:
 
 
 DANHBA_NAME = "danh-ba-iphone.zip"
-_DANHBA_GUIDE = """Danh bạ — chạy trên iPhone
+_DANHBA_GUIDE = """Danh bạ — nạp từ máy tính, dùng trên iPhone
 
-Cách cài để máy tự chạy và tự lấy bản mới:
-1. Mở Safari trên iPhone, vào trang /danhba/ của hub.
-2. Bấm Chia sẻ, rồi Thêm vào Màn hình chính.
-3. Mở icon Danh bạ. Lần sau có bản mới, mở lại icon là máy tự cập nhật.
+Danh sách nằm trên hub, không nằm trong một file chung.
+
+Từ máy tính, mở /danhba/nap.
+Mỗi dòng một người: tên ghi nhớ, rồi số điện thoại.
+Hub chia mỗi 5000 số một danh bạ. Một số chỉ nằm trong một danh bạ.
+
+Trên iPhone, mở /danhba/ bằng Safari rồi bấm Nạp lên iPhone.
+iPhone hỏi thì bấm Thêm tất cả, rồi bấm Đã thêm vào iPhone.
+Danh bạ đó chuyển sang mục Đã dùng.
+Trang iPhone tự lấy danh sách trên hub.
+Muốn khớp với số đang có trong máy, xuất file danh bạ rồi bấm Đối chiếu iPhone.
 
 Gói zip này là mã nguồn Xcode, không phải file cài trên iPhone.
-Trong app, tên mặc định là Khach. Dán số, bấm Nạp lên iPhone.
-App chia mỗi 5000 số một nhóm. Một số chỉ nằm trong một nhóm.
-
 Gói này không kèm danh bạ của bạn.
 """
 
