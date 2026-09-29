@@ -43,7 +43,7 @@ from control_plane.people import (
     profile_from_line,
 )
 from control_plane.version import IPHONE_BUILD, VIDEO_WORKER_BUILD
-from control_plane.video_package import ensure_video_package
+from control_plane.video_package import SETUP_NAME, ensure_pc_setup_package, ensure_video_package
 from control_plane import video_helpers
 from control_plane.screen_steps import (
     ScreenVideoError,
@@ -197,7 +197,7 @@ def _html(name: str, status_code: int = 200) -> HTMLResponse:
     if not path.exists():
         return HTMLResponse("<p>Missing page.</p>", status_code=404)
     text = path.read_text(encoding="utf-8").replace("__IPHONE_BUILD__", str(IPHONE_BUILD))
-    if name == "iphone.html":
+    if name in {"iphone.html", "tai-pc.html"}:
         text = text.replace("__CONTROL_TOKEN_JSON__", json.dumps(settings.token or ""))
     return HTMLResponse(text, status_code=status_code, headers={"Cache-Control": "no-cache"})
 
@@ -232,6 +232,26 @@ def iphone_app() -> HTMLResponse:
 def install_ios_app() -> HTMLResponse:
     """Cách cài app đọc chữ trên ứng dụng khác."""
     return _html("cai-app.html")
+
+
+@app.get("/tai-pc", response_class=HTMLResponse)
+def pc_download_page() -> HTMLResponse:
+    """Trang tải phần mềm nối PC. Token hiện trên trang để dán một lần lúc cài."""
+    return _html("tai-pc.html")
+
+
+@app.get("/tai-pc/FbPollerVideo.zip")
+def pc_setup_zip() -> FileResponse:
+    repo = Path(__file__).resolve().parents[1]
+    path = ensure_pc_setup_package(repo, settings.data_dir / "delivery")
+    if path.name != SETUP_NAME or not path.is_file():
+        raise HTTPException(404, "package missing")
+    return FileResponse(
+        path,
+        media_type="application/zip",
+        filename=SETUP_NAME,
+        headers={"Cache-Control": "no-cache", "Content-Disposition": f'attachment; filename="{SETUP_NAME}"'},
+    )
 
 
 @app.get("/tai")

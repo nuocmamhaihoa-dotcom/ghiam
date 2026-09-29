@@ -1,7 +1,8 @@
 """Hỏi hub vài phút một lần. Máy đang đọc video thì chờ. Rảnh thì tải zip, kiểm sha256, đổi mã, chạy lại.
 
-File này nằm ngoài thư mục current. Bản zip không thay file này, nên một bản mã hỏng vẫn bị bản sau thay được.
 Token và địa chỉ hub nằm trong config.json, không nằm trong zip.
+Khi gói mới có chương trình nối hub, file này tự thay chính nó và giữ bản cũ ở video_watchdog.py.prev.
+Lần chạy kế tiếp xóa dấu watchdog-replaced. Nếu file mới không chạy được, lịch Update khôi phục bản .prev.
 """
 
 from __future__ import annotations
@@ -22,6 +23,45 @@ from pathlib import Path
 
 STALE_AFTER_SEC = 180.0
 _TASK = "FbPollerVideoWorker"
+
+
+_SUPPORT = (
+    ("pc_agent/video_watchdog.py", "video_watchdog.py"),
+    ("pc_agent/windows/Run-VideoWorker.ps1", "Run-VideoWorker.ps1"),
+    ("pc_agent/windows/Install-VideoWorker.ps1", "Install-VideoWorker.ps1"),
+    ("pc_agent/windows/Cai-dat.bat", "Cai-dat.bat"),
+)
+
+
+def should_start_worker(*, pid_alive: bool) -> bool:
+    """Tiến trình đọc đã tắt thì mở lại. Đang sống thì không mở thêm một bản."""
+    return not pid_alive
+
+
+def clear_replaced_marker(root: Path) -> None:
+    marker = root / "watchdog-replaced"
+    if marker.is_file():
+        marker.unlink()
+
+
+def publish_support_files(root: Path) -> None:
+    """Chép chương trình nối hub ra ngoài current. Bản đang chạy được giữ trong file .prev."""
+    current = root / "current"
+    replaced_watchdog = False
+    for relative, dest_name in _SUPPORT:
+        src = current.joinpath(*relative.split("/"))
+        if not src.is_file():
+            continue
+        dest = root / dest_name
+        if dest.exists() and dest.resolve() == src.resolve():
+            continue
+        if dest.is_file():
+            shutil.copy2(dest, root / f"{dest_name}.prev")
+        shutil.copy2(src, dest)
+        if dest_name == "video_watchdog.py":
+            replaced_watchdog = True
+    if replaced_watchdog:
+        (root / "watchdog-replaced").write_text("1", encoding="utf-8")
 
 
 def upgrade_allowed(
@@ -200,7 +240,11 @@ def run_once(root: Path, *, installing: bool) -> int:
     reading, age, pid = read_reading_state(root / "state.json")
     choice = upgrade_allowed(local=local, remote=remote, reading=reading, age_sec=age, pid_alive=process_alive(pid))
     if choice == "current":
-        print(f"Đang ở bản {local}.", flush=True)
+        if should_start_worker(pid_alive=process_alive(pid)):
+            _start_worker()
+            print("PC chưa chạy. Đã khởi động lại.", flush=True)
+        else:
+            print(f"Đang ở bản {local}.", flush=True)
         return 0
     if choice == "busy":
         print("Đang đọc video. Sẽ cập nhật khi xong.", flush=True)
@@ -228,6 +272,7 @@ def run_once(root: Path, *, installing: bool) -> int:
             _start_worker()
             return 0
     replace_tree(root / "current", blob)
+    publish_support_files(root)
     install_cpu_requirements(root)
     if not installing:
         _start_worker()
@@ -241,6 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--root", default="")
     args = parser.parse_args(argv)
     root = Path(args.root) if args.root else Path(__file__).resolve().parent
+    clear_replaced_marker(root)
     try:
         return run_once(root, installing=bool(args.install))
     except (OSError, ValueError) as error:

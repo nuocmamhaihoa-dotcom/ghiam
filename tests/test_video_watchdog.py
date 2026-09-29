@@ -11,10 +11,13 @@ import zipfile
 from pathlib import Path
 
 from pc_agent.video_watchdog import (
+    clear_replaced_marker,
     process_alive,
+    publish_support_files,
     read_local_version,
     read_reading_state,
     replace_tree,
+    should_start_worker,
     upgrade_allowed,
     verify_sha256,
 )
@@ -71,6 +74,24 @@ class VideoWatchdogTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 replace_tree(Path(folder) / "current", blob.getvalue())
             self.assertFalse((Path(folder) / "config.json").exists())
+
+    def test_support_files_replace_the_connector_and_keep_the_previous_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            (base / "video_watchdog.py").write_text("old\n", encoding="utf-8")
+            current = base / "current" / "pc_agent" / "windows"
+            current.mkdir(parents=True)
+            (base / "current" / "pc_agent" / "video_watchdog.py").write_text("new\n", encoding="utf-8")
+            (current / "Run-VideoWorker.ps1").write_text("run\n", encoding="utf-8")
+            publish_support_files(base)
+            self.assertEqual((base / "video_watchdog.py").read_text(encoding="utf-8"), "new\n")
+            self.assertEqual((base / "video_watchdog.py.prev").read_text(encoding="utf-8"), "old\n")
+            self.assertEqual((base / "Run-VideoWorker.ps1").read_text(encoding="utf-8"), "run\n")
+            self.assertTrue((base / "watchdog-replaced").is_file())
+            clear_replaced_marker(base)
+            self.assertFalse((base / "watchdog-replaced").exists())
+        self.assertFalse(should_start_worker(pid_alive=True))
+        self.assertTrue(should_start_worker(pid_alive=False))
 
     def test_worker_state_marks_a_live_reading(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

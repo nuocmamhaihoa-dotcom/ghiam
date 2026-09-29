@@ -101,8 +101,20 @@ Save-TrainedData -Name "vie" -MinBytes 100000
 
 function Save-HubFile {
   param([string]$Url, [string]$Dest, [string]$Marker)
+  $beside = $PSScriptRoot
+  if ($beside) {
+    $local = Join-Path $beside (Split-Path -Leaf $Dest)
+    if ((Test-Path $local) -and $local -ne $Dest) {
+      Copy-Item $local $Dest -Force
+    }
+  }
   Write-Host "Tai $Url"
-  Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Dest
+  try {
+    Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Dest
+  } catch {
+    if (-not (Test-Path $Dest)) { throw }
+    Write-Host "Giu ban nam trong goi tai ve."
+  }
   $body = Get-Content -Raw -Encoding UTF8 $Dest
   if ($body -notlike "*$Marker*") { throw "Noi dung tai ve khong dung: $Url" }
 }
@@ -131,13 +143,38 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $py = Join-Path $Root "py\Scripts\python.exe"
 & $py (Join-Path $Root "video_watchdog.py")
-exit $LASTEXITCODE
+$code = $LASTEXITCODE
+$marker = Join-Path $Root "watchdog-replaced"
+if ($code -ne 0 -and (Test-Path $marker)) {
+  $prev = Join-Path $Root "video_watchdog.py.prev"
+  if (Test-Path $prev) {
+    Copy-Item $prev (Join-Path $Root "video_watchdog.py") -Force
+  }
+  Remove-Item $marker -Force -ErrorAction SilentlyContinue
+}
+exit $code
 '@ | Set-Content -Encoding utf8 (Join-Path $Root "Update-VideoWorker.ps1")
 
-$runner = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$Root\Run-VideoWorker.ps1`""
-$updater = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$Root\Update-VideoWorker.ps1`""
-schtasks /Create /TN FbPollerVideoWorker /TR $runner /SC ONLOGON /F | Out-Null
-schtasks /Create /TN FbPollerVideoUpdate /TR $updater /SC MINUTE /MO 5 /F | Out-Null
+$runner = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Root\Run-VideoWorker.ps1`""
+$updater = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Root\Update-VideoWorker.ps1`""
+function Register-KeepAliveTask {
+  param([string]$Name, [string]$Execute, [string]$Kind)
+  $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $Execute
+  if ($Kind -eq "logon") {
+    $trigger = New-ScheduledTaskTrigger -AtLogOn
+  } else {
+    $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration ([TimeSpan]::FromDays(9999))
+  }
+  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
+  Register-ScheduledTask -TaskName $Name -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
+}
+try {
+  Register-KeepAliveTask -Name "FbPollerVideoWorker" -Execute "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Root\Run-VideoWorker.ps1`"" -Kind "logon"
+  Register-KeepAliveTask -Name "FbPollerVideoUpdate" -Execute "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Root\Update-VideoWorker.ps1`"" -Kind "update"
+} catch {
+  schtasks /Create /TN FbPollerVideoWorker /TR $runner /SC ONLOGON /F | Out-Null
+  schtasks /Create /TN FbPollerVideoUpdate /TR $updater /SC MINUTE /MO 5 /F | Out-Null
+}
 schtasks /Run /TN FbPollerVideoWorker | Out-Null
-Write-Host "Da cai. May tu chay khi dang nhap va tu lay ban moi khi khong dang doc video."
+Write-Host "Da cai. May tu chay khi dang nhap, tu noi lai khi mat mang, va tu lay ban moi khi khong dang doc video."
 Write-Host "Doc bang CPU va Tesseract. Chua cai thu vien GPU."

@@ -366,11 +366,13 @@ def main() -> None:
             except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
                 pass
 
-    try:
-        state["worker_id"] = client.heartbeat("", name, cpus, use_gpu, gpu_name)
-    except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
-        print("Chưa nối được hub.", file=sys.stderr)
-        raise SystemExit(1) from error
+    while True:
+        try:
+            state["worker_id"] = client.heartbeat("", name, cpus, use_gpu, gpu_name)
+            break
+        except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            print("Chưa nối được hub. Thử lại.", file=sys.stderr)
+            time.sleep(5)
     print(f"Đã nối hub. Máy này có {cpus} lõi, dùng hết để đọc video.", flush=True)
     refresh_worker_state()
     threading.Thread(target=beat, daemon=True).start()

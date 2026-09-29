@@ -34,5 +34,7 @@ if (-not (Test-Path $py)) { throw "Chua co Python venv" }
 $worker = Join-Path $code "pc_agent\video_worker.py"
 if (-not (Test-Path $worker)) { throw "Chua co ma doc video" }
 Set-Location $code
-& $py $worker --hub $env:CONTROL_HUB
+$log = Join-Path $Root "logs\worker.log"
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $log) | Out-Null
+& $py $worker --hub $env:CONTROL_HUB *>> $log
 exit $LASTEXITCODE
