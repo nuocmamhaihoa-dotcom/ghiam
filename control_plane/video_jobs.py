@@ -33,6 +33,7 @@ class VideoJob:
         self.lease = 0.0
         self._frames: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
         self._staged: list[dict[str, str]] | None = None
+        self._tally: dict[str, int] | None = None
         self._lock = threading.Lock()
 
     def bind(self, path: Path) -> None:
@@ -92,6 +93,14 @@ class VideoJob:
             )
         with self._lock:
             self._staged = cleaned
+
+    def note_tally(self, contacts: int, accounts: int, saved: int) -> None:
+        with self._lock:
+            self._tally = {
+                "contacts": max(0, int(contacts)),
+                "accounts": max(0, int(accounts)),
+                "saved": max(0, int(saved)),
+            }
 
     def staged_people(self) -> list[dict[str, str]] | None:
         with self._lock:
@@ -277,6 +286,10 @@ class VideoJob:
                 body["archive"] = list(self.archive)
                 body["archiveCount"] = self.archive_count
                 body["duplicates"] = list(self.duplicates)
+                if self._tally is not None:
+                    body["seenContacts"] = self._tally["contacts"]
+                    body["seenAccounts"] = self._tally["accounts"]
+                    body["readSaved"] = self._tally["saved"]
             path = self.path
             failed = self.done and bool(self.error)
         body["canContinue"] = failed and path is not None and path.is_file()
@@ -338,3 +351,6 @@ class JobProgress(ReadProgress):
 
     def stage_people(self, people: list[dict[str, str]]) -> None:
         self._job.stage_people(people)
+
+    def note_tally(self, contacts: int, accounts: int, saved: int) -> None:
+        self._job.note_tally(contacts, accounts, saved)

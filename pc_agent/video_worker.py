@@ -80,10 +80,15 @@ class HubClient:
         worker_id: str,
         frames: list[dict[str, object]],
         people: list[dict[str, str]] | None = None,
+        tally: dict[str, int] | None = None,
     ) -> None:
         payload: dict[str, object] = {"workerId": worker_id, "frames": frames}
         if people is not None:
             payload["people"] = people
+        if tally is not None:
+            payload["seenContacts"] = tally["contacts"]
+            payload["seenAccounts"] = tally["accounts"]
+            payload["readSaved"] = tally["saved"]
         self._request("POST", f"/v1/recordings/jobs/{job_id}/checkpoint", payload, timeout=30)
 
     def download(self, job_id: str, worker_id: str, dest: Path) -> None:
@@ -108,11 +113,22 @@ class HubClient:
             timeout=30,
         )
 
-    def complete(self, job_id: str, worker_id: str, people: list[dict[str, str]]) -> None:
+    def complete(
+        self,
+        job_id: str,
+        worker_id: str,
+        people: list[dict[str, str]],
+        tally: dict[str, int] | None = None,
+    ) -> None:
+        payload: dict[str, object] = {"workerId": worker_id, "people": people}
+        if tally is not None:
+            payload["seenContacts"] = tally["contacts"]
+            payload["seenAccounts"] = tally["accounts"]
+            payload["readSaved"] = tally["saved"]
         self._request(
             "POST",
             f"/v1/recordings/jobs/{job_id}/complete",
-            {"workerId": worker_id, "people": people},
+            payload,
             timeout=120,
         )
 
@@ -139,6 +155,7 @@ class RemoteProgress(ReadProgress):
         self._known: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
         self._pending: list[dict[str, object]] = []
         self._staged: list[dict[str, str]] | None = None
+        self._tally: dict[str, int] | None = None
         saved = resume or {}
         frames = saved.get("frames")
         if isinstance(frames, list):
@@ -190,13 +207,28 @@ class RemoteProgress(ReadProgress):
                 return None
             return [dict(row) for row in self._staged]
 
+    def note_tally(self, contacts: int, accounts: int, saved: int) -> None:
+        with self._lock:
+            self._tally = {
+                "contacts": max(0, int(contacts)),
+                "accounts": max(0, int(accounts)),
+                "saved": max(0, int(saved)),
+            }
+
+    def tally(self) -> dict[str, int] | None:
+        with self._lock:
+            if self._tally is None:
+                return None
+            return dict(self._tally)
+
     def stage_people(self, people: list[dict[str, str]]) -> None:
         with self._lock:
             self._staged = [dict(row) for row in people]
             pending = self._pending
             self._pending = []
+            tally = dict(self._tally) if self._tally is not None else None
         try:
-            self._client.checkpoint(self._job_id, self._worker_id, pending, people)
+            self._client.checkpoint(self._job_id, self._worker_id, pending, people, tally)
         except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
             with self._lock:
                 self._pending = pending + self._pending
@@ -251,7 +283,7 @@ def _read_one(client: HubClient, worker_id: str, job_id: str, resume: dict[str, 
         finally:
             if not sink._stop.is_set():
                 sink.close()
-        client.complete(job_id, worker_id, people)
+        client.complete(job_id, worker_id, people, sink.tally())
 
 
 def _prepare_gpu() -> tuple[bool, str]:

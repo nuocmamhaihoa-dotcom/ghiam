@@ -1085,6 +1085,9 @@ class WorkerProgressBody(BaseModel):
 class WorkerPeopleBody(BaseModel):
     workerId: str
     people: list[dict[str, str]] = Field(default_factory=list)
+    seenContacts: int | None = None
+    seenAccounts: int | None = None
+    readSaved: int | None = None
 
 
 class WorkerFailBody(BaseModel):
@@ -1183,6 +1186,8 @@ def video_job_complete(
         raise HTTPException(404, "không thấy tiến trình")
     if not job.note_worker(body.workerId):
         raise HTTPException(409, "PC phụ không giữ video này")
+    if body.seenContacts is not None and body.seenAccounts is not None and body.readSaved is not None:
+        job.note_tally(body.seenContacts, body.seenAccounts, body.readSaved)
     try:
         kept = _commit_people(job, list(body.people), body.workerId)
     finally:
@@ -1196,6 +1201,9 @@ class WorkerCheckpointBody(BaseModel):
     workerId: str
     frames: list[dict[str, Any]] = Field(default_factory=list)
     people: list[dict[str, str]] | None = None
+    seenContacts: int | None = None
+    seenAccounts: int | None = None
+    readSaved: int | None = None
 
 
 @app.post("/v1/recordings/jobs/{job_id}/checkpoint")
@@ -1224,6 +1232,8 @@ def video_job_checkpoint(
         )
     if body.people is not None:
         job.stage_people(body.people)
+    if body.seenContacts is not None and body.seenAccounts is not None and body.readSaved is not None:
+        job.note_tally(body.seenContacts, body.seenAccounts, body.readSaved)
     return {"ok": True}
 
 

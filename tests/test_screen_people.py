@@ -10,7 +10,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from control_plane.people import clean_username
-from control_plane.screen_people import TextLine, propose_rows, sightings_from_image, sightings_from_lines
+from control_plane.screen_people import TextLine, propose_rows, reading_counts, sightings_from_image, sightings_from_lines
 
 
 def _line(text: str, top: int, height: int = 28, left: int = 70) -> TextLine:
@@ -208,16 +208,27 @@ class ScreenPeopleTests(unittest.TestCase):
         self.assertEqual(rows[0]["username"], "@user0000x")
         self.assertEqual(rows[-1]["username"], "@user0200x")
 
-    def test_one_reading_is_not_saved(self) -> None:
+    def test_one_reading_is_saved(self) -> None:
         once = [
             {"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"},
             {"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"},
         ]
-        self.assertEqual(propose_rows(once), [])
         self.assertEqual(
-            propose_rows(once + once),
+            propose_rows(once),
             [{"name": "Trần Tùng", "contactName": "A Tùng Bán Gạch", "username": "@trn.tng751"}],
         )
+
+    def test_reading_counts_separate_the_list_from_accounts(self) -> None:
+        sightings = [
+            {"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"},
+            {"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"},
+            {"kind": "contact", "name": "Bà soi", "contactName": "Chị Soi Xuân Trung"},
+            {"kind": "profile", "name": "Dịu 93", "username": "@daodiu100693"},
+            {"kind": "contact", "name": "Bấm nút ba lần để dừng", "contactName": "Cấu hình không hợp lệ"},
+            {"kind": "profile", "name": "Bấm nút ba lần để dừng", "username": "@kol"},
+        ]
+        self.assertEqual(reading_counts(sightings), {"contacts": 2, "accounts": 2, "saved": 1})
+        self.assertEqual(len(propose_rows(sightings)), 1)
 
     def test_instruction_text_and_short_handle_are_not_saved(self) -> None:
         found = sightings_from_lines(

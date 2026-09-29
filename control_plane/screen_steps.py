@@ -21,6 +21,7 @@ from control_plane.screen_people import (
     captions_from_sightings,
     lines_from_tsv,
     propose_rows,
+    reading_counts,
     read_frame_tsv,
     sightings_from_lines,
 )
@@ -72,6 +73,10 @@ class ReadProgress:
 
     def stage_people(self, people: list[dict[str, str]]) -> None:
         del people
+
+    def note_tally(self, contacts: int, accounts: int, saved: int) -> None:
+        """Số người thấy trong danh bạ, số người có tài khoản, số người đủ để ghi."""
+        del contacts, accounts, saved
 
 
 def ocr_workers(frame_count: int, cpu_count: int, reserve: int | None = None) -> int:
@@ -380,6 +385,8 @@ def analyze_screen_video(
     frames = [(seconds, lines) for seconds, lines, _sightings in readings]
     sightings = [item for _seconds, _lines, found in readings for item in found]
     rows = propose_rows(sightings)
+    counts = reading_counts(sightings)
+    sink.note_tally(counts["contacts"], counts["accounts"], counts["saved"])
     sink.stage_people(rows)
     return visible_steps(frames), rows
 

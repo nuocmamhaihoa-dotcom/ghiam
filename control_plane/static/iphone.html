@@ -40,6 +40,7 @@
     #progressTrack { height: 14px; border-radius: 8px; background: #eee; overflow: hidden; border: 1px solid #ddd; }
     #progressFill { height: 100%; width: 0%; background: #111; transition: width 0.2s linear; }
     #progressLabel { margin: 0.4rem 0 0; font-weight: 700; line-height: 1.35; font-size: 16px; word-break: break-word; }
+    #readTally { margin: 0.45rem 0 0; line-height: 1.4; font-size: 16px; font-weight: 700; }
     #helperLine { margin: 0 0 0.8rem; line-height: 1.4; font-size: 16px; color: #333; }
     #problemLead { margin: 0.6rem 0 0.25rem; color: #b42318; font-weight: 800; }
     #problemList { margin: 0; padding-left: 1.15rem; color: #b42318; font-size: 15px; overflow-wrap: anywhere; }
@@ -92,6 +93,7 @@
     <section id="progressBox" hidden>
       <div id="progressTrack"><div id="progressFill"></div></div>
       <p id="progressLabel"></p>
+      <p id="readTally" hidden></p>
       <p id="problemLead" hidden>Vấn đề khi xử lý</p>
       <ul id="problemList" hidden></ul>
       <button id="continueBtn" type="button" hidden>Tiếp tục đọc nối</button>
@@ -178,6 +180,7 @@
     const problemLead = document.getElementById("problemLead");
     const problemList = document.getElementById("problemList");
     const continueBtn = document.getElementById("continueBtn");
+    const readTally = document.getElementById("readTally");
     const SAMPLE_MS = 4000;
     const MAX_MS = 600000;
     let busy = false;
@@ -207,6 +210,32 @@
       const token = localStorage.getItem("fb_poller_control_token") || "";
       if (token) headers.Authorization = "Bearer " + token;
       return headers;
+    }
+
+    function hideTally() {
+      readTally.textContent = "";
+      readTally.hidden = true;
+    }
+
+    function showTally(contacts, accounts, saved) {
+      readTally.textContent = "Thấy " + contacts + " người trong danh bạ, " + accounts + " người có tài khoản, ghi được " + saved + ".";
+      readTally.hidden = false;
+    }
+
+    function tallyFromJobs(jobs) {
+      let contacts = 0;
+      let accounts = 0;
+      let saved = 0;
+      let seen = false;
+      jobs.forEach((job) => {
+        if (!job.ok || job.seenContacts == null) return;
+        seen = true;
+        contacts += job.seenContacts;
+        accounts += job.seenAccounts || 0;
+        saved += job.readSaved || 0;
+      });
+      if (seen) showTally(contacts, accounts, saved);
+      else hideTally();
     }
 
     function setStatus(text, live) {
@@ -546,6 +575,11 @@
       job.people = data.people || [];
       job.savedPeople = data.savedPeople || 0;
       job.duplicates = data.duplicates || [];
+      if (data.seenContacts != null) {
+        job.seenContacts = data.seenContacts;
+        job.seenAccounts = data.seenAccounts || 0;
+        job.readSaved = data.readSaved || 0;
+      }
     }
 
     function enqueue(files) {
@@ -570,6 +604,9 @@
           people: [],
           savedPeople: 0,
           duplicates: [],
+          seenContacts: null,
+          seenAccounts: 0,
+          readSaved: 0,
         };
         batchJobs.push(slot);
         paintBatch();
@@ -607,6 +644,7 @@
       continueBtn.hidden = true;
       hidePlayback();
       hidePeople();
+      hideTally();
       await uploadRest();
       while (batchJobs.some((job) => !job.done) || queue.length) {
         await uploadRest();
@@ -636,6 +674,7 @@
       await loadSaved();
       await loadDuplicates();
       if (fresh.length) showPeople(fresh);
+      tallyFromJobs(batchJobs);
       resumeSlots = batchJobs.filter((job) => job.jobId && job.ok === false && job.canContinue);
       continueBtn.hidden = resumeSlots.length === 0;
       if (batchTotal) {
@@ -723,6 +762,11 @@
           slot.people = data.people || [];
           slot.savedPeople = data.savedPeople || 0;
           slot.duplicates = data.duplicates || [];
+          if (data.seenContacts != null) {
+            slot.seenContacts = data.seenContacts;
+            slot.seenAccounts = data.seenAccounts || 0;
+            slot.readSaved = data.readSaved || 0;
+          }
         }
       }
       paintBatch();
@@ -753,6 +797,7 @@
       await loadSaved();
       await loadDuplicates();
       if (fresh.length) showPeople(fresh);
+      tallyFromJobs(batchJobs);
       resumeSlots = batchJobs.filter((job) => job.jobId && job.ok === false && job.canContinue);
       continueBtn.hidden = resumeSlots.length === 0;
       if (batchTotal) {

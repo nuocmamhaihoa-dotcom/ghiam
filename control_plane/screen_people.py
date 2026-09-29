@@ -297,8 +297,6 @@ def _winning_spellings(values: list[str], near: Callable[[str, str], bool]) -> l
         return None
     groups.sort(key=len, reverse=True)
     if len(groups) == 1:
-        if len(groups[0]) < 2:
-            return None
         return groups[0]
     leader = len(groups[0])
     runner = len(groups[1])
@@ -309,6 +307,45 @@ def _winning_spellings(values: list[str], near: Callable[[str, str], bool]) -> l
 
 def _mode(values: list[str]) -> str:
     return max(values, key=lambda value: (values.count(value), len(value)))
+
+
+def _accepted_sighting(item: dict[str, str]) -> tuple[str, str] | None:
+    """Tên đã lọc và loại lần nhìn. Câu hướng dẫn và tài khoản ngắn không tính."""
+    name = clean_name(item.get("name") or "")
+    key = fold_name(name)
+    if not key or _is_instruction(name):
+        return None
+    kind = item.get("kind") or ""
+    if kind == "contact":
+        contact_name = clean_name(item.get("contactName") or "")
+        if (
+            not contact_name
+            or _is_instruction(contact_name)
+            or "@" in contact_name
+            or "@" in name
+            or fold_name(contact_name) == key
+        ):
+            return None
+        return key, "contact"
+    if kind == "profile" and clean_username(item.get("username") or ""):
+        return key, "profile"
+    return None
+
+
+def reading_counts(sightings: list[dict[str, str]]) -> dict[str, int]:
+    """Số người trong danh bạ, số người có tài khoản, số người đủ điều kiện ghi."""
+    contacts: set[str] = set()
+    accounts: set[str] = set()
+    for item in sightings:
+        accepted = _accepted_sighting(item)
+        if accepted is None:
+            continue
+        key, kind = accepted
+        if kind == "contact":
+            contacts.add(key)
+        else:
+            accounts.add(key)
+    return {"contacts": len(contacts), "accounts": len(accounts), "saved": len(propose_rows(sightings))}
 
 
 def propose_rows(sightings: list[dict[str, str]]) -> list[dict[str, str]]:
