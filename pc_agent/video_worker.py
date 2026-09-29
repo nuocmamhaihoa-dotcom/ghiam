@@ -476,7 +476,7 @@ def main() -> None:
         try:
             job_id, resume = client.claim(state["worker_id"])
             if not job_id:
-                time.sleep(0.4)
+                time.sleep(1.0)
                 continue
             say(f"Nhận video {job_id}.")
             set_reading(True)

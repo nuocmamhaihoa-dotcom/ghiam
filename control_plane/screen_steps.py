@@ -27,8 +27,10 @@ from control_plane.screen_people import (
 )
 
 _MAX_FRAMES = 2400
-_MIN_DIFF = 0.08
-_SAMPLE_FPS = 8.0
+# Khung gần như y hệt (đồng hồ, nén ảnh) không đọc lại. Một dòng chữ đổi vẫn vượt ngưỡng này.
+_MIN_DIFF = 1.0
+# 4 khung/giây. Tên hiện khoảng 1/4 giây vẫn được đọc. 8 khung/giây làm Tesseract đọc gấp đôi mà ít thêm tên.
+_SAMPLE_FPS = 4.0
 _STEP_LIMIT = 400
 _APP_WORDS = {"tiktok", "facebook", "instagram", "zalo", "danh", "ba", "follow", "da", "thich", "follower"}
 _MIXED_OK = {"tiktok", "iphone", "facebook", "instagram", "youtube", "zalo"}
@@ -110,9 +112,9 @@ def _ffmpeg_extract_command(path: Path, pattern: Path, rate: float) -> list[str]
         "-frames:v",
         str(_MAX_FRAMES),
         "-c:v",
-        "png",
-        "-compression_level",
-        "1",
+        "mjpeg",
+        "-q:v",
+        "2",
         "-progress",
         "pipe:1",
         str(pattern),
@@ -323,6 +325,16 @@ def _frame_key(seconds: float) -> str:
     return f"{float(seconds):.3f}"
 
 
+def _frame_images(work: Path) -> list[Path]:
+    images: list[Path] = []
+    for image in work.glob("f-*"):
+        if image.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+            continue
+        if len(image.stem) > 2 and image.stem[2:].isdigit():
+            images.append(image)
+    return sorted(images)
+
+
 def _work_dir(path: Path) -> Path:
     return path.with_name(path.name + "-frames")
 
@@ -346,7 +358,7 @@ def _saved_frames(work: Path, rate: float) -> list[tuple[float, Path]] | None:
         return None
     if abs(saved_rate - rate) > 0.0001:
         return None
-    images = sorted(image for image in work.glob("f-*.png") if len(image.stem) > 2 and image.stem[2:].isdigit())
+    images = _frame_images(work)
     if not images:
         return None
     return [(index / saved_rate, image) for index, image in enumerate(images)]
@@ -369,7 +381,7 @@ def analyze_screen_video(
     work.mkdir(parents=True, exist_ok=True)
     images = _saved_frames(work, rate)
     if images is None:
-        for old in work.glob("f-*.png"):
+        for old in _frame_images(work):
             old.unlink(missing_ok=True)
         marker = work / "extract.done"
         marker.unlink(missing_ok=True)
@@ -450,7 +462,7 @@ def _extract_frames(
     duration: float | None,
     progress: ReadProgress,
 ) -> list[tuple[float, Path]]:
-    pattern = work / "f-%05d.png"
+    pattern = work / "f-%05d.jpg"
     progress.report(12, "Tách khung hình")
     try:
         proc = subprocess.Popen(
@@ -535,7 +547,7 @@ def _extract_frames(
         for pipe in (proc.stdout, proc.stderr):
             if pipe is not None and not pipe.closed:
                 pipe.close()
-    images = sorted(image for image in work.glob("f-*.png") if image.stem[2:].isdigit())
+    images = _frame_images(work)
     if proc.returncode != 0 and not images:
         raise ScreenVideoError("Không đọc được video.")
     if proc.returncode != 0 and images:

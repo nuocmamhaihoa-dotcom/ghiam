@@ -607,6 +607,36 @@
     function sleep(ms) {
       return new Promise((resolve) => window.setTimeout(resolve, ms));
     }
+    function sendChunk(url, blob, headerMap, onLoaded) {
+      return new Promise((resolve) => {
+        const request = new XMLHttpRequest();
+        request.open("PUT", url);
+        request.timeout = 0;
+        Object.keys(headerMap).forEach((key) => request.setRequestHeader(key, headerMap[key]));
+        let touched = Date.now();
+        const timer = window.setInterval(() => {
+          if (Date.now() - touched < 30000) return;
+          window.clearInterval(timer);
+          request.abort();
+        }, 1000);
+        request.upload.onprogress = (event) => {
+          touched = Date.now();
+          if (onLoaded && event.lengthComputable) onLoaded(event.loaded);
+        };
+        const done = (status, data) => {
+          window.clearInterval(timer);
+          resolve({ status: status, data: data });
+        };
+        request.onload = () => {
+          let data = {};
+          try { data = JSON.parse(request.responseText || "{}"); } catch (error) { data = {}; }
+          done(request.status, data);
+        };
+        request.onerror = () => done(0, {});
+        request.onabort = () => done(0, {});
+        request.send(blob);
+      });
+    }
     function postJobOnce(file, onUpload) {
       return new Promise((resolve) => {
         const body = new FormData();
@@ -618,7 +648,7 @@
         Object.keys(auth).forEach((key) => request.setRequestHeader(key, auth[key]));
         request.upload.onprogress = (event) => {
           if (!event.lengthComputable || !event.total || !onUpload) return;
-          onUpload(Math.round((event.loaded / event.total) * 8));
+          onUpload(event.loaded, event.total);
         };
         request.onload = () => {
           if (request.status === 413) { resolve({ ok: false, error: "Video quá lớn." }); return; }
@@ -633,7 +663,7 @@
       });
     }
     async function postJobChunked(file, onUpload) {
-      const chunkSize = 8 * 1024 * 1024;
+      const chunkSize = 1024 * 1024;
       let started = null;
       for (let attempt = 0; attempt < 4 && !started; attempt += 1) {
         try {
@@ -652,35 +682,35 @@
       }
       if (!started || !started.uploadId) return { ok: false, error: "Không gửi được video." };
       let offset = started.offset || 0;
+      if (onUpload) onUpload(offset, file.size);
       while (offset < file.size) {
         const end = Math.min(file.size, offset + chunkSize);
         const blob = file.slice(offset, end);
         let advanced = false;
         for (let attempt = 0; attempt < 6; attempt += 1) {
-          try {
-            const response = await fetch("/v1/recordings/uploads/" + started.uploadId + "?offset=" + offset, {
-              method: "PUT",
-              headers: Object.assign({ "Content-Type": "application/octet-stream" }, headers()),
-              body: blob,
-            });
-            if (response.status === 409) {
-              const data = await response.json();
-              if (typeof data.offset === "number" && data.offset > offset && data.offset <= file.size) {
-                offset = data.offset;
-                advanced = true;
-                break;
-              }
+          const sent = await sendChunk(
+            "/v1/recordings/uploads/" + started.uploadId + "?offset=" + offset,
+            blob,
+            Object.assign({ "Content-Type": "application/octet-stream" }, headers()),
+            (loaded) => { if (onUpload) onUpload(offset + loaded, file.size); }
+          );
+          if (sent.status === 409) {
+            const data = sent.data || {};
+            if (typeof data.offset === "number" && data.offset > offset && data.offset <= file.size) {
+              offset = data.offset;
+              advanced = true;
+              if (onUpload) onUpload(offset, file.size);
+              break;
             }
-            if (response.status === 507) return { ok: false, error: "Hết chỗ trống trên máy chủ." };
-            if (!response.ok) throw new Error("chunk");
-            const data = await response.json();
-            offset = data.offset;
-            advanced = true;
-            if (onUpload) onUpload(Math.round((offset / file.size) * 8));
-            break;
-          } catch (error) {
-            await sleep(400 * (attempt + 1));
           }
+          if (sent.status === 507) return { ok: false, error: "Hết chỗ trống trên máy chủ." };
+          if (sent.status >= 200 && sent.status < 300 && typeof sent.data.offset === "number") {
+            offset = sent.data.offset;
+            advanced = true;
+            if (onUpload) onUpload(offset, file.size);
+            break;
+          }
+          await sleep(400 * (attempt + 1));
         }
         if (!advanced) return { ok: false, error: "Mất kết nối khi đang gửi video." };
       }
@@ -757,17 +787,19 @@
         batchJobs.push(slot);
         paintFiles();
         paintBatch();
-        const posted = await postJob(file, (percent) => {
-          slot.percent = Math.max(slot.percent, percent);
-          slot.task = "Đang gửi video";
+        const posted = await postJob(file, (loaded, total) => {
+          const whole = total || file.size || 1;
+          slot.percent = Math.min(99, Math.round((loaded / whole) * 100));
+          slot.task = "Đang gửi " + (loaded / 1048576).toFixed(1) + "/" + (whole / 1048576).toFixed(1) + " MB";
           paintBatch();
         });
         if (!posted.ok) {
           slot.done = true; slot.ok = false; slot.error = posted.error; slot.task = "Gặp vấn đề";
         } else {
           slot.jobId = posted.jobId;
-          slot.percent = Math.max(slot.percent, 8);
+          slot.percent = 8;
           slot.task = "Đã nhận video";
+          shownOverall = 0;
         }
         paintBatch();
       }

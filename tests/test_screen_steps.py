@@ -129,8 +129,10 @@ class ScreenVideoTests(unittest.TestCase):
         argv = _ffmpeg_extract_command(Path("clip.mp4"), Path("f-%05d.png"), 8)
         self.assertEqual(argv[argv.index("-threads") + 1], "0")
         self.assertLess(argv.index("-threads"), argv.index("-i"))
-        self.assertEqual(argv[argv.index("-compression_level") + 1], "1")
+        self.assertEqual(argv[argv.index("-q:v") + 1], "2")
+        self.assertEqual(argv[argv.index("-c:v") + 1], "mjpeg")
         scale = next(item for item in argv if item.startswith("fps="))
+        self.assertIn("fps=8", scale)
         self.assertIn(r"scale=min(1080\,iw):-2", scale)
 
     def test_media_seconds_are_microseconds(self) -> None:
