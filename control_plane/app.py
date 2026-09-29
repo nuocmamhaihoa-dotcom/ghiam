@@ -411,14 +411,14 @@ def danhba_issue_vcard(
 
 @app.get("/danhba/xuat/{ticket}.vcf")
 def danhba_vcard(ticket: str) -> Response:
-    """File danh bạ. iPhone nhận text/vcard và hỏi Thêm tất cả."""
+    """File danh bạ. iPhone nhận text/x-vcard và hỏi Thêm tất cả."""
     card = read_vcard(settings.db_path, ticket, utcnow())
     if card is None:
         raise HTTPException(status_code=404, detail="Liên kết nạp đã hết hạn")
     filename = card["filename"].replace('"', "").replace("\r", "").replace("\n", "")
     return Response(
         content=card["body"],
-        media_type="text/vcard; charset=utf-8",
+        media_type="text/x-vcard; charset=utf-8",
         headers={
             "Content-Disposition": f'inline; filename="{filename}"',
             "Cache-Control": "no-store",

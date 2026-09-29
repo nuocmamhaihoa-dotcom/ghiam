@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="Danh bạ" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="theme-color" content="#ffffff" />
-  <meta name="danhba-build" content="6" />
+  <meta name="danhba-build" content="7" />
   <link rel="manifest" href="/danhba/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>Danh bạ</title>
@@ -39,7 +39,7 @@
       text-decoration: none; color: #fff; background: #111;
     }
     button.ghost, a.ghost { background: #f4f5f7; color: #111; }
-    button:disabled { opacity: 0.45; }
+    button:disabled, a.btn[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
     .hint, .build { color: #5c6570; }
     .card {
       margin: 0 0 0.55rem; padding: 0.75rem 0.8rem; border-radius: 12px; background: #f4f5f7;
@@ -61,7 +61,7 @@
 </head>
 <body>
   <h1>Danh bạ</h1>
-  <p class="hint" id="install">Bấm Nạp lên iPhone. iPhone hỏi thì bấm Thêm tất cả. Mỗi danh bạ tối đa 5000 số. Một số chỉ nằm trong một danh bạ.</p>
+  <p class="hint" id="install">Bấm Nạp lên iPhone. iPhone mở thẻ liên hệ thì bấm Tạo liên hệ mới hoặc Thêm tất cả, rồi bấm Xong. Mỗi danh bạ tối đa 5000 số. Một số chỉ nằm trong một danh bạ.</p>
   <p class="note" id="upgrade" hidden>Có bản mới trên hub.</p>
   <p id="status" class="hint">Dán số, rồi bấm Nạp lên iPhone.</p>
   <div id="local">
@@ -83,14 +83,14 @@
     <div id="used"></div>
   </div>
   <p id="message" class="note" hidden></p>
-  <p class="build" id="buildLine">Phiên bản 6</p>
+  <p class="build" id="buildLine">Phiên bản 7</p>
   <div class="bar">
-    <button id="go" type="button">Nạp lên iPhone</button>
+    <a id="go" class="btn" href="#">Nạp lên iPhone</a>
     <button id="sync" class="ghost" type="button">Đối chiếu iPhone</button>
   </div>
   <input id="syncFile" type="file" accept=".vcf,.vcard,.txt,text/vcard,text/x-vcard,text/plain" />
   <script>
-    window.DANHBA_BUILD = 6;
+    window.DANHBA_BUILD = 7;
   </script>
   <script>
 (function (root) {
@@ -325,6 +325,7 @@
       var group = escapeValue(book.name);
       lines.push("BEGIN:VCARD");
       lines.push("VERSION:3.0");
+      lines.push("N:;" + name + ";;;");
       lines.push("FN:" + name);
       lines.push("ORG:" + group);
       lines.push("TEL;TYPE=CELL:" + entries[i].phone);
@@ -416,9 +417,9 @@
       }
       if (!known) activeId = ready.length ? ready[0].id : null;
       statusLine.textContent = ready.length
-        ? ready.length + " danh bạ chưa dùng. Bấm Nạp lên iPhone. iPhone hỏi thì bấm Thêm tất cả."
+        ? ready.length + " danh bạ chưa dùng. Bấm Nạp lên iPhone. iPhone hỏi thì bấm Tạo liên hệ mới hoặc Thêm tất cả."
         : "Chưa có danh bạ chờ. Nạp danh sách từ máy tính.";
-      goButton.disabled = loaded && !ready.length;
+      goButton.setAttribute("aria-disabled", loaded && !ready.length ? "true" : "false");
       goButton.textContent = "Nạp lên iPhone";
       readyBox.textContent = "";
       usedBox.textContent = "";
@@ -514,32 +515,22 @@
         var name = document.createElement("span");
         name.textContent = book.name + " · " + book.entries.length + " số";
         var mark = document.createElement("span");
-        mark.textContent = sentLocal[book.id] ? "Đã mở" : "Chưa nạp";
+        mark.textContent = "Chưa nạp";
         row.appendChild(name);
         row.appendChild(mark);
         localBooks.appendChild(row);
       });
-      goButton.disabled = false;
+      goButton.setAttribute("aria-disabled", "false");
       goButton.textContent = "Nạp lên iPhone";
     }
 
-    function openVcard(body, fileName) {
-      var link = document.createElement("a");
-      link.href = "data:text/vcard;charset=utf-8," + encodeURIComponent(body);
-      link.setAttribute("download", fileName);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    }
+    var armedBody = "";
+    var armedUrl = "";
 
-    function openLocal() {
+    function pendingCard() {
       var split = localSplit();
       var list = (split && split.books) || [];
-      if (!list.length) {
-        showMessage("Dán số hoặc chọn file.", true);
-        renderLocal();
-        return;
-      }
+      if (!list.length) return null;
       var pending = list.filter(function (book) { return !sentLocal[book.id]; });
       if (!pending.length) pending = list;
       var body = "";
@@ -550,12 +541,48 @@
         body += cardBody;
         opened.push(pending[i]);
       }
-      openVcard(body, (opened.length === 1 ? opened[0].name : "Danh ba") + ".vcf");
+      if (!body) return null;
+      return {
+        body: body,
+        opened: opened
+      };
+    }
+
+    function armLocalCard() {
+      var prepared = pendingCard();
+      if (!prepared) {
+        goButton.href = "#";
+        goButton.removeAttribute("download");
+        return null;
+      }
+      if (prepared.body !== armedBody) {
+        armedBody = prepared.body;
+        armedUrl = URL.createObjectURL(new Blob([prepared.body], { type: "text/x-vcard" }));
+      }
+      goButton.href = armedUrl;
+      goButton.removeAttribute("download");
+      return prepared;
+    }
+
+    function openLocal() {
+      var prepared = armLocalCard();
+      if (!prepared) {
+        showMessage("Dán số hoặc chọn file.", true);
+        renderLocal();
+        return;
+      }
+      var opened = prepared.opened;
       opened.forEach(function (book) { sentLocal[book.id] = true; });
       var count = opened.reduce(function (sum, book) { return sum + book.entries.length; }, 0);
-      var extra = opened.length < pending.length ? " Bấm Nạp lên iPhone lần nữa cho danh bạ kế." : "";
-      showMessage("Đang thêm " + count + " số vào Danh bạ. iPhone hỏi thì bấm Thêm tất cả." + extra, false);
-      renderLocal();
+      var extra = "";
+      var split = localSplit();
+      var waiting = ((split && split.books) || []).filter(function (book) { return !sentLocal[book.id]; });
+      if (waiting.length) extra = " Bấm Nạp lên iPhone lần nữa cho danh bạ kế.";
+      showMessage(
+        "Nếu iPhone mở thẻ " + count + " số, bấm Tạo liên hệ mới hoặc Thêm tất cả, rồi bấm Xong. Số chỉ vào Danh bạ sau bước đó." + extra,
+        false
+      );
+      window.location.assign(armedUrl);
     }
 
     function blurField() {
@@ -594,14 +621,32 @@
       applyBooks(payload, true);
     }
 
-    goButton.addEventListener("pointerdown", blurField);
-    goButton.addEventListener("click", function () {
-      if (running) return;
+    goButton.addEventListener("touchstart", function () {
+      blurField();
+      if (!onHub) armLocalCard();
+    }, { passive: true });
+    goButton.addEventListener("pointerdown", function () {
+      blurField();
+      if (!onHub) armLocalCard();
+    });
+    goButton.addEventListener("click", function (event) {
+      if (running || goButton.getAttribute("aria-disabled") === "true") {
+        event.preventDefault();
+        return;
+      }
       blurField();
       if (!onHub) {
+        var prepared = armLocalCard();
+        if (!prepared) {
+          event.preventDefault();
+          showMessage("Dán số hoặc chọn file.", true);
+          renderLocal();
+          return;
+        }
         openLocal();
         return;
       }
+      event.preventDefault();
       rememberToken();
       running = true;
       loadAll().then(function () {
@@ -627,14 +672,21 @@
       reader.onload = function () {
         numbersInput.value = String(reader.result || "");
         renderLocal();
+        armLocalCard();
       };
       reader.onerror = function () {
         showMessage("Không mở được file.", true);
       };
       reader.readAsText(file);
     });
-    numbersInput.addEventListener("input", renderLocal);
-    titleInput.addEventListener("input", renderLocal);
+    numbersInput.addEventListener("input", function () {
+      renderLocal();
+      armLocalCard();
+    });
+    titleInput.addEventListener("input", function () {
+      renderLocal();
+      armLocalCard();
+    });
 
     syncButton.addEventListener("click", function () {
       if (running) return;
