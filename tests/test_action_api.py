@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import os
 import sqlite3
@@ -961,6 +962,64 @@ class ActionApiTests(unittest.TestCase):
                     "DELETE FROM saved_people WHERE username IN ('@mot.aa', '@hai.bb', '@ba.cc')"
                 )
                 conn.execute("DELETE FROM people_meta")
+
+
+    def test_video_worker_package_is_separate_from_the_comment_agent(self) -> None:
+        dummy = Path(os.environ["CONTROL_PACKAGES_DIR"]) / "comment-agent.zip"
+        dummy.parent.mkdir(parents=True, exist_ok=True)
+        dummy.write_bytes(b"PK\x03\x04comment")
+        denied = self.client.get("/v1/updates/video-worker/manifest")
+        self.assertEqual(denied.status_code, 401)
+        self.assertEqual(self.client.get("/v1/updates/video-worker.zip").status_code, 401)
+
+        manifest = self.client.get("/v1/updates/manifest", headers=self.headers)
+        self.assertEqual(manifest.status_code, 200, manifest.text)
+        body = manifest.json()
+        self.assertIn("comment-agent.zip", body["agent"]["package_url"])
+        worker = body["video_worker"]
+        self.assertEqual(worker["version"], "1")
+        self.assertEqual(worker["package_url"], "/v1/updates/video-worker.zip")
+        self.assertEqual(worker["engine"], "cpu")
+        self.assertEqual(len(worker["sha256"]), 64)
+
+        info = self.client.get("/v1/updates/video-worker/manifest", headers=self.headers)
+        self.assertEqual(info.status_code, 200, info.text)
+        self.assertEqual(info.json(), worker)
+        downloaded = self.client.get("/v1/updates/video-worker.zip", headers=self.headers)
+        self.assertEqual(downloaded.status_code, 200, downloaded.text)
+        self.assertEqual(hashlib.sha256(downloaded.content).hexdigest(), worker["sha256"])
+        self.assertTrue(downloaded.content.startswith(b"PK"))
+        with zipfile.ZipFile(io.BytesIO(downloaded.content)) as archive:
+            names = archive.namelist()
+            self.assertIn("pc_agent/video_worker.py", names)
+            self.assertIn("control_plane/screen_steps.py", names)
+            self.assertNotIn("pc_agent/video_watchdog.py", names)
+            self.assertEqual(archive.read("requirements-cpu.txt").decode("utf-8").strip(), "pillow")
+            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "1")
+            guide = archive.read("HUONG-DAN.txt").decode("utf-8")
+            self.assertNotIn("test-token", guide)
+            self.assertNotIn(".db", " ".join(names))
+
+        installer = self.client.get("/cai-video.ps1")
+        self.assertEqual(installer.status_code, 200, installer.text)
+        script = installer.text
+        self.assertIn("Python.Python.3.12", script)
+        self.assertIn("Gyan.FFmpeg", script)
+        self.assertIn("UB-Mannheim.TesseractOCR", script)
+        self.assertIn("FbPollerVideoWorker", script)
+        self.assertIn("FbPollerVideoUpdate", script)
+        self.assertIn("222.255.214.202:8088", script)
+        for banned in ("chromium", "playwright", "easyocr", "paddle"):
+            self.assertNotIn(banned, script.lower())
+        self.assertNotIn("test-token", script)
+        runner = self.client.get("/cai-video-run.ps1")
+        self.assertEqual(runner.status_code, 200)
+        self.assertIn("FB_VIDEO_STATE", runner.text)
+        self.assertIn("TESSDATA_PREFIX", runner.text)
+        watchdog = self.client.get("/cai-video-watchdog.py")
+        self.assertEqual(watchdog.status_code, 200)
+        self.assertIn("upgrade_allowed", watchdog.text)
+        self.assertNotIn("test-token", watchdog.text)
 
 
 if __name__ == "__main__":

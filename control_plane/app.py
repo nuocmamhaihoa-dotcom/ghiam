@@ -42,7 +42,8 @@ from control_plane.people import (
     name_key,
     profile_from_line,
 )
-from control_plane.version import IPHONE_BUILD
+from control_plane.version import IPHONE_BUILD, VIDEO_WORKER_BUILD
+from control_plane.video_package import ensure_video_package
 from control_plane import video_helpers
 from control_plane.screen_steps import (
     ScreenVideoError,
@@ -697,6 +698,26 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _video_worker_info() -> dict[str, str]:
+    repo = Path(__file__).resolve().parents[1]
+    dest = ensure_video_package(repo, settings.data_dir / "delivery")
+    return {
+        "version": str(VIDEO_WORKER_BUILD),
+        "package_url": "/v1/updates/video-worker.zip",
+        "sha256": _sha256(dest),
+        "engine": "cpu",
+    }
+
+
+def _public_script(path: Path, *, bom: bool) -> PlainTextResponse:
+    if not path.is_file():
+        raise HTTPException(404, "missing")
+    text = path.read_text(encoding="utf-8")
+    if bom and not text.startswith("\ufeff"):
+        text = "\ufeff" + text
+    return PlainTextResponse(text, media_type="text/plain; charset=utf-8", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/v1/updates/manifest")
 def updates_manifest(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     """LAN manifest — agents should prefer this over GitHub for high bandwidth."""
@@ -713,6 +734,7 @@ def updates_manifest(authorization: str | None = Header(default=None)) -> dict[s
             data["agent"].setdefault("version", "1.0.0")
         data["channel"] = data.get("channel") or "stable"
         data["transport"] = "lan-high-bandwidth"
+        data["video_worker"] = _video_worker_info()
         return data
 
     if pkg is None:
@@ -736,6 +758,7 @@ def updates_manifest(authorization: str | None = Header(default=None)) -> dict[s
             "notes": "Served from LAN PC server",
         },
         "rollout": {"force_update": False, "min_agent_version": "1.0.0"},
+        "video_worker": _video_worker_info(),
     }
 
 
@@ -764,6 +787,48 @@ def download_package(
             "X-Transfer-Mode": "lan-high-bandwidth",
         },
     )
+
+
+@app.get("/v1/updates/video-worker/manifest")
+def video_worker_manifest(authorization: str | None = Header(default=None)) -> dict[str, str]:
+    """Bản mã PC đọc video. Khác gói máy quét comment."""
+    _auth(authorization)
+    return _video_worker_info()
+
+
+@app.get("/v1/updates/video-worker.zip")
+def video_worker_zip(authorization: str | None = Header(default=None)) -> FileResponse:
+    _auth(authorization)
+    info = _video_worker_info()
+    path = settings.data_dir / "delivery" / f"fb-poller-video-worker-{VIDEO_WORKER_BUILD}.zip"
+    if info["version"] != str(VIDEO_WORKER_BUILD):
+        raise HTTPException(500, "package version mismatch")
+    if not path.is_file():
+        raise HTTPException(404, "package missing")
+    return FileResponse(
+        path,
+        media_type="application/zip",
+        filename=path.name,
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/cai-video.ps1")
+def cai_video_installer() -> PlainTextResponse:
+    root = Path(__file__).resolve().parents[1]
+    return _public_script(root / "pc_agent" / "windows" / "Install-VideoWorker.ps1", bom=True)
+
+
+@app.get("/cai-video-run.ps1")
+def cai_video_runner() -> PlainTextResponse:
+    root = Path(__file__).resolve().parents[1]
+    return _public_script(root / "pc_agent" / "windows" / "Run-VideoWorker.ps1", bom=True)
+
+
+@app.get("/cai-video-watchdog.py")
+def cai_video_watchdog() -> PlainTextResponse:
+    root = Path(__file__).resolve().parents[1]
+    return _public_script(root / "pc_agent" / "video_watchdog.py", bom=False)
 
 
 @app.post("/v1/updates/packages/upload")

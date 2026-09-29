@@ -4,7 +4,10 @@
 Mỗi máy nhận một video. Máy có card NVIDIA và đã cài bộ đọc GPU thì đọc bằng GPU.
 Chưa cài thì đọc bằng CPU (Tesseract), cùng cách với hub.
 
-Đặt CONTROL_TOKEN bằng token của hub, rồi chạy:
+Trên Windows, một lệnh cài Python, ffmpeg, Tesseract vie+eng, lưu token, và chạy khi đăng nhập.
+Lệnh nằm ở đầu pc_agent/windows/Install-VideoWorker.ps1. Bản mới tự tải khi máy không đang đọc video.
+
+Chạy tay: đặt CONTROL_TOKEN bằng token của hub, rồi
 
     python pc_agent/video_worker.py
 
@@ -286,6 +289,41 @@ def _read_one(client: HubClient, worker_id: str, job_id: str, resume: dict[str, 
         client.complete(job_id, worker_id, people, sink.tally())
 
 
+_state_lock = threading.Lock()
+_reading = False
+
+
+def write_worker_state(reading: bool, path: Path | None = None) -> None:
+    """Ghi đang đọc hay đang rảnh để bộ cập nhật biết có được đổi mã hay không."""
+    target = path
+    if target is None:
+        raw = os.environ.get("FB_VIDEO_STATE", "").strip()
+        if not raw:
+            return
+        target = Path(raw)
+    payload = json.dumps({"reading": bool(reading), "pid": os.getpid(), "at": time.time()})
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_suffix(".tmp")
+        temporary.write_text(payload, encoding="utf-8")
+        temporary.replace(target)
+    except OSError:
+        return
+
+
+def set_reading(reading: bool) -> None:
+    global _reading
+    with _state_lock:
+        _reading = reading
+    write_worker_state(reading)
+
+
+def refresh_worker_state() -> None:
+    with _state_lock:
+        reading = _reading
+    write_worker_state(reading)
+
+
 def _prepare_gpu() -> tuple[bool, str]:
     """Bật GPU chỉ khi card NVIDIA có thật và bộ đọc nạp được."""
     card = nvidia_name()
@@ -322,6 +360,7 @@ def main() -> None:
 
     def beat() -> None:
         while not state["stop"].wait(5):
+            refresh_worker_state()
             try:
                 state["worker_id"] = client.heartbeat(state["worker_id"], name, cpus, use_gpu, gpu_name)
             except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
@@ -333,6 +372,7 @@ def main() -> None:
         print("Chưa nối được hub.", file=sys.stderr)
         raise SystemExit(1) from error
     print(f"Đã nối hub. Máy này có {cpus} lõi, dùng hết để đọc video.", flush=True)
+    refresh_worker_state()
     threading.Thread(target=beat, daemon=True).start()
     while True:
         try:
@@ -341,7 +381,11 @@ def main() -> None:
                 time.sleep(0.4)
                 continue
             print(f"Nhận video {job_id}.", flush=True)
-            _read_one(client, state["worker_id"], job_id, resume)
+            set_reading(True)
+            try:
+                _read_one(client, state["worker_id"], job_id, resume)
+            finally:
+                set_reading(False)
             print(f"Xong video {job_id}.", flush=True)
         except KeyboardInterrupt:
             state["stop"].set()
