@@ -123,7 +123,7 @@ class DanhBaStoreTests(unittest.TestCase):
         early = read_vcard(self.db_path, ticket, "2026-09-29T00:01:00+00:00")
         self.assertIsNotNone(early)
         assert early is not None
-        self.assertIn("N:;Lan An;;;", early["body"])
+        self.assertIn("N:Lan An;;;;", early["body"])
         self.assertIn("FN:Lan An", early["body"])
         self.assertIn("TEL;TYPE=CELL:0901234567", early["body"])
         self.assertIn("TEL;TYPE=CELL:0902222222", early["body"])
@@ -142,7 +142,7 @@ class DanhBaStoreTests(unittest.TestCase):
         escaped = render_vcard(
             [{"name": "Khach 1", "entries": [{"name": "A, B", "phone": "0901234567"}]}]
         )
-        self.assertIn("N:;A\\, B;;;", escaped)
+        self.assertIn("N:A\\, B;;;;", escaped)
         self.assertIn("FN:A\\, B", escaped)
 
 
