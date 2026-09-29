@@ -27,6 +27,15 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
+from control_plane.danhba_store import (
+    get_book,
+    import_people,
+    issue_vcard,
+    list_books,
+    mark_used,
+    read_vcard,
+    reconcile,
+)
 from control_plane.delivery import DANHBA_NAME, PACKAGE_NAME, ensure_danhba_package, ensure_package
 from control_plane.people import apply_novel, complete_rows
 from control_plane.version import DANHBA_BUILD, IPHONE_BUILD
@@ -310,6 +319,110 @@ def danhba_manifest() -> FileResponse:
         path,
         media_type="application/manifest+json",
         headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/danhba/nap", response_class=HTMLResponse)
+def danhba_pc() -> HTMLResponse:
+    """Trang máy tính: nạp tên và số lên hub."""
+    path = STATIC_DIR / "danhba-nap.html"
+    if not path.exists():
+        return HTMLResponse("<p>Missing page.</p>", status_code=404)
+    text = path.read_text(encoding="utf-8").replace("__DANHBA_BUILD__", str(DANHBA_BUILD))
+    return HTMLResponse(text, headers={"Cache-Control": "no-cache"})
+
+
+class DanhBaImportBody(BaseModel):
+    title: str = "Khach"
+    text: str = ""
+
+
+class DanhBaSyncBody(BaseModel):
+    text: str = ""
+    phones: list[str] = Field(default_factory=list)
+    full: bool = False
+
+
+def _danhba_books() -> dict[str, Any]:
+    return list_books(settings.db_path)
+
+
+@app.get("/v1/danhba/books")
+def danhba_books(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    return _danhba_books()
+
+
+@app.get("/v1/danhba/books/{book_id}")
+def danhba_book(book_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    book = get_book(settings.db_path, book_id)
+    if book is None:
+        raise HTTPException(status_code=404, detail="Không thấy danh bạ")
+    return book
+
+
+@app.post("/v1/danhba/books/{book_id}/use")
+def danhba_use(book_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    book = mark_used(settings.db_path, book_id, utcnow())
+    if book is None:
+        raise HTTPException(status_code=404, detail="Không thấy danh bạ")
+    return book
+
+
+@app.post("/v1/danhba/import")
+def danhba_import(body: DanhBaImportBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    if len(body.text) > 20_000_000:
+        raise HTTPException(status_code=413, detail="Danh sách quá lớn")
+    if not body.text.strip():
+        raise HTTPException(status_code=400, detail="Dán danh sách gồm tên ghi nhớ và số điện thoại")
+    return import_people(settings.db_path, body.text, body.title, utcnow())
+
+
+@app.post("/v1/danhba/sync")
+def danhba_sync(body: DanhBaSyncBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Khớp danh bạ đã lưu với số đang có trên iPhone. Không ghi số lạ vào hub."""
+    _auth(authorization)
+    if len(body.text) > 20_000_000:
+        raise HTTPException(status_code=413, detail="Danh sách quá lớn")
+    try:
+        return reconcile(settings.db_path, body.text, body.phones[:200_000], body.full, utcnow())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Không thấy số điện thoại để đối chiếu") from None
+
+
+class DanhBaExportBody(BaseModel):
+    bookId: str = ""
+
+
+@app.post("/v1/danhba/xuat")
+def danhba_issue_vcard(
+    body: DanhBaExportBody, authorization: str | None = Header(default=None)
+) -> dict[str, Any]:
+    """Vé để Safari mở thẳng hộp thêm liên hệ. Không kèm số điện thoại."""
+    _auth(authorization)
+    issued = issue_vcard(settings.db_path, body.bookId.strip() or None, utcnow())
+    if issued is None:
+        raise HTTPException(status_code=404, detail="Chưa có danh bạ chờ")
+    return issued
+
+
+@app.get("/danhba/xuat/{ticket}.vcf")
+def danhba_vcard(ticket: str) -> Response:
+    """File danh bạ. iPhone nhận text/x-vcard và hỏi Thêm tất cả."""
+    card = read_vcard(settings.db_path, ticket, utcnow())
+    if card is None:
+        raise HTTPException(status_code=404, detail="Liên kết nạp đã hết hạn")
+    filename = card["filename"].replace('"', "").replace("\r", "").replace("\n", "")
+    return Response(
+        content=card["body"],
+        media_type="text/x-vcard; charset=utf-8",
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
     )
 
 
