@@ -36,6 +36,7 @@ from control_plane.delivery import PACKAGE_NAME, ensure_package
 from control_plane.people import (
     apply_novel,
     clean_name,
+    clean_username,
     complete_rows,
     complete_sightings,
     name_key,
@@ -346,6 +347,18 @@ def people_list(
     }
 
 
+@app.get("/v1/people/duplicates")
+def people_duplicates(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    cursor: str = Query(default=""),
+) -> dict[str, Any]:
+    """Người vừa quét đã có trong kho. Không gồm người mới."""
+    _auth(authorization)
+    items, next_cursor = db.list_duplicates_page(settings.db_path, limit=limit, cursor=cursor)
+    return {"count": db.duplicate_count(settings.db_path), "items": items, "cursor": next_cursor}
+
+
 @app.post("/v1/people/sightings")
 def people_sightings(
     body: SightingsBody,
@@ -407,53 +420,112 @@ def _people_match(rows: list[dict[str, str]]) -> bool:
     return True
 
 
-def _save_proposed(rows: list[dict[str, str]]) -> tuple[int, int, list[str]]:
-    """Ghi dòng đủ ba cột. Cột đã có thì giữ nguyên. Trả về (lần nhìn thấy mới, số người mới, khóa bị bỏ)."""
+def _display_person(row: dict[str, str]) -> dict[str, str]:
+    return {
+        "name": row.get("name") or "",
+        "contactName": row.get("contactName") or "",
+        "username": row.get("username") or "",
+    }
+
+
+def _prepared_person(row: dict[str, str]) -> dict[str, str] | None:
+    """Dòng đủ ba cột, đã làm sạch. Thiếu cột thì bỏ."""
+    if not complete_sightings([row]):
+        return None
+    name = clean_name(row.get("name") or "")
+    key = name_key(name)
+    username = clean_username(row.get("username") or "")
+    if not key or not username:
+        return None
+    return {
+        "nameKey": key,
+        "name": name,
+        "contactName": clean_name(row.get("contactName") or ""),
+        "username": username,
+    }
+
+
+def _save_proposed(
+    rows: list[dict[str, str]],
+) -> tuple[int, int, list[str], list[dict[str, str]], list[dict[str, str]]]:
+    """Ghi người mới. Người đã đủ ba cột trong kho thì đưa sang bảng trùng.
+
+    Trả về (lần nhìn thấy mới, số người mới, khóa bị bỏ, dòng trùng, người mới).
+    """
     prepared: list[dict[str, str]] = []
-    keys: list[str] = []
     for row in rows:
-        if not complete_sightings([row]):
-            continue
-        prepared.append(row)
-        key = name_key(clean_name(row.get("name") or ""))
-        if key:
-            keys.append(key)
+        item = _prepared_person(row)
+        if item is not None:
+            prepared.append(item)
     if not prepared:
-        return 0, 0, []
+        return 0, 0, [], [], []
     with db.people_write_lock:
-        stored = db.people_by_keys(settings.db_path, keys)
-        before = {
-            key: (row["name"], row["contactName"], row["username"])
-            for key, row in stored.items()
-        }
-        current = list(stored.values())
+        stored = db.people_by_keys(settings.db_path, [row["nameKey"] for row in prepared])
+        by_username = db.people_by_usernames(
+            settings.db_path, [row["username"] for row in prepared]
+        )
+        duplicate_rows: dict[str, dict[str, str]] = {}
+        fresh: list[dict[str, str]] = []
+        for row in prepared:
+            existing = stored.get(row["nameKey"])
+            owner = existing if existing and existing.get("contactName") and existing.get("username") else None
+            if owner is None:
+                match = by_username.get(row["username"].casefold())
+                if match and match.get("contactName") and match.get("username"):
+                    owner = match
+            if owner is not None:
+                duplicate_rows[owner["nameKey"]] = {
+                    "nameKey": owner["nameKey"],
+                    "name": row["name"],
+                    "contactName": row["contactName"],
+                    "username": row["username"],
+                }
+                continue
+            fresh.append(row)
         sightings_saved = 0
         people_saved = 0
-        for row in prepared:
-            items = complete_sightings([row])
-            current, added = apply_novel(current, items)
-            if added:
-                people_saved += 1
-                sightings_saved += added
-        if not sightings_saved:
-            return 0, 0, []
-        to_write = [
-            row
-            for row in current
-            if before.get(row["nameKey"])
-            != (row["name"], row.get("contactName") or "", row.get("username") or "")
-        ]
-        if not to_write:
-            return sightings_saved, people_saved, []
-        skipped = _write_people(to_write)
-    return sightings_saved, people_saved, skipped
+        skipped: list[str] = []
+        if fresh:
+            fresh_keys = {row["nameKey"] for row in fresh}
+            before = {
+                key: (row["name"], row["contactName"], row["username"])
+                for key, row in stored.items()
+                if key in fresh_keys
+            }
+            current = [row for key, row in stored.items() if key in fresh_keys]
+            for row in fresh:
+                items = complete_sightings([row])
+                current, added = apply_novel(current, items)
+                if added:
+                    people_saved += 1
+                    sightings_saved += added
+            if sightings_saved:
+                to_write = [
+                    row
+                    for row in current
+                    if before.get(row["nameKey"])
+                    != (row["name"], row.get("contactName") or "", row.get("username") or "")
+                ]
+                if to_write:
+                    skipped = _write_people(to_write)
+        duplicates = list(duplicate_rows.values())
+        if duplicates:
+            db.save_duplicates(settings.db_path, duplicates, utcnow())
+    fresh_by_key: dict[str, dict[str, str]] = {}
+    for row in fresh:
+        fresh_by_key[row["nameKey"]] = row
+    fresh_display = [_display_person(row) for row in fresh_by_key.values()]
+    duplicate_display = [_display_person(row) for row in duplicates]
+    return sightings_saved, people_saved, skipped, duplicate_display, fresh_display
 
 
 @app.post("/v1/people/confirm")
 def people_confirm(body: PeopleConfirmBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     """Ghi những dòng người dùng đã giữ. Cột đã có thì không ghi đè."""
     _auth(authorization)
-    added, _people, _skipped = _save_proposed([row.model_dump() for row in body.rows])
+    added, _people, _skipped, _duplicates, _fresh = _save_proposed(
+        [row.model_dump() for row in body.rows]
+    )
     items, _cursor = db.list_people_page(settings.db_path, limit=50)
     _total, ready = db.people_counts(settings.db_path)
     return {"ok": True, "saved": added, "count": ready, "items": items}
@@ -863,12 +935,13 @@ async def recordings_from_video(
             "savedPeople": 0,
         }
     stored = _store_seen([f"{len(people)} người"] if people else ["Đã đọc video"])
-    added, people_saved, skipped = _save_proposed(people)
+    added, people_saved, skipped, duplicates, fresh = _save_proposed(people)
     archive = _video_archive(people)
     _total, ready = db.people_counts(settings.db_path)
     stored["steps"] = []
-    stored["count"] = len(people)
-    stored["people"] = people
+    stored["count"] = len(fresh)
+    stored["people"] = fresh
+    stored["duplicates"] = duplicates
     stored["saved"] = added
     stored["savedPeople"] = people_saved
     stored["archive"] = archive
@@ -887,7 +960,7 @@ def _commit_people(job: VideoJob, people: list[dict[str, str]], worker_id: str |
     job.update(97, "Ghi kết quả")
     try:
         _store_seen([f"{len(rows)} người"] if rows else ["Đã đọc video"])
-        _added, people_saved, skipped = _save_proposed(rows)
+        _added, people_saved, skipped, duplicates, fresh = _save_proposed(rows)
         if skipped:
             job.add_problem(_STORE_FULL)
         archive = _video_archive(rows)
@@ -900,8 +973,8 @@ def _commit_people(job: VideoJob, people: list[dict[str, str]], worker_id: str |
             job.fail(detail)
         raise
     if worker_id:
-        return job.finish_from_worker(worker_id, rows, people_saved, archive, ready)
-    job.finish(rows, people_saved, archive, ready)
+        return job.finish_from_worker(worker_id, fresh, people_saved, archive, ready, duplicates)
+    job.finish(fresh, people_saved, archive, ready, duplicates)
     return True
 
 

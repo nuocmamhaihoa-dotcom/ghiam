@@ -43,22 +43,24 @@
     #helperLine { margin: 0 0 0.8rem; line-height: 1.4; font-size: 16px; color: #333; }
     #problemLead { margin: 0.6rem 0 0.25rem; color: #b42318; font-weight: 800; }
     #problemList { margin: 0; padding-left: 1.15rem; color: #b42318; font-size: 15px; overflow-wrap: anywhere; }
-    #peopleBox, #savedBox { margin-top: 0.4rem; }
+    #peopleBox, #savedBox, #dupBox { margin-top: 0.4rem; }
     #peopleBox[hidden] { display: none !important; }
-    #peopleLead, #savedLead { margin: 0 0 0.6rem; line-height: 1.4; }
-    #savedEmpty { margin: 0; color: #444; }
-    #savedEmpty[hidden], #savedTable[hidden], #savedMore[hidden] { display: none !important; }
-    #savedMore {
+    #dupBox { margin-top: 1.1rem; }
+    #peopleLead, #savedLead, #dupLead { margin: 0 0 0.6rem; line-height: 1.4; }
+    #savedEmpty, #dupEmpty { margin: 0; color: #444; }
+    #savedEmpty[hidden], #savedTable[hidden], #savedMore[hidden],
+    #dupEmpty[hidden], #dupTable[hidden], #dupMore[hidden] { display: none !important; }
+    #savedMore, #dupMore {
       display: block; width: 100%; margin: 0.7rem 0 0.2rem; min-height: 48px;
       border-radius: 12px; border: 2px solid #111; background: #fff;
       font: inherit; font-weight: 800; font-size: 16px;
     }
-    #peopleTable, #savedTable { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
-    #peopleTable th, #peopleTable td, #savedTable th, #savedTable td {
+    #peopleTable, #savedTable, #dupTable { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
+    #peopleTable th, #peopleTable td, #savedTable th, #savedTable td, #dupTable th, #dupTable td {
       border-bottom: 1px solid #ddd; padding: 0.45rem 0.2rem;
       text-align: left; vertical-align: top; word-break: break-word; overflow-wrap: anywhere;
     }
-    #peopleTable th, #savedTable th { font-size: 13px; font-weight: 800; }
+    #peopleTable th, #savedTable th, #dupTable th { font-size: 13px; font-weight: 800; }
     #actions {
       display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;
       padding: 0.7rem max(0.8rem, env(safe-area-inset-right)) calc(0.7rem + env(safe-area-inset-bottom)) max(0.8rem, env(safe-area-inset-left));
@@ -103,6 +105,21 @@
       </table>
       <button id="savedMore" type="button" hidden>Xem thêm</button>
     </section>
+    <section id="dupBox">
+      <p id="dupLead">Dữ liệu trùng. Người vừa quét đã có trong kho.</p>
+      <p id="dupEmpty">Chưa có dữ liệu trùng.</p>
+      <table id="dupTable" hidden>
+        <thead>
+          <tr>
+            <th>Tên</th>
+            <th>Tên danh bạ</th>
+            <th>Tài khoản</th>
+          </tr>
+        </thead>
+        <tbody id="dupBody"></tbody>
+      </table>
+      <button id="dupMore" type="button" hidden>Xem thêm</button>
+    </section>
     <section id="peopleBox" hidden>
       <p id="peopleLead">Video vừa đọc. Cột đã có sẵn được giữ nguyên.</p>
       <table id="peopleTable">
@@ -140,7 +157,13 @@
     const savedEmpty = document.getElementById("savedEmpty");
     const savedLead = document.getElementById("savedLead");
     const savedMore = document.getElementById("savedMore");
+    const dupTable = document.getElementById("dupTable");
+    const dupBody = document.getElementById("dupBody");
+    const dupEmpty = document.getElementById("dupEmpty");
+    const dupLead = document.getElementById("dupLead");
+    const dupMore = document.getElementById("dupMore");
     let savedCursor = "";
+    let dupCursor = "";
     const playback = document.getElementById("playback");
     const status = document.getElementById("status");
     const progressBox = document.getElementById("progressBox");
@@ -243,6 +266,51 @@
         + " người. Kho chứa được 50 triệu kết quả.";
     }
 
+    function showDuplicates(rows) {
+      const list = rows || [];
+      dupEmpty.hidden = list.length > 0;
+      dupTable.hidden = list.length === 0;
+      fillTable(dupBody, list);
+    }
+
+    function appendDuplicates(rows) {
+      (rows || []).forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.appendChild(cell(row.name));
+        tr.appendChild(cell(row.contactName));
+        tr.appendChild(cell(row.username));
+        dupBody.appendChild(tr);
+      });
+      if (dupBody.children.length) {
+        dupEmpty.hidden = true;
+        dupTable.hidden = false;
+      }
+    }
+
+    function paintDuplicateCount(count) {
+      const n = Number(count) || 0;
+      dupLead.textContent = "Dữ liệu trùng: " + n.toLocaleString("vi-VN") + " người.";
+    }
+
+    async function loadDuplicates(cursor) {
+      try {
+        const params = new URLSearchParams();
+        params.set("limit", "50");
+        if (cursor) params.set("cursor", cursor);
+        const response = await fetch("/v1/people/duplicates?" + params.toString(), { headers: authHeaders() });
+        if (!response.ok) return;
+        const data = await response.json();
+        paintDuplicateCount(data.count);
+        const rows = data.items || [];
+        if (cursor) appendDuplicates(rows);
+        else showDuplicates(rows);
+        dupCursor = data.cursor || "";
+        dupMore.hidden = !dupCursor;
+      } catch (error) {
+        setStatus("Chưa mở được dữ liệu trùng. Mở lại trang.", false);
+      }
+    }
+
     const helperLine = document.getElementById("helperLine");
 
     async function refreshHelper() {
@@ -285,6 +353,10 @@
 
     savedMore.addEventListener("click", () => {
       if (savedCursor) loadSaved(savedCursor);
+    });
+
+    dupMore.addEventListener("click", () => {
+      if (dupCursor) loadDuplicates(dupCursor);
     });
 
     function showClip(file) {
@@ -433,6 +505,7 @@
           ok: true,
           people: data.people || [],
           savedPeople: data.savedPeople || 0,
+          duplicates: data.duplicates || [],
           archive: data.archive,
           problems: data.problems || [],
         };
@@ -465,6 +538,7 @@
       let failed = 0;
       let added = 0;
       let found = 0;
+      let duplicated = 0;
       while (queue.length) {
         const file = queue.shift();
         batchDone += 1;
@@ -480,13 +554,18 @@
         }
         added += result.savedPeople || 0;
         found += result.people.length;
+        duplicated += (result.duplicates || []).length;
         await loadSaved();
+        await loadDuplicates();
         showPeople(result.people);
       }
       if (batchTotal) paintProgress(100, failed ? "Gặp vấn đề" : "Đã ghi xong");
       if (failed && added) setStatus("Đã lưu " + added + " người. " + failed + " video chưa đọc được.", false);
+      else if (failed && duplicated) setStatus(duplicated + " người trùng dữ liệu đã có. " + failed + " video chưa đọc được.", false);
       else if (failed) setStatus(failed + " video chưa đọc được. Kết quả đã lưu vẫn còn.", false);
+      else if (added && duplicated) setStatus("Đã lưu " + added + " người. " + duplicated + " người trùng dữ liệu đã có.", false);
       else if (added) setStatus("Đã lưu " + added + " người vào mục kết quả.", false);
+      else if (duplicated) setStatus(duplicated + " người trùng dữ liệu đã có.", false);
       else if (found) setStatus("Cột đã có sẵn được giữ nguyên.", false);
       else setStatus("Không thấy người đủ ba cột.", false);
       batchDone = 0;
@@ -669,6 +748,7 @@
     });
 
     loadSaved();
+    loadDuplicates();
     refreshHelper();
     window.setInterval(refreshHelper, 8000);
   </script>

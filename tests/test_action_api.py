@@ -177,6 +177,11 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("50 triệu", page.text)
         self.assertIn('id="savedMore"', page.text)
         self.assertIn("Xem thêm", page.text)
+        self.assertIn("Dữ liệu trùng", page.text)
+        self.assertIn('id="dupBox"', page.text)
+        self.assertIn('id="dupTable"', page.text)
+        self.assertIn('id="dupMore"', page.text)
+        self.assertIn("/v1/people/duplicates", page.text)
         self.assertIn("/v1/people", page.text)
         self.assertIn("multiple", page.text)
         self.assertIn("nhiều video", page.text)
@@ -373,14 +378,14 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "26")
+        self.assertEqual(build, "27")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
 
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 26)
+        self.assertEqual(payload["iphoneBuild"], 27)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -495,6 +500,98 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(skipped.json()["saved"], 0)
         with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
             conn.execute("DELETE FROM saved_people WHERE username = ?", ("@le.hoa",))
+            conn.execute("DELETE FROM scan_duplicates")
+            conn.execute("DELETE FROM people_meta")
+
+    def test_repeat_scan_is_listed_as_duplicate(self) -> None:
+        denied = self.client.get("/v1/people/duplicates")
+        self.assertEqual(denied.status_code, 401)
+        _total, ready = people_db.people_counts(Path(os.environ["CONTROL_DB"]))
+        first = self.client.post(
+            "/v1/people/confirm",
+            headers=self.headers,
+            json={"rows": [{"name": "Đỗ Nam", "contactName": "Anh Nam", "username": "@do.nam.dup"}]},
+        )
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(first.json()["saved"], 2)
+        second = self.client.post(
+            "/v1/people/confirm",
+            headers=self.headers,
+            json={"rows": [{"name": "Mai Hoa", "contactName": "Chị Hoa Mai", "username": "@mai.hoa.dup"}]},
+        )
+        self.assertEqual(second.status_code, 200, second.text)
+        self.assertEqual(second.json()["saved"], 2)
+        contact = self.client.post(
+            "/v1/people/sightings",
+            headers=self.headers,
+            json={"items": [{"kind": "contact", "name": "Phạm Lẻ", "contactName": "Chị Lẻ"}]},
+        )
+        self.assertEqual(contact.status_code, 200, contact.text)
+        filled = self.client.post(
+            "/v1/people/confirm",
+            headers=self.headers,
+            json={"rows": [{"name": "Phạm Lẻ", "contactName": "Chị Lẻ", "username": "@pham.le.dup"}]},
+        )
+        self.assertEqual(filled.status_code, 200, filled.text)
+        self.assertGreater(filled.json()["saved"], 0)
+        kept_fill = next(item for item in filled.json()["items"] if item["username"] == "@pham.le.dup")
+        self.assertEqual(kept_fill["contactName"], "Chị Lẻ")
+        repeat = self.client.post(
+            "/v1/people/confirm",
+            headers=self.headers,
+            json={"rows": [{"name": "Đỗ Nam", "contactName": "Tên quét lại", "username": "@khac.nam"}]},
+        )
+        self.assertEqual(repeat.status_code, 200, repeat.text)
+        self.assertEqual(repeat.json()["saved"], 0)
+        kept = next(item for item in repeat.json()["items"] if item["name"] == "Đỗ Nam")
+        self.assertEqual(kept["contactName"], "Anh Nam")
+        self.assertEqual(kept["username"], "@do.nam.dup")
+        other = self.client.post(
+            "/v1/people/confirm",
+            headers=self.headers,
+            json={"rows": [{"name": "Võ Nữ", "contactName": "Chị Nữ", "username": "@mai.hoa.dup"}]},
+        )
+        self.assertEqual(other.status_code, 200, other.text)
+        self.assertEqual(other.json()["saved"], 0)
+        listed = self.client.get("/v1/people", headers=self.headers)
+        self.assertEqual(listed.json()["count"], ready + 3)
+        self.assertFalse(any(item["name"] == "Võ Nữ" for item in listed.json()["items"]))
+        dupes = self.client.get("/v1/people/duplicates", headers=self.headers, params={"limit": 1})
+        self.assertEqual(dupes.status_code, 200, dupes.text)
+        body = dupes.json()
+        self.assertGreaterEqual(body["count"], 2)
+        seen = {(item["name"], item["contactName"], item["username"]) for item in body["items"]}
+        cursor = body["cursor"]
+        self.assertTrue(cursor)
+        for _ in range(10):
+            if not cursor:
+                break
+            page = self.client.get(
+                "/v1/people/duplicates",
+                headers=self.headers,
+                params={"limit": 1, "cursor": cursor},
+            )
+            self.assertEqual(page.status_code, 200, page.text)
+            seen.update(
+                (item["name"], item["contactName"], item["username"]) for item in page.json()["items"]
+            )
+            cursor = page.json()["cursor"]
+        self.assertIn(("Đỗ Nam", "Tên quét lại", "@khac.nam"), seen)
+        self.assertIn(("Võ Nữ", "Chị Nữ", "@mai.hoa.dup"), seen)
+        self.assertNotIn(("Phạm Lẻ", "Chị Lẻ", "@pham.le.dup"), seen)
+        again = self.client.post(
+            "/v1/people/confirm",
+            headers=self.headers,
+            json={"rows": [{"name": "Đỗ Nam", "contactName": "Tên quét lại", "username": "@khac.nam"}]},
+        )
+        self.assertEqual(again.json()["saved"], 0)
+        counted = self.client.get("/v1/people/duplicates", headers=self.headers)
+        self.assertEqual(counted.json()["count"], body["count"])
+        with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
+            conn.execute(
+                "DELETE FROM saved_people WHERE username IN ('@do.nam.dup', '@mai.hoa.dup', '@pham.le.dup')"
+            )
+            conn.execute("DELETE FROM scan_duplicates")
             conn.execute("DELETE FROM people_meta")
 
     def _wait_job(self, job_id: str) -> dict[str, object]:
