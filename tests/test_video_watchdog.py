@@ -6,6 +6,8 @@ import hashlib
 import io
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -75,6 +77,25 @@ class VideoWorkerStartTests(unittest.TestCase):
             folder = Path(raw) / "tessdata-fast"
             self.assertFalse(ensure_fast_models(broken, folder, broken))
             self.assertFalse((folder / "eng.traineddata").exists())
+
+    def test_each_reader_uses_one_thread_even_when_pil_loads_openmp_first(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        env = dict(os.environ)
+        env.pop("OMP_THREAD_LIMIT", None)
+        for entry in ("pc_agent.video_worker", "control_plane.app"):
+            code = (
+                f"import ctypes, ctypes.util, {entry}\n"
+                "name = ctypes.util.find_library('gomp')\n"
+                "print(ctypes.CDLL(name).omp_get_thread_limit() if name else -1)\n"
+            )
+            result = subprocess.run(
+                [sys.executable, "-c", code], cwd=root, env=env, capture_output=True, text=True, timeout=120
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            limit = int(result.stdout.strip().splitlines()[-1])
+            if limit == -1:
+                self.skipTest("libgomp is not installed")
+            self.assertEqual(limit, 1, entry)
 
     def test_pc_reads_a_sample_before_taking_videos(self) -> None:
         if shutil.which("tesseract") is None:

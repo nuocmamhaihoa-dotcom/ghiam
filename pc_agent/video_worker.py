@@ -40,6 +40,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+# libgomp chỉ đọc giới hạn này lúc được nạp, và PIL có thể nạp nó trước Tesseract.
+# Thiếu giới hạn thì mỗi bộ đọc mở thêm luồng, nhiều bộ đọc cùng lúc giành CPU của nhau.
+os.environ.setdefault("OMP_THREAD_LIMIT", "1")
 
 from PIL import Image, ImageDraw, ImageFont
 
