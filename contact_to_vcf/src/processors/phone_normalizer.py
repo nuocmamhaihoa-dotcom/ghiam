@@ -60,6 +60,56 @@ def normalize_phone(raw: str, *, normalize: bool, vn_to_e164: bool) -> PhoneResu
     return _length_result(original, cleaned, plus=False)
 
 
+def canonical_phones(raw: str) -> list[str]:
+    """Return every stored phone from one cell.
+
+    A clear Vietnam number becomes ``+84…``. Any other value that contains
+    digits is kept, so a short or foreign number is still stored. A cell
+    with no digits produces an empty list.
+    """
+    if raw is None:
+        return []
+    original = str(raw).strip()
+    if original == "":
+        return []
+    parts = _phone_parts(original)
+    if len(parts) <= 1:
+        phone = _canonical_one(original)
+        return [phone] if phone else []
+    found = [phone for part in parts if (phone := _canonical_one(part))]
+    if found:
+        return found
+    phone = _canonical_one(original)
+    return [phone] if phone else []
+
+
+def _canonical_one(raw: str) -> str | None:
+    cleaned = str(raw).strip().translate(_SEPARATORS).replace(",", "")
+    if cleaned.startswith("00"):
+        cleaned = "+" + cleaned[2:]
+    if any(character.isalpha() for character in cleaned):
+        runs = re.findall(r"\d+", cleaned)
+        long_runs = [run for run in runs if len(run) >= 8]
+        if long_runs:
+            cleaned = max(long_runs, key=len)
+        elif runs:
+            cleaned = "".join(runs)
+        else:
+            return None
+    if cleaned.startswith("+"):
+        body = cleaned[1:]
+        if not body.isdigit():
+            digits = _digits(body)
+            return digits or None
+        converted = _to_e164("+" + body)
+        return converted if converted is not None else "+" + body
+    digits = _digits(cleaned)
+    if digits == "":
+        return None
+    converted = _to_e164(digits)
+    return converted if converted is not None else digits
+
+
 def extract_phones(raw: str, *, normalize: bool, vn_to_e164: bool) -> list[PhoneResult]:
     """Return every clear phone in one cell.
 

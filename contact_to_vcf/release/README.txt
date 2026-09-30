@@ -12,8 +12,9 @@ CÁCH DÙNG
 3. Xem vài dòng đầu. Nền xanh lá là cột số, nền xanh dương là cột tên.
 4. Giữ 5.000 liên hệ mỗi file, hoặc bấm 500 / file để nhập iPhone dễ hơn.
 5. Chọn thư mục xuất.
-6. Bấm KIỂM TRA DỮ LIỆU, rồi BẮT ĐẦU CHUYỂN ĐỔI.
-7. Mở thu_tu_nhap.txt và nhập từng file VCF theo thứ tự.
+6. Bấm NẠP VÀO KHO. Tên liên hệ được ghi bằng chính số điện thoại.
+7. Bấm Tải về trên từng danh bạ. Danh bạ đã tải hiện thời điểm tải.
+   Số đã vào danh bạ nào thì không bị chuyển sang danh bạ khác.
 
 Nút TẠM DỪNG / TIẾP TỤC / HỦY dùng trong lúc chạy.
 Nếu chương trình bị tắt giữa chừng, chọn lại đúng file và thư mục xuất.

@@ -34,7 +34,8 @@ from core.checkpoint import load_checkpoint
 from models.records import Checkpoint, FileInspection, JobConfig, JobResult, Progress
 from parsers.column_suggest import suggest_columns
 from parsers.detect import detect_format
-from ui.worker import ConversionWorker, InspectWorker
+from processors.pool import CONTACTS_PER_FILE, export_book, list_books, pool_total
+from ui.worker import ConversionWorker, InspectWorker, PoolImportWorker
 from utils.format import format_duration, format_int, format_percent
 
 _DELIMITERS = [
@@ -54,6 +55,7 @@ class MainWindow(QMainWindow):
         self.inspection: FileInspection | None = None
         self.output_dir: Path | None = None
         self.worker: ConversionWorker | None = None
+        self.pool_worker: PoolImportWorker | None = None
         self.inspect_worker: InspectWorker | None = None
         self._inspect_workers: list[InspectWorker] = []
         self._inspect_token = 0
@@ -175,13 +177,13 @@ class MainWindow(QMainWindow):
         layout.addWidget(options)
 
         buttons = QHBoxLayout()
-        self.check_btn = QPushButton("KIỂM TRA DỮ LIỆU")
-        self.start_btn = QPushButton("BẮT ĐẦU CHUYỂN ĐỔI")
+        self.check_btn = QPushButton("LÀM MỚI KHO")
+        self.start_btn = QPushButton("NẠP VÀO KHO")
         self.pause_btn = QPushButton("TẠM DỪNG")
         self.resume_btn = QPushButton("TIẾP TỤC")
         self.cancel_btn = QPushButton("HỦY")
-        self.check_btn.clicked.connect(self._check)
-        self.start_btn.clicked.connect(self._start_fresh)
+        self.check_btn.clicked.connect(self._reload_books)
+        self.start_btn.clicked.connect(self._import_pool)
         self.pause_btn.clicked.connect(self._pause)
         self.resume_btn.clicked.connect(self._resume)
         self.cancel_btn.clicked.connect(self._cancel)
@@ -195,7 +197,37 @@ class MainWindow(QMainWindow):
             buttons.addWidget(button)
         layout.addLayout(buttons)
 
-        progress_box = QGroupBox("3. Tiến trình")
+        books_box = QGroupBox("3. Kho số và danh bạ")
+        books_layout = QVBoxLayout(books_box)
+        self.kho_label = QLabel("Chưa chọn thư mục kho.")
+        self.kho_label.setWordWrap(True)
+        books_layout.addWidget(self.kho_label)
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("Lọc"))
+        self.book_filter = QComboBox()
+        self.book_filter.addItem("Tất cả", "all")
+        self.book_filter.addItem("Chưa tải", "pending")
+        self.book_filter.addItem("Đã tải", "downloaded")
+        self.book_filter.currentIndexChanged.connect(self._reload_books)
+        filter_row.addWidget(self.book_filter)
+        self.download_all_btn = QPushButton("Tải các file chưa tải")
+        self.download_all_btn.clicked.connect(self._download_pending)
+        filter_row.addWidget(self.download_all_btn)
+        filter_row.addStretch(1)
+        books_layout.addLayout(filter_row)
+        self.books = QTableWidget(0, 4)
+        self.books.setHorizontalHeaderLabels(["Danh bạ", "Số lượng", "Trạng thái", ""])
+        self.books.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.books.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.books.verticalHeader().setVisible(False)
+        self.books.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.books.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.books.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.books.setMaximumHeight(220)
+        books_layout.addWidget(self.books)
+        layout.addWidget(books_box)
+
+        progress_box = QGroupBox("4. Tiến trình")
         progress_layout = QGridLayout(progress_box)
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 1000)
@@ -313,6 +345,7 @@ class MainWindow(QMainWindow):
                 f"{format_int(checkpoint.exported)} liên hệ đã xuất."
             )
             self._apply_checkpoint(checkpoint)
+        self._reload_books()
         self._refresh_buttons()
 
     def _reinspect(self) -> None:
@@ -411,14 +444,10 @@ class MainWindow(QMainWindow):
         self._color_preview()
 
     def _show_mapping(self) -> None:
-        name = self.name_combo.currentText() or "—"
         phone = self.phone_combo.currentText() or "—"
-        if self.name_combo.currentIndex() == self.phone_combo.currentIndex() and self.name_combo.count():
-            self.mapping_label.setText(
-                "Cột tên và cột số đang trùng nhau. Hãy chọn hai cột khác nhau."
-            )
-        else:
-            self.mapping_label.setText(f"Cột tên: {name}. Cột số điện thoại: {phone}.")
+        self.mapping_label.setText(
+            f"Cột số điện thoại: {phone}. Mỗi số thành một liên hệ, tên cũng là số đó."
+        )
         self._color_preview()
 
     def _color_preview(self) -> None:
@@ -438,18 +467,17 @@ class MainWindow(QMainWindow):
 
     def _update_plan(self) -> None:
         inspection = self.inspection
-        per_file = self.per_file.value()
         if inspection is None or not inspection.estimated_rows:
             self.plan_label.setText(
-                f"Mỗi file tối đa {format_int(per_file)} liên hệ. "
-                "500 liên hệ mỗi file thường dễ nhập vào Danh bạ iPhone hơn."
+                "Mỗi danh bạ giữ tối đa 5.000 số. "
+                "Số đã vào danh bạ nào thì giữ nguyên danh bạ đó."
             )
             return
-        files = (inspection.estimated_rows + per_file - 1) // per_file
+        files = (inspection.estimated_rows + CONTACTS_PER_FILE - 1) // CONTACTS_PER_FILE
         self.plan_label.setText(
-            f"Khoảng {format_int(inspection.estimated_rows)} dòng sẽ chia thành "
-            f"khoảng {format_int(files)} file, mỗi file tối đa {format_int(per_file)} liên hệ. "
-            "Sau khi chạy, mở thu_tu_nhap.txt và nhập lần lượt."
+            f"Khoảng {format_int(inspection.estimated_rows)} dòng, "
+            f"khoảng {format_int(files)} danh bạ, mỗi danh bạ tối đa 5.000 số. "
+            "Số đã chia rồi không chuyển sang danh bạ khác."
         )
 
     def _delimiter_label(self, delimiter: str) -> str:
@@ -539,6 +567,124 @@ class MainWindow(QMainWindow):
             encoding=self.inspection.encoding,
         )
 
+    def _import_pool(self) -> None:
+        if self._busy():
+            return
+        try:
+            config = self._config()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Thiếu thông tin", str(exc))
+            return
+        phone_index = self.phone_combo.currentData()
+        if phone_index is None:
+            QMessageBox.warning(self, "Thiếu thông tin", "Hãy chọn cột số điện thoại")
+            return
+        self.pool_worker = PoolImportWorker(
+            config.output_dir,
+            config.input_path,
+            config.file_format,
+            config.delimiter,
+            config.has_header,
+            config.encoding,
+            int(phone_index),
+        )
+        self.pool_worker.progressed.connect(self._on_pool_progress)
+        self.pool_worker.succeeded.connect(self._on_pool_done)
+        self.pool_worker.failed.connect(self._on_failed)
+        self.pool_worker.start()
+        self._log(f"Đang nạp {config.input_path.name} vào kho.")
+        self._refresh_buttons()
+
+    def _on_pool_progress(self, seen: int) -> None:
+        self.run_labels["processed"].setText(format_int(seen))
+        self.progress_bar.setRange(0, 0)
+
+    def _on_pool_done(self, stats: object) -> None:
+        added = int(getattr(stats, "added", 0))
+        duplicate = int(getattr(stats, "duplicate", 0))
+        rejected = int(getattr(stats, "rejected", 0))
+        total = 0 if self.output_dir is None else pool_total(self.output_dir)
+        self.info_labels["valid"].setText(format_int(added))
+        self.info_labels["duplicate"].setText(format_int(duplicate))
+        self.info_labels["invalid"].setText(format_int(rejected))
+        self.run_labels["processed"].setText(format_int(int(getattr(stats, "seen", 0))))
+        self.progress_bar.setRange(0, 1000)
+        self.progress_bar.setValue(1000)
+        self._log(
+            f"Nạp xong. Thêm {format_int(added)}, "
+            f"trùng {format_int(duplicate)}, "
+            f"không có chữ số {format_int(rejected)}. "
+            f"Kho đang có {format_int(total)} số."
+        )
+        self._reload_books()
+        self._refresh_buttons()
+
+    def _reload_books(self) -> None:
+        self.books.setRowCount(0)
+        if self.output_dir is None:
+            self.kho_label.setText("Chưa chọn thư mục kho.")
+            return
+        status = self.book_filter.currentData()
+        if not isinstance(status, str):
+            status = "all"
+        books = list_books(self.output_dir, status)
+        total = pool_total(self.output_dir)
+        self.kho_label.setText(
+            f"Kho đang giữ {format_int(total)} số. Mỗi danh bạ tối đa 5.000 số."
+        )
+        self.books.setRowCount(len(books))
+        for row, book in enumerate(books):
+            self.books.setItem(row, 0, QTableWidgetItem(book.file_name))
+            self.books.setItem(row, 1, QTableWidgetItem(format_int(book.contact_count)))
+            if book.downloaded_at:
+                state = f"Đã tải {book.downloaded_at}"
+            else:
+                state = "Chưa tải"
+            self.books.setItem(row, 2, QTableWidgetItem(state))
+            button = QPushButton("Tải về")
+            button.clicked.connect(lambda _checked=False, book_id=book.id: self._download_book(book_id))
+            self.books.setCellWidget(row, 3, button)
+
+    def _download_book(self, book_id: int) -> None:
+        if self.output_dir is None or self._busy():
+            return
+        selected, _filter = QFileDialog.getSaveFileName(
+            self,
+            "Tải danh bạ",
+            f"danhba_{book_id:05d}.vcf",
+            "vCard (*.vcf)",
+        )
+        if not selected:
+            return
+        try:
+            count = export_book(self.output_dir, book_id, Path(selected))
+        except ValueError as exc:
+            QMessageBox.warning(self, "Không tải được", str(exc))
+            return
+        self._log(f"Đã tải {Path(selected).name}: {format_int(count)} liên hệ.")
+        self._reload_books()
+
+    def _download_pending(self) -> None:
+        if self.output_dir is None or self._busy():
+            return
+        pending = list_books(self.output_dir, "pending")
+        if not pending:
+            QMessageBox.information(self, "Kho số", "Không còn danh bạ chưa tải.")
+            return
+        folder = QFileDialog.getExistingDirectory(self, "Chọn thư mục để tải các danh bạ chưa tải")
+        if not folder:
+            return
+        target = Path(folder)
+        for book in pending:
+            export_book(self.output_dir, book.id, target / book.file_name)
+        self._log(f"Đã tải {len(pending)} danh bạ chưa tải vào {target}.")
+        self._reload_books()
+
+    def _busy(self) -> bool:
+        converting = self.worker is not None and self.worker.isRunning()
+        importing = self.pool_worker is not None and self.pool_worker.isRunning()
+        return converting or importing
+
     def _check(self) -> None:
         self._launch("validate", resume=False)
 
@@ -571,6 +717,10 @@ class MainWindow(QMainWindow):
         self._launch("convert", resume=True)
 
     def _pause(self) -> None:
+        if self.pool_worker is not None and self.pool_worker.isRunning():
+            self.pool_worker.request_cancel()
+            self._log("Sẽ dừng sau số đang nạp.")
+            return
         if self.worker is None or not self.worker.isRunning():
             return
         self.worker.control.pause()
@@ -579,6 +729,10 @@ class MainWindow(QMainWindow):
         self._refresh_buttons()
 
     def _cancel(self) -> None:
+        if self.pool_worker is not None and self.pool_worker.isRunning():
+            self.pool_worker.request_cancel()
+            self._log("Sẽ dừng sau số đang nạp. Số đã vào kho vẫn giữ đúng danh bạ.")
+            return
         if self.worker is None or not self.worker.isRunning():
             return
         self.worker.control.cancel()
@@ -643,7 +797,7 @@ class MainWindow(QMainWindow):
         self.log.appendPlainText(message)
 
     def _refresh_buttons(self) -> None:
-        running = self.worker is not None and self.worker.isRunning()
+        running = self._busy()
         self.check_btn.setEnabled(not running)
         self.start_btn.setEnabled(not running)
         self.pause_btn.setEnabled(running and not self._paused)
@@ -654,6 +808,11 @@ class MainWindow(QMainWindow):
         self.resume_btn.setEnabled(can_resume)
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
+        if self.pool_worker is not None and self.pool_worker.isRunning():
+            self.pool_worker.request_cancel()
+            self.pool_worker.wait(5000)
+            if self.pool_worker.isRunning():
+                _park_thread(self.pool_worker)
         if self.worker is not None and self.worker.isRunning():
             self.worker.control.cancel()
             self.worker.wait(5000)

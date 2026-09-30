@@ -675,6 +675,87 @@ def test_window_shows_preview_and_suggested_phone_column(tmp_path: Path) -> None
     app.processEvents()
 
 
+def test_pool_keeps_a_number_in_its_first_book(tmp_path: Path) -> None:
+    from processors.phone_normalizer import canonical_phones
+    from processors.pool import book_of, export_book, import_file, list_books, pool_total
+
+    assert canonical_phones("090 123 4567") == ["+84901234567"]
+    assert canonical_phones("+84 901 234 567") == ["+84901234567"]
+    assert canonical_phones("12") == ["12"]
+    assert canonical_phones("abc") == []
+    assert canonical_phones("0901234567 / 0912345678") == ["+84901234567", "+84912345678"]
+
+    folder = tmp_path / "kho"
+    folder.mkdir()
+    source = tmp_path / "a.csv"
+    _write_csv(
+        source,
+        [
+            ("Bo qua", "0901234567"),
+            ("Ngan", "12"),
+            ("Trong", "abc"),
+            ("Hai so", "0901234568 / 0987654321"),
+        ],
+    )
+    first = import_file(
+        folder,
+        source,
+        file_format="csv",
+        delimiter=",",
+        has_header=True,
+        encoding="utf-8-sig",
+        phone_column=1,
+        contacts_per_file=2,
+    )
+    assert first.added == 4
+    assert first.rejected == 1
+    assert pool_total(folder) == 4
+    assert [book.contact_count for book in list_books(folder)] == [2, 2]
+    home = book_of(folder, "+84901234567")
+    assert home == 1
+
+    again = import_file(
+        folder,
+        source,
+        file_format="csv",
+        delimiter=",",
+        has_header=True,
+        encoding="utf-8-sig",
+        phone_column=1,
+        contacts_per_file=2,
+    )
+    assert again.added == 0
+    assert again.duplicate == 4
+    assert book_of(folder, "+84901234567") == home
+    assert [book.contact_count for book in list_books(folder)] == [2, 2]
+
+    destination = tmp_path / "danhba_00001.vcf"
+    assert export_book(folder, 1, destination) == 2
+    text = destination.read_text(encoding="utf-8")
+    assert "FN:+84901234567" in text
+    assert "TEL;TYPE=CELL:+84901234567" in text
+    assert text.count("BEGIN:VCARD") == 2
+    downloaded = list_books(folder, "downloaded")
+    assert downloaded[0].id == 1
+    assert downloaded[0].downloaded_at
+
+    extra = tmp_path / "b.csv"
+    _write_csv(extra, [("Them", "0901234569")])
+    import_file(
+        folder,
+        extra,
+        file_format="csv",
+        delimiter=",",
+        has_header=True,
+        encoding="utf-8-sig",
+        phone_column=1,
+        contacts_per_file=2,
+    )
+    assert book_of(folder, "+84901234567") == 1
+    assert book_of(folder, "+84901234569") == 3
+    assert [book.id for book in list_books(folder, "pending")] == [2, 3]
+
+
 def test_window_constructs() -> None:
     from PySide6.QtWidgets import QApplication
 
