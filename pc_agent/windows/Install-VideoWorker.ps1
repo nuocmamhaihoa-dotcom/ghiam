@@ -176,8 +176,40 @@ function Save-TrainedData {
   Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest
   if ((Get-Item $dest).Length -lt $MinBytes) { throw "File $Name tai ve bi thieu." }
 }
-Save-TrainedData -Name "eng" -MinBytes 1000000
-Save-TrainedData -Name "vie" -MinBytes 100000
+
+# Bo chu nhanh, cung bo may chu dang dung. Do tren video that: doc nhanh hon va nhan ra nhieu ten hon bo chu chuan.
+$fastDir = Join-Path $Root "tessdata-fast"
+New-Item -ItemType Directory -Force -Path $fastDir | Out-Null
+function Save-FastData {
+  param([string]$Name, [int]$MinBytes, [int]$MaxBytes)
+  $dest = Join-Path $fastDir "$Name.traineddata"
+  if ((Test-Path $dest) -and ((Get-Item $dest).Length -ge $MinBytes) -and ((Get-Item $dest).Length -le $MaxBytes)) { return $true }
+  $part = "$dest.part"
+  foreach ($source in @("hub", "github")) {
+    try {
+      Write-Host "Tai bo chu nhanh $Name"
+      if ($source -eq "hub") {
+        Invoke-WebRequest -UseBasicParsing -Uri "$Hub/v1/updates/tessdata/$Name" -Headers @{ Authorization = "Bearer $token" } -OutFile $part
+      } else {
+        Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/tesseract-ocr/tessdata_fast/raw/main/$Name.traineddata" -OutFile $part
+      }
+      $size = (Get-Item $part).Length
+      if ($size -ge $MinBytes -and $size -le $MaxBytes) {
+        Move-Item $part $dest -Force
+        return $true
+      }
+    } catch { }
+    if (Test-Path $part) { Remove-Item $part -Force -ErrorAction SilentlyContinue }
+  }
+  return $false
+}
+$fastEng = Save-FastData -Name "eng" -MinBytes 1000000 -MaxBytes 12000000
+$fastVie = Save-FastData -Name "vie" -MinBytes 200000 -MaxBytes 3000000
+if (-not ($fastEng -and $fastVie)) {
+  Write-Host "Chua tai duoc bo chu nhanh. Dung bo chu chuan."
+  Save-TrainedData -Name "eng" -MinBytes 1000000
+  Save-TrainedData -Name "vie" -MinBytes 100000
+}
 
 @{ hub = $Hub; token = $token } | ConvertTo-Json | Set-Content -Encoding utf8 $cfgPath
 

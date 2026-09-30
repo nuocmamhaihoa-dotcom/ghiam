@@ -7,6 +7,8 @@ Chưa cài thì đọc bằng CPU (Tesseract), cùng cách với hub.
 
 Trên Windows, một lệnh cài Python, ffmpeg, Tesseract vie+eng, lưu token, và chạy khi đăng nhập.
 Lệnh nằm ở đầu pc_agent/windows/Install-VideoWorker.ps1. Bản mới tự tải khi máy không đang đọc video.
+Khi mở, PC tải bộ chữ nhanh giống máy chủ và đọc thử một ảnh mẫu, rồi báo kết quả lên hub.
+Hub có bản mới mà máy đang rảnh thì PC thoát với mã 3 để FbPoller.bat cài bản mới rồi mở lại.
 
 Chạy tay: đặt CONTROL_TOKEN bằng token của hub, rồi
 
@@ -32,16 +34,20 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from PIL import Image, ImageDraw, ImageFont
+
 from control_plane.gpu_read import fallback_note, nvidia_name, reader_ready
-from control_plane.screen_people import prepare_tesseract
+from control_plane.screen_people import lines_from_tsv, prepare_tesseract, read_frame_tsv
 from control_plane.screen_steps import ReadProgress, ScreenVideoError, analyze_screen_video
-from control_plane.tesseract_keep import set_reader_limit
+from control_plane.tesseract_keep import reader_mode, set_reader_limit, warm_readers
+from control_plane.version import VIDEO_WORKER_BUILD
 
 _OCR_BYTES = 256 * 1024 * 1024
 _SHARE_PERCENT = 80
@@ -52,6 +58,14 @@ _PARALLEL_MIN = 8 * 1024 * 1024
 _PREFIX_BYTES = 8 * 1024 * 1024
 _WAVE_BYTES = 32 * 1024 * 1024
 _JOBS_PER_PC = 2
+_FAST_URL = "https://github.com/tesseract-ocr/tessdata_fast/raw/main/{name}.traineddata"
+# Bộ chữ nhanh nhỏ hơn nhiều bộ chữ chuẩn (vie chuẩn 7,8 MB, eng chuẩn 23 MB). Ngoài khoảng này là tải nhầm.
+_FAST_BOUNDS = {"eng": (1_000_000, 12_000_000), "vie": (200_000, 3_000_000)}
+# Thoát bằng mã này thì FbPoller.bat chạy lại trình cài, tải bản mới, rồi mở lại PC phụ.
+_UPDATE_EXIT = 3
+_UPDATE_WAIT_SEC = 1800.0
+_RETEST_SEC = 300.0
+_TEST_WORDS = ("kiem", "tra", "doc", "chu")
 _reader_note = ""
 
 
@@ -93,6 +107,10 @@ class _JobSlots:
         if running >= 2:
             return max(1, self.workers // 2)
         return self.workers
+
+    def busy(self) -> int:
+        with self._lock:
+            return self.held
 
 
 def machine_ram_bytes() -> int:
@@ -176,22 +194,32 @@ class HubClient:
         gpu: bool = False,
         gpu_name: str = "",
         workers: int = 0,
-    ) -> str:
-        body = self._request(
-            "POST",
-            "/v1/video-workers/heartbeat",
-            {
-                "workerId": worker_id,
-                "name": name,
-                "cpus": cpus,
-                "gpu": gpu,
-                "gpuName": gpu_name,
-                "workers": workers,
-            },
-            timeout=30,
-        )
+        report: dict[str, object] | None = None,
+    ) -> tuple[str, int]:
+        """Trả về mã PC và bản mới nhất hub đang phát."""
+        payload: dict[str, object] = {
+            "workerId": worker_id,
+            "name": name,
+            "cpus": cpus,
+            "gpu": gpu,
+            "gpuName": gpu_name,
+            "workers": workers,
+        }
+        if report:
+            payload.update(report)
+        body = self._request("POST", "/v1/video-workers/heartbeat", payload, timeout=30)
         found = body.get("workerId")
-        return found if isinstance(found, str) and found else worker_id
+        latest = body.get("build")
+        latest_build = latest if isinstance(latest, int) and not isinstance(latest, bool) else 0
+        return (found if isinstance(found, str) and found else worker_id), latest_build
+
+    def fetch_model(self, name: str) -> bytes:
+        request = urllib.request.Request(
+            f"{self.hub}/v1/updates/tessdata/{name}",
+            headers={"Authorization": f"Bearer {self.token}"},
+        )
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return response.read(_FAST_BOUNDS["eng"][1] + 1)
 
     def claim(self, worker_id: str) -> tuple[str, dict[str, object]]:
         body = self._request("POST", "/v1/recordings/jobs/claim", {"workerId": worker_id}, timeout=30)
@@ -746,6 +774,125 @@ def refresh_worker_state() -> None:
     write_worker_state(reading)
 
 
+def _fast_ok(path: Path, name: str) -> bool:
+    low, high = _FAST_BOUNDS[name]
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return False
+    return low <= size <= high
+
+
+def _fetch_url(url: str) -> bytes:
+    with urllib.request.urlopen(urllib.request.Request(url), timeout=60) as response:
+        return response.read(_FAST_BOUNDS["eng"][1] + 1)
+
+
+def ensure_fast_models(fetch_hub: Callable[[str], bytes], folder: Path, fetch_url: Callable[[str], bytes] = _fetch_url) -> bool:
+    """Bộ chữ nhanh vie+eng như máy chủ. Tải từ hub, hub không có thì tải GitHub. Thiếu thì giữ bộ chữ cũ."""
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return False
+    for name in ("eng", "vie"):
+        dest = folder / f"{name}.traineddata"
+        if _fast_ok(dest, name):
+            continue
+        low, high = _FAST_BOUNDS[name]
+        for source in ("hub", "github"):
+            try:
+                blob = fetch_hub(name) if source == "hub" else fetch_url(_FAST_URL.format(name=name))
+            except (OSError, urllib.error.URLError, TimeoutError, socket.timeout, http.client.HTTPException):
+                continue
+            if not low <= len(blob) <= high:
+                continue
+            part = dest.with_name(dest.name + ".part")
+            try:
+                part.write_bytes(blob)
+                part.replace(dest)
+            except OSError:
+                continue
+            break
+        if not _fast_ok(dest, name):
+            return False
+    return True
+
+
+def _test_font() -> ImageFont.FreeTypeFont | None:
+    windows = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+    for path in (
+        windows / "arialbd.ttf",
+        windows / "arial.ttf",
+        windows / "segoeui.ttf",
+        windows / "tahoma.ttf",
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    ):
+        if not path.is_file():
+            continue
+        try:
+            return ImageFont.truetype(str(path), 44)
+        except OSError:
+            continue
+    return None
+
+
+def reader_self_test() -> dict[str, object]:
+    """Đọc một ảnh mẫu bằng đúng cách đọc video. readerOk None khi máy không có phông để vẽ ảnh mẫu."""
+    font = _test_font()
+    if font is None:
+        return {"readerOk": None, "readerNote": "", "readerMs": 0}
+    image = Image.new("RGB", (720, 1400), (255, 255, 255))
+    pen = ImageDraw.Draw(image)
+    pen.text((40, 420), "Kiem Tra Doc Chu", font=font, fill=(0, 0, 0))
+    pen.text((40, 500), "@kiem.tra2026", font=font, fill=(0, 0, 0))
+    with tempfile.TemporaryDirectory(prefix="fb-pc-test-") as folder:
+        path = Path(folder) / "f-00001.jpg"
+        image.save(path, format="JPEG", quality=92)
+        start = time.perf_counter()
+        try:
+            tsv = read_frame_tsv(path)
+        except Exception:
+            tsv = ""
+        took = int((time.perf_counter() - start) * 1000)
+    words = {
+        word.strip("@.,").casefold()
+        for line in lines_from_tsv(tsv)
+        for word in line.text.split()
+    }
+    if any(word in words for word in _TEST_WORDS):
+        return {"readerOk": True, "readerNote": "", "readerMs": took}
+    if not tsv:
+        return {"readerOk": False, "readerNote": "PC chưa chạy được Tesseract.", "readerMs": took}
+    return {"readerOk": False, "readerNote": "PC đọc ảnh mẫu không ra chữ.", "readerMs": took}
+
+
+def read_update_mark(path: Path) -> dict[str, object]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def write_update_mark(path: Path, build: int) -> bool:
+    try:
+        path.write_text(json.dumps({"build": int(build), "at": time.time()}), encoding="utf-8")
+    except OSError:
+        return False
+    return True
+
+
+def update_due(own: int, latest: int, held: int, tried: dict[str, object], now: float) -> bool:
+    """Hub có bản mới và máy không giữ video nào. Vừa thử lên đúng bản đó trong 30 phút thì chờ."""
+    if latest <= own or held > 0:
+        return False
+    at = tried.get("at")
+    if tried.get("build") == latest and isinstance(at, (int, float)) and now - float(at) < _UPDATE_WAIT_SEC:
+        return False
+    return True
+
+
 def _prepare_gpu() -> tuple[bool, str]:
     """Bật GPU chỉ khi card NVIDIA có thật và bộ đọc nạp được. Lỗi thì đọc bằng CPU."""
     try:
@@ -777,7 +924,6 @@ def main() -> None:
     os.environ["CONTROL_OCR_RESERVE"] = str(reserve)
     os.environ["CONTROL_FFMPEG_THREADS"] = str(workers)
     set_reader_limit(workers)
-    _reader_note = prepare_tesseract([ROOT, ROOT.parent])
     parser = argparse.ArgumentParser(description="PC phụ đọc video màn hình cho hub")
     parser.add_argument("--hub", default=os.environ.get("CONTROL_HUB", "http://222.255.214.202:8088"))
     args = parser.parse_args()
@@ -785,22 +931,49 @@ def main() -> None:
     if not token:
         say("Đặt CONTROL_TOKEN rồi chạy lại.", err=True)
         sys.exit(2)
+    client = HubClient(args.hub, token)
+    fast_folder = ROOT.parent / "tessdata-fast"
+    models = "standard"
+    if ensure_fast_models(client.fetch_model, fast_folder):
+        os.environ["TESSDATA_PREFIX"] = str(fast_folder) + os.sep
+        models = "fast"
+    _reader_note = prepare_tesseract([ROOT, ROOT.parent])
     use_gpu, gpu_name = _prepare_gpu()
     name = os.environ.get("COMPUTERNAME") or os.environ.get("HOSTNAME") or "PC"
-    client = HubClient(args.hub, token)
-    state = {"worker_id": "", "stop": threading.Event()}
+    report: dict[str, object] = {"build": VIDEO_WORKER_BUILD, "models": models}
+    report.update(reader_self_test())
+    report["readerMode"] = reader_mode()
+    threading.Thread(target=warm_readers, daemon=True).start()
+    slots = _JobSlots(workers)
+    mark = ROOT.parent / "update-tried.json"
+    state: dict[str, object] = {"worker_id": "", "latest": 0}
+    stop = threading.Event()
+    updating = threading.Event()
 
     def beat() -> None:
-        while not state["stop"].wait(5):
+        tested = time.monotonic()
+        while not stop.wait(5):
             refresh_worker_state()
+            if report.get("readerOk") is False and time.monotonic() - tested >= _RETEST_SEC:
+                report.update(reader_self_test())
+                report["readerMode"] = reader_mode()
+                tested = time.monotonic()
             try:
-                state["worker_id"] = client.heartbeat(state["worker_id"], name, cpus, use_gpu, gpu_name, workers)
+                worker_id, latest = client.heartbeat(
+                    str(state["worker_id"]), name, cpus, use_gpu, gpu_name, workers, dict(report)
+                )
             except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
-                pass
+                continue
+            state["worker_id"] = worker_id
+            state["latest"] = latest
+            if update_due(VIDEO_WORKER_BUILD, latest, slots.busy(), read_update_mark(mark), time.time()):
+                updating.set()
 
     while True:
         try:
-            state["worker_id"] = client.heartbeat("", name, cpus, use_gpu, gpu_name, workers)
+            state["worker_id"], state["latest"] = client.heartbeat(
+                "", name, cpus, use_gpu, gpu_name, workers, dict(report)
+            )
             break
         except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
             say("Chưa nối được hub. Thử lại.", err=True)
@@ -813,10 +986,24 @@ def main() -> None:
         )
     else:
         say(f"Đã nối hub. Máy này có {cpus} lõi, dùng {workers} lõi (80%) để đọc video. Tối đa hai video cùng lúc.")
+    say(f"Bản {VIDEO_WORKER_BUILD}. " + ("Bộ chữ nhanh." if models == "fast" else "Bộ chữ chuẩn."))
+    if report.get("readerOk") is True:
+        say(f"Đọc thử ảnh mẫu được, mất {report.get('readerMs')} ms.")
+    elif report.get("readerOk") is False:
+        say(f"{report.get('readerNote')} Máy chủ đọc thay cho đến khi PC đọc được.", err=True)
     refresh_worker_state()
     threading.Thread(target=beat, daemon=True).start()
-    slots = _JobSlots(workers)
     while True:
+        if updating.is_set():
+            if slots.busy() == 0:
+                latest = int(str(state["latest"]))
+                if write_update_mark(mark, latest):
+                    say(f"Hub có bản {latest}. Đang tự cập nhật.")
+                    stop.set()
+                    sys.exit(_UPDATE_EXIT)
+                updating.clear()
+            time.sleep(0.5)
+            continue
         claimed = False
         started = False
         try:
@@ -824,7 +1011,7 @@ def main() -> None:
                 time.sleep(0.2)
                 continue
             claimed = True
-            job_id, resume = client.claim(state["worker_id"])
+            job_id, resume = client.claim(str(state["worker_id"]))
             if not job_id:
                 slots.give()
                 claimed = False
@@ -836,7 +1023,7 @@ def main() -> None:
 
             def _run(job_id: str = job_id, resume: dict[str, object] | None = resume) -> None:
                 try:
-                    _read_one(client, state["worker_id"], job_id, resume, slots)
+                    _read_one(client, str(state["worker_id"]), job_id, resume, slots)
                 finally:
                     slots.give()
                     set_reading(False)
@@ -850,7 +1037,7 @@ def main() -> None:
                 set_reading(False)
             if claimed:
                 slots.give()
-            state["stop"].set()
+            stop.set()
             raise
         except urllib.error.HTTPError as error:
             if started:

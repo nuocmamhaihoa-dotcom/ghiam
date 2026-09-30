@@ -58,11 +58,14 @@ from control_plane.screen_steps import (
     ScreenVideoError,
     analyze_screen_video,
     clean_ocr,
+    cut_video_part,
     discard_video_work,
     faststart_video,
     read_screen_image,
     seen_line,
+    video_duration,
 )
+from control_plane.screen_people import locate_tesseract, propose_rows, reading_counts
 from control_plane.settings import settings
 from control_plane.video_jobs import JobProgress, VideoJob, jobs
 
@@ -899,6 +902,36 @@ def video_worker_zip(authorization: str | None = Header(default=None)) -> FileRe
     )
 
 
+_FAST_MODELS = ("vie", "eng")
+
+
+def _fast_model_path(name: str) -> Path | None:
+    folders: list[Path] = []
+    forced = os.environ.get("CONTROL_TESSDATA_FAST", "").strip()
+    if forced:
+        folders.append(Path(forced))
+    _exe, data = locate_tesseract()
+    if data is not None:
+        folders.append(data)
+    for folder in folders:
+        path = folder / f"{name}.traineddata"
+        if path.is_file():
+            return path
+    return None
+
+
+@app.get("/v1/updates/tessdata/{name}")
+def fast_tessdata(name: str, authorization: str | None = Header(default=None)) -> FileResponse:
+    """Bộ chữ máy chủ đang dùng, để PC đọc giống máy chủ."""
+    _auth(authorization)
+    if name not in _FAST_MODELS:
+        raise HTTPException(404, "không có bộ chữ này")
+    path = _fast_model_path(name)
+    if path is None:
+        raise HTTPException(404, "máy chủ chưa có bộ chữ này")
+    return FileResponse(path, media_type="application/octet-stream", filename=f"{name}.traineddata")
+
+
 @app.get("/cai-video-open.ps1")
 def cai_video_open() -> PlainTextResponse:
     root = Path(__file__).resolve().parents[1]
@@ -1245,6 +1278,11 @@ class HelperBeatBody(BaseModel):
     gpu: bool = False
     gpuName: str = ""
     workers: int = Field(default=0, ge=0, le=256)
+    build: int = Field(default=0, ge=0, le=1_000_000)
+    models: str = ""
+    readerOk: bool | None = None
+    readerNote: str = ""
+    readerMode: str = ""
 
 
 class WorkerJobBody(BaseModel):
@@ -1284,12 +1322,27 @@ def video_worker_heartbeat(
     body: HelperBeatBody,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    """PC phụ báo còn sống, số lõi, và có đọc bằng GPU hay không."""
+    """PC phụ báo còn sống, số lõi, bản đang chạy, và kết quả đọc thử ảnh mẫu. Hub trả bản mới nhất."""
     _auth(authorization)
     worker_id = video_helpers.helpers.beat(
-        body.workerId, body.name, body.cpus, body.gpu, body.gpuName, body.workers
+        body.workerId,
+        body.name,
+        body.cpus,
+        body.gpu,
+        body.gpuName,
+        body.workers,
+        body.build,
+        body.models,
+        body.readerOk,
+        body.readerNote,
+        body.readerMode,
     )
-    return {"ok": True, "workerId": worker_id, "videoHelper": video_helpers.helpers.public()}
+    return {
+        "ok": True,
+        "workerId": worker_id,
+        "build": VIDEO_WORKER_BUILD,
+        "videoHelper": video_helpers.helpers.public(),
+    }
 
 
 @app.post("/v1/recordings/from-video/job")

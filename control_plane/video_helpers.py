@@ -7,6 +7,7 @@ import time
 import uuid
 from dataclasses import dataclass
 
+from control_plane.version import VIDEO_WORKER_BUILD
 
 OFFER_SECONDS = 3.0
 LEASE_SECONDS = 90.0
@@ -30,6 +31,11 @@ def _clean_gpu_name(name: str) -> str:
     return cleaned[:80]
 
 
+def _clean_note(text: str) -> str:
+    cleaned = " ".join(str(text or "").split())
+    return "".join(ch for ch in cleaned if ch.isprintable())[:120]
+
+
 @dataclass
 class Helper:
     worker_id: str
@@ -40,6 +46,15 @@ class Helper:
     gpu: bool = False
     gpu_name: str = ""
     workers: int = 0
+    build: int = 0
+    models: str = ""
+    # None là PC chưa báo kết quả đọc thử. False là PC đọc ảnh mẫu không ra chữ.
+    reader_ok: bool | None = None
+    reader_note: str = ""
+    reader_mode: str = ""
+
+    def usable(self) -> bool:
+        return self.reader_ok is not False
 
 
 class HelperBook:
@@ -59,6 +74,11 @@ class HelperBook:
         gpu: bool = False,
         gpu_name: str = "",
         workers: int = 0,
+        build: int = 0,
+        models: str = "",
+        reader_ok: bool | None = None,
+        reader_note: str = "",
+        reader_mode: str = "",
     ) -> str:
         cleaned_id = _clean_id(worker_id) or uuid.uuid4().hex
         cores = min(256, max(1, int(cpus or 1)))
@@ -70,14 +90,19 @@ class HelperBook:
         with self._lock:
             current = self._items.get(cleaned_id)
             if current is None:
-                self._items[cleaned_id] = Helper(cleaned_id, label, cores, now, 0, using_gpu, card, readers)
-            else:
-                current.name = label
-                current.cpus = cores
-                current.seen = now
-                current.gpu = using_gpu
-                current.gpu_name = card
-                current.workers = readers
+                current = Helper(cleaned_id, label, cores, now, 0, using_gpu, card, readers)
+                self._items[cleaned_id] = current
+            current.name = label
+            current.cpus = cores
+            current.seen = now
+            current.gpu = using_gpu
+            current.gpu_name = card
+            current.workers = readers
+            current.build = max(0, int(build or 0))
+            current.models = "fast" if models == "fast" else ("standard" if models == "standard" else "")
+            current.reader_ok = reader_ok
+            current.reader_note = _clean_note(reader_note)
+            current.reader_mode = "api" if reader_mode == "api" else ("cli" if reader_mode == "cli" else "")
         return cleaned_id
 
     def fresh(self, worker_id: str) -> bool:
@@ -97,26 +122,39 @@ class HelperBook:
                 item.seen = now
 
     def has_fresh(self) -> bool:
-        """Còn PC vừa gửi nhịp, kể cả PC đang bận đọc video."""
+        """Còn PC đọc được chữ vừa gửi nhịp, kể cả PC đang bận đọc video."""
         now = time.monotonic()
         with self._lock:
-            return any((now - item.seen) <= FRESH_SECONDS for item in self._items.values())
+            return any((now - item.seen) <= FRESH_SECONDS and item.usable() for item in self._items.values())
+
+    def idle_count(self, skip: str = "") -> int:
+        """Số PC đọc được chữ, vừa nối, và còn chỗ nhận thêm video."""
+        now = time.monotonic()
+        with self._lock:
+            return sum(
+                1
+                for item in self._items.values()
+                if item.worker_id != skip
+                and (now - item.seen) <= FRESH_SECONDS
+                and item.usable()
+                and item.held < JOBS_PER_PC
+            )
 
     def has_idle(self) -> bool:
         """Còn PC vừa nối và đang giữ ít hơn hai video."""
-        now = time.monotonic()
-        with self._lock:
-            return any(
-                (now - item.seen) <= FRESH_SECONDS and item.held < JOBS_PER_PC
-                for item in self._items.values()
-            )
+        return self.idle_count() > 0
 
     def try_hold(self, worker_id: str) -> bool:
-        """Giữ thêm một video. Đủ hai video, hoặc PC không còn tươi, thì từ chối."""
+        """Giữ thêm một video. Đủ hai video, PC không còn tươi, hoặc PC đọc thử không ra chữ, thì từ chối."""
         now = time.monotonic()
         with self._lock:
             item = self._items.get(worker_id)
-            if item is None or (now - item.seen) > FRESH_SECONDS or item.held >= JOBS_PER_PC:
+            if (
+                item is None
+                or (now - item.seen) > FRESH_SECONDS
+                or item.held >= JOBS_PER_PC
+                or not item.usable()
+            ):
                 return False
             item.held += 1
             item.seen = now
@@ -137,8 +175,17 @@ class HelperBook:
         with self._lock:
             fresh = [item for item in self._items.values() if (now - item.seen) <= FRESH_SECONDS]
         if not fresh:
-            return {"connected": False, "name": "", "cpus": 0, "count": 0, "cores": 0, "gpu": 0, "workers": 0}
-        best = max(fresh, key=lambda item: (item.cpus, item.seen))
+            return {
+                "connected": False,
+                "name": "",
+                "cpus": 0,
+                "count": 0,
+                "cores": 0,
+                "gpu": 0,
+                "workers": 0,
+                "latestBuild": VIDEO_WORKER_BUILD,
+            }
+        best = max(fresh, key=lambda item: (item.usable(), item.cpus, item.seen))
         return {
             "connected": True,
             "name": best.name,
@@ -147,6 +194,14 @@ class HelperBook:
             "cores": sum(item.cpus for item in fresh),
             "gpu": sum(1 for item in fresh if item.gpu),
             "workers": best.workers,
+            "build": best.build,
+            "latestBuild": VIDEO_WORKER_BUILD,
+            "models": best.models,
+            "readerOk": best.reader_ok,
+            "readerNote": best.reader_note,
+            "readerMode": best.reader_mode,
+            "outdated": sum(1 for item in fresh if 0 < item.build < VIDEO_WORKER_BUILD),
+            "broken": sum(1 for item in fresh if not item.usable()),
         }
 
 

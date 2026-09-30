@@ -7,7 +7,9 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import sqlite3
+import subprocess
 import tempfile
 import time
 import unittest
@@ -26,10 +28,12 @@ Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 from fastapi.testclient import TestClient  # noqa: E402
 from PIL import Image  # noqa: E402
 
+from control_plane import app as app_module  # noqa: E402
 from control_plane import db as people_db  # noqa: E402
 from control_plane import video_helpers  # noqa: E402
 from control_plane.app import app  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
+from control_plane.version import VIDEO_WORKER_BUILD  # noqa: E402
 from control_plane.video_jobs import VideoJob, jobs  # noqa: E402
 
 
@@ -1243,6 +1247,89 @@ class ActionApiTests(unittest.TestCase):
         self.assertIsInstance(problems, list)
         self.assertTrue(any("Máy chủ đọc tiếp" in str(item) for item in problems), problems)
 
+    def test_pc_reports_its_build_models_and_reader(self) -> None:
+        beat = self.client.post(
+            "/v1/video-workers/heartbeat",
+            headers=self.headers,
+            json={
+                "name": "pc-moi",
+                "cpus": 20,
+                "workers": 16,
+                "build": VIDEO_WORKER_BUILD,
+                "models": "fast",
+                "readerOk": True,
+                "readerMode": "api",
+            },
+        )
+        self.assertEqual(beat.status_code, 200, beat.text)
+        self.assertEqual(beat.json()["build"], VIDEO_WORKER_BUILD)
+        helper = self.client.get("/health").json()["videoHelper"]
+        self.assertEqual(helper["build"], VIDEO_WORKER_BUILD)
+        self.assertEqual(helper["latestBuild"], VIDEO_WORKER_BUILD)
+        self.assertEqual(helper["models"], "fast")
+        self.assertIs(helper["readerOk"], True)
+        self.assertEqual(helper["readerMode"], "api")
+        self.assertEqual(helper["outdated"], 0)
+        self.assertEqual(helper["broken"], 0)
+        old = self.client.post(
+            "/v1/video-workers/heartbeat",
+            headers=self.headers,
+            json={"name": "pc-cu", "cpus": 8, "build": VIDEO_WORKER_BUILD - 1},
+        )
+        self.assertEqual(old.status_code, 200, old.text)
+        helper = self.client.get("/health").json()["videoHelper"]
+        self.assertEqual(helper["count"], 2)
+        self.assertEqual(helper["outdated"], 1)
+        self.assertEqual(helper["name"], "pc-moi")
+
+    def test_a_pc_that_cannot_read_gets_no_video(self) -> None:
+        beat = self.client.post(
+            "/v1/video-workers/heartbeat",
+            headers=self.headers,
+            json={"name": "pc-hong", "cpus": 8, "readerOk": False, "readerNote": "PC chưa chạy được Tesseract."},
+        )
+        self.assertEqual(beat.status_code, 200, beat.text)
+        worker_id = beat.json()["workerId"]
+        helper = self.client.get("/health").json()["videoHelper"]
+        self.assertTrue(helper["connected"])
+        self.assertIs(helper["readerOk"], False)
+        self.assertEqual(helper["broken"], 1)
+        self.assertIn("Tesseract", helper["readerNote"])
+        started = time.time()
+        opened = self.client.post(
+            "/v1/recordings/from-video/job",
+            headers=self.headers,
+            files={"file": ("clip.mp4", b"not-a-video", "video/mp4")},
+        )
+        job_id = opened.json()["jobId"]
+        refused = self.client.post(
+            "/v1/recordings/jobs/claim",
+            headers=self.headers,
+            json={"workerId": worker_id},
+        )
+        self.assertEqual(refused.status_code, 200, refused.text)
+        self.assertEqual(refused.json()["jobId"], "")
+        body = self._wait_job(job_id)
+        self.assertTrue(body.get("error"), body)
+        self.assertLess(time.time() - started, video_helpers.OFFER_SECONDS)
+
+    def test_fast_models_are_served_to_pcs(self) -> None:
+        folder = Path(tempfile.mkdtemp(prefix="fb-fast-"))
+        (folder / "vie.traineddata").write_bytes(b"vie-model")
+        previous = os.environ.get("CONTROL_TESSDATA_FAST")
+        os.environ["CONTROL_TESSDATA_FAST"] = str(folder)
+        try:
+            self.assertEqual(self.client.get("/v1/updates/tessdata/vie").status_code, 401)
+            served = self.client.get("/v1/updates/tessdata/vie", headers=self.headers)
+            self.assertEqual(served.status_code, 200, served.text)
+            self.assertEqual(served.content, b"vie-model")
+            self.assertEqual(self.client.get("/v1/updates/tessdata/osd", headers=self.headers).status_code, 404)
+        finally:
+            if previous is None:
+                os.environ.pop("CONTROL_TESSDATA_FAST", None)
+            else:
+                os.environ["CONTROL_TESSDATA_FAST"] = previous
+
     def test_people_store_pages_and_stops_at_fifty_million(self) -> None:
         total, ready = people_db.people_counts(Path(os.environ["CONTROL_DB"]))
         previous = people_db.PEOPLE_CAPACITY
@@ -1428,6 +1515,7 @@ class ActionApiTests(unittest.TestCase):
             self.assertIn("pc_agent/video_watchdog.py", names)
             self.assertIn("pc_agent/windows/Run-VideoWorker.ps1", names)
             self.assertIn("control_plane/screen_steps.py", names)
+            self.assertIn("control_plane/version.py", names)
             self.assertEqual(archive.read("requirements-cpu.txt").decode("utf-8").strip(), "pillow")
             self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "11")
             self.assertIn("pc_agent/windows/Open-FbPoller.ps1", names)
@@ -1451,12 +1539,15 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("PSScriptRoot", script)
         self.assertIn("watchdog-replaced", script)
         self.assertIn("222.255.214.202:8088", script)
+        self.assertIn("tessdata_fast", script)
+        self.assertIn("/v1/updates/tessdata/", script)
         for banned in ("chromium", "playwright", "easyocr", "paddle"):
             self.assertNotIn(banned, script.lower())
         self.assertNotIn("test-token", script)
         runner = self.client.get("/cai-video-run.ps1")
         self.assertEqual(runner.status_code, 200)
         self.assertIn("FB_VIDEO_STATE", runner.text)
+        self.assertIn("tessdata-fast", runner.text)
         self.assertIn("PYTHONUTF8", runner.text)
         self.assertIn("TESSDATA_PREFIX", runner.text)
         self.assertIn("tools\\ffmpeg", runner.text)

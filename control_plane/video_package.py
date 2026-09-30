@@ -43,6 +43,7 @@ _SOURCES = (
     "control_plane/screen_people.py",
     "control_plane/people.py",
     "control_plane/tesseract_keep.py",
+    "control_plane/version.py",
 )
 _SETUP_FILES = (
     ("pc_agent/windows/Cai-dat.bat", "Cai-dat.bat"),

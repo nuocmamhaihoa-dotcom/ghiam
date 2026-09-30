@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import os
+import shutil
 import tempfile
 import unittest
 import zipfile
@@ -21,7 +22,69 @@ from pc_agent.video_watchdog import (
     upgrade_allowed,
     verify_sha256,
 )
-from pc_agent.video_worker import _JobSlots, machine_ram_bytes, worker_budget, write_worker_state
+from pc_agent.video_worker import (
+    _JobSlots,
+    ensure_fast_models,
+    machine_ram_bytes,
+    reader_self_test,
+    update_due,
+    worker_budget,
+    write_worker_state,
+)
+
+
+class VideoWorkerStartTests(unittest.TestCase):
+    def test_pc_updates_only_when_it_holds_no_video(self) -> None:
+        now = 10_000.0
+        self.assertTrue(update_due(12, 13, 0, {}, now))
+        self.assertFalse(update_due(12, 13, 1, {}, now))
+        self.assertFalse(update_due(13, 13, 0, {}, now))
+        self.assertFalse(update_due(13, 0, 0, {}, now))
+        self.assertFalse(update_due(12, 13, 0, {"build": 13, "at": now - 60}, now))
+        self.assertTrue(update_due(12, 13, 0, {"build": 13, "at": now - 3600}, now))
+        self.assertTrue(update_due(12, 14, 0, {"build": 13, "at": now - 60}, now))
+
+    def test_fast_models_come_from_the_hub_then_github(self) -> None:
+        asked: list[str] = []
+
+        def hub(name: str) -> bytes:
+            asked.append("hub:" + name)
+            if name == "vie":
+                return b"v" * 8_000_000
+            return b"e" * 4_000_000
+
+        def github(url: str) -> bytes:
+            asked.append("github:" + url.rsplit("/", 1)[-1])
+            return b"v" * 531_275
+
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw) / "tessdata-fast"
+            self.assertTrue(ensure_fast_models(hub, folder, github))
+            self.assertEqual((folder / "eng.traineddata").stat().st_size, 4_000_000)
+            self.assertEqual((folder / "vie.traineddata").stat().st_size, 531_275)
+            self.assertEqual(asked, ["hub:eng", "hub:vie", "github:vie.traineddata"])
+            asked.clear()
+            self.assertTrue(ensure_fast_models(hub, folder, github))
+            self.assertEqual(asked, [])
+
+    def test_missing_fast_models_keep_the_old_ones(self) -> None:
+        def broken(_name: str) -> bytes:
+            raise OSError("offline")
+
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw) / "tessdata-fast"
+            self.assertFalse(ensure_fast_models(broken, folder, broken))
+            self.assertFalse((folder / "eng.traineddata").exists())
+
+    def test_pc_reads_a_sample_before_taking_videos(self) -> None:
+        if shutil.which("tesseract") is None:
+            self.skipTest("tesseract is required")
+        if not Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf").is_file():
+            self.skipTest("font missing")
+        result = reader_self_test()
+        self.assertIs(result["readerOk"], True, result)
+        self.assertEqual(result["readerNote"], "")
+        self.assertGreaterEqual(int(str(result["readerMs"])), 0)
 
 
 class VideoWatchdogTests(unittest.TestCase):

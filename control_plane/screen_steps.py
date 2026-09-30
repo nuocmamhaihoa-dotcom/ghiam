@@ -863,6 +863,36 @@ def _ocr(image: Path) -> str:
     return ""
 
 
+def video_duration(path: Path) -> float | None:
+    """Thời lượng theo giây. None khi không đọc được."""
+    try:
+        return _duration(path)
+    except ScreenVideoError:
+        return None
+
+
+def cut_video_part(path: Path, dest: Path, start: float, end: float | None) -> bool:
+    """Cắt một đoạn bằng copy, không nén lại. Chỉ giữ hình. Mục lục để đầu file để PC đọc khi còn đang tải."""
+    if shutil.which("ffmpeg") is None:
+        return False
+    argv = ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y"]
+    if start > 0:
+        argv += ["-ss", f"{start:.3f}"]
+    argv += ["-i", str(path)]
+    if end is not None:
+        argv += ["-t", f"{max(0.5, end - start):.3f}"]
+    argv += ["-map", "0:v:0", "-c", "copy", "-an", "-movflags", "+faststart", "-avoid_negative_ts", "make_zero", str(dest)]
+    try:
+        result = subprocess.run(argv, capture_output=True, timeout=300, check=False, env=_media_env())
+    except (OSError, subprocess.TimeoutExpired):
+        dest.unlink(missing_ok=True)
+        return False
+    if result.returncode != 0 or not dest.is_file() or dest.stat().st_size < 1024:
+        dest.unlink(missing_ok=True)
+        return False
+    return True
+
+
 def faststart_video(path: Path) -> Path:
     """Đưa mục lục mp4 lên đầu để đọc được khi file mới tải một phần. Lỗi thì giữ file gốc."""
     if path.suffix.lower() not in {".mp4", ".mov", ".m4v"}:
