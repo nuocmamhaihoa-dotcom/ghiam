@@ -8,10 +8,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from control_plane.screen_steps import ReadProgress, discard_video_work
+from control_plane.screen_steps import _MAX_FRAMES, ReadProgress, discard_video_work
 
-# Mỗi khung đã tách đều được nhớ để đọc nối. Video được tách tối đa 2400 khung.
-_FRAME_LIMIT = 2400
+# Mỗi khung đã đọc đều được nhớ để đọc nối, và để ghép hai phần video của hai PC.
+_FRAME_LIMIT = _MAX_FRAMES
 _PEOPLE_LIMIT = 20_000
 
 

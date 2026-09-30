@@ -11,14 +11,15 @@ from pathlib import Path
 
 from PIL import Image
 
-from control_plane.screen_people import _prepared_image
 from control_plane.screen_steps import (
+    _MAX_FRAMES,
     ReadProgress,
     _changed_frames,
+    _earlier_frames,
+    _extract_frames,
     _ffmpeg_extract_command,
     _media_env,
     _media_seconds,
-    _ocr_targets,
     _read_frames,
     _sample_previews,
     _sample_rate,
@@ -195,7 +196,69 @@ class ScreenVideoTests(unittest.TestCase):
     def test_a_long_video_is_sampled_across_its_whole_length(self) -> None:
         rate = _sample_rate(7200)
         self.assertGreater(rate, 0)
-        self.assertAlmostEqual(rate * 7200, 2400, places=3)
+        self.assertAlmostEqual(rate * 7200, _MAX_FRAMES, places=3)
+
+    def test_a_twenty_minute_video_keeps_four_frames_a_second(self) -> None:
+        self.assertEqual(_sample_rate(20 * 60), 4.0)
+        self.assertEqual(_sample_rate(30 * 60), 4.0)
+        self.assertLess(_sample_rate(40 * 60), 4.0)
+
+    def test_a_continued_extract_starts_at_the_next_frame(self) -> None:
+        argv = _ffmpeg_extract_command(Path("clip.mp4"), Path("f-%05d.jpg"), 4.0, first=41)
+        self.assertEqual(argv[argv.index("-ss") + 1], "10.000")
+        self.assertLess(argv.index("-ss"), argv.index("-i"))
+        self.assertEqual(argv[argv.index("-start_number") + 1], "41")
+        self.assertEqual(argv[argv.index("-frames:v") + 1], str(_MAX_FRAMES - 40))
+        plain = _ffmpeg_extract_command(Path("clip.mp4"), Path("f-%05d.jpg"), 4.0)
+        self.assertNotIn("-ss", plain)
+        self.assertNotIn("-start_number", plain)
+
+    def test_a_growing_video_is_extracted_once(self) -> None:
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg is required")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            clip = root / "clip.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+                    "-f", "lavfi", "-i", "testsrc2=s=320x480:r=30:d=6",
+                    "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                    str(clip),
+                ],
+                check=True,
+                timeout=60,
+            )
+            data = clip.read_bytes()
+            grow = root / "grow.mp4"
+            grow.write_bytes(data[: len(data) // 2])
+            work = root / "work"
+            work.mkdir()
+            sink = ReadProgress()
+            first = _extract_frames(grow, work, 4.0, 6.0, sink, partial=True, have=0)
+            self.assertTrue(first)
+            self.assertTrue((work / "extract.partial").is_file())
+            stamp = (work / "f-00001.jpg").stat().st_mtime_ns
+            have = _earlier_frames(work, 4.0)
+            self.assertEqual(have, len(first))
+            grow.write_bytes(data)
+            whole = _extract_frames(grow, work, 4.0, 6.0, sink, partial=False, have=have)
+            self.assertEqual((work / "f-00001.jpg").stat().st_mtime_ns, stamp)
+            self.assertFalse((work / "extract.partial").exists())
+            once = root / "once"
+            once.mkdir()
+            single = _extract_frames(clip, once, 4.0, 6.0, sink, partial=False, have=0)
+            self.assertEqual(len(whole), len(single))
+
+    def test_frames_from_another_rate_are_extracted_again(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            work = Path(folder)
+            (work / "f-00001.jpg").write_bytes(b"jpg")
+            (work / "f-00002.jpg").write_bytes(b"jpg")
+            (work / "extract.partial").write_text("2.000000", encoding="utf-8")
+            self.assertEqual(_earlier_frames(work, 2.0), 2)
+            self.assertEqual(_earlier_frames(work, 4.0), 0)
+            self.assertFalse(any(work.glob("f-*")))
 
     def test_progress_names_the_work(self) -> None:
         if shutil.which("ffmpeg") is None or shutil.which("tesseract") is None:
@@ -300,39 +363,6 @@ class ScreenVideoTests(unittest.TestCase):
             Image.new("RGB", (200, 400), (0, 0, 0)).save(third)
             chosen = _changed_frames([(0.0, first), (0.5, second), (1.0, third)], Sink())
         self.assertEqual([item[1].name for item in chosen], ["a.png", "c.png"])
-
-    def test_ocr_reads_only_the_changed_band(self) -> None:
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            first = root / "full.png"
-            second = root / "moved.png"
-            Image.new("RGB", (200, 500), (180, 180, 180)).save(first)
-            changed = Image.new("RGB", (200, 500), (180, 180, 180))
-            for y in range(300, 360):
-                for x in range(200):
-                    changed.putpixel((x, y), (0, 0, 0))
-            changed.save(second)
-            targets = _ocr_targets([(0.0, first), (0.5, second)])
-            self.assertEqual(targets[0][1], first)
-            self.assertTrue(targets[1][1].name.endswith("-band.jpg"))
-            with Image.open(targets[1][1]) as band:
-                self.assertLess(band.size[1], 500)
-                self.assertGreater(band.size[1], 40)
-
-    def test_a_band_keeps_its_full_height(self) -> None:
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            band = root / "frame-band.jpg"
-            plain = root / "frame.jpg"
-            Image.new("RGB", (40, 100), (200, 200, 200)).save(band, format="JPEG")
-            Image.new("RGB", (40, 100), (200, 200, 200)).save(plain, format="JPEG")
-            kept = _prepared_image(band)
-            cropped = _prepared_image(plain)
-        self.assertIsNotNone(kept)
-        self.assertIsNotNone(cropped)
-        assert kept is not None and cropped is not None
-        self.assertEqual(kept.size[1], 100)
-        self.assertLess(cropped.size[1], 100)
 
     def test_faststart_keeps_a_file_that_is_not_a_video(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

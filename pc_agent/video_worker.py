@@ -601,21 +601,6 @@ def _parallel_from(url: str, token: str, dest: Path, frontier: int, total: int) 
     return frontier >= total
 
 
-def _copy_prefix(src: Path, dest: Path, size: int) -> int:
-    """Chép đúng số byte đã có. File gốc vẫn được nối thêm phía sau."""
-    copied = 0
-    with src.open("rb") as incoming, dest.open("wb") as outgoing:
-        remaining = max(0, size)
-        while remaining > 0:
-            blob = incoming.read(min(1024 * 1024, remaining))
-            if not blob:
-                break
-            outgoing.write(blob)
-            copied += len(blob)
-            remaining -= len(blob)
-    return copied
-
-
 def _hold_while_downloading(client: HubClient, job_id: str, worker_id: str, stop: threading.Event) -> None:
     while not stop.wait(8):
         try:
@@ -642,7 +627,6 @@ def _read_one(
             pass
     with tempfile.TemporaryDirectory(prefix="fb-pc-") as folder:
         dest = Path(folder) / "clip.mp4"
-        snap = Path(folder) / "clip-snap.mp4"
         failed: list[str] = []
         finished = threading.Event()
 
@@ -682,12 +666,8 @@ def _read_one(
                         break
                     finished.wait(0.25)
                     continue
-                copied = _copy_prefix(dest, snap, size)
-                if copied < 32:
-                    if done:
-                        break
-                    continue
-                last = done and not failed and dest.is_file() and dest.stat().st_size <= copied + 4096
+                # Đọc thẳng file đang tải. Mỗi đợt chỉ tách phần mới, khung cuối chưa chắc thì đợt sau tách lại.
+                last = done and not failed
                 if sink is None:
                     holding.set()
                     sink = RemoteProgress(client, job_id, worker_id, resume)
@@ -695,7 +675,7 @@ def _read_one(
                 share = slots.share() if slots is not None else cpus
                 try:
                     _steps, people = analyze_screen_video(
-                        snap,
+                        dest,
                         sink,
                         threads=str(max(1, share)),
                         reserve=max(0, cpus - max(1, share)),
@@ -703,12 +683,12 @@ def _read_one(
                     )
                 except ScreenVideoError as error:
                     if not last:
-                        seen = copied
+                        seen = size
                         continue
                     sink.close()
                     client.fail(job_id, worker_id, str(error))
                     return
-                seen = copied
+                seen = size
                 if last:
                     sink.close()
                     client.complete(job_id, worker_id, people, sink.tally(), sink.reading())
