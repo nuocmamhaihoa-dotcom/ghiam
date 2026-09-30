@@ -18,7 +18,7 @@ def reset_output(output_dir: Path) -> None:
     for path in output_dir.glob("contacts_*.vcf"):
         if path.is_file():
             path.unlink()
-    for name in ("errors.csv", "report.txt", "conversion.log"):
+    for name in ("errors.csv", "report.txt", "conversion.log", "thu_tu_nhap.txt"):
         path = output_dir / name
         if path.is_file():
             path.unlink()

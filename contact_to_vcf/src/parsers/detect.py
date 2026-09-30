@@ -35,17 +35,24 @@ def detect_encoding(path: Path) -> str:
 
 
 def sniff_delimiter(path: Path, encoding: str) -> str:
+    """Pick the delimiter that actually splits the sample into columns."""
     with path.open("rb") as handle:
         raw = handle.read(8192)
     try:
         sample = raw.decode(encoding)
     except UnicodeError:
         return ","
+    counts = {delimiter: sample.count(delimiter) for delimiter in ",;\t|"}
     try:
-        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+        chosen = csv.Sniffer().sniff(sample, delimiters=",;\t|").delimiter
     except csv.Error:
-        return ","
-    return dialect.delimiter
+        chosen = ""
+    if chosen and counts.get(chosen, 0) > 0:
+        return chosen
+    best = max(counts, key=counts.get)
+    if counts[best] > 0:
+        return best
+    return ","
 
 
 def open_reader(config: JobConfig) -> Reader:
