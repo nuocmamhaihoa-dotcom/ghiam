@@ -596,6 +596,85 @@ def test_window_restores_saved_options(tmp_path: Path) -> None:
     app.processEvents()
 
 
+def test_several_phones_in_one_cell_become_separate_contacts(tmp_path: Path) -> None:
+    path = tmp_path / "multi.csv"
+    _write_csv(
+        path,
+        [
+            ("An", "0901234567 / 0912345678"),
+            ("Binh", "0901234569, 0987654321"),
+            ("Chi", "090 123 4570"),
+            ("Dung", "0901111111 / khong-phai-so"),
+        ],
+    )
+    output = tmp_path / "out"
+    result = execute(_config(path, output, contacts_per_file=2))
+    assert result.report is not None
+    assert result.report.total_rows == 4
+    assert result.report.exported == 6
+    assert result.report.invalid == 0
+    assert _phones(output) == [
+        "+84901234567",
+        "+84912345678",
+        "+84901234569",
+        "+84987654321",
+        "+84901234570",
+        "+84901111111",
+    ]
+    guide = (output / "thu_tu_nhap.txt").read_text(encoding="utf-8")
+    assert "contacts_00001.vcf — 2 liên hệ — An → An" in guide
+    assert "contacts_00003.vcf — 2 liên hệ — Chi → Dung" in guide
+    assert "Thêm vào Danh bạ" in guide
+
+
+def test_semicolon_csv_is_detected_without_a_fixed_delimiter(tmp_path: Path) -> None:
+    path = tmp_path / "people.csv"
+    path.write_text("ten;so\nAn;0901234567\n", encoding="utf-8")
+    info = inspect_source(path)
+    assert info.delimiter == ";"
+    assert info.columns == ["ten", "so"]
+    assert info.samples[0] == ("An", "0901234567")
+
+
+def test_phone_column_is_suggested_from_sample_values() -> None:
+    from parsers.column_suggest import suggest_columns
+
+    name_index, phone_index = suggest_columns(
+        ["so", "ten"],
+        [("0901234567", "An"), ("0912345678", "Binh")],
+    )
+    assert phone_index == 0
+    assert name_index == 1
+
+
+def test_window_shows_preview_and_suggested_phone_column(tmp_path: Path) -> None:
+    from PySide6.QtWidgets import QApplication
+
+    from ui.main_window import MainWindow
+
+    path = tmp_path / "people.csv"
+    path.write_text("so;ten\n0901234567;An\n", encoding="utf-8")
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    window.file_edit.setText(str(path))
+    window.header_check.setChecked(True)
+    window._auto_delimiter = True
+    window._reinspect()
+    deadline = time.monotonic() + 5
+    while window.inspection is None and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(0.02)
+    assert window.inspection is not None
+    assert window.inspection.delimiter == ";"
+    assert window.phone_combo.currentIndex() == 0
+    assert window.name_combo.currentIndex() == 1
+    assert window.preview.rowCount() == 1
+    assert window.preview.item(0, 0).text() == "0901234567"
+    assert "Cột số điện thoại: so" in window.mapping_label.text()
+    window.close()
+    app.processEvents()
+
+
 def test_window_constructs() -> None:
     from PySide6.QtWidgets import QApplication
 

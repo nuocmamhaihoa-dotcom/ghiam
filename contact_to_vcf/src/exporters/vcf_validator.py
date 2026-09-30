@@ -44,10 +44,12 @@ def fold_line(line: str) -> str:
 
 
 def format_card(name: str, phone: str) -> str:
+    escaped_name = escape_vcard_text(name)
     lines = [
         "BEGIN:VCARD",
         "VERSION:3.0",
-        fold_line("FN:" + escape_vcard_text(name)),
+        fold_line("N:;" + escaped_name + ";;;"),
+        fold_line("FN:" + escaped_name),
         fold_line("TEL;TYPE=CELL:" + escape_vcard_text(phone)),
         "END:VCARD",
     ]

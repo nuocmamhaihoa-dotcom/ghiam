@@ -32,15 +32,17 @@ Workflow GitHub `contact-to-vcf-windows` cũng đóng gói file exe này khi có
 
 1. Chọn file nguồn CSV, XLSX hoặc TXT.
 2. Chọn cột tên và cột số điện thoại. Phần mềm không đoán cố định tên cột.
-3. Đặt số liên hệ mỗi file. Mặc định là 5.000.
-4. Chọn thư mục xuất.
-5. Bật hoặc tắt lọc trùng, chuẩn hóa số, chuyển `0…` sang `+84…`, giữ tên gốc, chia thư mục.
-6. Bấm **KIỂM TRA DỮ LIỆU** để đếm dòng hợp lệ, dòng lỗi và số trùng.
-7. Bấm **BẮT ĐẦU CHUYỂN ĐỔI**.
+3. Xem vài dòng đầu. Cột có nền xanh lá là số điện thoại, nền xanh dương là tên. Đổi lại nếu chưa đúng. CSV được nhận dấu phẩy, chấm phẩy, tab hoặc gạch đứng theo nội dung file.
+4. Đặt số liên hệ mỗi file. Mặc định là 5.000. Bấm **500 / file** khi nhập vào Danh bạ iPhone.
+5. Chọn thư mục xuất.
+6. Bật hoặc tắt lọc trùng, chuẩn hóa số, chuyển `0…` sang `+84…`, giữ tên gốc, chia thư mục.
+7. Bấm **KIỂM TRA DỮ LIỆU** để đếm dòng hợp lệ, dòng lỗi và số trùng.
+8. Bấm **BẮT ĐẦU CHUYỂN ĐỔI**.
+9. Mở `thu_tu_nhap.txt` và nhập các file VCF từ trên xuống. Trên iPhone: Tệp → chọn file → Chia sẻ → Thêm vào Danh bạ.
 
 Có thể **TẠM DỪNG**, **TIẾP TỤC** hoặc **HỦY**. Nếu máy tắt giữa chừng, mở lại, chọn đúng file nguồn và thư mục xuất. Phần mềm khôi phục cột, số liên hệ mỗi file và các tùy chọn đã lưu, rồi bấm **TIẾP TỤC**. Chương trình chỉ chạy tiếp khi file nguồn còn đúng kích thước và fingerprint đã lưu. Số đã xuất và mốc tiếp tục được ghi trong cùng một giao dịch SQLite, nên mất điện không làm vừa ghi số vào danh sách trùng vừa mất contact trong file VCF.
 
-Khi chuyển đổi xong, file tạm để tiếp tục được xóa. `contacts_*.vcf`, `errors.csv`, `report.txt` và `conversion.log` vẫn nằm trong thư mục xuất.
+Khi chuyển đổi xong, file tạm để tiếp tục được xóa. `contacts_*.vcf`, `thu_tu_nhap.txt`, `errors.csv`, `report.txt` và `conversion.log` vẫn nằm trong thư mục xuất.
 
 ## Đầu vào
 
@@ -71,21 +73,27 @@ Khi bật chuẩn hóa và chuyển số Việt Nam:
 
 Số không đủ cơ sở để nhận dạng được ghi vào `errors.csv`, không bị sửa đoán.
 
+Một ô có nhiều số, cách nhau bởi `/`, `;`, `|` hoặc xuống dòng, thành nhiều liên hệ cùng tên. `0901234567, 0912345678` cũng được tách. `090 123 4567` vẫn là một số.
+
 ## Đầu ra
 
 ```text
 output/contacts_00001.vcf
 output/contacts_00002.vcf
+output/thu_tu_nhap.txt
 output/errors.csv
 output/report.txt
 output/conversion.log
 ```
+
+`thu_tu_nhap.txt` ghi số liên hệ và tên đầu, tên cuối của từng file.
 
 Mỗi contact:
 
 ```text
 BEGIN:VCARD
 VERSION:3.0
+N:;Nguyen Van A;;;
 FN:Nguyen Van A
 TEL;TYPE=CELL:+84901234567
 END:VCARD

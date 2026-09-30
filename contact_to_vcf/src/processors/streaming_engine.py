@@ -17,8 +17,9 @@ from core.checkpoint import (
 from core.control import RunControl
 from core.output_reset import reset_output
 from exporters.error_log import ErrorLog
+from exporters.import_guide import write_import_guide
 from exporters.vcf_exporter import VcfExporter
-from exporters.vcf_validator import VcfStructureError
+from exporters.vcf_validator import VcfStructureError, count_markers
 from models.records import Checkpoint, JobConfig, JobResult, Progress, RawRecord, Report
 from parsers.detect import open_reader
 from processors.deduplicator import Deduplicator
@@ -173,9 +174,9 @@ def execute(
             if not control.keep_going():
                 cancelled = True
                 break
-            outcome, reason = process_row(record, config)
+            contacts, reason = process_row(record, config)
             file_closed = False
-            if outcome is None:
+            if not contacts:
                 progress.invalid += 1
                 if converting:
                     pending.append(
@@ -189,25 +190,26 @@ def execute(
                 elif progress.invalid <= 5 and on_message is not None:
                     on_message(f"Lỗi dòng {record.row_number}: {reason}")
             else:
-                name, phone = outcome
-                duplicated = bool(
-                    config.dedupe and deduper is not None and deduper.is_duplicate(phone)
-                )
-                if duplicated:
-                    progress.duplicate += 1
-                elif converting and exporter is not None:
-                    finished = exporter.add(name, phone)
-                    progress.exported += 1
-                    progress.valid += 1
-                    if finished is not None:
-                        progress.files_created = exporter.files_created
-                        progress.last_file = finished.name
-                        logger.write(
-                            f"Đã tạo {finished.name} ({config.contacts_per_file} liên hệ)."
-                        )
-                        file_closed = True
-                else:
-                    progress.valid += 1
+                for name, phone in contacts:
+                    duplicated = bool(
+                        config.dedupe and deduper is not None and deduper.is_duplicate(phone)
+                    )
+                    if duplicated:
+                        progress.duplicate += 1
+                        continue
+                    if converting and exporter is not None:
+                        finished = exporter.add(name, phone)
+                        progress.exported += 1
+                        progress.valid += 1
+                        if finished is not None:
+                            progress.files_created = exporter.files_created
+                            progress.last_file = finished.name
+                            logger.write(
+                                f"Đã tạo {finished.name} ({config.contacts_per_file} liên hệ)."
+                            )
+                            file_closed = True
+                    else:
+                        progress.valid += 1
             progress.processed += 1
             rows_since_commit += 1
             next_offset = record.end_offset
@@ -258,6 +260,9 @@ def execute(
                 average_speed=progress.speed,
             )
             (config.output_dir / "report.txt").write_text(report.render(), encoding="utf-8")
+            guide = write_import_guide(config.output_dir)
+            if guide is not None:
+                logger.write(f"Đã ghi {guide.name}. Nhập các file VCF theo thứ tự trong file này.")
             logger.write(
                 "Hoàn tất. "
                 f"Hợp lệ {progress.valid}, lỗi {progress.invalid}, "
@@ -333,8 +338,6 @@ def _flush_errors(errors: ErrorLog, pending: list[tuple[int, str, str, str]]) ->
 
 
 def _last_count(path: Path) -> int:
-    from exporters.vcf_validator import count_markers
-
     _begin, end = count_markers(path)
     return end
 

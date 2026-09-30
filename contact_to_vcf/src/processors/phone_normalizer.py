@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import re
+
 from models.records import PhoneResult
+
+_FIELD_SPLIT = re.compile(r"[\n\r;/|]+")
 
 _SEPARATORS = str.maketrans("", "", " \t-().")
 
@@ -54,6 +58,46 @@ def normalize_phone(raw: str, *, normalize: bool, vn_to_e164: bool) -> PhoneResu
     if not cleaned.isdigit():
         return PhoneResult(False, original, "Số chứa ký tự không hợp lệ")
     return _length_result(original, cleaned, plus=False)
+
+
+def extract_phones(raw: str, *, normalize: bool, vn_to_e164: bool) -> list[PhoneResult]:
+    """Return every clear phone in one cell.
+
+    A single number, including spaced or dotted forms, stays one phone.
+    A cell such as ``090… / 091…`` becomes one result per number.
+    """
+    if raw is None:
+        return [PhoneResult(False, "", "Thiếu số điện thoại")]
+    original = str(raw).strip()
+    if original == "":
+        return [PhoneResult(False, "", "Thiếu số điện thoại")]
+    direct = normalize_phone(original, normalize=normalize, vn_to_e164=vn_to_e164)
+    if direct.ok:
+        return [direct]
+    parts = _phone_parts(original)
+    if len(parts) <= 1:
+        return [direct]
+    parsed = [
+        normalize_phone(part, normalize=normalize, vn_to_e164=vn_to_e164) for part in parts
+    ]
+    good = [item for item in parsed if item.ok]
+    if good:
+        return good
+    return [direct]
+
+
+def _phone_parts(value: str) -> list[str]:
+    parts = [part.strip() for part in _FIELD_SPLIT.split(value) if part.strip()]
+    if len(parts) > 1:
+        return parts
+    comma_parts = [part.strip() for part in value.split(",") if part.strip()]
+    if len(comma_parts) >= 2 and all(_digit_count(part) >= 8 for part in comma_parts):
+        return comma_parts
+    return parts
+
+
+def _digit_count(value: str) -> int:
+    return sum(character.isdigit() for character in value)
 
 
 def prepare_name(raw: str, *, keep_original: bool) -> tuple[str | None, str]:

@@ -5,7 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QThread, Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -13,6 +15,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -21,12 +24,15 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
 from core.checkpoint import load_checkpoint
 from models.records import Checkpoint, FileInspection, JobConfig, JobResult, Progress
+from parsers.column_suggest import suggest_columns
 from parsers.detect import detect_format
 from ui.worker import ConversionWorker, InspectWorker
 from utils.format import format_duration, format_int, format_percent
@@ -54,6 +60,7 @@ class MainWindow(QMainWindow):
         self._paused = False
         self._saved: Checkpoint | None = None
         self._saved_columns: tuple[int, int] | None = None
+        self._auto_delimiter = False
         self._build()
         self._apply_style()
         self._refresh_buttons()
@@ -92,10 +99,26 @@ class MainWindow(QMainWindow):
         source_layout.addLayout(info, 1, 0, 1, 2)
         layout.addWidget(source_box)
 
+        preview_box = QGroupBox("Xem trước — kiểm tra cột tên và cột số trước khi chạy")
+        preview_layout = QVBoxLayout(preview_box)
+        self.preview = QTableWidget(0, 0)
+        self.preview.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.preview.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.preview.setMaximumHeight(150)
+        self.preview.verticalHeader().setVisible(False)
+        self.preview.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.mapping_label = QLabel("Chọn file để xem vài dòng đầu.")
+        self.mapping_label.setWordWrap(True)
+        preview_layout.addWidget(self.mapping_label)
+        preview_layout.addWidget(self.preview)
+        layout.addWidget(preview_box)
+
         options = QGroupBox("2. Cột, cỡ file và tùy chọn")
         form = QGridLayout(options)
         self.name_combo = QComboBox()
         self.phone_combo = QComboBox()
+        self.name_combo.currentIndexChanged.connect(self._show_mapping)
+        self.phone_combo.currentIndexChanged.connect(self._show_mapping)
         self.delimiter_combo = QComboBox()
         for label, _value in _DELIMITERS:
             self.delimiter_combo.addItem(label)
@@ -108,6 +131,14 @@ class MainWindow(QMainWindow):
         self.per_file.setRange(1, 1_000_000)
         self.per_file.setValue(5000)
         self.per_file.setGroupSeparatorShown(True)
+        self.per_file.valueChanged.connect(self._update_plan)
+        size_500 = QPushButton("500 / file")
+        size_500.setToolTip("Cỡ dễ nhập vào Danh bạ iPhone, từng file một.")
+        size_500.clicked.connect(lambda: self.per_file.setValue(500))
+        size_5000 = QPushButton("5.000 / file")
+        size_5000.clicked.connect(lambda: self.per_file.setValue(5000))
+        self.plan_label = QLabel("Chọn file để ước tính số file danh bạ.")
+        self.plan_label.setWordWrap(True)
         self.output_edit = QLineEdit()
         self.output_edit.setReadOnly(True)
         self.output_edit.setPlaceholderText("Thư mục xuất")
@@ -131,13 +162,16 @@ class MainWindow(QMainWindow):
         form.addWidget(self.header_check, 1, 2, 1, 2)
         form.addWidget(QLabel("Số liên hệ mỗi file"), 2, 0)
         form.addWidget(self.per_file, 2, 1)
-        form.addWidget(self.output_edit, 2, 2)
-        form.addWidget(pick_out, 2, 3)
-        form.addWidget(self.dedupe_check, 3, 0, 1, 2)
-        form.addWidget(self.normalize_check, 3, 2, 1, 2)
-        form.addWidget(self.vn_check, 4, 0, 1, 2)
-        form.addWidget(self.keep_name_check, 4, 2, 1, 2)
-        form.addWidget(self.split_check, 5, 0, 1, 4)
+        form.addWidget(size_500, 2, 2)
+        form.addWidget(size_5000, 2, 3)
+        form.addWidget(self.plan_label, 3, 0, 1, 4)
+        form.addWidget(self.output_edit, 4, 0, 1, 3)
+        form.addWidget(pick_out, 4, 3)
+        form.addWidget(self.dedupe_check, 5, 0, 1, 2)
+        form.addWidget(self.normalize_check, 5, 2, 1, 2)
+        form.addWidget(self.vn_check, 6, 0, 1, 2)
+        form.addWidget(self.keep_name_check, 6, 2, 1, 2)
+        form.addWidget(self.split_check, 7, 0, 1, 4)
         layout.addWidget(options)
 
         buttons = QHBoxLayout()
@@ -253,10 +287,10 @@ class MainWindow(QMainWindow):
         if path.suffix.lower() == ".txt":
             self.header_check.setChecked(False)
             self.delimiter_combo.setCurrentIndex(3)
+            self._auto_delimiter = False
         else:
             self.header_check.setChecked(True)
-            if path.suffix.lower() == ".csv":
-                self.delimiter_combo.setCurrentIndex(0)
+            self._auto_delimiter = path.suffix.lower() == ".csv"
         self.header_check.blockSignals(False)
         self.delimiter_combo.blockSignals(False)
         self._reinspect()
@@ -296,11 +330,14 @@ class MainWindow(QMainWindow):
         self._inspect_token += 1
         token = self._inspect_token
         self.info_labels["rows"].setText("Đang đếm…")
+        auto = self._auto_delimiter
+        self._auto_delimiter = False
+        delimiter = None if file_format == "xlsx" or auto else self._delimiter()
         worker = InspectWorker(
             token,
             path,
             file_format,
-            self._delimiter() if file_format != "xlsx" else None,
+            delimiter,
             self.header_check.isChecked(),
         )
         worker.finished_ok.connect(self._on_inspected)
@@ -323,13 +360,23 @@ class MainWindow(QMainWindow):
         if token != self._inspect_token:
             return
         self.inspection = inspection
+        if inspection.delimiter:
+            self.delimiter_combo.blockSignals(True)
+            self._set_delimiter(inspection.delimiter)
+            self.delimiter_combo.blockSignals(False)
         self._fill_columns(inspection)
+        self._fill_preview(inspection)
         self.info_labels["name"].setText(inspection.path.name)
         self.info_labels["format"].setText(inspection.file_format.upper())
         rows = "—" if inspection.estimated_rows is None else format_int(inspection.estimated_rows)
         self.info_labels["rows"].setText(rows)
         self._apply_saved_columns()
-        self._log(f"Đã đọc cấu trúc {inspection.path.name}: {len(inspection.columns)} cột.")
+        self._show_mapping()
+        self._update_plan()
+        self._log(
+            f"Đã đọc {inspection.path.name}: {len(inspection.columns)} cột, "
+            f"dấu phân cách {self._delimiter_label(inspection.delimiter)}."
+        )
 
     def _on_inspect_failed(self, token: int, message: str) -> None:
         if token != self._inspect_token:
@@ -337,14 +384,81 @@ class MainWindow(QMainWindow):
         self._log(message)
 
     def _fill_columns(self, inspection: FileInspection) -> None:
+        self.name_combo.blockSignals(True)
+        self.phone_combo.blockSignals(True)
         self.name_combo.clear()
         self.phone_combo.clear()
         for index, name in enumerate(inspection.columns):
             self.name_combo.addItem(name, index)
             self.phone_combo.addItem(name, index)
         if inspection.columns:
-            self.name_combo.setCurrentIndex(0)
-            self.phone_combo.setCurrentIndex(1 if len(inspection.columns) > 1 else 0)
+            name_index, phone_index = suggest_columns(inspection.columns, inspection.samples)
+            self.name_combo.setCurrentIndex(name_index)
+            self.phone_combo.setCurrentIndex(phone_index)
+        self.name_combo.blockSignals(False)
+        self.phone_combo.blockSignals(False)
+
+    def _fill_preview(self, inspection: FileInspection) -> None:
+        self.preview.clear()
+        self.preview.setColumnCount(len(inspection.columns))
+        self.preview.setHorizontalHeaderLabels(inspection.columns)
+        self.preview.setRowCount(len(inspection.samples))
+        for row_index, row in enumerate(inspection.samples):
+            for column_index, value in enumerate(row):
+                if column_index >= len(inspection.columns):
+                    break
+                self.preview.setItem(row_index, column_index, QTableWidgetItem(value))
+        self._color_preview()
+
+    def _show_mapping(self) -> None:
+        name = self.name_combo.currentText() or "—"
+        phone = self.phone_combo.currentText() or "—"
+        if self.name_combo.currentIndex() == self.phone_combo.currentIndex() and self.name_combo.count():
+            self.mapping_label.setText(
+                "Cột tên và cột số đang trùng nhau. Hãy chọn hai cột khác nhau."
+            )
+        else:
+            self.mapping_label.setText(f"Cột tên: {name}. Cột số điện thoại: {phone}.")
+        self._color_preview()
+
+    def _color_preview(self) -> None:
+        name_index = self.name_combo.currentIndex()
+        phone_index = self.phone_combo.currentIndex()
+        for row in range(self.preview.rowCount()):
+            for column in range(self.preview.columnCount()):
+                item = self.preview.item(row, column)
+                if item is None:
+                    continue
+                if column == phone_index and phone_index != name_index:
+                    item.setBackground(QColor("#d9f2e6"))
+                elif column == name_index:
+                    item.setBackground(QColor("#d9e8f6"))
+                else:
+                    item.setBackground(QColor("#ffffff"))
+
+    def _update_plan(self) -> None:
+        inspection = self.inspection
+        per_file = self.per_file.value()
+        if inspection is None or not inspection.estimated_rows:
+            self.plan_label.setText(
+                f"Mỗi file tối đa {format_int(per_file)} liên hệ. "
+                "500 liên hệ mỗi file thường dễ nhập vào Danh bạ iPhone hơn."
+            )
+            return
+        files = (inspection.estimated_rows + per_file - 1) // per_file
+        self.plan_label.setText(
+            f"Khoảng {format_int(inspection.estimated_rows)} dòng sẽ chia thành "
+            f"khoảng {format_int(files)} file, mỗi file tối đa {format_int(per_file)} liên hệ. "
+            "Sau khi chạy, mở thu_tu_nhap.txt và nhập lần lượt."
+        )
+
+    def _delimiter_label(self, delimiter: str) -> str:
+        for label, value in _DELIMITERS:
+            if value == delimiter:
+                return label
+        if delimiter == "":
+            return "không dùng"
+        return repr(delimiter)
 
     def _delimiter(self) -> str:
         return _DELIMITERS[self.delimiter_combo.currentIndex()][1]
