@@ -161,6 +161,7 @@ async def _startup() -> None:
         cd_copy = settings.data_dir / "proxies_static.txt"
         if not cd_copy.exists():
             cd_copy.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _load_uploads()
     start_background_checker()
 
 
@@ -1175,6 +1176,160 @@ def _commit_people(job: VideoJob, people: list[dict[str, str]], worker_id: str |
     return True
 
 
+# Video từ 4 phút trở lên, lúc có hai PC rảnh, thì chia đôi. Hai phần chồng nhau vài giây để không cắt mất dòng ở giữa.
+_SPLIT_MIN_SECONDS = 240.0
+_SPLIT_OVERLAP = 3.0
+
+
+def _discard_job(job: VideoJob) -> None:
+    path = job.source_path()
+    job.discard()
+    if path is not None:
+        _forget_upload_path(path)
+
+
+def _job_finished(job: VideoJob) -> None:
+    """Việc thường xong thì xóa video. Một phần video xong thì xem việc cha đã đủ để ghép chưa."""
+    if job.parent_id:
+        parent = jobs.get(job.parent_id)
+        if parent is not None:
+            _merge_parts(parent)
+        return
+    if job.succeeded():
+        _discard_job(job)
+
+
+def _merge_parts(parent: VideoJob) -> None:
+    """Đủ các phần thì ghép mọi lần nhìn thấy rồi mới áp quy tắc ghi, để danh bạ ở phần này ghép được tài khoản ở phần kia."""
+    parts = jobs.parts(parent)
+    live = [part for part in parts if part is not None]
+    if len(live) != len(parts):
+        parent.fail("Mất một phần video. Chọn lại video.")
+        return
+    if not all(part.done for part in live) or not parent.begin_merge():
+        return
+    for part in live:
+        for text in part.public().get("problems", []):
+            parent.add_problem(str(text))
+    failed = [part for part in live if part.error]
+    if failed:
+        parent.end_merge()
+        parent.fail(failed[0].error)
+        return
+    sightings: list[dict[str, str]] = []
+    seen: dict[str, list[int]] = {"pc": [0, 0], "hub": [0, 0]}
+    for part in live:
+        frames = part.remembered()
+        for key in sorted(frames, key=float):
+            sightings.extend(frames[key][1])
+        for source, (words_seen, words_kept) in part.words().items():
+            seen[source][0] += words_seen
+            seen[source][1] += words_kept
+    for source, (words_seen, words_kept) in seen.items():
+        if words_seen or words_kept:
+            parent.note_words(source, words_seen, words_kept)
+    counts = reading_counts(sightings)
+    parent.note_tally(counts["contacts"], counts["accounts"], counts["saved"])
+    try:
+        _commit_people(parent, propose_rows(sightings), None)
+    except HTTPException:
+        return
+    if parent.succeeded():
+        for part in live:
+            _discard_job(part)
+        _discard_job(parent)
+
+
+def _split_video_job(parent: VideoJob, path: Path) -> bool:
+    """Hai PC rảnh và video dài thì cắt hai phần cho hai PC. Không cắt được thì đọc cả video như cũ."""
+    if video_helpers.helpers.idle_count() < 2:
+        return False
+    duration = video_duration(path)
+    if duration is None or duration < _SPLIT_MIN_SECONDS:
+        return False
+    middle = duration / 2
+    pieces = [(0.0, middle + _SPLIT_OVERLAP), (max(0.0, middle - _SPLIT_OVERLAP), None)]
+    made: list[Path] = []
+    for index, (start, end) in enumerate(pieces):
+        dest = path.with_name(f"{path.stem}-phan{index + 1}.mp4")
+        if not cut_video_part(path, dest, start, end):
+            for done in made:
+                discard_video_work(done)
+            return False
+        made.append(dest)
+    children: list[VideoJob] = []
+    for index, dest in enumerate(made):
+        child = jobs.create()
+        child.parent_id = parent.id
+        child.part_label = f"Phần {index + 1}"
+        child.update(8, "Đã nhận phần video")
+        child.bind(dest)
+        children.append(child)
+    parent.set_parts([child.id for child in children])
+    parent.bind(path)
+    parent.update(10, "Chia video cho hai PC")
+    for child in children:
+        threading.Thread(target=_schedule_video_job, args=(child.id, child.source_path()), daemon=True).start()
+    return True
+
+
+def _finish_read(job: VideoJob, people: list[dict[str, str]], worker_id: str | None) -> bool:
+    """Việc thường thì ghi người ngay. Một phần video thì chờ phần kia rồi ghép."""
+    if job.parent_id:
+        kept = job.finish_part(worker_id)
+        if kept:
+            _job_finished(job)
+        return kept
+    return _commit_people(job, people, worker_id)
+
+
+def _reopen_job(job: VideoJob) -> bool:
+    """Đọc nối việc đã lỗi. Video chia hai phần thì chỉ đọc lại phần lỗi."""
+    if job.part_ids:
+        if not job.reopen():
+            return False
+        for part in jobs.parts(job):
+            if part is None or not part.done or not part.error:
+                continue
+            path = part.source_path()
+            if path is not None and part.reopen():
+                threading.Thread(target=_schedule_video_job, args=(part.id, path), daemon=True).start()
+        return True
+    path = job.source_path()
+    if path is None or not job.reopen():
+        return False
+    threading.Thread(target=_schedule_video_job, args=(job.id, path), daemon=True).start()
+    return True
+
+
+def _job_public(job: VideoJob) -> dict[str, Any]:
+    """Việc chia hai phần thì trang thấy phần trăm và việc đang làm của cả hai."""
+    body = job.public()
+    if not job.part_ids or job.done:
+        return body
+    parts = [part.public() for part in jobs.parts(job) if part is not None]
+    if not parts:
+        return body
+    percent = sum(min(99, int(part.get("percent") or 0)) for part in parts) // len(parts)
+    body["percent"] = max(int(body.get("percent") or 0), percent)
+    labels = [
+        f"Phần {index + 1} {int(part.get('percent') or 0)}%: {part.get('task') or ''}"
+        for index, part in enumerate(parts)
+    ]
+    body["task"] = "Hai PC cùng đọc. " + ". ".join(labels)
+    problems = list(body.get("problems") or [])
+    for part in parts:
+        for text in part.get("problems") or []:
+            if text not in problems:
+                problems.append(text)
+    body["problems"] = problems[:20]
+    for key in ("wordSeen", "wordKept", "hubWordSeen", "hubWordKept"):
+        values = [int(part[key]) for part in parts if part.get(key) is not None]
+        if values:
+            body[key] = sum(values)
+    return body
+
+
 def _run_video_job(job_id: str, path: Path) -> None:
     """Đọc video ở luồng riêng để trang hỏi được phần trăm."""
     job = jobs.get(job_id)
@@ -1187,7 +1342,7 @@ def _run_video_job(job_id: str, path: Path) -> None:
         _steps, people = analyze_screen_video(path, JobProgress(job))
         if job.done:
             return
-        _commit_people(job, people, None)
+        _finish_read(job, people, None)
     except ScreenVideoError as error:
         job.fail(str(error))
     except HTTPException as error:
@@ -1196,8 +1351,8 @@ def _run_video_job(job_id: str, path: Path) -> None:
     except Exception:
         job.fail("Không xử lý được video.")
     finally:
-        if job.succeeded():
-            job.discard()
+        if job.done:
+            _job_finished(job)
 
 
 def _watch_helper_job(job_id: str, path: Path) -> None:
@@ -1208,8 +1363,7 @@ def _watch_helper_job(job_id: str, path: Path) -> None:
         return
     while True:
         if job.done:
-            if job.succeeded():
-                job.discard()
+            _job_finished(job)
             return
         owner = job.owner_id()
         if not owner:
@@ -1258,8 +1412,7 @@ def _schedule_video_job(job_id: str, path: Path) -> None:
     if video_helpers.helpers.has_fresh() and not job.owner_id():
         _wait_for_helper(job)
     if job.done:
-        if job.succeeded():
-            job.discard()
+        _job_finished(job)
         return
     owner = job.owner_id()
     if owner and owner != "hub":
@@ -1367,7 +1520,8 @@ def claim_video_job(body: WorkerJobBody, authorization: str | None = Header(defa
         raise HTTPException(409, "PC phụ chưa nối")
     if not video_helpers.helpers.try_hold(body.workerId):
         return {"ok": True, "jobId": ""}
-    job = jobs.claim_next(body.workerId)
+    spread = video_helpers.helpers.idle_count(skip=body.workerId) > 0
+    job = jobs.claim_next(body.workerId, spread=spread)
     if job is None:
         video_helpers.helpers.mark_idle(body.workerId)
         return {"ok": True, "jobId": ""}
@@ -1380,6 +1534,8 @@ def _prepare_and_schedule(job_id: str, path: Path) -> None:
     job = jobs.get(job_id)
     if job is None:
         discard_video_work(ready)
+        return
+    if _split_video_job(job, ready):
         return
     job.bind(ready)
     job.update(8, "Đã nhận video")
@@ -1531,16 +1687,128 @@ def _close_upload(item: dict[str, Any]) -> None:
         return
 
 
+def _upload_dir() -> Path:
+    """Video đang gửi nằm trên đĩa của hub, cùng sổ ghi các khúc đã nhận. Hub khởi động lại vẫn gửi tiếp được."""
+    folder = settings.data_dir / "uploads"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+def _upload_record(upload_id: str) -> Path:
+    return _upload_dir() / f"{upload_id}.json"
+
+
+def _save_upload(upload_id: str, item: dict[str, Any]) -> None:
+    """Gọi khi đang giữ khóa của lần gửi."""
+    record = {
+        "path": str(item["path"]),
+        "name": str(item.get("name") or ""),
+        "size": int(item["size"]),
+        "spans": sorted([int(start), int(end)] for start, end in item["spans"]),
+        "created": float(item["created"]),
+        "finished": bool(item.get("finished")),
+        "jobId": str(item.get("jobId") or ""),
+    }
+    target = _upload_record(upload_id)
+    temporary = target.with_suffix(".tmp")
+    try:
+        temporary.write_text(json.dumps(record), encoding="utf-8")
+        temporary.replace(target)
+    except OSError:
+        temporary.unlink(missing_ok=True)
+
+
+def _load_uploads() -> None:
+    """Đọc lại các lần gửi dở sau khi hub khởi động lại. File video đã mất thì bỏ sổ ghi."""
+    for record in sorted(_upload_dir().glob("*.json")):
+        upload_id = record.stem
+        if not upload_id.isalnum():
+            continue
+        with _uploads_lock:
+            if upload_id in _uploads:
+                continue
+        try:
+            data = json.loads(record.read_text(encoding="utf-8"))
+            path = Path(str(data["path"]))
+            size = int(data["size"])
+            spans = {(int(start), int(end)) for start, end in data.get("spans") or []}
+            created = float(data.get("created") or time.time())
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+            record.unlink(missing_ok=True)
+            continue
+        if size <= 0 or not path.is_file():
+            record.unlink(missing_ok=True)
+            continue
+        ranges: list[tuple[int, int]] = []
+        for start, end in sorted(spans):
+            ranges = _upload_add(ranges, start, end)
+        with _uploads_lock:
+            _uploads.setdefault(
+                upload_id,
+                {
+                    "path": path,
+                    "name": str(data.get("name") or ""),
+                    "size": size,
+                    "fd": -1,
+                    "ranges": ranges,
+                    "spans": spans,
+                    "created": created,
+                    "finished": bool(data.get("finished")),
+                    "jobId": str(data.get("jobId") or ""),
+                    "lock": threading.Lock(),
+                },
+            )
+
+
+def _forget_upload(upload_id: str, *, remove_video: bool) -> None:
+    with _uploads_lock:
+        item = _uploads.pop(upload_id, None)
+    if item is not None:
+        _close_upload(item)
+        if remove_video:
+            Path(item["path"]).unlink(missing_ok=True)
+    _upload_record(upload_id).unlink(missing_ok=True)
+
+
+def _forget_upload_path(path: Path) -> None:
+    """Video đã đọc xong và đã xóa thì bỏ luôn sổ ghi lần gửi của nó."""
+    with _uploads_lock:
+        matches = [key for key, item in _uploads.items() if Path(item["path"]) == path]
+    for key in matches:
+        _forget_upload(key, remove_video=False)
+
+
+def _upload_job_alive(item: dict[str, Any]) -> bool:
+    """Tiến trình của lần gửi còn trong bộ nhớ, kể cả lúc đang sắp xếp video hay đã lỗi chờ đọc nối."""
+    job_id = str(item.get("jobId") or "")
+    if not job_id:
+        return False
+    job = jobs.get(job_id)
+    return job is not None and not job.succeeded()
+
+
 def _drop_old_uploads() -> None:
-    now = time.monotonic()
-    stale: list[dict[str, Any]] = []
+    now = time.time()
+    stale: list[str] = []
     with _uploads_lock:
         for key, item in list(_uploads.items()):
-            if now - float(item["created"]) > 6 * 3600:
-                stale.append(_uploads.pop(key))
-    for item in stale:
-        _close_upload(item)
-        Path(item["path"]).unlink(missing_ok=True)
+            if now - float(item["created"]) > 6 * 3600 and not _upload_job_alive(item):
+                stale.append(key)
+    for key in stale:
+        _forget_upload(key, remove_video=True)
+
+
+def _upload_fd(item: dict[str, Any]) -> int:
+    """Mở file khi khúc đầu tới sau lúc hub khởi động lại. Gọi khi đang giữ khóa của lần gửi."""
+    fd = item.get("fd")
+    if isinstance(fd, int) and fd >= 0:
+        return fd
+    try:
+        opened = os.open(item["path"], os.O_RDWR)
+    except OSError as error:
+        raise HTTPException(404, "không thấy lần gửi") from error
+    item["fd"] = opened
+    return opened
 
 
 @app.post("/v1/recordings/uploads")
@@ -1554,31 +1822,52 @@ def start_video_upload(body: UploadStartBody, authorization: str | None = Header
     if suffix not in {".mp4", ".mov", ".m4v", ".webm"}:
         suffix = ".mp4"
     _drop_old_uploads()
-    handle = tempfile.NamedTemporaryFile(prefix="fb-video-", suffix=suffix, delete=False)
-    path = Path(handle.name)
-    handle.close()
     upload_id = uuid.uuid4().hex
+    path = _upload_dir() / f"fb-video-{upload_id}{suffix}"
+    try:
+        path.touch()
+        fd = os.open(path, os.O_RDWR)
+    except OSError as error:
+        raise HTTPException(507, "Hết chỗ trống trên máy chủ.") from error
+    item: dict[str, Any] = {
+        "path": path,
+        "name": " ".join(str(body.name or "").split())[:120],
+        "size": body.size,
+        "fd": fd,
+        "ranges": [],
+        "spans": set(),
+        "created": time.time(),
+        "finished": False,
+        "jobId": "",
+        "lock": threading.Lock(),
+    }
+    with item["lock"]:
+        _save_upload(upload_id, item)
     with _uploads_lock:
-        _uploads[upload_id] = {
-            "path": path,
-            "size": body.size,
-            "fd": os.open(path, os.O_RDWR),
-            "ranges": [],
-            "spans": set(),
-            "created": time.monotonic(),
-            "lock": threading.Lock(),
-        }
+        _uploads[upload_id] = item
     return {"ok": True, "uploadId": upload_id, "offset": 0}
+
+
+def _live_upload(upload_id: str) -> dict[str, Any]:
+    with _uploads_lock:
+        item = _uploads.get(upload_id)
+    if item is None:
+        _load_uploads()
+        with _uploads_lock:
+            item = _uploads.get(upload_id)
+    if item is None:
+        raise HTTPException(404, "không thấy lần gửi")
+    if not Path(item["path"]).is_file():
+        _forget_upload(upload_id, remove_video=False)
+        raise HTTPException(404, "không thấy lần gửi")
+    return item
 
 
 @app.get("/v1/recordings/uploads/{upload_id}")
 def read_video_upload(upload_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     """Báo trang đã nhận những khúc nào, để trang gửi khúc sau mà không cần lời trả của lần gửi."""
     _auth(authorization)
-    with _uploads_lock:
-        item = _uploads.get(upload_id)
-    if item is None:
-        raise HTTPException(404, "không thấy lần gửi")
+    item = _live_upload(upload_id)
     lock = item["lock"]
     with lock:
         spans = sorted((int(start), int(end)) for start, end in item["spans"])
@@ -1588,6 +1877,8 @@ def read_video_upload(upload_id: str, authorization: str | None = Header(default
             "offset": _upload_frontier(item["ranges"]),
             "size": int(item["size"]),
             "spans": [[start, end] for start, end in spans],
+            "finished": bool(item.get("finished")),
+            "jobId": str(item.get("jobId") or ""),
         }
 
 
@@ -1599,10 +1890,7 @@ async def write_video_chunk(
     authorization: str | None = Header(default=None),
 ) -> JSONResponse:
     _auth(authorization)
-    with _uploads_lock:
-        item = _uploads.get(upload_id)
-    if item is None:
-        raise HTTPException(404, "không thấy lần gửi")
+    item = _live_upload(upload_id)
     declared = request.headers.get("content-length")
     if declared is not None:
         try:
@@ -1629,33 +1917,38 @@ async def write_video_chunk(
         if _upload_overlaps(ranges, offset, end):
             return JSONResponse({"ok": False, "offset": _upload_frontier(ranges)}, status_code=409)
         try:
-            stored = os.pwrite(int(item["fd"]), raw, offset)
+            stored = os.pwrite(_upload_fd(item), raw, offset)
         except OSError as error:
             raise HTTPException(507, "Hết chỗ trống trên máy chủ.") from error
         if stored != len(raw):
             raise HTTPException(507, "Hết chỗ trống trên máy chủ.")
         spans.add((offset, end))
         item["ranges"] = _upload_add(ranges, offset, end)
+        _save_upload(upload_id, item)
         return JSONResponse({"ok": True, "offset": _upload_frontier(item["ranges"]), "end": end})
 
 
 @app.post("/v1/recordings/uploads/{upload_id}/finish")
 def finish_video_upload(upload_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Nhận đủ thì mở tiến trình đọc. Tiến trình mất vì hub khởi động lại thì đọc lại từ file đã nhận."""
     _auth(authorization)
-    with _uploads_lock:
-        item = _uploads.get(upload_id)
-    if item is None:
-        raise HTTPException(404, "không thấy lần gửi")
+    item = _live_upload(upload_id)
     lock = item["lock"]
     with lock:
         frontier = _upload_frontier(item["ranges"])
         if frontier != int(item["size"]):
             return JSONResponse({"ok": False, "offset": frontier}, status_code=409)
-        path = Path(item["path"])
+        if item.get("finished") and _upload_job_alive(item):
+            job = jobs.get(str(item["jobId"]))
+            if job is not None and job.done and job.error:
+                _reopen_job(job)
+            return {"ok": True, "jobId": str(item["jobId"])}
         _close_upload(item)
-        with _uploads_lock:
-            _uploads.pop(upload_id, None)
-    return _begin_video_job(path)
+        started = _begin_video_job(Path(item["path"]))
+        item["finished"] = True
+        item["jobId"] = str(started["jobId"])
+        _save_upload(upload_id, item)
+    return started
 
 
 @app.post("/v1/recordings/jobs/{job_id}/samples")
@@ -1680,6 +1973,9 @@ def video_job_samples(
         if raw and len(raw) <= 150_000:
             decoded.append(raw)
     job.note_samples("pc", decoded)
+    parent = jobs.get(job.parent_id) if job.parent_id else None
+    if parent is not None:
+        parent.note_samples("pc", decoded)
     video_helpers.helpers.touch(body.workerId)
     return {"ok": True, "sampleCount": len(decoded)}
 
@@ -1750,8 +2046,10 @@ def video_job_complete(
             job.release(body.workerId)
             video_helpers.helpers.mark_idle(body.workerId)
             return job.public()
+    if body.wordSeen or body.wordKept:
+        job.note_words("pc", body.wordSeen, body.wordKept)
     try:
-        kept = _commit_people(job, list(body.people), body.workerId)
+        kept = _finish_read(job, list(body.people), body.workerId)
     finally:
         video_helpers.helpers.mark_idle(body.workerId)
     if not kept:
@@ -1807,11 +2105,9 @@ def continue_video_job(job_id: str, authorization: str | None = Header(default=N
     job = jobs.get(job_id)
     if job is None:
         raise HTTPException(404, "không thấy tiến trình")
-    path = job.source_path()
-    if path is None or not job.reopen():
+    if not _reopen_job(job):
         raise HTTPException(409, "Video này không đọc tiếp được.")
-    threading.Thread(target=_schedule_video_job, args=(job.id, path), daemon=True).start()
-    return job.public()
+    return _job_public(job)
 
 
 @app.post("/v1/recordings/jobs/{job_id}/fail")
@@ -1828,6 +2124,7 @@ def video_job_fail(
     if not job.fail_from_worker(body.workerId, body.error or "Không đọc được video."):
         raise HTTPException(409, "PC phụ không giữ video này")
     video_helpers.helpers.mark_idle(body.workerId)
+    _job_finished(job)
     return job.public()
 
 
@@ -1855,7 +2152,7 @@ def recordings_job(job_id: str, authorization: str | None = Header(default=None)
     job = jobs.get(job_id)
     if job is None:
         raise HTTPException(404, "không thấy tiến trình")
-    return job.public()
+    return _job_public(job)
 
 
 @app.post("/v1/recordings/from-frame")

@@ -37,11 +37,48 @@ class VideoJob:
         self._words: dict[str, tuple[int, int]] = {}
         self._samples: list[tuple[str, bytes]] = []
         self._reread = False
+        # Video dài chia cho hai PC: việc cha giữ video gốc, mỗi phần là một việc con để PC nhận.
+        self.parent_id = ""
+        self.part_ids: list[str] = []
+        self.part_label = ""
+        self._merging = False
         self._lock = threading.Lock()
 
     def bind(self, path: Path) -> None:
         with self._lock:
             self.path = path
+
+    def set_parts(self, part_ids: list[str]) -> None:
+        with self._lock:
+            self.part_ids = list(part_ids)
+
+    def begin_merge(self) -> bool:
+        with self._lock:
+            if self._merging or self.done:
+                return False
+            self._merging = True
+            return True
+
+    def end_merge(self) -> None:
+        with self._lock:
+            self._merging = False
+
+    def words(self) -> dict[str, tuple[int, int]]:
+        with self._lock:
+            return dict(self._words)
+
+    def finish_part(self, worker_id: str | None) -> bool:
+        """Một phần đã đọc xong. Chưa ghi người: việc cha ghép các phần rồi mới ghi."""
+        with self._lock:
+            if self.done:
+                return False
+            if worker_id is not None and (not worker_id or self.owner != worker_id):
+                return False
+            self.percent = 100
+            self.task = "Đã đọc xong phần này"
+            self.done = True
+            self.error = ""
+            return True
 
     def source_path(self) -> Path | None:
         with self._lock:
@@ -175,7 +212,7 @@ class VideoJob:
 
     def claim(self, worker_id: str) -> bool:
         with self._lock:
-            if self.done or self.owner or self.path is None or not worker_id:
+            if self.done or self.owner or self.path is None or self.part_ids or not worker_id:
                 return False
             self.owner = worker_id
             self.lease = time.monotonic()
@@ -185,7 +222,7 @@ class VideoJob:
 
     def take_hub(self) -> bool:
         with self._lock:
-            if self.done or self.owner:
+            if self.done or self.owner or self.part_ids:
                 return False
             self.owner = "hub"
             self.lease = time.monotonic()
@@ -355,7 +392,7 @@ class JobStore:
         job = VideoJob(uuid.uuid4().hex)
         dropped: list[VideoJob] = []
         with self._lock:
-            done_ids = [key for key, item in self._jobs.items() if item.done]
+            done_ids = [key for key, item in self._jobs.items() if item.done and not self._waiting_part(item)]
             while len(self._jobs) >= 40 and done_ids:
                 old = self._jobs.pop(done_ids.pop(), None)
                 if old is not None:
@@ -365,16 +402,40 @@ class JobStore:
             old.discard()
         return job
 
+    def _waiting_part(self, item: VideoJob) -> bool:
+        """Phần đã xong nhưng việc cha chưa ghép thì giữ lại. Gọi khi đang giữ khóa."""
+        if not item.parent_id:
+            return False
+        parent = self._jobs.get(item.parent_id)
+        return parent is not None and not parent.done
+
     def get(self, job_id: str) -> VideoJob | None:
         with self._lock:
             return self._jobs.get(job_id)
 
-    def claim_next(self, worker_id: str) -> VideoJob | None:
+    def parts(self, job: VideoJob) -> list[VideoJob | None]:
+        with self._lock:
+            return [self._jobs.get(part_id) for part_id in job.part_ids]
+
+    def claim_next(self, worker_id: str, spread: bool = False) -> VideoJob | None:
+        """spread: PC đang giữ một phần của video thì để phần kia cho PC khác."""
         with self._lock:
             for job in self._jobs.values():
+                if spread and job.parent_id and self._holds_sibling(job, worker_id):
+                    continue
                 if job.claim(worker_id):
                     return job
         return None
+
+    def _holds_sibling(self, job: VideoJob, worker_id: str) -> bool:
+        parent = self._jobs.get(job.parent_id)
+        if parent is None:
+            return False
+        for part_id in parent.part_ids:
+            sibling = self._jobs.get(part_id)
+            if sibling is not None and sibling is not job and sibling.owner_id() == worker_id:
+                return True
+        return False
 
 
 jobs = JobStore()
@@ -409,8 +470,12 @@ class JobProgress(ReadProgress):
         self._job.note_words("hub", seen, kept)
 
     def note_samples(self, images: list[bytes]) -> None:
-        if images:
-            self._job.note_samples("hub", images)
+        if not images:
+            return
+        self._job.note_samples("hub", images)
+        parent = jobs.get(self._job.parent_id) if self._job.parent_id else None
+        if parent is not None:
+            parent.note_samples("hub", images)
 
     def note_blank(self) -> None:
         return

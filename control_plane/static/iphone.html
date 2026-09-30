@@ -33,6 +33,9 @@
     #status { margin: 0 0 0.7rem; font-weight: 700; line-height: 1.4; }
     #status[hidden] { display: none !important; }
     #status.live { color: #b42318; }
+    #awakeNote { margin: 0 0 0.7rem; line-height: 1.4; font-size: 16px; font-weight: 700; color: #0a7a32; }
+    #awakeNote.warn { color: #b42318; }
+    #awakeNote[hidden] { display: none !important; }
     #playback { width: 100%; border-radius: 12px; background: #000; margin-bottom: 0.8rem; }
     #playback[hidden] { display: none !important; }
     #progressBox { margin: 0 0 0.8rem; }
@@ -90,8 +93,9 @@
 <body>
   <p id="updateNote" hidden></p>
   <main>
-    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. Mỗi PC đọc tối đa hai video. Một video thì dùng 80% CPU và RAM của PC. Hai video thì chia đôi phần 80% đó. PC có card NVIDIA thì đọc bằng GPU. <a href="/tai-pc">Tải phần mềm cho PC</a>. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
+    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. Trang giữ màn hình sáng đến khi gửi và đọc xong. Mở app khác thì iPhone dừng việc gửi, quay lại trang thì gửi tiếp. Mỗi PC đọc tối đa hai video. Một video thì dùng 80% CPU và RAM của PC. Hai video thì chia đôi phần 80% đó. Có hai PC thì video từ 4 phút được chia đôi cho hai máy. PC có card NVIDIA thì đọc bằng GPU. <a href="/tai-pc">Tải phần mềm cho PC</a>. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
     <p id="helperLine">PC phụ chưa nối. Video được máy chủ đọc bằng các lõi còn lại.</p>
+    <p id="awakeNote" hidden></p>
     <p id="status" hidden></p>
     <video id="playback" controls playsinline hidden></video>
     <section id="progressBox" hidden>
@@ -455,6 +459,18 @@
 
     const helperLine = document.getElementById("helperLine");
 
+    function helperState(helper) {
+      const build = Number(helper.build) || 0;
+      const latest = Number(helper.latestBuild) || 0;
+      if (helper.readerOk === false) {
+        const note = helper.readerNote ? helper.readerNote + " " : "";
+        return note + "PC chưa đọc được chữ, máy chủ đọc thay.";
+      }
+      if (build && latest && build < latest) return "PC đang tự lên bản " + latest + ".";
+      if (build) return "PC bản " + build + (helper.models === "fast" ? ", bộ chữ nhanh." : ".");
+      return "";
+    }
+
     async function refreshHelper() {
       try {
         const response = await fetch("/health", { cache: "no-store" });
@@ -471,7 +487,7 @@
         }
         let line;
         if (count >= 2) {
-          line = count + " PC phụ đang nối, " + cores + " lõi. Mỗi máy đọc tối đa hai video bằng 80% CPU và RAM.";
+          line = count + " PC phụ đang nối, " + cores + " lõi. Mỗi máy đọc tối đa hai video bằng 80% CPU và RAM. Video từ 4 phút được chia đôi cho hai máy.";
         } else if (used > 0 && cores > 0) {
           line = "PC phụ đang nối, " + cores + " lõi, dùng " + used + " lõi (80% CPU và RAM). Máy đó đọc tối đa hai video.";
         } else if (cores > 0) {
@@ -480,7 +496,8 @@
           line = "PC phụ đang nối. Máy đó đọc tối đa hai video bằng 80% CPU và RAM.";
         }
         if (gpu > 0) line += " " + gpu + " máy đọc bằng GPU.";
-        helperLine.textContent = line;
+        line += " " + helperState(helper);
+        helperLine.textContent = line.trim();
       } catch (error) {
         /* Giữ dòng đang hiện. */
       }
@@ -603,6 +620,153 @@
       return new Promise((resolve) => window.setTimeout(resolve, ms));
     }
 
+    const awakeNote = document.getElementById("awakeNote");
+    let awakeLock = null;
+    let awakeWanted = false;
+    let pausedWhileHidden = false;
+
+    function showAwake(text, warn) {
+      awakeNote.textContent = text || "";
+      awakeNote.hidden = !text;
+      awakeNote.classList.toggle("warn", !!warn);
+    }
+
+    function homeAppWithoutWakeLock() {
+      // App mở từ màn hình chính trên iOS trước 18.4 nhận lệnh giữ sáng nhưng màn hình vẫn tắt.
+      if (!navigator.standalone) return false;
+      const found = /OS (\d+)_(\d+)/.exec(navigator.userAgent || "");
+      if (!found) return false;
+      const major = Number(found[1]);
+      const minor = Number(found[2]);
+      return major < 18 || (major === 18 && minor < 4);
+    }
+
+    async function holdScreen() {
+      awakeWanted = true;
+      if (!navigator.wakeLock || typeof navigator.wakeLock.request !== "function") {
+        showAwake("Máy này chưa tự giữ được màn hình sáng. Chạm màn hình vài lần, hoặc đặt Tự động khóa thành Không bao giờ trong Cài đặt, Màn hình và Độ sáng, đến khi xong.", true);
+        return;
+      }
+      if (awakeLock) return;
+      try {
+        const lock = await navigator.wakeLock.request("screen");
+        if (!awakeWanted) {
+          lock.release().catch(() => {});
+          return;
+        }
+        awakeLock = lock;
+        lock.addEventListener("release", () => {
+          if (awakeLock === lock) awakeLock = null;
+        });
+        if (homeAppWithoutWakeLock()) {
+          showAwake("App trên màn hình chính chưa tự giữ được màn hình sáng ở bản iOS này. Mở trang bằng Safari, hoặc chạm màn hình vài lần đến khi xong.", true);
+          return;
+        }
+        showAwake("Đang giữ màn hình sáng. Để trang này mở đến khi xong.", false);
+      } catch (error) {
+        showAwake("Chưa giữ được màn hình sáng. Chạm vào trang để giữ, hoặc chạm màn hình vài lần đến khi xong.", true);
+      }
+    }
+
+    function freeScreen() {
+      awakeWanted = false;
+      pausedWhileHidden = false;
+      const lock = awakeLock;
+      awakeLock = null;
+      if (lock) lock.release().catch(() => {});
+      showAwake("", false);
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        if (awakeWanted) pausedWhileHidden = true;
+        return;
+      }
+      if (!awakeWanted) return;
+      if (pausedWhileHidden) {
+        pausedWhileHidden = false;
+        setStatus("iPhone vừa dừng trang khi màn hình tắt hoặc khi mở app khác. Đang gửi tiếp.", false);
+      }
+      holdScreen();
+    });
+    ["click", "touchend"].forEach((name) => {
+      document.addEventListener(name, () => {
+        if (awakeWanted && !awakeLock) holdScreen();
+      }, { passive: true });
+    });
+
+    const UPLOAD_KEEP_MS = 2 * 86400000;
+
+    function uploadKey(file) {
+      return "fb_upload:" + (file.name || "") + ":" + file.size + ":" + (file.lastModified || 0);
+    }
+
+    function storedUpload(file) {
+      try {
+        const raw = localStorage.getItem(uploadKey(file));
+        if (!raw) return "";
+        const data = JSON.parse(raw);
+        if (!data || !data.id || Date.now() - (Number(data.at) || 0) > UPLOAD_KEEP_MS) {
+          localStorage.removeItem(uploadKey(file));
+          return "";
+        }
+        return String(data.id);
+      } catch (error) {
+        return "";
+      }
+    }
+
+    function rememberUpload(file, uploadId) {
+      try {
+        localStorage.setItem(uploadKey(file), JSON.stringify({ id: uploadId, at: Date.now() }));
+      } catch (error) {
+        /* Bộ nhớ trang đầy thì vẫn gửi, chỉ không nối được sau khi tải lại trang. */
+      }
+    }
+
+    function forgetUpload(file) {
+      try {
+        if (file) localStorage.removeItem(uploadKey(file));
+      } catch (error) {
+        /* Không xóa được thì hai ngày sau tự bỏ. */
+      }
+    }
+
+    function pruneUploads() {
+      try {
+        for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+          const key = localStorage.key(index);
+          if (!key || key.indexOf("fb_upload:") !== 0) continue;
+          let data = null;
+          try { data = JSON.parse(localStorage.getItem(key) || "null"); } catch (error) { data = null; }
+          if (!data || Date.now() - (Number(data.at) || 0) > UPLOAD_KEEP_MS) localStorage.removeItem(key);
+        }
+      } catch (error) {
+        /* Không đọc được bộ nhớ trang thì bỏ qua. */
+      }
+    }
+
+    async function finishUpload(uploadId) {
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        try {
+          const response = await fetch("/v1/recordings/uploads/" + uploadId + "/finish", {
+            method: "POST",
+            headers: authHeaders(),
+          });
+          if (response.status === 404) return { ok: false, missing: true, error: "Mất kết nối khi đang gửi video." };
+          if (response.status === 507) return { ok: false, error: "Hết chỗ trống trên máy chủ." };
+          if (response.status === 409) return { ok: false, short: true, error: "Máy chủ chưa nhận đủ video." };
+          if (!response.ok) throw new Error("finish");
+          const data = await response.json();
+          if (!data.jobId) throw new Error("finish");
+          return { ok: true, jobId: data.jobId };
+        } catch (error) {
+          await sleep(Math.min(3000, 400 * (attempt + 1)));
+        }
+      }
+      return { ok: false, error: "Không gửi được video." };
+    }
+
     function openChunk(url, blob, headerMap, onLoaded) {
       const request = new XMLHttpRequest();
       const promise = new Promise((resolve) => {
@@ -712,8 +876,19 @@
     }
 
     async function sendVideoPieces(file, onUpload, chunkSize, lanes) {
-      let started = null;
-      for (let attempt = 0; attempt < 4 && !started; attempt += 1) {
+      let uploadId = "";
+      let known = null;
+      const saved = storedUpload(file);
+      if (saved) {
+        const found = await readUpload(saved);
+        if (found.status && Number(found.status.size) === file.size) {
+          uploadId = saved;
+          known = found.status;
+        } else if (found.missing) {
+          forgetUpload(file);
+        }
+      }
+      for (let attempt = 0; attempt < 8 && !uploadId; attempt += 1) {
         try {
           const response = await fetch("/v1/recordings/uploads", {
             method: "POST",
@@ -723,16 +898,24 @@
           if (response.status === 413) return { ok: false, error: "Video quá lớn." };
           if (response.status === 507) return { ok: false, error: "Hết chỗ trống trên máy chủ." };
           if (!response.ok) throw new Error("start");
-          started = await response.json();
+          const started = await response.json();
+          if (started && started.uploadId) {
+            uploadId = String(started.uploadId);
+            rememberUpload(file, uploadId);
+          }
         } catch (error) {
-          await sleep(400 * (attempt + 1));
+          await sleep(Math.min(3000, 400 * (attempt + 1)));
         }
       }
-      if (!started || !started.uploadId) return { ok: false, error: "Không gửi được video." };
-      const uploadId = started.uploadId;
+      if (!uploadId) return { ok: false, error: "Không gửi được video." };
       const pieces = [];
       for (let offset = 0; offset < file.size; offset += chunkSize) {
-        pieces.push({ offset: offset, end: Math.min(file.size, offset + chunkSize), done: false, loaded: 0 });
+        const piece = { offset: offset, end: Math.min(file.size, offset + chunkSize), done: false, loaded: 0 };
+        if (known && chunkHeld(known, piece)) {
+          piece.done = true;
+          piece.loaded = piece.end - piece.offset;
+        }
+        pieces.push(piece);
       }
       const report = () => {
         let bytes = 0;
@@ -752,9 +935,10 @@
           const piece = pieces[cursor];
           cursor += 1;
           if (!piece) return;
-          const known = await readUpload(uploadId);
-          if (known.missing) { markMissing(); return; }
-          if (chunkHeld(known.status, piece)) {
+          if (piece.done) continue;
+          const held = await readUpload(uploadId);
+          if (held.missing) { markMissing(); return; }
+          if (chunkHeld(held.status, piece)) {
             piece.done = true;
             piece.loaded = piece.end - piece.offset;
             report();
@@ -768,7 +952,7 @@
             return;
           }
           let landed = false;
-          for (let attempt = 0; attempt < 6 && !landed && !failure; attempt += 1) {
+          for (let attempt = 0; attempt < 10 && !landed && !failure; attempt += 1) {
             const before = await readUpload(uploadId);
             if (before.missing) { markMissing(); return; }
             if (chunkHeld(before.status, piece)) { landed = true; break; }
@@ -798,7 +982,7 @@
             }
             if (!landed && !failure) {
               flight.stop();
-              await sleep(300 * (attempt + 1));
+              await sleep(Math.min(3000, 400 * (attempt + 1)));
             }
           }
           if (!landed) { failure = failure || "Mất kết nối khi đang gửi video."; return; }
@@ -810,25 +994,15 @@
       const workers = [];
       for (let lane = 0; lane < lanes; lane += 1) workers.push(pump());
       await Promise.all(workers);
-      if (missing) return { ok: false, missing: true, error: failure };
-      if (failure) return { ok: false, error: failure };
-      for (let attempt = 0; attempt < 4; attempt += 1) {
-        try {
-          const response = await fetch("/v1/recordings/uploads/" + uploadId + "/finish", {
-            method: "POST",
-            headers: authHeaders(),
-          });
-          if (response.status === 404) return { ok: false, missing: true, error: "Mất kết nối khi đang gửi video." };
-          if (response.status === 507) return { ok: false, error: "Hết chỗ trống trên máy chủ." };
-          if (!response.ok) throw new Error("finish");
-          const data = await response.json();
-          if (!data.jobId) throw new Error("finish");
-          return { ok: true, jobId: data.jobId };
-        } catch (error) {
-          await sleep(400 * (attempt + 1));
-        }
+      if (missing) {
+        forgetUpload(file);
+        return { ok: false, missing: true, error: failure };
       }
-      return { ok: false, error: "Không gửi được video." };
+      if (failure) return { ok: false, error: failure };
+      const closed = await finishUpload(uploadId);
+      if (closed.missing) forgetUpload(file);
+      if (!closed.ok) return closed;
+      return { ok: true, jobId: closed.jobId, uploadId: uploadId };
     }
 
     async function postJob(file, onUpload) {
@@ -840,6 +1014,20 @@
         await sleep(400 * (attempt + 1));
       }
       return last;
+    }
+
+    async function restartLostJob(job) {
+      if (!job.uploadId || (job.restarts || 0) >= 2) return false;
+      job.restarts = (job.restarts || 0) + 1;
+      const again = await finishUpload(job.uploadId);
+      if (!again.ok) return false;
+      job.jobId = again.jobId;
+      job.done = false;
+      job.ok = true;
+      job.error = "";
+      job.misses = 0;
+      job.task = "Máy chủ vừa khởi động lại. Đọc lại video đã gửi, không cần gửi lại.";
+      return true;
     }
 
     async function pollOnce(job) {
@@ -857,9 +1045,10 @@
         return;
       }
       if (response.status === 404) {
+        if (await restartLostJob(job)) return;
         job.done = true;
         job.ok = false;
-        job.error = "Mất tiến trình xử lý.";
+        job.error = "Mất tiến trình xử lý. Chọn lại video để gửi tiếp phần còn thiếu.";
         return;
       }
       if (!response.ok) {
@@ -886,6 +1075,7 @@
         return;
       }
       job.ok = true;
+      forgetUpload(job.file);
       job.people = data.people || [];
       job.savedPeople = data.savedPeople || 0;
       job.duplicates = data.duplicates || [];
@@ -921,6 +1111,8 @@
           seenContacts: null,
           seenAccounts: 0,
           readSaved: 0,
+          file: file,
+          uploadId: "",
         };
         batchJobs.push(slot);
         paintBatch();
@@ -938,6 +1130,7 @@
           slot.task = "Gặp vấn đề";
         } else {
           slot.jobId = posted.jobId;
+          slot.uploadId = posted.uploadId || "";
           slot.percent = 8;
           slot.task = "Đã nhận video";
           shownOverall = 0;
@@ -950,6 +1143,7 @@
       if (pumping) return;
       pumping = true;
       busy = true;
+      holdScreen();
       pick.classList.add("busy");
       recordBtn.disabled = true;
       carried = [];
@@ -1025,6 +1219,7 @@
       busy = false;
       pick.classList.remove("busy");
       recordBtn.disabled = recording;
+      freeScreen();
       if (leftover.length) enqueue(leftover);
     }
 
@@ -1032,6 +1227,7 @@
       if (pumping || !resumeSlots.length) return;
       pumping = true;
       busy = true;
+      holdScreen();
       continueBtn.hidden = true;
       pick.classList.add("busy");
       recordBtn.disabled = true;
@@ -1054,10 +1250,11 @@
           continue;
         }
         if (response.status === 404) {
+          if (await restartLostJob(slot)) continue;
           slot.done = true;
           slot.ok = false;
           slot.canContinue = false;
-          slot.error = "Mất tiến trình xử lý.";
+          slot.error = "Mất tiến trình xử lý. Chọn lại video để gửi tiếp phần còn thiếu.";
           continue;
         }
         if (!response.ok) {
@@ -1144,6 +1341,7 @@
       busy = false;
       pick.classList.remove("busy");
       recordBtn.disabled = recording;
+      freeScreen();
     }
 
     function stopTracks() {
@@ -1321,6 +1519,7 @@
       enqueue(files);
     });
 
+    pruneUploads();
     loadSaved();
     loadDuplicates();
     refreshHelper();

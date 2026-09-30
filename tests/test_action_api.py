@@ -211,6 +211,12 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Không giới hạn số video, dung lượng hay thời lượng", page.text)
         self.assertIn("80% CPU và RAM", page.text)
         self.assertIn("Mỗi máy đọc tối đa hai video", page.text)
+        self.assertIn("Video từ 4 phút được chia đôi cho hai máy", page.text)
+        self.assertIn("navigator.wakeLock", page.text)
+        self.assertIn("Đang giữ màn hình sáng", page.text)
+        self.assertIn("fb_upload:", page.text)
+        self.assertIn("restartLostJob", page.text)
+        self.assertIn("PC đang tự lên bản", page.text)
         self.assertIn("máy đọc bằng GPU", page.text)
         self.assertIn('id="helperLine"', page.text)
         self.assertIn("PC phụ chưa nối", page.text)
@@ -258,6 +264,9 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(body["start_url"], "/iphone")
         self.assertEqual(body["display"], "standalone")
         home = self.client.get("/")
+        self.assertIn("fb_upload:", home.text)
+        self.assertIn("restartLostJob", home.text)
+        self.assertIn("Video từ 4 phút được chia đôi cho hai máy", home.text)
         self.assertIn("Mở app iPhone", home.text)
         self.assertIn("Mở giả lập điện thoại trên PC", home.text)
         self.assertNotIn("Chạm trên iPhone được ghi để làm lại.", home.text)
@@ -1312,6 +1321,157 @@ class ActionApiTests(unittest.TestCase):
         body = self._wait_job(job_id)
         self.assertTrue(body.get("error"), body)
         self.assertLess(time.time() - started, video_helpers.OFFER_SECONDS)
+
+    def test_an_upload_survives_a_hub_restart(self) -> None:
+        chunk = 4 * 1024 * 1024
+        payload = b"a" * chunk + b"b" * (3 * 1024 * 1024)
+        started = self.client.post(
+            "/v1/recordings/uploads",
+            headers=self.headers,
+            json={"name": "clip.mp4", "size": len(payload)},
+        )
+        self.assertEqual(started.status_code, 200, started.text)
+        upload_id = started.json()["uploadId"]
+        first = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}",
+            headers=self.headers,
+            params={"offset": 0},
+            content=payload[:chunk],
+        )
+        self.assertEqual(first.status_code, 200, first.text)
+        with app_module._uploads_lock:
+            dropped = list(app_module._uploads.values())
+            app_module._uploads.clear()
+        for item in dropped:
+            app_module._close_upload(item)
+        status = self.client.get(f"/v1/recordings/uploads/{upload_id}", headers=self.headers)
+        self.assertEqual(status.status_code, 200, status.text)
+        self.assertEqual(status.json()["offset"], chunk)
+        self.assertEqual(status.json()["spans"], [[0, chunk]])
+        self.assertFalse(status.json()["finished"])
+        second = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}",
+            headers=self.headers,
+            params={"offset": chunk},
+            content=payload[chunk:],
+        )
+        self.assertEqual(second.status_code, 200, second.text)
+        with app_module._uploads_lock:
+            stored = Path(app_module._uploads[upload_id]["path"])
+        self.assertEqual(stored.read_bytes(), payload)
+        done = self.client.post(f"/v1/recordings/uploads/{upload_id}/finish", headers=self.headers)
+        self.assertEqual(done.status_code, 200, done.text)
+        job_id = done.json()["jobId"]
+        again = self.client.post(f"/v1/recordings/uploads/{upload_id}/finish", headers=self.headers)
+        self.assertEqual(again.json()["jobId"], job_id)
+        self._wait_job(job_id)
+        with jobs._lock:
+            jobs._jobs.pop(job_id, None)
+        lost = self.client.get(f"/v1/recordings/jobs/{job_id}", headers=self.headers)
+        self.assertEqual(lost.status_code, 404)
+        restarted = self.client.post(f"/v1/recordings/uploads/{upload_id}/finish", headers=self.headers)
+        self.assertEqual(restarted.status_code, 200, restarted.text)
+        self.assertNotEqual(restarted.json()["jobId"], job_id)
+        body = self._wait_job(restarted.json()["jobId"])
+        self.assertTrue(body.get("error"), body)
+
+    def test_a_long_video_is_split_between_two_pcs(self) -> None:
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg is required")
+        folder = Path(tempfile.mkdtemp(prefix="fb-split-"))
+        clip = folder / "clip.mp4"
+        subprocess.run(
+            [
+                "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+                "-f", "lavfi", "-i", "testsrc2=s=320x480:r=30:d=10",
+                "-pix_fmt", "yuv420p", str(clip),
+            ],
+            check=True,
+            timeout=60,
+        )
+        previous = app_module._SPLIT_MIN_SECONDS
+        app_module._SPLIT_MIN_SECONDS = 2.0
+        try:
+            workers = []
+            for name in ("pc-mot", "pc-hai"):
+                beat = self.client.post(
+                    "/v1/video-workers/heartbeat",
+                    headers=self.headers,
+                    json={"name": name, "cpus": 16, "readerOk": True},
+                )
+                self.assertEqual(beat.status_code, 200, beat.text)
+                workers.append(beat.json()["workerId"])
+            opened = self.client.post(
+                "/v1/recordings/from-video/job",
+                headers=self.headers,
+                files={"file": ("clip.mp4", clip.read_bytes(), "video/mp4")},
+            )
+            self.assertEqual(opened.status_code, 200, opened.text)
+            parent_id = opened.json()["jobId"]
+
+            def claim(worker_id: str, tries: int) -> str:
+                for _ in range(tries):
+                    response = self.client.post(
+                        "/v1/recordings/jobs/claim",
+                        headers=self.headers,
+                        json={"workerId": worker_id},
+                    )
+                    self.assertEqual(response.status_code, 200, response.text)
+                    found = str(response.json()["jobId"])
+                    if found:
+                        return found
+                    time.sleep(0.05)
+                return ""
+
+            first = claim(workers[0], 200)
+            self.assertTrue(first)
+            self.assertNotEqual(first, parent_id)
+            self.assertEqual(claim(workers[0], 1), "")
+            second = claim(workers[1], 200)
+            self.assertTrue(second)
+            self.assertNotIn(second, (first, parent_id))
+            for worker_id, part_id in ((workers[0], first), (workers[1], second)):
+                video = self.client.get(
+                    f"/v1/recordings/jobs/{part_id}/video",
+                    headers=self.headers,
+                    params={"workerId": worker_id},
+                )
+                self.assertEqual(video.status_code, 200, video.text)
+                self.assertEqual(video.content[4:8], b"ftyp")
+            running = self.client.get(f"/v1/recordings/jobs/{parent_id}", headers=self.headers).json()
+            self.assertIn("Hai PC cùng đọc", str(running.get("task")), running)
+            seen = (
+                (workers[0], first, {"kind": "contact", "name": "Mai Lan Chia", "contactName": "Chị Mai Chia", "username": ""}),
+                (workers[1], second, {"kind": "profile", "name": "Mai Lan Chia", "contactName": "", "username": "@mai.lan.chia"}),
+            )
+            for worker_id, part_id, sighting in seen:
+                noted = self.client.post(
+                    f"/v1/recordings/jobs/{part_id}/checkpoint",
+                    headers=self.headers,
+                    json={"workerId": worker_id, "frames": [{"t": 1.0, "captions": [], "sightings": [sighting]}]},
+                )
+                self.assertEqual(noted.status_code, 200, noted.text)
+            for worker_id, part_id, _sighting in seen:
+                finished = self.client.post(
+                    f"/v1/recordings/jobs/{part_id}/complete",
+                    headers=self.headers,
+                    json={"workerId": worker_id, "people": [], "wordSeen": 40, "wordKept": 30},
+                )
+                self.assertEqual(finished.status_code, 200, finished.text)
+            body = self._wait_job(parent_id)
+        finally:
+            app_module._SPLIT_MIN_SECONDS = previous
+        self.assertEqual(body.get("error"), "", body)
+        self.assertEqual(body.get("savedPeople"), 1, body)
+        self.assertEqual(body.get("wordSeen"), 80)
+        rows = body.get("people") or []
+        self.assertTrue(
+            any(row.get("username") == "@mai.lan.chia" and row.get("contactName") == "Chị Mai Chia" for row in rows),
+            rows,
+        )
+        with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
+            conn.execute("DELETE FROM saved_people WHERE username = ?", ("@mai.lan.chia",))
+            conn.execute("DELETE FROM people_meta")
 
     def test_fast_models_are_served_to_pcs(self) -> None:
         folder = Path(tempfile.mkdtemp(prefix="fb-fast-"))
