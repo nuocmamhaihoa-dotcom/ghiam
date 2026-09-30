@@ -1474,6 +1474,26 @@ def start_video_upload(body: UploadStartBody, authorization: str | None = Header
     return {"ok": True, "uploadId": upload_id, "offset": 0}
 
 
+@app.get("/v1/recordings/uploads/{upload_id}")
+def read_video_upload(upload_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Báo trang đã nhận những khúc nào, để trang gửi khúc sau mà không cần lời trả của lần gửi."""
+    _auth(authorization)
+    with _uploads_lock:
+        item = _uploads.get(upload_id)
+    if item is None:
+        raise HTTPException(404, "không thấy lần gửi")
+    lock = item["lock"]
+    with lock:
+        spans = sorted((int(start), int(end)) for start, end in item["spans"])
+        return {
+            "ok": True,
+            "uploadId": upload_id,
+            "offset": _upload_frontier(item["ranges"]),
+            "size": int(item["size"]),
+            "spans": [[start, end] for start, end in spans],
+        }
+
+
 @app.put("/v1/recordings/uploads/{upload_id}")
 async def write_video_chunk(
     upload_id: str,

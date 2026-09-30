@@ -493,9 +493,9 @@
       return new Promise((resolve) => window.setTimeout(resolve, ms));
     }
 
-    function sendChunk(url, blob, headerMap, onLoaded) {
-      return new Promise((resolve) => {
-        const request = new XMLHttpRequest();
+    function openChunk(url, blob, headerMap, onLoaded) {
+      const request = new XMLHttpRequest();
+      const promise = new Promise((resolve) => {
         request.open("PUT", url);
         request.timeout = 0;
         Object.keys(headerMap).forEach((key) => request.setRequestHeader(key, headerMap[key]));
@@ -522,6 +522,32 @@
         request.onabort = () => done(0, {});
         request.send(blob);
       });
+      return {
+        promise: promise,
+        stop: () => {
+          try { request.abort(); } catch (error) { /* khúc đã đóng */ }
+        },
+      };
+    }
+
+    function chunkHeld(status, piece) {
+      const spans = status && status.spans ? status.spans : [];
+      for (let index = 0; index < spans.length; index += 1) {
+        const span = spans[index];
+        if (span && span[0] <= piece.offset && span[1] >= piece.end) return true;
+      }
+      return !!(status && typeof status.offset === "number" && status.offset >= piece.end);
+    }
+
+    async function readUpload(uploadId) {
+      try {
+        const response = await fetch("/v1/recordings/uploads/" + uploadId, { headers: authHeaders() });
+        if (response.status === 404) return { missing: true };
+        if (!response.ok) return {};
+        return { status: await response.json() };
+      } catch (error) {
+        return {};
+      }
     }
 
     function postJobOnce(file, onUpload) {
@@ -565,6 +591,17 @@
     async function postJobChunked(file, onUpload) {
       const chunkSize = 4 * 1024 * 1024;
       const lanes = 4;
+      let lastError = "Không gửi được video.";
+      for (let round = 0; round < 3; round += 1) {
+        const outcome = await sendVideoPieces(file, onUpload, chunkSize, lanes);
+        if (outcome.ok) return outcome;
+        lastError = outcome.error || lastError;
+        if (!outcome.missing) return { ok: false, error: lastError };
+      }
+      return { ok: false, error: lastError };
+    }
+
+    async function sendVideoPieces(file, onUpload, chunkSize, lanes) {
       let started = null;
       for (let attempt = 0; attempt < 4 && !started; attempt += 1) {
         try {
@@ -582,6 +619,7 @@
         }
       }
       if (!started || !started.uploadId) return { ok: false, error: "Không gửi được video." };
+      const uploadId = started.uploadId;
       const pieces = [];
       for (let offset = 0; offset < file.size; offset += chunkSize) {
         pieces.push({ offset: offset, end: Math.min(file.size, offset + chunkSize), done: false, loaded: 0 });
@@ -594,11 +632,24 @@
       report();
       let cursor = 0;
       let failure = "";
+      let missing = false;
+      const markMissing = () => {
+        missing = true;
+        failure = "Mất kết nối khi đang gửi video.";
+      };
       const pump = async () => {
         while (!failure) {
           const piece = pieces[cursor];
           cursor += 1;
           if (!piece) return;
+          const known = await readUpload(uploadId);
+          if (known.missing) { markMissing(); return; }
+          if (chunkHeld(known.status, piece)) {
+            piece.done = true;
+            piece.loaded = piece.end - piece.offset;
+            report();
+            continue;
+          }
           let payload = null;
           try {
             payload = await file.slice(piece.offset, piece.end).arrayBuffer();
@@ -608,18 +659,37 @@
           }
           let landed = false;
           for (let attempt = 0; attempt < 6 && !landed && !failure; attempt += 1) {
-            const sent = await sendChunk(
-              "/v1/recordings/uploads/" + started.uploadId + "?offset=" + piece.offset,
+            const before = await readUpload(uploadId);
+            if (before.missing) { markMissing(); return; }
+            if (chunkHeld(before.status, piece)) { landed = true; break; }
+            const flight = openChunk(
+              "/v1/recordings/uploads/" + uploadId + "?offset=" + piece.offset,
               payload,
               Object.assign({ "Content-Type": "application/octet-stream" }, authHeaders()),
               (loaded) => { piece.loaded = loaded; report(); }
             );
-            const data = sent.data || {};
-            const mark = typeof data.end === "number" ? data.end : data.offset;
-            if (sent.status === 507) { failure = "Hết chỗ trống trên máy chủ."; return; }
-            if (sent.status >= 200 && sent.status < 300 && typeof mark === "number" && mark >= piece.end) landed = true;
-            else if (sent.status === 409 && typeof data.offset === "number" && data.offset >= piece.end) landed = true;
-            else await sleep(300 * (attempt + 1));
+            let reply = null;
+            const waitReply = flight.promise.then((value) => { reply = value; });
+            const deadline = Date.now() + 30000;
+            while (!landed && !failure && reply === null && Date.now() < deadline) {
+              await Promise.race([waitReply, sleep(300)]);
+              if (reply) break;
+              const live = await readUpload(uploadId);
+              if (live.missing) { flight.stop(); markMissing(); return; }
+              if (chunkHeld(live.status, piece)) { flight.stop(); landed = true; }
+            }
+            if (!landed && reply) {
+              const data = reply.data || {};
+              if (reply.status === 507) { failure = "Hết chỗ trống trên máy chủ."; return; }
+              if (reply.status === 404) { markMissing(); return; }
+              const mark = typeof data.end === "number" ? data.end : data.offset;
+              if (reply.status >= 200 && reply.status < 300 && typeof mark === "number" && mark >= piece.end) landed = true;
+              else if (reply.status === 409 && typeof data.offset === "number" && data.offset >= piece.end) landed = true;
+            }
+            if (!landed && !failure) {
+              flight.stop();
+              await sleep(300 * (attempt + 1));
+            }
           }
           if (!landed) { failure = failure || "Mất kết nối khi đang gửi video."; return; }
           piece.done = true;
@@ -630,13 +700,16 @@
       const workers = [];
       for (let lane = 0; lane < lanes; lane += 1) workers.push(pump());
       await Promise.all(workers);
+      if (missing) return { ok: false, missing: true, error: failure };
       if (failure) return { ok: false, error: failure };
       for (let attempt = 0; attempt < 4; attempt += 1) {
         try {
-          const response = await fetch("/v1/recordings/uploads/" + started.uploadId + "/finish", {
+          const response = await fetch("/v1/recordings/uploads/" + uploadId + "/finish", {
             method: "POST",
             headers: authHeaders(),
           });
+          if (response.status === 404) return { ok: false, missing: true, error: "Mất kết nối khi đang gửi video." };
+          if (response.status === 507) return { ok: false, error: "Hết chỗ trống trên máy chủ." };
           if (!response.ok) throw new Error("finish");
           const data = await response.json();
           if (!data.jobId) throw new Error("finish");

@@ -453,7 +453,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "33")
+        self.assertEqual(build, "34")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -463,7 +463,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 33)
+        self.assertEqual(payload["iphoneBuild"], 34)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -1003,6 +1003,43 @@ class ActionApiTests(unittest.TestCase):
             headers=self.headers,
             json={"workerId": worker_id, "error": "Không đọc được video."},
         )
+
+    def test_upload_status_shows_bytes_the_phone_already_sent(self) -> None:
+        missing = self.client.get("/v1/recordings/uploads/khong-co", headers=self.headers)
+        self.assertEqual(missing.status_code, 404, missing.text)
+        locked = self.client.get("/v1/recordings/uploads/khong-co")
+        self.assertEqual(locked.status_code, 401, locked.text)
+        started = self.client.post(
+            "/v1/recordings/uploads",
+            headers=self.headers,
+            json={"name": "lon.mp4", "size": 10},
+        )
+        self.assertEqual(started.status_code, 200, started.text)
+        upload_id = started.json()["uploadId"]
+        empty = self.client.get(f"/v1/recordings/uploads/{upload_id}", headers=self.headers)
+        self.assertEqual(empty.status_code, 200, empty.text)
+        self.assertEqual(empty.json()["offset"], 0)
+        self.assertEqual(empty.json()["size"], 10)
+        self.assertEqual(empty.json()["spans"], [])
+        later = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}?offset=5",
+            headers=self.headers,
+            content=b"56789",
+        )
+        self.assertEqual(later.status_code, 200, later.text)
+        seen = self.client.get(f"/v1/recordings/uploads/{upload_id}", headers=self.headers)
+        self.assertEqual(seen.status_code, 200, seen.text)
+        self.assertEqual(seen.json()["offset"], 0)
+        self.assertEqual(seen.json()["spans"], [[5, 10]])
+        first = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}?offset=0",
+            headers=self.headers,
+            content=b"01234",
+        )
+        self.assertEqual(first.status_code, 200, first.text)
+        done = self.client.get(f"/v1/recordings/uploads/{upload_id}", headers=self.headers)
+        self.assertEqual(done.json()["offset"], 10)
+        self.assertEqual(done.json()["spans"], [[0, 5], [5, 10]])
 
     def test_two_pcs_each_take_one_video(self) -> None:
         first = self.client.post(
