@@ -11,9 +11,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFileDialog,
-    QFormLayout,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -23,6 +21,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -51,7 +50,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Chuyển danh bạ sang VCF")
-        self.resize(980, 780)
+        self.resize(860, 640)
         self.inspection: FileInspection | None = None
         self.output_dir: Path | None = None
         self.worker: ConversionWorker | None = None
@@ -68,59 +67,39 @@ class MainWindow(QMainWindow):
         self._refresh_buttons()
 
     def _build(self) -> None:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        self.setCentralWidget(scroll)
         root = QWidget()
-        self.setCentralWidget(root)
+        scroll.setWidget(root)
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(8)
 
-        source_box = QGroupBox("1. File nguồn")
-        source_layout = QGridLayout(source_box)
+        title = QLabel("Danh bạ")
+        title.setObjectName("title")
+        hint = QLabel("Chọn file số, nạp vào kho, rồi tải từng danh bạ. Tên liên hệ là chính số điện thoại.")
+        hint.setWordWrap(True)
+        hint.setObjectName("hint")
+        layout.addWidget(title)
+        layout.addWidget(hint)
+
+        file_row = QHBoxLayout()
         self.file_edit = QLineEdit()
         self.file_edit.setReadOnly(True)
-        self.file_edit.setPlaceholderText("Chọn CSV, XLSX hoặc TXT")
+        self.file_edit.setPlaceholderText("File CSV, Excel hoặc TXT")
         pick_file = QPushButton("Chọn file")
         pick_file.clicked.connect(self._pick_file)
-        source_layout.addWidget(self.file_edit, 0, 0)
-        source_layout.addWidget(pick_file, 0, 1)
-        self.info_labels = {
-            "name": QLabel("—"),
-            "format": QLabel("—"),
-            "rows": QLabel("—"),
-            "valid": QLabel("—"),
-            "invalid": QLabel("—"),
-            "duplicate": QLabel("—"),
-        }
-        info = QFormLayout()
-        info.addRow("Tên file", self.info_labels["name"])
-        info.addRow("Định dạng", self.info_labels["format"])
-        info.addRow("Tổng số dòng", self.info_labels["rows"])
-        info.addRow("Số dòng hợp lệ", self.info_labels["valid"])
-        info.addRow("Số dòng lỗi", self.info_labels["invalid"])
-        info.addRow("Số điện thoại trùng", self.info_labels["duplicate"])
-        source_layout.addLayout(info, 1, 0, 1, 2)
-        layout.addWidget(source_box)
+        file_row.addWidget(self.file_edit, stretch=1)
+        file_row.addWidget(pick_file)
+        layout.addLayout(file_row)
 
-        preview_box = QGroupBox("Xem trước — kiểm tra cột tên và cột số trước khi chạy")
-        preview_layout = QVBoxLayout(preview_box)
-        self.preview = QTableWidget(0, 0)
-        self.preview.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.preview.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-        self.preview.setMaximumHeight(150)
-        self.preview.verticalHeader().setVisible(False)
-        self.preview.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.mapping_label = QLabel("Chọn file để xem vài dòng đầu.")
-        self.mapping_label.setWordWrap(True)
-        preview_layout.addWidget(self.mapping_label)
-        preview_layout.addWidget(self.preview)
-        layout.addWidget(preview_box)
-
-        options = QGroupBox("2. Cột, cỡ file và tùy chọn")
-        form = QGridLayout(options)
-        self.name_combo = QComboBox()
+        column_row = QHBoxLayout()
+        column_row.addWidget(QLabel("Cột số"))
         self.phone_combo = QComboBox()
-        self.name_combo.currentIndexChanged.connect(self._show_mapping)
+        self.name_combo = QComboBox()
         self.phone_combo.currentIndexChanged.connect(self._show_mapping)
+        self.name_combo.currentIndexChanged.connect(self._show_mapping)
         self.delimiter_combo = QComboBox()
         for label, _value in _DELIMITERS:
             self.delimiter_combo.addItem(label)
@@ -129,23 +108,102 @@ class MainWindow(QMainWindow):
         self.header_check = QCheckBox("Dòng đầu là tiêu đề")
         self.header_check.setChecked(True)
         self.header_check.stateChanged.connect(self._reinspect)
+        column_row.addWidget(self.phone_combo, stretch=1)
+        column_row.addWidget(self.delimiter_combo)
+        column_row.addWidget(self.header_check)
+        layout.addLayout(column_row)
+
+        self.mapping_label = QLabel("Chọn file để xem vài dòng đầu.")
+        self.mapping_label.setWordWrap(True)
+        self.mapping_label.setObjectName("hint")
+        layout.addWidget(self.mapping_label)
+        self.preview = QTableWidget(0, 0)
+        self.preview.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.preview.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.preview.setMaximumHeight(120)
+        self.preview.verticalHeader().setVisible(False)
+        self.preview.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(self.preview)
+
+        self.info_labels = {
+            "name": QLabel("—"),
+            "format": QLabel("—"),
+            "rows": QLabel("—"),
+            "valid": QLabel("—"),
+            "invalid": QLabel("—"),
+            "duplicate": QLabel("—"),
+        }
+        summary = QHBoxLayout()
+        for key in ("format", "rows", "valid", "duplicate", "invalid"):
+            summary.addWidget(self.info_labels[key])
+        summary.addStretch(1)
+        layout.addLayout(summary)
+
+        kho_row = QHBoxLayout()
+        self.output_edit = QLineEdit()
+        self.output_edit.setReadOnly(True)
+        self.output_edit.setPlaceholderText("Thư mục kho")
+        pick_out = QPushButton("Chọn thư mục")
+        pick_out.clicked.connect(self._pick_output)
+        kho_row.addWidget(self.output_edit, stretch=1)
+        kho_row.addWidget(pick_out)
+        layout.addLayout(kho_row)
+
+        self.start_btn = QPushButton("Nạp vào kho")
+        self.start_btn.setObjectName("primary")
+        self.start_btn.clicked.connect(self._import_pool)
+        layout.addWidget(self.start_btn)
+
+        self.plan_label = QLabel("Mỗi danh bạ 5.000 số. Số đã chia thì không chuyển danh bạ khác.")
+        self.plan_label.setWordWrap(True)
+        self.plan_label.setObjectName("hint")
+        self.kho_label = QLabel("Chưa chọn thư mục kho.")
+        self.kho_label.setWordWrap(True)
+        layout.addWidget(self.plan_label)
+        layout.addWidget(self.kho_label)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 1000)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setFixedHeight(8)
+        layout.addWidget(self.progress_bar)
+
+        book_row = QHBoxLayout()
+        self.book_filter = QComboBox()
+        self.book_filter.addItem("Tất cả", "all")
+        self.book_filter.addItem("Chưa tải", "pending")
+        self.book_filter.addItem("Đã tải", "downloaded")
+        self.book_filter.currentIndexChanged.connect(self._reload_books)
+        self.download_all_btn = QPushButton("Tải hết chưa tải")
+        self.download_all_btn.clicked.connect(self._download_pending)
+        book_row.addWidget(self.book_filter)
+        book_row.addWidget(self.download_all_btn)
+        book_row.addStretch(1)
+        layout.addLayout(book_row)
+
+        self.books = QTableWidget(0, 4)
+        self.books.setHorizontalHeaderLabels(["Danh bạ", "Số lượng", "Trạng thái", ""])
+        self.books.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.books.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.books.verticalHeader().setVisible(False)
+        self.books.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.books.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.books.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.books.setMinimumHeight(160)
+        layout.addWidget(self.books)
+
+        self.more_check = QCheckBox("Hiện thêm")
+        self.more_check.toggled.connect(self._toggle_more)
+        layout.addWidget(self.more_check)
+        self.more_panel = QWidget()
+        more = QGridLayout(self.more_panel)
+        more.setContentsMargins(0, 0, 0, 0)
         self.per_file = QSpinBox()
         self.per_file.setRange(1, 1_000_000)
         self.per_file.setValue(5000)
         self.per_file.setGroupSeparatorShown(True)
         self.per_file.valueChanged.connect(self._update_plan)
-        size_500 = QPushButton("500 / file")
-        size_500.setToolTip("Cỡ dễ nhập vào Danh bạ iPhone, từng file một.")
-        size_500.clicked.connect(lambda: self.per_file.setValue(500))
-        size_5000 = QPushButton("5.000 / file")
-        size_5000.clicked.connect(lambda: self.per_file.setValue(5000))
-        self.plan_label = QLabel("Chọn file để ước tính số file danh bạ.")
-        self.plan_label.setWordWrap(True)
-        self.output_edit = QLineEdit()
-        self.output_edit.setReadOnly(True)
-        self.output_edit.setPlaceholderText("Thư mục xuất")
-        pick_out = QPushButton("Chọn thư mục")
-        pick_out.clicked.connect(self._pick_output)
         self.dedupe_check = QCheckBox("Loại bỏ số điện thoại trùng")
         self.dedupe_check.setChecked(True)
         self.normalize_check = QCheckBox("Chuẩn hóa số điện thoại")
@@ -155,83 +213,27 @@ class MainWindow(QMainWindow):
         self.keep_name_check = QCheckBox("Giữ tên gốc")
         self.keep_name_check.setChecked(True)
         self.split_check = QCheckBox("Chia thư mục (1.000 file mỗi thư mục)")
-        form.addWidget(QLabel("Cột tên"), 0, 0)
-        form.addWidget(self.name_combo, 0, 1)
-        form.addWidget(QLabel("Cột số điện thoại"), 0, 2)
-        form.addWidget(self.phone_combo, 0, 3)
-        form.addWidget(QLabel("Dấu phân cách"), 1, 0)
-        form.addWidget(self.delimiter_combo, 1, 1)
-        form.addWidget(self.header_check, 1, 2, 1, 2)
-        form.addWidget(QLabel("Số liên hệ mỗi file"), 2, 0)
-        form.addWidget(self.per_file, 2, 1)
-        form.addWidget(size_500, 2, 2)
-        form.addWidget(size_5000, 2, 3)
-        form.addWidget(self.plan_label, 3, 0, 1, 4)
-        form.addWidget(self.output_edit, 4, 0, 1, 3)
-        form.addWidget(pick_out, 4, 3)
-        form.addWidget(self.dedupe_check, 5, 0, 1, 2)
-        form.addWidget(self.normalize_check, 5, 2, 1, 2)
-        form.addWidget(self.vn_check, 6, 0, 1, 2)
-        form.addWidget(self.keep_name_check, 6, 2, 1, 2)
-        form.addWidget(self.split_check, 7, 0, 1, 4)
-        layout.addWidget(options)
-
-        buttons = QHBoxLayout()
-        self.check_btn = QPushButton("LÀM MỚI KHO")
-        self.start_btn = QPushButton("NẠP VÀO KHO")
-        self.pause_btn = QPushButton("TẠM DỪNG")
-        self.resume_btn = QPushButton("TIẾP TỤC")
-        self.cancel_btn = QPushButton("HỦY")
+        more.addWidget(QLabel("Cột tên"), 0, 0)
+        more.addWidget(self.name_combo, 0, 1)
+        more.addWidget(QLabel("Số mỗi file khi chuyển kiểu cũ"), 1, 0)
+        more.addWidget(self.per_file, 1, 1)
+        more.addWidget(self.dedupe_check, 2, 0, 1, 2)
+        more.addWidget(self.normalize_check, 3, 0, 1, 2)
+        more.addWidget(self.vn_check, 4, 0, 1, 2)
+        more.addWidget(self.keep_name_check, 5, 0, 1, 2)
+        more.addWidget(self.split_check, 6, 0, 1, 2)
+        extra = QHBoxLayout()
+        self.check_btn = QPushButton("Làm mới")
+        self.pause_btn = QPushButton("Tạm dừng")
+        self.resume_btn = QPushButton("Tiếp tục")
+        self.cancel_btn = QPushButton("Hủy")
         self.check_btn.clicked.connect(self._reload_books)
-        self.start_btn.clicked.connect(self._import_pool)
         self.pause_btn.clicked.connect(self._pause)
         self.resume_btn.clicked.connect(self._resume)
         self.cancel_btn.clicked.connect(self._cancel)
-        for button in (
-            self.check_btn,
-            self.start_btn,
-            self.pause_btn,
-            self.resume_btn,
-            self.cancel_btn,
-        ):
-            buttons.addWidget(button)
-        layout.addLayout(buttons)
-
-        books_box = QGroupBox("3. Kho số và danh bạ")
-        books_layout = QVBoxLayout(books_box)
-        self.kho_label = QLabel("Chưa chọn thư mục kho.")
-        self.kho_label.setWordWrap(True)
-        books_layout.addWidget(self.kho_label)
-        filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("Lọc"))
-        self.book_filter = QComboBox()
-        self.book_filter.addItem("Tất cả", "all")
-        self.book_filter.addItem("Chưa tải", "pending")
-        self.book_filter.addItem("Đã tải", "downloaded")
-        self.book_filter.currentIndexChanged.connect(self._reload_books)
-        filter_row.addWidget(self.book_filter)
-        self.download_all_btn = QPushButton("Tải các file chưa tải")
-        self.download_all_btn.clicked.connect(self._download_pending)
-        filter_row.addWidget(self.download_all_btn)
-        filter_row.addStretch(1)
-        books_layout.addLayout(filter_row)
-        self.books = QTableWidget(0, 4)
-        self.books.setHorizontalHeaderLabels(["Danh bạ", "Số lượng", "Trạng thái", ""])
-        self.books.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.books.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-        self.books.verticalHeader().setVisible(False)
-        self.books.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.books.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.books.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        self.books.setMaximumHeight(220)
-        books_layout.addWidget(self.books)
-        layout.addWidget(books_box)
-
-        progress_box = QGroupBox("4. Tiến trình")
-        progress_layout = QGridLayout(progress_box)
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 1000)
-        self.progress_bar.setValue(0)
+        for button in (self.check_btn, self.pause_btn, self.resume_btn, self.cancel_btn):
+            extra.addWidget(button)
+        more.addLayout(extra, 7, 0, 1, 2)
         self.run_labels = {
             "processed": QLabel("0"),
             "total": QLabel("—"),
@@ -241,60 +243,57 @@ class MainWindow(QMainWindow):
             "files": QLabel("0"),
             "errors": QLabel("0"),
         }
-        progress_layout.addWidget(self.progress_bar, 0, 0, 1, 4)
-        pairs = [
-            (1, 0, "Đã xử lý", "processed"),
-            (1, 2, "Tổng số", "total"),
-            (2, 0, "Phần trăm", "percent"),
-            (2, 2, "Tốc độ xử lý", "speed"),
-            (3, 0, "Thời gian còn lại", "eta"),
-            (3, 2, "Số file đã tạo", "files"),
-            (4, 0, "Số liên hệ lỗi", "errors"),
-        ]
-        for row, column, title, key in pairs:
-            progress_layout.addWidget(QLabel(title), row, column)
-            progress_layout.addWidget(self.run_labels[key], row, column + 1)
-        layout.addWidget(progress_box)
-
-        log_box = QGroupBox("Nhật ký hoạt động")
-        log_layout = QVBoxLayout(log_box)
+        stats = QHBoxLayout()
+        for key in ("processed", "total", "percent", "speed", "eta", "files", "errors"):
+            stats.addWidget(self.run_labels[key])
+        more.addLayout(stats, 8, 0, 1, 2)
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(300)
-        self.log.setPlaceholderText("Nhật ký tổng hợp. Chi tiết lỗi nằm trong errors.csv và conversion.log.")
-        log_layout.addWidget(self.log)
-        layout.addWidget(log_box, stretch=1)
+        self.log.setFixedHeight(90)
+        self.log.setPlaceholderText("Nhật ký")
+        more.addWidget(self.log, 9, 0, 1, 2)
+        self.more_panel.setVisible(False)
+        layout.addWidget(self.more_panel)
+        layout.addStretch(1)
+
+    def _toggle_more(self, shown: bool) -> None:
+        self.more_panel.setVisible(shown)
 
     def _apply_style(self) -> None:
         self.setStyleSheet(
             """
-            QWidget { background: #f4f6f8; color: #1f2933; font-size: 13px; }
-            QGroupBox {
-                font-weight: 600;
-                border: 1px solid #d5dde5;
-                border-radius: 8px;
-                margin-top: 12px;
-                padding: 12px;
-            }
-            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }
+            QWidget { background: #ffffff; color: #1c1917; font-size: 14px; }
+            QScrollArea { border: none; }
+            QLabel#title { font-size: 22px; font-weight: 650; }
+            QLabel#hint { color: #57534e; }
             QLineEdit, QComboBox, QSpinBox, QPlainTextEdit {
-                background: white;
-                border: 1px solid #c9d3dd;
-                border-radius: 6px;
-                padding: 4px 6px;
+                background: #fafaf9;
+                border: 1px solid #e7e5e4;
+                border-radius: 8px;
+                padding: 6px 8px;
+                min-height: 22px;
             }
-            QPlainTextEdit { background: #111827; color: #e5e7eb; }
+            QPlainTextEdit { background: #1c1917; color: #fafaf9; }
             QPushButton {
-                background: #0f6f8c;
+                background: #f5f5f4;
+                color: #1c1917;
+                border: 1px solid #e7e5e4;
+                border-radius: 8px;
+                padding: 8px 12px;
+            }
+            QPushButton:disabled { color: #a8a29e; }
+            QPushButton#primary {
+                background: #1c1917;
                 color: white;
                 border: none;
-                border-radius: 6px;
-                padding: 8px 10px;
-                font-weight: 600;
+                font-weight: 650;
+                padding: 10px 12px;
             }
-            QPushButton:disabled { background: #b7c3ce; color: #f8fafc; }
-            QProgressBar { border: 1px solid #c9d3dd; border-radius: 6px; background: white; text-align: center; }
-            QProgressBar::chunk { background: #0f6f8c; border-radius: 5px; }
+            QPushButton#primary:disabled { background: #d6d3d1; color: white; }
+            QHeaderView::section { background: #fafaf9; border: none; padding: 6px; }
+            QProgressBar { border: none; border-radius: 4px; background: #f5f5f4; }
+            QProgressBar::chunk { background: #1c1917; border-radius: 4px; }
             """
         )
 
