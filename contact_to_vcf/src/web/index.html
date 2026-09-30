@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Danh bạ</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f1ea;
+      --card: #ffffff;
+      --ink: #1c1917;
+      --muted: #78716c;
+      --line: #e7e5e4;
+      --primary: #111827;
+      --primary-ink: #ffffff;
+      --go: #0f766e;
+      --soft: #f5f5f4;
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 20px 16px 40px; }
+    h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.03em; }
+    .lead { color: var(--muted); margin: 0 0 18px; line-height: 1.45; }
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(28, 25, 23, 0.06);
+      margin-bottom: 14px;
+    }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    input[type="text"], input[type="password"], select {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fafaf9;
+      border-radius: 14px;
+      padding: 14px 12px;
+      font-size: 16px;
+    }
+    .stack { display: grid; gap: 12px; }
+    button, .file-btn {
+      border: 0;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 650;
+      min-height: 52px;
+      padding: 0 16px;
+      cursor: pointer;
+    }
+    .primary { background: var(--primary); color: var(--primary-ink); width: 100%; }
+    .go { background: var(--go); color: white; width: 100%; }
+    .ghost { background: var(--soft); color: var(--ink); }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .row > * { flex: 1; }
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+    .chip {
+      border-radius: 999px;
+      min-height: 42px;
+      padding: 0 14px;
+      background: var(--soft);
+      color: var(--ink);
+    }
+    .chip.on { background: var(--primary); color: white; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; color: var(--muted); font-weight: 600; padding: 8px 4px; }
+    td { padding: 10px 4px; border-top: 1px solid var(--line); vertical-align: middle; }
+    .book-btn { min-height: 42px; background: var(--go); color: white; }
+    .status { color: var(--muted); font-size: 14px; }
+    .hide { display: none; }
+    .error { color: #b91c1c; }
+    .stats { display: flex; gap: 8px; flex-wrap: wrap; }
+    .stat {
+      background: #fafaf9;
+      border-radius: 12px;
+      padding: 10px 12px;
+      min-width: 90px;
+    }
+    .stat b { display: block; font-size: 18px; }
+    @media (min-width: 900px) {
+      body.desktop .layout { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 16px; align-items: start; }
+      body.desktop h1 { font-size: 34px; }
+      body.desktop .primary, body.desktop .go { width: auto; min-width: 180px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Danh bạ</h1>
+    <p class="lead" id="lead">Nạp số, giữ kho, tải từng file. Tên liên hệ là chính số điện thoại.</p>
+
+    <section id="login" class="card stack">
+      <label>Tài khoản</label>
+      <input id="user" type="text" value="danhba" autocomplete="username">
+      <label>Mật khẩu</label>
+      <input id="password" type="password" value="danhba123" autocomplete="current-password">
+      <button class="primary" id="enter" type="button">Vào phần mềm</button>
+      <p class="error hide" id="login-error"></p>
+    </section>
+
+    <div id="app" class="hide">
+      <div class="layout">
+        <section class="card stack">
+          <label>File số điện thoại</label>
+          <button class="ghost file-btn" id="pick" type="button">Chọn file CSV, Excel hoặc TXT</button>
+          <input id="file" class="hide" type="file" accept=".csv,.xlsx,.txt,text/csv,text/plain">
+          <p class="status" id="file-name">Chưa chọn file.</p>
+          <div id="columns" class="hide stack">
+            <label>Cột số</label>
+            <div class="chips" id="chips"></div>
+            <div class="row">
+              <button class="ghost" id="more" type="button">Hiện thêm</button>
+            </div>
+            <div id="extra" class="hide stack">
+              <label>Dấu phân cách</label>
+              <select id="delimiter">
+                <option value=",">Phẩy ,</option>
+                <option value=";">Chấm phẩy ;</option>
+                <option value="&#9;">Tab</option>
+                <option value="|">Gạch đứng |</option>
+              </select>
+              <label><input id="header" type="checkbox" checked> Dòng đầu là tiêu đề</label>
+            </div>
+            <div style="overflow:auto">
+              <table id="preview"></table>
+            </div>
+            <button class="primary" id="import" type="button">Nạp vào kho</button>
+          </div>
+          <p class="status" id="result"></p>
+        </section>
+
+        <section class="card stack">
+          <div class="stats" id="stats"></div>
+          <div class="chips" id="filters">
+            <button class="chip on" type="button" data-status="all">Tất cả</button>
+            <button class="chip" type="button" data-status="pending">Chưa tải</button>
+            <button class="chip" type="button" data-status="downloaded">Đã tải</button>
+          </div>
+          <button class="go" id="download-all" type="button">Tải hết chưa tải</button>
+          <div style="overflow:auto">
+            <table>
+              <thead><tr><th>Danh bạ</th><th>Số lượng</th><th>Trạng thái</th><th></th></tr></thead>
+              <tbody id="books"></tbody>
+            </table>
+          </div>
+          <p class="status">Mỗi danh bạ 5.000 số. Số đã chia thì không chuyển sang danh bạ khác. Số trùng không được thêm lại.</p>
+        </section>
+      </div>
+    </div>
+  </div>
+  <script>
+    const touch = navigator.maxTouchPoints > 0 || window.matchMedia("(max-width: 800px)").matches;
+    document.body.classList.add(touch ? "phone" : "desktop");
+    document.getElementById("lead").textContent = touch
+      ? "Giao diện điện thoại. Chọn file, nạp kho, rồi tải danh bạ."
+      : "Giao diện máy tính. Chọn file, nạp kho, rồi tải danh bạ.";
+
+    const $ = (id) => document.getElementById(id);
+    let upload = null;
+    let phoneColumn = 0;
+    let filter = "all";
+
+    async function api(url, options) {
+      const response = await fetch(url, options);
+      const type = response.headers.get("content-type") || "";
+      if (type.includes("application/json")) {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Lỗi");
+        return data;
+      }
+      if (!response.ok) throw new Error("Lỗi");
+      return response;
+    }
+
+    $("enter").onclick = async () => {
+      $("login-error").classList.add("hide");
+      try {
+        await api("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user: $("user").value, password: $("password").value })
+        });
+        $("login").classList.add("hide");
+        $("app").classList.remove("hide");
+        await loadBooks();
+      } catch (error) {
+        $("login-error").textContent = error.message;
+        $("login-error").classList.remove("hide");
+      }
+    };
+
+    $("pick").onclick = () => $("file").click();
+    $("file").onchange = async () => {
+      const file = $("file").files[0];
+      if (!file) return;
+      $("file-name").textContent = file.name;
+      const body = new FormData();
+      body.append("file", file);
+      const info = await api("/api/inspect", { method: "POST", body });
+      upload = info;
+      phoneColumn = info.phone_column;
+      $("header").checked = info.has_header;
+      if ([",", ";", "\t", "|"].includes(info.delimiter)) $("delimiter").value = info.delimiter;
+      $("columns").classList.remove("hide");
+      drawChips();
+      drawPreview();
+    };
+
+    function drawChips() {
+      $("chips").innerHTML = "";
+      upload.columns.forEach((name, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "chip" + (index === phoneColumn ? " on" : "");
+        button.textContent = name;
+        button.onclick = () => { phoneColumn = index; drawChips(); drawPreview(); };
+        $("chips").appendChild(button);
+      });
+    }
+
+    function drawPreview() {
+      const table = $("preview");
+      const head = "<tr>" + upload.columns.map((name, index) =>
+        "<th" + (index === phoneColumn ? " style=\"color:#0f766e\"" : "") + ">" + escapeHtml(name) + "</th>"
+      ).join("") + "</tr>";
+      const rows = upload.samples.map((row) => "<tr>" + upload.columns.map((_, index) =>
+        "<td>" + escapeHtml(row[index] || "") + "</td>"
+      ).join("") + "</tr>").join("");
+      table.innerHTML = head + rows;
+    }
+
+    $("more").onclick = () => $("extra").classList.toggle("hide");
+    $("header").onchange = $("delimiter").onchange = () => {
+      if (!upload) return;
+      upload.has_header = $("header").checked;
+      upload.delimiter = $("delimiter").value;
+    };
+
+    $("import").onclick = async () => {
+      if (!upload) return;
+      $("import").disabled = true;
+      $("result").textContent = "Đang nạp…";
+      try {
+        const data = await api("/api/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            upload_id: upload.upload_id,
+            phone_column: phoneColumn,
+            has_header: $("header").checked,
+            delimiter: $("delimiter").value
+          })
+        });
+        $("result").textContent = "Thêm " + data.added + " số. Trùng " + data.duplicate + ". Bỏ qua " + data.rejected + ". Kho có " + data.total + " số.";
+        await loadBooks();
+      } catch (error) {
+        $("result").textContent = error.message;
+      } finally {
+        $("import").disabled = false;
+      }
+    };
+
+    $("filters").onclick = (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      filter = button.dataset.status;
+      for (const item of $("filters").children) item.classList.toggle("on", item === button);
+      loadBooks();
+    };
+
+    async function loadBooks() {
+      const data = await api("/api/books?status=" + filter);
+      $("stats").innerHTML = "<div class=\"stat\"><b>" + data.total + "</b>số trong kho</div>";
+      $("books").innerHTML = data.books.map((book) => {
+        const state = book.downloaded_at ? ("Đã tải " + book.downloaded_at) : "Chưa tải";
+        return "<tr><td>" + book.name + "</td><td>" + book.count + "</td><td>" + state +
+          "</td><td><button class=\"book-btn\" type=\"button\" data-id=\"" + book.id + "\">Tải về</button></td></tr>";
+      }).join("");
+    }
+
+    $("books").onclick = (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      window.location = "/api/books/" + button.dataset.id + "/download";
+    };
+
+    $("download-all").onclick = () => {
+      window.location = "/api/download-pending";
+      setTimeout(loadBooks, 1500);
+    };
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[char]));
+    }
+  </script>
+</body>
+</html>
