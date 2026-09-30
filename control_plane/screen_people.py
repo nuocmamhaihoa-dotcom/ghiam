@@ -316,7 +316,13 @@ def _near_username(left: str, right: str) -> bool:
     return _edit_distance(folded_left, folded_right, 1) <= 1
 
 
-def _winning_spellings(values: list[str], near: Callable[[str, str], bool]) -> list[str] | None:
+def _winning_spellings(
+    values: list[str],
+    near: Callable[[str, str], bool],
+    *,
+    minimum: int = 3,
+    multiple: int = 3,
+) -> list[str] | None:
     """Cụm đọc nhiều nhất. Hai cách đọc khác nhau ngang nhau thì không chọn."""
     groups: list[list[str]] = []
     for value in values:
@@ -335,7 +341,7 @@ def _winning_spellings(values: list[str], near: Callable[[str, str], bool]) -> l
         return groups[0]
     leader = len(groups[0])
     runner = len(groups[1])
-    if leader == runner or leader < 3 or leader < runner * 3:
+    if leader == runner or leader < minimum or leader < runner * multiple:
         return None
     return groups[0]
 
@@ -420,7 +426,8 @@ def propose_rows(sightings: list[dict[str, str]]) -> list[dict[str, str]]:
             continue
         contact_names = [contact_name for _name, contact_name in contacts[key]]
         usernames = [username for _name, username in profiles[key]]
-        chosen_contacts = _winning_spellings(contact_names, _near_contact)
+        # Tên danh bạ đọc giống nhau 2 lần thì thắng một cách đọc khác. Tài khoản vẫn cần lệch rõ hơn.
+        chosen_contacts = _winning_spellings(contact_names, _near_contact, minimum=2, multiple=1)
         chosen_usernames = _winning_spellings(usernames, _near_username)
         if not chosen_contacts or not chosen_usernames:
             continue

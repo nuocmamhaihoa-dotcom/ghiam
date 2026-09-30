@@ -29,15 +29,19 @@ from control_plane.screen_people import (
     tsv_word_counts,
 )
 
-# 4 khung/giây cho video đến 30 phút. Video dài hơn thì dàn đều số khung này.
-_MAX_FRAMES = 7200
+# 8 khung/giây cho video đến 30 phút. Video dài hơn thì dàn đều số khung này.
+_MAX_FRAMES = 30 * 60 * 8
 # Khung chỉ nhích vài điểm ảnh thì bỏ. Một dòng chữ đổi (khoảng 3) vẫn được đọc.
 _MIN_DIFF = 2.0
 # Trang cùng bố cục mà chỉ đổi tên và tài khoản thì trung bình đổi chưa tới 1, nhưng ô 10x10 đổi mạnh nhất lên
 # khoảng 29. Nhiễu nén, một điểm ảnh, hay cả khung dịch 1 điểm ảnh chỉ tới 3.
 _BLOCK_DIFF = 12.0
 # Rộng tối đa 720. Đo trên video iPhone thật: rộng 1080 đọc chậm hơn và nhận ra ít tên hơn.
-_SAMPLE_FPS = 4.0
+# 8 khung/giây đọc được khoảng một nửa tên danh bạ hơn 4 khung/giây. Giải mã gần như không chậm thêm.
+_SAMPLE_FPS = 8.0
+# Bốn tiến trình ffmpeg. Một tiến trình không dùng hết lõi.
+_SEGMENTS = 4
+_SEGMENT_MIN_FRAMES = 64
 _PARTIAL_MARK = "extract.partial"
 _PREVIEW_WIDTH = 420
 _PREVIEW_CAP = 3
@@ -131,22 +135,25 @@ def _ffmpeg_extract_command(
     rate: float,
     threads: str | None = None,
     first: int = 1,
+    frames: int | None = None,
 ) -> list[str]:
     """JPEG nén nhẹ. Không phóng to khung. Số luồng mặc định là hết lõi.
 
     first lớn hơn 1 là tách nối: bắt đầu từ đúng giây của khung đó, đánh số tiếp.
+    frames là số khung của đoạn này. Mặc định là phần còn lại trong giới hạn.
     """
     count = _ffmpeg_thread_count() if threads is None else threads
     argv = ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-threads", count]
     if first > 1:
         argv += ["-ss", f"{(first - 1) / rate:.3f}"]
+    limit = max(1, _MAX_FRAMES - (first - 1)) if frames is None else max(1, frames)
     argv += [
         "-i",
         str(path),
         "-vf",
         f"fps={rate:.4f},scale=min(720\\,iw):-2,format=yuv420p",
         "-frames:v",
-        str(max(1, _MAX_FRAMES - (first - 1))),
+        str(limit),
     ]
     if first > 1:
         argv += ["-start_number", str(first)]
@@ -397,6 +404,50 @@ def _saved_frames(work: Path, rate: float) -> list[tuple[float, Path]] | None:
     return [(index / saved_rate, image) for index, image in enumerate(images)]
 
 
+class _AddWords(ReadProgress):
+    """Cộng số từ của từng đoạn, và chỉ báo video không có chữ khi mọi đoạn đều trống."""
+
+    def __init__(self, inner: ReadProgress) -> None:
+        self._inner = inner
+        self.seen = 0
+        self.kept = 0
+        self.blank = False
+
+    def report(self, percent: int, task: str) -> None:
+        self._inner.report(percent, task)
+
+    def problem(self, text: str) -> None:
+        if text == "Không đọc được chữ trên video.":
+            self.blank = True
+            return
+        self._inner.problem(text)
+
+    def remembered(self) -> dict[str, tuple[list[str], list[dict[str, str]]]]:
+        return self._inner.remembered()
+
+    def remember_frame(self, seconds: float, captions: list[str], sightings: list[dict[str, str]]) -> None:
+        self._inner.remember_frame(seconds, captions, sightings)
+
+    def staged_people(self) -> list[dict[str, str]] | None:
+        return self._inner.staged_people()
+
+    def stage_people(self, people: list[dict[str, str]]) -> None:
+        self._inner.stage_people(people)
+
+    def note_tally(self, contacts: int, accounts: int, saved: int) -> None:
+        self._inner.note_tally(contacts, accounts, saved)
+
+    def note_words(self, seen: int, kept: int) -> None:
+        self.seen += max(0, int(seen))
+        self.kept += max(0, int(kept))
+
+    def note_samples(self, images: list[bytes]) -> None:
+        self._inner.note_samples(images)
+
+    def note_blank(self) -> None:
+        self.blank = True
+
+
 def analyze_screen_video(
     path: Path,
     progress: ReadProgress | None = None,
@@ -421,14 +472,24 @@ def analyze_screen_video(
     work = _work_dir(path)
     work.mkdir(parents=True, exist_ok=True)
     images = None if keep_open else _saved_frames(work, rate)
+    words = _AddWords(sink)
     if images is None:
         marker = work / "extract.done"
         marker.unlink(missing_ok=True)
         have = _earlier_frames(work, rate)
-        images = _extract_frames(
+        chosen = []
+        readings = []
+        held: list[Image.Image] = []
+        produced = have > 0
+        for batch in _iter_segments(
             path, work, rate, duration, sink, threads=threads, partial=keep_open, have=have
-        )
-        if not images:
+        ):
+            if batch:
+                produced = True
+            part = _changed_frames(batch, sink, held)
+            chosen.extend(part)
+            readings.extend(_read_frames(part, words, reserve=reserve))
+        if not produced:
             if keep_open:
                 return [], []
             raise ScreenVideoError("Video không có hình.")
@@ -436,10 +497,20 @@ def analyze_screen_video(
             marker.write_text(f"{rate:.6f}", encoding="utf-8")
     else:
         sink.report(40, "Tách khung hình")
-    chosen = _changed_frames(images, sink)
+        chosen = _changed_frames(images, sink)
+        readings = _read_frames(chosen, words, reserve=reserve)
     if not keep_open:
         sink.note_samples(_sample_previews(chosen))
-    readings = _read_frames(chosen, sink, reserve=reserve)
+    seen_keys = {_frame_key(seconds) for seconds, _captions, _found in readings}
+    for key, (captions, sightings) in sink.remembered().items():
+        if key in seen_keys:
+            continue
+        readings.append((float(key), list(captions), [dict(item) for item in sightings]))
+    readings.sort(key=lambda item: item[0])
+    sink.note_words(words.seen, words.kept)
+    if words.blank and readings and all(not captions and not found for _seconds, captions, found in readings):
+        sink.note_blank()
+        sink.problem("Không đọc được chữ trên video.")
     sink.report(94, "Ghép tên")
     frames = [(seconds, lines) for seconds, lines, _sightings in readings]
     sightings = [item for _seconds, _lines, found in readings for item in found]
@@ -478,7 +549,7 @@ def _earlier_frames(work: Path, rate: float) -> int:
 
 
 def _sample_rate(duration: float | None) -> float:
-    """Đọc 4 hình mỗi giây. Video dài thì dàn đều trong giới hạn khung."""
+    """Đọc 8 hình mỗi giây. Video dài thì dàn đều trong giới hạn khung."""
     if duration is None or duration <= 0:
         return _SAMPLE_FPS
     if duration * _SAMPLE_FPS <= _MAX_FRAMES:
@@ -494,6 +565,12 @@ def _media_env() -> dict[str, str]:
 
 
 def _duration(path: Path) -> float | None:
+    duration, _bitrate = _media_facts(path)
+    return duration
+
+
+def _media_facts(path: Path) -> tuple[float | None, int]:
+    """Thời lượng theo giây và bitrate. Bitrate 0 khi không đọc được."""
     try:
         result = subprocess.run(
             [
@@ -501,9 +578,9 @@ def _duration(path: Path) -> float | None:
                 "-v",
                 "error",
                 "-show_entries",
-                "format=duration",
+                "format=duration,bit_rate",
                 "-of",
-                "csv=p=0",
+                "default=noprint_wrappers=1:nokey=0",
                 str(path),
             ],
             capture_output=True,
@@ -514,34 +591,81 @@ def _duration(path: Path) -> float | None:
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise ScreenVideoError("Không đọc được video.") from error
-    raw = (result.stdout or "").strip()
-    if not raw or raw.upper() == "N/A":
+    duration: float | None = None
+    bitrate = 0
+    for line in (result.stdout or "").splitlines():
+        key, _, value = line.partition("=")
+        if key == "duration" and value and value.upper() != "N/A":
+            try:
+                duration = float(value)
+            except ValueError:
+                duration = None
+        elif key == "bit_rate" and value.isdigit():
+            bitrate = int(value)
+    return duration, bitrate
+
+
+def _readable_seconds(path: Path, duration: float | None, partial: bool, bitrate: int) -> float | None:
+    """Giây đã có đủ dữ liệu để tách. File còn đang tải thì chừa 15% theo bitrate, kẻo tua vào khúc chưa tới."""
+    if duration is None or duration <= 0:
+        return None
+    if not partial:
+        return duration
+    if bitrate <= 0:
         return None
     try:
-        return float(raw)
-    except ValueError:
+        size = path.stat().st_size
+    except OSError:
         return None
+    estimated = size * 8 / bitrate
+    return min(duration, max(0.0, estimated * 0.85))
 
 
-def _extract_frames(
-    path: Path,
-    work: Path,
-    rate: float,
+def _segment_ranges(total: int, have: int) -> list[tuple[int, int]]:
+    """Khoảng khung 1-based còn phải tách. Phần còn lại ngắn thì một tiến trình."""
+    if total <= have:
+        return []
+    if total - have < _SEGMENT_MIN_FRAMES:
+        return [(have + 1, total)]
+    ranges: list[tuple[int, int]] = []
+    for index in range(_SEGMENTS):
+        start = index * total // _SEGMENTS + 1
+        end = (index + 1) * total // _SEGMENTS
+        start = max(start, have + 1)
+        if end >= start:
+            ranges.append((start, end))
+    return ranges
+
+
+def _segment_threads(threads: str | None, parts: int) -> str | None:
+    """Chia số luồng cho từng đoạn. 0 là ffmpeg tự chia, giữ nguyên cho mỗi đoạn."""
+    raw = _ffmpeg_thread_count() if threads is None else threads
+    if parts <= 1 or not raw.isdigit() or int(raw) <= 0:
+        return threads
+    return str(max(1, int(raw) // parts))
+
+
+def _numbered_frames(images: list[Path], rate: float) -> list[tuple[float, Path]]:
+    timed: list[tuple[float, Path]] = []
+    for image in images:
+        try:
+            number = int(image.stem.split("-", 1)[1])
+        except (IndexError, ValueError):
+            continue
+        timed.append(((number - 1) / rate, image))
+    return timed
+
+
+def _run_ffmpeg(
+    argv: list[str],
     duration: float | None,
     progress: ReadProgress,
-    threads: str | None = None,
-    partial: bool = False,
-    have: int = 0,
-) -> list[tuple[float, Path]]:
-    """Tách tiếp từ khung have+1. partial là file còn đang tải: bỏ khoảng một giây cuối để đợt sau tách lại."""
-    pattern = work / "f-%05d.jpg"
-    progress.report(12, "Tách khung hình")
-    if have >= _MAX_FRAMES:
-        return [(index / rate, image) for index, image in enumerate(_frame_images(work))]
-    start = have / rate
+    origin: float,
+) -> int:
+    """Chạy một ffmpeg tách khung. origin là giây của khung đầu đoạn, để phần trăm tính trên cả video."""
     try:
         proc = subprocess.Popen(
-            _ffmpeg_extract_command(path, pattern, rate, threads, first=have + 1),
+            argv,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -571,7 +695,6 @@ def _extract_frames(
     drain.start()
     crept = 12
     shown = 12
-    # Video dài bao lâu cũng được. Chỉ dừng khi ffmpeg im 3 phút.
     stall_seconds = 180
     deadline = time.monotonic() + stall_seconds
     try:
@@ -598,7 +721,7 @@ def _extract_frames(
             if seconds is None:
                 continue
             if duration and duration > 0:
-                percent = 12 + int(min(1.0, (start + seconds) / duration) * 28)
+                percent = 12 + int(min(1.0, (origin + seconds) / duration) * 28)
             else:
                 crept = min(39, crept + 1)
                 percent = crept
@@ -622,23 +745,149 @@ def _extract_frames(
         for pipe in (proc.stdout, proc.stderr):
             if pipe is not None and not pipe.closed:
                 pipe.close()
-    images = _frame_images(work)
-    if partial:
+    return proc.returncode if proc.returncode is not None else 1
+
+
+def _files_in_range(work: Path, start: int, end: int) -> list[Path]:
+    found: list[Path] = []
+    for number in range(start, end + 1):
+        image = work / f"f-{number:05d}.jpg"
+        if image.is_file():
+            found.append(image)
+    return found
+
+
+def _trim_tail(images: list[Path], rate: float) -> list[Path]:
+    trim = min(len(images), max(2, math.ceil(rate)))
+    for old in images[len(images) - trim :]:
+        old.unlink(missing_ok=True)
+    return images[: len(images) - trim]
+
+
+def _iter_segments(
+    path: Path,
+    work: Path,
+    rate: float,
+    duration: float | None,
+    progress: ReadProgress,
+    threads: str | None = None,
+    partial: bool = False,
+    have: int = 0,
+) -> Any:
+    """Tách các đoạn còn thiếu. Đoạn sau tách trong lúc đoạn trước đang được đọc chữ."""
+    pattern = work / "f-%05d.jpg"
+    progress.report(12, "Tách khung hình")
+    if have >= _MAX_FRAMES:
+        return
+    _known, bitrate = _media_facts(path)
+    whole = duration if duration is not None else _known
+    readable = _readable_seconds(path, whole, partial, bitrate)
+    ranges: list[tuple[int, int]] = []
+    if readable is not None and readable > 0:
+        total = min(_MAX_FRAMES, max(have, math.ceil(readable * rate - 1e-3)))
+        ranges = _segment_ranges(total, have)
+    if len(ranges) <= 1:
+        code = _run_ffmpeg(
+            _ffmpeg_extract_command(path, pattern, rate, threads, first=have + 1),
+            whole,
+            progress,
+            have / rate,
+        )
+        images = _frame_images(work)
         fresh = images[have:]
-        trim = min(len(fresh), max(2, math.ceil(rate)))
-        for old in fresh[len(fresh) - trim :]:
-            old.unlink(missing_ok=True)
-        images = images[: len(images) - trim]
-        (work / _PARTIAL_MARK).write_text(f"{rate:.6f}", encoding="utf-8")
-    else:
-        (work / _PARTIAL_MARK).unlink(missing_ok=True)
-        if proc.returncode != 0 and not images:
-            raise ScreenVideoError("Không đọc được video.")
-        if proc.returncode != 0:
-            progress.problem("Tách hình dừng sớm.")
-    if images:
-        progress.report(40, "Tách khung hình")
-    return [(index / rate, image) for index, image in enumerate(images)]
+        if partial:
+            fresh = _trim_tail(fresh, rate)
+            (work / _PARTIAL_MARK).write_text(f"{rate:.6f}", encoding="utf-8")
+        else:
+            (work / _PARTIAL_MARK).unlink(missing_ok=True)
+            if code != 0 and not images:
+                raise ScreenVideoError("Không đọc được video.")
+            if code != 0:
+                progress.problem("Tách hình dừng sớm.")
+        if fresh or images:
+            progress.report(40, "Tách khung hình")
+        yield _numbered_frames(fresh, rate)
+        return
+    results: list[list[Path] | BaseException | None] = [None] * len(ranges)
+    finished: queue.Queue[int] = queue.Queue()
+    segment_threads = _segment_threads(threads, len(ranges))
+
+    def _run(index: int, start: int, end: int) -> None:
+        try:
+            code = _run_ffmpeg(
+                _ffmpeg_extract_command(
+                    path,
+                    pattern,
+                    rate,
+                    segment_threads,
+                    first=start,
+                    frames=end - start + 1,
+                ),
+                whole,
+                progress,
+                (start - 1) / rate,
+            )
+            files = _files_in_range(work, start, end)
+            if code != 0 and not files:
+                results[index] = []
+            else:
+                if code != 0:
+                    progress.problem("Tách hình dừng sớm.")
+                results[index] = files
+        except BaseException as error:  # noqa: BLE001 - đưa lỗi về luồng gọi để không mất các đoạn khác
+            results[index] = error
+        finished.put(index)
+
+    workers = [
+        threading.Thread(target=_run, args=(index, start, end), daemon=True)
+        for index, (start, end) in enumerate(ranges)
+    ]
+    for worker in workers:
+        worker.start()
+    sent = 0
+    try:
+        while sent < len(ranges):
+            finished.get()
+            while sent < len(ranges) and results[sent] is not None:
+                item = results[sent]
+                last = sent == len(ranges) - 1
+                sent += 1
+                if isinstance(item, BaseException):
+                    if sent == 1 and have == 0:
+                        raise item
+                    progress.problem("Tách hình dừng sớm.")
+                    yield []
+                    continue
+                files = list(item)
+                if last and partial:
+                    files = _trim_tail(files, rate)
+                    (work / _PARTIAL_MARK).write_text(f"{rate:.6f}", encoding="utf-8")
+                elif last:
+                    (work / _PARTIAL_MARK).unlink(missing_ok=True)
+                if files:
+                    progress.report(40, "Tách khung hình")
+                yield _numbered_frames(files, rate)
+    finally:
+        for worker in workers:
+            worker.join(timeout=2)
+
+
+def _extract_frames(
+    path: Path,
+    work: Path,
+    rate: float,
+    duration: float | None,
+    progress: ReadProgress,
+    threads: str | None = None,
+    partial: bool = False,
+    have: int = 0,
+) -> list[tuple[float, Path]]:
+    """Tách tiếp từ khung have+1. partial là file còn đang tải: bỏ khoảng một giây cuối để đợt sau tách lại."""
+    for _batch in _iter_segments(
+        path, work, rate, duration, progress, threads=threads, partial=partial, have=have
+    ):
+        pass
+    return [(index / rate, image) for index, image in enumerate(_frame_images(work))]
 
 
 def _load_thumbs(images: list[Path]) -> list[Image.Image | None]:
@@ -658,9 +907,13 @@ def _load_thumbs(images: list[Path]) -> list[Image.Image | None]:
     return found
 
 
-def _changed_frames(images: list[tuple[float, Path]], progress: ReadProgress) -> list[tuple[float, Path]]:
+def _changed_frames(
+    images: list[tuple[float, Path]],
+    progress: ReadProgress,
+    held: list[Image.Image] | None = None,
+) -> list[tuple[float, Path]]:
     chosen: list[tuple[float, Path]] = []
-    previous: Image.Image | None = None
+    previous: Image.Image | None = held[0] if held else None
     unopened = 0
     total = len(images)
     progress.report(42, "Chọn khung đổi")
@@ -676,6 +929,8 @@ def _changed_frames(images: list[tuple[float, Path]], progress: ReadProgress) ->
             continue
         chosen.append((seconds, image))
         previous = small
+    if held is not None and previous is not None:
+        held[:] = [previous]
     if unopened:
         progress.problem(f"{unopened} khung không mở được.")
     progress.report(47, "Chọn khung đổi")

@@ -13,6 +13,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 from control_plane.screen_steps import (
     _MAX_FRAMES,
+    _segment_ranges,
+    _segment_threads,
     ReadProgress,
     _changed_frames,
     _earlier_frames,
@@ -198,10 +200,41 @@ class ScreenVideoTests(unittest.TestCase):
         self.assertGreater(rate, 0)
         self.assertAlmostEqual(rate * 7200, _MAX_FRAMES, places=3)
 
-    def test_a_twenty_minute_video_keeps_four_frames_a_second(self) -> None:
-        self.assertEqual(_sample_rate(20 * 60), 4.0)
-        self.assertEqual(_sample_rate(30 * 60), 4.0)
-        self.assertLess(_sample_rate(40 * 60), 4.0)
+    def test_a_twenty_minute_video_keeps_eight_frames_a_second(self) -> None:
+        self.assertEqual(_sample_rate(20 * 60), 8.0)
+        self.assertEqual(_sample_rate(30 * 60), 8.0)
+        self.assertLess(_sample_rate(40 * 60), 8.0)
+
+    def test_a_long_extract_is_split_into_four_ranges(self) -> None:
+        ranges = _segment_ranges(96, 0)
+        self.assertEqual(ranges, [(1, 24), (25, 48), (49, 72), (73, 96)])
+        self.assertEqual(_segment_ranges(96, 30), [(31, 48), (49, 72), (73, 96)])
+        self.assertEqual(_segment_ranges(40, 0), [(1, 40)])
+        self.assertEqual(_segment_threads("16", 4), "4")
+        self.assertIsNone(_segment_threads(None, 4))
+
+    def test_four_decoders_cover_the_video(self) -> None:
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg is required")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            clip = root / "clip.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+                    "-f", "lavfi", "-i", "testsrc2=s=320x240:r=30:d=12",
+                    "-pix_fmt", "yuv420p", str(clip),
+                ],
+                check=True,
+                timeout=60,
+            )
+            work = root / "frames"
+            work.mkdir()
+            frames = _extract_frames(clip, work, 8.0, 12.0, ReadProgress())
+            self.assertGreaterEqual(len(frames), 12 * 8 - 4)
+            self.assertTrue((work / "f-00001.jpg").is_file())
+            numbers = sorted(int(path.stem.split("-")[1]) for _seconds, path in frames)
+            self.assertEqual(numbers, list(range(1, numbers[-1] + 1)))
 
     def test_a_continued_extract_starts_at_the_next_frame(self) -> None:
         argv = _ffmpeg_extract_command(Path("clip.mp4"), Path("f-%05d.jpg"), 4.0, first=41)

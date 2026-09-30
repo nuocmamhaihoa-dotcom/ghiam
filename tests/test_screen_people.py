@@ -140,6 +140,18 @@ class ScreenPeopleTests(unittest.TestCase):
         self.assertEqual(rows[0]["contactName"], "A Tùng Bán Gạch")
         self.assertEqual(rows[0]["username"], "@trn.tng751")
 
+    def test_contact_seen_twice_beats_one_different_name(self) -> None:
+        rows = propose_rows(
+            [
+                {"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"},
+                {"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"},
+                {"kind": "contact", "name": "Trần Tùng", "contactName": "Tên khác"},
+                {"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"},
+            ]
+        )
+        self.assertEqual(rows[0]["contactName"], "A Tùng Bán Gạch")
+        self.assertEqual(rows[0]["username"], "@trn.tng751")
+
     def test_two_contact_names_are_not_proposed(self) -> None:
         rows = propose_rows(
             [
