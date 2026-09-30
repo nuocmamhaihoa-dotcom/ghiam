@@ -21,7 +21,7 @@ from pc_agent.video_watchdog import (
     upgrade_allowed,
     verify_sha256,
 )
-from pc_agent.video_worker import machine_ram_bytes, worker_budget, write_worker_state
+from pc_agent.video_worker import _JobSlots, machine_ram_bytes, worker_budget, write_worker_state
 
 
 class VideoWatchdogTests(unittest.TestCase):
@@ -35,6 +35,16 @@ class VideoWatchdogTests(unittest.TestCase):
         self.assertEqual(worker_budget(4, 64 * 1024 * 1024 * 1024), (3, 1))
         self.assertEqual(worker_budget(1, 32 * 1024 * 1024 * 1024), (1, 0))
         self.assertGreater(machine_ram_bytes(), 0)
+
+    def test_two_videos_split_the_reader_cores(self) -> None:
+        slots = _JobSlots(16)
+        self.assertTrue(slots.take())
+        self.assertEqual(slots.share(), 16)
+        self.assertTrue(slots.take())
+        self.assertEqual(slots.share(), 8)
+        self.assertFalse(slots.take())
+        slots.give()
+        self.assertEqual(slots.share(), 16)
 
     def test_one_reading_blocks_an_update(self) -> None:
         self.assertEqual(

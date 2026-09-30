@@ -11,18 +11,21 @@ from pathlib import Path
 
 from PIL import Image
 
+from control_plane.screen_people import _prepared_image
 from control_plane.screen_steps import (
     ReadProgress,
+    _changed_frames,
     _ffmpeg_extract_command,
     _media_env,
     _media_seconds,
+    _ocr_targets,
     _read_frames,
+    _sample_previews,
     _sample_rate,
     _saved_frames,
-    _changed_frames,
-    _sample_previews,
     analyze_screen_video,
     clean_ocr,
+    faststart_video,
     ocr_workers,
     read_screen_video,
     same_caption,
@@ -134,7 +137,7 @@ class ScreenVideoTests(unittest.TestCase):
         self.assertEqual(argv[argv.index("-c:v") + 1], "mjpeg")
         scale = next(item for item in argv if item.startswith("fps="))
         self.assertIn("fps=8", scale)
-        self.assertIn(r"scale=min(1080\,iw):-2", scale)
+        self.assertIn(r"scale=min(720\,iw):-2", scale)
         self.assertIn("format=yuv420p", scale)
 
     def test_preview_keeps_the_first_middle_and_last_frame(self) -> None:
@@ -276,3 +279,65 @@ class ScreenVideoTests(unittest.TestCase):
 
         _steps, people = analyze_screen_video(Path("/tmp/khong-co-video.mp4"), Staged())
         self.assertEqual(people, [{"name": "Tran Tung", "contactName": "A Tung", "username": "@trn.tng751"}])
+
+    def test_a_small_shift_is_not_read_again(self) -> None:
+        class Sink:
+            def report(self, _percent: int, _task: str) -> None:
+                return None
+
+            def problem(self, _text: str) -> None:
+                return None
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            first = root / "a.png"
+            second = root / "b.png"
+            third = root / "c.png"
+            Image.new("RGB", (200, 400), (255, 255, 255)).save(first)
+            nudged = Image.new("RGB", (200, 400), (255, 255, 255))
+            nudged.putpixel((100, 200), (0, 0, 0))
+            nudged.save(second)
+            Image.new("RGB", (200, 400), (0, 0, 0)).save(third)
+            chosen = _changed_frames([(0.0, first), (0.5, second), (1.0, third)], Sink())
+        self.assertEqual([item[1].name for item in chosen], ["a.png", "c.png"])
+
+    def test_ocr_reads_only_the_changed_band(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            first = root / "full.png"
+            second = root / "moved.png"
+            Image.new("RGB", (200, 500), (180, 180, 180)).save(first)
+            changed = Image.new("RGB", (200, 500), (180, 180, 180))
+            for y in range(300, 360):
+                for x in range(200):
+                    changed.putpixel((x, y), (0, 0, 0))
+            changed.save(second)
+            targets = _ocr_targets([(0.0, first), (0.5, second)])
+            self.assertEqual(targets[0][1], first)
+            self.assertTrue(targets[1][1].name.endswith("-band.jpg"))
+            with Image.open(targets[1][1]) as band:
+                self.assertLess(band.size[1], 500)
+                self.assertGreater(band.size[1], 40)
+
+    def test_a_band_keeps_its_full_height(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            band = root / "frame-band.jpg"
+            plain = root / "frame.jpg"
+            Image.new("RGB", (40, 100), (200, 200, 200)).save(band, format="JPEG")
+            Image.new("RGB", (40, 100), (200, 200, 200)).save(plain, format="JPEG")
+            kept = _prepared_image(band)
+            cropped = _prepared_image(plain)
+        self.assertIsNotNone(kept)
+        self.assertIsNotNone(cropped)
+        assert kept is not None and cropped is not None
+        self.assertEqual(kept.size[1], 100)
+        self.assertLess(cropped.size[1], 100)
+
+    def test_faststart_keeps_a_file_that_is_not_a_video(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "clip.mp4"
+            path.write_bytes(b"not-a-video")
+            ready = faststart_video(path)
+            self.assertEqual(ready, path)
+            self.assertEqual(path.read_bytes(), b"not-a-video")

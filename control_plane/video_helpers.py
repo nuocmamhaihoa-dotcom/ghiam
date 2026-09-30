@@ -1,4 +1,4 @@
-"""PC phụ kéo video về đọc. Hub giữ việc khi không có PC rảnh."""
+"""PC phụ kéo video về đọc. Một PC giữ tối đa hai video. Hub đọc khi PC không còn chỗ."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from dataclasses import dataclass
 OFFER_SECONDS = 3.0
 LEASE_SECONDS = 90.0
 FRESH_SECONDS = 15.0
+JOBS_PER_PC = 2
 
 
 def _clean_name(name: str) -> str:
@@ -35,7 +36,7 @@ class Helper:
     name: str
     cpus: int
     seen: float
-    busy: bool = False
+    held: int = 0
     gpu: bool = False
     gpu_name: str = ""
     workers: int = 0
@@ -69,7 +70,7 @@ class HelperBook:
         with self._lock:
             current = self._items.get(cleaned_id)
             if current is None:
-                self._items[cleaned_id] = Helper(cleaned_id, label, cores, now, False, using_gpu, card, readers)
+                self._items[cleaned_id] = Helper(cleaned_id, label, cores, now, 0, using_gpu, card, readers)
             else:
                 current.name = label
                 current.cpus = cores
@@ -102,23 +103,34 @@ class HelperBook:
             return any((now - item.seen) <= FRESH_SECONDS for item in self._items.values())
 
     def has_idle(self) -> bool:
+        """Còn PC vừa nối và đang giữ ít hơn hai video."""
         now = time.monotonic()
         with self._lock:
-            return any((now - item.seen) <= FRESH_SECONDS and not item.busy for item in self._items.values())
+            return any(
+                (now - item.seen) <= FRESH_SECONDS and item.held < JOBS_PER_PC
+                for item in self._items.values()
+            )
+
+    def try_hold(self, worker_id: str) -> bool:
+        """Giữ thêm một video. Đủ hai video, hoặc PC không còn tươi, thì từ chối."""
+        now = time.monotonic()
+        with self._lock:
+            item = self._items.get(worker_id)
+            if item is None or (now - item.seen) > FRESH_SECONDS or item.held >= JOBS_PER_PC:
+                return False
+            item.held += 1
+            item.seen = now
+            return True
 
     def mark_busy(self, worker_id: str) -> None:
-        with self._lock:
-            item = self._items.get(worker_id)
-            if item is not None:
-                item.busy = True
-                item.seen = time.monotonic()
+        self.try_hold(worker_id)
 
     def mark_idle(self, worker_id: str) -> None:
-        """Bỏ cờ bận. Không làm mới giờ thấy, để PC đã tắt không bị chờ thêm."""
+        """Trả một chỗ. Không làm mới giờ thấy, để PC đã tắt không bị chờ thêm."""
         with self._lock:
             item = self._items.get(worker_id)
-            if item is not None:
-                item.busy = False
+            if item is not None and item.held > 0:
+                item.held -= 1
 
     def public(self) -> dict[str, object]:
         now = time.monotonic()

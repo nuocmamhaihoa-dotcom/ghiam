@@ -59,6 +59,7 @@ from control_plane.screen_steps import (
     analyze_screen_video,
     clean_ocr,
     discard_video_work,
+    faststart_video,
     read_screen_image,
     seen_line,
 )
@@ -1174,7 +1175,6 @@ def _watch_helper_job(job_id: str, path: Path) -> None:
         return
     while True:
         if job.done:
-            video_helpers.helpers.mark_idle(job.owner_id())
             if job.succeeded():
                 job.discard()
             return
@@ -1225,7 +1225,6 @@ def _schedule_video_job(job_id: str, path: Path) -> None:
     if video_helpers.helpers.has_fresh() and not job.owner_id():
         _wait_for_helper(job)
     if job.done:
-        video_helpers.helpers.mark_idle(job.owner_id())
         if job.succeeded():
             job.discard()
         return
@@ -1313,18 +1312,31 @@ def claim_video_job(body: WorkerJobBody, authorization: str | None = Header(defa
     _auth(authorization)
     if not video_helpers.helpers.fresh(body.workerId):
         raise HTTPException(409, "PC phụ chưa nối")
+    if not video_helpers.helpers.try_hold(body.workerId):
+        return {"ok": True, "jobId": ""}
     job = jobs.claim_next(body.workerId)
     if job is None:
+        video_helpers.helpers.mark_idle(body.workerId)
         return {"ok": True, "jobId": ""}
-    video_helpers.helpers.mark_busy(body.workerId)
     return {"ok": True, "jobId": job.id, "resume": job.resume_public()}
+
+
+def _prepare_and_schedule(job_id: str, path: Path) -> None:
+    """Sắp mục lục lên đầu rồi mới cho PC nhận, để PC đọc được phần đã tải."""
+    ready = faststart_video(path)
+    job = jobs.get(job_id)
+    if job is None:
+        discard_video_work(ready)
+        return
+    job.bind(ready)
+    job.update(8, "Đã nhận video")
+    _schedule_video_job(job_id, ready)
 
 
 def _begin_video_job(dest: Path) -> dict[str, Any]:
     job = jobs.create()
-    job.bind(dest)
-    job.update(8, "Đã nhận video")
-    threading.Thread(target=_schedule_video_job, args=(job.id, dest), daemon=True).start()
+    job.update(4, "Đang sắp xếp video")
+    threading.Thread(target=_prepare_and_schedule, args=(job.id, dest), daemon=True).start()
     return {"ok": True, "jobId": job.id}
 
 

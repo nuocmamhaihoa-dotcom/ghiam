@@ -206,7 +206,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("nhiều video", page.text)
         self.assertIn("Không giới hạn số video, dung lượng hay thời lượng", page.text)
         self.assertIn("80% CPU và RAM", page.text)
-        self.assertIn("Mỗi máy đọc một video", page.text)
+        self.assertIn("Mỗi máy đọc tối đa hai video", page.text)
         self.assertIn("máy đọc bằng GPU", page.text)
         self.assertIn('id="helperLine"', page.text)
         self.assertIn("PC phụ chưa nối", page.text)
@@ -455,7 +455,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "36")
+        self.assertEqual(build, "37")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -465,7 +465,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 36)
+        self.assertEqual(payload["iphoneBuild"], 37)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -1105,7 +1105,7 @@ class ActionApiTests(unittest.TestCase):
             body = self._wait_job(job_id)
             self.assertEqual(body.get("error"), "Không đọc được video.")
 
-    def test_busy_pc_keeps_the_next_video_until_it_is_free(self) -> None:
+    def test_one_pc_reads_two_videos_and_the_third_waits(self) -> None:
         beat = self.client.post(
             "/v1/video-workers/heartbeat",
             headers=self.headers,
@@ -1113,62 +1113,77 @@ class ActionApiTests(unittest.TestCase):
         )
         self.assertEqual(beat.status_code, 200, beat.text)
         worker_id = beat.json()["workerId"]
-        opened = self.client.post(
-            "/v1/recordings/from-video/job",
-            headers=self.headers,
-            files={"file": ("clip.mp4", b"video-mot", "video/mp4")},
-        )
-        first_id = opened.json()["jobId"]
-        claimed_id = ""
-        for _ in range(40):
-            claimed = self.client.post(
-                "/v1/recordings/jobs/claim",
+        opened = [
+            self.client.post(
+                "/v1/recordings/from-video/job",
                 headers=self.headers,
-                json={"workerId": worker_id},
+                files={"file": ("clip.mp4", body, "video/mp4")},
             )
-            self.assertEqual(claimed.status_code, 200, claimed.text)
-            claimed_id = claimed.json()["jobId"]
-            if claimed_id:
-                break
-            time.sleep(0.05)
-        self.assertEqual(claimed_id, first_id)
-        queued = self.client.post(
-            "/v1/recordings/from-video/job",
+            for body in (b"video-mot", b"video-hai", b"video-ba")
+        ]
+        job_ids = [item.json()["jobId"] for item in opened]
+        taken: list[str] = []
+        for _ in range(2):
+            claimed_id = ""
+            for _attempt in range(80):
+                claimed = self.client.post(
+                    "/v1/recordings/jobs/claim",
+                    headers=self.headers,
+                    json={"workerId": worker_id},
+                )
+                self.assertEqual(claimed.status_code, 200, claimed.text)
+                claimed_id = claimed.json()["jobId"]
+                if claimed_id:
+                    break
+                time.sleep(0.05)
+            self.assertTrue(claimed_id)
+            taken.append(claimed_id)
+        self.assertEqual(len(set(taken)), 2)
+        third_id = next(job_id for job_id in job_ids if job_id not in taken)
+        refused = self.client.post(
+            "/v1/recordings/jobs/claim",
             headers=self.headers,
-            files={"file": ("clip.mp4", b"video-hai", "video/mp4")},
+            json={"workerId": worker_id},
         )
-        second_id = queued.json()["jobId"]
-        time.sleep(0.5)
-        waiting = self.client.get(f"/v1/recordings/jobs/{second_id}", headers=self.headers)
-        self.assertEqual(waiting.status_code, 200, waiting.text)
-        body = waiting.json()
+        self.assertEqual(refused.status_code, 200, refused.text)
+        self.assertEqual(refused.json()["jobId"], "")
+        body: dict[str, object] = {}
+        deadline = time.time() + 8
+        while time.time() < deadline:
+            waiting = self.client.get(f"/v1/recordings/jobs/{third_id}", headers=self.headers)
+            self.assertEqual(waiting.status_code, 200, waiting.text)
+            body = waiting.json()
+            if "Chờ PC" in str(body.get("task")):
+                break
+            time.sleep(0.1)
         self.assertFalse(body.get("done"))
-        self.assertIn("Chờ PC", str(body.get("task")))
+        self.assertIn("Chờ PC", str(body.get("task")), body)
         failed = self.client.post(
-            f"/v1/recordings/jobs/{first_id}/fail",
+            f"/v1/recordings/jobs/{taken[0]}/fail",
             headers=self.headers,
             json={"workerId": worker_id, "error": "Không đọc được video."},
         )
         self.assertEqual(failed.status_code, 200, failed.text)
-        taken = ""
-        for _ in range(40):
+        claimed_third = ""
+        for _attempt in range(80):
             claimed = self.client.post(
                 "/v1/recordings/jobs/claim",
                 headers=self.headers,
                 json={"workerId": worker_id},
             )
             self.assertEqual(claimed.status_code, 200, claimed.text)
-            taken = claimed.json()["jobId"]
-            if taken:
+            claimed_third = claimed.json()["jobId"]
+            if claimed_third:
                 break
             time.sleep(0.05)
-        self.assertEqual(taken, second_id)
-        closed = self.client.post(
-            f"/v1/recordings/jobs/{second_id}/fail",
-            headers=self.headers,
-            json={"workerId": worker_id, "error": "Không đọc được video."},
-        )
-        self.assertEqual(closed.status_code, 200, closed.text)
+        self.assertEqual(claimed_third, third_id)
+        for job_id in (taken[1], third_id):
+            closed = self.client.post(
+                f"/v1/recordings/jobs/{job_id}/fail",
+                headers=self.headers,
+                json={"workerId": worker_id, "error": "Không đọc được video."},
+            )
+            self.assertEqual(closed.status_code, 200, closed.text)
 
     def test_hub_reads_when_the_pc_does_not_take_the_video(self) -> None:
         previous = video_helpers.OFFER_SECONDS
@@ -1395,7 +1410,7 @@ class ActionApiTests(unittest.TestCase):
         body = manifest.json()
         self.assertIn("comment-agent.zip", body["agent"]["package_url"])
         worker = body["video_worker"]
-        self.assertEqual(worker["version"], "10")
+        self.assertEqual(worker["version"], "11")
         self.assertEqual(worker["package_url"], "/v1/updates/video-worker.zip")
         self.assertEqual(worker["engine"], "cpu")
         self.assertEqual(len(worker["sha256"]), 64)
@@ -1414,7 +1429,7 @@ class ActionApiTests(unittest.TestCase):
             self.assertIn("pc_agent/windows/Run-VideoWorker.ps1", names)
             self.assertIn("control_plane/screen_steps.py", names)
             self.assertEqual(archive.read("requirements-cpu.txt").decode("utf-8").strip(), "pillow")
-            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "10")
+            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "11")
             self.assertIn("pc_agent/windows/Open-FbPoller.ps1", names)
             guide = archive.read("HUONG-DAN.txt").decode("utf-8")
             self.assertNotIn("test-token", guide)

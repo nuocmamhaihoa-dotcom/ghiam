@@ -458,11 +458,13 @@ def _prepared_image(path: Path) -> Image.Image | None:
     try:
         with Image.open(path) as full:
             gray = ImageOps.autocontrast(full.convert("L"))
-            width, height = gray.size
-            top = int(height * 0.04)
-            bottom = int(height * 0.92)
-            if bottom - top > 40:
-                gray = gray.crop((0, top, width, bottom))
+            # Dải đã cắt theo vùng đổi thì giữ nguyên, kẻo cắt mất khoảng chồng tên.
+            if not path.stem.endswith("-band"):
+                width, height = gray.size
+                top = int(height * 0.04)
+                bottom = int(height * 0.92)
+                if bottom - top > 40:
+                    gray = gray.crop((0, top, width, bottom))
             sharpened = gray.filter(ImageFilter.SHARPEN)
             sharpened.load()
             return sharpened

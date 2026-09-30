@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """PC kéo video từ hub, đọc bằng 80% CPU và RAM của máy này, rồi gửi kết quả về.
 
-Mỗi máy nhận một video. Máy có card NVIDIA và đã cài bộ đọc GPU thì đọc bằng GPU.
+Mỗi máy nhận tối đa hai video. Một video dùng hết 80%. Hai video thì chia đôi phần đó.
+Máy có card NVIDIA và đã cài bộ đọc GPU thì đọc bằng GPU.
 Chưa cài thì đọc bằng CPU (Tesseract), cùng cách với hub.
 
 Trên Windows, một lệnh cài Python, ffmpeg, Tesseract vie+eng, lưu token, và chạy khi đăng nhập.
@@ -48,6 +49,9 @@ _READ_STALL_SEC = 45
 _LANE_BYTES = 8 * 1024 * 1024
 _LANES = 4
 _PARALLEL_MIN = 8 * 1024 * 1024
+_PREFIX_BYTES = 8 * 1024 * 1024
+_WAVE_BYTES = 32 * 1024 * 1024
+_JOBS_PER_PC = 2
 _reader_note = ""
 
 
@@ -62,6 +66,33 @@ def worker_budget(cpu_count: int, ram_bytes: int | None) -> tuple[int, int]:
         workers = max(1, min(by_cpu, by_ram))
     workers = min(workers, cpus)
     return workers, cpus - workers
+
+
+class _JobSlots:
+    """Đếm video đang giữ trên máy này và chia số lõi khi có hai video."""
+
+    def __init__(self, workers: int) -> None:
+        self.workers = max(1, workers)
+        self.held = 0
+        self._lock = threading.Lock()
+
+    def take(self) -> bool:
+        with self._lock:
+            if self.held >= _JOBS_PER_PC:
+                return False
+            self.held += 1
+            return True
+
+    def give(self) -> None:
+        with self._lock:
+            self.held = max(0, self.held - 1)
+
+    def share(self) -> int:
+        with self._lock:
+            running = self.held
+        if running >= 2:
+            return max(1, self.workers // 2)
+        return self.workers
 
 
 def machine_ram_bytes() -> int:
@@ -365,8 +396,12 @@ class RemoteProgress(ReadProgress):
 
     def note_words(self, seen: int, kept: int) -> None:
         with self._lock:
-            self._seen = max(0, int(seen))
-            self._kept = max(0, int(kept))
+            added_seen = max(0, int(seen))
+            added_kept = max(0, int(kept))
+            self._seen += added_seen
+            self._kept += added_kept
+            if added_seen or added_kept:
+                self._blank = False
 
     def note_blank(self) -> None:
         with self._lock:
@@ -566,6 +601,21 @@ def _parallel_from(url: str, token: str, dest: Path, frontier: int, total: int) 
     return frontier >= total
 
 
+def _copy_prefix(src: Path, dest: Path, size: int) -> int:
+    """Chép đúng số byte đã có. File gốc vẫn được nối thêm phía sau."""
+    copied = 0
+    with src.open("rb") as incoming, dest.open("wb") as outgoing:
+        remaining = max(0, size)
+        while remaining > 0:
+            blob = incoming.read(min(1024 * 1024, remaining))
+            if not blob:
+                break
+            outgoing.write(blob)
+            copied += len(blob)
+            remaining -= len(blob)
+    return copied
+
+
 def _hold_while_downloading(client: HubClient, job_id: str, worker_id: str, stop: threading.Event) -> None:
     while not stop.wait(8):
         try:
@@ -574,7 +624,13 @@ def _hold_while_downloading(client: HubClient, job_id: str, worker_id: str, stop
             return
 
 
-def _read_one(client: HubClient, worker_id: str, job_id: str, resume: dict[str, object] | None = None) -> None:
+def _read_one(
+    client: HubClient,
+    worker_id: str,
+    job_id: str,
+    resume: dict[str, object] | None = None,
+    slots: _JobSlots | None = None,
+) -> None:
     ready = (resume or {}).get("people")
     if isinstance(ready, list):
         client.complete(job_id, worker_id, [row for row in ready if isinstance(row, dict)])
@@ -586,6 +642,18 @@ def _read_one(client: HubClient, worker_id: str, job_id: str, resume: dict[str, 
             pass
     with tempfile.TemporaryDirectory(prefix="fb-pc-") as folder:
         dest = Path(folder) / "clip.mp4"
+        snap = Path(folder) / "clip-snap.mp4"
+        failed: list[str] = []
+        finished = threading.Event()
+
+        def pull() -> None:
+            try:
+                client.download(job_id, worker_id, dest)
+            except OSError:
+                failed.append("Mất kết nối khi đang tải video. Bấm Tiếp tục để đọc nối.")
+            finally:
+                finished.set()
+
         client.progress(job_id, worker_id, 8, "PC phụ đang tải video", [])
         holding = threading.Event()
         holder = threading.Thread(
@@ -594,29 +662,73 @@ def _read_one(client: HubClient, worker_id: str, job_id: str, resume: dict[str, 
             daemon=True,
         )
         holder.start()
+        threading.Thread(target=pull, daemon=True).start()
+        sink: RemoteProgress | None = None
         try:
-            client.download(job_id, worker_id, dest)
-        except OSError:
-            holding.set()
-            client.fail(job_id, worker_id, "Mất kết nối khi đang tải video. Bấm Tiếp tục để đọc nối.")
-            return
-        finally:
-            holding.set()
-        sink = RemoteProgress(client, job_id, worker_id, resume)
-        try:
-            _steps, people = analyze_screen_video(dest, sink)
-        except ScreenVideoError as error:
-            sink.close()
-            client.fail(job_id, worker_id, str(error))
-            return
-        finally:
-            if not sink._stop.is_set():
+            seen = 0
+            while True:
+                size = dest.stat().st_size if dest.is_file() else 0
+                done = finished.is_set()
+                if done and failed:
+                    break
+                if not done and size < _PREFIX_BYTES:
+                    finished.wait(0.25)
+                    continue
+                if not done and seen and size < seen + _WAVE_BYTES:
+                    finished.wait(0.4)
+                    continue
+                if size < 32:
+                    if done:
+                        break
+                    finished.wait(0.25)
+                    continue
+                copied = _copy_prefix(dest, snap, size)
+                if copied < 32:
+                    if done:
+                        break
+                    continue
+                last = done and not failed and dest.is_file() and dest.stat().st_size <= copied + 4096
+                if sink is None:
+                    holding.set()
+                    sink = RemoteProgress(client, job_id, worker_id, resume)
+                cpus = os.cpu_count() or 1
+                share = slots.share() if slots is not None else cpus
+                try:
+                    _steps, people = analyze_screen_video(
+                        snap,
+                        sink,
+                        threads=str(max(1, share)),
+                        reserve=max(0, cpus - max(1, share)),
+                        keep_open=not last,
+                    )
+                except ScreenVideoError as error:
+                    if not last:
+                        seen = copied
+                        continue
+                    sink.close()
+                    client.fail(job_id, worker_id, str(error))
+                    return
+                seen = copied
+                if last:
+                    sink.close()
+                    client.complete(job_id, worker_id, people, sink.tally(), sink.reading())
+                    return
+            if sink is not None:
                 sink.close()
-        client.complete(job_id, worker_id, people, sink.tally(), sink.reading())
+            client.fail(
+                job_id,
+                worker_id,
+                failed[0] if failed else "Không đọc được video.",
+            )
+        finally:
+            holding.set()
+            if sink is not None and not sink._stop.is_set():
+                sink.close()
 
 
 _state_lock = threading.Lock()
 _reading = False
+_readers = 0
 
 
 def write_worker_state(reading: bool, path: Path | None = None) -> None:
@@ -638,10 +750,14 @@ def write_worker_state(reading: bool, path: Path | None = None) -> None:
 
 
 def set_reading(reading: bool) -> None:
-    global _reading
+    global _reading, _readers
     with _state_lock:
-        _reading = reading
-    write_worker_state(reading)
+        if reading:
+            _readers += 1
+        else:
+            _readers = max(0, _readers - 1)
+        _reading = _readers > 0
+    write_worker_state(_reading)
 
 
 def refresh_worker_state() -> None:
@@ -713,32 +829,61 @@ def main() -> None:
         say(_reader_note, err=True)
     if ram > 0:
         say(
-            f"Đã nối hub. Máy này có {cpus} lõi, {ram // (1024 * 1024)} MB RAM, dùng {workers} lõi (80%) để đọc video."
+            f"Đã nối hub. Máy này có {cpus} lõi, {ram // (1024 * 1024)} MB RAM, dùng {workers} lõi (80%) để đọc video. Tối đa hai video cùng lúc."
         )
     else:
-        say(f"Đã nối hub. Máy này có {cpus} lõi, dùng {workers} lõi (80%) để đọc video.")
+        say(f"Đã nối hub. Máy này có {cpus} lõi, dùng {workers} lõi (80%) để đọc video. Tối đa hai video cùng lúc.")
     refresh_worker_state()
     threading.Thread(target=beat, daemon=True).start()
+    slots = _JobSlots(workers)
     while True:
+        claimed = False
+        started = False
         try:
+            if not slots.take():
+                time.sleep(0.2)
+                continue
+            claimed = True
             job_id, resume = client.claim(state["worker_id"])
             if not job_id:
+                slots.give()
+                claimed = False
                 time.sleep(0.5)
                 continue
             say(f"Nhận video {job_id}.")
             set_reading(True)
-            try:
-                _read_one(client, state["worker_id"], job_id, resume)
-            finally:
-                set_reading(False)
-            say(f"Xong video {job_id}.")
+            started = True
+
+            def _run(job_id: str = job_id, resume: dict[str, object] | None = resume) -> None:
+                try:
+                    _read_one(client, state["worker_id"], job_id, resume, slots)
+                finally:
+                    slots.give()
+                    set_reading(False)
+                say(f"Xong video {job_id}.")
+
+            threading.Thread(target=_run, daemon=True).start()
+            claimed = False
+            started = False
         except KeyboardInterrupt:
+            if started:
+                set_reading(False)
+            if claimed:
+                slots.give()
             state["stop"].set()
             raise
         except urllib.error.HTTPError as error:
+            if started:
+                set_reading(False)
+            if claimed:
+                slots.give()
             say(f"Hub trả {error.code}. Thử video sau.", err=True)
             time.sleep(1)
         except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            if started:
+                set_reading(False)
+            if claimed:
+                slots.give()
             say("Mất kết nối hub, thử lại.", err=True)
             time.sleep(2)
 

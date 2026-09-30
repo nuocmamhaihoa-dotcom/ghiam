@@ -1167,7 +1167,7 @@
           const gpu = helper.gpu ? ", có máy đọc bằng GPU" : "";
           const used = Number(helper.workers) || 0;
           const share = used > 0 ? ", dùng " + used + " lõi (80% CPU và RAM)" : ", mỗi máy dùng 80% CPU và RAM";
-          $("helperLine").textContent = "PC phụ đang nối: " + (helper.count || 1) + " máy, " + (helper.cores || helper.cpus || 0) + " lõi" + share + gpu + ". Mỗi máy đọc một video.";
+          $("helperLine").textContent = "PC phụ đang nối: " + (helper.count || 1) + " máy, " + (helper.cores || helper.cpus || 0) + " lõi" + share + gpu + ". Mỗi máy đọc tối đa hai video.";
         } else {
           $("helperLine").textContent = "PC phụ chưa nối. Video được máy chủ đọc. Mở phần mềm PC nếu muốn máy tính đọc giúp.";
         }

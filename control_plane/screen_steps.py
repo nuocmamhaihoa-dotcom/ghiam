@@ -29,10 +29,14 @@ from control_plane.screen_people import (
 )
 
 _MAX_FRAMES = 2400
-# Khung gần như y hệt (đồng hồ, nén ảnh) không đọc lại. Một dòng chữ đổi vẫn vượt ngưỡng này.
-_MIN_DIFF = 1.0
-# 4 khung/giây. Tên hiện khoảng 1/4 giây vẫn được đọc. 8 khung/giây làm Tesseract đọc gấp đôi mà ít thêm tên.
-_SAMPLE_FPS = 4.0
+# Khung chỉ nhích vài điểm ảnh thì bỏ. Một dòng chữ đổi (khoảng 3) vẫn được đọc.
+_MIN_DIFF = 2.0
+# 2 khung/giây, rộng tối đa 720. Chữ mờ dễ sót hơn 4 khung/giây rộng 1080.
+_SAMPLE_FPS = 2.0
+# Một hàng ảnh thu nhỏ đổi mạnh thì nằm trong dải cần đọc. Dải được nới thêm để không cắt đôi tên.
+_ROW_DIFF = 18.0
+_BAND_PAD = 0.12
+_BAND_FULL = 0.75
 _PREVIEW_WIDTH = 420
 _PREVIEW_CAP = 3
 _PREVIEW_BYTES = 150_000
@@ -119,8 +123,14 @@ def _ffmpeg_thread_count() -> str:
     return "0"
 
 
-def _ffmpeg_extract_command(path: Path, pattern: Path, rate: float) -> list[str]:
+def _ffmpeg_extract_command(
+    path: Path,
+    pattern: Path,
+    rate: float,
+    threads: str | None = None,
+) -> list[str]:
     """JPEG nén nhẹ. Không phóng to khung. Số luồng mặc định là hết lõi."""
+    count = _ffmpeg_thread_count() if threads is None else threads
     return [
         "ffmpeg",
         "-nostdin",
@@ -129,11 +139,11 @@ def _ffmpeg_extract_command(path: Path, pattern: Path, rate: float) -> list[str]
         "error",
         "-y",
         "-threads",
-        _ffmpeg_thread_count(),
+        count,
         "-i",
         str(path),
         "-vf",
-        f"fps={rate:.4f},scale=min(1080\\,iw):-2,format=yuv420p",
+        f"fps={rate:.4f},scale=min(720\\,iw):-2,format=yuv420p",
         "-frames:v",
         str(_MAX_FRAMES),
         "-c:v",
@@ -392,40 +402,53 @@ def _saved_frames(work: Path, rate: float) -> list[tuple[float, Path]] | None:
 def analyze_screen_video(
     path: Path,
     progress: ReadProgress | None = None,
+    *,
+    threads: str | None = None,
+    reserve: int | None = None,
+    keep_open: bool = False,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
-    """Đọc chữ nhìn thấy và đề xuất người đủ ba cột. Chưa ghi vào bảng."""
+    """Đọc chữ nhìn thấy và đề xuất người đủ ba cột. Chưa ghi vào bảng.
+
+    keep_open dùng khi file vẫn đang dài thêm: đọc phần đã có, chưa chốt danh sách người.
+    """
     sink = progress if progress is not None else ReadProgress()
-    staged = sink.staged_people()
-    if staged is not None:
-        sink.report(94, "Ghép tên")
-        return [], list(staged)
+    if not keep_open:
+        staged = sink.staged_people()
+        if staged is not None:
+            sink.report(94, "Ghép tên")
+            return [], list(staged)
     sink.report(8, "Đọc thời lượng")
     duration = _duration(path)
     rate = _sample_rate(duration)
     work = _work_dir(path)
     work.mkdir(parents=True, exist_ok=True)
-    images = _saved_frames(work, rate)
+    images = None if keep_open else _saved_frames(work, rate)
     if images is None:
         for old in _frame_images(work):
             old.unlink(missing_ok=True)
         marker = work / "extract.done"
         marker.unlink(missing_ok=True)
-        images = _extract_frames(path, work, rate, duration, sink)
+        images = _extract_frames(path, work, rate, duration, sink, threads=threads, partial=keep_open)
         if not images:
+            if keep_open:
+                return [], []
             raise ScreenVideoError("Video không có hình.")
-        marker.write_text(f"{rate:.6f}", encoding="utf-8")
+        if not keep_open:
+            marker.write_text(f"{rate:.6f}", encoding="utf-8")
     else:
         sink.report(40, "Tách khung hình")
     chosen = _changed_frames(images, sink)
-    sink.note_samples(_sample_previews(chosen))
-    readings = _read_frames(chosen, sink)
+    if not keep_open:
+        sink.note_samples(_sample_previews(chosen))
+    readings = _read_frames(_ocr_targets(chosen), sink, reserve=reserve)
     sink.report(94, "Ghép tên")
     frames = [(seconds, lines) for seconds, lines, _sightings in readings]
     sightings = [item for _seconds, _lines, found in readings for item in found]
     rows = propose_rows(sightings)
     counts = reading_counts(sightings)
     sink.note_tally(counts["contacts"], counts["accounts"], counts["saved"])
-    sink.stage_people(rows)
+    if not keep_open:
+        sink.stage_people(rows)
     return visible_steps(frames), rows
 
 
@@ -436,7 +459,7 @@ def read_screen_video(path: Path) -> list[dict[str, Any]]:
 
 
 def _sample_rate(duration: float | None) -> float:
-    """Đọc 8 hình mỗi giây. Video dài thì dàn đều trong giới hạn khung."""
+    """Đọc 2 hình mỗi giây. Video dài thì dàn đều trong giới hạn khung."""
     if duration is None or duration <= 0:
         return _SAMPLE_FPS
     if duration * _SAMPLE_FPS <= _MAX_FRAMES:
@@ -487,12 +510,14 @@ def _extract_frames(
     rate: float,
     duration: float | None,
     progress: ReadProgress,
+    threads: str | None = None,
+    partial: bool = False,
 ) -> list[tuple[float, Path]]:
     pattern = work / "f-%05d.jpg"
     progress.report(12, "Tách khung hình")
     try:
         proc = subprocess.Popen(
-            _ffmpeg_extract_command(path, pattern, rate),
+            _ffmpeg_extract_command(path, pattern, rate, threads),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -575,8 +600,10 @@ def _extract_frames(
                 pipe.close()
     images = _frame_images(work)
     if proc.returncode != 0 and not images:
+        if partial:
+            return []
         raise ScreenVideoError("Không đọc được video.")
-    if proc.returncode != 0 and images:
+    if proc.returncode != 0 and images and not partial:
         progress.problem("Tách hình dừng sớm.")
     if images:
         progress.report(40, "Tách khung hình")
@@ -624,6 +651,63 @@ def _changed_frames(images: list[tuple[float, Path]], progress: ReadProgress) ->
         progress.problem(f"{unopened} khung không mở được.")
     progress.report(47, "Chọn khung đổi")
     return chosen
+
+
+def _changed_band(previous: Image.Image, current: Image.Image) -> tuple[float, float] | None:
+    """Tỷ lệ trên và dưới của dải đã đổi. None nghĩa là đọc cả khung."""
+    diff = ImageChops.difference(previous, current)
+    width, height = diff.size
+    if width <= 0 or height <= 0:
+        return None
+    pixels = list(diff.getdata())
+    changed = [
+        y
+        for y in range(height)
+        if sum(pixels[y * width : (y + 1) * width]) / width >= _ROW_DIFF
+    ]
+    if not changed:
+        return None
+
+    def frac(row: float) -> float:
+        return 0.08 + (row / height) * 0.84
+
+    top = max(0.0, frac(min(changed)) - _BAND_PAD)
+    bottom = min(1.0, frac(max(changed) + 1) + _BAND_PAD)
+    if bottom - top >= _BAND_FULL:
+        return None
+    return top, bottom
+
+
+def _write_band(path: Path, band: tuple[float, float]) -> Path | None:
+    dest = path.with_name(path.stem + "-band.jpg")
+    try:
+        with Image.open(path) as full:
+            width, height = full.size
+            top = max(0, int(height * band[0]))
+            bottom = min(height, int(height * band[1]))
+            if bottom - top < 40:
+                return None
+            full.crop((0, top, width, bottom)).convert("RGB").save(dest, format="JPEG", quality=90)
+    except OSError:
+        return None
+    return dest
+
+
+def _ocr_targets(chosen: list[tuple[float, Path]]) -> list[tuple[float, Path]]:
+    """Khung đầu đọc cả ảnh. Khung sau chỉ đọc dải đổi, cộng một khoảng chồng để không cắt tên."""
+    targets: list[tuple[float, Path]] = []
+    previous: Image.Image | None = None
+    for seconds, image in chosen:
+        small = _thumb(image)
+        band = _changed_band(previous, small) if previous is not None and small is not None else None
+        if band is None:
+            targets.append((seconds, image))
+        else:
+            cropped = _write_band(image, band)
+            targets.append((seconds, cropped if cropped is not None else image))
+        if small is not None:
+            previous = small
+    return targets
 
 
 def _thumb(image: Path) -> Image.Image | None:
@@ -715,6 +799,7 @@ def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str
 def _read_frames(
     chosen: list[tuple[float, Path]],
     progress: ReadProgress,
+    reserve: int | None = None,
 ) -> list[tuple[float, list[str], list[dict[str, str]]]]:
     if not chosen:
         progress.report(92, "Đọc chữ")
@@ -745,7 +830,7 @@ def _read_frames(
     else:
         progress.report(48, "Đọc chữ")
     if pending:
-        workers = 1 if prefers_single_worker() else ocr_workers(len(pending), os.cpu_count() or 1)
+        workers = 1 if prefers_single_worker() else ocr_workers(len(pending), os.cpu_count() or 1, reserve)
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {pool.submit(_read_one, chosen[index]): index for index in pending}
             for future in as_completed(futures):
@@ -805,3 +890,45 @@ def _ocr(image: Path) -> str:
         if result.returncode == 0:
             return result.stdout or ""
     return ""
+
+
+def faststart_video(path: Path) -> Path:
+    """Đưa mục lục mp4 lên đầu để đọc được khi file mới tải một phần. Lỗi thì giữ file gốc."""
+    if path.suffix.lower() not in {".mp4", ".mov", ".m4v"}:
+        return path
+    if shutil.which("ffmpeg") is None:
+        return path
+    dest = path.with_name(path.stem + "-fast.mp4")
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-nostdin",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-i",
+                str(path),
+                "-c",
+                "copy",
+                "-movflags",
+                "+faststart",
+                str(dest),
+            ],
+            capture_output=True,
+            timeout=180,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        dest.unlink(missing_ok=True)
+        return path
+    if result.returncode != 0 or not dest.is_file() or dest.stat().st_size < 32:
+        dest.unlink(missing_ok=True)
+        return path
+    try:
+        dest.replace(path)
+    except OSError:
+        dest.unlink(missing_ok=True)
+        return path
+    return path
