@@ -32,9 +32,12 @@ class _Gate:
         self.lib: ctypes.CDLL | None = None
         self.idle: queue.Queue[c_void_p] = queue.Queue()
         self.made = 0
+        self.opened = 0
         self.limit = max(1, os.cpu_count() or 1)
         self.broken = False
         self.lock = threading.Lock()
+        # Mỗi lần chỉ nạp một bộ đọc. Các luồng khác vẫn mượn được bộ đọc đã có.
+        self.opening = threading.Lock()
         self.loaded = False
 
 
@@ -96,18 +99,20 @@ def _library() -> ctypes.CDLL | None:
     with _gate.lock:
         if _gate.loaded:
             return _gate.lib
-        _gate.loaded = True
+        found: ctypes.CDLL | None = None
         for name in _library_names():
             try:
                 lib = ctypes.CDLL(name)
             except OSError:
                 continue
             if _bind(lib):
-                _gate.lib = lib
-                _gate.broken = False
-                return lib
-        _gate.broken = True
-        return None
+                found = lib
+                break
+        # Đánh dấu đã nạp sau cùng. Luồng khác thấy dấu này thì thư viện đã sẵn.
+        _gate.lib = found
+        _gate.broken = found is None
+        _gate.loaded = True
+        return found
 
 
 def _data_dirs() -> list[str | None]:
@@ -144,25 +149,75 @@ def _open_api(lib: ctypes.CDLL) -> c_void_p | None:
     return None
 
 
-def _borrow(lib: ctypes.CDLL) -> c_void_p | None:
-    if _gate.broken:
-        return None
-    try:
-        return _gate.idle.get_nowait()
-    except queue.Empty:
-        pass
+def _open_one(lib: ctypes.CDLL) -> c_void_p | None:
+    """Nạp thêm một bộ đọc khi còn chỗ. None khi đã đủ số bộ đọc hoặc nạp không được."""
     with _gate.lock:
+        if _gate.broken or _gate.made >= _gate.limit:
+            return None
+        _gate.made += 1
+    with _gate.opening:
+        api = _open_api(lib)
+    with _gate.lock:
+        if api is None:
+            _gate.made -= 1
+            if _gate.opened == 0:
+                _gate.broken = True
+            return None
+        _gate.opened += 1
+    return api
+
+
+def _borrow(lib: ctypes.CDLL) -> c_void_p | None:
+    while True:
         if _gate.broken:
             return None
-        if _gate.made < _gate.limit:
-            api = _open_api(lib)
-            if api is None:
-                if _gate.made == 0:
-                    _gate.broken = True
+        try:
+            return _gate.idle.get_nowait()
+        except queue.Empty:
+            pass
+        with _gate.lock:
+            room = _gate.made < _gate.limit
+        if room:
+            api = _open_one(lib)
+            if api is not None:
+                return api
+            if _gate.broken:
                 return None
-            _gate.made += 1
-            return api
-    return _gate.idle.get()
+            with _gate.lock:
+                room = _gate.made < _gate.limit
+            if room:
+                return None
+        # Đủ số bộ đọc rồi thì chờ một bộ được trả. Bộ đang nạp mà hỏng thì hỏi lại.
+        try:
+            return _gate.idle.get(timeout=0.5)
+        except queue.Empty:
+            continue
+
+
+def warm_readers(count: int | None = None) -> int:
+    """Nạp sẵn bộ đọc trước video đầu tiên. Trả về số bộ đọc đang có."""
+    lib = _library()
+    if lib is None:
+        return 0
+    with _gate.lock:
+        target = _gate.limit if count is None else max(1, min(int(count), _gate.limit))
+    while True:
+        with _gate.lock:
+            if _gate.broken or _gate.made >= target:
+                return _gate.opened
+        api = _open_one(lib)
+        if api is None:
+            with _gate.lock:
+                return _gate.opened
+        _gate.idle.put(api)
+
+
+def reader_mode() -> str:
+    """api khi đọc bằng Tesseract trong bộ nhớ, cli khi phải gọi lệnh tesseract từng khung."""
+    lib = _library()
+    if lib is None or _gate.broken:
+        return "cli"
+    return "api"
 
 
 def _recognize(lib: ctypes.CDLL, api: c_void_p, image: Image.Image) -> str:
