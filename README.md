@@ -1,5 +1,7 @@
 # fb-poller (PA1) — Tiered Facebook public comment poller
 
+Công cụ desktop chuyển CSV/XLSX/TXT sang VCF nằm ở [`contact_to_vcf/README.md`](contact_to_vcf/README.md).
+
 **Hướng đã chốt: PA1-only** (không Graph API trong giai đoạn này).
 
 Thu thập **comment công khai** từ **bài viết công khai** bằng browser nhẹ (Playwright), chỉ lấy **Newest đầu trang**, **không nested replies** trong vòng Hot.

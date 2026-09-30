@@ -1,0 +1,312 @@
+"""Persistent phone pool. A number stays in the book it was first assigned to."""
+
+from __future__ import annotations
+
+import sqlite3
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+
+from exporters.vcf_validator import format_card
+from models.records import JobConfig
+from parsers.detect import open_reader
+from processors.phone_normalizer import canonical_phones
+
+CONTACTS_PER_FILE = 5000
+
+
+@dataclass(frozen=True)
+class ImportStats:
+    seen: int
+    added: int
+    duplicate: int
+    rejected: int
+
+
+@dataclass(frozen=True)
+class BookInfo:
+    id: int
+    contact_count: int
+    created_at: str
+    downloaded_at: str | None
+
+    @property
+    def file_name(self) -> str:
+        return f"danhba_{self.id:05d}.vcf"
+
+
+def pool_path(folder: Path) -> Path:
+    return folder / "kho.sqlite"
+
+
+def import_file(
+    folder: Path,
+    source: Path,
+    *,
+    file_format: str,
+    delimiter: str,
+    has_header: bool,
+    encoding: str,
+    phone_column: int,
+    contacts_per_file: int = CONTACTS_PER_FILE,
+    should_stop: Callable[[], bool] | None = None,
+    on_progress: Callable[[int], None] | None = None,
+) -> ImportStats:
+    """Add phones from one source. Existing phones stay in their original book."""
+    config = JobConfig(
+        input_path=source,
+        output_dir=folder,
+        file_format=file_format,
+        delimiter=delimiter,
+        has_header=has_header,
+        name_column=0,
+        phone_column=phone_column,
+        contacts_per_file=contacts_per_file,
+        encoding=encoding,
+    )
+    reader = open_reader(config)
+    stream = reader.iter_stream(0, 1)
+    stats = ImportStats(0, 0, 0, 0)
+    pool = _Pool(pool_path(folder), contacts_per_file)
+    try:
+        for record in stream:
+            if should_stop is not None and should_stop():
+                break
+            cell = ""
+            if 0 <= phone_column < len(record.columns):
+                cell = record.columns[phone_column]
+            phones = canonical_phones(cell)
+            if not phones:
+                stats = ImportStats(
+                    stats.seen + 1,
+                    stats.added,
+                    stats.duplicate,
+                    stats.rejected + 1,
+                )
+            else:
+                added = 0
+                duplicate = 0
+                for phone in phones:
+                    if pool.add(phone, source.name):
+                        added += 1
+                    else:
+                        duplicate += 1
+                stats = ImportStats(
+                    stats.seen + 1,
+                    stats.added + added,
+                    stats.duplicate + duplicate,
+                    stats.rejected,
+                )
+            if on_progress is not None and stats.seen % 2000 == 0:
+                on_progress(stats.seen)
+        pool.finish()
+    finally:
+        pool.close()
+        close = getattr(stream, "close", None)
+        if callable(close):
+            close()
+    if on_progress is not None:
+        on_progress(stats.seen)
+    return stats
+
+
+def list_books(folder: Path, status: str = "all") -> list[BookInfo]:
+    if not pool_path(folder).is_file():
+        return []
+    connection = _connect(pool_path(folder))
+    try:
+        _ensure_schema(connection)
+        query = "SELECT id, contact_count, created_at, downloaded_at FROM books"
+        if status == "pending":
+            query += " WHERE downloaded_at IS NULL"
+        elif status == "downloaded":
+            query += " WHERE downloaded_at IS NOT NULL"
+        query += " ORDER BY id"
+        rows = connection.execute(query).fetchall()
+    finally:
+        connection.close()
+    return [
+        BookInfo(
+            id=int(row["id"]),
+            contact_count=int(row["contact_count"]),
+            created_at=str(row["created_at"]),
+            downloaded_at=None if row["downloaded_at"] is None else str(row["downloaded_at"]),
+        )
+        for row in rows
+    ]
+
+
+def pool_total(folder: Path) -> int:
+    if not pool_path(folder).is_file():
+        return 0
+    connection = _connect(pool_path(folder))
+    try:
+        _ensure_schema(connection)
+        row = connection.execute("SELECT COUNT(*) AS total FROM numbers").fetchone()
+    finally:
+        connection.close()
+    if row is None:
+        return 0
+    return int(row["total"])
+
+
+def export_book(folder: Path, book_id: int, destination: Path) -> int:
+    """Write one book and record the download time. Membership does not change."""
+    connection = _connect(pool_path(folder))
+    try:
+        _ensure_schema(connection)
+        rows = connection.execute(
+            "SELECT phone FROM numbers WHERE book_id = ? ORDER BY rowid",
+            (book_id,),
+        ).fetchall()
+        if not rows:
+            raise ValueError("Danh bạ này không còn số để tải")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with destination.open("w", encoding="utf-8", newline="") as handle:
+            for row in rows:
+                phone = str(row["phone"])
+                handle.write(format_card(phone, phone))
+        downloaded_at = _now()
+        connection.execute(
+            "UPDATE books SET downloaded_at = ? WHERE id = ?",
+            (downloaded_at, book_id),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    return len(rows)
+
+
+def book_of(folder: Path, phone: str) -> int | None:
+    if not pool_path(folder).is_file():
+        return None
+    connection = _connect(pool_path(folder))
+    try:
+        _ensure_schema(connection)
+        row = connection.execute(
+            "SELECT book_id FROM numbers WHERE phone = ?",
+            (phone,),
+        ).fetchone()
+    finally:
+        connection.close()
+    if row is None:
+        return None
+    return int(row["book_id"])
+
+
+class _Pool:
+    def __init__(self, path: Path, contacts_per_file: int) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.contacts_per_file = contacts_per_file
+        self.connection = _connect(path)
+        _ensure_schema(self.connection)
+        self._pending = 0
+        self.connection.execute("BEGIN")
+
+    def add(self, phone: str, source_name: str) -> bool:
+        existing = self.connection.execute(
+            "SELECT book_id FROM numbers WHERE phone = ?",
+            (phone,),
+        ).fetchone()
+        if existing is not None:
+            return False
+        book_id = self._open_book()
+        self.connection.execute(
+            """
+            INSERT INTO numbers (phone, book_id, added_at, source_name)
+            VALUES (?, ?, ?, ?)
+            """,
+            (phone, book_id, _now(), source_name),
+        )
+        self.connection.execute(
+            "UPDATE books SET contact_count = contact_count + 1 WHERE id = ?",
+            (book_id,),
+        )
+        self._pending += 1
+        if self._pending >= 2000:
+            self._commit_open()
+        return True
+
+    def finish(self) -> None:
+        self._commit_open()
+
+    def close(self) -> None:
+        self.connection.close()
+
+    def _open_book(self) -> int:
+        row = self.connection.execute(
+            """
+            SELECT id FROM books
+            WHERE downloaded_at IS NULL AND contact_count < ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (self.contacts_per_file,),
+        ).fetchone()
+        if row is not None:
+            return int(row["id"])
+        cursor = self.connection.execute(
+            "INSERT INTO books (created_at, contact_count, downloaded_at) VALUES (?, 0, NULL)",
+            (_now(),),
+        )
+        if cursor.lastrowid is None:
+            raise RuntimeError("Không tạo được danh bạ mới")
+        return int(cursor.lastrowid)
+
+    def _commit_open(self) -> None:
+        self.connection.commit()
+        self.connection.execute("BEGIN")
+        self._pending = 0
+
+
+def _connect(path: Path) -> sqlite3.Connection:
+    connection = sqlite3.connect(path)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA journal_mode=WAL")
+    return connection
+
+
+def _ensure_schema(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS books (
+            id INTEGER PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            contact_count INTEGER NOT NULL,
+            downloaded_at TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS numbers (
+            phone TEXT PRIMARY KEY,
+            book_id INTEGER NOT NULL,
+            added_at TEXT NOT NULL,
+            source_name TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_numbers_book ON numbers (book_id)"
+    )
+    connection.commit()
+
+
+def _now() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M")
+
+
+def iter_book_phones(folder: Path, book_id: int) -> Iterator[str]:
+    connection = _connect(pool_path(folder))
+    try:
+        _ensure_schema(connection)
+        rows = connection.execute(
+            "SELECT phone FROM numbers WHERE book_id = ? ORDER BY rowid",
+            (book_id,),
+        ).fetchall()
+    finally:
+        connection.close()
+    for row in rows:
+        yield str(row["phone"])
