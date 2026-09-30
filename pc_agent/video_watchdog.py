@@ -8,6 +8,7 @@ Lần chạy kế tiếp xóa dấu watchdog-replaced. Nếu file mới không c
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import io
 import json
@@ -140,9 +141,26 @@ def read_reading_state(path: Path, now: float | None = None) -> tuple[bool, floa
     return reading, age, worker_pid
 
 
+def _windows_process_alive(pid: int) -> bool:
+    """os.kill(pid, 0) trên Windows luôn báo lỗi dù tiến trình còn sống."""
+    access = 0x1000
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+    kernel.OpenProcess.restype = ctypes.c_void_p
+    kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel.CloseHandle.restype = ctypes.c_int
+    handle = kernel.OpenProcess(access, 0, pid)
+    if not handle:
+        return False
+    kernel.CloseHandle(handle)
+    return True
+
+
 def process_alive(pid: int) -> bool:
     if pid <= 0:
         return False
+    if os.name == "nt":
+        return _windows_process_alive(pid)
     try:
         os.kill(pid, 0)
     except OSError:

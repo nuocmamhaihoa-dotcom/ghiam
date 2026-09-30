@@ -1192,17 +1192,37 @@ def _watch_helper_job(job_id: str, path: Path) -> None:
         time.sleep(0.4)
 
 
+def _wait_for_helper(job: VideoJob) -> None:
+    """PC đang nối thì để PC nhận. PC đang bận thì video nằm chờ, hub không đọc chen."""
+    job.update(4, "Chờ PC phụ nhận video")
+    while not job.owner_id() and not job.done:
+        if not video_helpers.helpers.has_fresh():
+            return
+        if not video_helpers.helpers.has_idle():
+            time.sleep(0.2)
+            continue
+        deadline = time.monotonic() + video_helpers.OFFER_SECONDS
+        while (
+            time.monotonic() < deadline
+            and not job.owner_id()
+            and not job.done
+            and video_helpers.helpers.has_idle()
+        ):
+            time.sleep(0.1)
+        if job.owner_id() or job.done or not video_helpers.helpers.has_fresh():
+            return
+        if video_helpers.helpers.has_idle():
+            return
+
+
 def _schedule_video_job(job_id: str, path: Path) -> None:
-    """Có PC rảnh thì chờ PC nhận. Không có thì hub đọc ngay."""
+    """PC đang nối thì video chờ PC. PC mất hoặc PC rảnh không nhận thì hub đọc."""
     job = jobs.get(job_id)
     if job is None:
         discard_video_work(path)
         return
-    if video_helpers.helpers.has_idle() and not job.owner_id():
-        job.update(4, "Chờ PC phụ nhận video")
-        deadline = time.monotonic() + video_helpers.OFFER_SECONDS
-        while time.monotonic() < deadline and not job.owner_id() and not job.done:
-            time.sleep(0.1)
+    if video_helpers.helpers.has_fresh() and not job.owner_id():
+        _wait_for_helper(job)
     if job.done:
         video_helpers.helpers.mark_idle(job.owner_id())
         if job.succeeded():

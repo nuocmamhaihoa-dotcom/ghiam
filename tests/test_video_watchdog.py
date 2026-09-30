@@ -21,10 +21,21 @@ from pc_agent.video_watchdog import (
     upgrade_allowed,
     verify_sha256,
 )
-from pc_agent.video_worker import write_worker_state
+from pc_agent.video_worker import machine_ram_bytes, worker_budget, write_worker_state
 
 
 class VideoWatchdogTests(unittest.TestCase):
+    def test_pc_keeps_ten_percent_of_cpu_and_ram(self) -> None:
+        workers, reserve = worker_budget(20, 32 * 1024 * 1024 * 1024)
+        self.assertEqual((workers, reserve), (18, 2))
+        small_workers, small_reserve = worker_budget(20, 2 * 1024 * 1024 * 1024)
+        self.assertEqual(small_workers, 7)
+        self.assertEqual(small_reserve, 13)
+        self.assertEqual(worker_budget(10, None), (9, 1))
+        self.assertEqual(worker_budget(4, 64 * 1024 * 1024 * 1024), (3, 1))
+        self.assertEqual(worker_budget(1, 32 * 1024 * 1024 * 1024), (1, 0))
+        self.assertGreater(machine_ram_bytes(), 0)
+
     def test_one_reading_blocks_an_update(self) -> None:
         self.assertEqual(
             upgrade_allowed(local=1, remote=2, reading=True, age_sec=5, pid_alive=True),

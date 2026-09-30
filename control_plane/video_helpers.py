@@ -84,6 +84,12 @@ class HelperBook:
             if item is not None:
                 item.seen = now
 
+    def has_fresh(self) -> bool:
+        """Còn PC vừa gửi nhịp, kể cả PC đang bận đọc video."""
+        now = time.monotonic()
+        with self._lock:
+            return any((now - item.seen) <= FRESH_SECONDS for item in self._items.values())
+
     def has_idle(self) -> bool:
         now = time.monotonic()
         with self._lock:

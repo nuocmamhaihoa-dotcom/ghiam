@@ -135,6 +135,18 @@ class ScreenVideoTests(unittest.TestCase):
         self.assertIn("fps=8", scale)
         self.assertIn(r"scale=min(1080\,iw):-2", scale)
 
+    def test_frame_extract_honors_a_pc_thread_budget(self) -> None:
+        previous = os.environ.get("CONTROL_FFMPEG_THREADS")
+        os.environ["CONTROL_FFMPEG_THREADS"] = "18"
+        try:
+            argv = _ffmpeg_extract_command(Path("clip.mp4"), Path("f-%05d.jpg"), 4)
+            self.assertEqual(argv[argv.index("-threads") + 1], "18")
+        finally:
+            if previous is None:
+                os.environ.pop("CONTROL_FFMPEG_THREADS", None)
+            else:
+                os.environ["CONTROL_FFMPEG_THREADS"] = previous
+
     def test_media_seconds_are_microseconds(self) -> None:
         self.assertEqual(_media_seconds("960000"), 0.96)
         self.assertIsNone(_media_seconds("N/A"))

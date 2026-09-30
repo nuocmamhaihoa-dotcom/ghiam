@@ -1102,6 +1102,71 @@ class ActionApiTests(unittest.TestCase):
             body = self._wait_job(job_id)
             self.assertEqual(body.get("error"), "Không đọc được video.")
 
+    def test_busy_pc_keeps_the_next_video_until_it_is_free(self) -> None:
+        beat = self.client.post(
+            "/v1/video-workers/heartbeat",
+            headers=self.headers,
+            json={"name": "pc-hang", "cpus": 20},
+        )
+        self.assertEqual(beat.status_code, 200, beat.text)
+        worker_id = beat.json()["workerId"]
+        opened = self.client.post(
+            "/v1/recordings/from-video/job",
+            headers=self.headers,
+            files={"file": ("clip.mp4", b"video-mot", "video/mp4")},
+        )
+        first_id = opened.json()["jobId"]
+        claimed_id = ""
+        for _ in range(40):
+            claimed = self.client.post(
+                "/v1/recordings/jobs/claim",
+                headers=self.headers,
+                json={"workerId": worker_id},
+            )
+            self.assertEqual(claimed.status_code, 200, claimed.text)
+            claimed_id = claimed.json()["jobId"]
+            if claimed_id:
+                break
+            time.sleep(0.05)
+        self.assertEqual(claimed_id, first_id)
+        queued = self.client.post(
+            "/v1/recordings/from-video/job",
+            headers=self.headers,
+            files={"file": ("clip.mp4", b"video-hai", "video/mp4")},
+        )
+        second_id = queued.json()["jobId"]
+        time.sleep(0.5)
+        waiting = self.client.get(f"/v1/recordings/jobs/{second_id}", headers=self.headers)
+        self.assertEqual(waiting.status_code, 200, waiting.text)
+        body = waiting.json()
+        self.assertFalse(body.get("done"))
+        self.assertIn("Chờ PC", str(body.get("task")))
+        failed = self.client.post(
+            f"/v1/recordings/jobs/{first_id}/fail",
+            headers=self.headers,
+            json={"workerId": worker_id, "error": "Không đọc được video."},
+        )
+        self.assertEqual(failed.status_code, 200, failed.text)
+        taken = ""
+        for _ in range(40):
+            claimed = self.client.post(
+                "/v1/recordings/jobs/claim",
+                headers=self.headers,
+                json={"workerId": worker_id},
+            )
+            self.assertEqual(claimed.status_code, 200, claimed.text)
+            taken = claimed.json()["jobId"]
+            if taken:
+                break
+            time.sleep(0.05)
+        self.assertEqual(taken, second_id)
+        closed = self.client.post(
+            f"/v1/recordings/jobs/{second_id}/fail",
+            headers=self.headers,
+            json={"workerId": worker_id, "error": "Không đọc được video."},
+        )
+        self.assertEqual(closed.status_code, 200, closed.text)
+
     def test_hub_reads_when_the_pc_does_not_take_the_video(self) -> None:
         previous = video_helpers.OFFER_SECONDS
         video_helpers.OFFER_SECONDS = 0.2
@@ -1222,7 +1287,7 @@ class ActionApiTests(unittest.TestCase):
         body = manifest.json()
         self.assertIn("comment-agent.zip", body["agent"]["package_url"])
         worker = body["video_worker"]
-        self.assertEqual(worker["version"], "7")
+        self.assertEqual(worker["version"], "8")
         self.assertEqual(worker["package_url"], "/v1/updates/video-worker.zip")
         self.assertEqual(worker["engine"], "cpu")
         self.assertEqual(len(worker["sha256"]), 64)
@@ -1241,7 +1306,7 @@ class ActionApiTests(unittest.TestCase):
             self.assertIn("pc_agent/windows/Run-VideoWorker.ps1", names)
             self.assertIn("control_plane/screen_steps.py", names)
             self.assertEqual(archive.read("requirements-cpu.txt").decode("utf-8").strip(), "pillow")
-            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "7")
+            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "8")
             self.assertIn("pc_agent/windows/Open-FbPoller.ps1", names)
             guide = archive.read("HUONG-DAN.txt").decode("utf-8")
             self.assertNotIn("test-token", guide)

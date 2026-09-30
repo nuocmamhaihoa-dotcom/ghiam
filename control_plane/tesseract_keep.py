@@ -40,6 +40,12 @@ class _Gate:
 _gate = _Gate()
 
 
+def set_reader_limit(limit: int) -> None:
+    """Giới hạn số bộ đọc Tesseract sống cùng lúc, trước khi ảnh đầu được đọc."""
+    with _gate.lock:
+        _gate.limit = max(1, int(limit))
+
+
 def _bind(lib: ctypes.CDLL) -> bool:
     if not hasattr(lib, "TessBaseAPIGetTsvText"):
         return False
