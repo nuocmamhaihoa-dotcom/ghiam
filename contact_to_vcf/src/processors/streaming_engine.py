@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
 from core.checkpoint import (
     CHECKPOINT_VERSION,
+    clear_resume_state,
     config_matches,
     dedupe_path,
     load_checkpoint,
@@ -77,6 +79,7 @@ def execute(
     next_row = 1 if checkpoint is None else checkpoint.next_row
     last_emit = 0.0
     cancelled = False
+    finished_cleanly = False
 
     try:
         if converting:
@@ -144,23 +147,25 @@ def execute(
             exporter.flush()
             error_bytes = errors.flush() if not pending else _flush_errors(errors, pending)
             pending.clear()
-            if deduper is not None:
-                deduper.commit()
-                deduper.begin()
             progress.files_created = exporter.files_created
             progress.elapsed_sec = elapsed()
-            save_checkpoint(
-                _make_checkpoint(
-                    config,
-                    size,
-                    fingerprint,
-                    progress,
-                    exporter,
-                    error_bytes,
-                    next_offset,
-                    next_row,
-                )
+            checkpoint_now = _make_checkpoint(
+                config,
+                size,
+                fingerprint,
+                progress,
+                exporter,
+                error_bytes,
+                next_offset,
+                next_row,
             )
+            if deduper is not None:
+                deduper.save_state(
+                    json.dumps(checkpoint_now.to_dict(), ensure_ascii=False)
+                )
+                deduper.commit()
+                deduper.begin()
+            save_checkpoint(checkpoint_now)
 
         emit(force=True)
         stream = reader.iter_stream(0 if checkpoint is None else checkpoint.next_offset, next_row)
@@ -181,6 +186,8 @@ def execute(
                             reason,
                         )
                     )
+                elif progress.invalid <= 5 and on_message is not None:
+                    on_message(f"Lỗi dòng {record.row_number}: {reason}")
             else:
                 name, phone = outcome
                 duplicated = bool(
@@ -236,11 +243,10 @@ def execute(
                 pending.clear()
             elif errors is not None:
                 errors.flush()
-            if deduper is not None:
-                deduper.commit()
             progress.files_created = exporter.files_created
             progress.elapsed_sec = elapsed()
             progress.total = progress.processed
+            durable()
             report = Report(
                 total_rows=progress.processed,
                 valid=progress.valid,
@@ -252,25 +258,13 @@ def execute(
                 average_speed=progress.speed,
             )
             (config.output_dir / "report.txt").write_text(report.render(), encoding="utf-8")
-            error_bytes = errors.flush()
-            save_checkpoint(
-                _make_checkpoint(
-                    config,
-                    size,
-                    fingerprint,
-                    progress,
-                    exporter,
-                    error_bytes,
-                    next_offset,
-                    next_row,
-                )
-            )
             logger.write(
                 "Hoàn tất. "
                 f"Hợp lệ {progress.valid}, lỗi {progress.invalid}, "
                 f"trùng {progress.duplicate}, file {progress.files_created}."
             )
             emit(force=True)
+            finished_cleanly = True
             return JobResult(False, "Chuyển đổi hoàn tất.", progress, report)
 
         if deduper is not None:
@@ -298,6 +292,8 @@ def execute(
         close = getattr(stream, "close", None) if "stream" in locals() else None
         if callable(close):
             close()
+        if finished_cleanly:
+            clear_resume_state(config.output_dir)
         if not converting:
             preview = config.output_dir / ".contact_to_vcf" / "preview-dedupe.sqlite"
             for extra in (preview, Path(str(preview) + "-wal"), Path(str(preview) + "-shm")):

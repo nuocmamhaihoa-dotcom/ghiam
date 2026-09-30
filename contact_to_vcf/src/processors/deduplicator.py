@@ -17,6 +17,10 @@ class Deduplicator:
         self.connection.execute("PRAGMA temp_store=MEMORY")
         self.connection.execute("PRAGMA cache_size=-65536")
         self.connection.execute("CREATE TABLE IF NOT EXISTS seen (phone TEXT PRIMARY KEY)")
+        self.connection.execute(
+            "CREATE TABLE IF NOT EXISTS job_state ("
+            "id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT NOT NULL)"
+        )
         self._transaction = False
 
     def begin(self) -> None:
@@ -32,6 +36,16 @@ class Deduplicator:
             (phone,),
         )
         return cursor.rowcount == 0
+
+    def save_state(self, payload: str) -> None:
+        """Store the resume checkpoint in the same transaction as new phones."""
+        if not self._transaction:
+            self.begin()
+        self.connection.execute(
+            "INSERT INTO job_state(id, payload) VALUES (1, ?) "
+            "ON CONFLICT(id) DO UPDATE SET payload = excluded.payload",
+            (payload,),
+        )
 
     def commit(self) -> None:
         if self._transaction:

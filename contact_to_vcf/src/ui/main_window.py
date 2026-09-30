@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QThread, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.checkpoint import load_checkpoint
-from models.records import FileInspection, JobConfig, JobResult, Progress
+from models.records import Checkpoint, FileInspection, JobConfig, JobResult, Progress
 from parsers.detect import detect_format
 from ui.worker import ConversionWorker, InspectWorker
 from utils.format import format_duration, format_int, format_percent
@@ -37,6 +37,7 @@ _DELIMITERS = [
     ("Tab", "\t"),
     ("Gạch đứng |", "|"),
 ]
+_PARKED_THREADS: list[QThread] = []
 
 
 class MainWindow(QMainWindow):
@@ -51,6 +52,8 @@ class MainWindow(QMainWindow):
         self._inspect_workers: list[InspectWorker] = []
         self._inspect_token = 0
         self._paused = False
+        self._saved: Checkpoint | None = None
+        self._saved_columns: tuple[int, int] | None = None
         self._build()
         self._apply_style()
         self._refresh_buttons()
@@ -262,15 +265,20 @@ class MainWindow(QMainWindow):
         selected = QFileDialog.getExistingDirectory(self, "Chọn thư mục xuất")
         if not selected:
             return
-        self.output_dir = Path(selected)
+        self._use_output(Path(selected))
+
+    def _use_output(self, folder: Path) -> None:
+        self.output_dir = folder
         self.output_edit.setText(str(self.output_dir))
         checkpoint = load_checkpoint(self.output_dir)
+        self._saved = checkpoint
         if checkpoint is not None:
             self._log(
                 "Có tiến trình đã lưu: "
                 f"đã xử lý {format_int(checkpoint.processed)} dòng, "
                 f"{format_int(checkpoint.exported)} liên hệ đã xuất."
             )
+            self._apply_checkpoint(checkpoint)
         self._refresh_buttons()
 
     def _reinspect(self) -> None:
@@ -320,6 +328,7 @@ class MainWindow(QMainWindow):
         self.info_labels["format"].setText(inspection.file_format.upper())
         rows = "—" if inspection.estimated_rows is None else format_int(inspection.estimated_rows)
         self.info_labels["rows"].setText(rows)
+        self._apply_saved_columns()
         self._log(f"Đã đọc cấu trúc {inspection.path.name}: {len(inspection.columns)} cột.")
 
     def _on_inspect_failed(self, token: int, message: str) -> None:
@@ -339,6 +348,54 @@ class MainWindow(QMainWindow):
 
     def _delimiter(self) -> str:
         return _DELIMITERS[self.delimiter_combo.currentIndex()][1]
+
+    def _set_delimiter(self, delimiter: str) -> None:
+        for index, (_label, value) in enumerate(_DELIMITERS):
+            if value == delimiter:
+                self.delimiter_combo.setCurrentIndex(index)
+                return
+
+    def _apply_checkpoint(self, checkpoint: Checkpoint) -> None:
+        current = self.file_edit.text().strip()
+        if current and Path(current).resolve() != Path(checkpoint.input_path).resolve():
+            self._log("Tiến trình đã lưu thuộc một file nguồn khác.")
+            return
+        self.header_check.blockSignals(True)
+        self.delimiter_combo.blockSignals(True)
+        self.header_check.setChecked(checkpoint.has_header)
+        self._set_delimiter(checkpoint.delimiter)
+        self.per_file.setValue(checkpoint.contacts_per_file)
+        self.dedupe_check.setChecked(checkpoint.dedupe)
+        self.normalize_check.setChecked(checkpoint.normalize_phone)
+        self.vn_check.setChecked(checkpoint.vn_to_e164)
+        self.keep_name_check.setChecked(checkpoint.keep_original_name)
+        self.split_check.setChecked(checkpoint.split_directories)
+        self.header_check.blockSignals(False)
+        self.delimiter_combo.blockSignals(False)
+        self._saved_columns = (checkpoint.name_column, checkpoint.phone_column)
+        inspection = self.inspection
+        needs_reread = inspection is not None and (
+            inspection.has_header != checkpoint.has_header
+            or (
+                inspection.file_format != "xlsx"
+                and inspection.delimiter != checkpoint.delimiter
+            )
+        )
+        if needs_reread:
+            self._reinspect()
+            return
+        self._apply_saved_columns()
+        self._log("Đã khôi phục tùy chọn từ tiến trình đã lưu. Bấm Tiếp tục để chạy tiếp.")
+
+    def _apply_saved_columns(self) -> None:
+        if self._saved_columns is None or self.name_combo.count() == 0:
+            return
+        name_index, phone_index = self._saved_columns
+        self._saved_columns = None
+        if 0 <= name_index < self.name_combo.count():
+            self.name_combo.setCurrentIndex(name_index)
+        if 0 <= phone_index < self.phone_combo.count():
+            self.phone_combo.setCurrentIndex(phone_index)
 
     def _config(self) -> JobConfig:
         if self.inspection is None:
@@ -485,9 +542,30 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # type: ignore[override]
         if self.worker is not None and self.worker.isRunning():
             self.worker.control.cancel()
-            self.worker.wait(3000)
+            self.worker.wait(5000)
+            if self.worker.isRunning():
+                _park_thread(self.worker)
         for worker in list(self._inspect_workers):
+            if not worker.isRunning():
+                continue
+            worker.wait(5000)
             if worker.isRunning():
-                worker.wait(3000)
-        self._inspect_workers = [worker for worker in self._inspect_workers if worker.isRunning()]
+                _park_thread(worker)
+        self._inspect_workers = [
+            worker for worker in self._inspect_workers if worker.isRunning()
+        ]
         event.accept()
+
+
+def _park_thread(thread: QThread) -> None:
+    try:
+        thread.disconnect()
+    except RuntimeError:
+        return
+    _PARKED_THREADS.append(thread)
+
+    def _release() -> None:
+        if thread in _PARKED_THREADS:
+            _PARKED_THREADS.remove(thread)
+
+    thread.finished.connect(_release)

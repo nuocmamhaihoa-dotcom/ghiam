@@ -15,8 +15,10 @@ CÁCH DÙNG
 6. Bấm KIỂM TRA DỮ LIỆU, rồi BẮT ĐẦU CHUYỂN ĐỔI.
 
 Nút TẠM DỪNG / TIẾP TỤC / HỦY dùng trong lúc chạy.
-Nếu chương trình bị tắt giữa chừng, chọn lại đúng file và thư mục xuất
-rồi bấm TIẾP TỤC. Chỉ tiếp tục được khi file nguồn chưa đổi.
+Nếu chương trình bị tắt giữa chừng, chọn lại đúng file và thư mục xuất.
+Phần mềm khôi phục cột và tùy chọn đã lưu. Bấm TIẾP TỤC.
+Chỉ tiếp tục được khi file nguồn chưa đổi.
+Khi chạy xong, file tạm để tiếp tục được xóa. Các file VCF vẫn được giữ.
 
 FILE TẠO RA
 -----------
@@ -28,6 +30,7 @@ report.txt
 conversion.log
 
 Trong Excel, hãy đặt cột số điện thoại ở dạng văn bản trước khi lưu.
+Hàng trống trong Excel được bỏ qua.
 Nếu Excel làm mất số 0 ở đầu, dòng đó được ghi vào errors.csv.
 
 VÍ DỤ SỐ VIỆT NAM

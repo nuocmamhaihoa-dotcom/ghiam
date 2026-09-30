@@ -33,7 +33,6 @@ class XlsxReader:
         workbook = load_workbook(self.path, read_only=True, data_only=True)
         try:
             sheet = workbook.worksheets[0]
-            pending_blank: list[RawRecord] = []
             for row_number, row in enumerate(sheet.iter_rows(values_only=True), start=1):
                 if row_number < start_row_number:
                     continue
@@ -41,13 +40,7 @@ class XlsxReader:
                     continue
                 columns = tuple(_cell_to_str(value) for value in row)
                 if all(cell == "" for cell in columns):
-                    pending_blank.append(
-                        RawRecord(row_number, (), row_number, "Dòng trống")
-                    )
                     continue
-                for blank in pending_blank:
-                    yield blank
-                pending_blank.clear()
                 yield RawRecord(row_number, columns, row_number)
         finally:
             workbook.close()

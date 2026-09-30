@@ -477,6 +477,125 @@ def test_window_loads_columns_without_blocking(tmp_path: Path) -> None:
     app.processEvents()
 
 
+def test_xlsx_blank_rows_are_skipped(tmp_path: Path) -> None:
+    path = tmp_path / "people.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["name", "phone"])
+    sheet.append(["Mot", "0901234567"])
+    sheet.append([None, None])
+    sheet.append(["Hai", "0901234568"])
+    book.save(path)
+    rows = list(XlsxReader(path, True).iter_stream(0, 1))
+    assert [row.columns[0] for row in rows] == ["Mot", "Hai"]
+
+
+def test_xlsx_resume_after_cancel(tmp_path: Path) -> None:
+    path = tmp_path / "people.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["name", "phone"])
+    for index in range(25):
+        sheet.append([f"N{index:02d}", f"09{index:08d}"])
+    book.save(path)
+    output = tmp_path / "out"
+
+    class StopAfter(RunControl):
+        def observe(self, progress: object) -> None:
+            if getattr(progress, "processed", 0) >= 12:
+                self.cancel()
+
+    stopped = execute(
+        _config(path, output, contacts_per_file=10, chunk_size=5),
+        control=StopAfter(),
+    )
+    assert stopped.cancelled
+    checkpoint = load_checkpoint(output)
+    assert checkpoint is not None
+    assert checkpoint.processed == 10
+
+    resumed = execute(
+        _config(path, output, delimiter=",", contacts_per_file=10, chunk_size=5),
+        resume=True,
+    )
+    assert resumed.report is not None
+    assert resumed.report.exported == 25
+    assert load_checkpoint(output) is None
+
+
+def test_checkpoint_in_sqlite_wins_over_a_stale_json_file(tmp_path: Path) -> None:
+    path = tmp_path / "people.csv"
+    _write_csv(path, [(f"N{index:04d}", f"09{index:08d}") for index in range(40)])
+    output = tmp_path / "out"
+
+    class StopAfter(RunControl):
+        def observe(self, progress: object) -> None:
+            if getattr(progress, "processed", 0) >= 20:
+                self.cancel()
+
+    execute(_config(path, output, contacts_per_file=100, chunk_size=10), control=StopAfter())
+    saved = load_checkpoint(output)
+    assert saved is not None
+    assert saved.processed == 20
+    json_path = output / ".contact_to_vcf" / "checkpoint.json"
+    payload = json_path.read_text(encoding="utf-8")
+    json_path.write_text(payload.replace('"processed": 20', '"processed": 1'), encoding="utf-8")
+    reloaded = load_checkpoint(output)
+    assert reloaded is not None
+    assert reloaded.processed == 20
+
+
+def test_finished_job_drops_resume_state(tmp_path: Path) -> None:
+    path = tmp_path / "people.csv"
+    _write_csv(path, [("An", "0901234567")])
+    output = tmp_path / "out"
+    result = execute(_config(path, output))
+    assert result.report is not None
+    assert (output / "contacts_00001.vcf").is_file()
+    assert (output / "report.txt").is_file()
+    assert load_checkpoint(output) is None
+    assert not (output / ".contact_to_vcf").exists()
+
+
+def test_window_restores_saved_options(tmp_path: Path) -> None:
+    from PySide6.QtWidgets import QApplication
+
+    from ui.main_window import MainWindow
+
+    path = tmp_path / "people.csv"
+    _write_csv(path, [(f"N{index}", f"09{index:08d}") for index in range(30)])
+    output = tmp_path / "out"
+
+    class StopAfter(RunControl):
+        def observe(self, progress: object) -> None:
+            if getattr(progress, "processed", 0) >= 10:
+                self.cancel()
+
+    execute(
+        _config(path, output, contacts_per_file=80, dedupe=False, chunk_size=10),
+        control=StopAfter(),
+    )
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    window.file_edit.setText(str(path))
+    window.delimiter_combo.setCurrentIndex(0)
+    window.header_check.setChecked(True)
+    window._reinspect()
+    deadline = time.monotonic() + 5
+    while window.inspection is None and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(0.02)
+    window._use_output(output)
+    app.processEvents()
+    assert window.per_file.value() == 80
+    assert window.dedupe_check.isChecked() is False
+    assert window.resume_btn.isEnabled()
+    assert window.name_combo.currentIndex() == 0
+    assert window.phone_combo.currentIndex() == 1
+    window.close()
+    app.processEvents()
+
+
 def test_window_constructs() -> None:
     from PySide6.QtWidgets import QApplication
 

@@ -38,7 +38,9 @@ Workflow GitHub `contact-to-vcf-windows` cũng đóng gói file exe này khi có
 6. Bấm **KIỂM TRA DỮ LIỆU** để đếm dòng hợp lệ, dòng lỗi và số trùng.
 7. Bấm **BẮT ĐẦU CHUYỂN ĐỔI**.
 
-Có thể **TẠM DỪNG**, **TIẾP TỤC** hoặc **HỦY**. Nếu máy tắt giữa chừng, mở lại, chọn đúng file nguồn và thư mục xuất, rồi bấm **TIẾP TỤC**. Phần mềm chỉ chạy tiếp khi file nguồn còn đúng kích thước và fingerprint đã lưu.
+Có thể **TẠM DỪNG**, **TIẾP TỤC** hoặc **HỦY**. Nếu máy tắt giữa chừng, mở lại, chọn đúng file nguồn và thư mục xuất. Phần mềm khôi phục cột, số liên hệ mỗi file và các tùy chọn đã lưu, rồi bấm **TIẾP TỤC**. Chương trình chỉ chạy tiếp khi file nguồn còn đúng kích thước và fingerprint đã lưu. Số đã xuất và mốc tiếp tục được ghi trong cùng một giao dịch SQLite, nên mất điện không làm vừa ghi số vào danh sách trùng vừa mất contact trong file VCF.
+
+Khi chuyển đổi xong, file tạm để tiếp tục được xóa. `contacts_*.vcf`, `errors.csv`, `report.txt` và `conversion.log` vẫn nằm trong thư mục xuất.
 
 ## Đầu vào
 
@@ -49,7 +51,7 @@ name,phone
 Nguyen Van A,0901234567
 ```
 
-XLSX dùng hàng đầu làm tiêu đề nếu bật tùy chọn đó. Cột số điện thoại trong Excel cần để dạng văn bản. Nếu Excel lưu `0901234567` thành số `901234567`, số 0 đầu đã mất trong file và phần mềm đưa dòng đó vào `errors.csv` thay vì tự thêm số 0.
+XLSX dùng hàng đầu làm tiêu đề nếu bật tùy chọn đó. Hàng trống trong Excel được bỏ qua, kể cả những hàng trống thừa mà Excel vẫn ghi trong kích thước sheet. Cột số điện thoại trong Excel cần để dạng văn bản. Nếu Excel lưu `0901234567` thành số `901234567`, số 0 đầu đã mất trong file và phần mềm đưa dòng đó vào `errors.csv` thay vì tự thêm số 0.
 
 TXT mặc định dùng dấu `|`. Có thể chọn dấu khác:
 
