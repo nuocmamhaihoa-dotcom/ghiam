@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -62,6 +63,8 @@ class MainWindow(QMainWindow):
         self._saved: Checkpoint | None = None
         self._saved_columns: tuple[int, int] | None = None
         self._auto_delimiter = False
+        self._narrow: bool | None = None
+        self._page_layout: QVBoxLayout | None = None
         self._build()
         self._apply_style()
         self._refresh_buttons()
@@ -73,6 +76,7 @@ class MainWindow(QMainWindow):
         root = QWidget()
         scroll.setWidget(root)
         layout = QVBoxLayout(root)
+        self._page_layout = layout
         layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(8)
 
@@ -191,7 +195,8 @@ class MainWindow(QMainWindow):
         self.books.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.books.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.books.setMinimumHeight(160)
-        layout.addWidget(self.books)
+        self.books.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout.addWidget(self.books, stretch=1)
 
         self.more_check = QCheckBox("Hiện thêm")
         self.more_check.toggled.connect(self._toggle_more)
@@ -255,10 +260,29 @@ class MainWindow(QMainWindow):
         more.addWidget(self.log, 9, 0, 1, 2)
         self.more_panel.setVisible(False)
         layout.addWidget(self.more_panel)
-        layout.addStretch(1)
+        self.setMinimumSize(360, 560)
+        self._fit_screen()
 
     def _toggle_more(self, shown: bool) -> None:
         self.more_panel.setVisible(shown)
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        self._fit_screen()
+
+    def _fit_screen(self) -> None:
+        if self._page_layout is None:
+            return
+        narrow = self.width() < 760
+        if narrow == self._narrow:
+            return
+        self._narrow = narrow
+        margin = 12 if narrow else 28
+        self._page_layout.setContentsMargins(margin, 14, margin, 14)
+        self._page_layout.setSpacing(10 if narrow else 8)
+        button_height = 48 if narrow else 36
+        self.start_btn.setMinimumHeight(button_height)
+        self.download_all_btn.setMinimumHeight(button_height)
 
     def _apply_style(self) -> None:
         self.setStyleSheet(

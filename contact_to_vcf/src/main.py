@@ -15,14 +15,19 @@ def _prepare_path() -> None:
 
 def main() -> None:
     _prepare_path()
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QGuiApplication
     from PySide6.QtWidgets import QApplication
 
     from ui.main_window import MainWindow
 
+    QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
     app = QApplication(sys.argv)
     app.setApplicationName("ContactToVCF")
     window = MainWindow()
-    window.show()
+    window.showMaximized()
     sys.exit(app.exec())
 
 

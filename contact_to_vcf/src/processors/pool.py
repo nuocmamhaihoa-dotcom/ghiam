@@ -67,8 +67,23 @@ def import_file(
     )
     reader = open_reader(config)
     stream = reader.iter_stream(0, 1)
+    seen = 0
+    added = 0
+    duplicate = 0
+    rejected = 0
     stats = ImportStats(0, 0, 0, 0)
+    batch: list[str] = []
     pool = _Pool(pool_path(folder), contacts_per_file)
+
+    def flush_batch() -> None:
+        nonlocal added, duplicate
+        if not batch:
+            return
+        new_count, duplicate_count = pool.add_many(batch, source.name)
+        added += new_count
+        duplicate += duplicate_count
+        batch.clear()
+
     try:
         for record in stream:
             if should_stop is not None and should_stop():
@@ -77,30 +92,18 @@ def import_file(
             if 0 <= phone_column < len(record.columns):
                 cell = record.columns[phone_column]
             phones = canonical_phones(cell)
+            seen += 1
             if not phones:
-                stats = ImportStats(
-                    stats.seen + 1,
-                    stats.added,
-                    stats.duplicate,
-                    stats.rejected + 1,
-                )
+                rejected += 1
             else:
-                added = 0
-                duplicate = 0
-                for phone in phones:
-                    if pool.add(phone, source.name):
-                        added += 1
-                    else:
-                        duplicate += 1
-                stats = ImportStats(
-                    stats.seen + 1,
-                    stats.added + added,
-                    stats.duplicate + duplicate,
-                    stats.rejected,
-                )
-            if on_progress is not None and stats.seen % 2000 == 0:
-                on_progress(stats.seen)
+                batch.extend(phones)
+                if len(batch) >= 4000:
+                    flush_batch()
+            if on_progress is not None and seen % 4000 == 0:
+                on_progress(seen)
+        flush_batch()
         pool.finish()
+        stats = ImportStats(seen, added, duplicate, rejected)
     finally:
         pool.close()
         close = getattr(stream, "close", None)
@@ -202,7 +205,67 @@ class _Pool:
         self.connection = _connect(path)
         _ensure_schema(self.connection)
         self._pending = 0
+        self._book_id: int | None = None
+        self._room = 0
+        self._unflushed = 0
         self.connection.execute("BEGIN")
+
+    def add_many(self, phones: list[str], source_name: str) -> tuple[int, int]:
+        """Insert many phones. Returns ``(added, duplicate)``."""
+        ordered: list[str] = []
+        seen: set[str] = set()
+        duplicate = 0
+        for phone in phones:
+            if phone in seen:
+                duplicate += 1
+                continue
+            seen.add(phone)
+            ordered.append(phone)
+        if not ordered:
+            return 0, duplicate
+        self.connection.execute(
+            "CREATE TEMP TABLE IF NOT EXISTS staging (phone TEXT PRIMARY KEY)"
+        )
+        self.connection.execute("DELETE FROM staging")
+        self.connection.executemany(
+            "INSERT INTO staging (phone) VALUES (?)",
+            [(phone,) for phone in ordered],
+        )
+        already = {
+            str(row["phone"])
+            for row in self.connection.execute(
+                """
+                SELECT staging.phone AS phone
+                FROM staging
+                JOIN numbers ON numbers.phone = staging.phone
+                """
+            )
+        }
+        stamp = _now()
+        added = 0
+        for phone in ordered:
+            if phone in already:
+                duplicate += 1
+                continue
+            book_id = self._book_for_new()
+            self.connection.execute(
+                """
+                INSERT INTO numbers (phone, book_id, added_at, source_name)
+                VALUES (?, ?, ?, ?)
+                """,
+                (phone, book_id, stamp, source_name),
+            )
+            self._room -= 1
+            self._unflushed += 1
+            added += 1
+            if self._room <= 0:
+                self._flush_book()
+                self._book_id = None
+        self._pending += added
+        if self._pending >= 8000:
+            self._flush_book()
+            self._commit_open()
+        return added, duplicate
 
     def add(self, phone: str, source_name: str) -> bool:
         existing = self.connection.execute(
@@ -229,10 +292,49 @@ class _Pool:
         return True
 
     def finish(self) -> None:
+        self._flush_book()
         self._commit_open()
 
     def close(self) -> None:
         self.connection.close()
+
+    def _book_for_new(self) -> int:
+        if self._book_id is not None and self._room > 0:
+            return self._book_id
+        self._flush_book()
+        row = self.connection.execute(
+            """
+            SELECT id, contact_count FROM books
+            WHERE downloaded_at IS NULL AND contact_count < ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (self.contacts_per_file,),
+        ).fetchone()
+        if row is not None:
+            self._book_id = int(row["id"])
+            self._room = self.contacts_per_file - int(row["contact_count"])
+            self._unflushed = 0
+            return self._book_id
+        cursor = self.connection.execute(
+            "INSERT INTO books (created_at, contact_count, downloaded_at) VALUES (?, 0, NULL)",
+            (_now(),),
+        )
+        if cursor.lastrowid is None:
+            raise RuntimeError("Không tạo được danh bạ mới")
+        self._book_id = int(cursor.lastrowid)
+        self._room = self.contacts_per_file
+        self._unflushed = 0
+        return self._book_id
+
+    def _flush_book(self) -> None:
+        if self._book_id is None or self._unflushed == 0:
+            return
+        self.connection.execute(
+            "UPDATE books SET contact_count = contact_count + ? WHERE id = ?",
+            (self._unflushed, self._book_id),
+        )
+        self._unflushed = 0
 
     def _open_book(self) -> int:
         row = self.connection.execute(
@@ -264,6 +366,9 @@ def _connect(path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(path)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA journal_mode=WAL")
+    connection.execute("PRAGMA synchronous=NORMAL")
+    connection.execute("PRAGMA temp_store=MEMORY")
+    connection.execute("PRAGMA cache_size=-65536")
     return connection
 
 
