@@ -205,7 +205,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("multiple", page.text)
         self.assertIn("nhiều video", page.text)
         self.assertIn("Không giới hạn số video, dung lượng hay thời lượng", page.text)
-        self.assertIn("mọi lõi của PC", page.text)
+        self.assertIn("80% CPU và RAM", page.text)
         self.assertIn("Mỗi máy đọc một video", page.text)
         self.assertIn("máy đọc bằng GPU", page.text)
         self.assertIn('id="helperLine"', page.text)
@@ -455,7 +455,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "35")
+        self.assertEqual(build, "36")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -465,7 +465,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 35)
+        self.assertEqual(payload["iphoneBuild"], 36)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -695,7 +695,7 @@ class ActionApiTests(unittest.TestCase):
         beat = self.client.post(
             "/v1/video-workers/heartbeat",
             headers=self.headers,
-            json={"name": "pc-nha", "cpus": 16},
+            json={"name": "pc-nha", "cpus": 16, "workers": 12},
         )
         self.assertEqual(beat.status_code, 200, beat.text)
         worker_id = beat.json()["workerId"]
@@ -708,6 +708,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(helper["count"], 1)
         self.assertEqual(helper["cores"], 16)
         self.assertEqual(helper["gpu"], 0)
+        self.assertEqual(helper["workers"], 12)
         empty = self.client.post(
             "/v1/recordings/jobs/claim",
             headers=self.headers,
@@ -1394,7 +1395,7 @@ class ActionApiTests(unittest.TestCase):
         body = manifest.json()
         self.assertIn("comment-agent.zip", body["agent"]["package_url"])
         worker = body["video_worker"]
-        self.assertEqual(worker["version"], "9")
+        self.assertEqual(worker["version"], "10")
         self.assertEqual(worker["package_url"], "/v1/updates/video-worker.zip")
         self.assertEqual(worker["engine"], "cpu")
         self.assertEqual(len(worker["sha256"]), 64)
@@ -1413,7 +1414,7 @@ class ActionApiTests(unittest.TestCase):
             self.assertIn("pc_agent/windows/Run-VideoWorker.ps1", names)
             self.assertIn("control_plane/screen_steps.py", names)
             self.assertEqual(archive.read("requirements-cpu.txt").decode("utf-8").strip(), "pillow")
-            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "9")
+            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "10")
             self.assertIn("pc_agent/windows/Open-FbPoller.ps1", names)
             guide = archive.read("HUONG-DAN.txt").decode("utf-8")
             self.assertNotIn("test-token", guide)

@@ -9,6 +9,7 @@ import os
 import queue
 import threading
 from ctypes import POINTER, c_char_p, c_int, c_ubyte, c_void_p
+from pathlib import Path
 
 from PIL import Image
 
@@ -65,6 +66,30 @@ def _bind(lib: ctypes.CDLL) -> bool:
     return True
 
 
+def _library_names() -> list[str]:
+    names: list[str] = []
+    found = ctypes.util.find_library("tesseract")
+    if found:
+        names.append(found)
+    exe = os.environ.get("CONTROL_TESSERACT", "").strip().strip('"')
+    if exe:
+        folder = Path(exe).parent
+        if folder.is_dir():
+            for pattern in ("libtesseract-5.dll", "libtesseract.dll", "tesseract.dll"):
+                candidate = folder / pattern
+                if candidate.is_file():
+                    names.append(str(candidate))
+            names.extend(str(path) for path in sorted(folder.glob("libtesseract*.dll")))
+    unique: list[str] = []
+    seen: set[str] = set()
+    for name in names:
+        if name in seen:
+            continue
+        seen.add(name)
+        unique.append(name)
+    return unique
+
+
 def _library() -> ctypes.CDLL | None:
     if _gate.loaded:
         return _gate.lib
@@ -72,20 +97,37 @@ def _library() -> ctypes.CDLL | None:
         if _gate.loaded:
             return _gate.lib
         _gate.loaded = True
-        found = ctypes.util.find_library("tesseract")
-        if not found:
-            _gate.broken = True
-            return None
-        try:
-            lib = ctypes.CDLL(found)
-        except OSError:
-            _gate.broken = True
-            return None
-        if not _bind(lib):
-            _gate.broken = True
-            return None
-        _gate.lib = lib
-        return lib
+        for name in _library_names():
+            try:
+                lib = ctypes.CDLL(name)
+            except OSError:
+                continue
+            if _bind(lib):
+                _gate.lib = lib
+                _gate.broken = False
+                return lib
+        _gate.broken = True
+        return None
+
+
+def _data_dirs() -> list[str | None]:
+    folders: list[str | None] = [None]
+    prefix = os.environ.get("TESSDATA_PREFIX", "").strip().strip('"').rstrip("\\/")
+    if prefix:
+        folders.append(prefix)
+    folders.extend(_DATA_DIRS)
+    exe = os.environ.get("CONTROL_TESSERACT", "").strip().strip('"')
+    if exe:
+        folders.append(str(Path(exe).parent / "tessdata"))
+    unique: list[str | None] = []
+    seen: set[str] = set()
+    for folder in folders:
+        key = "" if folder is None else folder
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(folder)
+    return unique
 
 
 def _open_api(lib: ctypes.CDLL) -> c_void_p | None:
@@ -93,7 +135,7 @@ def _open_api(lib: ctypes.CDLL) -> c_void_p | None:
     if not api:
         return None
     for language in (b"vie+eng", b"eng"):
-        for folder in _DATA_DIRS:
+        for folder in _data_dirs():
             path = None if folder is None else folder.encode("utf-8")
             if lib.TessBaseAPIInit2(api, path, language, _OEM_LSTM) == 0:
                 lib.TessBaseAPISetPageSegMode(api, _PSM_SPARSE)

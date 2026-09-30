@@ -99,7 +99,7 @@ class ReadProgress:
 
 
 def ocr_workers(frame_count: int, cpu_count: int, reserve: int | None = None) -> int:
-    """Số tiến trình Tesseract. Hub giữ một lõi. PC giữ phần lõi còn lại sau mức 90%."""
+    """Số tiến trình Tesseract. Hub giữ một lõi. PC giữ phần lõi còn lại sau mức 80%."""
     if reserve is None:
         raw = os.environ.get("CONTROL_OCR_RESERVE", "1")
         try:
@@ -112,7 +112,7 @@ def ocr_workers(frame_count: int, cpu_count: int, reserve: int | None = None) ->
 
 
 def _ffmpeg_thread_count() -> str:
-    """0 là ffmpeg tự dùng hết lõi. PC đặt số lõi bằng mức 90%."""
+    """0 là ffmpeg tự dùng hết lõi. PC đặt số lõi bằng mức 80%."""
     raw = os.environ.get("CONTROL_FFMPEG_THREADS", "0").strip()
     if raw.isdigit():
         return raw
@@ -133,7 +133,7 @@ def _ffmpeg_extract_command(path: Path, pattern: Path, rate: float) -> list[str]
         "-i",
         str(path),
         "-vf",
-        f"fps={rate:.4f},scale=min(1080\\,iw):-2",
+        f"fps={rate:.4f},scale=min(1080\\,iw):-2,format=yuv420p",
         "-frames:v",
         str(_MAX_FRAMES),
         "-c:v",

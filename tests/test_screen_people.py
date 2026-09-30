@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 import unittest
@@ -12,8 +13,11 @@ from PIL import Image, ImageDraw, ImageFont
 from control_plane.people import clean_username
 from control_plane.screen_people import (
     TextLine,
+    _tesseract_command,
     choose_tsv,
     lines_from_tsv,
+    locate_tesseract,
+    prepare_tesseract,
     propose_rows,
     reading_counts,
     sightings_from_image,
@@ -283,3 +287,33 @@ class ScreenPeopleTests(unittest.TestCase):
         self.assertEqual(rows[0]["name"], "Dũng")
         self.assertEqual(rows[0]["contactName"], "Bạn Dũng Xin Việc")
         self.assertEqual(rows[0]["username"], "@dung.ok1")
+
+    def test_locate_tesseract_uses_the_install_folder(self) -> None:
+        previous = {
+            "CONTROL_TESSERACT": os.environ.get("CONTROL_TESSERACT"),
+            "TESSDATA_PREFIX": os.environ.get("TESSDATA_PREFIX"),
+            "PATH": os.environ.get("PATH"),
+        }
+        os.environ.pop("CONTROL_TESSERACT", None)
+        os.environ.pop("TESSDATA_PREFIX", None)
+        try:
+            with tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                exe = root / "Tesseract-OCR" / "tesseract.exe"
+                exe.parent.mkdir()
+                exe.write_bytes(b"MZ")
+                data = root / "tessdata"
+                data.mkdir()
+                (data / "vie.traineddata").write_bytes(b"trained")
+                found_exe, found_data = locate_tesseract([root])
+                self.assertEqual(found_exe, exe)
+                self.assertEqual(found_data, data)
+                self.assertEqual(prepare_tesseract([root]), "")
+                self.assertEqual(_tesseract_command(), str(exe))
+                self.assertTrue(os.environ["TESSDATA_PREFIX"].rstrip("\\/").endswith("tessdata"))
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value

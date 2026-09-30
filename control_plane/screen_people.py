@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -480,14 +481,92 @@ def _prepare_people_image(path: Path, prepared: Path) -> bool:
     return True
 
 
+def locate_tesseract(roots: list[Path] | None = None) -> tuple[Path | None, Path | None]:
+    """Tìm tesseract và thư mục chữ. Ưu tiên bản cài cạnh phần mềm PC."""
+    exe_candidates: list[Path] = []
+    forced = os.environ.get("CONTROL_TESSERACT", "").strip().strip('"')
+    if forced:
+        exe_candidates.append(Path(forced))
+    for root in roots or []:
+        exe_candidates.append(root / "Tesseract-OCR" / "tesseract.exe")
+        exe_candidates.append(root / "Tesseract-OCR" / "tesseract")
+    if os.name == "nt":
+        for env_name in ("ProgramFiles", "ProgramFiles(x86)"):
+            base = os.environ.get(env_name, "")
+            if base:
+                exe_candidates.append(Path(base) / "Tesseract-OCR" / "tesseract.exe")
+        local = os.environ.get("LOCALAPPDATA", "")
+        if local:
+            exe_candidates.append(Path(local) / "Programs" / "Tesseract-OCR" / "tesseract.exe")
+    found_on_path = shutil.which("tesseract")
+    if found_on_path:
+        exe_candidates.append(Path(found_on_path))
+    exe = next((path for path in exe_candidates if path.is_file()), None)
+
+    data_candidates: list[Path] = []
+    prefix = os.environ.get("TESSDATA_PREFIX", "").strip().strip('"').rstrip("\\/")
+    if prefix:
+        data_candidates.append(Path(prefix))
+    for root in roots or []:
+        data_candidates.append(root / "tessdata")
+    if exe is not None:
+        data_candidates.append(exe.parent / "tessdata")
+    data_candidates.extend(
+        [
+            Path("/usr/share/tesseract-ocr/5/tessdata"),
+            Path("/usr/share/tesseract-ocr/4.00/tessdata"),
+            Path("/usr/share/tessdata"),
+        ]
+    )
+    data = next(
+        (
+            path
+            for path in data_candidates
+            if (path / "eng.traineddata").is_file() or (path / "vie.traineddata").is_file()
+        ),
+        None,
+    )
+    return exe, data
+
+
+def prepare_tesseract(roots: list[Path] | None = None) -> str:
+    """Trỏ PATH và thư mục chữ tới bản đã cài. Trả về câu báo khi thiếu."""
+    exe, data = locate_tesseract(roots)
+    if exe is not None:
+        os.environ["CONTROL_TESSERACT"] = str(exe)
+        folder = str(exe.parent)
+        path = os.environ.get("PATH", "")
+        parts = path.split(os.pathsep) if path else []
+        if folder not in parts:
+            os.environ["PATH"] = folder + os.pathsep + path
+    if data is not None:
+        prefix = str(data)
+        if not prefix.endswith(("\\", "/")):
+            prefix += os.sep
+        os.environ["TESSDATA_PREFIX"] = prefix
+    if exe is None:
+        return "PC chưa có Tesseract. Máy chủ sẽ đọc lại."
+    if data is None:
+        return "PC chưa có dữ liệu chữ vie+eng. Máy chủ sẽ đọc lại."
+    return ""
+
+
+def _tesseract_command() -> str:
+    forced = os.environ.get("CONTROL_TESSERACT", "").strip().strip('"')
+    if forced and Path(forced).is_file():
+        return forced
+    return "tesseract"
+
+
 def _tesseract_cli(prepared: Path) -> str:
     env = os.environ.copy()
     env["OMP_THREAD_LIMIT"] = "1"
+    command = _tesseract_command()
     for lang in ("vie+eng", "eng"):
         try:
             result = subprocess.run(
                 [
-                    "tesseract",
+                    command,
                     str(prepared),
                     "stdout",
                     "--dpi",

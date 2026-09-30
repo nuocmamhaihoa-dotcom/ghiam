@@ -91,9 +91,9 @@
     #progressFill { height: 100%; width: 0; background: #1c1915; }
     #progressLabel, #readTally, #wordCount, #videoStatus { margin: 0.45rem 0 0; }
     #readTally, #wordCount { font-weight: 700; }
-    #sampleBox { display: flex; gap: 0.6rem; overflow-x: auto; margin-top: 0.6rem; }
-    #sampleBox figure { margin: 0; flex: 0 0 180px; }
-    #sampleBox img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); background: #111; }
+    #sampleBox { display: flex; gap: 0.6rem; overflow-x: auto; margin-top: 0.6rem; align-items: flex-start; }
+    #sampleBox figure { margin: 0; flex: 0 0 auto; width: auto; }
+    #sampleBox img { display: block; width: auto; height: 280px; max-width: 180px; object-fit: contain; object-position: center top; border-radius: 10px; border: 1px solid var(--line); background: #111; }
     #sampleBox figcaption { font-size: 13px; font-weight: 700; margin-top: 0.25rem; }
     #problemList { margin: 0.3rem 0 0.6rem; padding-left: 1.2rem; color: var(--bad); }
     #continueBtn { min-height: 48px; margin-top: 0.4rem; }
@@ -1165,7 +1165,9 @@
         const helper = data.videoHelper || {};
         if (helper.connected) {
           const gpu = helper.gpu ? ", có máy đọc bằng GPU" : "";
-          $("helperLine").textContent = "PC phụ đang nối: " + (helper.count || 1) + " máy, " + (helper.cores || helper.cpus || 0) + " lõi" + gpu + ". Mỗi máy đọc một video.";
+          const used = Number(helper.workers) || 0;
+          const share = used > 0 ? ", dùng " + used + " lõi (80% CPU và RAM)" : ", mỗi máy dùng 80% CPU và RAM";
+          $("helperLine").textContent = "PC phụ đang nối: " + (helper.count || 1) + " máy, " + (helper.cores || helper.cpus || 0) + " lõi" + share + gpu + ". Mỗi máy đọc một video.";
         } else {
           $("helperLine").textContent = "PC phụ chưa nối. Video được máy chủ đọc. Mở phần mềm PC nếu muốn máy tính đọc giúp.";
         }

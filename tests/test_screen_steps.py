@@ -135,6 +135,7 @@ class ScreenVideoTests(unittest.TestCase):
         scale = next(item for item in argv if item.startswith("fps="))
         self.assertIn("fps=8", scale)
         self.assertIn(r"scale=min(1080\,iw):-2", scale)
+        self.assertIn("format=yuv420p", scale)
 
     def test_preview_keeps_the_first_middle_and_last_frame(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

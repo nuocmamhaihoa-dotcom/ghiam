@@ -41,9 +41,9 @@
     #progressFill { height: 100%; width: 0%; background: #111; transition: width 0.2s linear; }
     #progressLabel { margin: 0.4rem 0 0; font-weight: 700; line-height: 1.35; font-size: 16px; word-break: break-word; }
     #readTally, #wordCount { margin: 0.45rem 0 0; line-height: 1.4; font-size: 16px; font-weight: 700; }
-    #sampleBox { display: flex; gap: 0.5rem; overflow-x: auto; margin-top: 0.6rem; }
-    #sampleBox figure { margin: 0; flex: 0 0 42%; }
-    #sampleBox img { width: 100%; height: auto; border-radius: 8px; border: 1px solid #ddd; background: #111; }
+    #sampleBox { display: flex; gap: 0.5rem; overflow-x: auto; margin-top: 0.6rem; align-items: flex-start; }
+    #sampleBox figure { margin: 0; flex: 0 0 auto; width: auto; }
+    #sampleBox img { display: block; width: auto; height: 280px; max-width: 46vw; object-fit: contain; object-position: center top; border-radius: 8px; border: 1px solid #ddd; background: #111; }
     #sampleBox figcaption { font-size: 13px; font-weight: 700; margin-top: 0.2rem; }
     #helperLine { margin: 0 0 0.8rem; line-height: 1.4; font-size: 16px; color: #333; }
     #problemLead { margin: 0.6rem 0 0.25rem; color: #b42318; font-weight: 800; }
@@ -90,7 +90,7 @@
 <body>
   <p id="updateNote" hidden></p>
   <main>
-    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. Nhiều PC phụ nối vào hub thì mỗi máy đọc một video bằng mọi lõi của PC. PC có card NVIDIA thì đọc bằng GPU. <a href="/tai-pc">Tải phần mềm cho PC</a>. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
+    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. Nhiều PC phụ nối vào hub thì mỗi máy đọc một video bằng 80% CPU và RAM của PC. PC có card NVIDIA thì đọc bằng GPU. <a href="/tai-pc">Tải phần mềm cho PC</a>. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
     <p id="helperLine">PC phụ chưa nối. Video được máy chủ đọc bằng các lõi còn lại.</p>
     <p id="status" hidden></p>
     <video id="playback" controls playsinline hidden></video>
@@ -463,6 +463,7 @@
         const helper = body.videoHelper || {};
         const count = Number(helper.count) || (helper.connected ? 1 : 0);
         const cores = Number(helper.cores) || Number(helper.cpus) || 0;
+        const used = Number(helper.workers) || 0;
         const gpu = Number(helper.gpu) || 0;
         if (!helper.connected || count < 1) {
           helperLine.textContent = "PC phụ chưa nối. Video được máy chủ đọc bằng các lõi còn lại.";
@@ -470,11 +471,13 @@
         }
         let line;
         if (count >= 2) {
-          line = count + " PC phụ đang nối, " + cores + " lõi. Mỗi máy đọc một video.";
+          line = count + " PC phụ đang nối, " + cores + " lõi. Mỗi máy đọc một video bằng 80% CPU và RAM.";
+        } else if (used > 0 && cores > 0) {
+          line = "PC phụ đang nối, " + cores + " lõi, dùng " + used + " lõi (80% CPU và RAM). Video sẽ do PC đó đọc.";
         } else if (cores > 0) {
-          line = "PC phụ đang nối, " + cores + " lõi. Video sẽ do PC đó đọc.";
+          line = "PC phụ đang nối, " + cores + " lõi. Video sẽ do PC đó đọc bằng 80% CPU và RAM.";
         } else {
-          line = "PC phụ đang nối. Video sẽ do PC đó đọc.";
+          line = "PC phụ đang nối. Video sẽ do PC đó đọc bằng 80% CPU và RAM.";
         }
         if (gpu > 0) line += " " + gpu + " máy đọc bằng GPU.";
         helperLine.textContent = line;

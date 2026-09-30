@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PC kéo video từ hub, đọc bằng 90% CPU và RAM của máy này, rồi gửi kết quả về.
+"""PC kéo video từ hub, đọc bằng 80% CPU và RAM của máy này, rồi gửi kết quả về.
 
 Mỗi máy nhận một video. Máy có card NVIDIA và đã cài bộ đọc GPU thì đọc bằng GPU.
 Chưa cài thì đọc bằng CPU (Tesseract), cùng cách với hub.
@@ -38,21 +38,27 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from control_plane.gpu_read import fallback_note, nvidia_name, reader_ready
+from control_plane.screen_people import prepare_tesseract
 from control_plane.screen_steps import ReadProgress, ScreenVideoError, analyze_screen_video
 from control_plane.tesseract_keep import set_reader_limit
 
 _OCR_BYTES = 256 * 1024 * 1024
-_SHARE = 0.9
+_SHARE_PERCENT = 80
+_READ_STALL_SEC = 45
+_LANE_BYTES = 8 * 1024 * 1024
+_LANES = 4
+_PARALLEL_MIN = 8 * 1024 * 1024
+_reader_note = ""
 
 
 def worker_budget(cpu_count: int, ram_bytes: int | None) -> tuple[int, int]:
-    """Số bộ đọc và số lõi để dành. Lấy mức nhỏ hơn giữa 90% lõi và 90% RAM."""
+    """Số bộ đọc và số lõi để dành. Lấy mức nhỏ hơn giữa 80% lõi và 80% RAM."""
     cpus = max(1, int(cpu_count or 1))
-    by_cpu = max(1, int(cpus * _SHARE))
+    by_cpu = max(1, (cpus * _SHARE_PERCENT) // 100)
     if ram_bytes is None or ram_bytes <= 0:
         workers = by_cpu
     else:
-        by_ram = max(1, int(ram_bytes * _SHARE) // _OCR_BYTES)
+        by_ram = max(1, (int(ram_bytes) * _SHARE_PERCENT) // 100 // _OCR_BYTES)
         workers = max(1, min(by_cpu, by_ram))
     workers = min(workers, cpus)
     return workers, cpus - workers
@@ -131,11 +137,26 @@ class HubClient:
             return {}
         return loaded
 
-    def heartbeat(self, worker_id: str, name: str, cpus: int, gpu: bool = False, gpu_name: str = "") -> str:
+    def heartbeat(
+        self,
+        worker_id: str,
+        name: str,
+        cpus: int,
+        gpu: bool = False,
+        gpu_name: str = "",
+        workers: int = 0,
+    ) -> str:
         body = self._request(
             "POST",
             "/v1/video-workers/heartbeat",
-            {"workerId": worker_id, "name": name, "cpus": cpus, "gpu": gpu, "gpuName": gpu_name},
+            {
+                "workerId": worker_id,
+                "name": name,
+                "cpus": cpus,
+                "gpu": gpu,
+                "gpuName": gpu_name,
+                "workers": workers,
+            },
             timeout=30,
         )
         found = body.get("workerId")
@@ -166,7 +187,7 @@ class HubClient:
         self._request("POST", f"/v1/recordings/jobs/{job_id}/checkpoint", payload, timeout=180)
 
     def download(self, job_id: str, worker_id: str, dest: Path) -> None:
-        """Tải video theo từng khúc. Mạng đứt thì nối từ byte đã ghi, không tải lại từ đầu."""
+        """Tải video nhiều kết nối. Một đường đứt thì các đường kia vẫn chạy, rồi nối từ byte đã ghi."""
         url = f"{self.hub}/v1/recordings/jobs/{job_id}/video?workerId={worker_id}"
         last_error: Exception | None = None
         for attempt in range(8):
@@ -175,29 +196,23 @@ class HubClient:
             if have:
                 headers["Range"] = f"bytes={have}-"
             request = urllib.request.Request(url, headers=headers, method="GET")
+            copied_end: int | None = None
+            total_size = 0
             try:
                 with urllib.request.urlopen(request, timeout=_READ_STALL_SEC) as response:
                     code = int(getattr(response, "status", 200) or 200)
                     if have and code == 200:
                         have = 0
                     total = _declared_total(response.headers, have, code)
-                    mode = "ab" if have and code == 206 else "wb"
-                    written = have if mode == "ab" else 0
-                    with dest.open(mode) as handle:
-                        while True:
-                            try:
-                                chunk = response.read(1024 * 1024)
-                            except http.client.IncompleteRead as error:
-                                if error.partial:
-                                    handle.write(error.partial)
-                                    written += len(error.partial)
-                                break
-                            if not chunk:
-                                break
-                            handle.write(chunk)
-                            written += len(chunk)
-                    if total is None or written >= total:
-                        return
+                    remaining = None if total is None else total - have
+                    if total is None or remaining is None or remaining < _PARALLEL_MIN:
+                        if _read_body(response, dest, have, code, total):
+                            return
+                    else:
+                        first_end = min(total, have + _LANE_BYTES)
+                        if _copy_limited(response, dest, have, code, first_end - have):
+                            copied_end = first_end
+                            total_size = total
             except urllib.error.HTTPError as error:
                 last_error = error
                 if error.code == 416 and have:
@@ -206,6 +221,12 @@ class HubClient:
                     raise
             except (OSError, urllib.error.URLError, TimeoutError, socket.timeout, http.client.IncompleteRead) as error:
                 last_error = error
+            if copied_end is not None:
+                try:
+                    if _parallel_from(url, self.token, dest, copied_end, total_size):
+                        return
+                except (OSError, urllib.error.URLError, TimeoutError, socket.timeout, http.client.IncompleteRead) as error:
+                    last_error = error
             time.sleep(min(8.0, 0.4 * (2**attempt)))
         if last_error is not None:
             raise OSError("Chưa tải hết video.") from last_error
@@ -417,9 +438,6 @@ class RemoteProgress(ReadProgress):
         self._thread.join(timeout=2)
 
 
-_READ_STALL_SEC = 45
-
-
 def _declared_total(headers: object, have: int, code: int) -> int | None:
     getter = getattr(headers, "get", None)
     if not callable(getter):
@@ -437,6 +455,117 @@ def _declared_total(headers: object, have: int, code: int) -> int | None:
     return int(length)
 
 
+def _write_stream(response: object, handle: object, limit: int | None) -> int:
+    """Đọc thân HTTP. limit là số byte cần lấy; None là đọc đến khi hết."""
+    written = 0
+    while limit is None or written < limit:
+        want = 4 * 1024 * 1024 if limit is None else min(4 * 1024 * 1024, limit - written)
+        try:
+            chunk = response.read(want)  # type: ignore[attr-defined]
+        except http.client.IncompleteRead as error:
+            if error.partial:
+                take = error.partial if limit is None else error.partial[: limit - written]
+                handle.write(take)  # type: ignore[attr-defined]
+                written += len(take)
+            break
+        if not chunk:
+            break
+        handle.write(chunk)  # type: ignore[attr-defined]
+        written += len(chunk)
+    return written
+
+
+def _read_body(response: object, dest: Path, have: int, code: int, total: int | None) -> bool:
+    mode = "ab" if have and code == 206 else "wb"
+    written = have if mode == "ab" else 0
+    with dest.open(mode) as handle:
+        written += _write_stream(response, handle, None)
+    return total is None or written >= total
+
+
+def _copy_limited(response: object, dest: Path, have: int, code: int, count: int) -> bool:
+    if count <= 0:
+        return True
+    mode = "ab" if have and code == 206 else "wb"
+    with dest.open(mode) as handle:
+        written = _write_stream(response, handle, count)
+    return written >= count
+
+
+class _Memory:
+    def __init__(self) -> None:
+        self.parts: list[bytes] = []
+
+    def write(self, chunk: bytes) -> None:
+        self.parts.append(chunk)
+
+    def join(self) -> bytes:
+        return b"".join(self.parts)
+
+
+def _fetch_range(url: str, token: str, start: int, end: int) -> bytes:
+    """Tải đúng khoảng [start, end)."""
+    if end <= start:
+        return b""
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Range": f"bytes={start}-{end - 1}",
+    }
+    request = urllib.request.Request(url, headers=headers, method="GET")
+    want = end - start
+    sink = _Memory()
+    with urllib.request.urlopen(request, timeout=_READ_STALL_SEC) as response:
+        code = int(getattr(response, "status", 200) or 200)
+        if code != 206:
+            raise OSError("Máy chủ không trả khúc video.")
+        got = _write_stream(response, sink, want)
+    blob = sink.join()
+    if got != want or len(blob) != want:
+        raise OSError("Khúc video tải thiếu.")
+    return blob
+
+
+def _parallel_from(url: str, token: str, dest: Path, frontier: int, total: int) -> bool:
+    """Bốn đường cùng lúc. Khúc nào xong thì giữ, khúc đứt thì lần sau tải tiếp từ byte đã ghi."""
+    while frontier < total:
+        pieces: list[tuple[int, int]] = []
+        for index in range(_LANES):
+            start = frontier + index * _LANE_BYTES
+            if start >= total:
+                break
+            pieces.append((start, min(total, start + _LANE_BYTES)))
+        blobs: list[bytes | None] = [None] * len(pieces)
+        errors: list[BaseException] = []
+        lock = threading.Lock()
+
+        def grab(index: int, start: int, end: int) -> None:
+            try:
+                blob = _fetch_range(url, token, start, end)
+            except (OSError, urllib.error.URLError, TimeoutError, socket.timeout, http.client.IncompleteRead) as error:
+                with lock:
+                    errors.append(error)
+                return
+            blobs[index] = blob
+
+        threads = [
+            threading.Thread(target=grab, args=(index, start, end), daemon=True)
+            for index, (start, end) in enumerate(pieces)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        with dest.open("ab") as handle:
+            for blob in blobs:
+                if blob is None:
+                    return False
+                handle.write(blob)
+        if errors:
+            return False
+        frontier = pieces[-1][1]
+    return frontier >= total
+
+
 def _hold_while_downloading(client: HubClient, job_id: str, worker_id: str, stop: threading.Event) -> None:
     while not stop.wait(8):
         try:
@@ -450,6 +579,11 @@ def _read_one(client: HubClient, worker_id: str, job_id: str, resume: dict[str, 
     if isinstance(ready, list):
         client.complete(job_id, worker_id, [row for row in ready if isinstance(row, dict)])
         return
+    if _reader_note:
+        try:
+            client.progress(job_id, worker_id, 8, "PC phụ đang đọc video", [_reader_note])
+        except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            pass
     with tempfile.TemporaryDirectory(prefix="fb-pc-") as folder:
         dest = Path(folder) / "clip.mp4"
         client.progress(job_id, worker_id, 8, "PC phụ đang tải video", [])
@@ -540,11 +674,14 @@ def _prepare_gpu() -> tuple[bool, str]:
 
 
 def main() -> None:
+    global _reader_note
     cpus = os.cpu_count() or 1
-    workers, reserve = worker_budget(cpus, machine_ram_bytes())
+    ram = machine_ram_bytes()
+    workers, reserve = worker_budget(cpus, ram)
     os.environ["CONTROL_OCR_RESERVE"] = str(reserve)
     os.environ["CONTROL_FFMPEG_THREADS"] = str(workers)
     set_reader_limit(workers)
+    _reader_note = prepare_tesseract([ROOT, ROOT.parent])
     parser = argparse.ArgumentParser(description="PC phụ đọc video màn hình cho hub")
     parser.add_argument("--hub", default=os.environ.get("CONTROL_HUB", "http://222.255.214.202:8088"))
     args = parser.parse_args()
@@ -561,25 +698,32 @@ def main() -> None:
         while not state["stop"].wait(5):
             refresh_worker_state()
             try:
-                state["worker_id"] = client.heartbeat(state["worker_id"], name, cpus, use_gpu, gpu_name)
+                state["worker_id"] = client.heartbeat(state["worker_id"], name, cpus, use_gpu, gpu_name, workers)
             except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
                 pass
 
     while True:
         try:
-            state["worker_id"] = client.heartbeat("", name, cpus, use_gpu, gpu_name)
+            state["worker_id"] = client.heartbeat("", name, cpus, use_gpu, gpu_name, workers)
             break
         except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
             say("Chưa nối được hub. Thử lại.", err=True)
             time.sleep(5)
-    say(f"Đã nối hub. Máy này có {cpus} lõi, dùng {workers} lõi (90%) để đọc video.")
+    if _reader_note:
+        say(_reader_note, err=True)
+    if ram > 0:
+        say(
+            f"Đã nối hub. Máy này có {cpus} lõi, {ram // (1024 * 1024)} MB RAM, dùng {workers} lõi (80%) để đọc video."
+        )
+    else:
+        say(f"Đã nối hub. Máy này có {cpus} lõi, dùng {workers} lõi (80%) để đọc video.")
     refresh_worker_state()
     threading.Thread(target=beat, daemon=True).start()
     while True:
         try:
             job_id, resume = client.claim(state["worker_id"])
             if not job_id:
-                time.sleep(2.0)
+                time.sleep(0.5)
                 continue
             say(f"Nhận video {job_id}.")
             set_reading(True)
