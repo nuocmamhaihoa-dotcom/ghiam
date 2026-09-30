@@ -89,8 +89,12 @@
     #progressBox { margin: 0 0 1rem; }
     #progressTrack { height: 14px; border-radius: 999px; background: #e7e0d4; overflow: hidden; }
     #progressFill { height: 100%; width: 0; background: #1c1915; }
-    #progressLabel, #readTally, #videoStatus { margin: 0.45rem 0 0; }
-    #readTally { font-weight: 700; }
+    #progressLabel, #readTally, #wordCount, #videoStatus { margin: 0.45rem 0 0; }
+    #readTally, #wordCount { font-weight: 700; }
+    #sampleBox { display: flex; gap: 0.6rem; overflow-x: auto; margin-top: 0.6rem; }
+    #sampleBox figure { margin: 0; flex: 0 0 180px; }
+    #sampleBox img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); background: #111; }
+    #sampleBox figcaption { font-size: 13px; font-weight: 700; margin-top: 0.25rem; }
     #problemList { margin: 0.3rem 0 0.6rem; padding-left: 1.2rem; color: var(--bad); }
     #continueBtn { min-height: 48px; margin-top: 0.4rem; }
     .panel {
@@ -163,6 +167,8 @@
         <div id="progressTrack"><div id="progressFill"></div></div>
         <p id="progressLabel"></p>
         <p id="readTally" hidden>Thấy 0 người trong danh bạ, 0 người có tài khoản, ghi được 0.</p>
+        <p id="wordCount" hidden></p>
+        <div id="sampleBox" hidden></div>
         <p id="problemLead" hidden>Vấn đề khi xử lý</p>
         <ul id="problemList" hidden></ul>
         <button id="continueBtn" type="button" hidden>Tiếp tục đọc nối</button>
@@ -522,6 +528,10 @@
     const progressFill = $("progressFill");
     const progressLabel = $("progressLabel");
     const readTally = $("readTally");
+    const wordCount = $("wordCount");
+    const sampleBox = $("sampleBox");
+    const sampleSeen = new Map();
+    let sampleStamp = 0;
     const problemLead = $("problemLead");
     const problemList = $("problemList");
     const continueBtn = $("continueBtn");
@@ -540,6 +550,96 @@
     function setVideoStatus(text) {
       videoStatus.textContent = text || "";
       videoStatus.hidden = !text;
+    }
+    function copyReading(job, data) {
+      if (data.wordSeen != null) {
+        job.wordSeen = data.wordSeen;
+        job.wordKept = data.wordKept || 0;
+      }
+      if (data.hubWordSeen != null) {
+        job.hubWordSeen = data.hubWordSeen;
+        job.hubWordKept = data.hubWordKept || 0;
+      }
+      if (Array.isArray(data.samples)) job.samples = data.samples;
+    }
+    function paintWords() {
+      const lines = [];
+      batchJobs.forEach((job, index) => {
+        const prefix = batchJobs.length > 1 ? "Video " + (index + 1) + ": " : "";
+        if (job.wordSeen != null) {
+          lines.push(prefix + "PC thấy " + job.wordSeen + " từ, giữ " + (job.wordKept || 0) + " từ trước khi ghép tên.");
+        }
+        if (job.hubWordSeen != null) {
+          lines.push(prefix + "Máy chủ thấy " + job.hubWordSeen + " từ, giữ " + (job.hubWordKept || 0) + " từ trước khi ghép tên.");
+        }
+      });
+      wordCount.textContent = lines.join(" ");
+      wordCount.hidden = !lines.length;
+    }
+    function clearSamples() {
+      sampleStamp += 1;
+      sampleSeen.forEach((item) => {
+        if (item.url) URL.revokeObjectURL(item.url);
+      });
+      sampleSeen.clear();
+      sampleBox.replaceChildren();
+      sampleBox.hidden = true;
+      wordCount.textContent = "";
+      wordCount.hidden = true;
+    }
+    function drawSamples() {
+      sampleBox.replaceChildren();
+      sampleSeen.forEach((item) => {
+        if (!item.url) return;
+        const figure = document.createElement("figure");
+        const img = document.createElement("img");
+        img.src = item.url;
+        img.alt = item.source === "hub" ? "Khung máy chủ" : "Khung PC";
+        const caption = document.createElement("figcaption");
+        caption.textContent = item.source === "hub" ? "Khung máy chủ" : "Khung PC";
+        figure.appendChild(img);
+        figure.appendChild(caption);
+        sampleBox.appendChild(figure);
+      });
+      sampleBox.hidden = sampleBox.childElementCount === 0;
+    }
+    function paintSamples() {
+      const wanted = [];
+      batchJobs.forEach((job) => {
+        (job.samples || []).forEach((sample) => {
+          if (!job.jobId || !sample || sample.index == null) return;
+          wanted.push({
+            key: job.jobId + ":" + sample.index,
+            jobId: job.jobId,
+            index: sample.index,
+            source: sample.source === "hub" ? "hub" : "pc",
+          });
+        });
+      });
+      const live = new Set(wanted.map((item) => item.key));
+      Array.from(sampleSeen.keys()).forEach((key) => {
+        if (live.has(key)) return;
+        const old = sampleSeen.get(key);
+        if (old && old.url) URL.revokeObjectURL(old.url);
+        sampleSeen.delete(key);
+      });
+      const stamp = sampleStamp;
+      wanted.forEach((item) => {
+        if (sampleSeen.has(item.key)) return;
+        sampleSeen.set(item.key, { source: item.source, url: "" });
+        fetch("/v1/recordings/jobs/" + item.jobId + "/samples/" + item.index, { headers: headers() })
+          .then((response) => (response.ok ? response.blob() : null))
+          .then((blob) => {
+            if (stamp !== sampleStamp || !blob) return;
+            const held = sampleSeen.get(item.key);
+            if (!held) return;
+            held.url = URL.createObjectURL(blob);
+            held.source = item.source;
+            drawSamples();
+          })
+          .catch(() => {});
+      });
+      drawSamples();
     }
     function showTally(contacts, accounts, saved) {
       readTally.textContent = "Thấy " + contacts + " người trong danh bạ, " + accounts + " người có tài khoản, ghi được " + saved + ".";
@@ -593,6 +693,8 @@
         });
       });
       renderProblems(live);
+      paintWords();
+      paintSamples();
     }
     function paintFiles() {
       const names = queue.map((file) => file.name).concat(batchJobs.map((job) => job.name || "")).filter(Boolean);
@@ -849,6 +951,7 @@
       job.task = data.task || job.task;
       job.problems = data.problems || [];
       job.canContinue = !!data.canContinue;
+      copyReading(job, data);
       if (!data.done) return;
       job.done = true;
       if (data.error) { job.ok = false; job.error = data.error; return; }
@@ -930,6 +1033,7 @@
       drop.classList.add("busy");
       carried = [];
       renderProblems([]);
+      clearSamples();
       shownOverall = 0;
       batchJobs = [];
       resumeSlots = [];

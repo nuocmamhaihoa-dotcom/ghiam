@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import os
 import queue
 import re
@@ -24,6 +25,7 @@ from control_plane.screen_people import (
     reading_counts,
     read_frame_tsv,
     sightings_from_lines,
+    tsv_word_counts,
 )
 
 _MAX_FRAMES = 2400
@@ -31,6 +33,9 @@ _MAX_FRAMES = 2400
 _MIN_DIFF = 1.0
 # 4 khung/giây. Tên hiện khoảng 1/4 giây vẫn được đọc. 8 khung/giây làm Tesseract đọc gấp đôi mà ít thêm tên.
 _SAMPLE_FPS = 4.0
+_PREVIEW_WIDTH = 420
+_PREVIEW_CAP = 3
+_PREVIEW_BYTES = 150_000
 _STEP_LIMIT = 400
 _APP_WORDS = {"tiktok", "facebook", "instagram", "zalo", "danh", "ba", "follow", "da", "thich", "follower"}
 _MIXED_OK = {"tiktok", "iphone", "facebook", "instagram", "youtube", "zalo"}
@@ -79,6 +84,18 @@ class ReadProgress:
     def note_tally(self, contacts: int, accounts: int, saved: int) -> None:
         """Số người thấy trong danh bạ, số người có tài khoản, số người đủ để ghi."""
         del contacts, accounts, saved
+
+    def note_words(self, seen: int, kept: int) -> None:
+        """Số từ Tesseract in ra và số từ giữ lại trước khi ghép tên."""
+        del seen, kept
+
+    def note_samples(self, images: list[bytes]) -> None:
+        """Vài khung đã chọn, để trang chỉ đúng hình đang đọc."""
+        del images
+
+    def note_blank(self) -> None:
+        """Mọi khung đã chọn đều không có chữ."""
+        return
 
 
 def ocr_workers(frame_count: int, cpu_count: int, reserve: int | None = None) -> int:
@@ -400,6 +417,7 @@ def analyze_screen_video(
     else:
         sink.report(40, "Tách khung hình")
     chosen = _changed_frames(images, sink)
+    sink.note_samples(_sample_previews(chosen))
     readings = _read_frames(chosen, sink)
     sink.report(94, "Ghép tên")
     frames = [(seconds, lines) for seconds, lines, _sightings in readings]
@@ -620,8 +638,58 @@ def _thumb(image: Path) -> Image.Image | None:
         return None
 
 
-def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str, str]]]:
+def _preview_jpeg(path: Path) -> bytes | None:
+    """Ảnh nhỏ để xem trên trang. Khung gốc vẫn để Tesseract đọc."""
+    try:
+        with Image.open(path) as image:
+            rgb = image.convert("RGB")
+            width, height = rgb.size
+            if width > _PREVIEW_WIDTH:
+                height = max(1, int(height * _PREVIEW_WIDTH / width))
+                rgb = rgb.resize((_PREVIEW_WIDTH, height))
+            buf = io.BytesIO()
+            rgb.save(buf, format="JPEG", quality=60)
+            data = buf.getvalue()
+    except OSError:
+        return None
+    if not data or len(data) > _PREVIEW_BYTES:
+        return None
+    return data
+
+
+def _sample_previews(chosen: list[tuple[float, Path]]) -> list[bytes]:
+    """Khung đầu, giữa, và cuối trong các khung thực sự được đọc."""
+    if not chosen:
+        return []
+    indexes = [0]
+    if len(chosen) > 2:
+        indexes.append(len(chosen) // 2)
+    if len(chosen) > 1:
+        indexes.append(len(chosen) - 1)
+    unique: list[int] = []
+    for index in indexes:
+        if index not in unique:
+            unique.append(index)
+    images: list[bytes] = []
+    for index in unique[:_PREVIEW_CAP]:
+        data = _preview_jpeg(chosen[index][1])
+        if data:
+            images.append(data)
+    return images
+
+
+def _line_words(lines: list[object]) -> int:
+    total = 0
+    for line in lines:
+        text = getattr(line, "text", "")
+        total += len(str(text).split())
+    return total
+
+
+def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str, str]], int, int]:
     seconds, image = item
+    seen = 0
+    kept = 0
     try:
         text_lines = read_lines(image)
     except Exception:
@@ -629,6 +697,10 @@ def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str
     if text_lines is None:
         tsv = read_frame_tsv(image)
         text_lines = lines_from_tsv(tsv) if tsv else []
+        if tsv:
+            seen, kept = tsv_word_counts(tsv)
+    else:
+        seen = kept = _line_words(text_lines)
     sightings = sightings_from_lines(text_lines)
     captions = captions_from_sightings(sightings)
     if not captions:
@@ -637,7 +709,7 @@ def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str
         fallback = seen_line(text) if text else ""
         if fallback:
             captions = [fallback]
-    return seconds, captions, sightings
+    return seconds, captions, sightings, seen, kept
 
 
 def _read_frames(
@@ -653,6 +725,8 @@ def _read_frames(
     blank = 0
     failed = 0
     done_count = 0
+    word_seen = 0
+    word_kept = 0
     for index, (seconds, _image) in enumerate(chosen):
         saved = known.get(_frame_key(seconds))
         if saved is None:
@@ -683,17 +757,22 @@ def _read_frames(
                     failed += 1
                     results[index] = (chosen[index][0], [], [])
                 else:
-                    seconds, captions, sightings = reading
+                    seconds, captions, sightings, seen, kept = reading
+                    word_seen += seen
+                    word_kept += kept
                     if not captions and not sightings:
                         blank += 1
-                    results[index] = reading
+                    results[index] = (seconds, captions, sightings)
                     progress.remember_frame(seconds, captions, sightings)
                 percent = 48 + int((done_count / total) * 44)
                 label = "Đọc tiếp" if known else "Đọc chữ"
                 progress.report(min(92, percent), f"{label}, khung {done_count}/{total}")
+    if pending or not known:
+        progress.note_words(word_seen, word_kept)
     if failed:
         progress.problem(f"{failed} khung không đọc được.")
     if blank == total:
+        progress.note_blank()
         progress.problem("Không đọc được chữ trên video.")
     elif blank:
         progress.problem(f"{blank} khung không có chữ.")

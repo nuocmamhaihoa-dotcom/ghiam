@@ -36,11 +36,15 @@
     #playback { width: 100%; border-radius: 12px; background: #000; margin-bottom: 0.8rem; }
     #playback[hidden] { display: none !important; }
     #progressBox { margin: 0 0 0.8rem; }
-    #progressBox[hidden], #problemLead[hidden], #problemList[hidden], #continueBtn[hidden] { display: none !important; }
+    #progressBox[hidden], #problemLead[hidden], #problemList[hidden], #continueBtn[hidden], #wordCount[hidden], #sampleBox[hidden] { display: none !important; }
     #progressTrack { height: 14px; border-radius: 8px; background: #eee; overflow: hidden; border: 1px solid #ddd; }
     #progressFill { height: 100%; width: 0%; background: #111; transition: width 0.2s linear; }
     #progressLabel { margin: 0.4rem 0 0; font-weight: 700; line-height: 1.35; font-size: 16px; word-break: break-word; }
-    #readTally { margin: 0.45rem 0 0; line-height: 1.4; font-size: 16px; font-weight: 700; }
+    #readTally, #wordCount { margin: 0.45rem 0 0; line-height: 1.4; font-size: 16px; font-weight: 700; }
+    #sampleBox { display: flex; gap: 0.5rem; overflow-x: auto; margin-top: 0.6rem; }
+    #sampleBox figure { margin: 0; flex: 0 0 42%; }
+    #sampleBox img { width: 100%; height: auto; border-radius: 8px; border: 1px solid #ddd; background: #111; }
+    #sampleBox figcaption { font-size: 13px; font-weight: 700; margin-top: 0.2rem; }
     #helperLine { margin: 0 0 0.8rem; line-height: 1.4; font-size: 16px; color: #333; }
     #problemLead { margin: 0.6rem 0 0.25rem; color: #b42318; font-weight: 800; }
     #problemList { margin: 0; padding-left: 1.15rem; color: #b42318; font-size: 15px; overflow-wrap: anywhere; }
@@ -94,6 +98,8 @@
       <div id="progressTrack"><div id="progressFill"></div></div>
       <p id="progressLabel"></p>
       <p id="readTally" hidden></p>
+      <p id="wordCount" hidden></p>
+      <div id="sampleBox" hidden></div>
       <p id="problemLead" hidden>Vấn đề khi xử lý</p>
       <ul id="problemList" hidden></ul>
       <button id="continueBtn" type="button" hidden>Tiếp tục đọc nối</button>
@@ -181,6 +187,10 @@
     const problemList = document.getElementById("problemList");
     const continueBtn = document.getElementById("continueBtn");
     const readTally = document.getElementById("readTally");
+    const wordCount = document.getElementById("wordCount");
+    const sampleBox = document.getElementById("sampleBox");
+    const sampleSeen = new Map();
+    let sampleStamp = 0;
     const SAMPLE_MS = 4000;
     const MAX_MS = 600000;
     let busy = false;
@@ -215,6 +225,101 @@
     function hideTally() {
       readTally.textContent = "";
       readTally.hidden = true;
+    }
+
+    function copyReading(job, data) {
+      if (data.wordSeen != null) {
+        job.wordSeen = data.wordSeen;
+        job.wordKept = data.wordKept || 0;
+      }
+      if (data.hubWordSeen != null) {
+        job.hubWordSeen = data.hubWordSeen;
+        job.hubWordKept = data.hubWordKept || 0;
+      }
+      if (Array.isArray(data.samples)) job.samples = data.samples;
+    }
+
+    function paintWords() {
+      const lines = [];
+      batchJobs.forEach((job, index) => {
+        const prefix = batchJobs.length > 1 ? "Video " + (index + 1) + ": " : "";
+        if (job.wordSeen != null) {
+          lines.push(prefix + "PC thấy " + job.wordSeen + " từ, giữ " + (job.wordKept || 0) + " từ trước khi ghép tên.");
+        }
+        if (job.hubWordSeen != null) {
+          lines.push(prefix + "Máy chủ thấy " + job.hubWordSeen + " từ, giữ " + (job.hubWordKept || 0) + " từ trước khi ghép tên.");
+        }
+      });
+      wordCount.textContent = lines.join(" ");
+      wordCount.hidden = !lines.length;
+    }
+
+    function clearSamples() {
+      sampleStamp += 1;
+      sampleSeen.forEach((item) => {
+        if (item.url) URL.revokeObjectURL(item.url);
+      });
+      sampleSeen.clear();
+      sampleBox.replaceChildren();
+      sampleBox.hidden = true;
+      wordCount.textContent = "";
+      wordCount.hidden = true;
+    }
+
+    function drawSamples() {
+      sampleBox.replaceChildren();
+      sampleSeen.forEach((item) => {
+        if (!item.url) return;
+        const figure = document.createElement("figure");
+        const img = document.createElement("img");
+        img.src = item.url;
+        img.alt = item.source === "hub" ? "Khung máy chủ" : "Khung PC";
+        const caption = document.createElement("figcaption");
+        caption.textContent = item.source === "hub" ? "Khung máy chủ" : "Khung PC";
+        figure.appendChild(img);
+        figure.appendChild(caption);
+        sampleBox.appendChild(figure);
+      });
+      sampleBox.hidden = sampleBox.childElementCount === 0;
+    }
+
+    function paintSamples() {
+      const wanted = [];
+      batchJobs.forEach((job) => {
+        (job.samples || []).forEach((sample) => {
+          if (!job.jobId || !sample || sample.index == null) return;
+          wanted.push({
+            key: job.jobId + ":" + sample.index,
+            jobId: job.jobId,
+            index: sample.index,
+            source: sample.source === "hub" ? "hub" : "pc",
+          });
+        });
+      });
+      const live = new Set(wanted.map((item) => item.key));
+      Array.from(sampleSeen.keys()).forEach((key) => {
+        if (live.has(key)) return;
+        const old = sampleSeen.get(key);
+        if (old && old.url) URL.revokeObjectURL(old.url);
+        sampleSeen.delete(key);
+      });
+      const stamp = sampleStamp;
+      wanted.forEach((item) => {
+        if (sampleSeen.has(item.key)) return;
+        sampleSeen.set(item.key, { source: item.source, url: "" });
+        fetch("/v1/recordings/jobs/" + item.jobId + "/samples/" + item.index, { headers: authHeaders() })
+          .then((response) => (response.ok ? response.blob() : null))
+          .then((blob) => {
+            if (stamp !== sampleStamp || !blob) return;
+            const held = sampleSeen.get(item.key);
+            if (!held) return;
+            held.url = URL.createObjectURL(blob);
+            held.source = item.source;
+            drawSamples();
+          })
+          .catch(() => {});
+      });
+      drawSamples();
     }
 
     function showTally(contacts, accounts, saved) {
@@ -487,6 +592,8 @@
         });
       });
       renderProblems(live);
+      paintWords();
+      paintSamples();
     }
 
     function sleep(ms) {
@@ -767,6 +874,7 @@
       job.task = data.task || job.task;
       job.problems = data.problems || [];
       job.canContinue = !!data.canContinue;
+      copyReading(job, data);
       if (!data.done) return;
       job.done = true;
       if (data.error) {
@@ -843,6 +951,7 @@
       recordBtn.disabled = true;
       carried = [];
       renderProblems([]);
+      clearSamples();
       shownOverall = 0;
       batchJobs = [];
       resumeSlots = [];

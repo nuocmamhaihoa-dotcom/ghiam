@@ -20,6 +20,7 @@ from control_plane.screen_steps import (
     _sample_rate,
     _saved_frames,
     _changed_frames,
+    _sample_previews,
     analyze_screen_video,
     clean_ocr,
     ocr_workers,
@@ -134,6 +135,18 @@ class ScreenVideoTests(unittest.TestCase):
         scale = next(item for item in argv if item.startswith("fps="))
         self.assertIn("fps=8", scale)
         self.assertIn(r"scale=min(1080\,iw):-2", scale)
+
+    def test_preview_keeps_the_first_middle_and_last_frame(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw)
+            chosen = []
+            for index, color in enumerate(((255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0))):
+                path = folder / f"{index}.jpg"
+                Image.new("RGB", (800, 200), color).save(path, format="JPEG")
+                chosen.append((float(index), path))
+            previews = _sample_previews(chosen)
+        self.assertEqual(len(previews), 3)
+        self.assertTrue(all(item.startswith(b"\xff\xd8") and len(item) <= 150_000 for item in previews))
 
     def test_frame_extract_honors_a_pc_thread_budget(self) -> None:
         previous = os.environ.get("CONTROL_FFMPEG_THREADS")

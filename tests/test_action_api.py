@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
@@ -23,6 +24,7 @@ os.environ["CONTROL_PROXY_CHECK_SEC"] = "86400"
 Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 
 from fastapi.testclient import TestClient  # noqa: E402
+from PIL import Image  # noqa: E402
 
 from control_plane import db as people_db  # noqa: E402
 from control_plane import video_helpers  # noqa: E402
@@ -453,7 +455,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "34")
+        self.assertEqual(build, "35")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -463,7 +465,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 34)
+        self.assertEqual(payload["iphoneBuild"], 35)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -1274,6 +1276,111 @@ class ActionApiTests(unittest.TestCase):
                 conn.execute("DELETE FROM people_meta")
 
 
+    def test_pc_without_text_makes_the_hub_reread(self) -> None:
+        beat = self.client.post(
+            "/v1/video-workers/heartbeat",
+            headers=self.headers,
+            json={"name": "pc-trong", "cpus": 4},
+        )
+        self.assertEqual(beat.status_code, 200, beat.text)
+        worker_id = beat.json()["workerId"]
+        opened = self.client.post(
+            "/v1/recordings/from-video/job",
+            headers=self.headers,
+            files={"file": ("clip.mp4", b"not-a-video", "video/mp4")},
+        )
+        job_id = opened.json()["jobId"]
+        claimed_id = ""
+        for _ in range(40):
+            claimed = self.client.post(
+                "/v1/recordings/jobs/claim",
+                headers=self.headers,
+                json={"workerId": worker_id},
+            )
+            claimed_id = claimed.json()["jobId"]
+            if claimed_id:
+                break
+            time.sleep(0.05)
+        self.assertEqual(claimed_id, job_id)
+        time.sleep(0.3)
+        done = self.client.post(
+            f"/v1/recordings/jobs/{job_id}/complete",
+            headers=self.headers,
+            json={
+                "workerId": worker_id,
+                "people": [],
+                "noText": True,
+                "wordSeen": 0,
+                "wordKept": 0,
+                "seenContacts": 0,
+                "seenAccounts": 0,
+                "readSaved": 0,
+            },
+        )
+        self.assertEqual(done.status_code, 200, done.text)
+        waiting = done.json()
+        self.assertFalse(waiting.get("done"), waiting)
+        problems = waiting.get("problems")
+        self.assertIsInstance(problems, list)
+        self.assertTrue(any("Máy chủ đọc lại" in str(item) for item in problems), problems)
+        self.assertEqual(waiting.get("wordSeen"), 0)
+        self.assertEqual(waiting.get("wordKept"), 0)
+        body = self._wait_job(job_id)
+        self.assertTrue(body.get("error"), body)
+        again = body.get("problems")
+        self.assertIsInstance(again, list)
+        self.assertTrue(any("Máy chủ đọc lại" in str(item) for item in again), again)
+
+    def test_sample_frames_need_the_token(self) -> None:
+        beat = self.client.post(
+            "/v1/video-workers/heartbeat",
+            headers=self.headers,
+            json={"name": "pc-khung", "cpus": 4},
+        )
+        worker_id = beat.json()["workerId"]
+        opened = self.client.post(
+            "/v1/recordings/from-video/job",
+            headers=self.headers,
+            files={"file": ("clip.mp4", b"video-khung", "video/mp4")},
+        )
+        job_id = opened.json()["jobId"]
+        claimed_id = ""
+        for _ in range(40):
+            claimed = self.client.post(
+                "/v1/recordings/jobs/claim",
+                headers=self.headers,
+                json={"workerId": worker_id},
+            )
+            claimed_id = claimed.json()["jobId"]
+            if claimed_id:
+                break
+            time.sleep(0.05)
+        self.assertEqual(claimed_id, job_id)
+        buf = io.BytesIO()
+        Image.new("RGB", (8, 8), (10, 20, 30)).save(buf, format="JPEG")
+        raw = buf.getvalue()
+        posted = self.client.post(
+            f"/v1/recordings/jobs/{job_id}/samples",
+            headers=self.headers,
+            json={"workerId": worker_id, "images": [base64.b64encode(raw).decode("ascii")]},
+        )
+        self.assertEqual(posted.status_code, 200, posted.text)
+        denied = self.client.get(f"/v1/recordings/jobs/{job_id}/samples/0")
+        self.assertEqual(denied.status_code, 401)
+        image = self.client.get(f"/v1/recordings/jobs/{job_id}/samples/0", headers=self.headers)
+        self.assertEqual(image.status_code, 200, image.text)
+        self.assertEqual(image.content, raw)
+        self.assertEqual(image.headers["content-type"], "image/jpeg")
+        listed = self.client.get(f"/v1/recordings/jobs/{job_id}", headers=self.headers)
+        samples = listed.json().get("samples")
+        self.assertEqual(samples, [{"index": 0, "source": "pc"}])
+        closed = self.client.post(
+            f"/v1/recordings/jobs/{job_id}/fail",
+            headers=self.headers,
+            json={"workerId": worker_id, "error": "Không đọc được video."},
+        )
+        self.assertEqual(closed.status_code, 200, closed.text)
+
     def test_video_worker_package_is_separate_from_the_comment_agent(self) -> None:
         dummy = Path(os.environ["CONTROL_PACKAGES_DIR"]) / "comment-agent.zip"
         dummy.parent.mkdir(parents=True, exist_ok=True)
@@ -1287,7 +1394,7 @@ class ActionApiTests(unittest.TestCase):
         body = manifest.json()
         self.assertIn("comment-agent.zip", body["agent"]["package_url"])
         worker = body["video_worker"]
-        self.assertEqual(worker["version"], "8")
+        self.assertEqual(worker["version"], "9")
         self.assertEqual(worker["package_url"], "/v1/updates/video-worker.zip")
         self.assertEqual(worker["engine"], "cpu")
         self.assertEqual(len(worker["sha256"]), 64)
@@ -1306,7 +1413,7 @@ class ActionApiTests(unittest.TestCase):
             self.assertIn("pc_agent/windows/Run-VideoWorker.ps1", names)
             self.assertIn("control_plane/screen_steps.py", names)
             self.assertEqual(archive.read("requirements-cpu.txt").decode("utf-8").strip(), "pillow")
-            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "8")
+            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "9")
             self.assertIn("pc_agent/windows/Open-FbPoller.ps1", names)
             guide = archive.read("HUONG-DAN.txt").decode("utf-8")
             self.assertNotIn("test-token", guide)

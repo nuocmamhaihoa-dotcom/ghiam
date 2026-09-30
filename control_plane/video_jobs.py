@@ -34,6 +34,9 @@ class VideoJob:
         self._frames: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
         self._staged: list[dict[str, str]] | None = None
         self._tally: dict[str, int] | None = None
+        self._words: dict[str, tuple[int, int]] = {}
+        self._samples: list[tuple[str, bytes]] = []
+        self._reread = False
         self._lock = threading.Lock()
 
     def bind(self, path: Path) -> None:
@@ -101,6 +104,41 @@ class VideoJob:
                 "accounts": max(0, int(accounts)),
                 "saved": max(0, int(saved)),
             }
+
+    def note_words(self, source: str, seen: int, kept: int) -> None:
+        key = "hub" if source == "hub" else "pc"
+        with self._lock:
+            self._words[key] = (max(0, int(seen)), max(0, int(kept)))
+
+    def note_samples(self, source: str, images: list[bytes]) -> None:
+        label = "hub" if source == "hub" else "pc"
+        cleaned: list[tuple[str, bytes]] = []
+        for raw in images[:3]:
+            if isinstance(raw, (bytes, bytearray)) and raw and len(raw) <= 150_000:
+                cleaned.append((label, bytes(raw)))
+        with self._lock:
+            kept = [(item_source, data) for item_source, data in self._samples if item_source != label]
+            self._samples = (kept + cleaned)[:6]
+
+    def sample_jpeg(self, index: int) -> bytes | None:
+        with self._lock:
+            if index < 0 or index >= len(self._samples):
+                return None
+            return self._samples[index][1]
+
+    def mark_reread(self) -> bool:
+        """Hub đọc lại video này một lần. Khung PC đã ghi là trống thì không dùng lại."""
+        with self._lock:
+            if self._reread or self.done:
+                return False
+            self._reread = True
+            self._frames.clear()
+            self._staged = None
+            return True
+
+    def reread_started(self) -> bool:
+        with self._lock:
+            return self._reread
 
     def staged_people(self) -> list[dict[str, str]] | None:
         with self._lock:
@@ -290,6 +328,18 @@ class VideoJob:
                     body["seenContacts"] = self._tally["contacts"]
                     body["seenAccounts"] = self._tally["accounts"]
                     body["readSaved"] = self._tally["saved"]
+            pc_words = self._words.get("pc")
+            hub_words = self._words.get("hub")
+            if pc_words is not None:
+                body["wordSeen"] = pc_words[0]
+                body["wordKept"] = pc_words[1]
+            if hub_words is not None:
+                body["hubWordSeen"] = hub_words[0]
+                body["hubWordKept"] = hub_words[1]
+            body["sampleCount"] = len(self._samples)
+            body["samples"] = [
+                {"index": index, "source": source} for index, (source, _data) in enumerate(self._samples)
+            ]
             path = self.path
             failed = self.done and bool(self.error)
         body["canContinue"] = failed and path is not None and path.is_file()
@@ -354,3 +404,13 @@ class JobProgress(ReadProgress):
 
     def note_tally(self, contacts: int, accounts: int, saved: int) -> None:
         self._job.note_tally(contacts, accounts, saved)
+
+    def note_words(self, seen: int, kept: int) -> None:
+        self._job.note_words("hub", seen, kept)
+
+    def note_samples(self, images: list[bytes]) -> None:
+        if images:
+            self._job.note_samples("hub", images)
+
+    def note_blank(self) -> None:
+        return

@@ -15,6 +15,8 @@ from control_plane.people import clean_name, clean_username, fold_name
 from control_plane.tesseract_keep import read_tsv
 
 _HANDLE = re.compile(r"@[A-Za-z0-9._]{5,30}")
+# Dưới 30 là nhiễu. 45 bỏ sót chữ mờ trên video iPhone.
+_WORD_CONF = 30
 _TIME = re.compile(r"\d{1,2}:\d{2}")
 _LABELS = {
     "danh ba",
@@ -102,6 +104,38 @@ def _strip_button(text: str) -> str:
     return " ".join(words)
 
 
+def tsv_word_counts(tsv: str) -> tuple[int, int]:
+    """Số từ Tesseract in ra (conf ≥ 0) và số từ còn lại trước khi ghép tên."""
+    seen = 0
+    kept = 0
+    for raw in tsv.splitlines():
+        parts = raw.split("\t")
+        if len(parts) < 12 or parts[0] != "5":
+            continue
+        word = parts[11].strip()
+        if not word:
+            continue
+        try:
+            conf = float(parts[10])
+        except ValueError:
+            continue
+        if conf < 0:
+            continue
+        seen += 1
+        if conf >= _WORD_CONF:
+            kept += 1
+    return seen, kept
+
+
+def choose_tsv(memory: str | None, cli: str) -> str:
+    """Bản trong bộ nhớ còn từ thì dùng. Bản rỗng thì lấy lệnh tesseract."""
+    if memory and tsv_word_counts(memory)[1] > 0:
+        return memory
+    if cli:
+        return cli
+    return memory or ""
+
+
 def lines_from_tsv(tsv: str) -> list[TextLine]:
     """Ghép các từ Tesseract cùng một dòng thành một dòng chữ có vị trí."""
     groups: dict[tuple[str, str, str, str], list[dict[str, int | str]]] = {}
@@ -120,7 +154,7 @@ def lines_from_tsv(tsv: str) -> list[TextLine]:
             height = int(float(parts[9]))
         except ValueError:
             continue
-        if conf < 45 or width <= 0 or height <= 0:
+        if conf < _WORD_CONF or width <= 0 or height <= 0:
             continue
         key = (parts[1], parts[2], parts[3], parts[4])
         groups.setdefault(key, []).append(
@@ -485,14 +519,14 @@ def read_frame_tsv(path: Path) -> str:
     if image is None:
         return ""
     kept = read_tsv(image)
-    if kept is not None:
+    if kept is not None and tsv_word_counts(kept)[1] > 0:
         return kept
     prepared = path.with_name(path.stem + "-people.png")
     try:
         image.save(prepared)
     except OSError:
-        return ""
-    return _tesseract_cli(prepared)
+        return kept or ""
+    return choose_tsv(kept, _tesseract_cli(prepared))
 
 
 def sightings_from_image(path: Path) -> list[dict[str, str]]:

@@ -19,6 +19,7 @@ hoặc pip install paddlepaddle-gpu paddleocr
 from __future__ import annotations
 
 import argparse
+import base64
 import ctypes
 import http.client
 import json
@@ -218,18 +219,35 @@ class HubClient:
             timeout=60,
         )
 
+    def samples(self, job_id: str, worker_id: str, images: list[bytes]) -> None:
+        payload = {
+            "workerId": worker_id,
+            "images": [base64.b64encode(item).decode("ascii") for item in images[:3]],
+        }
+        self._request(
+            "POST",
+            f"/v1/recordings/jobs/{job_id}/samples",
+            payload,
+            timeout=60,
+        )
+
     def complete(
         self,
         job_id: str,
         worker_id: str,
         people: list[dict[str, str]],
         tally: dict[str, int] | None = None,
+        reading: dict[str, object] | None = None,
     ) -> None:
         payload: dict[str, object] = {"workerId": worker_id, "people": people}
         if tally is not None:
             payload["seenContacts"] = tally["contacts"]
             payload["seenAccounts"] = tally["accounts"]
             payload["readSaved"] = tally["saved"]
+        if reading is not None:
+            payload["noText"] = bool(reading.get("noText"))
+            payload["wordSeen"] = int(reading.get("wordSeen") or 0)
+            payload["wordKept"] = int(reading.get("wordKept") or 0)
         self._request(
             "POST",
             f"/v1/recordings/jobs/{job_id}/complete",
@@ -261,6 +279,10 @@ class RemoteProgress(ReadProgress):
         self._pending: list[dict[str, object]] = []
         self._staged: list[dict[str, str]] | None = None
         self._tally: dict[str, int] | None = None
+        self._seen = 0
+        self._kept = 0
+        self._blank = False
+        self._samples_sent = False
         saved = resume or {}
         frames = saved.get("frames")
         if isinstance(frames, list):
@@ -319,6 +341,32 @@ class RemoteProgress(ReadProgress):
                 "accounts": max(0, int(accounts)),
                 "saved": max(0, int(saved)),
             }
+
+    def note_words(self, seen: int, kept: int) -> None:
+        with self._lock:
+            self._seen = max(0, int(seen))
+            self._kept = max(0, int(kept))
+
+    def note_blank(self) -> None:
+        with self._lock:
+            self._blank = True
+
+    def note_samples(self, images: list[bytes]) -> None:
+        if not images:
+            return
+        with self._lock:
+            if self._samples_sent:
+                return
+            self._samples_sent = True
+        try:
+            self._client.samples(self._job_id, self._worker_id, images)
+        except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            with self._lock:
+                self._samples_sent = False
+
+    def reading(self) -> dict[str, object]:
+        with self._lock:
+            return {"noText": self._blank, "wordSeen": self._seen, "wordKept": self._kept}
 
     def tally(self) -> dict[str, int] | None:
         with self._lock:
@@ -430,7 +478,7 @@ def _read_one(client: HubClient, worker_id: str, job_id: str, resume: dict[str, 
         finally:
             if not sink._stop.is_set():
                 sink.close()
-        client.complete(job_id, worker_id, people, sink.tally())
+        client.complete(job_id, worker_id, people, sink.tally(), sink.reading())
 
 
 _state_lock = threading.Lock()

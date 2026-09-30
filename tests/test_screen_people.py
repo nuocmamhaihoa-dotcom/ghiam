@@ -10,7 +10,16 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from control_plane.people import clean_username
-from control_plane.screen_people import TextLine, propose_rows, reading_counts, sightings_from_image, sightings_from_lines
+from control_plane.screen_people import (
+    TextLine,
+    choose_tsv,
+    lines_from_tsv,
+    propose_rows,
+    reading_counts,
+    sightings_from_image,
+    sightings_from_lines,
+    tsv_word_counts,
+)
 
 
 def _line(text: str, top: int, height: int = 28, left: int = 70) -> TextLine:
@@ -18,6 +27,25 @@ def _line(text: str, top: int, height: int = 28, left: int = 70) -> TextLine:
 
 
 class ScreenPeopleTests(unittest.TestCase):
+    def test_keeps_words_from_confidence_30(self) -> None:
+        rows = [
+            "5\t1\t1\t1\t1\t1\t10\t10\t40\t20\t30\tHong",
+            "5\t1\t1\t1\t1\t2\t60\t10\t40\t20\t29\tBo",
+            "5\t1\t1\t1\t1\t3\t110\t10\t40\t20\t40\tNam",
+            "5\t1\t1\t1\t1\t4\t160\t10\t40\t20\t-1\tNope",
+        ]
+        tsv = "\n".join(rows)
+        self.assertEqual(tsv_word_counts(tsv), (3, 2))
+        self.assertEqual([line.text for line in lines_from_tsv(tsv)], ["Hong Nam"])
+        kept = rows[0]
+        low = rows[1]
+        cli = "5\t1\t1\t1\t1\t1\t10\t10\t40\t20\t90\tNam"
+        self.assertEqual(choose_tsv(kept, cli), kept)
+        self.assertEqual(choose_tsv(low, cli), cli)
+        self.assertEqual(choose_tsv(None, cli), cli)
+        self.assertEqual(choose_tsv("", ""), "")
+        self.assertEqual(choose_tsv(None, ""), "")
+
     def test_pairs_contact_rows_and_profiles_into_three_columns(self) -> None:
         contacts = sightings_from_lines(
             [

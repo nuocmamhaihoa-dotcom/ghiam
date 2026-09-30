@@ -10,6 +10,7 @@ Features:
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
@@ -1263,6 +1264,14 @@ class WorkerPeopleBody(BaseModel):
     seenContacts: int | None = None
     seenAccounts: int | None = None
     readSaved: int | None = None
+    noText: bool = False
+    wordSeen: int = Field(default=0, ge=0)
+    wordKept: int = Field(default=0, ge=0)
+
+
+class WorkerSamplesBody(BaseModel):
+    workerId: str
+    images: list[str] = Field(default_factory=list)
 
 
 class WorkerFailBody(BaseModel):
@@ -1581,6 +1590,49 @@ def finish_video_upload(upload_id: str, authorization: str | None = Header(defau
     return _begin_video_job(path)
 
 
+@app.post("/v1/recordings/jobs/{job_id}/samples")
+def video_job_samples(
+    job_id: str,
+    body: WorkerSamplesBody,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """PC gửi vài khung đã chọn để trang chỉ hình đang đọc."""
+    _auth(authorization)
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, "không thấy tiến trình")
+    if not job.note_worker(body.workerId):
+        raise HTTPException(409, "PC phụ không giữ video này")
+    decoded: list[bytes] = []
+    for item in body.images[:3]:
+        try:
+            raw = base64.b64decode(item, validate=True)
+        except (ValueError, TypeError):
+            continue
+        if raw and len(raw) <= 150_000:
+            decoded.append(raw)
+    job.note_samples("pc", decoded)
+    video_helpers.helpers.touch(body.workerId)
+    return {"ok": True, "sampleCount": len(decoded)}
+
+
+@app.get("/v1/recordings/jobs/{job_id}/samples/{index}")
+def video_job_sample_image(
+    job_id: str,
+    index: int,
+    authorization: str | None = Header(default=None),
+) -> Response:
+    """Một khung JPEG. Trang tải bằng token, không nhét ảnh vào lần hỏi tiến trình."""
+    _auth(authorization)
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, "không thấy tiến trình")
+    data = job.sample_jpeg(index)
+    if data is None:
+        raise HTTPException(404, "không thấy khung")
+    return Response(content=data, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
+
+
 @app.post("/v1/recordings/jobs/{job_id}/progress")
 def video_job_progress(
     job_id: str,
@@ -1616,6 +1668,20 @@ def video_job_complete(
         raise HTTPException(409, "PC phụ không giữ video này")
     if body.seenContacts is not None and body.seenAccounts is not None and body.readSaved is not None:
         job.note_tally(body.seenContacts, body.seenAccounts, body.readSaved)
+    if (
+        body.noText
+        and not body.people
+        and body.wordKept == 0
+        and job.source_path() is not None
+        and not job.reread_started()
+    ):
+        job.note_words("pc", body.wordSeen, body.wordKept)
+        if job.mark_reread():
+            job.add_problem("PC không đọc được chữ. Máy chủ đọc lại.")
+            job.update(8, "Máy chủ đọc lại")
+            job.release(body.workerId)
+            video_helpers.helpers.mark_idle(body.workerId)
+            return job.public()
     try:
         kept = _commit_people(job, list(body.people), body.workerId)
     finally:
