@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 from control_plane.screen_steps import (
     _MAX_FRAMES,
@@ -363,6 +363,36 @@ class ScreenVideoTests(unittest.TestCase):
             Image.new("RGB", (200, 400), (0, 0, 0)).save(third)
             chosen = _changed_frames([(0.0, first), (0.5, second), (1.0, third)], Sink())
         self.assertEqual([item[1].name for item in chosen], ["a.png", "c.png"])
+
+    def test_a_new_name_on_the_same_layout_is_read(self) -> None:
+        font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        if not Path(font_path).is_file():
+            self.skipTest("font missing")
+        font = ImageFont.truetype(font_path, 40)
+
+        class Sink:
+            def report(self, _percent: int, _task: str) -> None:
+                return None
+
+            def problem(self, _text: str) -> None:
+                return None
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            paths = []
+            for index, (name, handle) in enumerate(
+                (("Tuan Tran Shop", "@tuan.tran11"), ("Tuan Tran Shop", "@tuan.tran11"), ("Mai Tran Shop", "@mai.tran10"))
+            ):
+                image = Image.new("RGB", (720, 1560), (255, 255, 255))
+                pen = ImageDraw.Draw(image)
+                pen.ellipse((260, 200, 460, 400), fill=(90, 120, 200))
+                pen.text((120, 460), name, font=font, fill=(0, 0, 0))
+                pen.text((120, 520), handle, font=font, fill=(40, 40, 40))
+                path = root / f"{index}.jpg"
+                image.save(path, format="JPEG", quality=90 - index)
+                paths.append((float(index), path))
+            chosen = _changed_frames(paths, Sink())
+        self.assertEqual([item[1].name for item in chosen], ["0.jpg", "2.jpg"])
 
     def test_faststart_keeps_a_file_that_is_not_a_video(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

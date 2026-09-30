@@ -33,6 +33,9 @@ from control_plane.screen_people import (
 _MAX_FRAMES = 7200
 # Khung chỉ nhích vài điểm ảnh thì bỏ. Một dòng chữ đổi (khoảng 3) vẫn được đọc.
 _MIN_DIFF = 2.0
+# Trang cùng bố cục mà chỉ đổi tên và tài khoản thì trung bình đổi chưa tới 1, nhưng ô 10x10 đổi mạnh nhất lên
+# khoảng 29. Nhiễu nén, một điểm ảnh, hay cả khung dịch 1 điểm ảnh chỉ tới 3.
+_BLOCK_DIFF = 12.0
 # Rộng tối đa 720. Đo trên video iPhone thật: rộng 1080 đọc chậm hơn và nhận ra ít tên hơn.
 _SAMPLE_FPS = 4.0
 _PARTIAL_MARK = "extract.partial"
@@ -669,16 +672,23 @@ def _changed_frames(images: list[tuple[float, Path]], progress: ReadProgress) ->
         if small is None:
             unopened += 1
             continue
-        if previous is not None:
-            score = ImageStat.Stat(ImageChops.difference(previous, small)).mean[0]
-            if score < _MIN_DIFF:
-                continue
+        if previous is not None and not _frame_changed(previous, small):
+            continue
         chosen.append((seconds, image))
         previous = small
     if unopened:
         progress.problem(f"{unopened} khung không mở được.")
     progress.report(47, "Chọn khung đổi")
     return chosen
+
+
+def _frame_changed(previous: Image.Image, current: Image.Image) -> bool:
+    diff = ImageChops.difference(previous, current)
+    if ImageStat.Stat(diff).mean[0] >= _MIN_DIFF:
+        return True
+    width, height = diff.size
+    blocks = diff.resize((max(1, width // 10), max(1, height // 10)), Image.Resampling.BOX)
+    return blocks.getextrema()[1] >= _BLOCK_DIFF
 
 
 def _thumb(image: Path) -> Image.Image | None:
