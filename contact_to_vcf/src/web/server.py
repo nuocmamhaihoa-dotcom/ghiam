@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, urlparse
 
 from parsers.column_suggest import suggest_columns
 from parsers.detect import detect_format, inspect_source
-from processors.pool import export_book, import_file, list_books, pool_total
+from processors.pool import ImportStats, export_book, import_file, list_books, pool_total
 
 PAGE = Path(__file__).with_name("index.html")
 USER = os.environ.get("DANHBA_USER", "danhba")
@@ -126,6 +126,9 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             if path == "/api/import":
                 self._import()
                 return
+            if path == "/api/import-now":
+                self._import_now()
+                return
             self._json(404, {"error": "Không thấy trang"})
 
         def _inspect(self) -> None:
@@ -190,16 +193,46 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 encoding="utf-8-sig",
                 phone_column=phone_column,
             )
-            self._json(
-                200,
-                {
-                    "added": stats.added,
-                    "duplicate": stats.duplicate,
-                    "rejected": stats.rejected,
-                    "seen": stats.seen,
-                    "total": pool_total(app.kho),
-                },
-            )
+            self._json(200, _import_payload(app.kho, stats))
+
+        def _import_now(self) -> None:
+            form = _read_form(self)
+            file_item = form.get("file")
+            if file_item is None or not file_item[1]:
+                self._json(400, {"error": "Hãy chọn file"})
+                return
+            filename, payload = file_item
+            suffix = Path(filename).suffix.lower()
+            if suffix not in {".csv", ".xlsx", ".txt"}:
+                self._json(400, {"error": "Chỉ nhận CSV, XLSX hoặc TXT"})
+                return
+            target = app.uploads / f"{secrets.token_hex(8)}{suffix}"
+            target.write_bytes(payload)
+            try:
+                detected = detect_format(target)
+                info = inspect_source(target, file_format=detected)
+                _name_index, phone_index = suggest_columns(info.columns, info.samples)
+                stats = import_file(
+                    app.kho,
+                    target,
+                    file_format=info.file_format,
+                    delimiter=info.delimiter or ",",
+                    has_header=info.has_header,
+                    encoding=info.encoding or "utf-8-sig",
+                    phone_column=phone_index,
+                )
+            except (OSError, ValueError) as exc:
+                target.unlink(missing_ok=True)
+                self._json(400, {"error": str(exc)})
+                return
+            payload_json = _import_payload(app.kho, stats)
+            payload_json["upload_id"] = target.name
+            payload_json["phone_column"] = phone_index
+            payload_json["columns"] = info.columns
+            payload_json["samples"] = [list(row) for row in info.samples]
+            payload_json["has_header"] = info.has_header
+            payload_json["delimiter"] = info.delimiter
+            self._json(200, payload_json)
 
         def _download_pending(self) -> None:
             pending = list_books(app.kho, "pending")
@@ -283,6 +316,17 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             return
 
     return Handler
+
+
+def _import_payload(kho: Path, stats: ImportStats) -> dict[str, object]:
+    return {
+        "added": stats.added,
+        "duplicate": stats.duplicate,
+        "rejected": stats.rejected,
+        "seen": stats.seen,
+        "total": pool_total(kho),
+        "pending": [book.id for book in list_books(kho, "pending")],
+    }
 
 
 def _book_id(path: str) -> int | None:

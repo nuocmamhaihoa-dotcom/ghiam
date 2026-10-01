@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from exporters.vcf_validator import format_card
+from exporters.vcf_validator import contact_label, format_card
 from models.records import JobConfig
 from parsers.detect import open_reader
 from processors.phone_normalizer import canonical_phones
@@ -169,7 +169,7 @@ def export_book(folder: Path, book_id: int, destination: Path) -> int:
         with destination.open("w", encoding="utf-8", newline="") as handle:
             for row in rows:
                 phone = str(row["phone"])
-                handle.write(format_card(phone, phone))
+                handle.write(format_card(contact_label(phone), phone))
         downloaded_at = _now()
         connection.execute(
             "UPDATE books SET downloaded_at = ? WHERE id = ?",

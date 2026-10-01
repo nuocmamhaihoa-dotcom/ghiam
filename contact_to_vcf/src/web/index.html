@@ -55,7 +55,7 @@
       padding: 0 16px;
       cursor: pointer;
     }
-    .primary { background: var(--primary); color: var(--primary-ink); width: 100%; }
+    .primary, #import { background: var(--primary); color: var(--primary-ink); width: 100%; }
     .go { background: var(--go); color: white; width: 100%; }
     .ghost { background: var(--soft); color: var(--ink); }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -112,6 +112,8 @@
           <button class="ghost file-btn" id="pick" type="button">Chọn file CSV, Excel hoặc TXT</button>
           <input id="file" class="hide" type="file" accept=".csv,.xlsx,.txt,text/csv,text/plain">
           <p class="status" id="file-name">Chưa chọn file.</p>
+          <button class="primary" id="import" type="button">Tạo danh bạ</button>
+          <p class="status" id="result">Chọn file là danh bạ được tạo và tải về.</p>
           <div id="columns" class="hide stack">
             <label>Cột số</label>
             <div class="chips" id="chips"></div>
@@ -131,9 +133,7 @@
             <div style="overflow:auto">
               <table id="preview"></table>
             </div>
-            <button class="primary" id="import" type="button">Nạp vào kho</button>
           </div>
-          <p class="status" id="result"></p>
         </section>
 
         <section class="card stack">
@@ -159,8 +159,8 @@
     const touch = navigator.maxTouchPoints > 0 || window.matchMedia("(max-width: 800px)").matches;
     document.body.classList.add(touch ? "phone" : "desktop");
     document.getElementById("lead").textContent = touch
-      ? "Giao diện điện thoại. Chọn file, nạp kho, rồi tải danh bạ."
-      : "Giao diện máy tính. Chọn file, nạp kho, rồi tải danh bạ.";
+      ? "Giao diện điện thoại. Chọn file là danh bạ được tạo và tải về."
+      : "Giao diện máy tính. Chọn file là danh bạ được tạo và tải về.";
 
     const $ = (id) => document.getElementById(id);
     let upload = null;
@@ -197,21 +197,41 @@
     };
 
     $("pick").onclick = () => $("file").click();
-    $("file").onchange = async () => {
+    $("file").onchange = () => {
       const file = $("file").files[0];
-      if (!file) return;
-      $("file-name").textContent = file.name;
-      const body = new FormData();
-      body.append("file", file);
-      const info = await api("/api/inspect", { method: "POST", body });
-      upload = info;
-      phoneColumn = info.phone_column;
-      $("header").checked = info.has_header;
-      if ([",", ";", "\t", "|"].includes(info.delimiter)) $("delimiter").value = info.delimiter;
-      $("columns").classList.remove("hide");
-      drawChips();
-      drawPreview();
+      if (file) createBook(file);
     };
+
+    async function createBook(file) {
+      $("file-name").textContent = file.name;
+      $("import").disabled = true;
+      $("result").textContent = "Đang tạo danh bạ…";
+      try {
+        const body = new FormData();
+        body.append("file", file);
+        const data = await api("/api/import-now", { method: "POST", body });
+        upload = data;
+        phoneColumn = data.phone_column;
+        if (data.columns) {
+          $("header").checked = !!data.has_header;
+          if ([",", ";", "\t", "|"].includes(data.delimiter)) $("delimiter").value = data.delimiter;
+          $("columns").classList.remove("hide");
+          drawChips();
+          drawPreview();
+        }
+        $("result").textContent = "Thêm " + data.added + " số. Trùng " + data.duplicate + ". Bỏ qua " + data.rejected + ". Kho có " + data.total + " số.";
+        await loadBooks();
+        if (data.added > 0 && data.pending.length === 1) {
+          window.location.href = "/api/books/" + data.pending[0] + "/download";
+        } else if (data.added > 0 && data.pending.length > 1) {
+          window.location.href = "/api/download-pending";
+        }
+      } catch (error) {
+        $("result").textContent = error.message;
+      } finally {
+        $("import").disabled = false;
+      }
+    }
 
     function drawChips() {
       $("chips").innerHTML = "";
@@ -243,28 +263,13 @@
       upload.delimiter = $("delimiter").value;
     };
 
-    $("import").onclick = async () => {
-      if (!upload) return;
-      $("import").disabled = true;
-      $("result").textContent = "Đang nạp…";
-      try {
-        const data = await api("/api/import", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            upload_id: upload.upload_id,
-            phone_column: phoneColumn,
-            has_header: $("header").checked,
-            delimiter: $("delimiter").value
-          })
-        });
-        $("result").textContent = "Thêm " + data.added + " số. Trùng " + data.duplicate + ". Bỏ qua " + data.rejected + ". Kho có " + data.total + " số.";
-        await loadBooks();
-      } catch (error) {
-        $("result").textContent = error.message;
-      } finally {
-        $("import").disabled = false;
+    $("import").onclick = () => {
+      const file = $("file").files[0];
+      if (!file) {
+        $("result").textContent = "Hãy chọn file số điện thoại.";
+        return;
       }
+      createBook(file);
     };
 
     $("filters").onclick = (event) => {

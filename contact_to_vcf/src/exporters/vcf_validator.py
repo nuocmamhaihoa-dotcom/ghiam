@@ -43,6 +43,14 @@ def fold_line(line: str) -> str:
     return "\r\n ".join(parts)
 
 
+def contact_label(phone: str) -> str:
+    """Label a Vietnam +84 mobile with the 10-digit form the phone can display."""
+    text = phone.strip()
+    if text.startswith("+84") and len(text) == 12 and text[3:].isdigit():
+        return "0" + text[3:]
+    return text
+
+
 def format_card(name: str, phone: str) -> str:
     """Write one contact in the same vCard 3.0 shape as a working phone import.
 

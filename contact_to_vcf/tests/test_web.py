@@ -29,7 +29,7 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
         assert b"TEL;TYPE=CELL:+84900000001\r\n" in exact
         page = opener.open(f"http://127.0.0.1:{port}/").read().decode()
         assert "Vào phần mềm" in page
-        assert "Nạp vào kho" in page
+        assert "Tạo danh bạ" in page
         assert "min-width: 900px" in page
         assert "width=device-width" in page
 
@@ -77,8 +77,26 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
             f"http://127.0.0.1:{port}/api/books/{books['books'][0]['id']}/download"
         )
         card = downloaded.read().decode()
-        assert "FN:+84901234567" in card
+        assert "FN:0901234567" in card
         assert "TEL;TYPE=CELL:+84901234567" in card
+
+        auto_body, auto_type = _form({"file": ("so.txt", "0901111111\n0902222222\n".encode())})
+        automatic = json.load(
+            opener.open(
+                Request(
+                    f"http://127.0.0.1:{port}/api/import-now",
+                    data=auto_body,
+                    headers={"Content-Type": auto_type},
+                )
+            )
+        )
+        assert automatic["added"] == 2
+        assert automatic["pending"]
+        auto_card = opener.open(
+            f"http://127.0.0.1:{port}/api/books/{automatic['pending'][0]}/download"
+        ).read().decode()
+        assert "FN:0901111111" in auto_card
+        assert "TEL;TYPE=CELL:+84901111111" in auto_card
     finally:
         server.shutdown()
 
