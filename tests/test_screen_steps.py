@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from control_plane.screen_steps import (
     _MAX_FRAMES,
+    _segment_count,
     _segment_ranges,
     _segment_threads,
     ReadProgress,
@@ -114,6 +115,18 @@ class ScreenVideoTests(unittest.TestCase):
         captions = " ".join(step["caption"] for step in steps)
         self.assertIn("Thanh", captions)
         self.assertIn("monaco.daily6", captions)
+
+    def test_segment_count_respects_env_and_cpu(self) -> None:
+        previous = os.environ.get("CONTROL_FFMPEG_SEGMENTS")
+        os.environ["CONTROL_FFMPEG_SEGMENTS"] = "5"
+        try:
+            self.assertEqual(_segment_count(), 5)
+        finally:
+            if previous is None:
+                os.environ.pop("CONTROL_FFMPEG_SEGMENTS", None)
+            else:
+                os.environ["CONTROL_FFMPEG_SEGMENTS"] = previous
+        self.assertGreaterEqual(_segment_count(), 4)
 
     def test_ocr_workers_use_the_remaining_cores(self) -> None:
         self.assertEqual(ocr_workers(100, 12, reserve=1), 11)

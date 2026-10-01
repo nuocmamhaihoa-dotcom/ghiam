@@ -428,7 +428,7 @@ def propose_rows(sightings: list[dict[str, str]]) -> list[dict[str, str]]:
         usernames = [username for _name, username in profiles[key]]
         # Tên danh bạ đọc giống nhau 2 lần thì thắng một cách đọc khác. Tài khoản vẫn cần lệch rõ hơn.
         chosen_contacts = _winning_spellings(contact_names, _near_contact, minimum=2, multiple=1)
-        chosen_usernames = _winning_spellings(usernames, _near_username)
+        chosen_usernames = _winning_spellings(usernames, _near_username, minimum=2, multiple=1)
         if not chosen_contacts or not chosen_usernames:
             continue
         display = _richer_name([name for name, _extra in contacts[key] + profiles[key]])
@@ -599,20 +599,77 @@ def _tesseract_cli(prepared: Path) -> str:
     return ""
 
 
-def read_frame_tsv(path: Path) -> str:
-    """Một lần Tesseract cho cả danh bạ và dòng chữ nhìn thấy."""
+def _tesseract_cli_with_prefix(prepared: Path, prefix: str | None) -> str:
+    env = os.environ.copy()
+    env["OMP_THREAD_LIMIT"] = "1"
+    if prefix:
+        folder = prefix if prefix.endswith((os.sep, "/")) else prefix + os.sep
+        env["TESSDATA_PREFIX"] = folder
+    command = _tesseract_command()
+    for lang in ("vie+eng", "eng"):
+        try:
+            result = subprocess.run(
+                [
+                    command,
+                    str(prepared),
+                    "stdout",
+                    "--dpi",
+                    "300",
+                    "-l",
+                    lang,
+                    "--oem",
+                    "1",
+                    "--psm",
+                    "11",
+                    "tsv",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=25,
+                check=False,
+                env=env,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+        if result.returncode == 0 and result.stdout:
+            return result.stdout
+    return ""
+
+
+def _read_frame_tsv_impl(path: Path, *, standard: bool) -> str:
     image = _prepared_image(path)
     if image is None:
         return ""
-    kept = read_tsv(image)
-    if kept is not None and tsv_word_counts(kept)[1] > 0:
-        return kept
+    if not standard:
+        kept = read_tsv(image)
+        if kept is not None and tsv_word_counts(kept)[1] > 0:
+            return kept
+    else:
+        kept = None
     prepared = path.with_name(path.stem + "-people.png")
     try:
         image.save(prepared)
     except OSError:
         return kept or ""
-    return choose_tsv(kept, _tesseract_cli(prepared))
+    prefix: str | None = None
+    if standard:
+        prefix = os.environ.get("CONTROL_TESSDATA_STANDARD", "").strip() or None
+        if prefix is None:
+            _exe, data = locate_tesseract(None)
+            if data is not None:
+                prefix = str(data)
+    cli = _tesseract_cli_with_prefix(prepared, prefix)
+    return choose_tsv(kept, cli)
+
+
+def read_frame_tsv(path: Path) -> str:
+    """Một lần Tesseract cho cả danh bạ và dòng chữ nhìn thấy."""
+    return _read_frame_tsv_impl(path, standard=False)
+
+
+def read_frame_tsv_standard(path: Path) -> str:
+    """Đọc lại bằng bộ chữ chuẩn khi bộ chữ nhanh nghi ngờ."""
+    return _read_frame_tsv_impl(path, standard=True)
 
 
 def sightings_from_image(path: Path) -> list[dict[str, str]]:

@@ -33,6 +33,7 @@ from control_plane import db as people_db  # noqa: E402
 from control_plane import video_helpers  # noqa: E402
 from control_plane.app import app  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
+from control_plane.issues import record_issue, record_video_problem  # noqa: E402
 from control_plane.version import VIDEO_WORKER_BUILD  # noqa: E402
 from control_plane.video_jobs import VideoJob, jobs  # noqa: E402
 
@@ -74,6 +75,19 @@ class ActionApiTests(unittest.TestCase):
             json={"summary": "x", "kind": "drop-table"},
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_issues_journal_lists_video_problems(self) -> None:
+        denied = self.client.get("/v1/issues")
+        self.assertEqual(denied.status_code, 401)
+        record_video_problem("job-abc", "2 khung không có chữ.")
+        record_issue("PC phụ không nhận video", source="schedule", job_id="job-abc", level="info")
+        listed = self.client.get("/v1/issues", headers=self.headers)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        items = listed.json()["items"]
+        self.assertGreaterEqual(len(items), 2)
+        self.assertEqual(items[0]["level"], "info")
+        self.assertEqual(items[0]["jobId"], "job-abc")
+        self.assertIn("PC phụ", items[0]["summary"])
 
     def test_proxy_check_is_remembered(self) -> None:
         response = self.client.post("/v1/proxies/check", headers=self.headers)
@@ -469,7 +483,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "39")
+        self.assertEqual(build, "40")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -479,7 +493,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 39)
+        self.assertEqual(payload["iphoneBuild"], 40)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -1658,7 +1672,7 @@ class ActionApiTests(unittest.TestCase):
         body = manifest.json()
         self.assertIn("comment-agent.zip", body["agent"]["package_url"])
         worker = body["video_worker"]
-        self.assertEqual(worker["version"], "13")
+        self.assertEqual(worker["version"], "14")
         self.assertEqual(worker["package_url"], "/v1/updates/video-worker.zip")
         self.assertEqual(worker["engine"], "cpu")
         self.assertEqual(len(worker["sha256"]), 64)
@@ -1678,7 +1692,7 @@ class ActionApiTests(unittest.TestCase):
             self.assertIn("control_plane/screen_steps.py", names)
             self.assertIn("control_plane/version.py", names)
             self.assertEqual(archive.read("requirements-cpu.txt").decode("utf-8").strip(), "pillow")
-            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "13")
+            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "14")
             self.assertIn("pc_agent/windows/Open-FbPoller.ps1", names)
             guide = archive.read("HUONG-DAN.txt").decode("utf-8")
             self.assertNotIn("test-token", guide)

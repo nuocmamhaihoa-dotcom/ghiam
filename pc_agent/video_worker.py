@@ -935,12 +935,15 @@ def main() -> None:
         say("Đặt CONTROL_TOKEN rồi chạy lại.", err=True)
         sys.exit(2)
     client = HubClient(args.hub, token)
+    _reader_note = prepare_tesseract([ROOT, ROOT.parent])
+    standard_prefix = os.environ.get("TESSDATA_PREFIX", "").strip()
+    if standard_prefix:
+        os.environ["CONTROL_TESSDATA_STANDARD"] = standard_prefix.rstrip("\\/")
     fast_folder = ROOT.parent / "tessdata-fast"
     models = "standard"
     if ensure_fast_models(client.fetch_model, fast_folder):
         os.environ["TESSDATA_PREFIX"] = str(fast_folder) + os.sep
         models = "fast"
-    _reader_note = prepare_tesseract([ROOT, ROOT.parent])
     use_gpu, gpu_name = _prepare_gpu()
     name = os.environ.get("COMPUTERNAME") or os.environ.get("HOSTNAME") or "PC"
     report: dict[str, object] = {"build": VIDEO_WORKER_BUILD, "models": models}

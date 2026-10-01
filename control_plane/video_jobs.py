@@ -275,6 +275,12 @@ class VideoJob:
             if len(self.problems) >= 20 or cleaned in self.problems:
                 return
             self.problems.append(cleaned)
+        try:
+            from control_plane.issues import record_video_problem
+
+            record_video_problem(self.id, cleaned)
+        except Exception:
+            pass
 
     def finish(
         self,
@@ -343,6 +349,12 @@ class VideoJob:
         self.error = cleaned
         if cleaned not in self.problems and len(self.problems) < 20:
             self.problems.append(cleaned)
+        try:
+            from control_plane.issues import record_job_failure
+
+            record_job_failure(self.id, cleaned)
+        except Exception:
+            pass
 
     def public(self) -> dict[str, Any]:
         with self._lock:

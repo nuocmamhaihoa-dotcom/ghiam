@@ -129,7 +129,7 @@ def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-_ACTION_KINDS = {"note", "cli", "proxy_check", "proxy_upload", "package_upload", "screen"}
+_ACTION_KINDS = {"note", "cli", "proxy_check", "proxy_upload", "package_upload", "screen", "issue"}
 
 
 def _remember_hub(kind: str, summary: str, detail: str | None = None, actor: str = "me") -> None:
@@ -1050,6 +1050,34 @@ def get_actions(
     return {"count": len(items), "items": items}
 
 
+@app.get("/v1/issues")
+def get_issues(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=80, ge=1, le=200),
+    q: str = Query(default=""),
+) -> dict[str, Any]:
+    """Nhật ký lỗi và vấn đề (trang chủ)."""
+    from control_plane.issues import parse_detail
+
+    _auth(authorization)
+    raw = db.list_actions(settings.db_path, limit=limit, q=q, kind="issue")
+    items: list[dict[str, Any]] = []
+    for row in raw:
+        meta = parse_detail(row.get("detail"))
+        items.append(
+            {
+                "id": row.get("id"),
+                "at": row.get("at"),
+                "source": row.get("source") or meta.get("source") or "hub",
+                "summary": row.get("summary"),
+                "level": meta.get("level") or "warn",
+                "jobId": meta.get("jobId"),
+                "detail": meta.get("detail") or "",
+            }
+        )
+    return {"count": len(items), "items": items}
+
+
 class SeenBody(BaseModel):
     lines: list[str] = Field(default_factory=list, max_length=20)
 
@@ -1178,7 +1206,7 @@ def _commit_people(job: VideoJob, people: list[dict[str, str]], worker_id: str |
 
 # Video từ 4 phút trở lên, lúc có hai PC rảnh, thì chia đôi. Hai phần chồng nhau vài giây để không cắt mất dòng ở giữa.
 _SPLIT_MIN_SECONDS = 240.0
-_SPLIT_OVERLAP = 3.0
+_SPLIT_OVERLAP = 5.0
 
 
 def _discard_job(job: VideoJob) -> None:
@@ -1380,13 +1408,24 @@ def _watch_helper_job(job_id: str, path: Path) -> None:
         time.sleep(0.4)
 
 
+def _pc_wait_seconds() -> float:
+    raw = os.environ.get("CONTROL_PC_WAIT_SEC", "45").strip()
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return 45.0
+
+
 def _wait_for_helper(job: VideoJob) -> None:
     """PC đang nối thì để PC nhận. PC đang bận thì video nằm chờ, hub không đọc chen."""
     job.update(4, "Chờ PC phụ nhận video")
+    started = time.monotonic()
     while not job.owner_id() and not job.done:
         if not video_helpers.helpers.has_fresh():
             return
         if not video_helpers.helpers.has_idle():
+            if time.monotonic() - started >= _pc_wait_seconds():
+                return
             time.sleep(0.2)
             continue
         deadline = time.monotonic() + video_helpers.OFFER_SECONDS
@@ -1397,9 +1436,22 @@ def _wait_for_helper(job: VideoJob) -> None:
             and video_helpers.helpers.has_idle()
         ):
             time.sleep(0.1)
-        if job.owner_id() or job.done or not video_helpers.helpers.has_fresh():
+        if job.owner_id() or job.done:
             return
-        if video_helpers.helpers.has_idle():
+        if not video_helpers.helpers.has_fresh():
+            return
+        if time.monotonic() - started >= _pc_wait_seconds():
+            try:
+                from control_plane.issues import record_issue
+
+                record_issue(
+                    "PC phụ không nhận video trong thời gian chờ. Máy chủ sẽ đọc.",
+                    source="schedule",
+                    job_id=job.id,
+                    level="info",
+                )
+            except Exception:
+                pass
             return
 
 

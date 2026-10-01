@@ -20,11 +20,13 @@ from PIL import Image, ImageChops, ImageOps, ImageStat
 
 from control_plane.gpu_read import fallback_note, prefers_single_worker, read_lines
 from control_plane.screen_people import (
+    _accepted_sighting,
     captions_from_sightings,
     lines_from_tsv,
     propose_rows,
     reading_counts,
     read_frame_tsv,
+    read_frame_tsv_standard,
     sightings_from_lines,
     tsv_word_counts,
 )
@@ -39,9 +41,12 @@ _BLOCK_DIFF = 12.0
 # Rộng tối đa 720. Đo trên video iPhone thật: rộng 1080 đọc chậm hơn và nhận ra ít tên hơn.
 # 8 khung/giây đọc được khoảng một nửa tên danh bạ hơn 4 khung/giây. Giải mã gần như không chậm thêm.
 _SAMPLE_FPS = 8.0
-# Bốn tiến trình ffmpeg. Một tiến trình không dùng hết lõi.
-_SEGMENTS = 4
+# Đoạn ffmpeg song song. PC nhiều lõi thì tách nhiều hơn.
 _SEGMENT_MIN_FRAMES = 64
+# Đoạn danh bạ lướt nhanh: đọc thêm 12 khung/giây trong cửa sổ 45 giây có nhiều tên danh bạ.
+_BOOST_FPS = 12.0
+_BOOST_WINDOW = 45.0
+_BOOST_MIN_CONTACTS = 3
 _PARTIAL_MARK = "extract.partial"
 _PREVIEW_WIDTH = 420
 _PREVIEW_CAP = 3
@@ -106,6 +111,19 @@ class ReadProgress:
     def note_blank(self) -> None:
         """Mọi khung đã chọn đều không có chữ."""
         return
+
+
+def _segment_count() -> int:
+    """Số đoạn ffmpeg. CONTROL_FFMPEG_SEGMENTS ghi đè. Mặc định theo số lõi."""
+    raw = os.environ.get("CONTROL_FFMPEG_SEGMENTS", "").strip()
+    if raw.isdigit():
+        return max(1, min(16, int(raw)))
+    cpus = os.cpu_count() or 4
+    if cpus >= 16:
+        return 8
+    if cpus >= 8:
+        return 6
+    return 4
 
 
 def ocr_workers(frame_count: int, cpu_count: int, reserve: int | None = None) -> int:
@@ -507,6 +525,16 @@ def analyze_screen_video(
             continue
         readings.append((float(key), list(captions), [dict(item) for item in sightings]))
     readings.sort(key=lambda item: item[0])
+    if not keep_open and readings:
+        readings = _apply_dense_boost(
+            path,
+            work,
+            readings,
+            rate,
+            sink,
+            threads=threads,
+            reserve=reserve,
+        )
     sink.note_words(words.seen, words.kept)
     if words.blank and readings and all(not captions and not found for _seconds, captions, found in readings):
         sink.note_blank()
@@ -555,6 +583,161 @@ def _sample_rate(duration: float | None) -> float:
     if duration * _SAMPLE_FPS <= _MAX_FRAMES:
         return _SAMPLE_FPS
     return _MAX_FRAMES / duration
+
+
+def _contact_keys_between(
+    readings: list[tuple[float, list[str], list[dict[str, str]]]],
+    lo: float,
+    hi: float,
+) -> set[str]:
+    keys: set[str] = set()
+    for seconds, _captions, found in readings:
+        if seconds < lo or seconds > hi:
+            continue
+        for item in found:
+            accepted = _accepted_sighting(item)
+            if accepted is not None and accepted[1] == "contact":
+                keys.add(accepted[0])
+    return keys
+
+
+def _dense_contact_windows(
+    readings: list[tuple[float, list[str], list[dict[str, str]]]],
+) -> list[tuple[float, float]]:
+    """Cửa sổ 45 giây có ít nhất 3 tên danh bạ khác nhau."""
+    if not readings:
+        return []
+    half = _BOOST_WINDOW / 2.0
+    candidates: list[tuple[float, float]] = []
+    seen_centers: set[int] = set()
+    for seconds, _captions, _found in readings:
+        center = int(seconds)
+        if center in seen_centers:
+            continue
+        seen_centers.add(center)
+        lo = max(0.0, seconds - half)
+        hi = seconds + half
+        if len(_contact_keys_between(readings, lo, hi)) >= _BOOST_MIN_CONTACTS:
+            candidates.append((lo, hi))
+    candidates.sort(key=lambda item: item[0])
+    merged: list[tuple[float, float]] = []
+    for lo, hi in candidates:
+        if not merged or lo > merged[-1][1] + 1.0:
+            merged.append((lo, hi))
+        else:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], hi))
+    return merged[:6]
+
+
+def _ffmpeg_extract_range(
+    path: Path,
+    pattern: Path,
+    rate: float,
+    start_sec: float,
+    end_sec: float,
+    threads: str | None = None,
+) -> list[str]:
+    count = _ffmpeg_thread_count() if threads is None else threads
+    duration = max(0.5, end_sec - start_sec)
+    limit = min(_MAX_FRAMES, max(1, int(math.ceil(duration * rate))))
+    return [
+        "ffmpeg",
+        "-nostdin",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-threads",
+        count,
+        "-ss",
+        f"{start_sec:.3f}",
+        "-t",
+        f"{duration:.3f}",
+        "-i",
+        str(path),
+        "-vf",
+        f"fps={rate:.4f},scale=min(720\\,iw):-2,format=yuv420p",
+        "-frames:v",
+        str(limit),
+        "-start_number",
+        "1",
+        "-c:v",
+        "mjpeg",
+        "-q:v",
+        "2",
+        str(pattern),
+    ]
+
+
+def _merge_readings(
+    readings: list[tuple[float, list[str], list[dict[str, str]]]],
+    extra: list[tuple[float, list[str], list[dict[str, str]]]],
+) -> list[tuple[float, list[str], list[dict[str, str]]]]:
+    by_key: dict[str, tuple[float, list[str], list[dict[str, str]]]] = {}
+    for seconds, captions, found in readings + extra:
+        key = _frame_key(seconds)
+        prev = by_key.get(key)
+        if prev is None:
+            by_key[key] = (seconds, list(captions), [dict(item) for item in found])
+            continue
+        _prev_sec, prev_caps, prev_found = prev
+        merged_found = list(prev_found)
+        signatures = {repr(sorted(item.items())) for item in prev_found}
+        for item in found:
+            sig = repr(sorted(item.items()))
+            if sig not in signatures:
+                merged_found.append(dict(item))
+                signatures.add(sig)
+        merged_caps = list(prev_caps)
+        for caption in captions:
+            if caption not in merged_caps:
+                merged_caps.append(caption)
+        by_key[key] = (seconds, merged_caps, merged_found)
+    return sorted(by_key.values(), key=lambda item: item[0])
+
+
+def _apply_dense_boost(
+    path: Path,
+    work: Path,
+    readings: list[tuple[float, list[str], list[dict[str, str]]]],
+    base_rate: float,
+    progress: ReadProgress,
+    *,
+    threads: str | None = None,
+    reserve: int | None = None,
+) -> list[tuple[float, list[str], list[dict[str, str]]]]:
+    windows = _dense_contact_windows(readings)
+    if not windows or abs(_BOOST_FPS - base_rate) < 0.01:
+        return readings
+    boost_rate = _BOOST_FPS
+    extra: list[tuple[float, list[str], list[dict[str, str]]]] = []
+    words = _AddWords(progress)
+    for index, (start, end) in enumerate(windows):
+        sub = work / f"boost-{index}"
+        sub.mkdir(parents=True, exist_ok=True)
+        for old in sub.glob("b-*.jpg"):
+            old.unlink(missing_ok=True)
+        pattern = sub / "b-%05d.jpg"
+        argv = _ffmpeg_extract_range(path, pattern, boost_rate, start, end, threads)
+        code = _run_ffmpeg(argv, end - start, progress, start)
+        if code != 0 and not list(sub.glob("b-*.jpg")):
+            continue
+        timed: list[tuple[float, Path]] = []
+        for image in sorted(sub.glob("b-*.jpg")):
+            try:
+                number = int(image.stem.split("-", 1)[1])
+            except (IndexError, ValueError):
+                continue
+            timed.append((start + (number - 1) / boost_rate, image))
+        if not timed:
+            continue
+        held: list[Image.Image] = []
+        chosen = _changed_frames(timed, progress, held)
+        extra.extend(_read_frames(chosen, words, reserve=reserve))
+    if not extra:
+        return readings
+    progress.problem(f"Đọc thêm {len(windows)} vùng danh bạ dày ở {int(boost_rate)} khung/giây.")
+    return _merge_readings(readings, extra)
 
 
 def _media_env() -> dict[str, str]:
@@ -628,9 +811,10 @@ def _segment_ranges(total: int, have: int) -> list[tuple[int, int]]:
     if total - have < _SEGMENT_MIN_FRAMES:
         return [(have + 1, total)]
     ranges: list[tuple[int, int]] = []
-    for index in range(_SEGMENTS):
-        start = index * total // _SEGMENTS + 1
-        end = (index + 1) * total // _SEGMENTS
+    parts = _segment_count()
+    for index in range(parts):
+        start = index * total // parts + 1
+        end = (index + 1) * total // parts
         start = max(start, have + 1)
         if end >= start:
             ranges.append((start, end))
@@ -1006,15 +1190,51 @@ def _line_words(lines: list[object]) -> int:
     return total
 
 
+def _suspicious_read(seen: int, kept: int, captions: list[str], sightings: list[dict[str, str]]) -> bool:
+    if seen <= 0:
+        return not captions and not sightings
+    ratio = kept / seen
+    if seen >= 8 and ratio < 0.12:
+        return True
+    if not sightings and seen >= 15:
+        return True
+    if not captions and not sightings and seen >= 3:
+        return True
+    return False
+
+
+def _prefer_reading(
+    text_lines: list[Any],
+    sightings: list[dict[str, str]],
+    captions: list[str],
+    seen: int,
+    kept: int,
+    candidate_lines: list[Any],
+    candidate_sightings: list[dict[str, str]],
+    candidate_captions: list[str],
+    candidate_seen: int,
+    candidate_kept: int,
+) -> tuple[list[Any], list[dict[str, str]], list[str], int, int]:
+    if candidate_kept > kept:
+        return candidate_lines, candidate_sightings, candidate_captions, candidate_seen, candidate_kept
+    if len(candidate_sightings) > len(sightings):
+        return candidate_lines, candidate_sightings, candidate_captions, candidate_seen, candidate_kept
+    if candidate_captions and not captions:
+        return candidate_lines, candidate_sightings, candidate_captions, candidate_seen, candidate_kept
+    return text_lines, sightings, captions, seen, kept
+
+
 def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str, str]], int, int]:
     seconds, image = item
     seen = 0
     kept = 0
+    used_tesseract = False
     try:
         text_lines = read_lines(image)
     except Exception:
         text_lines = None
     if text_lines is None:
+        used_tesseract = True
         tsv = read_frame_tsv(image)
         text_lines = lines_from_tsv(tsv) if tsv else []
         if tsv:
@@ -1029,6 +1249,31 @@ def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str
         fallback = seen_line(text) if text else ""
         if fallback:
             captions = [fallback]
+    if used_tesseract and _suspicious_read(seen, kept, captions, sightings):
+        tsv_std = read_frame_tsv_standard(image)
+        if tsv_std:
+            std_lines = lines_from_tsv(tsv_std)
+            std_seen, std_kept = tsv_word_counts(tsv_std)
+            std_sightings = sightings_from_lines(std_lines)
+            std_captions = captions_from_sightings(std_sightings)
+            if not std_captions:
+                raw = "\n".join(line.text for line in std_lines)
+                text = clean_ocr(raw)
+                fallback = seen_line(text) if text else ""
+                if fallback:
+                    std_captions = [fallback]
+            text_lines, sightings, captions, seen, kept = _prefer_reading(
+                text_lines,
+                sightings,
+                captions,
+                seen,
+                kept,
+                std_lines,
+                std_sightings,
+                std_captions,
+                std_seen,
+                std_kept,
+            )
     return seconds, captions, sightings, seen, kept
 
 

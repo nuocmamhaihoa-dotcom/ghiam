@@ -96,6 +96,9 @@
     #sampleBox img { display: block; width: auto; height: 280px; max-width: 180px; object-fit: contain; object-position: center top; border-radius: 10px; border: 1px solid var(--line); background: #111; }
     #sampleBox figcaption { font-size: 13px; font-weight: 700; margin-top: 0.25rem; }
     #problemList { margin: 0.3rem 0 0.6rem; padding-left: 1.2rem; color: var(--bad); }
+    .issue-detail { margin-top: 0.25rem; color: var(--muted); font-size: 0.88rem; white-space: pre-wrap; }
+    .issue-warn { color: var(--warn); }
+    .issue-error { color: var(--bad); font-weight: 650; }
     #continueBtn { min-height: 48px; margin-top: 0.4rem; }
     .panel {
       background: var(--card); border: 1px solid var(--line);
@@ -157,6 +160,16 @@
   <main>
     <section data-view="home">
       <p class="lead" id="helperLine">PC phụ chưa nối. Video được máy chủ đọc.</p>
+      <section class="panel" id="issueBox">
+        <h2>Lỗi và vấn đề gần đây</h2>
+        <p class="lead" id="issueMeta">Ghi lại cảnh báo khi đọc video, PC phụ, và máy chủ.</p>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Thời gian</th><th>Nguồn</th><th>Chi tiết</th></tr></thead>
+            <tbody id="issueRows"><tr><td colspan="3" class="empty">Chưa có mục nào.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
       <label id="drop" class="drop">
         <strong>Thả video vào đây</strong>
         <span>Hoặc bấm để chọn. Nhiều video một lúc. Hub tự đọc và lưu người nhìn thấy, không cần bấm phát.</span>
@@ -355,6 +368,35 @@
     }
     function renderDuplicates(items) {
       $("dupHomeBody").innerHTML = personTable(items, "Chưa có dữ liệu trùng.");
+    }
+    function renderIssues(items) {
+      if (!items.length) {
+        $("issueRows").innerHTML = `<tr><td colspan="3" class="empty">Chưa ghi lỗi hay vấn đề nào.</td></tr>`;
+        $("issueMeta").textContent = "Mọi cảnh báo khi đọc video và PC phụ sẽ hiện ở đây.";
+        return;
+      }
+      $("issueMeta").textContent = items.length + " mục gần nhất (tự cập nhật mỗi 8 giây).";
+      $("issueRows").innerHTML = items.map((row) => {
+        const level = row.level === "error" ? "issue-error" : row.level === "info" ? "meta" : "issue-warn";
+        const job = row.jobId ? `<div class="meta">Việc: ${esc(row.jobId)}</div>` : "";
+        const detail = row.detail ? `<div class="issue-detail">${esc(row.detail)}</div>` : "";
+        return `<tr>
+          <td class="meta">${esc(fmtTime(row.at))}</td>
+          <td><span class="pill ${row.level === "error" ? "die" : row.level === "info" ? "" : "off"}">${esc(row.source || "hub")}</span></td>
+          <td class="${level}">${esc(row.summary || "")}${job}${detail}</td>
+        </tr>`;
+      }).join("");
+    }
+    async function loadIssues() {
+      if (!$("token").value.trim()) return;
+      try {
+        const r = await fetch("/v1/issues?limit=60", { headers: headers() });
+        if (!r.ok) return;
+        const data = await r.json();
+        renderIssues(data.items || []);
+      } catch (_e) {
+        /* giữ bảng cũ */
+      }
     }
     function renderActions(items) {
       if (!items.length) {
@@ -1267,7 +1309,7 @@
       } catch (error) { /* trang vẫn nhận video khi chưa hỏi được máy phụ */ }
     }
 
-    $("saveToken").onclick = () => { localStorage.setItem(tokenKey, $("token").value.trim()); loadAll(); };
+    $("saveToken").onclick = () => { localStorage.setItem(tokenKey, $("token").value.trim()); loadAll(); loadIssues(); };
     $("refresh").onclick = loadAll;
     $("recheck").onclick = recheck;
     $("saveAction").onclick = saveAction;
@@ -1280,11 +1322,12 @@
       button.addEventListener("click", () => showView(button.getAttribute("data-tab")));
     });
     if (/iPhone|iPod/.test(navigator.userAgent)) $("openPhone").hidden = true;
-    if ($("token").value) loadAll();
+    if ($("token").value) { loadAll(); loadIssues(); }
     pruneUploads();
     loadHelper();
     setInterval(() => { if ($("token").value && !pumping) loadAll(); }, 20000);
     setInterval(loadHelper, 5000);
+    setInterval(loadIssues, 8000);
     try {
       const peopleChannel = new BroadcastChannel("fb-people");
       peopleChannel.onmessage = (event) => {

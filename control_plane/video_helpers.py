@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from control_plane.version import VIDEO_WORKER_BUILD
 
-OFFER_SECONDS = 3.0
+OFFER_SECONDS = 8.0
 LEASE_SECONDS = 90.0
 FRESH_SECONDS = 15.0
 JOBS_PER_PC = 2
