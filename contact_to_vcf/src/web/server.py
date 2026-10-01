@@ -5,17 +5,19 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import secrets
 import shutil
 import tempfile
 import threading
 import zipfile
+from urllib.parse import unquote
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from parsers.column_suggest import suggest_columns
-from parsers.detect import detect_format, inspect_source
+from parsers.detect import detect_format, inspect_source, prepare_source
 from processors.pool import ImportStats, export_book, import_file, list_books, pool_total
 
 PAGE = Path(__file__).with_name("index.html")
@@ -138,15 +140,12 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 self._json(400, {"error": "Hãy chọn file"})
                 return
             filename, payload = file_item
-            suffix = Path(filename).suffix.lower()
-            if suffix not in {".csv", ".xlsx", ".txt"}:
-                self._json(400, {"error": "Chỉ nhận CSV, XLSX hoặc TXT"})
-                return
-            target = app.uploads / f"{secrets.token_hex(8)}{suffix}"
+            target = app.uploads / f"{secrets.token_hex(8)}{_safe_suffix(filename)}"
             target.write_bytes(payload)
             try:
-                detected = detect_format(target)
-                info = inspect_source(target, file_format=detected)
+                ready = prepare_source(target)
+                detected = detect_format(ready)
+                info = inspect_source(ready, file_format=detected)
             except (OSError, ValueError) as exc:
                 target.unlink(missing_ok=True)
                 self._json(400, {"error": str(exc)})
@@ -202,19 +201,16 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 self._json(400, {"error": "Hãy chọn file"})
                 return
             filename, payload = file_item
-            suffix = Path(filename).suffix.lower()
-            if suffix not in {".csv", ".xlsx", ".txt"}:
-                self._json(400, {"error": "Chỉ nhận CSV, XLSX hoặc TXT"})
-                return
-            target = app.uploads / f"{secrets.token_hex(8)}{suffix}"
+            target = app.uploads / f"{secrets.token_hex(8)}{_safe_suffix(filename)}"
             target.write_bytes(payload)
             try:
-                detected = detect_format(target)
-                info = inspect_source(target, file_format=detected)
+                ready = prepare_source(target)
+                detected = detect_format(ready)
+                info = inspect_source(ready, file_format=detected)
                 _name_index, phone_index = suggest_columns(info.columns, info.samples)
                 stats = import_file(
                     app.kho,
-                    target,
+                    ready,
                     file_format=info.file_format,
                     delimiter=info.delimiter or ",",
                     has_header=info.has_header,
@@ -338,6 +334,36 @@ def _book_id(path: str) -> int | None:
     return int(parts[2])
 
 
+def _safe_suffix(filename: str) -> str:
+    suffix = Path(filename).suffix.lower().strip()
+    if re.fullmatch(r"\.[a-z0-9]{1,8}", suffix):
+        return suffix
+    return ".txt"
+
+
+def _content_filename(header_text: str) -> str:
+    """Read the uploaded name, including the UTF-8 form some browsers send alone."""
+    star = re.search(r"filename\*\s*=\s*([^;\r\n]+)", header_text, re.IGNORECASE)
+    if star:
+        raw = star.group(1).strip().strip('"')
+        if "''" in raw:
+            raw = raw.split("''", 1)[1]
+        name = unquote(raw).strip().strip('"')
+        if name:
+            return Path(name.replace("\\", "/")).name
+    plain = re.search(
+        r"filename\s*=\s*(?:\"([^\"]*)\"|([^;\r\n]+))",
+        header_text,
+        re.IGNORECASE,
+    )
+    if plain:
+        name = (plain.group(1) if plain.group(1) is not None else plain.group(2) or "").strip()
+        name = name.strip('"').strip()
+        if name:
+            return Path(name.replace("\\", "/")).name
+    return "upload.txt"
+
+
 def _read_form(handler: BaseHTTPRequestHandler) -> dict[str, tuple[str, bytes]]:
     content_type = handler.headers.get("Content-Type", "")
     length = int(handler.headers.get("Content-Length", "0") or "0")
@@ -355,14 +381,12 @@ def _read_form(handler: BaseHTTPRequestHandler) -> dict[str, tuple[str, bytes]]:
             continue
         header_blob, _, data = chunk.partition(b"\r\n\r\n")
         header_text = header_blob.decode("utf-8", "replace")
+        name_match = re.search(r"\bname\s*=\s*(?:\"([^\"]*)\"|([^;\r\n]+))", header_text)
         name = ""
-        filename = ""
-        for item in header_text.split(";"):
-            item = item.strip()
-            if item.startswith("name="):
-                name = item.split("=", 1)[1].strip('"')
-            elif item.startswith("filename="):
-                filename = item.split("=", 1)[1].strip('"')
+        if name_match:
+            name = (name_match.group(1) if name_match.group(1) is not None else name_match.group(2) or "")
+            name = name.strip().strip('"')
+        filename = _content_filename(header_text)
         if data.endswith(b"\r\n"):
             data = data[:-2]
         if name:

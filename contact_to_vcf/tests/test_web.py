@@ -97,6 +97,39 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
         ).read().decode()
         assert "FN:0901111111" in auto_card
         assert "TEL;TYPE=CELL:+84901111111" in auto_card
+
+        other_body, other_type = _form(
+            {"file": ("danh_sach.dat", "0912345678\n0987654321\n".encode())}
+        )
+        other = json.load(
+            opener.open(
+                Request(
+                    f"http://127.0.0.1:{port}/api/import-now",
+                    data=other_body,
+                    headers={"Content-Type": other_type},
+                )
+            )
+        )
+        assert other["added"] == 2
+
+        star = (
+            "------danhba\r\n"
+            "Content-Disposition: form-data; name=\"file\"; "
+            "filename*=UTF-8''New%20Text%20Document%20%284%29.txt\r\n"
+            "\r\n"
+            "0903333333\r\n"
+            "------danhba--\r\n"
+        ).encode()
+        named = json.load(
+            opener.open(
+                Request(
+                    f"http://127.0.0.1:{port}/api/import-now",
+                    data=star,
+                    headers={"Content-Type": "multipart/form-data; boundary=----danhba"},
+                )
+            )
+        )
+        assert named["added"] == 1
     finally:
         server.shutdown()
 

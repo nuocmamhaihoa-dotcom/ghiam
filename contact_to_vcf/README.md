@@ -30,7 +30,7 @@ Workflow GitHub `contact-to-vcf-windows` cũng đóng gói file exe này khi có
 
 ## Luồng sử dụng
 
-1. Chọn file nguồn CSV, XLSX hoặc TXT.
+1. Chọn file nguồn. CSV, Excel và TXT đọc theo cột. Mọi định dạng khác vẫn được nhận và lấy số điện thoại có trong file.
 2. Chọn cột số điện thoại. Tên liên hệ luôn là chính số đó sau khi chuẩn hóa.
 3. Xem vài dòng đầu. Cột nền xanh lá là cột số sẽ được nạp. CSV nhận dấu phẩy, chấm phẩy, tab hoặc gạch đứng theo nội dung file.
 4. Chọn thư mục kho.

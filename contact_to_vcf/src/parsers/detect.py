@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import csv
+import re
+import zipfile
 from pathlib import Path
+from xml.etree import ElementTree
 
 from models.records import FileInspection, JobConfig
 from parsers.csv_parser import CsvReader
@@ -12,17 +15,28 @@ from parsers.xlsx_parser import XlsxReader
 from utils.fingerprint import estimate_text_rows, file_fingerprint
 
 Reader = CsvReader | TxtReader | XlsxReader
+_XLSX_SUFFIXES = {".xlsx", ".xlsm", ".xltx"}
+_PHONE_RUN = re.compile(r"\+?\d[\d\s.\-]{7,16}\d")
 
 
 def detect_format(path: Path) -> str:
-    suffix = path.suffix.lower()
-    if suffix == ".csv":
-        return "csv"
-    if suffix == ".xlsx":
+    """Classify a file. Excel workbooks stay workbooks; every other file is text."""
+    if _looks_like_xlsx(path):
         return "xlsx"
-    if suffix == ".txt":
-        return "txt"
-    raise ValueError("Chỉ hỗ trợ file CSV, XLSX và TXT")
+    if path.suffix.lower() in {".csv", ".tsv"}:
+        return "csv"
+    return "txt"
+
+
+def prepare_source(path: Path) -> Path:
+    """Turn a non-table file into text the phone reader can scan."""
+    if _looks_like_xlsx(path):
+        return path
+    if _looks_like_docx(path):
+        return _write_text(path, _docx_plain(path))
+    if _is_binary(path):
+        return _write_text(path, _binary_phones(path))
+    return path
 
 
 def detect_encoding(path: Path) -> str:
@@ -95,9 +109,9 @@ def inspect_source(
         if header and estimated:
             estimated = max(0, estimated - 1)
     else:
-        header = (resolved_format != "txt") if has_header is None else has_header
+        header = (resolved_format == "csv") if has_header is None else has_header
         if delimiter in (None, "", "auto"):
-            resolved_delimiter = "|" if resolved_format == "txt" else sniff_delimiter(path, resolved_encoding)
+            resolved_delimiter = sniff_delimiter(path, resolved_encoding)
         else:
             resolved_delimiter = delimiter
         if resolved_format == "csv":
@@ -128,6 +142,68 @@ def inspect_source(
         fingerprint=fingerprint,
         estimated_rows=estimated,
     )
+
+
+def _looks_like_xlsx(path: Path) -> bool:
+    if path.suffix.lower() in _XLSX_SUFFIXES:
+        return True
+    if not zipfile.is_zipfile(path):
+        return False
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return any(name.startswith("xl/") for name in archive.namelist())
+    except zipfile.BadZipFile:
+        return False
+
+
+def _looks_like_docx(path: Path) -> bool:
+    if not zipfile.is_zipfile(path):
+        return False
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return "word/document.xml" in archive.namelist()
+    except zipfile.BadZipFile:
+        return False
+
+
+def _docx_plain(path: Path) -> str:
+    parts: list[str] = []
+    with zipfile.ZipFile(path) as archive:
+        for name in archive.namelist():
+            if not name.startswith("word/") or not name.endswith(".xml"):
+                continue
+            root = ElementTree.fromstring(archive.read(name))
+            parts.append(" ".join(root.itertext()))
+    return "\n".join(parts)
+
+
+def _is_binary(path: Path) -> bool:
+    sample = path.read_bytes()[:4096]
+    return b"\x00" in sample
+
+
+def _binary_phones(path: Path) -> str:
+    raw = path.read_bytes()
+    decoded = "\n".join(
+        (
+            raw.decode("utf-8", "ignore"),
+            raw.decode("utf-16-le", "ignore"),
+            raw.decode("cp1258", "ignore"),
+        )
+    )
+    found: list[str] = []
+    seen: set[str] = set()
+    for match in _PHONE_RUN.findall(decoded):
+        if match not in seen:
+            seen.add(match)
+            found.append(match)
+    return "\n".join(found)
+
+
+def _write_text(path: Path, text: str) -> Path:
+    destination = path.with_name(path.name + ".phones.txt")
+    destination.write_text(text, encoding="utf-8")
+    return destination
 
 
 def _xlsx_estimate(path: Path) -> int | None:

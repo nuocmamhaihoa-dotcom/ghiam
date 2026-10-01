@@ -326,7 +326,7 @@ class MainWindow(QMainWindow):
             self,
             "Chọn file nguồn",
             "",
-            "Danh bạ (*.csv *.xlsx *.txt)",
+            "Mọi định dạng (*.*)",
         )
         if not selected:
             return
@@ -339,13 +339,16 @@ class MainWindow(QMainWindow):
         self.file_edit.setText(str(path))
         self.header_check.blockSignals(True)
         self.delimiter_combo.blockSignals(True)
-        if path.suffix.lower() == ".txt":
-            self.header_check.setChecked(False)
-            self.delimiter_combo.setCurrentIndex(3)
+        suffix = path.suffix.lower()
+        if suffix in {".csv", ".tsv"}:
+            self.header_check.setChecked(True)
+            self._auto_delimiter = True
+        elif suffix in {".xlsx", ".xlsm", ".xltx"}:
+            self.header_check.setChecked(True)
             self._auto_delimiter = False
         else:
-            self.header_check.setChecked(True)
-            self._auto_delimiter = path.suffix.lower() == ".csv"
+            self.header_check.setChecked(False)
+            self._auto_delimiter = True
         self.header_check.blockSignals(False)
         self.delimiter_combo.blockSignals(False)
         self._reinspect()
