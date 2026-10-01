@@ -20,6 +20,7 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
     try:
         sample = opener.open(f"http://127.0.0.1:{port}/danhba_test_30.vcf").read().decode()
         assert sample.count("BEGIN:VCARD") == 30
+        assert "FN:Test 01" in sample
         assert "TEL;TYPE=CELL:+84900000030" in sample
         page = opener.open(f"http://127.0.0.1:{port}/").read().decode()
         assert "Vào phần mềm" in page
