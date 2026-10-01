@@ -90,11 +90,11 @@ Mỗi contact:
 BEGIN:VCARD
 VERSION:3.0
 FN:Nguyen Van A
-TEL;TYPE=CELL:+84901234567
+TEL;TYPE=CELL:0901234567
 END:VCARD
 ```
 
-File dùng UTF-8 và xuống dòng CRLF. Tên Unicode, dấu tiếng Việt, dấu phẩy, dấu chấm phẩy và xuống dòng được thoát theo vCard để không làm vỡ contact phía sau.
+File dùng UTF-8 và xuống dòng CRLF. Số Việt Nam dạng `+84` và 9 chữ số được ghi trong file danh bạ thành 10 số bắt đầu bằng `0`, vì máy điện thoại nhập dạng này ổn định hơn. Tên Unicode, dấu tiếng Việt, dấu phẩy, dấu chấm phẩy và xuống dòng được thoát theo vCard để không làm vỡ contact phía sau.
 
 `5.001` liên hệ hợp lệ tạo `contacts_00001.vcf` với 5.000 contact và `contacts_00002.vcf` với 1 contact.
 

@@ -43,13 +43,23 @@ def fold_line(line: str) -> str:
     return "\r\n ".join(parts)
 
 
+def as_vietnam_10(value: str) -> str:
+    """Show a Vietnam +84 mobile as 10 digits. Other text, including names, stays as written."""
+    text = value.strip()
+    if text.startswith("+84") and text[3:].isdigit() and len(text) == 12:
+        return "0" + text[3:]
+    return value
+
+
 def format_card(name: str, phone: str) -> str:
     """Write one contact in the same vCard 3.0 shape as a working phone import."""
+    shown_name = as_vietnam_10(name)
+    shown_phone = as_vietnam_10(phone)
     lines = [
         "BEGIN:VCARD",
         "VERSION:3.0",
-        fold_line("FN:" + escape_vcard_text(name)),
-        fold_line("TEL;TYPE=CELL:" + escape_vcard_text(phone)),
+        fold_line("FN:" + escape_vcard_text(shown_name)),
+        fold_line("TEL;TYPE=CELL:" + escape_vcard_text(shown_phone)),
         "END:VCARD",
     ]
     return "\r\n".join(lines) + "\r\n"
