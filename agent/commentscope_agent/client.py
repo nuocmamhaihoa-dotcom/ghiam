@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal, Self
@@ -81,6 +81,34 @@ class ReleaseResult:
     quarantined_until: datetime | None
 
 
+@dataclass(frozen=True, slots=True)
+class WorkAssignment:
+    attempt_id: str
+    expires_at: datetime
+    post_id: int
+    url: str
+    platform: str
+    max_comments: int
+    include_replies: bool
+    max_replies_per_comment: int
+    time_budget_sec: int
+    author_mode: str
+    lease: Lease
+
+
+@dataclass(frozen=True, slots=True)
+class NoWork:
+    retry_after_sec: int
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
+class ProgressResult:
+    stored: int
+    duplicate: bool
+    expires_at: datetime
+
+
 class ControlPlaneClient:
     def __init__(
         self,
@@ -152,6 +180,44 @@ class ControlPlaneClient:
             proxy=_leased_proxy(_obj(data.get("proxy"), "proxy")),
         )
 
+    async def claim_work(self, *, worker_id: str, ttl_sec: int | None = None) -> WorkAssignment | NoWork:
+        payload: dict[str, Any] = {"worker_id": worker_id}
+        if ttl_sec is not None:
+            payload["ttl_sec"] = ttl_sec
+        data = await self._call("POST", "/api/agent/work/claim", json=payload, idempotent=False)
+        if data.get("attempt_id") is None:
+            return NoWork(
+                retry_after_sec=_int(data, "retry_after_sec"),
+                message=_opt_str(data, "message") or "Không có bài đang chờ",
+            )
+        return WorkAssignment(
+            attempt_id=_str(data, "attempt_id"),
+            expires_at=_time(data, "expires_at"),
+            post_id=_int(data, "post_id"),
+            url=_str(data, "url"),
+            platform=_str(data, "platform"),
+            max_comments=_int(data, "max_comments"),
+            include_replies=_bool(data, "include_replies"),
+            max_replies_per_comment=_int(data, "max_replies_per_comment"),
+            time_budget_sec=_int(data, "time_budget_sec"),
+            author_mode=_str(data, "author_mode"),
+            lease=Lease(
+                lease_id=_str(data, "lease_id"),
+                expires_at=_time(data, "expires_at"),
+                proxy=_leased_proxy(_obj(data.get("proxy"), "proxy")),
+            ),
+        )
+
+    async def report_progress(self, attempt_id: str, seq: int, comments: Sequence[Mapping[str, Any]]) -> ProgressResult:
+        data = await self._attempt_call(attempt_id, "progress", {"seq": seq, "comments": list(comments)})
+        return ProgressResult(
+            stored=_int(data, "stored"), duplicate=_bool(data, "duplicate"), expires_at=_time(data, "expires_at")
+        )
+
+    async def complete_attempt(self, attempt_id: str, payload: Mapping[str, Any]) -> str:
+        data = await self._attempt_call(attempt_id, "complete", dict(payload))
+        return _str(data, "post_status")
+
     async def renew(self, lease_id: str, ttl_sec: int | None = None) -> datetime:
         payload = {} if ttl_sec is None else {"ttl_sec": ttl_sec}
         data = await self._lease_call(lease_id, "renew", payload)
@@ -167,6 +233,10 @@ class ControlPlaneClient:
             rotation_scheduled=_bool(data, "rotation_scheduled"),
             quarantined_until=_opt_time(data, "quarantined_until"),
         )
+
+    async def _attempt_call(self, attempt_id: str, action: str, payload: dict[str, Any]) -> dict[str, Any]:
+        path = f"/api/agent/attempts/{quote(attempt_id, safe='')}/{action}"
+        return await self._call("POST", path, json=payload, idempotent=True)
 
     async def _lease_call(self, lease_id: str, action: str, payload: dict[str, Any]) -> dict[str, Any]:
         path = f"/api/agent/leases/{quote(lease_id, safe='')}/{action}"

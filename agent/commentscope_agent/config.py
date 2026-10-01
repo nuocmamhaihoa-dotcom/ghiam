@@ -21,6 +21,7 @@ ENV_KEYS = {
     "COMMENTSCOPE_POOL": "pool",
     "COMMENTSCOPE_KIND": "kind",
     "COMMENTSCOPE_CHECK_URL": "check_url",
+    "COMMENTSCOPE_CAPACITY": "capacity",
 }
 FILE_KEYS = frozenset(
     {
@@ -33,6 +34,7 @@ FILE_KEYS = frozenset(
         "lease_wait_sec",
         "request_timeout_sec",
         "check_url",
+        "capacity",
     }
 )
 
@@ -52,6 +54,7 @@ class AgentConfig:
     lease_wait_sec: float = 120.0
     request_timeout_sec: float = 20.0
     check_url: str | None = None
+    capacity: int = 1
 
 
 def load_config(path: Path | None, env: Mapping[str, str], overrides: Mapping[str, Any]) -> AgentConfig:
@@ -59,7 +62,13 @@ def load_config(path: Path | None, env: Mapping[str, str], overrides: Mapping[st
     for env_key, name in ENV_KEYS.items():
         value = env.get(env_key, "").strip()
         if value:
-            values[name] = value
+            if name == "capacity":
+                try:
+                    values[name] = int(value)
+                except ValueError:
+                    raise ConfigError("capacity phải là số nguyên") from None
+            else:
+                values[name] = value
     values.update({name: value for name, value in overrides.items() if value is not None})
     return _build(values)
 
@@ -142,6 +151,9 @@ def _build(values: Mapping[str, Any]) -> AgentConfig:
     check_url = _text(values, "check_url") or None
     if check_url is not None and not _is_http_url(check_url):
         raise ConfigError("check_url phải là địa chỉ http:// hoặc https://")
+    capacity = _integer(values, "capacity", 1)
+    if not 1 <= capacity <= 4:
+        raise ConfigError("capacity phải từ 1 đến 4 (số bài đọc cùng lúc trên máy này)")
     return AgentConfig(
         server_url=server_url,
         token=token,
@@ -152,6 +164,7 @@ def _build(values: Mapping[str, Any]) -> AgentConfig:
         lease_wait_sec=wait,
         request_timeout_sec=timeout,
         check_url=check_url,
+        capacity=capacity,
     )
 
 

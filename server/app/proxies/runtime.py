@@ -18,6 +18,8 @@ from app.config import Settings
 from app.crypto import SecretBox, SecretDecryptionError
 from app.db import Database
 from app.errors import NotFoundError
+from app.jobs.service import purge_old_comments
+from app.jobs.work import reap_expired_attempts
 from app.models import Proxy, ProxyHealth, ProxyKind, RotationMode, RotationState, resolve_rotation_mode
 from app.proxies import leasing, queries
 from app.proxies.checker import CheckResult, check_proxy, short_error
@@ -540,6 +542,7 @@ class ProxyRuntime:
     async def tick(self) -> None:
         now = utcnow()
         await leasing.reap_expired_leases(self._db, now)
+        await reap_expired_attempts(self._db, now)
         await self._queue_interval_rotations(now)
         await self._dispatch_pending(now)
         await self._queue_due_checks(now)
@@ -548,6 +551,7 @@ class ProxyRuntime:
             self._last_purge = monotonic
             retention = timedelta(days=self._settings.proxy_lease_retention_days)
             await leasing.purge_old_leases(self._db, now - retention)
+            await purge_old_comments(self._db, self._settings.comment_retention_days, now)
 
     async def _dispatch_pending(self, now: datetime) -> int:
         claimed: list[int] = []

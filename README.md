@@ -16,13 +16,16 @@ cần chốt): [docs/KE_HOACH_TRIEN_KHAI.md](docs/KE_HOACH_TRIEN_KHAI.md).
   thuê proxy theo lượt có thời hạn, chấm điểm và tạm cách ly proxy hỏng.
 - **Dashboard** trang "Kho proxy": thống kê, bộ lọc, thao tác hàng loạt (kiểm tra, đổi IP, bật/tắt, chuyển pool, xoá),
   xuất file.
+- **Job quét comment Facebook**: dán permalink bài viết công khai, xem trước, tạo job. Máy PC nhận việc, mở bài bằng
+  Chromium qua proxy và đọc comment đang hiện.
+- **Kết quả comment**: xem nội dung, tác giả, thời điểm, lượt thích; tải CSV, JSON hoặc NDJSON.
 - **Agent trên máy PC** ([agent/README.md](agent/README.md)): thuê proxy từ VPS, kiểm tra IP ra, mở Chromium qua proxy
-  (proxy HTTP, HTTPS, SOCKS5, có hoặc không có mật khẩu).
+  (proxy HTTP, HTTPS, SOCKS5, có hoặc không có mật khẩu), `scrape` một permalink hoặc `run` để nhận việc liên tục.
 - **Đóng gói VPS**: Docker Compose gồm PostgreSQL, server và Caddy (HTTPS tự động).
 
-Chưa có, theo thứ tự sẽ làm: job quét comment và hàng đợi việc, vòng lặp worker và bộ trích xuất comment trên PC, trang
-kết quả và xuất JSON/CSV, quản lý máy PC. Các mục này đang hiện trên menu dashboard với nhãn "Sắp có"; chi tiết ở
-[mục 7 của kế hoạch](docs/KE_HOACH_TRIEN_KHAI.md#7-các-giai-đoạn-tiếp-theo).
+Chưa có: trang quản lý máy PC trên dashboard (menu vẫn ghi "Sắp có"). CommentScope không đăng nhập Facebook và không
+giải captcha. Bài bị tường đăng nhập được đánh dấu bị chặn rồi thử proxy khác. Chi tiết ở
+[mục 4 của kế hoạch](docs/KE_HOACH_TRIEN_KHAI.md#4-hiện-trạng).
 
 ## Kiến trúc
 
@@ -124,6 +127,10 @@ commentscope-agent ping
 commentscope-agent check --pool vn-static
 commentscope-agent open http://ip-check.sim/json --pool 4g-gateway
 ```
+
+Đọc comment Facebook: trên dashboard mở "Job quét comment", dán permalink bài công khai rồi tạo job. Trên máy PC chạy
+`commentscope-agent run` để nhận việc, hoặc `commentscope-agent scrape` với một permalink. Mạng giả lập ở mục 3 không
+phải Facebook. Agent không đăng nhập; nếu Facebook yêu cầu đăng nhập thì bài được đánh dấu bị chặn và thử proxy khác.
 
 ## Triển khai lên VPS
 

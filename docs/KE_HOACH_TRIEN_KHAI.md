@@ -37,11 +37,12 @@ CommentScope thu thập comment công khai của các bài viết công khai the
   hạn, dùng xong trả lại kèm kết quả (dùng tốt / bị chặn / lỗi) để VPS chấm điểm, cách ly proxy hỏng hoặc đổi IP proxy 4G.
 
 **Đã xong**: kho proxy (nhập hàng loạt có xem trước, kiểm tra sống/chết, đổi IP 4G, cho máy PC thuê), dashboard quản trị
-kho proxy, agent PC tối thiểu (thuê proxy, kiểm tra IP ra, mở Chromium qua proxy), đóng gói triển khai VPS (Docker
-Compose, PostgreSQL, Caddy HTTPS).
+kho proxy, agent PC (thuê proxy, kiểm tra IP ra, mở Chromium qua proxy), đóng gói triển khai VPS (Docker Compose,
+PostgreSQL, Caddy HTTPS). Với Facebook: tạo job từ permalink bài công khai, máy PC đọc comment công khai (nội dung, tác
+giả, thời điểm, lượt thích) rồi gửi về VPS, dashboard xem và xuất JSON/CSV/NDJSON.
 
-**Còn lại, theo thứ tự phụ thuộc**: job quét comment và hàng đợi việc → vòng lặp worker trên PC và bộ trích xuất comment
-→ màn hình kết quả và xuất JSON/CSV → quản lý máy PC → giám sát, cảnh báo, sao lưu → mở rộng khi cần.
+**Còn lại, theo thứ tự phụ thuộc**: quản lý máy PC trên dashboard → giám sát, cảnh báo, sao lưu tự động → nền tảng khác
+Facebook → mở rộng khi cần.
 
 ## 2. Mục tiêu, phạm vi và nguyên tắc
 
@@ -100,10 +101,10 @@ flowchart LR
 | Thành phần | Công nghệ | Vai trò |
 | --- | --- | --- |
 | Server (`server/`) | Python 3.12, FastAPI, SQLAlchemy 2 async, Alembic, httpx | API cho dashboard (đăng nhập admin bằng JWT), API cho agent (token riêng), bộ lập lịch nền: kiểm tra proxy, đổi IP, thu hồi lượt thuê hết hạn |
-| Database | PostgreSQL 17 khi chạy thật, SQLite khi phát triển/test | Kho proxy, lượt thuê; sau này thêm job, việc, comment, máy PC |
+| Database | PostgreSQL 17 khi chạy thật, SQLite khi phát triển/test | Kho proxy, lượt thuê, job quét, bài viết và comment; sau này thêm máy PC |
 | Dashboard (`web/`) | React 19, Vite, Tailwind CSS 4, TanStack Query | Giao diện quản trị; bản build tĩnh do chính server phục vụ |
 | Reverse proxy (`deploy/Caddyfile`) | Caddy 2 | Tự xin và gia hạn chứng chỉ Let's Encrypt, HTTP/3, header bảo mật |
-| Agent (`agent/`) | Python ≥ 3.11, httpx, Playwright (Chromium) | Thuê proxy, mở cầu nối proxy cục bộ, mở Chromium qua proxy; sau này nhận việc và quét comment |
+| Agent (`agent/`) | Python ≥ 3.11, httpx, Playwright (Chromium) | Thuê proxy, mở cầu nối proxy cục bộ, mở Chromium qua proxy, đọc comment công khai của bài Facebook |
 
 ### 3.3 Các quyết định kiến trúc
 
@@ -129,11 +130,11 @@ flowchart LR
 | Đổi IP proxy 4G: link đổi IP, `{session}`, nhà cung cấp tự xoay; theo lịch, khi bị chặn, thủ công | Xong |
 | Cho máy PC thuê proxy: thuê, gia hạn, trả kèm kết quả, chấm điểm, cách ly | Xong |
 | Dashboard trang "Kho proxy" | Xong |
-| Agent PC: `ping`, `check`, `open` | Xong |
+| Agent PC: `ping`, `check`, `open`, `scrape`, `run` | Xong |
 | Đóng gói VPS: Dockerfile, Docker Compose, Caddy, `.env.example` | Xong |
-| Job quét comment, hàng đợi việc (dashboard: "Job quét comment") | Giai đoạn 1 |
-| Vòng lặp worker trên PC, bộ trích xuất comment | Giai đoạn 2 |
-| Kết quả comment: xem, lọc, xuất (dashboard: "Kết quả comment") | Giai đoạn 3 |
+| Job quét comment Facebook, hàng đợi việc (dashboard: "Job quét comment") | Xong cho bài Facebook công khai |
+| Bộ đọc comment Facebook trên PC (`scrape` một bài, `run` nhận việc liên tục) | Xong; không đăng nhập, không giải captcha |
+| Kết quả comment: xem, lọc, xuất JSON/CSV/NDJSON (dashboard: "Kết quả comment") | Xong |
 | Quản lý máy PC (dashboard: "Máy PC (worker)") | Giai đoạn 4 |
 | Giám sát, cảnh báo, sao lưu tự động | Giai đoạn 5 (đã có healthcheck và hướng dẫn sao lưu thủ công) |
 
@@ -146,6 +147,11 @@ flowchart LR
   (có và không có cửa sổ) qua cổng xoay theo session, giữ cửa sổ mở rồi đóng hoặc nhấn Ctrl+C, tự gia hạn lượt thuê
   nhiều vòng liên tiếp.
 - Chạy thật toàn bộ stack Docker Compose (PostgreSQL + server + Caddy).
+- Bộ đọc Facebook: HTML kiểu mbasic và JSON kiểu GraphQL (comment được lấy, bài viết không bị nhận nhầm là comment),
+  phân trang "Xem thêm bình luận" không đi vào link đăng nhập, tường đăng nhập và bài không còn công khai được phân
+  loại riêng. Chromium thật đọc fixture HTML cục bộ và trả đủ bốn trường nội dung, tác giả, thời điểm, lượt thích.
+  Môi trường này không xác nhận được Facebook đang phục vụ comment cho IP trung tâm dữ liệu: trang yêu cầu đăng nhập
+  được ghi là bị chặn rồi thử proxy khác, không có bước đăng nhập.
 
 ## 5. Kho proxy (đã triển khai)
 
@@ -319,6 +325,9 @@ Xuất file:
   được thêm dấu `'` ở đầu để chống chèn công thức (comment là nội dung do người ngoài viết).
 
 ## 7. Các giai đoạn tiếp theo
+
+Giai đoạn 1–3 đã được làm cho Facebook: job, hàng đợi, agent `run`/`scrape`, lưu comment và trang kết quả. Các mục dưới
+đây giữ lại thiết kế đã chốt. Phần còn phải làm là quản lý máy PC, vận hành và nền tảng khác Facebook.
 
 ### 7.1 Tổng quan
 
@@ -562,17 +571,15 @@ một máy thì máy đó bị từ chối ngay, các máy khác không bị ả
 - **Dashboard**: Vitest cho phần logic thuần (client API, bộ lọc, chọn dòng, kiểm tra dữ liệu nhập, phân trang).
 - **Agent**: proxy HTTP/HTTPS/SOCKS5 giả chạy local, VPS giả đúng khuôn API, đồng hồ giả cho phần gia hạn, Chromium thật
   mở trang qua cầu nối, kịch bản Ctrl+C lúc đang khởi động Chromium.
+- **Job và comment Facebook**: chuẩn hoá permalink, nhận việc song song, gửi lại lô không tạo comment trùng, xuất CSV
+  chống chèn công thức, HTML/JSON mẫu, Chromium thật đọc fixture HTML cục bộ (không mở Facebook).
 
-Bổ sung theo giai đoạn:
+Còn bổ sung:
 
-- **Giai đoạn 1**: test nhận việc song song trên PostgreSQL (nhiều agent giả), test máy trạng thái của bài/lượt xử lý,
-  test khởi động lại server giữa chừng, test chuẩn hoá permalink bằng bộ mẫu URL thật (đã ẩn thông tin).
-- **Giai đoạn 2**: một "trang mạng xã hội giả" chạy local (HTML + JS: comment tải dần, nút xem thêm, trả lời lồng nhau,
-  thời gian tương đối, số lượt thích rút gọn, biến thể tường đăng nhập, biến thể HTTP 429) để test thư viện dùng chung và
-  vòng lặp worker end-to-end với Chromium thật qua proxy giả; bộ mẫu HTML/JSON đã lưu cho từng nền tảng để test bộ phân
-  tích; job "mẫu" chạy định kỳ ở môi trường thật để phát hiện sớm khi trang đích đổi cấu trúc.
-- **Giai đoạn 3**: test chống trùng khi gửi lại lô, test xuất dạng luồng với dữ liệu lớn (đo bộ nhớ), test chống chèn
-  công thức CSV.
+- Khởi động lại server giữa chừng khi đang có lượt xử lý dở, đo bộ nhớ khi xuất file rất lớn.
+- Trang mạng xã hội giả có JavaScript (comment tải dần, HTTP 429) và vòng lặp worker end-to-end với Chromium đi qua
+  proxy giả; job mẫu chạy định kỳ trên Facebook thật để phát hiện khi trang đổi cấu trúc. Môi trường build này không
+  dùng để xác nhận Facebook đang trả comment cho IP trung tâm dữ liệu.
 - **Giai đoạn 4**: test thu hồi token, lệnh tạm dừng/rút máy, máy mất heartbeat.
 - **Hợp đồng API giữa agent và server**: dùng chung JSON Schema sinh từ OpenAPI của server để agent và server không lệch
   nhau khi thay đổi.

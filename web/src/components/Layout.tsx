@@ -4,13 +4,13 @@ import { NavLink, Outlet } from "react-router";
 
 import { useAuth } from "../lib/auth-context";
 
-const NAV_ITEMS = [{ to: "/proxies", label: "Kho proxy", icon: Globe }] as const;
-
-const UPCOMING_ITEMS = [
-  { label: "Job quét comment", icon: ScanSearch },
-  { label: "Máy PC (worker)", icon: MonitorSmartphone },
-  { label: "Kết quả comment", icon: ClipboardList },
+const NAV_ITEMS = [
+  { to: "/proxies", label: "Kho proxy", icon: Globe },
+  { to: "/jobs", label: "Job quét comment", icon: ScanSearch },
+  { to: "/results", label: "Kết quả comment", icon: ClipboardList },
 ] as const;
+
+const UPCOMING_ITEMS = [{ label: "Máy PC (worker)", icon: MonitorSmartphone }] as const;
 
 function Brand() {
   return (
@@ -93,16 +93,35 @@ export function Layout() {
         </div>
       </aside>
 
-      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur lg:hidden">
-        <Brand />
-        <button
-          type="button"
-          onClick={logout}
-          className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
-        >
-          <LogOut className="size-4" aria-hidden />
-          Đăng xuất
-        </button>
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur lg:hidden">
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <Brand />
+          <button
+            type="button"
+            onClick={logout}
+            className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
+          >
+            <LogOut className="size-4" aria-hidden />
+            Đăng xuất
+          </button>
+        </div>
+        <nav className="flex gap-1 overflow-x-auto px-3 pb-2" aria-label="Chức năng">
+          {NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                clsx(
+                  "flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium",
+                  isActive ? "bg-indigo-50 text-indigo-700" : "text-slate-600",
+                )
+              }
+            >
+              <item.icon className="size-4" aria-hidden />
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
       </header>
 
       <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">

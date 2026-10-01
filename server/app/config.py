@@ -52,6 +52,8 @@ class Settings(BaseSettings):
 
     scheduler_enabled: bool = True
     scheduler_tick_sec: float = Field(default=5.0, gt=0)
+    attempt_ttl_sec: int = Field(default=300, ge=30, le=3600)
+    comment_retention_days: int = Field(default=0, ge=0, le=3650)
 
     @property
     def agent_token_list(self) -> list[str]:

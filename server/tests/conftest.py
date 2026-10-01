@@ -64,7 +64,12 @@ async def reset_postgres(url: str) -> None:
     engine = create_async_engine(url)
     try:
         async with engine.begin() as connection:
-            await connection.execute(text("DROP TABLE IF EXISTS proxy_leases, proxies, alembic_version CASCADE"))
+            await connection.execute(
+                text(
+                    "DROP TABLE IF EXISTS comments, scrape_attempts, scrape_posts, scrape_jobs, "
+                    "proxy_leases, proxies, alembic_version CASCADE"
+                )
+            )
     finally:
         await engine.dispose()
 

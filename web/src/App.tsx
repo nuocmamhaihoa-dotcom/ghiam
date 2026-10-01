@@ -6,8 +6,11 @@ import { AuthProvider } from "./components/AuthProvider";
 import { Layout } from "./components/Layout";
 import { ApiError } from "./lib/api";
 import { useAuth } from "./lib/auth-context";
+import { JobDetailPage } from "./pages/JobDetailPage";
+import { JobsPage } from "./pages/JobsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ProxiesPage } from "./pages/ProxiesPage";
+import { ResultsPage } from "./pages/ResultsPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,6 +41,9 @@ export function App() {
             <Route element={<RequireAuth />}>
               <Route index element={<Navigate to="/proxies" replace />} />
               <Route path="proxies" element={<ProxiesPage />} />
+              <Route path="jobs" element={<JobsPage />} />
+              <Route path="jobs/:jobId" element={<JobDetailPage />} />
+              <Route path="results" element={<ResultsPage />} />
               <Route path="*" element={<Navigate to="/proxies" replace />} />
             </Route>
           </Routes>

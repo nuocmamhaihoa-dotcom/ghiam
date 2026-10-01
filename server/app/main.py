@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
-from app.api import agent, auth, health, proxies
+from app.api import agent, auth, health, jobs, proxies
 from app.config import Settings
 from app.container import Container, build_container
 from app.handlers import register_exception_handlers
@@ -85,7 +85,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
             allow_headers=["*"],
         )
     register_exception_handlers(app)
-    for module in (health, auth, proxies, agent):
+    for module in (health, auth, proxies, jobs, agent):
         app.include_router(module.router)
     _mount_web(app, settings.web_dist_dir)
     return app

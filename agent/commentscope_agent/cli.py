@@ -3,6 +3,8 @@
     commentscope-agent ping                   kiểm tra kết nối và token tới VPS
     commentscope-agent check                  thuê một proxy, kiểm tra IP ra qua proxy rồi trả lại
     commentscope-agent open URL [URL ...]     thuê một proxy và mở Chromium qua proxy đó
+    commentscope-agent scrape URL             đọc comment công khai của một bài Facebook
+    commentscope-agent run                    nhận việc từ VPS và đọc comment liên tục
 
 Mã thoát: 0 thành công, 1 lỗi kết nối VPS, 2 sai cấu hình hoặc token, 3 proxy không dùng được,
 4 không có proxy rảnh, 130 người dùng dừng (Ctrl+C).
@@ -22,7 +24,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any, TextIO, cast
 from urllib.parse import urlsplit
 
 import httpx
@@ -30,11 +32,14 @@ import httpx
 from commentscope_agent import __version__
 from commentscope_agent.bridge import ProxyBridge, Upstream
 from commentscope_agent.browser import BrowserUnavailableError, ProxiedBrowser
-from commentscope_agent.client import AgentAuthError, ControlPlaneClient, ControlPlaneError, NoProxy
+from commentscope_agent.client import AgentAuthError, ControlPlaneClient, ControlPlaneError, NoProxy, Outcome
 from commentscope_agent.config import KINDS, AgentConfig, ConfigError, insecure_transport_warning, load_config
+from commentscope_agent.facebook import is_facebook_url
 from commentscope_agent.lease import LeaseSession, NoProxyAvailableError
 from commentscope_agent.probe import NO_CHECK_URLS, ExitIp, ProbeError, probe_exit_ip
+from commentscope_agent.reader import ReadOptions, read_public_facebook
 from commentscope_agent.verdict import PageVisit, judge
+from commentscope_agent.worker import claim_forever, execute_assignment, flush_outbox
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -110,6 +115,15 @@ def build_parser() -> argparse.ArgumentParser:
     browse.add_argument("--screenshot-dir", type=Path, help="lưu ảnh chụp từng trang vào thư mục này")
     browse.add_argument("--timeout", type=float, default=45.0, metavar="GIÂY", help="thời gian chờ mỗi trang")
     browse.add_argument("--skip-check", action="store_true", help="không kiểm tra IP ra trước khi mở Chromium")
+    scrape = commands.add_parser(
+        "scrape", parents=[common, leasing], help="thuê proxy và đọc comment công khai của một bài Facebook"
+    )
+    scrape.add_argument("url", help="permalink bài viết công khai")
+    scrape.add_argument("--max-comments", type=int, default=100, help="số comment tối đa (mặc định 100)")
+    scrape.add_argument("--show", action="store_true", help="hiện cửa sổ Chromium")
+    run = commands.add_parser("run", parents=[common, leasing], help="nhận việc từ VPS và đọc comment liên tục")
+    run.add_argument("--capacity", type=int, help="số bài đọc cùng lúc, từ 1 đến 4 (mặc định 1)")
+    run.add_argument("--show", action="store_true", help="hiện cửa sổ Chromium")
     return parser
 
 
@@ -168,6 +182,10 @@ async def _run(
         try:
             if args.command == "ping":
                 return await _ping(client, config, console)
+            if args.command == "scrape":
+                return await _scrape(args, client, config, console)
+            if args.command == "run":
+                return await _run_jobs(args, client, config, console)
             return await _use_proxy(args, urls, client, config, console)
         except AgentAuthError as exc:
             return console.fail(EXIT_CONFIG, str(exc))
@@ -391,6 +409,155 @@ def _summary(
     }
 
 
+async def _scrape(args: argparse.Namespace, client: ControlPlaneClient, config: AgentConfig, console: Console) -> int:
+    url = args.url.strip()
+    if "://" not in url:
+        url = f"https://{url}"
+    if not is_facebook_url(url):
+        return console.fail(
+            EXIT_CONFIG, "Chỉ đọc comment công khai của permalink Facebook, ví dụ facebook.com/trang/posts/123"
+        )
+    if args.max_comments < 1:
+        return console.fail(EXIT_CONFIG, "--max-comments phải lớn hơn 0")
+    await client.ping()
+
+    def waiting(no_proxy: NoProxy, delay: float) -> None:
+        console.info(f"{no_proxy.message}. Thử lại sau {delay:g} giây...")
+
+    session = LeaseSession(
+        client,
+        worker_id=config.worker_id,
+        pool=config.pool,
+        kind=config.kind,
+        ttl_sec=config.lease_ttl_sec,
+        wait_sec=config.lease_wait_sec,
+        job_ref=args.job_ref,
+        on_wait=waiting,
+    )
+    result = None
+    proxy_outcome = "failed"
+    try:
+        async with session as lease:
+            proxy = lease.proxy
+            console.info(f"Đã thuê proxy {proxy.label}. Đang đọc comment công khai, không đăng nhập")
+            upstream = Upstream(
+                protocol=proxy.protocol,
+                host=proxy.host,
+                port=proxy.port,
+                username=proxy.username,
+                password=proxy.password,
+                label=proxy.label,
+            )
+            async with ProxyBridge(upstream, connect_timeout=config.request_timeout_sec) as bridge:
+                locale, timezone_id = ("vi-VN", "Asia/Ho_Chi_Minh")
+                if proxy.country and proxy.country.upper() == "US":
+                    locale, timezone_id = "en-US", "America/New_York"
+                async with ProxiedBrowser(
+                    bridge.server_url,
+                    username=bridge.credentials.username,
+                    password=bridge.credentials.password,
+                    headless=not args.show,
+                    navigation_timeout_sec=min(config.lease_ttl_sec, 180),
+                    locale=locale,
+                    timezone_id=timezone_id,
+                ) as browser:
+                    await browser.enable_savings()
+                    page = await browser.new_page()
+                    try:
+                        result = await read_public_facebook(
+                            page,
+                            url,
+                            ReadOptions(max_comments=args.max_comments, time_budget_sec=min(config.lease_ttl_sec, 180)),
+                        )
+                    finally:
+                        with contextlib.suppress(Exception):
+                            await page.close()
+                proxy_outcome = "ok"
+                if result.outcome == "blocked":
+                    proxy_outcome = "blocked"
+                elif result.outcome == "failed" and bridge.stats.upstream_failures:
+                    proxy_outcome = "failed"
+                session.finish(
+                    cast("Outcome", proxy_outcome),
+                    result.detail[:500],
+                    request_rotation=bool(args.rotate and proxy_outcome == "blocked"),
+                )
+    finally:
+        if session.acquired:
+            _report_release(session, console)
+    if result is None:
+        return EXIT_PROXY_FAILED
+    console.info(result.detail)
+    for comment in result.comments:
+        likes = "" if comment.likes is None else f", {comment.likes} lượt thích"
+        console.info(f"- {comment.author}: {comment.text}{likes}")
+    console.result(
+        {
+            "ok": result.outcome in {"done", "not_available"},
+            "outcome": result.outcome,
+            "stop_reason": result.stop_reason,
+            "complete": result.complete,
+            "comments_reported": result.comments_reported,
+            "pages": result.pages,
+            "proxy_outcome": proxy_outcome,
+            "post": {"url": url, "platform": "facebook", "comments_collected": len(result.comments)},
+            "comments": result.payloads(),
+        }
+    )
+    if result.outcome in {"done", "not_available"}:
+        return EXIT_OK
+    if proxy_outcome in {"blocked", "failed"}:
+        return EXIT_PROXY_FAILED
+    return EXIT_ERROR
+
+
+async def _run_jobs(args: argparse.Namespace, client: ControlPlaneClient, config: AgentConfig, console: Console) -> int:
+    stop = asyncio.Event()
+    outbox = Path("commentscope-data") / "outbox.jsonl"
+    tasks: set[asyncio.Task[None]] = set()
+    console.info(
+        f"Nhận bài Facebook công khai từ {config.server_url}, tối đa {config.capacity} bài cùng lúc. "
+        "Ctrl+C để dừng. Không đăng nhập và không giải captcha."
+    )
+    try:
+        await flush_outbox(client, outbox)
+        async for assignment in claim_forever(
+            client, worker_id=config.worker_id, ttl_sec=config.lease_ttl_sec, stop=stop
+        ):
+            await flush_outbox(client, outbox)
+            while len([task for task in tasks if not task.done()]) >= config.capacity:
+                await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            tasks = {task for task in tasks if not task.done()}
+            console.info(f"Nhận bài {assignment.url}")
+            tasks.add(asyncio.create_task(_read_one(assignment, client, console, outbox, show=bool(args.show))))
+    except asyncio.CancelledError:
+        stop.set()
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+    return EXIT_OK
+
+
+async def _read_one(
+    assignment: Any,
+    client: ControlPlaneClient,
+    console: Console,
+    outbox: Path,
+    *,
+    show: bool,
+) -> None:
+    try:
+        result = await execute_assignment(assignment, client, outbox=outbox, headless=not show)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        console.warn(f"Không đọc được {assignment.url}: {exc}")
+        return
+    console.info(f"{assignment.url}: {result.detail}")
+
+
 def _overrides(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "server_url": args.server,
@@ -400,6 +567,7 @@ def _overrides(args: argparse.Namespace) -> dict[str, Any]:
         "lease_wait_sec": getattr(args, "wait", None),
         "lease_ttl_sec": getattr(args, "ttl", None),
         "check_url": getattr(args, "check_url", None),
+        "capacity": getattr(args, "capacity", None),
     }
 
 

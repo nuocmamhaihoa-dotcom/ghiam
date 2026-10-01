@@ -3,16 +3,18 @@
 Agent là chương trình chạy trên các máy PC làm việc (worker). Agent tự gọi lên VPS qua HTTPS nên máy ở sau NAT hay dùng
 mạng 4G vẫn chạy được, không cần IP tĩnh hay mở cổng.
 
-Hiện có ba lệnh:
+Hiện có năm lệnh:
 
 | Lệnh | Việc làm |
 | --- | --- |
 | `ping` | Kiểm tra kết nối và token tới VPS |
 | `check` | Thuê một proxy từ kho trên VPS, kiểm tra IP ra qua proxy đó rồi trả lại kèm kết quả |
 | `open URL...` | Thuê một proxy và mở Chromium qua proxy đó, mở các trang được chỉ định |
+| `scrape URL` | Thuê một proxy và đọc comment công khai của một permalink Facebook, in ra màn hình |
+| `run` | Nhận job từ VPS và đọc comment liên tục, gửi kết quả về; bản chưa gửi được lưu ở `commentscope-data/outbox.jsonl` |
 
-Lệnh `run` (tự nhận việc quét comment và gửi kết quả về VPS) thuộc giai đoạn tiếp theo, xem
-[mục 7.3 của kế hoạch](../docs/KE_HOACH_TRIEN_KHAI.md#73-giai-đoạn-2-worker-trên-pc-và-bộ-trích-xuất-comment).
+`scrape` và `run` chỉ đọc comment đang hiện trên bài viết công khai. Agent không đăng nhập, không điền mật khẩu và không
+giải captcha. Trang yêu cầu đăng nhập được báo là bị chặn để VPS thử proxy khác.
 
 ## Yêu cầu
 
@@ -130,7 +132,12 @@ commentscope-agent check --kind rotating --rotate
 commentscope-agent open https://example.com --pool vn-static
 commentscope-agent open example.com example.org --headless --screenshot-dir anh-chup
 commentscope-agent open https://example.com --keep-open
+commentscope-agent scrape https://www.facebook.com/trang/posts/1234567890 --max-comments 100
+commentscope-agent run --capacity 1
 ```
+
+`scrape` in từng comment (tác giả, nội dung, lượt thích). Thêm `--json` để nhận một object gồm `comments`. `run` chạy
+tới khi nhấn Ctrl+C; `--show` mở cửa sổ Chromium thay vì chạy ẩn. `--capacity` từ 1 đến 4 (mặc định 1).
 
 Ví dụ dưới đây chạy với [mạng proxy giả lập](../README.md#3-thử-với-mạng-proxy-giả-lập), nên proxy có địa chỉ
 `127.0.0.1`.

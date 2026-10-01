@@ -38,7 +38,15 @@ async def test_migrations_create_exactly_the_model_schema(database_url: str) -> 
     try:
         await upgrade_database(engine)
         assert await _run(engine, _schema_diff) == []
-        assert await _run(engine, _tables) == {"alembic_version", "proxies", "proxy_leases"}
+        assert await _run(engine, _tables) == {
+            "alembic_version",
+            "proxies",
+            "proxy_leases",
+            "scrape_jobs",
+            "scrape_posts",
+            "scrape_attempts",
+            "comments",
+        }
 
         await upgrade_database(engine)
         await _run(engine, _downgrade)

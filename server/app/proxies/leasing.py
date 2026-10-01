@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 
 from sqlalchemy import ColumnElement, delete, func, or_, select, true, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.crypto import SecretBox
@@ -94,28 +95,53 @@ async def _unavailable_message(db: Database, data: LeaseIn, now: datetime) -> st
     return f"Tất cả {alive} proxy sống{scope} đang bận, đang đổi IP hoặc đang bị cách ly"
 
 
+async def reserve_proxy(
+    session: AsyncSession,
+    db: Database,
+    box: SecretBox,
+    settings: Settings,
+    data: LeaseIn,
+    now: datetime,
+) -> tuple[ProxyLease, LeasedProxyOut] | None:
+    """Chọn và giữ một proxy trong phiên có sẵn. Người gọi commit hoặc rollback."""
+
+    ttl = min(data.ttl_sec or settings.proxy_lease_default_ttl_sec, settings.proxy_lease_max_ttl_sec)
+    statement = (
+        select(Proxy)
+        .where(*_available_conditions(now, data))
+        .order_by(Proxy.last_used_at.asc().nulls_first(), Proxy.id.asc())
+        .limit(LEASE_CANDIDATES)
+    )
+    if not db.is_sqlite:
+        statement = statement.with_for_update(skip_locked=True, of=Proxy)
+    chosen: Proxy | None = None
+    for candidate in await session.scalars(statement):
+        # Postgres: đếm lại sau khi đã khoá dòng để không vượt max_concurrency khi nhiều máy thuê cùng lúc.
+        if db.is_sqlite or await queries.count_active_leases(session, candidate.id, now) < candidate.max_concurrency:
+            chosen = candidate
+            break
+    if chosen is None:
+        return None
+    if chosen.uses_session and not chosen.session_id:
+        chosen.session_id = new_session_id()
+    chosen.last_used_at = now
+    lease = ProxyLease(
+        id=secrets.token_hex(16),
+        proxy_id=chosen.id,
+        worker_id=data.worker_id,
+        job_ref=data.job_ref,
+        created_at=now,
+        expires_at=now + timedelta(seconds=ttl),
+    )
+    session.add(lease)
+    return lease, _leased_proxy_out(chosen, resolve_credentials(chosen, box))
+
+
 async def acquire_lease(db: Database, box: SecretBox, settings: Settings, data: LeaseIn) -> LeaseOut:
     now = utcnow()
-    ttl = min(data.ttl_sec or settings.proxy_lease_default_ttl_sec, settings.proxy_lease_max_ttl_sec)
     async with serialized(db), db.sessionmaker() as session:
-        statement = (
-            select(Proxy)
-            .where(*_available_conditions(now, data))
-            .order_by(Proxy.last_used_at.asc().nulls_first(), Proxy.id.asc())
-            .limit(LEASE_CANDIDATES)
-        )
-        if not db.is_sqlite:
-            statement = statement.with_for_update(skip_locked=True, of=Proxy)
-        chosen: Proxy | None = None
-        for candidate in await session.scalars(statement):
-            # Postgres: đếm lại sau khi đã khoá dòng để không vượt max_concurrency khi nhiều máy thuê cùng lúc.
-            if (
-                db.is_sqlite
-                or await queries.count_active_leases(session, candidate.id, now) < candidate.max_concurrency
-            ):
-                chosen = candidate
-                break
-        if chosen is None:
+        reserved = await reserve_proxy(session, db, box, settings, data, now)
+        if reserved is None:
             await session.rollback()
             return LeaseOut(
                 lease_id=None,
@@ -124,26 +150,9 @@ async def acquire_lease(db: Database, box: SecretBox, settings: Settings, data: 
                 retry_after_sec=RETRY_AFTER_SEC,
                 message=await _unavailable_message(db, data, now),
             )
-        if chosen.uses_session and not chosen.session_id:
-            chosen.session_id = new_session_id()
-        chosen.last_used_at = now
-        lease = ProxyLease(
-            id=secrets.token_hex(16),
-            proxy_id=chosen.id,
-            worker_id=data.worker_id,
-            job_ref=data.job_ref,
-            created_at=now,
-            expires_at=now + timedelta(seconds=ttl),
-        )
-        session.add(lease)
-        credentials = resolve_credentials(chosen, box)
+        lease, proxy_out = reserved
         await session.commit()
-    return LeaseOut(
-        lease_id=lease.id,
-        expires_at=lease.expires_at,
-        proxy=_leased_proxy_out(chosen, credentials),
-        retry_after_sec=None,
-    )
+    return LeaseOut(lease_id=lease.id, expires_at=lease.expires_at, proxy=proxy_out, retry_after_sec=None)
 
 
 async def renew_lease(db: Database, settings: Settings, lease_id: str, ttl_sec: int | None) -> RenewOut:

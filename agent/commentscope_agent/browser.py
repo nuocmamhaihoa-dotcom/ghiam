@@ -34,11 +34,15 @@ class ProxiedBrowser:
         headless: bool = True,
         navigation_timeout_sec: float = 45.0,
         ignore_https_errors: bool = False,
+        locale: str | None = None,
+        timezone_id: str | None = None,
     ) -> None:
         self._proxy: ProxySettings = {"server": proxy_server, "username": username, "password": password}
         self._headless = headless
         self._timeout_sec = navigation_timeout_sec
         self._ignore_https_errors = ignore_https_errors
+        self._locale = locale
+        self._timezone_id = timezone_id
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
@@ -55,9 +59,15 @@ class ProxiedBrowser:
             browser = await playwright.chromium.launch(
                 headless=self._headless, proxy=self._proxy, args=list(CHROMIUM_ARGS)
             )
-            context = await browser.new_context(
-                ignore_https_errors=self._ignore_https_errors, no_viewport=not self._headless
-            )
+            context_options: dict[str, Any] = {
+                "ignore_https_errors": self._ignore_https_errors,
+                "no_viewport": not self._headless,
+            }
+            if self._locale:
+                context_options["locale"] = self._locale
+            if self._timezone_id:
+                context_options["timezone_id"] = self._timezone_id
+            context = await browser.new_context(**context_options)
         except BaseException as exc:
             with contextlib.suppress(Exception):
                 await playwright.stop()
@@ -77,6 +87,20 @@ class ProxiedBrowser:
         if playwright is not None:
             with contextlib.suppress(Exception):
                 await playwright.stop()
+
+    async def new_page(self) -> Any:
+        return await self._require_context().new_page()
+
+    async def enable_savings(self) -> None:
+        """Chặn ảnh, video và font để đỡ tốn dung lượng proxy 4G."""
+
+        async def handler(route: Any) -> None:
+            if route.request.resource_type in {"image", "media", "font"}:
+                await route.abort()
+            else:
+                await route.continue_()
+
+        await self._require_context().route("**/*", handler)
 
     async def visit(self, url: str, *, screenshot: Path | None = None, keep_page: bool = False) -> PageVisit:
         from playwright.async_api import Error
