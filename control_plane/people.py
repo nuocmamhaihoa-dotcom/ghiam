@@ -6,6 +6,8 @@ import re
 import unicodedata
 
 _HANDLE = re.compile(r"^@?[A-Za-z0-9._]{5,30}$")
+_HANDLE_FIND = re.compile(r"@[A-Za-z0-9._]{5,30}")
+_HANDLE_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._")
 
 
 def name_key(name: str) -> str:
@@ -19,17 +21,34 @@ def fold_name(name: str) -> str:
     return " ".join(stripped.casefold().replace("đ", "d").split())
 
 
+def _name_char_ok(char: str) -> bool:
+    if char.isspace() or char in "-'":
+        return True
+    if char.isalpha() or char.isdigit():
+        return True
+    return unicodedata.category(char) == "Mn"
+
+
 def clean_name(value: str) -> str:
-    return " ".join(str(value or "").split())[:80]
+    """Chỉ giữ chữ (kể cả dấu Việt), số, khoảng, gạch. Ký tự lạ bỏ."""
+    kept = "".join(char if _name_char_ok(char) else " " for char in str(value or ""))
+    return " ".join(kept.split())[:80]
 
 
 def clean_username(value: str) -> str:
+    """Chỉ nhận @ và [A-Za-z0-9._]. Ký tự lạ giữa handle thì bỏ cả tài khoản."""
     text = " ".join(str(value or "").split())
-    if not text or not _HANDLE.match(text.lstrip("@")):
+    if not text:
         return ""
-    if not text.startswith("@"):
-        text = "@" + text
-    return text[:40]
+    found = _HANDLE_FIND.search(text)
+    if found:
+        return found.group(0)[:40]
+    core = text.lstrip("@")
+    if not core or any(char not in _HANDLE_CHARS for char in core):
+        return ""
+    if not _HANDLE.match(core):
+        return ""
+    return ("@" + core)[:40]
 
 
 def sighting_adds(row: dict[str, str] | None, item: dict[str, str]) -> bool:

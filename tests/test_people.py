@@ -6,6 +6,7 @@ import unittest
 
 from control_plane.people import (
     apply_novel,
+    clean_name,
     clean_username,
     complete_rows,
     complete_sightings,
@@ -50,6 +51,10 @@ class PeopleMergeTests(unittest.TestCase):
         self.assertEqual(clean_username("Hong@1978"), "")
         self.assertEqual(clean_username("@kol"), "")
         self.assertEqual(clean_username("@khac"), "")
+        self.assertEqual(clean_username("@trn!tng751"), "")
+        self.assertEqual(clean_name("Trần Tùng!"), "Trần Tùng")
+        self.assertEqual(clean_name("A Tùng #Bán Gạch"), "A Tùng Bán Gạch")
+        self.assertEqual(clean_name("Dịu 93"), "Dịu 93")
         folded = fold_sightings(
             [],
             [{"kind": "profile", "name": "Hồng", "username": "không hợp lệ"}],

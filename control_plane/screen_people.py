@@ -16,8 +16,12 @@ from control_plane.people import clean_name, clean_username, fold_name
 from control_plane.tesseract_keep import read_tsv
 
 _HANDLE = re.compile(r"@[A-Za-z0-9._]{5,30}")
+_HANDLE_CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._@"
 # Dưới 30 là nhiễu. 45 bỏ sót chữ mờ trên video iPhone.
 _WORD_CONF = 30
+# Tên và @ không ghi khi conf còn thấp (sau khi đã đọc lại).
+_NAME_CONF = 45.0
+_HANDLE_CONF = 70.0
 _TIME = re.compile(r"\d{1,2}:\d{2}")
 _LABELS = {
     "danh ba",
@@ -126,6 +130,77 @@ def tsv_word_counts(tsv: str) -> tuple[int, int]:
         if conf >= _WORD_CONF:
             kept += 1
     return seen, kept
+
+
+class _TsvWord(NamedTuple):
+    text: str
+    conf: float
+    left: int
+    top: int
+    width: int
+    height: int
+
+
+def tsv_words(tsv: str, *, min_conf: float = 0.0) -> list[_TsvWord]:
+    """Từ Tesseract còn conf. Dùng để khóa @ và bỏ chữ yếu."""
+    found: list[_TsvWord] = []
+    for raw in tsv.splitlines():
+        parts = raw.split("\t")
+        if len(parts) < 12 or parts[0] != "5":
+            continue
+        word = parts[11].strip()
+        if not word:
+            continue
+        try:
+            conf = float(parts[10])
+            left = int(float(parts[6]))
+            top = int(float(parts[7]))
+            width = int(float(parts[8]))
+            height = int(float(parts[9]))
+        except ValueError:
+            continue
+        if conf < min_conf or width <= 0 or height <= 0:
+            continue
+        found.append(_TsvWord(word, conf, left, top, width, height))
+    return found
+
+
+def handle_from_tsv(tsv: str, *, min_conf: float = _HANDLE_CONF) -> tuple[str, float]:
+    """Một @ từ TSV dòng đơn. Conf thấp hơn ngưỡng thì không trả."""
+    words = tsv_words(tsv, min_conf=0.0)
+    if not words:
+        return "", 0.0
+    blob = "".join(word.text for word in words)
+    conf = min(word.conf for word in words)
+    found = _HANDLE.findall(blob)
+    if found:
+        handle = clean_username(found[0])
+    elif any(char not in _HANDLE_CHARSET and not char.isspace() for char in blob):
+        handle = ""
+    else:
+        cleaned = "".join(char for char in blob if char in _HANDLE_CHARSET)
+        handle = clean_username(cleaned if cleaned.startswith("@") else f"@{cleaned}")
+    if not handle or conf < min_conf:
+        return "", conf
+    return handle, conf
+
+
+def name_min_conf(tsv: str, name: str) -> float | None:
+    """Conf thấp nhất của các từ khớp tên. None khi không thấy trong TSV."""
+    cleaned = clean_name(name)
+    if not tsv or not cleaned:
+        return None
+    parts = {fold_name(part) for part in cleaned.split() if part}
+    if not parts:
+        return None
+    confs = [
+        word.conf
+        for word in tsv_words(tsv, min_conf=0.0)
+        if fold_name(word.text) in parts or word.text in cleaned
+    ]
+    if not confs:
+        return None
+    return min(confs)
 
 
 def choose_tsv(memory: str | None, cli: str) -> str:
@@ -565,64 +640,48 @@ def _tesseract_command() -> str:
     return "tesseract"
 
 
-def _tesseract_cli(prepared: Path) -> str:
-    env = os.environ.copy()
-    env["OMP_THREAD_LIMIT"] = "1"
-    command = _tesseract_command()
-    for lang in ("vie+eng", "eng"):
-        try:
-            result = subprocess.run(
-                [
-                    command,
-                    str(prepared),
-                    "stdout",
-                    "--dpi",
-                    "300",
-                    "-l",
-                    lang,
-                    "--oem",
-                    "1",
-                    "--psm",
-                    "11",
-                    "tsv",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=25,
-                check=False,
-                env=env,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            return ""
-        if result.returncode == 0 and result.stdout:
-            return result.stdout
-    return ""
+def _standard_prefix() -> str | None:
+    prefix = os.environ.get("CONTROL_TESSDATA_STANDARD", "").strip() or None
+    if prefix is not None:
+        return prefix
+    _exe, data = locate_tesseract(None)
+    return str(data) if data is not None else None
 
 
-def _tesseract_cli_with_prefix(prepared: Path, prefix: str | None) -> str:
+def _tesseract_cli_run(
+    prepared: Path,
+    *,
+    prefix: str | None = None,
+    psm: str = "11",
+    langs: tuple[str, ...] = ("vie+eng", "eng"),
+    extra: list[str] | None = None,
+) -> str:
     env = os.environ.copy()
     env["OMP_THREAD_LIMIT"] = "1"
     if prefix:
         folder = prefix if prefix.endswith((os.sep, "/")) else prefix + os.sep
         env["TESSDATA_PREFIX"] = folder
     command = _tesseract_command()
-    for lang in ("vie+eng", "eng"):
+    added = list(extra or [])
+    for lang in langs:
+        argv = [
+            command,
+            str(prepared),
+            "stdout",
+            "--dpi",
+            "300",
+            "-l",
+            lang,
+            "--oem",
+            "1",
+            "--psm",
+            psm,
+            *added,
+            "tsv",
+        ]
         try:
             result = subprocess.run(
-                [
-                    command,
-                    str(prepared),
-                    "stdout",
-                    "--dpi",
-                    "300",
-                    "-l",
-                    lang,
-                    "--oem",
-                    "1",
-                    "--psm",
-                    "11",
-                    "tsv",
-                ],
+                argv,
                 capture_output=True,
                 text=True,
                 timeout=25,
@@ -634,6 +693,14 @@ def _tesseract_cli_with_prefix(prepared: Path, prefix: str | None) -> str:
         if result.returncode == 0 and result.stdout:
             return result.stdout
     return ""
+
+
+def _tesseract_cli(prepared: Path) -> str:
+    return _tesseract_cli_run(prepared)
+
+
+def _tesseract_cli_with_prefix(prepared: Path, prefix: str | None) -> str:
+    return _tesseract_cli_run(prepared, prefix=prefix)
 
 
 def _read_frame_tsv_impl(path: Path, *, standard: bool) -> str:
@@ -651,13 +718,7 @@ def _read_frame_tsv_impl(path: Path, *, standard: bool) -> str:
         image.save(prepared)
     except OSError:
         return kept or ""
-    prefix: str | None = None
-    if standard:
-        prefix = os.environ.get("CONTROL_TESSDATA_STANDARD", "").strip() or None
-        if prefix is None:
-            _exe, data = locate_tesseract(None)
-            if data is not None:
-                prefix = str(data)
+    prefix = _standard_prefix() if standard else None
     cli = _tesseract_cli_with_prefix(prepared, prefix)
     return choose_tsv(kept, cli)
 
@@ -672,9 +733,159 @@ def read_frame_tsv_standard(path: Path) -> str:
     return _read_frame_tsv_impl(path, standard=True)
 
 
+def _crop_box(image: Image.Image, left: int, top: int, width: int, height: int) -> Image.Image:
+    pad = max(6, int(max(height, 1) * 0.4))
+    right = left + max(1, width)
+    bottom = top + max(1, height)
+    box = (
+        max(0, left - pad),
+        max(0, top - pad),
+        min(image.width, right + pad),
+        min(image.height, bottom + pad),
+    )
+    return image.crop(box)
+
+
+def _handle_boxes(tsv: str, lines: list[TextLine]) -> list[tuple[int, int, int, int]]:
+    boxes: list[tuple[int, int, int, int]] = []
+    seen: set[tuple[int, int, int, int]] = set()
+
+    def _add(left: int, top: int, width: int, height: int) -> None:
+        key = (left, top, width, height)
+        if width <= 0 or height <= 0 or key in seen:
+            return
+        seen.add(key)
+        boxes.append(key)
+
+    for word in tsv_words(tsv, min_conf=0.0):
+        text = word.text
+        handle_like = bool(_HANDLE.fullmatch(text) or _HANDLE.fullmatch("@" + text.lstrip("@")))
+        if "@" in text or (handle_like and any(char.isdigit() or char in "._" for char in text)):
+            _add(word.left, word.top, word.width, word.height)
+    for line in lines:
+        if "@" not in line.text:
+            continue
+        _add(line.left, line.top, max(40, len(line.text) * 8), line.height)
+    return boxes[:4]
+
+
+def _read_handle_crop(image: Image.Image, box: tuple[int, int, int, int], dest: Path) -> tuple[str, float]:
+    """Đọc một dòng @ bằng PSM 7 và charset khóa. Conf thấp thì đọc lại bộ chuẩn, rồi bỏ."""
+    left, top, width, height = box
+    crop = _crop_box(image, left, top, width, height)
+    try:
+        crop.save(dest)
+    except OSError:
+        return "", 0.0
+    extra = ["-c", f"tessedit_char_whitelist={_HANDLE_CHARSET}"]
+    tsv = _tesseract_cli_run(dest, psm="7", langs=("eng",), extra=extra)
+    handle, conf = handle_from_tsv(tsv, min_conf=0.0)
+    if handle and conf >= _HANDLE_CONF:
+        return handle, conf
+    standard = _tesseract_cli_run(
+        dest,
+        prefix=_standard_prefix(),
+        psm="7",
+        langs=("eng",),
+        extra=extra,
+    )
+    retry, retry_conf = handle_from_tsv(standard, min_conf=0.0)
+    if retry and retry_conf >= _HANDLE_CONF:
+        return retry, retry_conf
+    return "", max(conf, retry_conf)
+
+
+def _open_frame_image(path: Path, *, prepared: bool) -> Image.Image | None:
+    if prepared:
+        return _prepared_image(path)
+    try:
+        with Image.open(path) as full:
+            copied = full.convert("RGB")
+            copied.load()
+            return copied
+    except OSError:
+        return None
+
+
+def tighten_frame_reading(
+    path: Path,
+    lines: list[TextLine],
+    sightings: list[dict[str, str]],
+    *,
+    tsv: str = "",
+    prepared: bool = True,
+) -> tuple[list[TextLine], list[dict[str, str]]]:
+    """Đọc lại dòng @, khóa charset, bỏ chữ/số còn yếu. Không ghi khi chưa chắc."""
+    del sightings
+    source = _open_frame_image(path, prepared=prepared)
+    boxes = _handle_boxes(tsv, lines)
+    confirmed: list[str] = []
+    if source is not None and boxes:
+        for index, box in enumerate(boxes):
+            dest = path.with_name(f"{path.stem}-handle-{index}.png")
+            try:
+                handle, _conf = _read_handle_crop(source, box, dest)
+            finally:
+                dest.unlink(missing_ok=True)
+            if handle and handle not in confirmed:
+                confirmed.append(handle)
+
+    updated: list[TextLine] = []
+    for line in lines:
+        text = line.text
+        if confirmed:
+            for old in _valid_handles(text):
+                replacement = old if old in confirmed else confirmed[0]
+                text = text.replace(old, replacement)
+            if "@" in text and not _valid_handles(text):
+                text = _HANDLE.sub(confirmed[0], text, count=1)
+                if "@" in text and not _valid_handles(text):
+                    text = re.sub(r"@\S+", confirmed[0], text, count=1)
+        elif boxes and "@" in text:
+            text = re.sub(r"@\S+", "", text)
+        cleaned = " ".join(text.split())
+        updated.append(line if cleaned == line.text else TextLine(cleaned, line.left, line.top, line.bottom))
+
+    found = sightings_from_lines(updated)
+    kept: list[dict[str, str]] = []
+    for item in found:
+        kind = item.get("kind") or ""
+        name = clean_name(item.get("name") or "")
+        contact = clean_name(item.get("contactName") or "")
+        username = clean_username(item.get("username") or "")
+        name_conf = name_min_conf(tsv, name)
+        contact_conf = name_min_conf(tsv, contact)
+        if name_conf is not None and name_conf < _NAME_CONF:
+            continue
+        if contact_conf is not None and contact_conf < _NAME_CONF:
+            continue
+        if kind == "profile":
+            if confirmed:
+                username = next((handle for handle in confirmed if handle == username), confirmed[0])
+            elif username and boxes:
+                username = ""
+            if not name or not username:
+                continue
+            kept.append({"kind": "profile", "name": name, "contactName": "", "username": username})
+            continue
+        if kind == "contact" and name and contact:
+            kept.append({"kind": "contact", "name": name, "contactName": contact, "username": ""})
+    if confirmed and not any(item.get("kind") == "profile" for item in kept):
+        names = [line for line in updated if _is_name_line(line.text)]
+        if names:
+            name = clean_name(names[-1].text)
+            name_conf = name_min_conf(tsv, name)
+            if name and (name_conf is None or name_conf >= _NAME_CONF):
+                kept.append({"kind": "profile", "name": name, "contactName": "", "username": confirmed[0]})
+    return updated, kept
+
+
 def sightings_from_image(path: Path) -> list[dict[str, str]]:
     """Đọc vị trí chữ trên một khung hình."""
     tsv = read_frame_tsv(path)
     if not tsv:
         return []
-    return sightings_from_lines(lines_from_tsv(tsv))
+    lines = lines_from_tsv(tsv)
+    sightings = sightings_from_lines(lines)
+    _lines, found = tighten_frame_reading(path, lines, sightings, tsv=tsv)
+    return found

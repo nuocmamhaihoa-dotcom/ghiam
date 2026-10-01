@@ -15,8 +15,10 @@ from control_plane.screen_people import (
     TextLine,
     _tesseract_command,
     choose_tsv,
+    handle_from_tsv,
     lines_from_tsv,
     locate_tesseract,
+    name_min_conf,
     prepare_tesseract,
     propose_rows,
     reading_counts,
@@ -49,6 +51,34 @@ class ScreenPeopleTests(unittest.TestCase):
         self.assertEqual(choose_tsv(None, cli), cli)
         self.assertEqual(choose_tsv("", ""), "")
         self.assertEqual(choose_tsv(None, ""), "")
+
+    def test_handle_tsv_keeps_only_sure_accounts(self) -> None:
+        strong = "\n".join(
+            [
+                "5\t1\t1\t1\t1\t1\t10\t10\t80\t20\t85\t@trn.tng751",
+            ]
+        )
+        weak = "\n".join(
+            [
+                "5\t1\t1\t1\t1\t1\t10\t10\t80\t20\t40\t@trn.tng751",
+            ]
+        )
+        junk = "\n".join(
+            [
+                "5\t1\t1\t1\t1\t1\t10\t10\t80\t20\t90\t@trn!tng",
+            ]
+        )
+        self.assertEqual(handle_from_tsv(strong)[0], "@trn.tng751")
+        self.assertEqual(handle_from_tsv(weak)[0], "")
+        self.assertEqual(handle_from_tsv(junk)[0], "")
+        mixed = "\n".join(
+            [
+                "5\t1\t1\t1\t1\t1\t10\t10\t40\t20\t80\tTrần",
+                "5\t1\t1\t1\t1\t2\t60\t10\t40\t20\t40\tTùng",
+            ]
+        )
+        self.assertEqual(name_min_conf(mixed, "Trần Tùng"), 40.0)
+        self.assertIsNone(name_min_conf(mixed, "Bà soi"))
 
     def test_pairs_contact_rows_and_profiles_into_three_columns(self) -> None:
         contacts = sightings_from_lines(

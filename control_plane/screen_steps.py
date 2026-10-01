@@ -28,6 +28,7 @@ from control_plane.screen_people import (
     read_frame_tsv,
     read_frame_tsv_standard,
     sightings_from_lines,
+    tighten_frame_reading,
     tsv_word_counts,
 )
 
@@ -41,6 +42,7 @@ _BLOCK_DIFF = 12.0
 # Rộng tối đa 720. Đo trên video iPhone thật: rộng 1080 đọc chậm hơn và nhận ra ít tên hơn.
 # 8 khung/giây đọc được khoảng một nửa tên danh bạ hơn 4 khung/giây. Giải mã gần như không chậm thêm.
 _SAMPLE_FPS = 8.0
+_FRAME_EXT = ".png"
 # Đoạn ffmpeg song song. PC nhiều lõi thì tách nhiều hơn.
 _SEGMENT_MIN_FRAMES = 64
 # Đoạn danh bạ lướt nhanh: đọc thêm 12 khung/giây trong cửa sổ 45 giây có nhiều tên danh bạ.
@@ -155,7 +157,7 @@ def _ffmpeg_extract_command(
     first: int = 1,
     frames: int | None = None,
 ) -> list[str]:
-    """JPEG nén nhẹ. Không phóng to khung. Số luồng mặc định là hết lõi.
+    """PNG (hoặc JPEG q=1 nếu đường dẫn .jpg). Không phóng to khung.
 
     first lớn hơn 1 là tách nối: bắt đầu từ đúng giây của khung đó, đánh số tiếp.
     frames là số khung của đoạn này. Mặc định là phần còn lại trong giới hạn.
@@ -169,14 +171,25 @@ def _ffmpeg_extract_command(
         "-i",
         str(path),
         "-vf",
-        f"fps={rate:.4f},scale=min(720\\,iw):-2,format=yuv420p",
+        _extract_filter(rate),
         "-frames:v",
         str(limit),
     ]
     if first > 1:
         argv += ["-start_number", str(first)]
-    argv += ["-c:v", "mjpeg", "-q:v", "2", "-progress", "pipe:1", str(pattern)]
+    argv += [*_frame_encode_args(pattern), "-progress", "pipe:1", str(pattern)]
     return argv
+
+
+def _extract_filter(rate: float) -> str:
+    return f"fps={rate:.4f},scale=min(720\\,iw):-2"
+
+
+def _frame_encode_args(pattern: Path) -> list[str]:
+    """PNG không nén mất nét. Đường .jpg cũ thì JPEG chất lượng 1."""
+    if pattern.suffix.lower() in {".jpg", ".jpeg"}:
+        return ["-c:v", "mjpeg", "-q:v", "1"]
+    return []
 
 
 def _media_seconds(raw: str) -> float | None:
@@ -656,15 +669,12 @@ def _ffmpeg_extract_range(
         "-i",
         str(path),
         "-vf",
-        f"fps={rate:.4f},scale=min(720\\,iw):-2,format=yuv420p",
+        _extract_filter(rate),
         "-frames:v",
         str(limit),
         "-start_number",
         "1",
-        "-c:v",
-        "mjpeg",
-        "-q:v",
-        "2",
+        *_frame_encode_args(pattern),
         str(pattern),
     ]
 
@@ -715,15 +725,17 @@ def _apply_dense_boost(
     for index, (start, end) in enumerate(windows):
         sub = work / f"boost-{index}"
         sub.mkdir(parents=True, exist_ok=True)
-        for old in sub.glob("b-*.jpg"):
-            old.unlink(missing_ok=True)
-        pattern = sub / "b-%05d.jpg"
+        for old in sub.glob("b-*.*"):
+            if old.suffix.lower() in {".png", ".jpg", ".jpeg"}:
+                old.unlink(missing_ok=True)
+        pattern = sub / f"b-%05d{_FRAME_EXT}"
         argv = _ffmpeg_extract_range(path, pattern, boost_rate, start, end, threads)
         code = _run_ffmpeg(argv, end - start, progress, start)
-        if code != 0 and not list(sub.glob("b-*.jpg")):
+        boosted = sorted(path for path in sub.glob("b-*.*") if path.suffix.lower() in {".png", ".jpg", ".jpeg"})
+        if code != 0 and not boosted:
             continue
         timed: list[tuple[float, Path]] = []
-        for image in sorted(sub.glob("b-*.jpg")):
+        for image in boosted:
             try:
                 number = int(image.stem.split("-", 1)[1])
             except (IndexError, ValueError):
@@ -932,11 +944,19 @@ def _run_ffmpeg(
     return proc.returncode if proc.returncode is not None else 1
 
 
+def _numbered_frame(work: Path, number: int) -> Path | None:
+    for ext in (_FRAME_EXT, ".png", ".jpg", ".jpeg"):
+        image = work / f"f-{number:05d}{ext}"
+        if image.is_file():
+            return image
+    return None
+
+
 def _files_in_range(work: Path, start: int, end: int) -> list[Path]:
     found: list[Path] = []
     for number in range(start, end + 1):
-        image = work / f"f-{number:05d}.jpg"
-        if image.is_file():
+        image = _numbered_frame(work, number)
+        if image is not None:
             found.append(image)
     return found
 
@@ -959,7 +979,7 @@ def _iter_segments(
     have: int = 0,
 ) -> Any:
     """Tách các đoạn còn thiếu. Đoạn sau tách trong lúc đoạn trước đang được đọc chữ."""
-    pattern = work / "f-%05d.jpg"
+    pattern = work / f"f-%05d{_FRAME_EXT}"
     progress.report(12, "Tách khung hình")
     if have >= _MAX_FRAMES:
         return
@@ -1229,6 +1249,7 @@ def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str
     seen = 0
     kept = 0
     used_tesseract = False
+    tsv = ""
     try:
         text_lines = read_lines(image)
     except Exception:
@@ -1262,7 +1283,7 @@ def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str
                 fallback = seen_line(text) if text else ""
                 if fallback:
                     std_captions = [fallback]
-            text_lines, sightings, captions, seen, kept = _prefer_reading(
+            chosen = _prefer_reading(
                 text_lines,
                 sightings,
                 captions,
@@ -1274,6 +1295,23 @@ def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str
                 std_seen,
                 std_kept,
             )
+            if chosen[0] is std_lines:
+                tsv = tsv_std
+            text_lines, sightings, captions, seen, kept = chosen
+    text_lines, sightings = tighten_frame_reading(
+        image,
+        list(text_lines),
+        sightings,
+        tsv=tsv,
+        prepared=used_tesseract,
+    )
+    captions = captions_from_sightings(sightings)
+    if not captions:
+        raw = "\n".join(line.text for line in text_lines)
+        text = clean_ocr(raw)
+        fallback = seen_line(text) if text else ""
+        if fallback:
+            captions = [fallback]
     return seconds, captions, sightings, seen, kept
 
 

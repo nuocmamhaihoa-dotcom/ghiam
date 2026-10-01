@@ -149,12 +149,15 @@ class ScreenVideoTests(unittest.TestCase):
         argv = _ffmpeg_extract_command(Path("clip.mp4"), Path("f-%05d.png"), 8)
         self.assertEqual(argv[argv.index("-threads") + 1], "0")
         self.assertLess(argv.index("-threads"), argv.index("-i"))
-        self.assertEqual(argv[argv.index("-q:v") + 1], "2")
-        self.assertEqual(argv[argv.index("-c:v") + 1], "mjpeg")
+        self.assertNotIn("-q:v", argv)
+        self.assertNotIn("mjpeg", argv)
         scale = next(item for item in argv if item.startswith("fps="))
         self.assertIn("fps=8", scale)
         self.assertIn(r"scale=min(720\,iw):-2", scale)
-        self.assertIn("format=yuv420p", scale)
+        self.assertNotIn("yuv420p", scale)
+        jpeg = _ffmpeg_extract_command(Path("clip.mp4"), Path("f-%05d.jpg"), 8)
+        self.assertEqual(jpeg[jpeg.index("-q:v") + 1], "1")
+        self.assertEqual(jpeg[jpeg.index("-c:v") + 1], "mjpeg")
 
     def test_preview_keeps_the_first_middle_and_last_frame(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -245,7 +248,7 @@ class ScreenVideoTests(unittest.TestCase):
             work.mkdir()
             frames = _extract_frames(clip, work, 8.0, 12.0, ReadProgress())
             self.assertGreaterEqual(len(frames), 12 * 8 - 4)
-            self.assertTrue((work / "f-00001.jpg").is_file())
+            self.assertTrue((work / "f-00001.png").is_file())
             numbers = sorted(int(path.stem.split("-")[1]) for _seconds, path in frames)
             self.assertEqual(numbers, list(range(1, numbers[-1] + 1)))
 
@@ -284,12 +287,12 @@ class ScreenVideoTests(unittest.TestCase):
             first = _extract_frames(grow, work, 4.0, 6.0, sink, partial=True, have=0)
             self.assertTrue(first)
             self.assertTrue((work / "extract.partial").is_file())
-            stamp = (work / "f-00001.jpg").stat().st_mtime_ns
+            stamp = (work / "f-00001.png").stat().st_mtime_ns
             have = _earlier_frames(work, 4.0)
             self.assertEqual(have, len(first))
             grow.write_bytes(data)
             whole = _extract_frames(grow, work, 4.0, 6.0, sink, partial=False, have=have)
-            self.assertEqual((work / "f-00001.jpg").stat().st_mtime_ns, stamp)
+            self.assertEqual((work / "f-00001.png").stat().st_mtime_ns, stamp)
             self.assertFalse((work / "extract.partial").exists())
             once = root / "once"
             once.mkdir()
