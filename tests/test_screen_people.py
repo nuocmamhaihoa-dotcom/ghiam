@@ -5,12 +5,15 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from control_plane import screen_people as people
 from control_plane.people import clean_username
+from control_plane.read_vote import clear_agreed
 from control_plane.screen_people import (
     TextLine,
     _tesseract_command,
@@ -359,3 +362,67 @@ class ScreenPeopleTests(unittest.TestCase):
                     os.environ.pop(key, None)
                 else:
                     os.environ[key] = value
+
+
+class VoteSpeedTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        clear_agreed()
+
+    def test_vote_box_reuses_an_agreed_crop(self) -> None:
+        clear_agreed()
+        image = Image.new("RGB", (200, 80), "white")
+        calls = {"n": 0}
+
+        def fake_read(picture: Image.Image, dest: Path, kind: str) -> str:
+            del picture, dest, kind
+            calls["n"] += 1
+            return "Lan Anh"
+
+        original = people._read_prepared
+        people._read_prepared = fake_read
+        try:
+            first, agreed = people._vote_box(image, (10, 10, 80, 20), Path("x.png"), "name", "Lan Anh")
+            self.assertTrue(agreed)
+            self.assertEqual(first, "Lan Anh")
+            self.assertEqual(calls["n"], 1)
+            again, agreed = people._vote_box(image, (10, 10, 80, 20), Path("x.png"), "name", "Lan Anh")
+            self.assertTrue(agreed)
+            self.assertEqual(again, "Lan Anh")
+            self.assertEqual(calls["n"], 1)
+        finally:
+            people._read_prepared = original
+
+    def test_rewrite_votes_lines_together(self) -> None:
+        dests: list[str] = []
+        lock = threading.Lock()
+        start = threading.Barrier(3) if people.reader_limit() >= 3 else None
+
+        def fake_vote(
+            image: Image.Image,
+            box: tuple[int, int, int, int],
+            dest: Path,
+            kind: str,
+            seed: str,
+        ) -> tuple[str, bool]:
+            del image, box, kind
+            if start is not None:
+                start.wait(timeout=2)
+            with lock:
+                dests.append(dest.name)
+            return seed.strip(), True
+
+        original = people._vote_box
+        people._vote_box = fake_vote
+        try:
+            image = Image.new("RGB", (240, 160), "white")
+            lines = [
+                TextLine("An", 10, 10, 30),
+                TextLine("Binh", 10, 50, 70),
+                TextLine("Cuong", 10, 90, 110),
+            ]
+            updated, names, _handles = people._rewrite_with_votes(Path("frame.png"), image, lines, "")
+        finally:
+            people._vote_box = original
+        self.assertEqual([row.text for row in updated], ["An", "Binh", "Cuong"])
+        self.assertEqual(names, {"An", "Binh", "Cuong"})
+        self.assertEqual(len(set(dests)), 3)

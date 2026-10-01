@@ -6,15 +6,29 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import NamedTuple
 
 from PIL import Image, ImageFilter, ImageOps
 
 from control_plane.people import clean_name, clean_username, fold_name
-from control_plane.read_vote import five_variants, needs_reread, read_rapid, vote_key, vote_line
-from control_plane.tesseract_keep import read_tsv
+from control_plane.read_vote import (
+    crop_mark,
+    five_variants,
+    needs_reread,
+    read_rapid,
+    recalled_agreed,
+    remember_agreed,
+    vote_key,
+    vote_line,
+)
+from control_plane.tesseract_keep import read_line_tsv, read_tsv, reader_limit
+
+_vote_pool: ThreadPoolExecutor | None = None
+_vote_pool_lock = threading.Lock()
 
 _HANDLE = re.compile(r"@[A-Za-z0-9._]{5,30}")
 _HANDLE_CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._@"
@@ -788,20 +802,29 @@ def _scaled(crop: Image.Image, scale: int) -> Image.Image:
     )
 
 
+def _text_from_line_tsv(tsv: str, kind: str) -> str:
+    if kind == "handle":
+        handle, _conf = handle_from_tsv(tsv, min_conf=0.0)
+        return handle
+    words = tsv_words(tsv, min_conf=0.0)
+    return clean_name(" ".join(word.text for word in words))
+
+
 def _read_saved_crop(dest: Path, kind: str) -> str:
     """Bộ chữ chuẩn, một dòng. @ khóa charset. Tên giữ dấu Việt."""
     prefix = _standard_prefix()
     if kind == "handle":
         extra = ["-c", f"tessedit_char_whitelist={_HANDLE_CHARSET}"]
         tsv = _tesseract_cli_run(dest, prefix=prefix, psm="7", langs=("eng",), extra=extra)
-        handle, _conf = handle_from_tsv(tsv, min_conf=0.0)
-        return handle
+        return _text_from_line_tsv(tsv, kind)
     tsv = _tesseract_cli_run(dest, prefix=prefix, psm="7", langs=("vie+eng", "eng"))
-    words = tsv_words(tsv, min_conf=0.0)
-    return clean_name(" ".join(word.text for word in words))
+    return _text_from_line_tsv(tsv, kind)
 
 
 def _read_prepared(picture: Image.Image, dest: Path, kind: str) -> str:
+    kept = read_line_tsv(picture, kind=kind)
+    if kept is not None:
+        return _text_from_line_tsv(kept, kind)
     try:
         picture.save(dest)
     except OSError:
@@ -830,14 +853,23 @@ def _vote_box(
 ) -> tuple[str, bool]:
     """Hướng 2 luôn chạy. Hướng 3 và năm lần đọc lại chỉ khi các hướng đã có còn lệch."""
     crop = _crop_box(image, *box)
+    mark = crop_mark(crop)
+    remembered = recalled_agreed(kind, seed, mark)
+    if remembered is not None:
+        return remembered, True
     second = _read_prepared(_scaled(crop, 2), dest, kind)
     if vote_key(seed, kind) and vote_key(seed, kind) == vote_key(second, kind):
-        return vote_line(seed, second, None, [], kind=kind)
-    third = _third_read(crop, dest, kind)
-    if not needs_reread(seed, second, third, kind):
-        return vote_line(seed, second, third, [], kind=kind)
-    reruns = [_read_prepared(variant, dest, kind) for variant in five_variants(crop)]
-    return vote_line(seed, second, third, reruns, kind=kind)
+        text, agreed = vote_line(seed, second, None, [], kind=kind)
+    else:
+        third = _third_read(crop, dest, kind)
+        if not needs_reread(seed, second, third, kind):
+            text, agreed = vote_line(seed, second, third, [], kind=kind)
+        else:
+            reruns = [_read_prepared(variant, dest, kind) for variant in five_variants(crop)]
+            text, agreed = vote_line(seed, second, third, reruns, kind=kind)
+    if agreed and text:
+        remember_agreed(kind, seed, mark, text)
+    return text, agreed
 
 
 def _open_frame_image(path: Path, *, prepared: bool) -> Image.Image | None:
@@ -852,6 +884,67 @@ def _open_frame_image(path: Path, *, prepared: bool) -> Image.Image | None:
         return None
 
 
+def _vote_executor() -> ThreadPoolExecutor:
+    global _vote_pool
+    with _vote_pool_lock:
+        if _vote_pool is None:
+            _vote_pool = ThreadPoolExecutor(max_workers=max(1, reader_limit()), thread_name_prefix="vote")
+        return _vote_pool
+
+
+def _apply_line_votes(
+    line: TextLine,
+    source: Image.Image,
+    tsv: str,
+    dest: Path,
+) -> tuple[TextLine, str | None, str | None]:
+    """Đối chiếu một dòng. Trả dòng đã sửa, tên đã trùng, @ đã trùng."""
+    text = line.text
+    box = _line_box(line, tsv, source.width)
+    agreed_handle: str | None = None
+    agreed_name: str | None = None
+    if _valid_handles(text) or text.strip().startswith("@"):
+        voted, handle_agreed = _vote_box(source, box, dest, "handle", text)
+        sure = _handle_conf(tsv, voted or text)
+        if voted and (handle_agreed or (sure is not None and sure >= _HANDLE_CONF)):
+            if handle_agreed:
+                agreed_handle = voted
+            for old in _valid_handles(text):
+                text = text.replace(old, voted)
+            if not _valid_handles(text):
+                text = f"{text} {voted}".strip()
+        else:
+            text = re.sub(r"@\S+", "", text)
+    name_source = re.sub(r"@\S+", " ", text)
+    if _is_name_line(name_source):
+        voted_name, name_agreed = _vote_box(source, box, dest, "name", name_source)
+        handle_part = " ".join(_valid_handles(text))
+        if voted_name and name_agreed:
+            agreed_name = voted_name
+            text = f"{voted_name} {handle_part}".strip()
+        elif voted_name and not name_agreed:
+            text = f"{clean_name(name_source)} {handle_part}".strip()
+        else:
+            text = handle_part
+    cleaned = " ".join(text.split())
+    return TextLine(cleaned, line.left, line.top, line.bottom), agreed_name, agreed_handle
+
+
+def _vote_one_line(
+    index: int,
+    line: TextLine,
+    source: Image.Image,
+    tsv: str,
+    stem: Path,
+) -> tuple[int, TextLine, str | None, str | None]:
+    dest = stem.with_name(f"{stem.stem}-vote-{index}.png")
+    try:
+        updated, agreed_name, agreed_handle = _apply_line_votes(line, source, tsv, dest)
+    finally:
+        dest.unlink(missing_ok=True)
+    return index, updated, agreed_name, agreed_handle
+
+
 def _rewrite_with_votes(
     path: Path,
     source: Image.Image,
@@ -861,39 +954,29 @@ def _rewrite_with_votes(
     """Mỗi dòng tên và @ đối chiếu riêng. Chuỗi đã trùng thì ghi, lệch hết thì bỏ."""
     agreed_names: set[str] = set()
     agreed_handles: list[str] = []
-    updated: list[TextLine] = []
-    dest = path.with_name(f"{path.stem}-vote.png")
-    try:
-        for line in lines:
-            text = line.text
-            box = _line_box(line, tsv, source.width)
-            if _valid_handles(text) or text.strip().startswith("@"):
-                voted, handle_agreed = _vote_box(source, box, dest, "handle", text)
-                sure = _handle_conf(tsv, voted or text)
-                if voted and (handle_agreed or (sure is not None and sure >= _HANDLE_CONF)):
-                    if handle_agreed and voted not in agreed_handles:
-                        agreed_handles.append(voted)
-                    for old in _valid_handles(text):
-                        text = text.replace(old, voted)
-                    if not _valid_handles(text):
-                        text = f"{text} {voted}".strip()
-                else:
-                    text = re.sub(r"@\S+", "", text)
-            name_source = re.sub(r"@\S+", " ", text)
-            if _is_name_line(name_source):
-                voted_name, name_agreed = _vote_box(source, box, dest, "name", name_source)
-                handle_part = " ".join(_valid_handles(text))
-                if voted_name and name_agreed:
-                    agreed_names.add(voted_name)
-                    text = f"{voted_name} {handle_part}".strip()
-                elif voted_name and not name_agreed:
-                    text = f"{clean_name(name_source)} {handle_part}".strip()
-                else:
-                    text = handle_part
-            cleaned = " ".join(text.split())
-            updated.append(TextLine(cleaned, line.left, line.top, line.bottom))
-    finally:
-        dest.unlink(missing_ok=True)
+    if not lines:
+        return [], agreed_names, agreed_handles
+    updated: list[TextLine] = [TextLine("", 0, 0, 0)] * len(lines)
+
+    def take(index: int, row: TextLine, agreed_name: str | None, agreed_handle: str | None) -> None:
+        updated[index] = row
+        if agreed_name:
+            agreed_names.add(agreed_name)
+        if agreed_handle and agreed_handle not in agreed_handles:
+            agreed_handles.append(agreed_handle)
+
+    if len(lines) == 1:
+        index, row, agreed_name, agreed_handle = _vote_one_line(0, lines[0], source, tsv, path)
+        take(index, row, agreed_name, agreed_handle)
+        return updated, agreed_names, agreed_handles
+
+    futures = [
+        _vote_executor().submit(_vote_one_line, index, line, source, tsv, path)
+        for index, line in enumerate(lines)
+    ]
+    for future in futures:
+        index, row, agreed_name, agreed_handle = future.result()
+        take(index, row, agreed_name, agreed_handle)
     return updated, agreed_names, agreed_handles
 
 

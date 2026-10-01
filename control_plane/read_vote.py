@@ -7,13 +7,19 @@ Hai hướng trùng thì không gọi hướng 3. Cả ba khác nhau thì đọc
 
 from __future__ import annotations
 
+import hashlib
 import os
 import tempfile
 import threading
+import time
 
 from PIL import Image, ImageFilter, ImageOps
 
 from control_plane.people import clean_name, clean_username, fold_name
+
+AGREED_HOLD_SEC = 4.0
+_agreed: dict[str, tuple[str, float]] = {}
+_agreed_lock = threading.Lock()
 
 try:
     from rapidocr_onnxruntime import RapidOCR
@@ -28,6 +34,59 @@ _engine_lock = threading.Lock()
 def rapid_ready() -> bool:
     """RapidOCR nhập được. Lần khởi tạo lỗi thì coi như chưa có."""
     return RapidOCR is not None and not _engine_failed
+
+
+def crop_mark(crop: Image.Image) -> str:
+    """Dấu vân nhỏ của dòng đã cắt. Cùng chữ, cùng vị trí thì cùng dấu."""
+    thumb = crop.resize((24, 8), Image.Resampling.BILINEAR).convert("L")
+    return hashlib.sha1(thumb.tobytes(), usedforsecurity=False).hexdigest()[:16]
+
+
+def _agreed_token(kind: str, seed: str, mark: str) -> str:
+    key = vote_key(seed, kind)
+    if not key:
+        return ""
+    return f"{kind}:{key}:{mark}"
+
+
+def _prune_agreed(now: float) -> None:
+    stale = [token for token, (_text, when) in _agreed.items() if now - when > AGREED_HOLD_SEC]
+    for token in stale:
+        _agreed.pop(token, None)
+
+
+def clear_agreed() -> None:
+    """Xóa dòng đã nhớ. Dùng trong test."""
+    with _agreed_lock:
+        _agreed.clear()
+
+
+def remember_agreed(kind: str, seed: str, mark: str, text: str, now: float | None = None) -> None:
+    """Giữ chữ vừa trùng để khung sau vài giây không đọc lại."""
+    token = _agreed_token(kind, seed, mark)
+    if not token or not text:
+        return
+    stamp = time.monotonic() if now is None else now
+    with _agreed_lock:
+        _prune_agreed(stamp)
+        _agreed[token] = (text, stamp)
+
+
+def recalled_agreed(kind: str, seed: str, mark: str, now: float | None = None) -> str | None:
+    """Chữ đã trùng trên cùng dòng trong vài giây vừa rồi. None khi phải đọc lại."""
+    token = _agreed_token(kind, seed, mark)
+    if not token:
+        return None
+    stamp = time.monotonic() if now is None else now
+    with _agreed_lock:
+        item = _agreed.get(token)
+        if item is None:
+            return None
+        text, when = item
+        if stamp - when > AGREED_HOLD_SEC:
+            _agreed.pop(token, None)
+            return None
+        return text
 
 
 def vote_key(text: str, kind: str) -> str:

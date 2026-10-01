@@ -6,7 +6,16 @@ import unittest
 
 from PIL import Image
 
-from control_plane.read_vote import five_variants, needs_reread, vote_line
+from control_plane.read_vote import (
+    AGREED_HOLD_SEC,
+    clear_agreed,
+    crop_mark,
+    five_variants,
+    needs_reread,
+    recalled_agreed,
+    remember_agreed,
+    vote_line,
+)
 
 
 class ReadVoteTests(unittest.TestCase):
@@ -58,6 +67,18 @@ class ReadVoteTests(unittest.TestCase):
         self.assertIn((12, 8), sizes)
         self.assertIn((24, 16), sizes)
         self.assertIn((36, 24), sizes)
+
+    def test_agreed_line_is_reused_for_a_few_seconds(self) -> None:
+        clear_agreed()
+        crop = Image.new("RGB", (80, 24), "white")
+        mark = crop_mark(crop)
+        remember_agreed("name", "Lan Anh", mark, "Lan Anh", now=100.0)
+        self.assertEqual(recalled_agreed("name", "Lan Anh", mark, now=100.0 + AGREED_HOLD_SEC), "Lan Anh")
+        self.assertIsNone(recalled_agreed("name", "Lan Anh", mark, now=100.1 + AGREED_HOLD_SEC))
+        other = Image.new("RGB", (80, 24), "black")
+        self.assertIsNone(recalled_agreed("name", "Lan Anh", crop_mark(other), now=101.0))
+        self.assertIsNone(recalled_agreed("name", "Bình", mark, now=101.0))
+        clear_agreed()
 
 
 if __name__ == "__main__":
