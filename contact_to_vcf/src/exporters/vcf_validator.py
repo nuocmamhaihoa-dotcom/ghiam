@@ -44,17 +44,13 @@ def fold_line(line: str) -> str:
 
 
 def format_card(name: str, phone: str) -> str:
-    """Write one contact in the vCard 3.0 shape iPhone Contacts accepts."""
-    escaped_name = escape_vcard_text(name)
+    """Write one contact in the same vCard 3.0 shape as a working phone import."""
     lines = [
         "BEGIN:VCARD",
         "VERSION:3.0",
-        "PRODID:-//Apple Inc.//iPhone OS 17.0//EN",
-        fold_line("N:;" + escaped_name + ";;;"),
-        fold_line("FN:" + escaped_name),
-        fold_line("TEL;type=CELL;type=VOICE;type=pref:" + escape_vcard_text(phone)),
+        fold_line("FN:" + escape_vcard_text(name)),
+        fold_line("TEL;TYPE=CELL:" + escape_vcard_text(phone)),
         "END:VCARD",
-        "",
     ]
     return "\r\n".join(lines) + "\r\n"
 

@@ -69,7 +69,7 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
         )
         card = downloaded.read().decode()
         assert "FN:+84901234567" in card
-        assert "TEL;type=CELL;type=VOICE;type=pref:+84901234567" in card
+        assert "TEL;TYPE=CELL:+84901234567" in card
     finally:
         server.shutdown()
 
