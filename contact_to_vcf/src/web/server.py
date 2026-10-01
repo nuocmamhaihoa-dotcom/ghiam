@@ -11,7 +11,7 @@ import shutil
 import tempfile
 import threading
 import zipfile
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -82,6 +82,7 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                     200,
                     {
                         "total": pool_total(app.kho),
+                        "key": self._cookie_token(),
                         "books": [
                             {
                                 "id": book.id,
@@ -102,7 +103,7 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 return
             iphone_id = _iphone_book_id(path)
             if iphone_id is not None:
-                self._download(iphone_id, attachment=True)
+                self._download(iphone_id, for_iphone=True)
                 return
             if path.startswith("/api/books/") and path.endswith("/download"):
                 book_id = _book_id(path)
@@ -125,7 +126,7 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Set-Cookie", f"session={token}; Path=/; HttpOnly; SameSite=Lax")
-                body = json.dumps({"ok": True}).encode()
+                body = json.dumps({"ok": True, "token": token}).encode()
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
@@ -266,10 +267,11 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
 
         def _iphone_page(self) -> None:
             books = list_books(app.kho, "all")
+            key = quote(self._cookie_token(), safe="")
             links = []
             for book in books:
                 links.append(
-                    f'<a class="go" href="/iphone/{book.id}.vcf">'
+                    f'<a class="go" href="/iphone/{book.id}.vcf?key={key}">'
                     f"Tải {book.file_name} ({book.contact_count} số)</a>"
                 )
             body = (
@@ -284,13 +286,13 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 "p{color:#78716c;line-height:1.45}"
                 "</style></head><body><div class=\"wrap\">"
                 "<h1>Tải trên iPhone</h1>"
-                "<p>Bấm một file .vcf. Nếu máy hiện chữ trong file, bấm chia sẻ rồi chọn Danh bạ, Thêm tất cả.</p>"
+                "<p>Bấm một file. Safari hiện mũi tên tải xuống ở phía trên. Bấm mũi tên đó để lưu tệp vào iPhone.</p>"
                 + ("".join(links) if links else "<p>Chưa có danh bạ.</p>")
                 + "<p><a href=\"/\">Quay lại</a></p></div></body></html>"
             )
             self._bytes(200, body.encode("utf-8"), "text/html; charset=utf-8")
 
-        def _download(self, book_id: int, attachment: bool = False) -> None:
+        def _download(self, book_id: int, for_iphone: bool = False) -> None:
             temporary = Path(tempfile.mkdtemp(prefix="danhba-"))
             try:
                 destination = temporary / f"danhba_{book_id:05d}.vcf"
@@ -302,16 +304,21 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 payload = destination.read_bytes()
             finally:
                 shutil.rmtree(temporary, ignore_errors=True)
-            self._vcf(payload, f"danhba_{book_id:05d}.vcf", attachment=attachment)
+            self._vcf(payload, f"danhba_{book_id:05d}.vcf", for_iphone=for_iphone)
 
-        def _auth(self) -> bool:
-            token = ""
+        def _cookie_token(self) -> str:
             cookie = self.headers.get("Cookie", "")
             for part in cookie.split(";"):
                 name, _, value = part.strip().partition("=")
                 if name == "session":
-                    token = value
-            return app.allowed(token)
+                    return value
+            return ""
+
+        def _auth(self) -> bool:
+            query_key = parse_qs(urlparse(self.path).query).get("key", [""])[0]
+            if app.allowed(query_key):
+                return True
+            return app.allowed(self._cookie_token())
 
         def _json_body(self) -> dict[str, object]:
             length = int(self.headers.get("Content-Length", "0") or "0")
@@ -327,12 +334,17 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             body = json.dumps(payload, ensure_ascii=False).encode()
             self._bytes(status, body, "application/json; charset=utf-8")
 
-        def _vcf(self, payload: bytes, filename: str, attachment: bool = False) -> None:
-            # iPhone Contacts ignores a vCard when the type carries a charset,
-            # and it keeps a previously downloaded file if this response is cacheable.
-            disposition = "attachment" if attachment else "inline"
+        def _vcf(self, payload: bytes, filename: str, for_iphone: bool = False) -> None:
+            # iPhone saves a file when the type is not one Safari displays,
+            # and the link itself carries the login key because iOS omits cookies on downloads.
+            if for_iphone:
+                content_type = "application/octet-stream"
+                disposition = "attachment"
+            else:
+                content_type = "text/x-vcard"
+                disposition = "inline"
             self.send_response(200)
-            self.send_header("Content-Type", "text/x-vcard")
+            self.send_header("Content-Type", content_type)
             self.send_header("Content-Disposition", f'{disposition}; filename="{filename}"')
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(payload)))
