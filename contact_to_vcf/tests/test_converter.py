@@ -812,6 +812,6 @@ def test_window_constructs() -> None:
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
     assert window.windowTitle() == "Chuyển danh bạ sang VCF"
-    assert window.per_file.value() == 5000
+    assert window.per_file.value() == 50000
     window.close()
     assert app is not None

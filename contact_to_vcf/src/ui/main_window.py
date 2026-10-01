@@ -158,7 +158,7 @@ class MainWindow(QMainWindow):
         self.start_btn.clicked.connect(self._import_pool)
         layout.addWidget(self.start_btn)
 
-        self.plan_label = QLabel("Mỗi danh bạ 5.000 số. Số đã chia thì không chuyển danh bạ khác.")
+        self.plan_label = QLabel("Mỗi danh bạ 50.000 số. Số đã chia thì không chuyển danh bạ khác.")
         self.plan_label.setWordWrap(True)
         self.plan_label.setObjectName("hint")
         self.kho_label = QLabel("Chưa chọn thư mục kho.")
@@ -206,7 +206,7 @@ class MainWindow(QMainWindow):
         more.setContentsMargins(0, 0, 0, 0)
         self.per_file = QSpinBox()
         self.per_file.setRange(1, 1_000_000)
-        self.per_file.setValue(5000)
+        self.per_file.setValue(CONTACTS_PER_FILE)
         self.per_file.setGroupSeparatorShown(True)
         self.per_file.valueChanged.connect(self._update_plan)
         self.dedupe_check = QCheckBox("Loại bỏ số điện thoại trùng")
@@ -495,14 +495,14 @@ class MainWindow(QMainWindow):
         inspection = self.inspection
         if inspection is None or not inspection.estimated_rows:
             self.plan_label.setText(
-                "Mỗi danh bạ giữ tối đa 5.000 số. "
+                f"Mỗi danh bạ giữ tối đa {format_int(CONTACTS_PER_FILE)} số. "
                 "Số đã vào danh bạ nào thì giữ nguyên danh bạ đó."
             )
             return
         files = (inspection.estimated_rows + CONTACTS_PER_FILE - 1) // CONTACTS_PER_FILE
         self.plan_label.setText(
             f"Khoảng {format_int(inspection.estimated_rows)} dòng, "
-            f"khoảng {format_int(files)} danh bạ, mỗi danh bạ tối đa 5.000 số. "
+            f"khoảng {format_int(files)} danh bạ, mỗi danh bạ tối đa {format_int(CONTACTS_PER_FILE)} số. "
             "Số đã chia rồi không chuyển sang danh bạ khác."
         )
 
@@ -656,7 +656,7 @@ class MainWindow(QMainWindow):
         books = list_books(self.output_dir, status)
         total = pool_total(self.output_dir)
         self.kho_label.setText(
-            f"Kho đang giữ {format_int(total)} số. Mỗi danh bạ tối đa 5.000 số."
+            f"Kho đang giữ {format_int(total)} số. Mỗi danh bạ tối đa {format_int(CONTACTS_PER_FILE)} số."
         )
         self.books.setRowCount(len(books))
         for row, book in enumerate(books):

@@ -30,6 +30,7 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
         page = opener.open(f"http://127.0.0.1:{port}/").read().decode()
         assert "Vào phần mềm" in page
         assert "Tạo danh bạ" in page
+        assert "50.000" in page
         assert "min-width: 900px" in page
         assert "width=device-width" in page
 
