@@ -72,7 +72,16 @@
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
     th { text-align: left; color: var(--muted); font-weight: 600; padding: 8px 4px; }
     td { padding: 10px 4px; border-top: 1px solid var(--line); vertical-align: middle; }
-    .book-btn { min-height: 42px; background: var(--go); color: white; }
+    .book-btn, a.book-btn {
+      min-height: 42px;
+      background: var(--go);
+      color: white;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    a.go { display: flex; align-items: center; justify-content: center; text-decoration: none; }
     .status { color: var(--muted); font-size: 14px; }
     .hide { display: none; }
     .error { color: #b91c1c; }
@@ -144,6 +153,7 @@
             <button class="chip" type="button" data-status="downloaded">Đã tải</button>
           </div>
           <button class="go" id="download-all" type="button">Tải hết chưa tải</button>
+          <a class="go" href="/iphone">Tải trên iPhone</a>
           <div style="overflow:auto">
             <table>
               <thead><tr><th>Danh bạ</th><th>Số lượng</th><th>Trạng thái</th><th></th></tr></thead>
@@ -222,9 +232,11 @@
         $("result").textContent = "Thêm " + data.added + " số. Trùng " + data.duplicate + ". Bỏ qua " + data.rejected + ". Kho có " + data.total + " số.";
         await loadBooks();
         if (data.added > 0 && data.pending.length === 1) {
-          window.location.href = "/api/books/" + data.pending[0] + "/download";
+          window.location.href = touch
+            ? ("/iphone/" + data.pending[0] + ".vcf")
+            : ("/api/books/" + data.pending[0] + "/download");
         } else if (data.added > 0 && data.pending.length > 1) {
-          window.location.href = "/api/download-pending";
+          window.location.href = touch ? "/iphone" : "/api/download-pending";
         }
       } catch (error) {
         $("result").textContent = error.message;
@@ -286,7 +298,8 @@
       $("books").innerHTML = data.books.map((book) => {
         const state = book.downloaded_at ? ("Đã tải " + book.downloaded_at) : "Chưa tải";
         return "<tr><td>" + book.name + "</td><td>" + book.count + "</td><td>" + state +
-          "</td><td><button class=\"book-btn\" type=\"button\" data-id=\"" + book.id + "\">Tải về</button></td></tr>";
+          "</td><td><button class=\"book-btn\" type=\"button\" data-id=\"" + book.id + "\">Tải về</button> " +
+          "<a class=\"book-btn\" href=\"/iphone/" + book.id + ".vcf\">Tải iPhone</a></td></tr>";
       }).join("");
     }
 

@@ -31,6 +31,7 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
         assert "Vào phần mềm" in page
         assert "Tạo danh bạ" in page
         assert "50.000" in page
+        assert "Tải trên iPhone" in page
         assert "min-width: 900px" in page
         assert "width=device-width" in page
 
@@ -80,6 +81,15 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
         card = downloaded.read().decode()
         assert "FN:0901234567" in card
         assert "TEL;TYPE=CELL:0901234567" in card
+        iphone = opener.open(
+            f"http://127.0.0.1:{port}/iphone/{books['books'][0]['id']}.vcf"
+        )
+        assert iphone.headers.get("Content-Type") == "text/x-vcard"
+        assert iphone.headers.get("Content-Disposition", "").startswith("attachment;")
+        assert ".vcf" in iphone.headers.get("Content-Disposition", "")
+        assert "FN:0901234567" in iphone.read().decode()
+        iphone_page = opener.open(f"http://127.0.0.1:{port}/iphone").read().decode()
+        assert f"/iphone/{books['books'][0]['id']}.vcf" in iphone_page
 
         auto_body, auto_type = _form({"file": ("so.txt", "0901111111\n0902222222\n".encode())})
         automatic = json.load(

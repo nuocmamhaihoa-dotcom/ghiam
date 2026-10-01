@@ -59,7 +59,10 @@ def serve(kho: Path, host: str = "0.0.0.0", port: int = 8080) -> ThreadingHTTPSe
 
 def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
         def do_GET(self) -> None:  # noqa: N802
+            self.close_connection = True
             path = urlparse(self.path).path
             if path in {"/", "/index.html"}:
                 self._bytes(200, PAGE.read_bytes(), "text/html; charset=utf-8")
@@ -94,6 +97,13 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             if path == "/api/download-pending":
                 self._download_pending()
                 return
+            if path == "/iphone":
+                self._iphone_page()
+                return
+            iphone_id = _iphone_book_id(path)
+            if iphone_id is not None:
+                self._download(iphone_id, attachment=True)
+                return
             if path.startswith("/api/books/") and path.endswith("/download"):
                 book_id = _book_id(path)
                 if book_id is None:
@@ -104,6 +114,7 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             self._json(404, {"error": "Không thấy trang"})
 
         def do_POST(self) -> None:  # noqa: N802
+            self.close_connection = True
             path = urlparse(self.path).path
             if path == "/api/login":
                 data = self._json_body()
@@ -253,7 +264,33 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(payload)
 
-        def _download(self, book_id: int) -> None:
+        def _iphone_page(self) -> None:
+            books = list_books(app.kho, "all")
+            links = []
+            for book in books:
+                links.append(
+                    f'<a class="go" href="/iphone/{book.id}.vcf">'
+                    f"Tải {book.file_name} ({book.contact_count} số)</a>"
+                )
+            body = (
+                "<!DOCTYPE html><html lang=\"vi\"><head><meta charset=\"utf-8\">"
+                "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+                "<title>Tải trên iPhone</title><style>"
+                "body{font-family:system-ui,sans-serif;margin:0;background:#f4f1ea;color:#1c1917}"
+                ".wrap{max-width:520px;margin:0 auto;padding:20px}"
+                "a.go{display:flex;align-items:center;justify-content:center;min-height:52px;"
+                "margin:0 0 12px;border-radius:14px;background:#0f766e;color:#fff;"
+                "text-decoration:none;font-weight:650}"
+                "p{color:#78716c;line-height:1.45}"
+                "</style></head><body><div class=\"wrap\">"
+                "<h1>Tải trên iPhone</h1>"
+                "<p>Bấm một file .vcf. Nếu máy hiện chữ trong file, bấm chia sẻ rồi chọn Danh bạ, Thêm tất cả.</p>"
+                + ("".join(links) if links else "<p>Chưa có danh bạ.</p>")
+                + "<p><a href=\"/\">Quay lại</a></p></div></body></html>"
+            )
+            self._bytes(200, body.encode("utf-8"), "text/html; charset=utf-8")
+
+        def _download(self, book_id: int, attachment: bool = False) -> None:
             temporary = Path(tempfile.mkdtemp(prefix="danhba-"))
             try:
                 destination = temporary / f"danhba_{book_id:05d}.vcf"
@@ -265,7 +302,7 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 payload = destination.read_bytes()
             finally:
                 shutil.rmtree(temporary, ignore_errors=True)
-            self._vcf(payload, f"danhba_{book_id:05d}.vcf")
+            self._vcf(payload, f"danhba_{book_id:05d}.vcf", attachment=attachment)
 
         def _auth(self) -> bool:
             token = ""
@@ -290,12 +327,13 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             body = json.dumps(payload, ensure_ascii=False).encode()
             self._bytes(status, body, "application/json; charset=utf-8")
 
-        def _vcf(self, payload: bytes, filename: str) -> None:
+        def _vcf(self, payload: bytes, filename: str, attachment: bool = False) -> None:
             # iPhone Contacts ignores a vCard when the type carries a charset,
             # and it keeps a previously downloaded file if this response is cacheable.
+            disposition = "attachment" if attachment else "inline"
             self.send_response(200)
             self.send_header("Content-Type", "text/x-vcard")
-            self.send_header("Content-Disposition", f'inline; filename="{filename}"')
+            self.send_header("Content-Disposition", f'{disposition}; filename="{filename}"')
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
@@ -323,6 +361,16 @@ def _import_payload(kho: Path, stats: ImportStats) -> dict[str, object]:
         "total": pool_total(kho),
         "pending": [book.id for book in list_books(kho, "pending")],
     }
+
+
+def _iphone_book_id(path: str) -> int | None:
+    parts = [part for part in path.split("/") if part]
+    if len(parts) != 2 or parts[0] != "iphone" or not parts[1].endswith(".vcf"):
+        return None
+    number = parts[1][:-4]
+    if not number.isdigit():
+        return None
+    return int(number)
 
 
 def _book_id(path: str) -> int | None:
