@@ -11,7 +11,7 @@ from pathlib import Path
 from exporters.vcf_validator import contact_label, format_card
 from models.records import JobConfig
 from parsers.detect import detect_encoding, open_reader, prepare_source
-from processors.phone_normalizer import canonical_phones, storage_forms
+from processors.phone_normalizer import canonical_phones, storage_forms, to_vietnam_10
 
 CONTACTS_PER_FILE = 50000
 
@@ -228,15 +228,16 @@ class _Pool:
 
     def add_many(self, phones: list[str], source_name: str) -> tuple[int, int]:
         """Insert many phones. Returns ``(added, duplicate)``."""
-        ordered: list[str] = []
+        ordered: list[tuple[str, str | None]] = []
         seen: set[str] = set()
         duplicate = 0
         for phone in phones:
-            if phone in seen:
+            stored, alt = storage_forms(phone)
+            if stored in seen:
                 duplicate += 1
                 continue
-            seen.add(phone)
-            ordered.append(phone)
+            seen.add(stored)
+            ordered.append((stored, alt))
         if not ordered:
             return 0, duplicate
         self.connection.execute(
@@ -250,7 +251,7 @@ class _Pool:
         self.connection.execute("DELETE FROM staging")
         self.connection.executemany(
             "INSERT OR IGNORE INTO staging (phone, alt) VALUES (?, ?)",
-            [storage_forms(phone) for phone in ordered],
+            ordered,
         )
         already = {
             str(row["phone"])
@@ -266,18 +267,22 @@ class _Pool:
         }
         stamp = _now()
         added = 0
-        for phone in ordered:
+        for phone, _alt in ordered:
             if phone in already:
                 duplicate += 1
                 continue
             book_id = self._book_for_new()
-            self.connection.execute(
-                """
-                INSERT INTO numbers (phone, book_id, added_at, source_name)
-                VALUES (?, ?, ?, ?)
-                """,
-                (phone, book_id, stamp, source_name),
-            )
+            try:
+                self.connection.execute(
+                    """
+                    INSERT INTO numbers (phone, book_id, added_at, source_name)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (phone, book_id, stamp, source_name),
+                )
+            except sqlite3.IntegrityError:
+                duplicate += 1
+                continue
             self._room -= 1
             self._unflushed += 1
             added += 1
@@ -419,7 +424,67 @@ def _ensure_schema(connection: sqlite3.Connection) -> None:
     connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_numbers_book ON numbers (book_id)"
     )
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS pool_meta (key TEXT PRIMARY KEY, value TEXT)"
+    )
+    _collapse_duplicate_numbers(connection)
     connection.commit()
+
+
+def _collapse_duplicate_numbers(connection: sqlite3.Connection) -> None:
+    """Keep the first book for each number and store one 10-digit key."""
+    done = connection.execute(
+        "SELECT value FROM pool_meta WHERE key = 'canonical_v1'"
+    ).fetchone()
+    if done is not None:
+        return
+    rows = connection.execute(
+        """
+        SELECT rowid, phone, added_at
+        FROM numbers
+        WHERE phone NOT LIKE '0%' OR length(phone) != 10
+        """
+    ).fetchall()
+    removed = False
+    for row in rows:
+        key = to_vietnam_10(str(row["phone"])) or str(row["phone"])
+        if key == row["phone"]:
+            continue
+        other = connection.execute(
+            "SELECT rowid, added_at FROM numbers WHERE phone = ?",
+            (key,),
+        ).fetchone()
+        if other is None:
+            connection.execute(
+                "UPDATE numbers SET phone = ? WHERE rowid = ?",
+                (key, row["rowid"]),
+            )
+            continue
+        current_first = (str(row["added_at"]), int(row["rowid"])) < (
+            str(other["added_at"]),
+            int(other["rowid"]),
+        )
+        if current_first:
+            connection.execute("DELETE FROM numbers WHERE rowid = ?", (other["rowid"],))
+            connection.execute(
+                "UPDATE numbers SET phone = ? WHERE rowid = ?",
+                (key, row["rowid"]),
+            )
+        else:
+            connection.execute("DELETE FROM numbers WHERE rowid = ?", (row["rowid"],))
+        removed = True
+    if removed:
+        connection.execute(
+            """
+            UPDATE books
+            SET contact_count = (
+                SELECT COUNT(*) FROM numbers WHERE numbers.book_id = books.id
+            )
+            """
+        )
+    connection.execute(
+        "INSERT INTO pool_meta (key, value) VALUES ('canonical_v1', '1')"
+    )
 
 
 def _now() -> str:

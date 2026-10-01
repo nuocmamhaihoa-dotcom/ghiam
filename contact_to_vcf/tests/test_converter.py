@@ -758,6 +758,72 @@ def test_pool_keeps_a_number_in_its_first_book(tmp_path: Path) -> None:
     assert [book.id for book in list_books(folder, "pending")] == [2, 3]
 
 
+def test_assigned_number_never_moves_to_another_book(tmp_path: Path) -> None:
+    import sqlite3
+
+    from processors.pool import book_of, import_file, list_books, pool_total
+
+    folder = tmp_path / "kho"
+    folder.mkdir()
+    connection = sqlite3.connect(folder / "kho.sqlite")
+    connection.execute(
+        "CREATE TABLE books (id INTEGER PRIMARY KEY, created_at TEXT NOT NULL, contact_count INTEGER NOT NULL, downloaded_at TEXT)"
+    )
+    connection.execute(
+        "CREATE TABLE numbers (phone TEXT PRIMARY KEY, book_id INTEGER NOT NULL, added_at TEXT NOT NULL, source_name TEXT NOT NULL)"
+    )
+    connection.execute(
+        "INSERT INTO books VALUES (1, '2026-10-01 09:00', 2, '2026-10-01 09:48')"
+    )
+    connection.executemany(
+        "INSERT INTO numbers VALUES (?, 1, '2026-10-01 09:00', 'old')",
+        [("+84901234567",), ("+841621234567",)],
+    )
+    connection.commit()
+    connection.close()
+
+    source = tmp_path / "again.txt"
+    source.write_text(
+        "0901234567\n+84 901 234 567\n090.123.4567\n01621234567\n0321234567\n0911111111\n",
+        encoding="utf-8",
+    )
+    stats = import_file(
+        folder,
+        source,
+        file_format="txt",
+        delimiter=",",
+        has_header=False,
+        encoding="utf-8",
+        phone_column=0,
+        contacts_per_file=50000,
+    )
+    assert stats.added == 1
+    assert stats.duplicate == 5
+    assert book_of(folder, "0901234567") == 1
+    assert book_of(folder, "+84901234567") == 1
+    assert book_of(folder, "01621234567") == 1
+    assert book_of(folder, "0321234567") == 1
+    assert book_of(folder, "0911111111") == 2
+    assert pool_total(folder) == 3
+    assert [book.contact_count for book in list_books(folder)] == [2, 1]
+
+    again = import_file(
+        folder,
+        source,
+        file_format="txt",
+        delimiter=",",
+        has_header=False,
+        encoding="utf-8",
+        phone_column=0,
+        contacts_per_file=50000,
+    )
+    assert again.added == 0
+    assert again.duplicate == 6
+    assert book_of(folder, "0901234567") == 1
+    assert book_of(folder, "0911111111") == 2
+    assert pool_total(folder) == 3
+
+
 def test_txt_keeps_every_number_and_names_each_contact_with_it(tmp_path: Path) -> None:
     from processors.pool import book_of, export_book, import_file
 
