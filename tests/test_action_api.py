@@ -261,6 +261,10 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("nhìn thấy", page.text)
         self.assertIn("Cài app", page.text)
         self.assertIn('href="/cai-app"', page.text)
+        self.assertIn('id="shareBox"', page.text)
+        self.assertIn("Gửi chữ / link", page.text)
+        self.assertIn("/v1/people/from-link", page.text)
+        self.assertIn("share_target", self.client.get("/manifest.webmanifest").text)
         self.assertNotIn("kịch bản", page.text)
         self.assertIn('accept="video/*"', page.text)
         self.assertNotIn("confirmOk", page.text)
@@ -278,6 +282,8 @@ class ActionApiTests(unittest.TestCase):
         body = manifest.json()
         self.assertEqual(body["start_url"], "/iphone")
         self.assertEqual(body["display"], "standalone")
+        self.assertEqual(body["share_target"]["action"], "/iphone")
+        self.assertEqual(body["share_target"]["method"], "POST")
         home = self.client.get("/")
         self.assertIn("fb_upload:", home.text)
         self.assertIn("restartLostJob", home.text)
@@ -483,7 +489,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "41")
+        self.assertEqual(build, "42")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -493,7 +499,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 41)
+        self.assertEqual(payload["iphoneBuild"], 42)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -533,6 +539,8 @@ class ActionApiTests(unittest.TestCase):
         with zipfile.ZipFile(io.BytesIO(bundle.content)) as archive:
             names = archive.namelist()
             self.assertIn("ios/FbPollerBroadcast/SampleHandler.swift", names)
+            self.assertIn("ios/FbPollerShare/ShareViewController.swift", names)
+            self.assertIn("ios/FbPoller/QRScanner.swift", names)
             self.assertIn("ios/Shared/HubStore.swift", names)
             joined = "\n".join(
                 archive.read(name).decode("utf-8", errors="ignore")
@@ -569,6 +577,46 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(listed.json()["count"], 1)
         with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
             conn.execute("DELETE FROM saved_people WHERE username = ?", ("@nguyen.anh",))
+            conn.execute("DELETE FROM people_meta")
+
+    def test_from_link_keeps_handle_without_ocr(self) -> None:
+        denied = self.client.post(
+            "/v1/people/from-link",
+            json={"text": "https://www.tiktok.com/@trn.tng751"},
+        )
+        self.assertEqual(denied.status_code, 401)
+        saved = self.client.post(
+            "/v1/people/from-link",
+            headers=self.headers,
+            json={"url": "https://www.tiktok.com/@trn.tng751", "text": "Trần Tùng", "source": "share"},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+        body = saved.json()
+        self.assertEqual(body["username"], "@trn.tng751")
+        self.assertEqual(body["source"], "share")
+        self.assertIn("tiktok.com/@trn.tng751", body["line"])
+        self.assertTrue(body["saved"])
+        self.assertEqual(body["people"], 1)
+        live = self.client.post(
+            "/v1/screen/live",
+            headers=self.headers,
+            json={"text": "https://www.instagram.com/hoanganh1116/", "source": "system"},
+        )
+        self.assertEqual(live.status_code, 200, live.text)
+        self.assertEqual(live.json()["username"], "@hoanganh1116")
+        self.assertEqual(live.json()["source"], "system")
+        self.assertIn("instagram.com/hoanganh1116", live.json()["line"])
+        shared = self.client.post(
+            "/iphone",
+            data={"url": "https://www.tiktok.com/@trn.tng751", "text": "Trần Tùng"},
+            follow_redirects=False,
+        )
+        self.assertEqual(shared.status_code, 303)
+        self.assertIn("/iphone?", shared.headers["location"])
+        self.assertIn("tiktok.com", shared.headers["location"])
+        with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
+            conn.execute("DELETE FROM saved_people WHERE username IN (?, ?)", ("@trn.tng751", "@hoanganh1116"))
+            conn.execute("DELETE FROM screen_lines")
             conn.execute("DELETE FROM people_meta")
 
     def test_confirm_saves_chosen_rows_without_overwrite(self) -> None:

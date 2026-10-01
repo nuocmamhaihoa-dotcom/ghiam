@@ -79,15 +79,38 @@ enum HubStore {
         return value
     }
 
-    static func postLive(_ text: String) async {
+    static func postLive(_ text: String, source: String = "system") async {
         guard !hubToken.isEmpty, let url = URL(string: hubBase + "/v1/screen/live") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 12
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(hubToken)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["text": text])
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["text": text, "source": source])
         _ = try? await URLSession.shared.data(for: request)
+    }
+
+    static func postShare(_ text: String) async {
+        guard !hubToken.isEmpty else {
+            await postLive(text, source: "share")
+            return
+        }
+        guard let url = URL(string: hubBase + "/v1/people/from-link") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 12
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(hubToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["text": text, "source": "share"])
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                await postLive(text, source: "share")
+                return
+            }
+        } catch {
+            await postLive(text, source: "share")
+        }
     }
 
     struct LiveList: Decodable {

@@ -9,6 +9,16 @@
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
   "lang": "vi",
+  "share_target": {
+    "action": "/iphone",
+    "method": "POST",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
   "icons": [
     {
       "src": "/apple-touch-icon.png",

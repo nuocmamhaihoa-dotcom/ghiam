@@ -88,12 +88,37 @@
     #pick { background: #fff; color: #111; }
     #pick input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     #recordBtn:disabled, #pick.busy { opacity: 0.45; }
+    #shareBox { margin: 0 0 0.8rem; }
+    #shareLead { margin: 0 0 0.45rem; line-height: 1.4; font-size: 16px; }
+    #shareText {
+      display: block; width: 100%; min-height: 72px; margin: 0 0 0.5rem;
+      border-radius: 12px; border: 2px solid #111; padding: 0.55rem 0.7rem;
+      font: inherit; font-size: 16px; resize: vertical;
+    }
+    #shareActions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    #shareBtn, #pasteBtn {
+      min-height: 48px; border-radius: 12px; border: 2px solid #111;
+      font: inherit; font-weight: 800; font-size: 16px;
+    }
+    #shareBtn { background: #111; color: #fff; }
+    #pasteBtn { background: #fff; color: #111; }
+    #shareNote { margin: 0.45rem 0 0; font-size: 15px; line-height: 1.4; }
+    #shareNote[hidden] { display: none !important; }
   </style>
 </head>
 <body>
   <p id="updateNote" hidden></p>
   <main>
-    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. Đọc 8 hình mỗi giây. Trang giữ màn hình sáng đến khi gửi và đọc xong. Mở app khác thì iPhone dừng việc gửi, quay lại trang thì gửi tiếp. Mỗi PC đọc tối đa hai video. Một video thì dùng 80% CPU và RAM của PC. Hai video thì chia đôi phần 80% đó. Có hai PC thì video từ 4 phút được chia đôi cho hai máy. PC có card NVIDIA thì đọc bằng GPU. <a href="/tai-pc">Tải phần mềm cho PC</a>. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
+    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. Đọc 8 hình mỗi giây. Trang giữ màn hình sáng đến khi gửi và đọc xong. Mở app khác thì iPhone dừng việc gửi, quay lại trang thì gửi tiếp. Mỗi PC đọc tối đa hai video. Một video thì dùng 80% CPU và RAM của PC. Hai video thì chia đôi phần 80% đó. Có hai PC thì video từ 4 phút được chia đôi cho hai máy. PC có card NVIDIA thì đọc bằng GPU. Dán link hồ sơ hoặc chữ hệ thống, hoặc Chia sẻ từ TikTok / Facebook / Instagram, để lấy @handle đúng chữ, không đọc lại bằng Tesseract. <a href="/tai-pc">Tải phần mềm cho PC</a>. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
+    <section id="shareBox">
+      <p id="shareLead">Dán link hồ sơ, chữ hệ thống, hoặc nội dung vừa chia sẻ. Hub lấy @handle từ URL / QR, không đoán chữ từ video.</p>
+      <textarea id="shareText" placeholder="https://www.tiktok.com/@ten.tai.khoan"></textarea>
+      <div id="shareActions">
+        <button id="shareBtn" type="button">Gửi chữ / link</button>
+        <button id="pasteBtn" type="button">Dán</button>
+      </div>
+      <p id="shareNote" hidden></p>
+    </section>
     <p id="helperLine">PC phụ chưa nối. Video được máy chủ đọc bằng các lõi còn lại.</p>
     <p id="awakeNote" hidden></p>
     <p id="status" hidden></p>
@@ -1518,6 +1543,70 @@
       if (!files.length || recording) return;
       enqueue(files);
     });
+
+    const shareText = document.getElementById("shareText");
+    const shareBtn = document.getElementById("shareBtn");
+    const pasteBtn = document.getElementById("pasteBtn");
+    const shareNote = document.getElementById("shareNote");
+
+    function showShareNote(message) {
+      shareNote.textContent = message;
+      shareNote.hidden = !message;
+    }
+
+    async function sendShare(text, source) {
+      const blob = String(text || "").trim();
+      if (!blob) {
+        showShareNote("Chưa có chữ hoặc link để gửi.");
+        return;
+      }
+      showShareNote("Đang gửi chữ / link…");
+      try {
+        const response = await fetch("/v1/people/from-link", {
+          method: "POST",
+          headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+          body: JSON.stringify({ text: blob, source: source || "share" }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          showShareNote("Chưa gửi được chữ / link.");
+          return;
+        }
+        const handle = data.username || "";
+        if (handle) {
+          showShareNote("Đã lấy " + handle + " từ chữ / link.");
+        } else {
+          showShareNote("Đã nhận chữ. Chưa thấy @handle trong link.");
+        }
+        loadSaved();
+      } catch (error) {
+        showShareNote("Chưa gửi được chữ / link.");
+      }
+    }
+
+    shareBtn.addEventListener("click", () => {
+      sendShare(shareText.value, "share");
+    });
+    pasteBtn.addEventListener("click", async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text) shareText.value = text;
+        await sendShare(shareText.value, "system");
+      } catch (error) {
+        shareText.focus();
+        showShareNote("Dán vào ô rồi bấm Gửi chữ / link.");
+      }
+    });
+
+    const sharedParams = new URLSearchParams(location.search);
+    const shared = [sharedParams.get("url"), sharedParams.get("text"), sharedParams.get("title")]
+      .filter(Boolean)
+      .join("\n");
+    if (shared) {
+      shareText.value = shared;
+      sendShare(shared, "share");
+      history.replaceState(null, "", "/iphone");
+    }
 
     pruneUploads();
     loadSaved();

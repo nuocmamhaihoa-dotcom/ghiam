@@ -23,8 +23,9 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
-from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import (
@@ -42,6 +43,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from control_plane import db
 from control_plane.delivery import PACKAGE_NAME, ensure_package
+from control_plane.handles import exact_line, profile_from_share
 from control_plane.people import (
     apply_novel,
     clean_name,
@@ -262,6 +264,19 @@ def phone() -> HTMLResponse:
 def iphone_app() -> HTMLResponse:
     """App trên iPhone. Token được gắn sẵn. Ghi thì ẩn app và chỉ còn nút Kết thúc."""
     return _html("iphone.html")
+
+
+@app.post("/iphone")
+async def iphone_share_target(
+    title: str = Form(default=""),
+    text: str = Form(default=""),
+    url: str = Form(default=""),
+) -> RedirectResponse:
+    """PWA share target: nhận link / chữ từ share sheet rồi mở lại trang iPhone."""
+    query = urlencode(
+        {key: value.strip() for key, value in (("url", url), ("text", text), ("title", title)) if value.strip()}
+    )
+    return RedirectResponse(url=f"/iphone?{query}" if query else "/iphone", status_code=303)
 
 
 @app.get("/cai-app", response_class=HTMLResponse)
@@ -2227,6 +2242,16 @@ async def recordings_from_frame(
 
 class LiveTextBody(BaseModel):
     text: str = ""
+    source: str = "vision"
+
+
+class FromLinkBody(BaseModel):
+    text: str = ""
+    url: str = ""
+    source: str = "share"
+
+
+_LIVE_SOURCES = frozenset({"vision", "system", "share"})
 
 
 def _live_line(text: str) -> str:
@@ -2236,28 +2261,72 @@ def _live_line(text: str) -> str:
     return seen_line(cleaned)[:180]
 
 
+def _live_source(value: str) -> str:
+    key = str(value or "").strip().casefold()
+    if key in _LIVE_SOURCES:
+        return key
+    return "vision"
+
+
+def _save_live_sighting(sighting: dict[str, str] | None) -> int:
+    if sighting is None:
+        return 0
+    key = name_key(clean_name(sighting.get("name") or ""))
+    if not key:
+        return 0
+    with db.people_write_lock:
+        stored = list(db.people_by_keys(settings.db_path, [key]).values())
+        _folded, added = apply_novel(stored, [sighting])
+        if added:
+            skipped = db.save_people(settings.db_path, _folded, utcnow())
+            if key in skipped:
+                return 0
+        return added
+
+
+def _ingest_live_text(text: str, source: str) -> dict[str, Any]:
+    """Lưu chữ màn hình / dán / share. system và share giữ nguyên, không lọc OCR."""
+    raw = " ".join(str(text or "").split())
+    kind = _live_source(source)
+    if not raw:
+        return {"ok": True, "line": "", "saved": False, "people": 0, "username": "", "source": kind}
+    sighting = profile_from_share(raw) or profile_from_line(raw)
+    if kind in {"system", "share"}:
+        line = exact_line(raw)
+    else:
+        line = _live_line(raw)
+        username = (sighting or {}).get("username") or ""
+        if username and username not in line:
+            line = f"{line} {username}".strip()[:400]
+    if not line:
+        return {"ok": True, "line": "", "saved": False, "people": 0, "username": "", "source": kind}
+    saved = db.append_screen_line(settings.db_path, at=utcnow(), line=line)
+    added = _save_live_sighting(sighting)
+    if saved:
+        _remember_hub("screen", line)
+    return {
+        "ok": True,
+        "line": line,
+        "saved": saved,
+        "people": added,
+        "username": (sighting or {}).get("username") or "",
+        "source": kind,
+    }
+
+
+@app.post("/v1/people/from-link")
+def people_from_link(body: FromLinkBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Lấy @handle từ link / chữ dán / QR. Không đọc lại bằng Tesseract."""
+    _auth(authorization)
+    blob = " ".join(part for part in (body.url, body.text) if str(part or "").strip())
+    return _ingest_live_text(blob, body.source or "share")
+
+
 @app.post("/v1/screen/live")
 def screen_live_post(body: LiveTextBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     """Store one line read from the iPhone screen while another app is open."""
     _auth(authorization)
-    line = _live_line(body.text)
-    if not line:
-        return {"ok": True, "line": "", "saved": False, "people": 0}
-    saved = db.append_screen_line(settings.db_path, at=utcnow(), line=line)
-    added = 0
-    sighting = profile_from_line(line)
-    if sighting is not None:
-        key = name_key(clean_name(sighting.get("name") or ""))
-        with db.people_write_lock:
-            stored = list(db.people_by_keys(settings.db_path, [key]).values())
-            _folded, added = apply_novel(stored, [sighting])
-            if added:
-                skipped = db.save_people(settings.db_path, _folded, utcnow())
-                if key in skipped:
-                    added = 0
-    if saved:
-        _remember_hub("screen", line)
-    return {"ok": True, "line": line, "saved": saved, "people": added}
+    return _ingest_live_text(body.text, body.source)
 
 
 @app.get("/v1/screen/live")
