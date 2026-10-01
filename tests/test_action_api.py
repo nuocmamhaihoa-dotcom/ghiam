@@ -1720,7 +1720,7 @@ class ActionApiTests(unittest.TestCase):
         body = manifest.json()
         self.assertIn("comment-agent.zip", body["agent"]["package_url"])
         worker = body["video_worker"]
-        self.assertEqual(worker["version"], "15")
+        self.assertEqual(worker["version"], str(VIDEO_WORKER_BUILD))
         self.assertEqual(worker["package_url"], "/v1/updates/video-worker.zip")
         self.assertEqual(worker["engine"], "cpu")
         self.assertEqual(len(worker["sha256"]), 64)
@@ -1740,7 +1740,7 @@ class ActionApiTests(unittest.TestCase):
             self.assertIn("control_plane/screen_steps.py", names)
             self.assertIn("control_plane/version.py", names)
             self.assertEqual(archive.read("requirements-cpu.txt").decode("utf-8").strip(), "pillow")
-            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), "15")
+            self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), str(VIDEO_WORKER_BUILD))
             self.assertIn("pc_agent/windows/Open-FbPoller.ps1", names)
             guide = archive.read("HUONG-DAN.txt").decode("utf-8")
             self.assertNotIn("test-token", guide)

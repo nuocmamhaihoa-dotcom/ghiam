@@ -11,7 +11,8 @@ from control_plane.version import VIDEO_WORKER_BUILD
 
 OFFER_SECONDS = 8.0
 LEASE_SECONDS = 90.0
-FRESH_SECONDS = 15.0
+# Nhịp PC là 3 giây. Mạng chập một lúc vẫn tính là đang nối. Im 45 giây thì hub đọc thay.
+FRESH_SECONDS = 45.0
 JOBS_PER_PC = 2
 
 
@@ -120,6 +121,18 @@ class HelperBook:
             item = self._items.get(worker_id)
             if item is not None:
                 item.seen = now
+
+    def note(self, worker_id: str) -> bool:
+        """Lệnh vừa tới từ PC đã biết, trong hạn giữ video, thì tính là còn nối."""
+        if not worker_id:
+            return False
+        now = time.monotonic()
+        with self._lock:
+            item = self._items.get(worker_id)
+            if item is None or (now - item.seen) > LEASE_SECONDS:
+                return False
+            item.seen = now
+            return True
 
     def has_fresh(self) -> bool:
         """Còn PC đọc được chữ vừa gửi nhịp, kể cả PC đang bận đọc video."""
