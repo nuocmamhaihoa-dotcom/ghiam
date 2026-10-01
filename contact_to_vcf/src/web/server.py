@@ -232,7 +232,7 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             finally:
                 shutil.rmtree(temporary, ignore_errors=True)
             self.send_response(200)
-            self.send_header("Content-Type", "text/vcard; charset=utf-8")
+            self.send_header("Content-Type", "text/vcard; charset=utf-8; name=\"danhba.vcf\"")
             self.send_header(
                 "Content-Disposition",
                 f'attachment; filename="danhba_{book_id:05d}.vcf"',

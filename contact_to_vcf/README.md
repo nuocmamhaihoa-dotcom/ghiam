@@ -91,7 +91,7 @@ BEGIN:VCARD
 VERSION:3.0
 N:;Nguyen Van A;;;
 FN:Nguyen Van A
-TEL;TYPE=CELL:+84901234567
+TEL;type=CELL;type=VOICE;type=pref:+84901234567
 END:VCARD
 ```
 
