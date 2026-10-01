@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
+import os
 import threading
 import time
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 
+from control_plane.settings import settings
 from control_plane.version import VIDEO_WORKER_BUILD
 
 OFFER_SECONDS = 8.0
@@ -59,13 +63,99 @@ class Helper:
 
 
 class HelperBook:
-    def __init__(self) -> None:
+    def __init__(self, path: Path | None = None) -> None:
         self._items: dict[str, Helper] = {}
         self._lock = threading.Lock()
+        self._path = path
+        self._load()
 
     def clear(self) -> None:
         with self._lock:
             self._items.clear()
+        self._write([])
+
+    def _rows_locked(self, now_mono: float) -> list[dict[str, object]]:
+        now_wall = time.time()
+        rows: list[dict[str, object]] = []
+        for item in self._items.values():
+            age = max(0.0, now_mono - item.seen)
+            if age > LEASE_SECONDS:
+                continue
+            rows.append(
+                {
+                    "workerId": item.worker_id,
+                    "name": item.name,
+                    "cpus": item.cpus,
+                    "seenWall": now_wall - age,
+                    "gpu": item.gpu,
+                    "gpuName": item.gpu_name,
+                    "workers": item.workers,
+                    "build": item.build,
+                    "models": item.models,
+                    "readerOk": item.reader_ok,
+                    "readerNote": item.reader_note,
+                    "readerMode": item.reader_mode,
+                }
+            )
+        return rows
+
+    def _write(self, rows: list[dict[str, object]]) -> None:
+        if self._path is None:
+            return
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self._path.with_suffix(".json.tmp")
+            temporary.write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+            os.replace(temporary, self._path)
+        except OSError:
+            return
+
+    def _load(self) -> None:
+        """Hub khởi động lại vẫn nhận ra PC vừa gửi nhịp, không trả 409."""
+        if self._path is None or not self._path.is_file():
+            return
+        try:
+            loaded = json.loads(self._path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeError):
+            return
+        if not isinstance(loaded, list):
+            return
+        now_wall = time.time()
+        now_mono = time.monotonic()
+        with self._lock:
+            for row in loaded:
+                if not isinstance(row, dict):
+                    continue
+                seen_wall = row.get("seenWall")
+                if isinstance(seen_wall, bool) or not isinstance(seen_wall, (int, float)):
+                    continue
+                age = max(0.0, now_wall - float(seen_wall))
+                if age > FRESH_SECONDS:
+                    continue
+                worker_id = _clean_id(str(row.get("workerId") or ""))
+                if not worker_id:
+                    continue
+                cpus = row.get("cpus")
+                cores = min(256, max(1, int(cpus))) if isinstance(cpus, int) and not isinstance(cpus, bool) else 1
+                item = Helper(worker_id, _clean_name(str(row.get("name") or "")), cores, now_mono - age)
+                item.gpu = bool(row.get("gpu"))
+                item.gpu_name = _clean_gpu_name(str(row.get("gpuName") or "")) if item.gpu else ""
+                workers = row.get("workers")
+                item.workers = (
+                    min(cores, max(0, int(workers)))
+                    if isinstance(workers, int) and not isinstance(workers, bool)
+                    else 0
+                )
+                build = row.get("build")
+                item.build = int(build) if isinstance(build, int) and not isinstance(build, bool) and build > 0 else 0
+                models = row.get("models")
+                item.models = "fast" if models == "fast" else ("standard" if models == "standard" else "")
+                reader_ok = row.get("readerOk")
+                item.reader_ok = reader_ok if isinstance(reader_ok, bool) else None
+                item.reader_note = _clean_note(str(row.get("readerNote") or ""))
+                mode = row.get("readerMode")
+                item.reader_mode = "api" if mode == "api" else ("cli" if mode == "cli" else "")
+                self._items[worker_id] = item
 
     def beat(
         self,
@@ -104,6 +194,8 @@ class HelperBook:
             current.reader_ok = reader_ok
             current.reader_note = _clean_note(reader_note)
             current.reader_mode = "api" if reader_mode == "api" else ("cli" if reader_mode == "cli" else "")
+            rows = self._rows_locked(now)
+        self._write(rows)
         return cleaned_id
 
     def fresh(self, worker_id: str) -> bool:
@@ -119,8 +211,11 @@ class HelperBook:
         now = time.monotonic()
         with self._lock:
             item = self._items.get(worker_id)
-            if item is not None:
-                item.seen = now
+            if item is None:
+                return
+            item.seen = now
+            rows = self._rows_locked(now)
+        self._write(rows)
 
     def note(self, worker_id: str) -> bool:
         """Lệnh vừa tới từ PC đã biết, trong hạn giữ video, thì tính là còn nối."""
@@ -132,7 +227,9 @@ class HelperBook:
             if item is None or (now - item.seen) > LEASE_SECONDS:
                 return False
             item.seen = now
-            return True
+            rows = self._rows_locked(now)
+        self._write(rows)
+        return True
 
     def has_fresh(self) -> bool:
         """Còn PC đọc được chữ vừa gửi nhịp, kể cả PC đang bận đọc video."""
@@ -171,7 +268,9 @@ class HelperBook:
                 return False
             item.held += 1
             item.seen = now
-            return True
+            rows = self._rows_locked(now)
+        self._write(rows)
+        return True
 
     def mark_busy(self, worker_id: str) -> None:
         self.try_hold(worker_id)
@@ -218,4 +317,4 @@ class HelperBook:
         }
 
 
-helpers = HelperBook()
+helpers = HelperBook(settings.data_dir / "video_workers.json")

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
+import tempfile
 import threading
 import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 from control_plane.video_helpers import LEASE_SECONDS, HelperBook
 from pc_agent.video_worker import HubClient
@@ -92,6 +95,22 @@ class PcLinkTests(unittest.TestCase):
         self.assertFalse(book.note(worker_id))
         self.assertFalse(book.fresh("khong-co"))
         self.assertFalse(book.note("khong-co"))
+
+    def test_hub_restart_still_knows_the_pc(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "video_workers.json"
+            first = HelperBook(path)
+            worker_id = first.beat("pc-1", "Nha", 20, workers=16)
+            second = HelperBook(path)
+            self.assertTrue(second.fresh(worker_id))
+            self.assertEqual(second.public()["name"], "Nha")
+            self.assertEqual(second.public()["cpus"], 20)
+            path.write_text(
+                json.dumps([{"workerId": "pc-cu", "name": "Cu", "cpus": 4, "seenWall": time.time() - 120}]),
+                encoding="utf-8",
+            )
+            third = HelperBook(path)
+            self.assertFalse(third.fresh("pc-cu"))
 
 
 if __name__ == "__main__":
