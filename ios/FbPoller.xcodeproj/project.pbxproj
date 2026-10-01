@@ -18,6 +18,11 @@
 		A40000000000000000000009 /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* ReplayKit.framework */; };
 		A4000000000000000000000A /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* ReplayKit.framework */; };
 		A4000000000000000000000B /* Vision.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* Vision.framework */; };
+		A4000000000000000000000C /* QRScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* QRScanner.swift */; };
+		A4000000000000000000000D /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* ShareViewController.swift */; };
+		A4000000000000000000000E /* HubStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* HubStore.swift */; };
+		A4000000000000000000000F /* FbPollerShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* FbPollerShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A40000000000000000000010 /* Vision.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* Vision.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -27,6 +32,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = A10000000000000000000003;
 			remoteInfo = FbPollerBroadcast;
+		};
+		A60000000000000000000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000004;
+			remoteInfo = FbPollerShare;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -38,6 +50,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				A40000000000000000000008 /* FbPollerBroadcast.appex in Embed Foundation Extensions */,
+				A4000000000000000000000F /* FbPollerShare.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -59,6 +72,11 @@
 		A2000000000000000000000C /* FbPollerBroadcast.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FbPollerBroadcast.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2000000000000000000000D /* ReplayKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ReplayKit.framework; path = System/Library/Frameworks/ReplayKit.framework; sourceTree = SDKROOT; };
 		A2000000000000000000000E /* Vision.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
+		A2000000000000000000000F /* QRScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScanner.swift; sourceTree = "<group>"; };
+		A20000000000000000000010 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		A20000000000000000000011 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A20000000000000000000012 /* FbPollerShare.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FbPollerShare.entitlements; sourceTree = "<group>"; };
+		A20000000000000000000013 /* FbPollerShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FbPollerShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -79,6 +97,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A50000000000000000000009 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A40000000000000000000010 /* Vision.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -87,6 +113,7 @@
 			children = (
 				A30000000000000000000002 /* FbPoller */,
 				A30000000000000000000003 /* FbPollerBroadcast */,
+				A30000000000000000000007 /* FbPollerShare */,
 				A30000000000000000000004 /* Shared */,
 				A30000000000000000000006 /* Frameworks */,
 				A30000000000000000000005 /* Products */,
@@ -99,6 +126,7 @@
 				A20000000000000000000001 /* FbPollerApp.swift */,
 				A20000000000000000000002 /* ContentView.swift */,
 				A20000000000000000000003 /* BroadcastPicker.swift */,
+				A2000000000000000000000F /* QRScanner.swift */,
 				A20000000000000000000004 /* Assets.xcassets */,
 				A20000000000000000000005 /* Info.plist */,
 				A20000000000000000000006 /* FbPoller.entitlements */,
@@ -116,6 +144,16 @@
 			path = FbPollerBroadcast;
 			sourceTree = "<group>";
 		};
+		A30000000000000000000007 /* FbPollerShare */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000010 /* ShareViewController.swift */,
+				A20000000000000000000011 /* Info.plist */,
+				A20000000000000000000012 /* FbPollerShare.entitlements */,
+			);
+			path = FbPollerShare;
+			sourceTree = "<group>";
+		};
 		A30000000000000000000004 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
@@ -129,6 +167,7 @@
 			children = (
 				A2000000000000000000000B /* FbPoller.app */,
 				A2000000000000000000000C /* FbPollerBroadcast.appex */,
+				A20000000000000000000013 /* FbPollerShare.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -158,6 +197,7 @@
 			);
 			dependencies = (
 				A60000000000000000000002 /* PBXTargetDependency */,
+				A60000000000000000000004 /* PBXTargetDependency */,
 			);
 			name = FbPoller;
 			productName = FbPoller;
@@ -181,6 +221,23 @@
 			productReference = A2000000000000000000000C /* FbPollerBroadcast.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		A10000000000000000000004 /* FbPollerShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A7000000000000000000000C /* Build configuration list for PBXNativeTarget "FbPollerShare" */;
+			buildPhases = (
+				A50000000000000000000008 /* Sources */,
+				A50000000000000000000009 /* Frameworks */,
+				A5000000000000000000000A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FbPollerShare;
+			productName = FbPollerShare;
+			productReference = A20000000000000000000013 /* FbPollerShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -194,6 +251,9 @@
 						CreatedOnToolsVersion = 15.0;
 					};
 					A10000000000000000000003 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					A10000000000000000000004 = {
 						CreatedOnToolsVersion = 15.0;
 					};
 				};
@@ -214,6 +274,7 @@
 			targets = (
 				A10000000000000000000002 /* FbPoller */,
 				A10000000000000000000003 /* FbPollerBroadcast */,
+				A10000000000000000000004 /* FbPollerShare */,
 			);
 		};
 /* End PBXProject section */
@@ -234,6 +295,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A5000000000000000000000A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -244,6 +312,7 @@
 				A40000000000000000000001 /* FbPollerApp.swift in Sources */,
 				A40000000000000000000002 /* ContentView.swift in Sources */,
 				A40000000000000000000003 /* BroadcastPicker.swift in Sources */,
+				A4000000000000000000000C /* QRScanner.swift in Sources */,
 				A40000000000000000000004 /* HubStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -257,6 +326,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A50000000000000000000008 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A4000000000000000000000D /* ShareViewController.swift in Sources */,
+				A4000000000000000000000E /* HubStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -264,6 +342,11 @@
 			isa = PBXTargetDependency;
 			target = A10000000000000000000003 /* FbPollerBroadcast */;
 			targetProxy = A60000000000000000000001 /* PBXContainerItemProxy */;
+		};
+		A60000000000000000000004 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000004 /* FbPollerShare */;
+			targetProxy = A60000000000000000000003 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -315,7 +398,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = FbPoller/FbPoller.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = FbPoller/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -339,7 +422,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = FbPoller/FbPoller.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = FbPoller/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -363,7 +446,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = FbPollerBroadcast/FbPollerBroadcast.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = FbPollerBroadcast/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -388,7 +471,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = FbPollerBroadcast/FbPollerBroadcast.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = FbPollerBroadcast/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -398,6 +481,56 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.fbpoller.screen.broadcast;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		A7000000000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = FbPollerShare/FbPollerShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 19;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = FbPollerShare/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.fbpoller.screen.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		A7000000000000000000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = FbPollerShare/FbPollerShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 19;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = FbPollerShare/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.fbpoller.screen.share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = iphoneos;
@@ -433,6 +566,15 @@
 			buildConfigurations = (
 				A70000000000000000000005 /* Debug */,
 				A70000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A7000000000000000000000C /* Build configuration list for PBXNativeTarget "FbPollerShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A7000000000000000000000A /* Debug */,
+				A7000000000000000000000B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

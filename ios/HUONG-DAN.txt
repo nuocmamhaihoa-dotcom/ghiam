@@ -9,7 +9,10 @@ iPhone một mình không cài được app này. Cần máy Mac có Xcode, làm
 5. Bấm Run
 6. Nếu iPhone hỏi, vào Cài đặt → Cài đặt chung → VPN và quản lý thiết bị, rồi tin cậy nhà phát triển
 7. Mở app fb-poller, bấm Bắt đầu ghi, chọn fb-poller, rồi mở ứng dụng khác
+8. Hoặc Chia sẻ hồ sơ từ TikTok / Facebook / Instagram sang fb-poller
+9. Trong app: Dán chữ / link, hoặc Quét mã QR. Cho phép camera khi hỏi.
 
-App đọc chữ trên màn hình và gửi về hub. App không bấm nút trong TikTok hay ứng dụng khác.
+App đọc chữ hệ thống trên màn hình và lấy @handle từ link / QR. App không bấm nút trong TikTok hay ứng dụng khác.
+App không đọc cây Accessibility của ứng dụng khác — iOS không cho.
 Bản cài bằng Apple ID miễn phí hết hạn sau khoảng 7 ngày. Bấm Run lại.
 Ghi hình hệ thống không chạy trên Simulator. Cần iPhone thật.

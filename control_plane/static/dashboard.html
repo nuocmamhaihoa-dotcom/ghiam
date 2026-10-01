@@ -6,11 +6,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="theme-color" content="#10141b" />
+  <meta name="theme-color" content="#f4f1ea" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <meta name="iphone-build" content="__IPHONE_BUILD__" />
-  <title>fb-poller — Hub VPS</title>
+  <title>Đọc video — Hub</title>
   <script>
     (function () {
       var q = new URLSearchParams(location.search);
@@ -22,260 +22,215 @@
   <style>
     [hidden] { display: none !important; }
     :root {
-      --bg: #10141b;
-      --card: #171d27;
-      --card2: #1e2633;
-      --line: #2c3848;
-      --text: #e7edf5;
-      --muted: #8b9bb0;
-      --accent: #4aa3f0;
-      --accent-ink: #041018;
-      --ok: #3dcc8e;
-      --warn: #e6b84d;
-      --bad: #f07178;
+      --bg: #f4f1ea;
+      --card: #fffdf8;
+      --ink: #1c1915;
+      --muted: #5e584e;
+      --line: #e4dccf;
+      --accent: #1c1915;
+      --ok: #1f7a45;
+      --warn: #8a5a10;
+      --bad: #9d2c2c;
       --font: "Segoe UI", system-ui, sans-serif;
-      --mono: ui-monospace, "Cascadia Mono", monospace;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; min-height: 100%; }
     body {
       font-family: var(--font);
-      color: var(--text);
+      color: var(--ink);
       background: var(--bg);
-      font-size: 14px;
-      line-height: 1.4;
-      touch-action: manipulation;
+      font-size: 17px;
+      line-height: 1.45;
     }
     .shell {
       position: sticky; top: 0; z-index: 20;
-      background: rgba(16, 20, 27, 0.96);
+      background: rgba(244, 241, 234, 0.96);
       border-bottom: 1px solid var(--line);
     }
     .top {
-      position: static;
       display: flex; flex-wrap: wrap; gap: 0.6rem 1rem;
       align-items: center; justify-content: space-between;
-      padding: 0.55rem 0.9rem;
-      background: transparent;
+      padding: 0.7rem 1rem;
     }
-    .brand { display: flex; align-items: baseline; gap: 0.55rem; min-width: 8rem; flex-wrap: wrap; }
-    a.deliver {
-      display: inline-flex; align-items: center; justify-content: center;
-      min-height: 44px; padding: 0 0.75rem; border-radius: 10px;
-      background: var(--accent); color: var(--accent-ink); font-weight: 700; text-decoration: none;
-    }
-    h1 { margin: 0; font-size: 1.05rem; font-weight: 650; letter-spacing: -0.02em; }
-    .sub { margin: 0; color: var(--muted); font-size: 0.78rem; }
-    h2 { margin: 0 0 0.45rem; font-size: 0.95rem; font-weight: 650; }
-    .token-row, .toolbar {
-      display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center;
-    }
-    .token-row { flex: 1; min-width: min(100%, 280px); }
+    h1 { margin: 0; font-size: 1.35rem; letter-spacing: -0.03em; }
+    .sub { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.92rem; }
+    .tools { display: flex; flex-wrap: wrap; gap: 0.7rem; align-items: center; }
+    .tools a, .token-box summary { color: var(--ink); }
+    h2 { margin: 0 0 0.4rem; font-size: 1.05rem; }
     input, button, select, textarea {
-      font: inherit; color: var(--text);
-      background: var(--card2); border: 1px solid var(--line);
-      border-radius: 8px; padding: 0.4rem 0.6rem;
+      font: inherit; color: var(--ink);
+      background: #fff; border: 1px solid var(--line);
+      border-radius: 10px; padding: 0.45rem 0.7rem;
     }
-    input, select { min-width: 0; }
-    .token-row input, .toolbar input { flex: 1; min-width: 140px; }
-    button, a#openPhone {
-      background: var(--accent); color: var(--accent-ink);
-      border-color: transparent; font-weight: 650; cursor: pointer;
-      text-decoration: none; display: inline-flex; align-items: center;
+    button, a.solid {
+      background: var(--accent); color: #fff; border-color: transparent;
+      font-weight: 700; cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center; justify-content: center;
     }
-    button.ghost, a#openPhone {
-      background: transparent; color: var(--text); border-color: var(--line); font-weight: 600;
+    button.ghost { background: transparent; color: var(--ink); border-color: var(--line); font-weight: 650; }
+    button.danger { background: var(--bad); color: #fff; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .tabs { display: flex; gap: 0.35rem; flex-wrap: wrap; padding: 0 1rem 0.7rem; }
+    .tabs button { min-height: 42px; }
+    .tabs button.ghost.on { background: var(--accent); color: #fff; border-color: transparent; }
+    main { padding: 1rem 1rem 2.5rem; max-width: 920px; }
+    .lead { color: var(--muted); margin: 0 0 0.8rem; }
+    .drop {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 0.35rem; min-height: 180px; margin: 0 0 1rem; padding: 1.2rem;
+      border: 2px dashed #1c1915; border-radius: 18px; background: #fff;
+      text-align: center; cursor: pointer;
     }
-    button.danger { background: #8d3a3a; color: #fff; }
-    button.live { background: var(--bad); color: #fff; }
-    button:disabled { opacity: 0.55; cursor: default; }
-    .tabs {
-      display: flex; gap: 0.3rem; flex-wrap: wrap;
-      padding: 0 0.9rem 0.45rem;
-      background: transparent;
-    }
-    .tabs button.ghost.on, .subtabs button.ghost.on {
-      background: var(--accent); color: #041018; border-color: transparent;
-    }
-    .subtabs { display: flex; gap: 0.3rem; flex-wrap: wrap; margin: 0 0 0.7rem; }
-    main { padding: 0.75rem 0.9rem 2rem; max-width: 1100px; }
-    .lead { color: var(--muted); margin: 0 0 0.65rem; font-size: 0.82rem; }
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
-      gap: 0.45rem; margin-bottom: 0.7rem;
-    }
-    .stat {
-      background: var(--card); border: 1px solid var(--line);
-      border-radius: 10px; padding: 0.55rem 0.65rem;
-    }
-    .stat b { display: block; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
-    .stat span { color: var(--muted); font-size: 0.72rem; }
-    .stat.ok b { color: var(--ok); }
-    .stat.bad b { color: var(--bad); }
-    #agents { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-    #agents p { margin: 0; display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .drop strong { font-size: 1.35rem; }
+    .drop span { color: var(--muted); max-width: 36rem; }
+    .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    .drop.over, .drop:hover { background: #fff7e8; }
+    .drop.busy { opacity: 0.55; pointer-events: none; }
+    #progressBox { margin: 0 0 1rem; }
+    #progressTrack { height: 14px; border-radius: 999px; background: #e7e0d4; overflow: hidden; }
+    #progressFill { height: 100%; width: 0; background: #1c1915; }
+    #progressLabel, #readTally, #wordCount, #videoStatus { margin: 0.45rem 0 0; }
+    #readTally, #wordCount { font-weight: 700; }
+    #sampleBox { display: flex; gap: 0.6rem; overflow-x: auto; margin-top: 0.6rem; align-items: flex-start; }
+    #sampleBox figure { margin: 0; flex: 0 0 auto; width: auto; }
+    #sampleBox img { display: block; width: auto; height: 280px; max-width: 180px; object-fit: contain; object-position: center top; border-radius: 10px; border: 1px solid var(--line); background: #111; }
+    #sampleBox figcaption { font-size: 13px; font-weight: 700; margin-top: 0.25rem; }
+    #problemList { margin: 0.3rem 0 0.6rem; padding-left: 1.2rem; color: var(--bad); }
+    .issue-detail { margin-top: 0.25rem; color: var(--muted); font-size: 0.88rem; white-space: pre-wrap; }
+    .issue-warn { color: var(--warn); }
+    .issue-error { color: var(--bad); font-weight: 650; }
+    #continueBtn { min-height: 48px; margin-top: 0.4rem; }
     .panel {
       background: var(--card); border: 1px solid var(--line);
-      border-radius: 12px; padding: 0.7rem 0.75rem; margin-bottom: 0.7rem;
+      border-radius: 16px; padding: 0.9rem 1rem; margin: 0 0 0.8rem;
     }
-    .panel h2 { color: var(--bad); }
-    .panel.ok-panel h2 { color: var(--ok); }
-    .panel.journal h2 { color: var(--accent); }
-    .split { display: grid; grid-template-columns: 1.4fr 0.8fr; gap: 0.7rem; }
-    .scroll { max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+    .scroll { max-height: 420px; overflow: auto; }
     table { width: 100%; border-collapse: collapse; }
-    th, td {
-      text-align: left; padding: 0.4rem 0.55rem;
-      border-bottom: 1px solid var(--line); vertical-align: top; font-size: 0.84rem;
-    }
-    th {
-      position: sticky; top: 0; z-index: 1;
-      color: var(--muted); font-weight: 650; background: #222a36;
-    }
-    tr:hover td { background: rgba(74, 163, 240, 0.06); }
-    .text { white-space: pre-wrap; word-break: break-word; }
-    .meta { color: var(--muted); font-family: var(--mono); font-size: 0.75rem; }
-    .pill {
-      display: inline-block; padding: 0.12rem 0.4rem; border-radius: 999px;
-      background: rgba(61, 204, 142, 0.15); color: var(--ok); font-size: 0.75rem;
-    }
-    .pill.off { background: rgba(230, 184, 77, 0.15); color: var(--warn); }
-    .pill.die { background: rgba(240, 113, 120, 0.16); color: var(--bad); }
-    .err {
-      margin: 0.45rem 0.9rem 0; padding: 0.45rem 0.65rem;
-      border-radius: 8px; background: #2a1c1c; color: #ffb4b4;
-    }
-    .empty { color: var(--muted); text-align: center; padding: 0.9rem; }
-    a { color: var(--accent); }
-    a.iphone-go {
-      display: flex; align-items: center; justify-content: center;
-      min-height: 48px; margin: 0 0 0.7rem;
-      background: var(--accent); color: var(--accent-ink);
-      border-radius: 12px; font-weight: 700; text-decoration: none;
-    }
+    th, td { text-align: left; padding: 0.45rem 0.4rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); font-weight: 650; }
+    .meta { color: var(--muted); font-size: 0.85rem; }
+    .empty { color: var(--muted); text-align: center; padding: 0.8rem; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.45rem; margin-bottom: 0.7rem; }
+    .stat { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 0.55rem 0.7rem; }
+    .stat b { display: block; font-size: 1.2rem; }
+    .stat span { color: var(--muted); font-size: 0.78rem; }
+    .stat.ok b { color: var(--ok); }
+    .stat.bad b { color: var(--bad); }
+    .pill { display: inline-block; padding: 0.12rem 0.45rem; border-radius: 999px; background: #e5f6ec; color: var(--ok); font-size: 0.8rem; }
+    .pill.off { background: #fff1d6; color: var(--warn); }
+    .pill.die { background: #fde8e8; color: var(--bad); }
+    .err { margin: 0 1rem 0.4rem; padding: 0.45rem 0.7rem; border-radius: 10px; background: #fde8e8; color: var(--bad); }
+    .err.ok { background: #e5f6ec; color: var(--ok); }
+    .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
+    .token-row, .toolbar { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.4rem; }
+    .token-row input, .toolbar input { flex: 1; min-width: 160px; }
+    .split { display: grid; grid-template-columns: 1.4fr 0.8fr; gap: 0.7rem; }
+    a { color: var(--ink); }
+    #fileList { margin: 0 0 0.8rem; padding-left: 1.2rem; }
     @media (max-width: 800px) {
       .split { grid-template-columns: 1fr; }
       .hide-sm { display: none; }
-      .tabs { padding-bottom: 0.4rem; }
-    }
-    @media (max-width: 640px) {
       body { font-size: 16px; }
-      .shell { padding-top: env(safe-area-inset-top); }
-      .top, .tabs, #phoneBanner, .err {
-        padding-left: max(0.9rem, env(safe-area-inset-left));
-        padding-right: max(0.9rem, env(safe-area-inset-right));
-      }
-      .tabs {
-        flex-wrap: nowrap; overflow-x: auto;
-        -webkit-overflow-scrolling: touch; scrollbar-width: none;
-      }
-      .tabs button, .subtabs button, .token-row button, .toolbar button, a#openPhone {
-        min-height: 44px; flex: 0 0 auto;
-      }
-      input, select, textarea { font-size: 16px; }
-      .lead, .desk-only { display: none; }
-      #openPhone { display: none; }
-      .editor-step { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <div class="shell">
-  <header class="top">
-    <div class="brand">
-      <h1>fb-poller</h1>
-      <p class="sub">Hub</p>
-      <a class="deliver" href="/iphone">Mở trên iPhone</a>
-      <p class="sub" id="updateNote" hidden></p>
-    </div>
-    <div class="token-row">
-      <input id="token" type="password" placeholder="Token hub" autocomplete="off" />
-      <button id="saveToken" class="ghost" type="button">Lưu token</button>
-      <button id="refresh" type="button">Tải lại</button>
-      <button id="recheck" class="danger" type="button">Check proxy ngay</button>
-    </div>
-    <div data-norecord>
-      <a id="openPhone" href="/phone">Mở giả lập điện thoại trên PC</a>
-    </div>
-  </header>
-  <nav class="tabs" data-norecord>
-    <button type="button" class="ghost on" data-tab="home">Tổng quan</button>
-    <button type="button" class="ghost" data-tab="journal">Nhật ký</button>
-    <button type="button" class="ghost" data-tab="proxy">Proxy</button>
-    <button type="button" class="ghost" data-tab="comments">Comment</button>
-    <button type="button" class="ghost" data-tab="people">Đã lưu</button>
-  </nav>
+    <header class="top">
+      <div>
+        <h1>Đọc video</h1>
+        <p class="sub">Thả video. Hub đọc người nhìn thấy và lưu ngay.</p>
+      </div>
+      <div class="tools" data-norecord>
+        <a class="sr" href="/iphone">Mở trên iPhone</a>
+        <a href="/iphone">Mở app iPhone</a>
+        <a id="openPhone" href="/phone">Mở giả lập điện thoại trên PC</a>
+        <a href="/tai-pc">Phần mềm PC</a>
+      </div>
+    </header>
+    <nav class="tabs" data-norecord>
+      <button type="button" class="ghost on" data-tab="home">Video</button>
+      <button type="button" class="ghost" data-tab="people">Đã lưu</button>
+      <button type="button" class="ghost" data-tab="journal">Nhật ký</button>
+      <button type="button" class="ghost" data-tab="proxy">Proxy</button>
+      <button type="button" class="ghost" data-tab="comments">Comment</button>
+    </nav>
   </div>
+  <p id="err" class="err" hidden></p>
   <main>
     <section data-view="home">
-      <p class="lead">Số liệu hub, máy đang nối, rồi chuyển tab để ghi nhớ, xem tên đã nhìn thấy, proxy hoặc comment.</p>
-      <a class="iphone-go" href="/iphone">Mở app iPhone</a>
-      <div class="stats" id="stats"></div>
-      <div id="agents"></div>
-    </section>
-
-    <section data-view="journal" hidden>
-      <div class="panel journal" id="journal">
-        <h2>Nhật ký thao tác</h2>
-        <p class="lead">Ghi việc vừa làm để tìm lại. Check proxy và upload gói được ghi tự động. Ô mật khẩu không lưu ký tự.</p>
-        <div class="toolbar">
-          <input id="actionText" type="text" maxlength="500" placeholder="Mình vừa làm gì? Ví dụ: import 300 URL rồi rebalance hot" />
-          <button id="saveAction" type="button">Ghi nhớ</button>
-        </div>
-        <div class="toolbar">
-          <input id="actionQ" type="search" placeholder="Tìm lại thao tác…" />
-          <button id="searchAction" class="ghost" type="button">Tìm</button>
-        </div>
+      <p class="lead" id="helperLine">PC phụ chưa nối. Video được máy chủ đọc.</p>
+      <section class="panel" id="issueBox">
+        <h2>Lỗi và vấn đề gần đây</h2>
+        <p class="lead" id="issueMeta">Ghi lại cảnh báo khi đọc video, PC phụ, và máy chủ.</p>
         <div class="scroll">
           <table>
-            <thead>
-              <tr>
-                <th>Thời gian</th>
-                <th>Loại</th>
-                <th>Thao tác</th>
-              </tr>
-            </thead>
-            <tbody id="actionRows">
-              <tr><td colspan="3" class="empty">Chưa có thao tác</td></tr>
-            </tbody>
+            <thead><tr><th>Thời gian</th><th>Nguồn</th><th>Chi tiết</th></tr></thead>
+            <tbody id="issueRows"><tr><td colspan="3" class="empty">Chưa có mục nào.</td></tr></tbody>
           </table>
         </div>
-      </div>
-    </section>
-
-    <section data-view="proxy" hidden>
-      <div class="split">
-        <div class="panel" id="diePanel">
-          <h2>Proxy DIE</h2>
-          <p class="meta" id="dieMeta">Đang tải…</p>
-          <p class="meta" id="dieHint"></p>
-          <div class="scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Endpoint</th>
-                  <th>Lỗi</th>
-                  <th class="hide-sm">Lần check</th>
-                </tr>
-              </thead>
-              <tbody id="dieRows">
-                <tr><td colspan="3" class="empty">—</td></tr>
-              </tbody>
-            </table>
-          </div>
+      </section>
+      <label id="drop" class="drop">
+        <strong>Thả video vào đây</strong>
+        <span>Hoặc bấm để chọn. Nhiều video một lúc. Hub tự đọc và lưu người nhìn thấy, không cần bấm phát.</span>
+        <input id="videoFile" type="file" accept="video/*" multiple />
+      </label>
+      <ul id="fileList" hidden></ul>
+      <section id="progressBox" hidden>
+        <div id="progressTrack"><div id="progressFill"></div></div>
+        <p id="progressLabel"></p>
+        <p id="readTally" hidden>Thấy 0 người trong danh bạ, 0 người có tài khoản, ghi được 0.</p>
+        <p id="wordCount" hidden></p>
+        <div id="sampleBox" hidden></div>
+        <p id="problemLead" hidden>Vấn đề khi xử lý</p>
+        <ul id="problemList" hidden></ul>
+        <button id="continueBtn" type="button" hidden>Tiếp tục đọc nối</button>
+      </section>
+      <p id="videoStatus" class="lead" hidden></p>
+      <section class="panel" id="freshBox" hidden>
+        <h2>Người vừa đọc</h2>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Tên</th><th>Tên danh bạ</th><th>Tài khoản</th></tr></thead>
+            <tbody id="freshBody"></tbody>
+          </table>
         </div>
-        <div class="panel ok-panel">
-          <h2>Proxy LIVE</h2>
-          <p class="meta" id="liveMeta">—</p>
-          <div id="liveSample" class="meta"></div>
+      </section>
+      <section class="panel">
+        <h2>Kết quả đã lưu</h2>
+        <p class="lead" id="storeCount">Đang tải kho…</p>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Tên</th><th>Tên danh bạ</th><th>Tài khoản</th></tr></thead>
+            <tbody id="savedHomeBody"><tr><td colspan="3" class="empty">Chưa có người đủ ba cột.</td></tr></tbody>
+          </table>
         </div>
-      </div>
+        <button id="savedMore" class="ghost" type="button" hidden>Xem thêm</button>
+      </section>
+      <section class="panel">
+        <h2>Dữ liệu trùng</h2>
+        <p class="lead">Người vừa quét đã có trong kho. Kho giữ dòng cũ.</p>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Tên</th><th>Tên danh bạ</th><th>Tài khoản</th></tr></thead>
+            <tbody id="dupHomeBody"><tr><td colspan="3" class="empty">Chưa có dữ liệu trùng.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+      <details class="token-box">
+        <summary>Token hub</summary>
+        <div class="token-row">
+          <input id="token" type="password" placeholder="Token hub" autocomplete="off" />
+          <button id="saveToken" class="ghost" type="button">Lưu token</button>
+          <button id="refresh" type="button">Tải lại</button>
+        </div>
+      </details>
+      <p class="sub" id="updateNote" hidden></p>
     </section>
 
     <section data-view="people" hidden>
-      <h2>Người trùng tên</h2>
-      <p class="lead">Mở điện thoại và lướt. Khi cùng một tên hiện ở danh bạ và trên hồ sơ, bảng này tự thêm một dòng. <a href="/phone">Mở điện thoại</a></p>
+      <h2>Kết quả đã lưu</h2>
+      <p class="lead">Mỗi người đủ tên, tên trong danh bạ và tài khoản là một dòng. Kho chứa được 50 triệu kết quả.</p>
       <div class="scroll">
         <table>
           <thead>
@@ -286,9 +241,56 @@
             </tr>
           </thead>
           <tbody id="peopleRows">
-            <tr><td colspan="3" class="empty">Chưa có người trùng tên</td></tr>
+            <tr><td colspan="3" class="empty">Chưa có người đủ ba cột.</td></tr>
           </tbody>
         </table>
+      </div>
+    </section>
+
+    <section data-view="journal" hidden>
+      <div class="panel" id="journal">
+        <h2>Nhật ký thao tác</h2>
+        <p class="lead">Ghi việc vừa làm để tìm lại. Check proxy và upload gói được ghi tự động. Ô mật khẩu không lưu ký tự.</p>
+        <div class="toolbar">
+          <input id="actionText" type="text" maxlength="500" placeholder="Mình vừa làm gì?" />
+          <button id="saveAction" type="button">Ghi nhớ</button>
+        </div>
+        <div class="toolbar">
+          <input id="actionQ" type="search" placeholder="Tìm lại thao tác…" />
+          <button id="searchAction" class="ghost" type="button">Tìm</button>
+        </div>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Thời gian</th><th>Loại</th><th>Thao tác</th></tr></thead>
+            <tbody id="actionRows"><tr><td colspan="3" class="empty">Chưa có thao tác</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section data-view="proxy" hidden>
+      <div class="toolbar">
+        <button id="recheck" class="danger" type="button">Check proxy ngay</button>
+      </div>
+      <div class="stats" id="stats"></div>
+      <div id="agents"></div>
+      <div class="split">
+        <div class="panel" id="diePanel">
+          <h2>Proxy DIE</h2>
+          <p class="meta" id="dieMeta">Đang tải…</p>
+          <p class="meta" id="dieHint"></p>
+          <div class="scroll">
+            <table>
+              <thead><tr><th>Endpoint</th><th>Lỗi</th><th class="hide-sm">Lần check</th></tr></thead>
+              <tbody id="dieRows"><tr><td colspan="3" class="empty">—</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Proxy LIVE</h2>
+          <p class="meta" id="liveMeta">—</p>
+          <div id="liveSample" class="meta"></div>
+        </div>
       </div>
     </section>
 
@@ -304,21 +306,16 @@
       </div>
       <div class="scroll">
         <table>
-          <thead>
-            <tr>
-              <th>Thời gian</th>
-              <th>Author</th>
-              <th>Comment</th>
-              <th class="hide-sm">Post / PC</th>
-            </tr>
-          </thead>
-          <tbody id="rows">
-            <tr><td colspan="4" class="empty">Nhập token rồi bấm Tải lại</td></tr>
-          </tbody>
+          <thead><tr><th>Thời gian</th><th>Author</th><th>Comment</th><th class="hide-sm">Post / PC</th></tr></thead>
+          <tbody id="rows"><tr><td colspan="4" class="empty">Nhập token rồi bấm Tải lại</td></tr></tbody>
         </table>
       </div>
     </section>
   </main>
+  <script>
+    const hubToken = __CONTROL_TOKEN_JSON__;
+    if (hubToken) localStorage.setItem("fb_poller_control_token", hubToken);
+  </script>
   <script src="/static/version.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
@@ -352,19 +349,55 @@
       if (Number.isNaN(d.getTime())) return iso || "";
       return d.toLocaleString("vi-VN");
     }
-    function renderPeople(items) {
-      const rows = $("peopleRows");
-      if (!items.length) {
-        rows.innerHTML = `<tr><td colspan="3" class="empty">Chưa có người trùng tên. Hãy lướt danh bạ và hồ sơ trong điện thoại.</td></tr>`;
-        return;
-      }
-      rows.innerHTML = items.map((person) => `<tr>
+    function personTable(items, emptyText) {
+      if (!items.length) return `<tr><td colspan="3" class="empty">${esc(emptyText)}</td></tr>`;
+      return items.map((person) => `<tr>
         <td>${esc(person.name)}</td>
         <td>${esc(person.contactName)}</td>
         <td>${esc(person.username)}</td>
       </tr>`).join("");
     }
-
+    let peopleCursor = "";
+    function renderPeople(items, total, cursor) {
+      peopleCursor = cursor || "";
+      $("peopleRows").innerHTML = personTable(items, "Chưa có người đủ ba cột.");
+      $("savedHomeBody").innerHTML = personTable(items, "Chưa có người đủ ba cột.");
+      const count = typeof total === "number" ? total : items.length;
+      $("storeCount").textContent = count + " người đã lưu. Kho chứa được 50 triệu kết quả.";
+      $("savedMore").hidden = !peopleCursor;
+    }
+    function renderDuplicates(items) {
+      $("dupHomeBody").innerHTML = personTable(items, "Chưa có dữ liệu trùng.");
+    }
+    function renderIssues(items) {
+      if (!items.length) {
+        $("issueRows").innerHTML = `<tr><td colspan="3" class="empty">Chưa ghi lỗi hay vấn đề nào.</td></tr>`;
+        $("issueMeta").textContent = "Mọi cảnh báo khi đọc video và PC phụ sẽ hiện ở đây.";
+        return;
+      }
+      $("issueMeta").textContent = items.length + " mục gần nhất (tự cập nhật mỗi 8 giây).";
+      $("issueRows").innerHTML = items.map((row) => {
+        const level = row.level === "error" ? "issue-error" : row.level === "info" ? "meta" : "issue-warn";
+        const job = row.jobId ? `<div class="meta">Việc: ${esc(row.jobId)}</div>` : "";
+        const detail = row.detail ? `<div class="issue-detail">${esc(row.detail)}</div>` : "";
+        return `<tr>
+          <td class="meta">${esc(fmtTime(row.at))}</td>
+          <td><span class="pill ${row.level === "error" ? "die" : row.level === "info" ? "" : "off"}">${esc(row.source || "hub")}</span></td>
+          <td class="${level}">${esc(row.summary || "")}${job}${detail}</td>
+        </tr>`;
+      }).join("");
+    }
+    async function loadIssues() {
+      if (!$("token").value.trim()) return;
+      try {
+        const r = await fetch("/v1/issues?limit=60", { headers: headers() });
+        if (!r.ok) return;
+        const data = await r.json();
+        renderIssues(data.items || []);
+      } catch (_e) {
+        /* giữ bảng cũ */
+      }
+    }
     function renderActions(items) {
       if (!items.length) {
         $("actionRows").innerHTML = `<tr><td colspan="3" class="empty">Chưa có thao tác. Gõ việc vừa làm rồi bấm Ghi nhớ.</td></tr>`;
@@ -379,30 +412,32 @@
 
     async function loadAll() {
       $("err").hidden = true;
+      $("err").classList.remove("ok");
       try {
         const lim = $("limit").value;
         const q = encodeURIComponent($("q").value.trim());
         const actionQ = encodeURIComponent($("actionQ").value.trim());
-        const [stats, agents, comments, die, proxies, actions, people] = await Promise.all([
+        const [stats, agents, comments, die, proxies, actions, people, duplicates] = await Promise.all([
           fetch("/v1/server/stats", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("stats " + r.status); return r.json(); }),
           fetch("/v1/agents", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("agents " + r.status); return r.json(); }),
           fetch("/v1/comments?limit=" + lim + "&q=" + q, { headers: headers() }).then((r) => { if (!r.ok) throw new Error("comments " + r.status); return r.json(); }),
           fetch("/v1/proxies/die?limit=500", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("proxies/die " + r.status); return r.json(); }),
           fetch("/v1/proxies?status=live&limit=30", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("proxies " + r.status); return r.json(); }),
           fetch("/v1/actions?limit=40&q=" + actionQ, { headers: headers() }).then((r) => { if (!r.ok) throw new Error("actions " + r.status); return r.json(); }),
-          fetch("/v1/people", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("people " + r.status); return r.json(); }),
+          fetch("/v1/people?limit=50", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("people " + r.status); return r.json(); }),
+          fetch("/v1/people/duplicates?limit=20", { headers: headers() }).then((r) => { if (!r.ok) throw new Error("duplicates " + r.status); return r.json(); }),
         ]);
         renderActions(actions.items || []);
-        renderPeople(people.items || []);
+        renderPeople(people.items || [], people.count, people.cursor || "");
+        renderDuplicates(duplicates.items || []);
 
         const px = stats.proxies || die.summary || {};
         $("stats").innerHTML = [
+          ["Đã lưu", people.count ?? "—", "ok"],
+          ["Trùng", duplicates.count ?? "—", ""],
           ["Comments", stats.comments, ""],
-          ["Agents", stats.agents, ""],
           ["Proxy LIVE", px.live ?? "—", "ok"],
           ["Proxy DIE", px.die ?? "—", "bad"],
-          ["Proxy tổng", px.total ?? "—", ""],
-          ["Bytes sync", fmtBytes(stats.bytes_total || 0), ""],
         ].map(([label, val, cls]) =>
           `<div class="stat ${cls}"><b>${esc(val)}</b><span>${label}</span></div>`
         ).join("");
@@ -413,7 +448,7 @@
         }).join(" ");
         $("agents").innerHTML = agentHtml
           ? `<p style="margin:0 0 0.8rem;display:flex;flex-wrap:wrap;gap:0.4rem">${agentHtml}</p>`
-          : `<p class="meta" style="margin:0 0 0.8rem">Chưa có PC kết nối</p>`;
+          : `<p class="meta" style="margin:0 0 0.8rem">Chưa có PC quét comment</p>`;
 
         const dieItems = die.items || [];
         $("dieMeta").textContent = dieItems.length
@@ -422,8 +457,8 @@
         const sampleErr = (dieItems[0] && dieItems[0].error) || "";
         if (dieItems.length && /502|407|user:pass|whitelist/i.test(sampleErr)) {
           $("dieHint").textContent =
-            "Gợi ý: ProxyVN host:port thường cần user:pass (hoặc whitelist IP VPS 14.225.192.11). " +
-            "Gửi thêm user/pass hoặc format host:port:user:pass để check LIVE chính xác.";
+            "Gợi ý: ProxyVN host:port thường cần user:pass (hoặc whitelist IP VPS). " +
+            "Gửi thêm user:pass hoặc format host:port:user:pass để check LIVE chính xác.";
         } else {
           $("dieHint").textContent = "";
         }
@@ -461,7 +496,7 @@
         epochs.reload += 1;
       } catch (e) {
         $("err").hidden = false;
-        $("err").textContent = "Lỗi: " + e.message + " — kiểm tra CONTROL_TOKEN";
+        $("err").textContent = "Lỗi: " + e.message;
       }
     }
 
@@ -474,13 +509,13 @@
         if (!r.ok) throw new Error("check " + r.status);
         const data = await r.json();
         $("err").hidden = false;
-        $("err").style.color = "#3ecf8e";
+        $("err").classList.add("ok");
         $("err").textContent = `Check xong: live=${data.live} die=${data.die} (${data.elapsed_ms}ms)`;
         epochs.recheck += 1;
         await loadAll();
       } catch (e) {
         $("err").hidden = false;
-        $("err").style.color = "#ff7b7b";
+        $("err").classList.remove("ok");
         $("err").textContent = "Check lỗi: " + e.message;
       } finally {
         $("recheck").disabled = false;
@@ -493,7 +528,6 @@
       $("err").hidden = true;
       if (!summary) {
         $("err").hidden = false;
-        $("err").style.color = "#ff7b7b";
         $("err").textContent = "Nhập thao tác bạn vừa làm trước khi ghi.";
         return;
       }
@@ -509,11 +543,11 @@
         $("actionText").value = "";
         await loadAll();
         $("err").hidden = false;
-        $("err").style.color = "#3ecf8e";
+        $("err").classList.add("ok");
         $("err").textContent = "Đã ghi nhớ thao tác.";
       } catch (e) {
         $("err").hidden = false;
-        $("err").style.color = "#ff7b7b";
+        $("err").classList.remove("ok");
         $("err").textContent = "Không ghi được: " + e.message;
       } finally {
         $("saveAction").disabled = false;
@@ -521,7 +555,6 @@
     }
 
     const epochs = { reload: 0, recheck: 0, note: 0 };
-
     function showView(name) {
       document.querySelectorAll("[data-view]").forEach((section) => {
         section.hidden = section.getAttribute("data-view") !== name;
@@ -531,7 +564,752 @@
       });
     }
 
-    $("saveToken").onclick = () => { localStorage.setItem(tokenKey, $("token").value.trim()); loadAll(); };
+    const drop = $("drop");
+    const videoFile = $("videoFile");
+    const progressBox = $("progressBox");
+    const progressFill = $("progressFill");
+    const progressLabel = $("progressLabel");
+    const readTally = $("readTally");
+    const wordCount = $("wordCount");
+    const sampleBox = $("sampleBox");
+    const sampleSeen = new Map();
+    let sampleStamp = 0;
+    const problemLead = $("problemLead");
+    const problemList = $("problemList");
+    const continueBtn = $("continueBtn");
+    const videoStatus = $("videoStatus");
+    const freshBox = $("freshBox");
+    const freshBody = $("freshBody");
+    const fileList = $("fileList");
+    let queue = [];
+    let pumping = false;
+    let batchTotal = 0;
+    let batchJobs = [];
+    let shownOverall = 0;
+    let carried = [];
+    let resumeSlots = [];
+
+    function setVideoStatus(text) {
+      videoStatus.textContent = text || "";
+      videoStatus.hidden = !text;
+    }
+    function copyReading(job, data) {
+      if (data.wordSeen != null) {
+        job.wordSeen = data.wordSeen;
+        job.wordKept = data.wordKept || 0;
+      }
+      if (data.hubWordSeen != null) {
+        job.hubWordSeen = data.hubWordSeen;
+        job.hubWordKept = data.hubWordKept || 0;
+      }
+      if (Array.isArray(data.samples)) job.samples = data.samples;
+    }
+    function paintWords() {
+      const lines = [];
+      batchJobs.forEach((job, index) => {
+        const prefix = batchJobs.length > 1 ? "Video " + (index + 1) + ": " : "";
+        if (job.wordSeen != null) {
+          lines.push(prefix + "PC thấy " + job.wordSeen + " từ, giữ " + (job.wordKept || 0) + " từ trước khi ghép tên.");
+        }
+        if (job.hubWordSeen != null) {
+          lines.push(prefix + "Máy chủ thấy " + job.hubWordSeen + " từ, giữ " + (job.hubWordKept || 0) + " từ trước khi ghép tên.");
+        }
+      });
+      wordCount.textContent = lines.join(" ");
+      wordCount.hidden = !lines.length;
+    }
+    function clearSamples() {
+      sampleStamp += 1;
+      sampleSeen.forEach((item) => {
+        if (item.url) URL.revokeObjectURL(item.url);
+      });
+      sampleSeen.clear();
+      sampleBox.replaceChildren();
+      sampleBox.hidden = true;
+      wordCount.textContent = "";
+      wordCount.hidden = true;
+    }
+    function drawSamples() {
+      sampleBox.replaceChildren();
+      sampleSeen.forEach((item) => {
+        if (!item.url) return;
+        const figure = document.createElement("figure");
+        const img = document.createElement("img");
+        img.src = item.url;
+        img.alt = item.source === "hub" ? "Khung máy chủ" : "Khung PC";
+        const caption = document.createElement("figcaption");
+        caption.textContent = item.source === "hub" ? "Khung máy chủ" : "Khung PC";
+        figure.appendChild(img);
+        figure.appendChild(caption);
+        sampleBox.appendChild(figure);
+      });
+      sampleBox.hidden = sampleBox.childElementCount === 0;
+    }
+    function paintSamples() {
+      const wanted = [];
+      batchJobs.forEach((job) => {
+        (job.samples || []).forEach((sample) => {
+          if (!job.jobId || !sample || sample.index == null) return;
+          wanted.push({
+            key: job.jobId + ":" + sample.index,
+            jobId: job.jobId,
+            index: sample.index,
+            source: sample.source === "hub" ? "hub" : "pc",
+          });
+        });
+      });
+      const live = new Set(wanted.map((item) => item.key));
+      Array.from(sampleSeen.keys()).forEach((key) => {
+        if (live.has(key)) return;
+        const old = sampleSeen.get(key);
+        if (old && old.url) URL.revokeObjectURL(old.url);
+        sampleSeen.delete(key);
+      });
+      const stamp = sampleStamp;
+      wanted.forEach((item) => {
+        if (sampleSeen.has(item.key)) return;
+        sampleSeen.set(item.key, { source: item.source, url: "" });
+        fetch("/v1/recordings/jobs/" + item.jobId + "/samples/" + item.index, { headers: headers() })
+          .then((response) => (response.ok ? response.blob() : null))
+          .then((blob) => {
+            if (stamp !== sampleStamp || !blob) return;
+            const held = sampleSeen.get(item.key);
+            if (!held) return;
+            held.url = URL.createObjectURL(blob);
+            held.source = item.source;
+            drawSamples();
+          })
+          .catch(() => {});
+      });
+      drawSamples();
+    }
+    function showTally(contacts, accounts, saved) {
+      readTally.textContent = "Thấy " + contacts + " người trong danh bạ, " + accounts + " người có tài khoản, ghi được " + saved + ".";
+      readTally.hidden = false;
+    }
+    function tallyFromJobs(jobs) {
+      let contacts = 0;
+      let accounts = 0;
+      let saved = 0;
+      let seen = false;
+      jobs.forEach((job) => {
+        if (!job.ok || job.seenContacts == null) return;
+        seen = true;
+        contacts += job.seenContacts;
+        accounts += job.seenAccounts || 0;
+        saved += job.readSaved || 0;
+      });
+      if (seen) showTally(contacts, accounts, saved);
+    }
+    function renderProblems(items) {
+      problemList.replaceChildren();
+      (items || []).forEach((text) => {
+        const item = document.createElement("li");
+        item.textContent = text;
+        problemList.appendChild(item);
+      });
+      const empty = !items || !items.length;
+      problemLead.hidden = empty;
+      problemList.hidden = empty;
+    }
+    function rememberProblems(items) {
+      (items || []).forEach((text) => {
+        if (text && carried.indexOf(text) === -1) carried.push(text);
+      });
+      renderProblems(carried);
+    }
+    function paintBatch() {
+      if (!batchTotal) return;
+      const sum = batchJobs.reduce((acc, job) => acc + Math.max(0, Math.min(100, job.percent || 0)), 0);
+      shownOverall = Math.max(shownOverall, Math.round(sum / batchTotal));
+      const active = batchJobs.find((job) => !job.done) || batchJobs[batchJobs.length - 1];
+      const index = Math.max(1, batchJobs.indexOf(active) + 1);
+      const task = active && active.task ? " — " + active.task : "";
+      progressFill.style.width = shownOverall + "%";
+      progressLabel.textContent = shownOverall + "% — Video " + index + "/" + batchTotal + task;
+      progressBox.hidden = false;
+      const live = carried.slice();
+      batchJobs.forEach((job) => {
+        (job.problems || []).forEach((text) => {
+          if (text && live.indexOf(text) === -1) live.push(text);
+        });
+      });
+      renderProblems(live);
+      paintWords();
+      paintSamples();
+    }
+    function paintFiles() {
+      const names = queue.map((file) => file.name).concat(batchJobs.map((job) => job.name || "")).filter(Boolean);
+      fileList.hidden = names.length === 0;
+      fileList.replaceChildren();
+      names.forEach((name) => {
+        const item = document.createElement("li");
+        item.textContent = name;
+        fileList.appendChild(item);
+      });
+    }
+    function sleep(ms) {
+      return new Promise((resolve) => window.setTimeout(resolve, ms));
+    }
+    const UPLOAD_KEEP_MS = 2 * 86400000;
+    function uploadKey(file) {
+      return "fb_upload:" + (file.name || "") + ":" + file.size + ":" + (file.lastModified || 0);
+    }
+    function storedUpload(file) {
+      try {
+        const raw = localStorage.getItem(uploadKey(file));
+        if (!raw) return "";
+        const data = JSON.parse(raw);
+        if (!data || !data.id || Date.now() - (Number(data.at) || 0) > UPLOAD_KEEP_MS) {
+          localStorage.removeItem(uploadKey(file));
+          return "";
+        }
+        return String(data.id);
+      } catch (error) {
+        return "";
+      }
+    }
+    function rememberUpload(file, uploadId) {
+      try { localStorage.setItem(uploadKey(file), JSON.stringify({ id: uploadId, at: Date.now() })); }
+      catch (error) { /* bộ nhớ trang đầy thì vẫn gửi, chỉ không nối được sau khi tải lại trang */ }
+    }
+    function forgetUpload(file) {
+      try { if (file) localStorage.removeItem(uploadKey(file)); }
+      catch (error) { /* không xóa được thì hai ngày sau tự bỏ */ }
+    }
+    function pruneUploads() {
+      try {
+        for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+          const key = localStorage.key(index);
+          if (!key || key.indexOf("fb_upload:") !== 0) continue;
+          let data = null;
+          try { data = JSON.parse(localStorage.getItem(key) || "null"); } catch (error) { data = null; }
+          if (!data || Date.now() - (Number(data.at) || 0) > UPLOAD_KEEP_MS) localStorage.removeItem(key);
+        }
+      } catch (error) { /* không đọc được bộ nhớ trang thì bỏ qua */ }
+    }
+    async function finishUpload(uploadId) {
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        try {
+          const response = await fetch("/v1/recordings/uploads/" + uploadId + "/finish", { method: "POST", headers: headers() });
+          if (response.status === 404) return { ok: false, missing: true, error: "Mất kết nối khi đang gửi video." };
+          if (response.status === 507) return { ok: false, error: "Hết chỗ trống trên máy chủ." };
+          if (response.status === 409) return { ok: false, short: true, error: "Máy chủ chưa nhận đủ video." };
+          if (!response.ok) throw new Error("finish");
+          const data = await response.json();
+          if (!data.jobId) throw new Error("finish");
+          return { ok: true, jobId: data.jobId };
+        } catch (error) {
+          await sleep(Math.min(3000, 400 * (attempt + 1)));
+        }
+      }
+      return { ok: false, error: "Không gửi được video." };
+    }
+    async function restartLostJob(job) {
+      if (!job.uploadId || (job.restarts || 0) >= 2) return false;
+      job.restarts = (job.restarts || 0) + 1;
+      const again = await finishUpload(job.uploadId);
+      if (!again.ok) return false;
+      job.jobId = again.jobId;
+      job.done = false;
+      job.ok = true;
+      job.error = "";
+      job.misses = 0;
+      job.task = "Máy chủ vừa khởi động lại. Đọc lại video đã gửi, không cần gửi lại.";
+      return true;
+    }
+    function openChunk(url, blob, headerMap, onLoaded) {
+      const request = new XMLHttpRequest();
+      const promise = new Promise((resolve) => {
+        request.open("PUT", url);
+        request.timeout = 0;
+        Object.keys(headerMap).forEach((key) => request.setRequestHeader(key, headerMap[key]));
+        let touched = Date.now();
+        const timer = window.setInterval(() => {
+          if (Date.now() - touched < 30000) return;
+          window.clearInterval(timer);
+          request.abort();
+        }, 1000);
+        request.upload.onprogress = (event) => {
+          touched = Date.now();
+          if (onLoaded && event.lengthComputable) onLoaded(event.loaded);
+        };
+        const done = (status, data) => {
+          window.clearInterval(timer);
+          resolve({ status: status, data: data });
+        };
+        request.onload = () => {
+          let data = {};
+          try { data = JSON.parse(request.responseText || "{}"); } catch (error) { data = {}; }
+          done(request.status, data);
+        };
+        request.onerror = () => done(0, {});
+        request.onabort = () => done(0, {});
+        request.send(blob);
+      });
+      return {
+        promise: promise,
+        stop: () => {
+          try { request.abort(); } catch (error) { /* khúc đã đóng */ }
+        },
+      };
+    }
+    function chunkHeld(status, piece) {
+      const spans = status && status.spans ? status.spans : [];
+      for (let index = 0; index < spans.length; index += 1) {
+        const span = spans[index];
+        if (span && span[0] <= piece.offset && span[1] >= piece.end) return true;
+      }
+      return !!(status && typeof status.offset === "number" && status.offset >= piece.end);
+    }
+    async function readUpload(uploadId) {
+      try {
+        const response = await fetch("/v1/recordings/uploads/" + uploadId, { headers: headers() });
+        if (response.status === 404) return { missing: true };
+        if (!response.ok) return {};
+        return { status: await response.json() };
+      } catch (error) {
+        return {};
+      }
+    }
+    function postJobOnce(file, onUpload) {
+      return new Promise((resolve) => {
+        const body = new FormData();
+        body.append("file", file, file.name || "video.mp4");
+        const request = new XMLHttpRequest();
+        request.open("POST", "/v1/recordings/from-video/job");
+        request.timeout = 0;
+        const auth = headers();
+        Object.keys(auth).forEach((key) => request.setRequestHeader(key, auth[key]));
+        request.upload.onprogress = (event) => {
+          if (!event.lengthComputable || !event.total || !onUpload) return;
+          onUpload(event.loaded, event.total);
+        };
+        request.onload = () => {
+          if (request.status === 413) { resolve({ ok: false, error: "Video quá lớn." }); return; }
+          if (request.status === 507) { resolve({ ok: false, error: "Hết chỗ trống trên máy chủ." }); return; }
+          if (request.status < 200 || request.status >= 300) { resolve({ ok: false, error: "Không gửi được video." }); return; }
+          try { resolve({ ok: true, jobId: JSON.parse(request.responseText).jobId }); }
+          catch (error) { resolve({ ok: false, error: "Không gửi được video." }); }
+        };
+        request.onerror = () => resolve({ ok: false, error: "Mất kết nối khi đang xử lý." });
+        request.ontimeout = () => resolve({ ok: false, error: "Mất kết nối khi đang xử lý." });
+        request.send(body);
+      });
+    }
+    async function postJobChunked(file, onUpload) {
+      const chunkSize = 4 * 1024 * 1024;
+      const lanes = 4;
+      let lastError = "Không gửi được video.";
+      for (let round = 0; round < 3; round += 1) {
+        const outcome = await sendVideoPieces(file, onUpload, chunkSize, lanes);
+        if (outcome.ok) return outcome;
+        lastError = outcome.error || lastError;
+        if (!outcome.missing) return { ok: false, error: lastError };
+      }
+      return { ok: false, error: lastError };
+    }
+    async function sendVideoPieces(file, onUpload, chunkSize, lanes) {
+      let uploadId = "";
+      let known = null;
+      const saved = storedUpload(file);
+      if (saved) {
+        const found = await readUpload(saved);
+        if (found.status && Number(found.status.size) === file.size) {
+          uploadId = saved;
+          known = found.status;
+        } else if (found.missing) {
+          forgetUpload(file);
+        }
+      }
+      for (let attempt = 0; attempt < 8 && !uploadId; attempt += 1) {
+        try {
+          const response = await fetch("/v1/recordings/uploads", {
+            method: "POST",
+            headers: Object.assign({ "Content-Type": "application/json" }, headers()),
+            body: JSON.stringify({ name: file.name || "video.mp4", size: file.size }),
+          });
+          if (response.status === 413) return { ok: false, error: "Video quá lớn." };
+          if (response.status === 507) return { ok: false, error: "Hết chỗ trống trên máy chủ." };
+          if (!response.ok) throw new Error("start");
+          const started = await response.json();
+          if (started && started.uploadId) {
+            uploadId = String(started.uploadId);
+            rememberUpload(file, uploadId);
+          }
+        } catch (error) {
+          await sleep(Math.min(3000, 400 * (attempt + 1)));
+        }
+      }
+      if (!uploadId) return { ok: false, error: "Không gửi được video." };
+      const pieces = [];
+      for (let offset = 0; offset < file.size; offset += chunkSize) {
+        const piece = { offset: offset, end: Math.min(file.size, offset + chunkSize), done: false, loaded: 0 };
+        if (known && chunkHeld(known, piece)) {
+          piece.done = true;
+          piece.loaded = piece.end - piece.offset;
+        }
+        pieces.push(piece);
+      }
+      const report = () => {
+        let bytes = 0;
+        pieces.forEach((piece) => { bytes += piece.done ? piece.end - piece.offset : piece.loaded; });
+        if (onUpload) onUpload(Math.min(file.size, bytes), file.size);
+      };
+      report();
+      let cursor = 0;
+      let failure = "";
+      let missing = false;
+      const markMissing = () => {
+        missing = true;
+        failure = "Mất kết nối khi đang gửi video.";
+      };
+      const pump = async () => {
+        while (!failure) {
+          const piece = pieces[cursor];
+          cursor += 1;
+          if (!piece) return;
+          if (piece.done) continue;
+          const held = await readUpload(uploadId);
+          if (held.missing) { markMissing(); return; }
+          if (chunkHeld(held.status, piece)) {
+            piece.done = true;
+            piece.loaded = piece.end - piece.offset;
+            report();
+            continue;
+          }
+          let payload = null;
+          try {
+            payload = await file.slice(piece.offset, piece.end).arrayBuffer();
+          } catch (error) {
+            failure = "Không gửi được video.";
+            return;
+          }
+          let landed = false;
+          for (let attempt = 0; attempt < 10 && !landed && !failure; attempt += 1) {
+            const before = await readUpload(uploadId);
+            if (before.missing) { markMissing(); return; }
+            if (chunkHeld(before.status, piece)) { landed = true; break; }
+            const flight = openChunk(
+              "/v1/recordings/uploads/" + uploadId + "?offset=" + piece.offset,
+              payload,
+              Object.assign({ "Content-Type": "application/octet-stream" }, headers()),
+              (loaded) => { piece.loaded = loaded; report(); }
+            );
+            let reply = null;
+            const waitReply = flight.promise.then((value) => { reply = value; });
+            const deadline = Date.now() + 30000;
+            while (!landed && !failure && reply === null && Date.now() < deadline) {
+              await Promise.race([waitReply, sleep(300)]);
+              if (reply) break;
+              const live = await readUpload(uploadId);
+              if (live.missing) { flight.stop(); markMissing(); return; }
+              if (chunkHeld(live.status, piece)) { flight.stop(); landed = true; }
+            }
+            if (!landed && reply) {
+              const data = reply.data || {};
+              if (reply.status === 507) { failure = "Hết chỗ trống trên máy chủ."; return; }
+              if (reply.status === 404) { markMissing(); return; }
+              const mark = typeof data.end === "number" ? data.end : data.offset;
+              if (reply.status >= 200 && reply.status < 300 && typeof mark === "number" && mark >= piece.end) landed = true;
+              else if (reply.status === 409 && typeof data.offset === "number" && data.offset >= piece.end) landed = true;
+            }
+            if (!landed && !failure) {
+              flight.stop();
+              await sleep(Math.min(3000, 400 * (attempt + 1)));
+            }
+          }
+          if (!landed) { failure = failure || "Mất kết nối khi đang gửi video."; return; }
+          piece.done = true;
+          piece.loaded = piece.end - piece.offset;
+          report();
+        }
+      };
+      const workers = [];
+      for (let lane = 0; lane < lanes; lane += 1) workers.push(pump());
+      await Promise.all(workers);
+      if (missing) {
+        forgetUpload(file);
+        return { ok: false, missing: true, error: failure };
+      }
+      if (failure) return { ok: false, error: failure };
+      const closed = await finishUpload(uploadId);
+      if (closed.missing) forgetUpload(file);
+      if (!closed.ok) return closed;
+      return { ok: true, jobId: closed.jobId, uploadId: uploadId };
+    }
+    async function postJob(file, onUpload) {
+      if (file.size > 8 * 1024 * 1024) return postJobChunked(file, onUpload);
+      let last = { ok: false, error: "Không gửi được video." };
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        last = await postJobOnce(file, onUpload);
+        if (last.ok || last.error === "Video quá lớn." || last.error === "Hết chỗ trống trên máy chủ.") return last;
+        await sleep(400 * (attempt + 1));
+      }
+      return last;
+    }
+    async function pollOnce(job) {
+      if (!job.jobId || job.done) return;
+      let response;
+      try {
+        response = await fetch("/v1/recordings/jobs/" + job.jobId, { headers: headers() });
+      } catch (error) {
+        job.misses += 1;
+        if (job.misses >= 8) { job.done = true; job.ok = false; job.error = "Mất kết nối khi đang xử lý."; }
+        return;
+      }
+      if (response.status === 404) {
+        if (await restartLostJob(job)) return;
+        job.done = true; job.ok = false; job.error = "Mất tiến trình xử lý. Chọn lại video để gửi tiếp phần còn thiếu.";
+        return;
+      }
+      if (!response.ok) {
+        job.misses += 1;
+        if (job.misses >= 8) { job.done = true; job.ok = false; job.error = "Mất kết nối khi đang xử lý."; }
+        return;
+      }
+      job.misses = 0;
+      const data = await response.json();
+      job.percent = Math.max(job.percent || 0, data.percent || 0);
+      job.task = data.task || job.task;
+      job.problems = data.problems || [];
+      job.canContinue = !!data.canContinue;
+      copyReading(job, data);
+      if (!data.done) return;
+      job.done = true;
+      if (data.error) { job.ok = false; job.error = data.error; return; }
+      job.ok = true;
+      forgetUpload(job.file);
+      job.people = data.people || [];
+      job.savedPeople = data.savedPeople || 0;
+      job.duplicates = data.duplicates || [];
+      if (data.seenContacts != null) {
+        job.seenContacts = data.seenContacts;
+        job.seenAccounts = data.seenAccounts || 0;
+        job.readSaved = data.readSaved || 0;
+      }
+    }
+    async function uploadRest() {
+      while (queue.length) {
+        const file = queue.shift();
+        const slot = {
+          name: file.name || "video",
+          percent: 0, task: "Đang gửi video", done: false, ok: true,
+          problems: [], misses: 0, people: [], savedPeople: 0, duplicates: [],
+          seenContacts: null, seenAccounts: 0, readSaved: 0,
+          file: file, uploadId: "",
+        };
+        batchJobs.push(slot);
+        paintFiles();
+        paintBatch();
+        const posted = await postJob(file, (loaded, total) => {
+          const whole = total || file.size || 1;
+          slot.percent = Math.min(99, Math.round((loaded / whole) * 100));
+          slot.task = "Đang gửi " + (loaded / 1048576).toFixed(1) + "/" + (whole / 1048576).toFixed(1) + " MB";
+          paintBatch();
+        });
+        if (!posted.ok) {
+          slot.done = true; slot.ok = false; slot.error = posted.error; slot.task = "Gặp vấn đề";
+        } else {
+          slot.jobId = posted.jobId;
+          slot.uploadId = posted.uploadId || "";
+          slot.percent = 8;
+          slot.task = "Đã nhận video";
+          shownOverall = 0;
+        }
+        paintBatch();
+      }
+    }
+    function finishBatch() {
+      let failed = 0;
+      let added = 0;
+      let duplicated = 0;
+      const fresh = [];
+      batchJobs.forEach((job) => {
+        rememberProblems(job.problems);
+        if (!job.ok) { failed += 1; rememberProblems(job.error ? [job.error] : []); return; }
+        added += job.savedPeople || 0;
+        duplicated += (job.duplicates || []).length;
+        (job.people || []).forEach((row) => fresh.push(row));
+      });
+      if (fresh.length) {
+        freshBody.innerHTML = personTable(fresh, "");
+        freshBox.hidden = false;
+      }
+      tallyFromJobs(batchJobs);
+      resumeSlots = batchJobs.filter((job) => job.jobId && job.ok === false && job.canContinue);
+      continueBtn.hidden = resumeSlots.length === 0;
+      if (resumeSlots.length) {
+        progressLabel.textContent = shownOverall + "% — Gặp vấn đề. Bấm Tiếp tục để đọc nối.";
+      } else if (batchTotal) {
+        shownOverall = 100;
+        progressFill.style.width = "100%";
+        progressLabel.textContent = "100% — Đã ghi xong";
+      }
+      if (failed && resumeSlots.length) setVideoStatus(failed + " video chưa đọc được. Bấm Tiếp tục để đọc nối.");
+      else if (failed) setVideoStatus(failed + " video chưa đọc được. Kết quả đã lưu vẫn còn.");
+      else if (added && duplicated) setVideoStatus("Đã lưu " + added + " người. " + duplicated + " người trùng dữ liệu đã có.");
+      else if (added) setVideoStatus("Đã lưu " + added + " người vào mục kết quả.");
+      else if (duplicated) setVideoStatus(duplicated + " người trùng dữ liệu đã có.");
+      else setVideoStatus("Không thấy người đủ ba cột.");
+    }
+    async function pumpQueue() {
+      if (pumping) return;
+      pumping = true;
+      drop.classList.add("busy");
+      carried = [];
+      renderProblems([]);
+      clearSamples();
+      shownOverall = 0;
+      batchJobs = [];
+      resumeSlots = [];
+      continueBtn.hidden = true;
+      freshBox.hidden = true;
+      setVideoStatus("Đang đọc video.");
+      await uploadRest();
+      while (batchJobs.some((job) => !job.done) || queue.length) {
+        await uploadRest();
+        const pending = batchJobs.filter((job) => job.jobId && !job.done);
+        if (!pending.length) break;
+        await Promise.all(pending.map((job) => pollOnce(job)));
+        paintBatch();
+        if (batchJobs.some((job) => !job.done) || queue.length) await sleep(400);
+      }
+      finishBatch();
+      await loadAll();
+      if (!resumeSlots.length) { batchTotal = 0; shownOverall = 0; }
+      batchJobs = [];
+      queue = [];
+      paintFiles();
+      pumping = false;
+      drop.classList.remove("busy");
+    }
+    function enqueue(files) {
+      const accepted = Array.from(files || []).filter((file) => file && file.size >= 0);
+      if (!accepted.length) return;
+      if (!pumping) batchTotal = 0;
+      accepted.forEach((file) => queue.push(file));
+      batchTotal += accepted.length;
+      paintFiles();
+      pumpQueue();
+    }
+    async function resumeFailed() {
+      if (pumping || !resumeSlots.length) return;
+      pumping = true;
+      drop.classList.add("busy");
+      continueBtn.hidden = true;
+      const slots = resumeSlots;
+      batchJobs = slots;
+      batchTotal = slots.length;
+      for (let index = 0; index < slots.length; index += 1) {
+        const slot = slots[index];
+        let response;
+        try {
+          response = await fetch("/v1/recordings/jobs/" + slot.jobId + "/continue", { method: "POST", headers: headers() });
+        } catch (error) {
+          slot.done = true; slot.ok = false; slot.canContinue = false; slot.error = "Mất kết nối khi đang xử lý.";
+          continue;
+        }
+        if (response.status === 404 && await restartLostJob(slot)) continue;
+        if (!response.ok) {
+          slot.done = true; slot.ok = false;
+          slot.error = response.status === 404 ? "Mất tiến trình xử lý. Chọn lại video để gửi tiếp phần còn thiếu." : "Chưa đọc tiếp được.";
+          continue;
+        }
+        const data = await response.json();
+        slot.done = !!data.done;
+        slot.ok = !data.error;
+        slot.percent = Math.max(slot.percent || 0, data.percent || 0);
+        slot.task = data.task || "Đọc tiếp";
+        slot.problems = data.problems || [];
+        slot.canContinue = !!data.canContinue;
+        slot.error = data.error || "";
+        slot.misses = 0;
+        if (data.done && !data.error) {
+          slot.people = data.people || [];
+          slot.savedPeople = data.savedPeople || 0;
+          slot.duplicates = data.duplicates || [];
+          if (data.seenContacts != null) {
+            slot.seenContacts = data.seenContacts;
+            slot.seenAccounts = data.seenAccounts || 0;
+            slot.readSaved = data.readSaved || 0;
+          }
+        }
+      }
+      setVideoStatus("Đang đọc tiếp. Không đọc lại phần đã xong.");
+      while (batchJobs.some((job) => !job.done)) {
+        await Promise.all(batchJobs.filter((job) => job.jobId && !job.done).map((job) => pollOnce(job)));
+        paintBatch();
+        await sleep(400);
+      }
+      finishBatch();
+      await loadAll();
+      if (!resumeSlots.length) { batchTotal = 0; shownOverall = 0; }
+      batchJobs = [];
+      pumping = false;
+      drop.classList.remove("busy");
+    }
+    ["dragenter", "dragover"].forEach((name) => {
+      drop.addEventListener(name, (event) => { event.preventDefault(); drop.classList.add("over"); });
+    });
+    ["dragleave", "drop"].forEach((name) => {
+      drop.addEventListener(name, (event) => { event.preventDefault(); drop.classList.remove("over"); });
+    });
+    drop.addEventListener("drop", (event) => {
+      const picked = Array.from((event.dataTransfer && event.dataTransfer.files) || []);
+      Promise.all(picked.map(async (file) => {
+        const data = await file.arrayBuffer();
+        return new File([data], file.name || "video.mp4", { type: file.type || "video/mp4", lastModified: file.lastModified });
+      })).then((files) => enqueue(files));
+    });
+    videoFile.addEventListener("change", async () => {
+      const picked = Array.from(videoFile.files || []);
+      const files = [];
+      for (const file of picked) {
+        const data = await file.arrayBuffer();
+        files.push(new File([data], file.name || "video.mp4", { type: file.type || "video/mp4", lastModified: file.lastModified }));
+      }
+      videoFile.value = "";
+      enqueue(files);
+    });
+    continueBtn.addEventListener("click", resumeFailed);
+    $("savedMore").onclick = async () => {
+      if (!peopleCursor) return;
+      const response = await fetch("/v1/people?limit=50&cursor=" + encodeURIComponent(peopleCursor), { headers: headers() });
+      if (!response.ok) return;
+      const data = await response.json();
+      const more = personTable(data.items || [], "");
+      if (more && data.items && data.items.length) {
+        $("peopleRows").insertAdjacentHTML("beforeend", more);
+        $("savedHomeBody").insertAdjacentHTML("beforeend", more);
+      }
+      peopleCursor = data.cursor || "";
+      $("savedMore").hidden = !peopleCursor;
+    };
+
+    async function loadHelper() {
+      try {
+        const data = await (await fetch("/health")).json();
+        const helper = data.videoHelper || {};
+        if (helper.connected) {
+          const gpu = helper.gpu ? ", có máy đọc bằng GPU" : "";
+          const used = Number(helper.workers) || 0;
+          const share = used > 0 ? ", dùng " + used + " lõi (80% CPU và RAM)" : ", mỗi máy dùng 80% CPU và RAM";
+          const build = Number(helper.build) || 0;
+          const latest = Number(helper.latestBuild) || 0;
+          let state = "";
+          if (helper.readerOk === false) state = " " + (helper.readerNote ? helper.readerNote + " " : "") + "PC chưa đọc được chữ, máy chủ đọc thay.";
+          else if (build && latest && build < latest) state = " PC đang tự lên bản " + latest + ".";
+          else if (build) state = " PC bản " + build + (helper.models === "fast" ? ", bộ chữ nhanh." : ".");
+          const split = (Number(helper.count) || 1) >= 2 ? " Video từ 4 phút được chia đôi cho hai máy." : "";
+          $("helperLine").textContent = "PC phụ đang nối: " + (helper.count || 1) + " máy, " + (helper.cores || helper.cpus || 0) + " lõi" + share + gpu + ". Mỗi máy đọc tối đa hai video." + split + state;
+        } else {
+          $("helperLine").textContent = "PC phụ chưa nối. Video được máy chủ đọc. Mở phần mềm PC nếu muốn máy tính đọc giúp.";
+        }
+      } catch (error) { /* trang vẫn nhận video khi chưa hỏi được máy phụ */ }
+    }
+
+    $("saveToken").onclick = () => { localStorage.setItem(tokenKey, $("token").value.trim()); loadAll(); loadIssues(); };
     $("refresh").onclick = loadAll;
     $("recheck").onclick = recheck;
     $("saveAction").onclick = saveAction;
@@ -543,17 +1321,19 @@
     document.querySelectorAll("[data-tab]").forEach((button) => {
       button.addEventListener("click", () => showView(button.getAttribute("data-tab")));
     });
-    if (/iPhone|iPod/.test(navigator.userAgent)) {
-      $("openPhone").hidden = true;
-    }
-    if ($("token").value) loadAll();
-    setInterval(() => { if ($("token").value) loadAll(); }, 20000);
+    if (/iPhone|iPod/.test(navigator.userAgent)) $("openPhone").hidden = true;
+    if ($("token").value) { loadAll(); loadIssues(); }
+    pruneUploads();
+    loadHelper();
+    setInterval(() => { if ($("token").value && !pumping) loadAll(); }, 20000);
+    setInterval(loadHelper, 5000);
+    setInterval(loadIssues, 8000);
     try {
       const peopleChannel = new BroadcastChannel("fb-people");
       peopleChannel.onmessage = (event) => {
         const message = event.data || {};
         if (message.type === "people-saved" && Array.isArray(message.items) && message.items.length) {
-          renderPeople(message.items);
+          renderPeople(message.items, message.items.length, "");
         }
       };
     } catch (err) { /* kênh không có thì tab Đã lưu cập nhật lúc Tải lại */ }

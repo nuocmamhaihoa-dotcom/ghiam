@@ -6,8 +6,10 @@ import unittest
 
 from control_plane.people import (
     apply_novel,
+    clean_name,
     clean_username,
     complete_rows,
+    complete_sightings,
     fold_sightings,
     name_key,
     sighting_adds,
@@ -45,7 +47,14 @@ class PeopleMergeTests(unittest.TestCase):
     def test_username_prefix_and_invalid_drop(self) -> None:
         self.assertEqual(clean_username("trn.tng751"), "@trn.tng751")
         self.assertEqual(clean_username("@b.soi22"), "@b.soi22")
+        self.assertEqual(clean_username("@hoanganh1116"), "@hoanganh1116")
         self.assertEqual(clean_username("Hong@1978"), "")
+        self.assertEqual(clean_username("@kol"), "")
+        self.assertEqual(clean_username("@khac"), "")
+        self.assertEqual(clean_username("@trn!tng751"), "")
+        self.assertEqual(clean_name("Trần Tùng!"), "Trần Tùng")
+        self.assertEqual(clean_name("A Tùng #Bán Gạch"), "A Tùng Bán Gạch")
+        self.assertEqual(clean_name("Dịu 93"), "Dịu 93")
         folded = fold_sightings(
             [],
             [{"kind": "profile", "name": "Hồng", "username": "không hợp lệ"}],
@@ -101,3 +110,12 @@ class PeopleMergeTests(unittest.TestCase):
         self.assertFalse(
             sighting_adds(stored[0], {"kind": "contact", "name": "Bà soi", "contactName": "Khác"})
         )
+
+    def test_many_complete_rows_are_kept(self) -> None:
+        rows = [
+            {"name": f"Nguoi {index:02d} Aa", "contactName": f"Danh {index:02d}", "username": f"@n{index:02d}aa"}
+            for index in range(50)
+        ]
+        folded, added = apply_novel([], complete_sightings(rows))
+        self.assertEqual(added, 100)
+        self.assertEqual(len(complete_rows(folded)), 50)

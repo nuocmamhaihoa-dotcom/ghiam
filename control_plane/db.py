@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
+
+# Một người là một kết quả. Kho dừng nhận người mới khi đủ số này.
+PEOPLE_CAPACITY = 50_000_000
+people_write_lock = threading.RLock()
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -15,6 +20,7 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute("PRAGMA temp_store=MEMORY;")
     conn.execute("PRAGMA cache_size=-128000;")  # ~128MB page cache
+    conn.execute("PRAGMA mmap_size=268435456;")
     return conn
 
 
@@ -103,6 +109,26 @@ def init_db(db_path: Path) -> None:
               username TEXT NOT NULL DEFAULT '',
               updated_at TEXT NOT NULL
             );
+            CREATE INDEX IF NOT EXISTS idx_people_ready
+              ON saved_people(updated_at DESC, name_key DESC)
+              WHERE contact_name != '' AND username != '';
+            CREATE INDEX IF NOT EXISTS idx_people_username
+              ON saved_people(lower(username));
+            CREATE TABLE IF NOT EXISTS people_meta (
+              id INTEGER PRIMARY KEY CHECK (id = 1),
+              total INTEGER NOT NULL,
+              ready INTEGER NOT NULL,
+              duplicates INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS scan_duplicates (
+              name_key TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              contact_name TEXT NOT NULL DEFAULT '',
+              username TEXT NOT NULL DEFAULT '',
+              updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_duplicates_recent
+              ON scan_duplicates(updated_at DESC, name_key DESC);
             CREATE TABLE IF NOT EXISTS screen_lines (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               at TEXT NOT NULL,
@@ -110,6 +136,7 @@ def init_db(db_path: Path) -> None:
             );
             """
         )
+        _ensure_people_extras(conn)
         conn.commit()
 
 
@@ -520,59 +547,347 @@ def proxy_summary(db_path: Path) -> dict[str, Any]:
     }
 
 
-def list_people(db_path: Path) -> list[dict[str, str]]:
+def _person_from_row(row: sqlite3.Row) -> dict[str, str]:
+    return {
+        "nameKey": row["name_key"],
+        "name": row["name"],
+        "contactName": row["contact_name"],
+        "username": row["username"],
+    }
+
+
+def _load_people_map(conn: sqlite3.Connection, keys: list[str]) -> dict[str, sqlite3.Row]:
+    found: dict[str, sqlite3.Row] = {}
+    unique: list[str] = []
+    seen: set[str] = set()
+    for key in keys:
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(key)
+    for start in range(0, len(unique), 400):
+        chunk = unique[start : start + 400]
+        marks = ",".join("?" * len(chunk))
+        rows = conn.execute(
+            f"SELECT name_key, name, contact_name, username FROM saved_people WHERE name_key IN ({marks})",
+            chunk,
+        ).fetchall()
+        for row in rows:
+            found[row["name_key"]] = row
+    return found
+
+
+def _ensure_people_extras(conn: sqlite3.Connection) -> None:
+    """Bảng trùng và cột đếm cho kho đã tạo từ bản trước."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS scan_duplicates (
+          name_key TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          contact_name TEXT NOT NULL DEFAULT '',
+          username TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_duplicates_recent
+          ON scan_duplicates(updated_at DESC, name_key DESC)
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_people_username
+          ON saved_people(lower(username))
+        """
+    )
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(people_meta)").fetchall()}
+    if columns and "duplicates" not in columns:
+        conn.execute("ALTER TABLE people_meta ADD COLUMN duplicates INTEGER NOT NULL DEFAULT 0")
+
+
+def _ensure_people_meta(conn: sqlite3.Connection) -> tuple[int, int, int]:
+    _ensure_people_extras(conn)
+    row = conn.execute("SELECT total, ready, duplicates FROM people_meta WHERE id=1").fetchone()
+    if row is not None:
+        return int(row["total"]), int(row["ready"]), int(row["duplicates"] or 0)
+    total = int(conn.execute("SELECT COUNT(*) AS n FROM saved_people").fetchone()["n"])
+    ready = int(
+        conn.execute(
+            "SELECT COUNT(*) AS n FROM saved_people WHERE contact_name != '' AND username != ''"
+        ).fetchone()["n"]
+    )
+    duplicates = int(conn.execute("SELECT COUNT(*) AS n FROM scan_duplicates").fetchone()["n"])
+    conn.execute(
+        "INSERT INTO people_meta(id, total, ready, duplicates) VALUES(1, ?, ?, ?)",
+        (total, ready, duplicates),
+    )
+    return total, ready, duplicates
+
+
+def people_counts(db_path: Path) -> tuple[int, int]:
+    """Tổng dòng trong kho, và số người đủ ba cột."""
+    with session(db_path) as conn:
+        total, ready, _duplicates = _ensure_people_meta(conn)
+        return total, ready
+
+
+def duplicate_count(db_path: Path) -> int:
+    """Số người đã quét lại khi kho đã có dòng đủ ba cột."""
+    with session(db_path) as conn:
+        _total, _ready, duplicates = _ensure_people_meta(conn)
+        return duplicates
+
+
+def people_by_keys(db_path: Path, keys: list[str]) -> dict[str, dict[str, str]]:
+    """Đọc đúng các khóa được hỏi. Không kéo cả kho vào bộ nhớ."""
+    with session(db_path) as conn:
+        found = _load_people_map(conn, keys)
+    return {key: _person_from_row(row) for key, row in found.items()}
+
+
+def people_by_usernames(db_path: Path, usernames: list[str]) -> dict[str, dict[str, str]]:
+    """Người đủ ba cột, khóa là username đã hạ chữ. Không kéo cả kho."""
+    unique: list[str] = []
+    seen: set[str] = set()
+    for username in usernames:
+        folded = username.casefold()
+        if folded and folded not in seen:
+            seen.add(folded)
+            unique.append(folded)
+    found: dict[str, dict[str, str]] = {}
+    if not unique:
+        return found
+    with session(db_path) as conn:
+        for start in range(0, len(unique), 400):
+            chunk = unique[start : start + 400]
+            marks = ",".join("?" * len(chunk))
+            rows = conn.execute(
+                f"""
+                SELECT name_key, name, contact_name, username
+                FROM saved_people
+                WHERE lower(username) IN ({marks})
+                  AND contact_name != '' AND username != ''
+                """,
+                chunk,
+            ).fetchall()
+            for row in rows:
+                found[str(row["username"]).casefold()] = _person_from_row(row)
+    return found
+
+
+def _cursor_parts(cursor: str) -> tuple[str, str] | None:
+    text = cursor.strip()
+    if "\n" not in text:
+        return None
+    updated_at, name_key = text.split("\n", 1)
+    if not updated_at or not name_key:
+        return None
+    return updated_at, name_key
+
+
+def list_people_page(
+    db_path: Path, *, limit: int = 50, cursor: str = ""
+) -> tuple[list[dict[str, str]], str]:
+    """Một trang người đủ ba cột, mới nhất trước. Con trỏ lấy trang sau."""
+    size = max(1, min(int(limit), 200))
+    where = "WHERE contact_name != '' AND username != ''"
+    params: list[Any] = []
+    parsed = _cursor_parts(cursor[:300])
+    if parsed is not None:
+        updated_at, name_key = parsed
+        where += " AND (updated_at < ? OR (updated_at = ? AND name_key < ?))"
+        params.extend([updated_at, updated_at, name_key])
+    params.append(size + 1)
     with session(db_path) as conn:
         rows = conn.execute(
-            "SELECT name_key, name, contact_name, username FROM saved_people ORDER BY updated_at DESC"
+            f"""
+            SELECT name_key, name, contact_name, username, updated_at
+            FROM saved_people
+            {where}
+            ORDER BY updated_at DESC, name_key DESC
+            LIMIT ?
+            """,
+            params,
         ).fetchall()
-    return [
-        {
-            "nameKey": row["name_key"],
-            "name": row["name"],
-            "contactName": row["contact_name"],
-            "username": row["username"],
-        }
-        for row in rows
-    ]
+    page = rows[:size]
+    next_cursor = ""
+    if len(rows) > size and page:
+        last = page[-1]
+        next_cursor = f"{last['updated_at']}\n{last['name_key']}"
+    return [_person_from_row(row) for row in page], next_cursor
 
 
-def save_people(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> None:
+def list_duplicates_page(
+    db_path: Path, *, limit: int = 50, cursor: str = ""
+) -> tuple[list[dict[str, str]], str]:
+    """Một trang dữ liệu trùng, lần quét mới nhất trước."""
+    size = max(1, min(int(limit), 200))
+    where = ""
+    params: list[Any] = []
+    parsed = _cursor_parts(cursor[:300])
+    if parsed is not None:
+        updated_at, name_key = parsed
+        where = "WHERE updated_at < ? OR (updated_at = ? AND name_key < ?)"
+        params.extend([updated_at, updated_at, name_key])
+    params.append(size + 1)
     with session(db_path) as conn:
-        current = {
-            row["name_key"]: row
-            for row in conn.execute(
-                "SELECT name_key, name, contact_name, username FROM saved_people"
-            ).fetchall()
-        }
+        _ensure_people_extras(conn)
+        rows = conn.execute(
+            f"""
+            SELECT name_key, name, contact_name, username, updated_at
+            FROM scan_duplicates
+            {where}
+            ORDER BY updated_at DESC, name_key DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+    page = rows[:size]
+    next_cursor = ""
+    if len(rows) > size and page:
+        last = page[-1]
+        next_cursor = f"{last['updated_at']}\n{last['name_key']}"
+    return [_person_from_row(row) for row in page], next_cursor
+
+
+def _load_duplicate_map(conn: sqlite3.Connection, keys: list[str]) -> dict[str, sqlite3.Row]:
+    found: dict[str, sqlite3.Row] = {}
+    unique: list[str] = []
+    seen: set[str] = set()
+    for key in keys:
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(key)
+    for start in range(0, len(unique), 400):
+        chunk = unique[start : start + 400]
+        marks = ",".join("?" * len(chunk))
+        rows = conn.execute(
+            f"""
+            SELECT name_key, name, contact_name, username
+            FROM scan_duplicates WHERE name_key IN ({marks})
+            """,
+            chunk,
+        ).fetchall()
         for row in rows:
-            old = current.get(row["nameKey"])
-            contact_name = row.get("contactName") or ""
-            username = row.get("username") or ""
-            if (
-                old
-                and old["name"] == row["name"]
-                and old["contact_name"] == contact_name
-                and old["username"] == username
-            ):
-                continue
+            found[row["name_key"]] = row
+    return found
+
+
+def save_duplicates(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> list[str]:
+    """Một dòng cho mỗi người đã có trong kho. Lần quét sau ghi đè dòng trùng đó."""
+    skipped: list[str] = []
+    with people_write_lock:
+        with session(db_path) as conn:
+            conn.execute("PRAGMA synchronous=FULL;")
+            _total, _ready, duplicates = _ensure_people_meta(conn)
+            current = _load_duplicate_map(conn, [str(row.get("nameKey") or "") for row in rows])
+            for row in rows:
+                key = str(row.get("nameKey") or "")
+                if not key:
+                    continue
+                name = row.get("name") or ""
+                contact_name = row.get("contactName") or ""
+                username = row.get("username") or ""
+                old = current.get(key)
+                if (
+                    old
+                    and old["name"] == name
+                    and old["contact_name"] == contact_name
+                    and old["username"] == username
+                ):
+                    continue
+                if old is None:
+                    if duplicates >= PEOPLE_CAPACITY:
+                        skipped.append(key)
+                        continue
+                    duplicates += 1
+                conn.execute(
+                    """
+                    INSERT INTO scan_duplicates(name_key, name, contact_name, username, updated_at)
+                    VALUES(?,?,?,?,?)
+                    ON CONFLICT(name_key) DO UPDATE SET
+                      name=excluded.name,
+                      contact_name=excluded.contact_name,
+                      username=excluded.username,
+                      updated_at=excluded.updated_at
+                    """,
+                    (key, name, contact_name, username, updated_at),
+                )
+                current[key] = {
+                    "name_key": key,
+                    "name": name,
+                    "contact_name": contact_name,
+                    "username": username,
+                }
+            conn.execute("UPDATE people_meta SET duplicates=? WHERE id=1", (duplicates,))
+    return skipped
+
+
+def save_people(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> list[str]:
+    """Ghi các dòng được đưa vào. Trả về khóa mới bị bỏ vì kho đã đủ."""
+    skipped: list[str] = []
+    with people_write_lock:
+        with session(db_path) as conn:
+            conn.execute("PRAGMA synchronous=FULL;")
+            total, ready, _duplicates = _ensure_people_meta(conn)
+            current = _load_people_map(
+                conn, [str(row.get("nameKey") or "") for row in rows]
+            )
+            for row in rows:
+                key = str(row.get("nameKey") or "")
+                if not key:
+                    continue
+                contact_name = row.get("contactName") or ""
+                username = row.get("username") or ""
+                name = row.get("name") or ""
+                old = current.get(key)
+                if (
+                    old
+                    and old["name"] == name
+                    and old["contact_name"] == contact_name
+                    and old["username"] == username
+                ):
+                    continue
+                now_ready = bool(contact_name and username)
+                if old is None:
+                    if total >= PEOPLE_CAPACITY:
+                        skipped.append(key)
+                        continue
+                    total += 1
+                    if now_ready:
+                        ready += 1
+                else:
+                    was_ready = bool(old["contact_name"] and old["username"])
+                    if was_ready != now_ready:
+                        ready += 1 if now_ready else -1
+                conn.execute(
+                    """
+                    INSERT INTO saved_people(name_key, name, contact_name, username, updated_at)
+                    VALUES(?,?,?,?,?)
+                    ON CONFLICT(name_key) DO UPDATE SET
+                      name=excluded.name,
+                      contact_name=excluded.contact_name,
+                      username=excluded.username,
+                      updated_at=excluded.updated_at
+                    """,
+                    (key, name, contact_name, username, updated_at),
+                )
+                current[key] = {
+                    "name_key": key,
+                    "name": name,
+                    "contact_name": contact_name,
+                    "username": username,
+                }
+            ready = max(0, ready)
             conn.execute(
                 """
-                INSERT INTO saved_people(name_key, name, contact_name, username, updated_at)
-                VALUES(?,?,?,?,?)
-                ON CONFLICT(name_key) DO UPDATE SET
-                  name=excluded.name,
-                  contact_name=excluded.contact_name,
-                  username=excluded.username,
-                  updated_at=excluded.updated_at
+                INSERT INTO people_meta(id, total, ready) VALUES(1, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET total=excluded.total, ready=excluded.ready
                 """,
-                (
-                    row["nameKey"],
-                    row["name"],
-                    row.get("contactName") or "",
-                    row.get("username") or "",
-                    updated_at,
-                ),
+                (total, ready),
             )
+    return skipped
 
 
 def append_screen_line(db_path: Path, *, at: str, line: str) -> bool:

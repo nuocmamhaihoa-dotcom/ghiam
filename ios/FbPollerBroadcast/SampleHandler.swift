@@ -91,7 +91,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         guard !trimmed.isEmpty, trimmed != lastText else { return }
         lastText = trimmed
         HubStore.remember(trimmed)
-        Task { await HubStore.postLive(trimmed) }
+        Task { await HubStore.postLive(trimmed, source: "system") }
     }
 
     private func finish() {
