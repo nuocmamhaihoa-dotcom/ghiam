@@ -62,6 +62,20 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             if path in {"/", "/index.html"}:
                 self._bytes(200, PAGE.read_bytes(), "text/html; charset=utf-8")
                 return
+            if path.startswith("/") and path.endswith(".vcf") and "/" not in path[1:]:
+                file_path = PAGE.parent / path[1:]
+                if file_path.is_file():
+                    payload = file_path.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/vcard; charset=utf-8")
+                    self.send_header(
+                        "Content-Disposition",
+                        f'attachment; filename="{file_path.name}"',
+                    )
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
             if not self._auth():
                 self._json(401, {"error": "Chưa đăng nhập"})
                 return

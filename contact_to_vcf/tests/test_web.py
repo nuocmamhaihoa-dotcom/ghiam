@@ -18,6 +18,9 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
     port = server.server_address[1]
     opener = build_opener(HTTPCookieProcessor(CookieJar()))
     try:
+        sample = opener.open(f"http://127.0.0.1:{port}/danhba_test_30.vcf").read().decode()
+        assert sample.count("BEGIN:VCARD") == 30
+        assert "TEL;TYPE=CELL:+84900000030" in sample
         page = opener.open(f"http://127.0.0.1:{port}/").read().decode()
         assert "Vào phần mềm" in page
         assert "Nạp vào kho" in page
