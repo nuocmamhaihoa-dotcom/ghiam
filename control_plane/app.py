@@ -20,6 +20,8 @@ import threading
 import time
 import uuid
 import zipfile
+
+import anyio
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -154,6 +156,8 @@ def _remember_hub(kind: str, summary: str, detail: str | None = None, actor: str
 async def _startup() -> None:
     settings.ensure_dirs()
     db.init_db(settings.db_path)
+    # Việc đọc video chiếm luồng. Nhịp sống và lệnh nhận video không xếp hàng sau chúng.
+    anyio.to_thread.current_default_thread_limiter().total_tokens = 80
     # Import proxy list into DB immediately; live/die loop runs in background
     from control_plane.proxy_check import load_proxy_lines, start_background_checker
 
@@ -1538,7 +1542,7 @@ class WorkerFailBody(BaseModel):
 
 
 @app.post("/v1/video-workers/heartbeat")
-def video_worker_heartbeat(
+async def video_worker_heartbeat(
     body: HelperBeatBody,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
@@ -1580,10 +1584,10 @@ async def recordings_from_video_job(
 
 
 @app.post("/v1/recordings/jobs/claim")
-def claim_video_job(body: WorkerJobBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+async def claim_video_job(body: WorkerJobBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     """PC kéo một video chưa ai giữ. Không có video thì jobId rỗng."""
     _auth(authorization)
-    if not video_helpers.helpers.fresh(body.workerId):
+    if not video_helpers.helpers.fresh(body.workerId) and not video_helpers.helpers.note(body.workerId):
         raise HTTPException(409, "PC phụ chưa nối")
     if not video_helpers.helpers.try_hold(body.workerId):
         return {"ok": True, "jobId": ""}

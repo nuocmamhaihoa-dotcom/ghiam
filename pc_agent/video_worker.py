@@ -25,6 +25,7 @@ import argparse
 import base64
 import ctypes
 import http.client
+import io
 import json
 import os
 import socket
@@ -33,6 +34,7 @@ import tempfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
@@ -68,8 +70,135 @@ _FAST_BOUNDS = {"eng": (1_000_000, 12_000_000), "vie": (200_000, 3_000_000)}
 _UPDATE_EXIT = 3
 _UPDATE_WAIT_SEC = 1800.0
 _RETEST_SEC = 300.0
+_BEAT_SEC = 3.0
+_BEAT_TIMEOUT = 8.0
+_CLAIM_TIMEOUT = 8.0
 _TEST_WORDS = ("kiem", "tra", "doc", "chu")
 _reader_note = ""
+# Máy quét Facebook thường có proxy hệ thống. Proxy chết thì hub bị ngắt dù mạng thẳng vẫn thông.
+_DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def _keep_socket(sock: socket.socket) -> None:
+    """Giữ TCP qua NAT. Nghỉ vài giây không bị tường lửa cắt."""
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    except OSError:
+        return
+    try:
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    except OSError:
+        pass
+    if os.name == "nt" and hasattr(socket, "SIO_KEEPALIVE_VALS"):
+        try:
+            sock.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 15_000, 5_000))
+        except OSError:
+            pass
+        return
+    for name, value in (("TCP_KEEPIDLE", 15), ("TCP_KEEPINTVL", 5), ("TCP_KEEPCNT", 3)):
+        option = getattr(socket, name, None)
+        if option is None:
+            continue
+        try:
+            sock.setsockopt(socket.IPPROTO_TCP, option, value)
+        except OSError:
+            pass
+
+
+def _open_direct(request: urllib.request.Request, timeout: float) -> object:
+    """Mở hub thẳng, không đi proxy của Windows."""
+    return _DIRECT.open(request, timeout=timeout)
+
+
+class _DirectLane:
+    """Một kết nối TCP tới hub. Nhịp sống và việc đọc video đi hai đường, không chờ nhau."""
+
+    def __init__(self, hub: str, token: str) -> None:
+        parsed = urllib.parse.urlsplit(hub)
+        self._scheme = parsed.scheme or "http"
+        self._host = parsed.hostname or ""
+        self._port = parsed.port or (443 if self._scheme == "https" else 80)
+        self._token = token
+        self._lock = threading.Lock()
+        self._conn: http.client.HTTPConnection | None = None
+
+    def close(self) -> None:
+        conn = self._conn
+        self._conn = None
+        if conn is None:
+            return
+        try:
+            conn.close()
+        except OSError:
+            return
+
+    def _open(self) -> http.client.HTTPConnection:
+        if not self._host:
+            raise OSError("Thiếu địa chỉ hub.")
+        if self._scheme == "https":
+            conn: http.client.HTTPConnection = http.client.HTTPSConnection(self._host, self._port, timeout=10)
+        else:
+            conn = http.client.HTTPConnection(self._host, self._port, timeout=10)
+        conn.connect()
+        sock = conn.sock
+        if sock is not None:
+            _keep_socket(sock)
+        self._conn = conn
+        return conn
+
+    def call(
+        self,
+        method: str,
+        path: str,
+        payload: dict[str, object] | None = None,
+        timeout: float = 60,
+    ) -> dict[str, object]:
+        data = b""
+        headers = {"Authorization": f"Bearer {self._token}", "Connection": "keep-alive"}
+        if payload is not None:
+            data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            headers["Content-Type"] = "application/json; charset=utf-8"
+        headers["Content-Length"] = str(len(data))
+        last: BaseException | None = None
+        for _attempt in range(2):
+            with self._lock:
+                try:
+                    conn = self._conn if self._conn is not None else self._open()
+                    conn.timeout = timeout
+                    sock = conn.sock
+                    if sock is not None:
+                        sock.settimeout(timeout)
+                    conn.request(method, path, body=data, headers=headers)
+                    response = conn.getresponse()
+                    raw = response.read()
+                    status = int(response.status)
+                    reason = response.reason or ""
+                    response_headers = response.headers
+                    if status >= 500 or response_headers.get("Connection", "").lower() == "close":
+                        self.close()
+                except (OSError, TimeoutError, http.client.HTTPException) as error:
+                    self.close()
+                    last = error
+                    continue
+            if status >= 500:
+                last = urllib.error.HTTPError(path, status, reason, response_headers, io.BytesIO(raw))
+                continue
+            if status >= 400:
+                raise urllib.error.HTTPError(path, status, reason, response_headers, io.BytesIO(raw))
+            if not raw:
+                return {}
+            try:
+                loaded = json.loads(raw.decode("utf-8"))
+            except json.JSONDecodeError as error:
+                raise json.JSONDecodeError(error.msg, error.doc, error.pos) from error
+            if not isinstance(loaded, dict):
+                return {}
+            return loaded
+        if isinstance(last, urllib.error.HTTPError):
+            raise last
+        if isinstance(last, (OSError, TimeoutError)):
+            raise last
+        raise OSError("Mất kết nối hub.") from last
 
 
 def worker_budget(cpu_count: int, ram_bytes: int | None) -> tuple[int, int]:
@@ -170,24 +299,13 @@ class HubClient:
     def __init__(self, hub: str, token: str) -> None:
         self.hub = hub.rstrip("/")
         self.token = token
-        self._lock = threading.Lock()
+        # Nhịp sống không chờ lần tải video hay lần gửi kết quả.
+        self._beat = _DirectLane(self.hub, self.token)
+        self._work = _DirectLane(self.hub, self.token)
 
     def _request(self, method: str, path: str, payload: dict[str, object] | None = None, timeout: float | None = 60) -> dict[str, object]:
-        data = None
-        headers = {"Authorization": f"Bearer {self.token}"}
-        if payload is not None:
-            data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-            headers["Content-Type"] = "application/json; charset=utf-8"
-        request = urllib.request.Request(self.hub + path, data=data, headers=headers, method=method)
-        with self._lock:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                raw = response.read()
-        if not raw:
-            return {}
-        loaded = json.loads(raw.decode("utf-8"))
-        if not isinstance(loaded, dict):
-            return {}
-        return loaded
+        limit = 60.0 if timeout is None else float(timeout)
+        return self._work.call(method, path, payload, limit)
 
     def heartbeat(
         self,
@@ -210,7 +328,7 @@ class HubClient:
         }
         if report:
             payload.update(report)
-        body = self._request("POST", "/v1/video-workers/heartbeat", payload, timeout=30)
+        body = self._beat.call("POST", "/v1/video-workers/heartbeat", payload, timeout=_BEAT_TIMEOUT)
         found = body.get("workerId")
         latest = body.get("build")
         latest_build = latest if isinstance(latest, int) and not isinstance(latest, bool) else 0
@@ -221,11 +339,11 @@ class HubClient:
             f"{self.hub}/v1/updates/tessdata/{name}",
             headers={"Authorization": f"Bearer {self.token}"},
         )
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return response.read(_FAST_BOUNDS["eng"][1] + 1)
+        with _open_direct(request, 60) as response:
+            return response.read(_FAST_BOUNDS["eng"][1] + 1)  # type: ignore[attr-defined]
 
     def claim(self, worker_id: str) -> tuple[str, dict[str, object]]:
-        body = self._request("POST", "/v1/recordings/jobs/claim", {"workerId": worker_id}, timeout=30)
+        body = self._request("POST", "/v1/recordings/jobs/claim", {"workerId": worker_id}, timeout=_CLAIM_TIMEOUT)
         found = body.get("jobId")
         job_id = found if isinstance(found, str) else ""
         resume = body.get("resume")
@@ -261,7 +379,7 @@ class HubClient:
             copied_end: int | None = None
             total_size = 0
             try:
-                with urllib.request.urlopen(request, timeout=_READ_STALL_SEC) as response:
+                with _open_direct(request, _READ_STALL_SEC) as response:
                     code = int(getattr(response, "status", 200) or 200)
                     if have and code == 200:
                         have = 0
@@ -580,7 +698,7 @@ def _fetch_range(url: str, token: str, start: int, end: int) -> bytes:
     request = urllib.request.Request(url, headers=headers, method="GET")
     want = end - start
     sink = _Memory()
-    with urllib.request.urlopen(request, timeout=_READ_STALL_SEC) as response:
+    with _open_direct(request, _READ_STALL_SEC) as response:
         code = int(getattr(response, "status", 200) or 200)
         if code != 206:
             raise OSError("Máy chủ không trả khúc video.")
@@ -956,24 +1074,44 @@ def main() -> None:
     stop = threading.Event()
     updating = threading.Event()
 
+    link_down = False
+
+    def pulse() -> bool:
+        try:
+            worker_id, latest = client.heartbeat(
+                str(state["worker_id"]), name, cpus, use_gpu, gpu_name, workers, dict(report)
+            )
+        except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            return False
+        state["worker_id"] = worker_id
+        state["latest"] = latest
+        if update_due(VIDEO_WORKER_BUILD, latest, slots.busy(), read_update_mark(mark), time.time()):
+            updating.set()
+        return True
+
+    def note_down(text: str) -> None:
+        nonlocal link_down
+        if link_down:
+            return
+        say(text, err=True)
+        link_down = True
+
+    def note_up() -> None:
+        nonlocal link_down
+        if not link_down:
+            return
+        say("Đã nối lại hub.")
+        link_down = False
+
     def beat() -> None:
         tested = time.monotonic()
-        while not stop.wait(5):
+        while not stop.wait(_BEAT_SEC):
             refresh_worker_state()
             if report.get("readerOk") is False and time.monotonic() - tested >= _RETEST_SEC:
                 report.update(reader_self_test())
                 report["readerMode"] = reader_mode()
                 tested = time.monotonic()
-            try:
-                worker_id, latest = client.heartbeat(
-                    str(state["worker_id"]), name, cpus, use_gpu, gpu_name, workers, dict(report)
-                )
-            except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
-                continue
-            state["worker_id"] = worker_id
-            state["latest"] = latest
-            if update_due(VIDEO_WORKER_BUILD, latest, slots.busy(), read_update_mark(mark), time.time()):
-                updating.set()
+            pulse()
 
     while True:
         try:
@@ -1018,6 +1156,7 @@ def main() -> None:
                 continue
             claimed = True
             job_id, resume = client.claim(str(state["worker_id"]))
+            note_up()
             if not job_id:
                 slots.give()
                 claimed = False
@@ -1050,15 +1189,17 @@ def main() -> None:
                 set_reading(False)
             if claimed:
                 slots.give()
-            say(f"Hub trả {error.code}. Thử video sau.", err=True)
-            time.sleep(1)
+            if error.code == 409:
+                pulse()
+            note_down(f"Hub trả {error.code}. Thử video sau.")
+            time.sleep(0.5)
         except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
             if started:
                 set_reading(False)
             if claimed:
                 slots.give()
-            say("Mất kết nối hub, thử lại.", err=True)
-            time.sleep(2)
+            note_down("Mất kết nối hub, thử lại.")
+            time.sleep(0.5)
 
 
 if __name__ == "__main__":
