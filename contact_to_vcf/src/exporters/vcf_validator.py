@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from processors.phone_normalizer import to_vietnam_10
+
 
 class VcfStructureError(Exception):
     """A written VCF file does not match the required contact structure."""
@@ -44,11 +46,11 @@ def fold_line(line: str) -> str:
 
 
 def contact_label(phone: str) -> str:
-    """Label a Vietnam +84 mobile with the 10-digit form the phone can display."""
-    text = phone.strip()
-    if text.startswith("+84") and len(text) == 12 and text[3:].isdigit():
-        return "0" + text[3:]
-    return text
+    """Show a Vietnam number as the same 10 digits used for the contact name."""
+    ten = to_vietnam_10(phone)
+    if ten is not None:
+        return ten
+    return phone.strip()
 
 
 def format_card(name: str, phone: str) -> str:

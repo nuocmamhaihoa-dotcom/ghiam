@@ -60,12 +60,67 @@ def normalize_phone(raw: str, *, normalize: bool, vn_to_e164: bool) -> PhoneResu
     return _length_result(original, cleaned, plus=False)
 
 
+_LEGACY_PREFIX = {
+    "0162": "032",
+    "0163": "033",
+    "0164": "034",
+    "0165": "035",
+    "0166": "036",
+    "0167": "037",
+    "0168": "038",
+    "0169": "039",
+    "0120": "070",
+    "0121": "079",
+    "0122": "077",
+    "0126": "076",
+    "0128": "078",
+    "0123": "083",
+    "0124": "084",
+    "0125": "085",
+    "0127": "081",
+    "0129": "082",
+    "0186": "056",
+    "0188": "058",
+    "0199": "059",
+}
+
+
+def to_vietnam_10(raw: str) -> str | None:
+    """Return the 10-digit Vietnam carrier form, or None when it is not clear."""
+    cleaned = str(raw).strip().translate(_SEPARATORS).replace(",", "")
+    if cleaned.startswith("00"):
+        cleaned = cleaned[2:]
+    elif cleaned.startswith("+"):
+        cleaned = cleaned[1:]
+    if not cleaned.isdigit():
+        return None
+    if cleaned.startswith("84") and len(cleaned) in {11, 12}:
+        cleaned = cleaned[2:]
+    if not cleaned.startswith("0"):
+        cleaned = "0" + cleaned
+    if len(cleaned) == 11:
+        prefix = _LEGACY_PREFIX.get(cleaned[:4])
+        if prefix is None:
+            return None
+        cleaned = prefix + cleaned[4:]
+    if len(cleaned) == 10 and cleaned.startswith("0"):
+        return cleaned
+    return None
+
+
+def storage_forms(phone: str) -> tuple[str, str | None]:
+    """Return the stored 10-digit number and the older +84 spelling, when both exist."""
+    ten = to_vietnam_10(phone)
+    if ten is None:
+        return phone, None
+    return ten, "+84" + ten[1:]
+
+
 def canonical_phones(raw: str) -> list[str]:
     """Return every stored phone from one cell.
 
-    A clear Vietnam number becomes ``+84…``. Any other value that contains
-    digits is kept, so a short or foreign number is still stored. A cell
-    with no digits produces an empty list.
+    A clear Vietnam number becomes the 10-digit carrier form. Any other value
+    that contains digits is kept. A cell with no digits produces an empty list.
     """
     if raw is None:
         return []
@@ -96,6 +151,9 @@ def _canonical_one(raw: str) -> str | None:
             cleaned = "".join(runs)
         else:
             return None
+    ten = to_vietnam_10(cleaned)
+    if ten is not None:
+        return ten
     if cleaned.startswith("+"):
         body = cleaned[1:]
         if not body.isdigit():

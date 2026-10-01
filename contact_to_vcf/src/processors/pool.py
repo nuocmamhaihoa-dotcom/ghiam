@@ -10,8 +10,8 @@ from pathlib import Path
 
 from exporters.vcf_validator import contact_label, format_card
 from models.records import JobConfig
-from parsers.detect import open_reader
-from processors.phone_normalizer import canonical_phones
+from parsers.detect import detect_encoding, open_reader, prepare_source
+from processors.phone_normalizer import canonical_phones, storage_forms
 
 CONTACTS_PER_FILE = 5000
 
@@ -40,6 +40,21 @@ def pool_path(folder: Path) -> Path:
     return folder / "kho.sqlite"
 
 
+def _phones_on_record(columns: tuple[str, ...], file_format: str, phone_column: int) -> list[str]:
+    """TXT keeps every number on the line. Other files use the chosen column."""
+    cells = list(columns) if file_format == "txt" else []
+    if file_format != "txt" and 0 <= phone_column < len(columns):
+        cells = [columns[phone_column]]
+    found: list[str] = []
+    seen: set[str] = set()
+    for cell in cells:
+        for phone in canonical_phones(cell):
+            if phone not in seen:
+                seen.add(phone)
+                found.append(phone)
+    return found
+
+
 def import_file(
     folder: Path,
     source: Path,
@@ -54,6 +69,9 @@ def import_file(
     on_progress: Callable[[int], None] | None = None,
 ) -> ImportStats:
     """Add phones from one source. Existing phones stay in their original book."""
+    if file_format == "txt":
+        source = prepare_source(source)
+        encoding = detect_encoding(source)
     config = JobConfig(
         input_path=source,
         output_dir=folder,
@@ -88,10 +106,7 @@ def import_file(
         for record in stream:
             if should_stop is not None and should_stop():
                 break
-            cell = ""
-            if 0 <= phone_column < len(record.columns):
-                cell = record.columns[phone_column]
-            phones = canonical_phones(cell)
+            phones = _phones_on_record(record.columns, file_format, phone_column)
             seen += 1
             if not phones:
                 rejected += 1
@@ -168,8 +183,8 @@ def export_book(folder: Path, book_id: int, destination: Path) -> int:
         destination.parent.mkdir(parents=True, exist_ok=True)
         with destination.open("w", encoding="utf-8", newline="") as handle:
             for row in rows:
-                phone = str(row["phone"])
-                handle.write(format_card(contact_label(phone), phone))
+                phone = contact_label(str(row["phone"]))
+                handle.write(format_card(phone, phone))
         downloaded_at = _now()
         connection.execute(
             "UPDATE books SET downloaded_at = ? WHERE id = ?",
@@ -187,9 +202,10 @@ def book_of(folder: Path, phone: str) -> int | None:
     connection = _connect(pool_path(folder))
     try:
         _ensure_schema(connection)
+        stored, alt = storage_forms(phone)
         row = connection.execute(
-            "SELECT book_id FROM numbers WHERE phone = ?",
-            (phone,),
+            "SELECT book_id FROM numbers WHERE phone = ? OR phone = ?",
+            (stored, alt or stored),
         ).fetchone()
     finally:
         connection.close()
@@ -224,12 +240,17 @@ class _Pool:
         if not ordered:
             return 0, duplicate
         self.connection.execute(
-            "CREATE TEMP TABLE IF NOT EXISTS staging (phone TEXT PRIMARY KEY)"
+            """
+            CREATE TEMP TABLE IF NOT EXISTS staging (
+                phone TEXT PRIMARY KEY,
+                alt TEXT
+            )
+            """
         )
         self.connection.execute("DELETE FROM staging")
         self.connection.executemany(
-            "INSERT INTO staging (phone) VALUES (?)",
-            [(phone,) for phone in ordered],
+            "INSERT OR IGNORE INTO staging (phone, alt) VALUES (?, ?)",
+            [storage_forms(phone) for phone in ordered],
         )
         already = {
             str(row["phone"])
@@ -237,7 +258,9 @@ class _Pool:
                 """
                 SELECT staging.phone AS phone
                 FROM staging
-                JOIN numbers ON numbers.phone = staging.phone
+                JOIN numbers
+                  ON numbers.phone = staging.phone
+                  OR numbers.phone = staging.alt
                 """
             )
         }

@@ -78,7 +78,7 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
         )
         card = downloaded.read().decode()
         assert "FN:0901234567" in card
-        assert "TEL;TYPE=CELL:+84901234567" in card
+        assert "TEL;TYPE=CELL:0901234567" in card
 
         auto_body, auto_type = _form({"file": ("so.txt", "0901111111\n0902222222\n".encode())})
         automatic = json.load(
@@ -96,7 +96,7 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
             f"http://127.0.0.1:{port}/api/books/{automatic['pending'][0]}/download"
         ).read().decode()
         assert "FN:0901111111" in auto_card
-        assert "TEL;TYPE=CELL:+84901111111" in auto_card
+        assert "TEL;TYPE=CELL:0901111111" in auto_card
 
         other_body, other_type = _form(
             {"file": ("danh_sach.dat", "0912345678\n0987654321\n".encode())}

@@ -30,11 +30,11 @@ Workflow GitHub `contact-to-vcf-windows` cũng đóng gói file exe này khi có
 
 ## Luồng sử dụng
 
-1. Chọn file nguồn. CSV, Excel và TXT đọc theo cột. Mọi định dạng khác vẫn được nhận và lấy số điện thoại có trong file.
+1. Chọn file nguồn. CSV và Excel đọc theo cột. TXT đọc hết từng dòng, kể cả nhiều số trên một dòng. Mọi định dạng khác vẫn được nhận và lấy số điện thoại có trong file.
 2. Chọn cột số điện thoại. Tên liên hệ luôn là chính số đó sau khi chuẩn hóa.
 3. Xem vài dòng đầu. Cột nền xanh lá là cột số sẽ được nạp. CSV nhận dấu phẩy, chấm phẩy, tab hoặc gạch đứng theo nội dung file.
 4. Chọn thư mục kho.
-5. Bấm **NẠP VÀO KHO**. Số Việt Nam rõ ràng thành `+84…` và tên liên hệ ghi đúng số đó. Số khác vẫn được nhận nếu có chữ số. Số đã có trong kho không được thêm lại.
+5. Bấm **NẠP VÀO KHO**. Số Việt Nam rõ ràng được lưu thành 10 số của nhà mạng, ví dụ `0901234567`. Tên liên hệ ghi đúng số đó, giống hệt số điện thoại. Số khác vẫn được nhận nếu có chữ số. Số đã có trong kho không được thêm lại.
 6. Mỗi danh bạ giữ tối đa 5.000 số. Số đã nằm trong danh bạ nào thì giữ nguyên danh bạ đó, kể cả khi nạp lại.
 7. Bấm **Tải về** trên từng dòng, hoặc **Tải các file chưa tải**. Dòng đã tải hiện thời điểm tải. Trên iPhone: Tệp → chọn file → Chia sẻ → Thêm vào Danh bạ.
 

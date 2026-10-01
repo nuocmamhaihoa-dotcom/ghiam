@@ -30,6 +30,9 @@ def detect_format(path: Path) -> str:
 
 def prepare_source(path: Path) -> Path:
     """Turn a non-table file into text the phone reader can scan."""
+    utf8 = _as_utf8_if_utf16(path)
+    if utf8 is not None:
+        path = utf8
     if _looks_like_xlsx(path):
         return path
     if _looks_like_docx(path):
@@ -175,6 +178,19 @@ def _docx_plain(path: Path) -> str:
             root = ElementTree.fromstring(archive.read(name))
             parts.append(" ".join(root.itertext()))
     return "\n".join(parts)
+
+
+def _as_utf8_if_utf16(path: Path) -> Path | None:
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return _write_text(path, raw.decode("utf-16"))
+    if len(raw) >= 4 and raw[1:2] == b"\x00" and raw[3:4] == b"\x00":
+        try:
+            text = raw.decode("utf-16-le")
+        except UnicodeDecodeError:
+            return None
+        return _write_text(path, text)
+    return None
 
 
 def _is_binary(path: Path) -> bool:

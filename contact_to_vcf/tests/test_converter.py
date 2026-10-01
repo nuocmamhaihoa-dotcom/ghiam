@@ -679,11 +679,13 @@ def test_pool_keeps_a_number_in_its_first_book(tmp_path: Path) -> None:
     from processors.phone_normalizer import canonical_phones
     from processors.pool import book_of, export_book, import_file, list_books, pool_total
 
-    assert canonical_phones("090 123 4567") == ["+84901234567"]
-    assert canonical_phones("+84 901 234 567") == ["+84901234567"]
+    assert canonical_phones("090 123 4567") == ["0901234567"]
+    assert canonical_phones("+84 901 234 567") == ["0901234567"]
+    assert canonical_phones("090.123.4567") == ["0901234567"]
+    assert canonical_phones("01621234567") == ["0321234567"]
     assert canonical_phones("12") == ["12"]
     assert canonical_phones("abc") == []
-    assert canonical_phones("0901234567 / 0912345678") == ["+84901234567", "+84912345678"]
+    assert canonical_phones("0901234567 / 0912345678") == ["0901234567", "0912345678"]
 
     folder = tmp_path / "kho"
     folder.mkdir()
@@ -733,7 +735,7 @@ def test_pool_keeps_a_number_in_its_first_book(tmp_path: Path) -> None:
     assert export_book(folder, 1, destination) == 2
     text = destination.read_text(encoding="utf-8")
     assert "FN:0901234567" in text
-    assert "TEL;TYPE=CELL:+84901234567" in text
+    assert "TEL;TYPE=CELL:0901234567" in text
     assert text.count("BEGIN:VCARD") == 2
     downloaded = list_books(folder, "downloaded")
     assert downloaded[0].id == 1
@@ -754,6 +756,37 @@ def test_pool_keeps_a_number_in_its_first_book(tmp_path: Path) -> None:
     assert book_of(folder, "+84901234567") == 1
     assert book_of(folder, "+84901234569") == 3
     assert [book.id for book in list_books(folder, "pending")] == [2, 3]
+
+
+def test_txt_keeps_every_number_and_names_each_contact_with_it(tmp_path: Path) -> None:
+    from processors.pool import book_of, export_book, import_file
+
+    path = tmp_path / "so.txt"
+    path.write_bytes(
+        "0901234567\n0912345678, 0987654321\n01621234567\n\nkhong phai so\n".encode("utf-16")
+    )
+    folder = tmp_path / "kho"
+    folder.mkdir()
+    stats = import_file(
+        folder,
+        path,
+        file_format="txt",
+        delimiter=",",
+        has_header=False,
+        encoding="utf-8-sig",
+        phone_column=0,
+    )
+    assert stats.seen == 5
+    assert stats.added == 4
+    assert stats.rejected == 2
+    assert book_of(folder, "0321234567") == 1
+    destination = tmp_path / "danhba.vcf"
+    assert export_book(folder, 1, destination) == 4
+    raw = destination.read_bytes()
+    assert raw.count(b"BEGIN:VCARD") == 4
+    assert b"FN:0901234567\r\nTEL;TYPE=CELL:0901234567\r\n" in raw
+    assert b"FN:0321234567\r\nTEL;TYPE=CELL:0321234567\r\n" in raw
+    assert b"+84" not in raw
 
 
 def test_card_bytes_match_the_working_phone_sample() -> None:
