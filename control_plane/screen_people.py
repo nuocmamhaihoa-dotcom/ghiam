@@ -13,6 +13,7 @@ from typing import NamedTuple
 from PIL import Image, ImageFilter, ImageOps
 
 from control_plane.people import clean_name, clean_username, fold_name
+from control_plane.read_vote import five_variants, needs_reread, read_rapid, vote_key, vote_line
 from control_plane.tesseract_keep import read_tsv
 
 _HANDLE = re.compile(r"@[A-Za-z0-9._]{5,30}")
@@ -746,53 +747,97 @@ def _crop_box(image: Image.Image, left: int, top: int, width: int, height: int) 
     return image.crop(box)
 
 
-def _handle_boxes(tsv: str, lines: list[TextLine]) -> list[tuple[int, int, int, int]]:
-    boxes: list[tuple[int, int, int, int]] = []
-    seen: set[tuple[int, int, int, int]] = set()
-
-    def _add(left: int, top: int, width: int, height: int) -> None:
-        key = (left, top, width, height)
-        if width <= 0 or height <= 0 or key in seen:
-            return
-        seen.add(key)
-        boxes.append(key)
-
-    for word in tsv_words(tsv, min_conf=0.0):
-        text = word.text
-        handle_like = bool(_HANDLE.fullmatch(text) or _HANDLE.fullmatch("@" + text.lstrip("@")))
-        if "@" in text or (handle_like and any(char.isdigit() or char in "._" for char in text)):
-            _add(word.left, word.top, word.width, word.height)
-    for line in lines:
-        if "@" not in line.text:
-            continue
-        _add(line.left, line.top, max(40, len(line.text) * 8), line.height)
-    return boxes[:4]
+def _handle_conf(tsv: str, handle: str) -> float | None:
+    token = clean_username(handle).lstrip("@").casefold()
+    if not token:
+        return None
+    confs = [
+        word.conf
+        for word in tsv_words(tsv, min_conf=0.0)
+        if token in word.text.casefold().replace(" ", "")
+    ]
+    if not confs:
+        return None
+    return min(confs)
 
 
-def _read_handle_crop(image: Image.Image, box: tuple[int, int, int, int], dest: Path) -> tuple[str, float]:
-    """Đọc một dòng @ bằng PSM 7 và charset khóa. Conf thấp thì đọc lại bộ chuẩn, rồi bỏ."""
-    left, top, width, height = box
-    crop = _crop_box(image, left, top, width, height)
-    try:
-        crop.save(dest)
-    except OSError:
-        return "", 0.0
-    extra = ["-c", f"tessedit_char_whitelist={_HANDLE_CHARSET}"]
-    tsv = _tesseract_cli_run(dest, psm="7", langs=("eng",), extra=extra)
-    handle, conf = handle_from_tsv(tsv, min_conf=0.0)
-    if handle and conf >= _HANDLE_CONF:
-        return handle, conf
-    standard = _tesseract_cli_run(
-        dest,
-        prefix=_standard_prefix(),
-        psm="7",
-        langs=("eng",),
-        extra=extra,
+def _line_box(line: TextLine, tsv: str, width: int) -> tuple[int, int, int, int]:
+    """Hộp chữ của một dòng. Không có hộp từ thì ước theo chiều cao dòng."""
+    words = [
+        word
+        for word in tsv_words(tsv, min_conf=0.0)
+        if line.top - 4 <= word.top + (word.height / 2) <= line.bottom + 4 and word.left >= line.left - 12
+    ]
+    if words:
+        left = min(word.left for word in words)
+        top = min(word.top for word in words)
+        right = max(word.left + word.width for word in words)
+        bottom = max(word.top + word.height for word in words)
+        return left, top, max(1, right - left), max(1, bottom - top)
+    height = max(8, line.height)
+    guess = max(48, int(len(line.text) * height * 0.55))
+    return line.left, line.top, min(guess, max(1, width - line.left)), height
+
+
+def _scaled(crop: Image.Image, scale: int) -> Image.Image:
+    if scale == 1:
+        return crop
+    return crop.resize(
+        (max(1, crop.width * scale), max(1, crop.height * scale)),
+        Image.Resampling.LANCZOS,
     )
-    retry, retry_conf = handle_from_tsv(standard, min_conf=0.0)
-    if retry and retry_conf >= _HANDLE_CONF:
-        return retry, retry_conf
-    return "", max(conf, retry_conf)
+
+
+def _read_saved_crop(dest: Path, kind: str) -> str:
+    """Bộ chữ chuẩn, một dòng. @ khóa charset. Tên giữ dấu Việt."""
+    prefix = _standard_prefix()
+    if kind == "handle":
+        extra = ["-c", f"tessedit_char_whitelist={_HANDLE_CHARSET}"]
+        tsv = _tesseract_cli_run(dest, prefix=prefix, psm="7", langs=("eng",), extra=extra)
+        handle, _conf = handle_from_tsv(tsv, min_conf=0.0)
+        return handle
+    tsv = _tesseract_cli_run(dest, prefix=prefix, psm="7", langs=("vie+eng", "eng"))
+    words = tsv_words(tsv, min_conf=0.0)
+    return clean_name(" ".join(word.text for word in words))
+
+
+def _read_prepared(picture: Image.Image, dest: Path, kind: str) -> str:
+    try:
+        picture.save(dest)
+    except OSError:
+        return ""
+    return _read_saved_crop(dest, kind)
+
+
+def _third_read(crop: Image.Image, dest: Path, kind: str) -> str | None:
+    """RapidOCR trên dòng đã cắt. Chưa cài thì Tesseract phóng ba lần, tăng tương phản."""
+    enlarged = _scaled(crop, 2)
+    rapid = read_rapid(enlarged)
+    if rapid is not None:
+        if kind == "handle":
+            return clean_username(rapid)
+        return clean_name(rapid)
+    contrasted = ImageOps.autocontrast(crop)
+    return _read_prepared(_scaled(contrasted, 3), dest, kind)
+
+
+def _vote_box(
+    image: Image.Image,
+    box: tuple[int, int, int, int],
+    dest: Path,
+    kind: str,
+    seed: str,
+) -> tuple[str, bool]:
+    """Hướng 2 luôn chạy. Hướng 3 và năm lần đọc lại chỉ khi các hướng đã có còn lệch."""
+    crop = _crop_box(image, *box)
+    second = _read_prepared(_scaled(crop, 2), dest, kind)
+    if vote_key(seed, kind) and vote_key(seed, kind) == vote_key(second, kind):
+        return vote_line(seed, second, None, [], kind=kind)
+    third = _third_read(crop, dest, kind)
+    if not needs_reread(seed, second, third, kind):
+        return vote_line(seed, second, third, [], kind=kind)
+    reruns = [_read_prepared(variant, dest, kind) for variant in five_variants(crop)]
+    return vote_line(seed, second, third, reruns, kind=kind)
 
 
 def _open_frame_image(path: Path, *, prepared: bool) -> Image.Image | None:
@@ -807,6 +852,51 @@ def _open_frame_image(path: Path, *, prepared: bool) -> Image.Image | None:
         return None
 
 
+def _rewrite_with_votes(
+    path: Path,
+    source: Image.Image,
+    lines: list[TextLine],
+    tsv: str,
+) -> tuple[list[TextLine], set[str], list[str]]:
+    """Mỗi dòng tên và @ đối chiếu riêng. Chuỗi đã trùng thì ghi, lệch hết thì bỏ."""
+    agreed_names: set[str] = set()
+    agreed_handles: list[str] = []
+    updated: list[TextLine] = []
+    dest = path.with_name(f"{path.stem}-vote.png")
+    try:
+        for line in lines:
+            text = line.text
+            box = _line_box(line, tsv, source.width)
+            if _valid_handles(text) or text.strip().startswith("@"):
+                voted, handle_agreed = _vote_box(source, box, dest, "handle", text)
+                sure = _handle_conf(tsv, voted or text)
+                if voted and (handle_agreed or (sure is not None and sure >= _HANDLE_CONF)):
+                    if handle_agreed and voted not in agreed_handles:
+                        agreed_handles.append(voted)
+                    for old in _valid_handles(text):
+                        text = text.replace(old, voted)
+                    if not _valid_handles(text):
+                        text = f"{text} {voted}".strip()
+                else:
+                    text = re.sub(r"@\S+", "", text)
+            name_source = re.sub(r"@\S+", " ", text)
+            if _is_name_line(name_source):
+                voted_name, name_agreed = _vote_box(source, box, dest, "name", name_source)
+                handle_part = " ".join(_valid_handles(text))
+                if voted_name and name_agreed:
+                    agreed_names.add(voted_name)
+                    text = f"{voted_name} {handle_part}".strip()
+                elif voted_name and not name_agreed:
+                    text = f"{clean_name(name_source)} {handle_part}".strip()
+                else:
+                    text = handle_part
+            cleaned = " ".join(text.split())
+            updated.append(TextLine(cleaned, line.left, line.top, line.bottom))
+    finally:
+        dest.unlink(missing_ok=True)
+    return updated, agreed_names, agreed_handles
+
+
 def tighten_frame_reading(
     path: Path,
     lines: list[TextLine],
@@ -815,36 +905,15 @@ def tighten_frame_reading(
     tsv: str = "",
     prepared: bool = True,
 ) -> tuple[list[TextLine], list[dict[str, str]]]:
-    """Đọc lại dòng @, khóa charset, bỏ chữ/số còn yếu. Không ghi khi chưa chắc."""
+    """Đối chiếu tên và @. Hai hoặc ba hướng trùng thì ghi. Lệch hết thì đọc lại năm lần."""
     del sightings
     source = _open_frame_image(path, prepared=prepared)
-    boxes = _handle_boxes(tsv, lines)
-    confirmed: list[str] = []
-    if source is not None and boxes:
-        for index, box in enumerate(boxes):
-            dest = path.with_name(f"{path.stem}-handle-{index}.png")
-            try:
-                handle, _conf = _read_handle_crop(source, box, dest)
-            finally:
-                dest.unlink(missing_ok=True)
-            if handle and handle not in confirmed:
-                confirmed.append(handle)
-
-    updated: list[TextLine] = []
-    for line in lines:
-        text = line.text
-        if confirmed:
-            for old in _valid_handles(text):
-                replacement = old if old in confirmed else confirmed[0]
-                text = text.replace(old, replacement)
-            if "@" in text and not _valid_handles(text):
-                text = _HANDLE.sub(confirmed[0], text, count=1)
-                if "@" in text and not _valid_handles(text):
-                    text = re.sub(r"@\S+", confirmed[0], text, count=1)
-        elif boxes and "@" in text:
-            text = re.sub(r"@\S+", "", text)
-        cleaned = " ".join(text.split())
-        updated.append(line if cleaned == line.text else TextLine(cleaned, line.left, line.top, line.bottom))
+    agreed_names: set[str] = set()
+    agreed_handles: list[str] = []
+    if source is None:
+        updated = list(lines)
+    else:
+        updated, agreed_names, agreed_handles = _rewrite_with_votes(path, source, lines, tsv)
 
     found = sightings_from_lines(updated)
     kept: list[dict[str, str]] = []
@@ -855,28 +924,29 @@ def tighten_frame_reading(
         username = clean_username(item.get("username") or "")
         name_conf = name_min_conf(tsv, name)
         contact_conf = name_min_conf(tsv, contact)
-        if name_conf is not None and name_conf < _NAME_CONF:
+        if name not in agreed_names and name_conf is not None and name_conf < _NAME_CONF:
             continue
-        if contact_conf is not None and contact_conf < _NAME_CONF:
+        if contact not in agreed_names and contact_conf is not None and contact_conf < _NAME_CONF:
             continue
         if kind == "profile":
-            if confirmed:
-                username = next((handle for handle in confirmed if handle == username), confirmed[0])
-            elif username and boxes:
-                username = ""
+            if agreed_handles:
+                if username not in agreed_handles:
+                    username = ""
             if not name or not username:
                 continue
             kept.append({"kind": "profile", "name": name, "contactName": "", "username": username})
             continue
         if kind == "contact" and name and contact:
             kept.append({"kind": "contact", "name": name, "contactName": contact, "username": ""})
-    if confirmed and not any(item.get("kind") == "profile" for item in kept):
+    if agreed_handles and not any(item.get("kind") == "profile" for item in kept):
         names = [line for line in updated if _is_name_line(line.text)]
         if names:
             name = clean_name(names[-1].text)
             name_conf = name_min_conf(tsv, name)
-            if name and (name_conf is None or name_conf >= _NAME_CONF):
-                kept.append({"kind": "profile", "name": name, "contactName": "", "username": confirmed[0]})
+            if name and (name in agreed_names or name_conf is None or name_conf >= _NAME_CONF):
+                kept.append(
+                    {"kind": "profile", "name": name, "contactName": "", "username": agreed_handles[0]}
+                )
     return updated, kept
 
 

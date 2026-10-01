@@ -49,6 +49,7 @@ os.environ.setdefault("OMP_THREAD_LIMIT", "1")
 from PIL import Image, ImageDraw, ImageFont
 
 from control_plane.gpu_read import fallback_note, nvidia_name, reader_ready
+from control_plane.read_vote import rapid_ready
 from control_plane.screen_people import lines_from_tsv, prepare_tesseract, read_frame_tsv
 from control_plane.screen_steps import ReadProgress, ScreenVideoError, analyze_screen_video
 from control_plane.tesseract_keep import reader_mode, set_reader_limit, warm_readers
@@ -1133,6 +1134,8 @@ def main() -> None:
     say(f"Bản {VIDEO_WORKER_BUILD}. " + ("Bộ chữ nhanh." if models == "fast" else "Bộ chữ chuẩn."))
     if report.get("readerOk") is True:
         say(f"Đọc thử ảnh mẫu được, mất {report.get('readerMs')} ms.")
+    if not rapid_ready():
+        say("Chưa có RapidOCR. Đối chiếu tên và @ bằng Tesseract.")
     elif report.get("readerOk") is False:
         say(f"{report.get('readerNote')} Máy chủ đọc thay cho đến khi PC đọc được.", err=True)
     refresh_worker_state()

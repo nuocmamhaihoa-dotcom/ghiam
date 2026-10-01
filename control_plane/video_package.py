@@ -9,10 +9,10 @@ from control_plane.version import VIDEO_WORKER_BUILD
 
 PACKAGE_NAME = f"fb-poller-video-worker-{VIDEO_WORKER_BUILD}.zip"
 SETUP_NAME = "FbPollerVideo.zip"
-_REQUIREMENTS = "pillow\n"
+_REQUIREMENTS = "pillow\nrapidocr-onnxruntime\n"
 _GUIDE = """fb-poller video worker
 
-PC đọc video bằng CPU và Tesseract (vie+eng).
+PC đọc video bằng CPU. Tên và @ được đối chiếu: Tesseract nhanh, Tesseract chuẩn, rồi RapidOCR trên đúng dòng chữ.
 Gói này không chứa token và không chứa dữ liệu đã lưu.
 Thư viện GPU không nằm trong gói. Card NVIDIA vẫn đọc bằng CPU cho đến khi tự cài easyocr hoặc paddle sau.
 Token và địa chỉ hub nằm ngoài thư mục current, nên bản cập nhật không xóa chúng.
@@ -42,6 +42,7 @@ _SOURCES = (
     "control_plane/screen_steps.py",
     "control_plane/screen_people.py",
     "control_plane/people.py",
+    "control_plane/read_vote.py",
     "control_plane/tesseract_keep.py",
     "control_plane/version.py",
 )

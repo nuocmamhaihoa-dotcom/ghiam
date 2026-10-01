@@ -1739,7 +1739,10 @@ class ActionApiTests(unittest.TestCase):
             self.assertIn("pc_agent/windows/Run-VideoWorker.ps1", names)
             self.assertIn("control_plane/screen_steps.py", names)
             self.assertIn("control_plane/version.py", names)
-            self.assertEqual(archive.read("requirements-cpu.txt").decode("utf-8").strip(), "pillow")
+            self.assertEqual(
+                archive.read("requirements-cpu.txt").decode("utf-8").strip(),
+                "pillow\nrapidocr-onnxruntime",
+            )
             self.assertEqual(archive.read("VERSION").decode("utf-8").strip(), str(VIDEO_WORKER_BUILD))
             self.assertIn("pc_agent/windows/Open-FbPoller.ps1", names)
             guide = archive.read("HUONG-DAN.txt").decode("utf-8")
