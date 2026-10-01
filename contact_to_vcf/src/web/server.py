@@ -65,16 +65,7 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             if path.startswith("/") and path.endswith(".vcf") and "/" not in path[1:]:
                 file_path = PAGE.parent / path[1:]
                 if file_path.is_file():
-                    payload = file_path.read_bytes()
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/vcard; charset=utf-8")
-                    self.send_header(
-                        "Content-Disposition",
-                        f'attachment; filename="{file_path.name}"',
-                    )
-                    self.send_header("Content-Length", str(len(payload)))
-                    self.end_headers()
-                    self.wfile.write(payload)
+                    self._vcf(file_path.read_bytes(), file_path.name)
                     return
             if not self._auth():
                 self._json(401, {"error": "Chưa đăng nhập"})
@@ -245,15 +236,7 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 payload = destination.read_bytes()
             finally:
                 shutil.rmtree(temporary, ignore_errors=True)
-            self.send_response(200)
-            self.send_header("Content-Type", "text/vcard; charset=utf-8")
-            self.send_header(
-                "Content-Disposition",
-                f'attachment; filename="danhba_{book_id:05d}.vcf"',
-            )
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self._vcf(payload, f"danhba_{book_id:05d}.vcf")
 
         def _auth(self) -> bool:
             token = ""
@@ -277,6 +260,17 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
         def _json(self, status: int, payload: dict[str, object]) -> None:
             body = json.dumps(payload, ensure_ascii=False).encode()
             self._bytes(status, body, "application/json; charset=utf-8")
+
+        def _vcf(self, payload: bytes, filename: str) -> None:
+            # iPhone Contacts ignores a vCard when the type carries a charset,
+            # and it keeps a previously downloaded file if this response is cacheable.
+            self.send_response(200)
+            self.send_header("Content-Type", "text/x-vcard")
+            self.send_header("Content-Disposition", f'inline; filename="{filename}"')
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
 
         def _bytes(self, status: int, body: bytes, content_type: str) -> None:
             self.send_response(status)

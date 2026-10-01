@@ -12,7 +12,7 @@ from openpyxl import Workbook
 
 from core.checkpoint import load_checkpoint
 from core.control import RunControl
-from exporters.vcf_validator import VcfStructureError, validate_vcf
+from exporters.vcf_validator import VcfStructureError, format_card, validate_vcf
 from models.records import JobConfig
 from parsers.csv_parser import CsvReader
 from parsers.detect import inspect_source
@@ -229,7 +229,7 @@ def test_duplicate_phones_are_removed_across_the_whole_run(tmp_path: Path) -> No
     assert result.report is not None
     assert result.report.duplicate == 2
     assert result.report.exported == 2
-    assert _phones(output) == ["0901234567", "0912345678"]
+    assert _phones(output) == ["+84901234567", "+84912345678"]
 
 
 def test_invalid_row_does_not_stop_the_file(tmp_path: Path) -> None:
@@ -320,7 +320,7 @@ def test_txt_conversion(tmp_path: Path) -> None:
     result = execute(_config(path, output, file_format="txt", delimiter="|", has_header=False))
     assert result.report is not None
     assert result.report.exported == 1
-    assert _phones(output) == ["0901234567"]
+    assert _phones(output) == ["+84901234567"]
     raw = next(output.glob("contacts_*.vcf")).read_bytes()
     assert raw.startswith(b"BEGIN:VCARD\r\n")
     assert b"END:VCARD\r\n" in raw
@@ -614,12 +614,12 @@ def test_several_phones_in_one_cell_become_separate_contacts(tmp_path: Path) -> 
     assert result.report.exported == 6
     assert result.report.invalid == 0
     assert _phones(output) == [
-        "0901234567",
-        "0912345678",
-        "0901234569",
-        "0987654321",
-        "0901234570",
-        "0901111111",
+        "+84901234567",
+        "+84912345678",
+        "+84901234569",
+        "+84987654321",
+        "+84901234570",
+        "+84901111111",
     ]
     guide = (output / "thu_tu_nhap.txt").read_text(encoding="utf-8")
     assert "contacts_00001.vcf — 2 liên hệ — An → An" in guide
@@ -732,8 +732,8 @@ def test_pool_keeps_a_number_in_its_first_book(tmp_path: Path) -> None:
     destination = tmp_path / "danhba_00001.vcf"
     assert export_book(folder, 1, destination) == 2
     text = destination.read_text(encoding="utf-8")
-    assert "FN:0901234567" in text
-    assert "TEL;TYPE=CELL:0901234567" in text
+    assert "FN:+84901234567" in text
+    assert "TEL;TYPE=CELL:+84901234567" in text
     assert text.count("BEGIN:VCARD") == 2
     downloaded = list_books(folder, "downloaded")
     assert downloaded[0].id == 1
@@ -754,6 +754,21 @@ def test_pool_keeps_a_number_in_its_first_book(tmp_path: Path) -> None:
     assert book_of(folder, "+84901234567") == 1
     assert book_of(folder, "+84901234569") == 3
     assert [book.id for book in list_books(folder, "pending")] == [2, 3]
+
+
+def test_card_bytes_match_the_working_phone_sample() -> None:
+    sample_path = Path(__file__).resolve().parents[1] / "src" / "web" / "test_10_contacts.vcf"
+    sample = sample_path.read_bytes()
+    built = b"".join(
+        format_card(f"Test {index:02d}", f"+8490000{index:04d}").encode("utf-8")
+        for index in range(1, 11)
+    )
+    assert built == sample
+    thirty = (sample_path.parent / "danhba_test_30.vcf").read_bytes()
+    assert thirty.startswith(built)
+    assert thirty.count(b"BEGIN:VCARD") == 30
+    assert b"TEL;TYPE=CELL:+84900000030\r\n" in thirty
+    assert b"0900000001" not in thirty
 
 
 def test_window_constructs() -> None:

@@ -18,10 +18,15 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
     port = server.server_address[1]
     opener = build_opener(HTTPCookieProcessor(CookieJar()))
     try:
-        sample = opener.open(f"http://127.0.0.1:{port}/danhba_test_30.vcf").read().decode()
+        sample_response = opener.open(f"http://127.0.0.1:{port}/danhba_test_30.vcf")
+        assert sample_response.headers.get("Content-Type") == "text/x-vcard"
+        sample = sample_response.read().decode()
         assert sample.count("BEGIN:VCARD") == 30
         assert "FN:Test 01" in sample
-        assert "TEL;TYPE=CELL:0900000030" in sample
+        assert "TEL;TYPE=CELL:+84900000030" in sample
+        exact = opener.open(f"http://127.0.0.1:{port}/test_10_contacts.vcf").read()
+        assert exact.count(b"BEGIN:VCARD") == 10
+        assert b"TEL;TYPE=CELL:+84900000001\r\n" in exact
         page = opener.open(f"http://127.0.0.1:{port}/").read().decode()
         assert "Vào phần mềm" in page
         assert "Nạp vào kho" in page
@@ -72,8 +77,8 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
             f"http://127.0.0.1:{port}/api/books/{books['books'][0]['id']}/download"
         )
         card = downloaded.read().decode()
-        assert "FN:0901234567" in card
-        assert "TEL;TYPE=CELL:0901234567" in card
+        assert "FN:+84901234567" in card
+        assert "TEL;TYPE=CELL:+84901234567" in card
     finally:
         server.shutdown()
 
