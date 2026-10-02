@@ -18,11 +18,14 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageOps, ImageStat
 
+from control_plane import stage_timing
 from control_plane.gpu_read import fallback_note, prefers_single_worker, read_lines
+from control_plane.read_vote import forget_scope
 from control_plane.screen_people import (
     _accepted_sighting,
     captions_from_sightings,
     lines_from_tsv,
+    prepare_frame_image,
     propose_rows,
     reading_counts,
     read_frame_tsv,
@@ -186,10 +189,10 @@ def _extract_filter(rate: float) -> str:
 
 
 def _frame_encode_args(pattern: Path) -> list[str]:
-    """PNG không nén mất nét. Đường .jpg cũ thì JPEG chất lượng 1."""
+    """PNG nén mức 1: từng điểm ảnh y hệt mức mặc định, ffmpeg tốn ít CPU hơn khoảng 40%. Đường .jpg cũ thì JPEG chất lượng 1."""
     if pattern.suffix.lower() in {".jpg", ".jpeg"}:
         return ["-c:v", "mjpeg", "-q:v", "1"]
-    return []
+    return ["-compression_level", "1"]
 
 
 def _media_seconds(raw: str) -> float | None:
@@ -413,6 +416,7 @@ def _work_dir(path: Path) -> Path:
 def discard_video_work(path: Path) -> None:
     """Xóa video và khung đã tách sau khi ghi xong, hoặc khi bỏ tiến trình."""
     work = _work_dir(path)
+    forget_scope(str(work))
     if work.is_dir():
         shutil.rmtree(work, ignore_errors=True)
     path.unlink(missing_ok=True)
@@ -858,6 +862,17 @@ def _run_ffmpeg(
     progress: ReadProgress,
     origin: float,
 ) -> int:
+    """Chạy một ffmpeg tách khung và cộng giờ vào đồng hồ ffmpeg."""
+    with stage_timing.timed("ffmpeg"):
+        return _run_ffmpeg_process(argv, duration, progress, origin)
+
+
+def _run_ffmpeg_process(
+    argv: list[str],
+    duration: float | None,
+    progress: ReadProgress,
+    origin: float,
+) -> int:
     """Chạy một ffmpeg tách khung. origin là giây của khung đầu đoạn, để phần trăm tính trên cả video."""
     try:
         proc = subprocess.Popen(
@@ -1151,15 +1166,16 @@ def _frame_changed(previous: Image.Image, current: Image.Image) -> bool:
 
 
 def _thumb(image: Path) -> Image.Image | None:
-    try:
-        with Image.open(image) as full:
-            gray = full.convert("L")
-            width, height = gray.size
-            small = gray.crop((0, int(height * 0.08), width, int(height * 0.92))).resize((80, 130))
-            small.load()
-            return small
-    except OSError:
-        return None
+    with stage_timing.timed("thumb"):
+        try:
+            with Image.open(image) as full:
+                gray = full.convert("L")
+                width, height = gray.size
+                small = gray.crop((0, int(height * 0.08), width, int(height * 0.92))).resize((80, 130))
+                small.load()
+                return small
+        except OSError:
+            return None
 
 
 def _preview_jpeg(path: Path) -> bytes | None:
@@ -1250,13 +1266,16 @@ def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str
     kept = 0
     used_tesseract = False
     tsv = ""
+    loaded: Image.Image | None = None
+    read_started = time.perf_counter()
     try:
         text_lines = read_lines(image)
     except Exception:
         text_lines = None
     if text_lines is None:
         used_tesseract = True
-        tsv = read_frame_tsv(image)
+        loaded = prepare_frame_image(image)
+        tsv = read_frame_tsv(image, loaded)
         text_lines = lines_from_tsv(tsv) if tsv else []
         if tsv:
             seen, kept = tsv_word_counts(tsv)
@@ -1271,7 +1290,7 @@ def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str
         if fallback:
             captions = [fallback]
     if used_tesseract and _suspicious_read(seen, kept, captions, sightings):
-        tsv_std = read_frame_tsv_standard(image)
+        tsv_std = read_frame_tsv_standard(image, loaded)
         if tsv_std:
             std_lines = lines_from_tsv(tsv_std)
             std_seen, std_kept = tsv_word_counts(tsv_std)
@@ -1298,13 +1317,16 @@ def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str
             if chosen[0] is std_lines:
                 tsv = tsv_std
             text_lines, sightings, captions, seen, kept = chosen
-    text_lines, sightings = tighten_frame_reading(
-        image,
-        list(text_lines),
-        sightings,
-        tsv=tsv,
-        prepared=used_tesseract,
-    )
+    stage_timing.add("read", time.perf_counter() - read_started)
+    with stage_timing.timed("vote"):
+        text_lines, sightings = tighten_frame_reading(
+            image,
+            list(text_lines),
+            sightings,
+            tsv=tsv,
+            prepared=used_tesseract,
+            loaded=loaded,
+        )
     captions = captions_from_sightings(sightings)
     if not captions:
         raw = "\n".join(line.text for line in text_lines)

@@ -151,11 +151,13 @@ class ScreenVideoTests(unittest.TestCase):
         self.assertLess(argv.index("-threads"), argv.index("-i"))
         self.assertNotIn("-q:v", argv)
         self.assertNotIn("mjpeg", argv)
+        self.assertEqual(argv[argv.index("-compression_level") + 1], "1")
         scale = next(item for item in argv if item.startswith("fps="))
         self.assertIn("fps=8", scale)
         self.assertIn(r"scale=min(720\,iw):-2", scale)
         self.assertNotIn("yuv420p", scale)
         jpeg = _ffmpeg_extract_command(Path("clip.mp4"), Path("f-%05d.jpg"), 8)
+        self.assertNotIn("-compression_level", jpeg)
         self.assertEqual(jpeg[jpeg.index("-q:v") + 1], "1")
         self.assertEqual(jpeg[jpeg.index("-c:v") + 1], "mjpeg")
 
