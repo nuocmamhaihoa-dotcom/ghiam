@@ -1443,7 +1443,7 @@ def _read_frames(
                 label = "Đọc tiếp" if known else "Đọc chữ"
                 progress.report(min(92, percent), f"{label}, khung {done_count}/{total}")
     if pending:
-        rescued, unblanked = _rescue_empty(chosen, results, progress)
+        _rescued, unblanked = _rescue_empty(chosen, results, progress)
         blank = max(0, blank - unblanked)
     if pending or not known:
         progress.note_words(word_seen, word_kept)

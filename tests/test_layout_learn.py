@@ -9,7 +9,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from control_plane import layout_learn, screen_people as people, screen_steps
+from control_plane import layout_learn, screen_steps
+from control_plane import screen_people as people
 from control_plane.layout_learn import LayoutLearner, Zone
 from control_plane.read_vote import clear_memos
 from control_plane.screen_people import TextLine
@@ -160,14 +161,12 @@ class ProfileBandTests(unittest.TestCase):
     def test_junk_in_the_learned_bands_is_replaced_and_other_words_stay(self) -> None:
         page = _profile_page("Tran Tung", "@trn.tng751")
         learner = self._learner()
-        junk = "\n".join(
-            [
-                "5\t1\t1\t1\t1\t1\t300\t372\t40\t30\t55\tOd",
-                "5\t1\t1\t1\t2\t1\t320\t436\t60\t20\t49\tWQSG",
-                "5\t1\t2\t1\t1\t1\t100\t700\t90\t30\t95\tFollower",
-            ]
+        junk = (
+            "5\t1\t1\t1\t1\t1\t300\t372\t40\t30\t55\tOd\n"
+            "5\t1\t1\t1\t2\t1\t320\t436\t60\t20\t49\tWQSG\n"
+            "5\t1\t2\t1\t1\t1\t100\t700\t90\t30\t95\tFollower"
         )
-        lines, tsv, rescued = people._rescue_profile(page, learner, [], junk, "v/f-00002.png")
+        lines, _tsv, rescued = people._rescue_profile(page, learner, [], junk, "v/f-00002.png")
         self.assertTrue(rescued)
         texts = [line.text for line in lines]
         self.assertNotIn("Od", texts)

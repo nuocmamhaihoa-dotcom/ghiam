@@ -28,7 +28,12 @@ from control_plane.read_vote import (
     vote_key,
     vote_line,
 )
-from control_plane.tesseract_keep import read_fast_line_tsv, read_line_tsv, read_tsv, reader_limit
+from control_plane.tesseract_keep import (
+    read_fast_line_tsv,
+    read_line_tsv,
+    read_tsv,
+    reader_limit,
+)
 
 _vote_pool: ThreadPoolExecutor | None = None
 _vote_pool_lock = threading.Lock()
