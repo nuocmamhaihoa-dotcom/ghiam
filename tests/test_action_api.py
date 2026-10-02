@@ -828,10 +828,18 @@ class ActionApiTests(unittest.TestCase):
         progress = self.client.post(
             f"/v1/recordings/jobs/{job_id}/progress",
             headers=self.headers,
-            json={"workerId": worker_id, "percent": 48, "task": "Đọc chữ, khung 1/1", "problems": []},
+            json={
+                "workerId": worker_id,
+                "percent": 48,
+                "task": "Đọc chữ, khung 1/1",
+                "problems": [],
+                "learned": "Quy luật học được: @ nằm ở dải y 430 đến 459.",
+            },
         )
         self.assertEqual(progress.status_code, 200, progress.text)
         self.assertGreaterEqual(progress.json()["percent"], 48)
+        self.assertEqual(progress.json()["learned"], "Quy luật học được: @ nằm ở dải y 430 đến 459.")
+        self.assertEqual(progress.json()["problems"], [])
         done = self.client.post(
             f"/v1/recordings/jobs/{job_id}/complete",
             headers=self.headers,
@@ -1263,7 +1271,10 @@ class ActionApiTests(unittest.TestCase):
 
     def test_hub_reads_when_the_pc_does_not_take_the_video(self) -> None:
         previous = video_helpers.OFFER_SECONDS
+        previous_fresh = video_helpers.FRESH_SECONDS
         video_helpers.OFFER_SECONDS = 0.2
+        # PC im quá hạn "còn nối" thì hub đọc. Hạn thật là 45 giây, ở đây rút ngắn để test không phải chờ.
+        video_helpers.FRESH_SECONDS = 0.6
         try:
             beat = self.client.post(
                 "/v1/video-workers/heartbeat",
@@ -1280,6 +1291,7 @@ class ActionApiTests(unittest.TestCase):
             body = self._wait_job(job_id)
         finally:
             video_helpers.OFFER_SECONDS = previous
+            video_helpers.FRESH_SECONDS = previous_fresh
         self.assertTrue(body.get("error"), body)
         self.assertLess(int(body.get("percent") or 0), 100)
 
@@ -1331,11 +1343,17 @@ class ActionApiTests(unittest.TestCase):
                 "models": "fast",
                 "readerOk": True,
                 "readerMode": "api",
+                "hardware": {"cpu": "Intel Core i7-12700K", "physical": 12, "logical": 20, "gpus": ["Intel UHD 770"]},
+                "timing": {"frames": 240, "readMs": 260, "voteMs": 410, "reused": 4648},
             },
         )
         self.assertEqual(beat.status_code, 200, beat.text)
         self.assertEqual(beat.json()["build"], VIDEO_WORKER_BUILD)
         helper = self.client.get("/health").json()["videoHelper"]
+        self.assertEqual(helper["hardware"]["cpu"], "Intel Core i7-12700K")
+        self.assertEqual(helper["hardware"]["gpus"], ["Intel UHD 770"])
+        self.assertEqual(helper["timing"]["voteMs"], 410)
+        self.assertEqual(helper["timing"]["reused"], 4648)
         self.assertEqual(helper["build"], VIDEO_WORKER_BUILD)
         self.assertEqual(helper["latestBuild"], VIDEO_WORKER_BUILD)
         self.assertEqual(helper["models"], "fast")

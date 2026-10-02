@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from control_plane import tesseract_keep as keep
 from control_plane.screen_people import _tesseract_cli, lines_from_tsv
-from control_plane.tesseract_keep import read_tsv
+from control_plane.tesseract_keep import read_line_tsv, read_tsv
 
 
 def _words(tsv: str) -> list[str]:
@@ -74,16 +74,21 @@ class FreshGateTests(unittest.TestCase):
         if not Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf").is_file():
             self.skipTest("font missing")
         self.saved = keep._gate
+        self.saved_line = keep._line_gate
         keep._gate = keep._Gate()
+        keep._line_gate = keep._Gate()
 
     def tearDown(self) -> None:
         fresh = keep._gate
+        fresh_line = keep._line_gate
         keep._gate = self.saved
-        lib = fresh.lib
-        while lib is not None and not fresh.idle.empty():
-            api = fresh.idle.get_nowait()
-            lib.TessBaseAPIEnd(api)
-            lib.TessBaseAPIDelete(api)
+        keep._line_gate = self.saved_line
+        lib = keep._gate.lib or fresh.lib
+        for pool in (fresh, fresh_line):
+            while lib is not None and not pool.idle.empty():
+                api = pool.idle.get_nowait()
+                lib.TessBaseAPIEnd(api)
+                lib.TessBaseAPIDelete(api)
 
     def test_threads_that_start_together_all_read_in_memory(self) -> None:
         keep._gate.limit = 4
@@ -103,6 +108,7 @@ class FreshGateTests(unittest.TestCase):
 
     def test_readers_are_opened_before_the_first_frame(self) -> None:
         keep._gate.limit = 2
+        keep._line_gate.limit = 2
         opened = keep.warm_readers()
         if keep._gate.lib is None:
             self.skipTest("in-process tesseract is unavailable")
@@ -111,3 +117,16 @@ class FreshGateTests(unittest.TestCase):
         self.assertEqual(keep.reader_mode(), "api")
         self.assertIn("Tran", read_tsv(_draw(["Tran Tung"])) or "")
         self.assertEqual(keep._gate.made, 2)
+
+    def test_line_reader_stays_in_memory(self) -> None:
+        keep._line_gate.limit = 2
+        image = _draw(["Tran Tung"])
+        first = read_line_tsv(image, kind="name")
+        if keep._line_gate.lib is None and first is None and keep._gate.lib is None:
+            self.skipTest("in-process tesseract is unavailable")
+        if first is None:
+            self.skipTest("in-process line tesseract is unavailable")
+        self.assertIn("Tran", first)
+        second = read_line_tsv(image, kind="name")
+        self.assertIsNotNone(second)
+        self.assertLessEqual(keep._line_gate.made, 2)

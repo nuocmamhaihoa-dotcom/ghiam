@@ -7,7 +7,7 @@ import os
 import threading
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from control_plane.settings import settings
@@ -41,6 +41,65 @@ def _clean_note(text: str) -> str:
     return "".join(ch for ch in cleaned if ch.isprintable())[:120]
 
 
+def _clean_label(value: object, limit: int) -> str:
+    cleaned = " ".join(str(value or "").split())
+    return "".join(ch for ch in cleaned if ch.isprintable())[:limit]
+
+
+_TIMING_KEYS = (
+    "frames",
+    "readMs",
+    "voteMs",
+    "thumbMs",
+    "ffmpegSec",
+    "voteLines",
+    "reused",
+    "third",
+    "rereads",
+    "skipped",
+    "rescued",
+    "strips",
+    "fades",
+)
+
+
+def _whole(value: object, limit: int) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return max(0, min(limit, int(value)))
+
+
+def clean_timing(data: object) -> dict[str, int]:
+    """Thời gian từng bước PC báo lên: chỉ các khóa biết trước, số nguyên không âm."""
+    if not isinstance(data, dict):
+        return {}
+    found: dict[str, int] = {}
+    for key in _TIMING_KEYS:
+        number = _whole(data.get(key), 1_000_000_000)
+        if number is not None:
+            found[key] = number
+    return found
+
+
+def clean_hardware(data: object) -> dict[str, object]:
+    """Cấu hình PC báo lên: tên CPU, lõi vật lý và luồng, RAM, card đồ họa, chỗ trống ổ tạm."""
+    if not isinstance(data, dict):
+        return {}
+    found: dict[str, object] = {}
+    cpu = _clean_label(data.get("cpu"), 80)
+    if cpu:
+        found["cpu"] = cpu
+    for key, limit in (("physical", 512), ("logical", 512), ("ramMb", 4_194_304), ("tempFreeMb", 100_000_000)):
+        number = _whole(data.get(key), limit)
+        if number is not None:
+            found[key] = number
+    gpus = data.get("gpus")
+    if isinstance(gpus, list):
+        names = [_clean_label(item, 60) for item in gpus[:4]]
+        found["gpus"] = [name for name in names if name]
+    return found
+
+
 @dataclass
 class Helper:
     worker_id: str
@@ -57,6 +116,8 @@ class Helper:
     reader_ok: bool | None = None
     reader_note: str = ""
     reader_mode: str = ""
+    hardware: dict[str, object] = field(default_factory=dict)
+    timing: dict[str, int] = field(default_factory=dict)
 
     def usable(self) -> bool:
         return self.reader_ok is not False
@@ -95,6 +156,8 @@ class HelperBook:
                     "readerOk": item.reader_ok,
                     "readerNote": item.reader_note,
                     "readerMode": item.reader_mode,
+                    "hardware": item.hardware,
+                    "timing": item.timing,
                 }
             )
         return rows
@@ -155,6 +218,8 @@ class HelperBook:
                 item.reader_note = _clean_note(str(row.get("readerNote") or ""))
                 mode = row.get("readerMode")
                 item.reader_mode = "api" if mode == "api" else ("cli" if mode == "cli" else "")
+                item.hardware = clean_hardware(row.get("hardware"))
+                item.timing = clean_timing(row.get("timing"))
                 self._items[worker_id] = item
 
     def beat(
@@ -170,6 +235,8 @@ class HelperBook:
         reader_ok: bool | None = None,
         reader_note: str = "",
         reader_mode: str = "",
+        hardware: object = None,
+        timing: object = None,
     ) -> str:
         cleaned_id = _clean_id(worker_id) or uuid.uuid4().hex
         cores = min(256, max(1, int(cpus or 1)))
@@ -194,6 +261,12 @@ class HelperBook:
             current.reader_ok = reader_ok
             current.reader_note = _clean_note(reader_note)
             current.reader_mode = "api" if reader_mode == "api" else ("cli" if reader_mode == "cli" else "")
+            fresh_hardware = clean_hardware(hardware)
+            if fresh_hardware:
+                current.hardware = fresh_hardware
+            fresh_timing = clean_timing(timing)
+            if fresh_timing:
+                current.timing = fresh_timing
             rows = self._rows_locked(now)
         self._write(rows)
         return cleaned_id
@@ -312,6 +385,8 @@ class HelperBook:
             "readerOk": best.reader_ok,
             "readerNote": best.reader_note,
             "readerMode": best.reader_mode,
+            "hardware": best.hardware,
+            "timing": best.timing,
             "outdated": sum(1 for item in fresh if 0 < item.build < VIDEO_WORKER_BUILD),
             "broken": sum(1 for item in fresh if not item.usable()),
         }

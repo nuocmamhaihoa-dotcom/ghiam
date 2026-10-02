@@ -1,4 +1,4 @@
-"""Giữ Tesseract sống trong bộ nhớ. Cùng PSM 11, cùng dpi 300, không phóng to ảnh."""
+"""Giữ Tesseract sống trong bộ nhớ. Khung dùng PSM 11. Dòng đối chiếu dùng PSM 7, bộ chữ chuẩn."""
 
 from __future__ import annotations
 
@@ -8,8 +8,11 @@ import ctypes.util
 import os
 import queue
 import threading
+from collections.abc import Callable
+from contextlib import contextmanager
 from ctypes import POINTER, c_char_p, c_int, c_ubyte, c_void_p
 from pathlib import Path
+from typing import Iterator
 
 from PIL import Image
 
@@ -17,14 +20,17 @@ from PIL import Image
 os.environ["OMP_THREAD_LIMIT"] = "1"
 
 _PSM_SPARSE = 11
+_PSM_LINE = 7
 _OEM_LSTM = 1
 _DPI = 300
+_HANDLE_WHITELIST = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._@"
 _DATA_DIRS = (
     None,
     "/usr/share/tesseract-ocr/5/tessdata",
     "/usr/share/tesseract-ocr/4.00/tessdata",
     "/usr/share/tessdata",
 )
+_Opener = Callable[[ctypes.CDLL], c_void_p | None]
 
 
 class _Gate:
@@ -42,12 +48,27 @@ class _Gate:
 
 
 _gate = _Gate()
+_line_gate = _Gate()
+_slots: threading.Semaphore | None = None
+_slots_lock = threading.Lock()
+
+
+def reader_limit() -> int:
+    """Số bộ đọc được phép chạy cùng lúc. PC đặt bằng 80% lõi."""
+    with _gate.lock:
+        return _gate.limit
 
 
 def set_reader_limit(limit: int) -> None:
     """Giới hạn số bộ đọc Tesseract sống cùng lúc, trước khi ảnh đầu được đọc."""
+    n = max(1, int(limit))
     with _gate.lock:
-        _gate.limit = max(1, int(limit))
+        _gate.limit = n
+    with _line_gate.lock:
+        _line_gate.limit = n
+    global _slots
+    with _slots_lock:
+        _slots = threading.Semaphore(n)
 
 
 def _bind(lib: ctypes.CDLL) -> bool:
@@ -66,6 +87,9 @@ def _bind(lib: ctypes.CDLL) -> bool:
     lib.TessDeleteText.argtypes = [c_void_p]
     lib.TessBaseAPIClear.argtypes = [c_void_p]
     lib.TessBaseAPIClearAdaptiveClassifier.argtypes = [c_void_p]
+    if hasattr(lib, "TessBaseAPISetVariable"):
+        lib.TessBaseAPISetVariable.argtypes = [c_void_p, c_char_p, c_char_p]
+        lib.TessBaseAPISetVariable.restype = c_int
     return True
 
 
@@ -135,6 +159,11 @@ def _data_dirs() -> list[str | None]:
     return unique
 
 
+def _quiet(lib: ctypes.CDLL, api: c_void_p) -> None:
+    """Tesseract in lời báo như 'Image too small' ra cửa sổ PC. Đưa vào tệp rỗng."""
+    _set_variable(lib, api, b"debug_file", os.devnull.encode("utf-8"))
+
+
 def _open_api(lib: ctypes.CDLL) -> c_void_p | None:
     api = lib.TessBaseAPICreate()
     if not api:
@@ -144,72 +173,120 @@ def _open_api(lib: ctypes.CDLL) -> c_void_p | None:
             path = None if folder is None else folder.encode("utf-8")
             if lib.TessBaseAPIInit2(api, path, language, _OEM_LSTM) == 0:
                 lib.TessBaseAPISetPageSegMode(api, _PSM_SPARSE)
+                _quiet(lib, api)
                 return api
     lib.TessBaseAPIDelete(api)
     return None
 
 
-def _open_one(lib: ctypes.CDLL) -> c_void_p | None:
+def _standard_dirs() -> list[str | None]:
+    """Thư mục bộ chữ chuẩn. Bỏ tessdata-fast vì hướng 2 phải khác hướng 1."""
+    folders: list[str | None] = []
+    standard = os.environ.get("CONTROL_TESSDATA_STANDARD", "").strip().strip('"').rstrip("\\/")
+    if standard:
+        folders.append(standard)
+    prefix = os.environ.get("TESSDATA_PREFIX", "").strip().strip('"').rstrip("\\/")
+    if prefix and Path(prefix).name != "tessdata-fast" and prefix != standard:
+        folders.append(prefix)
+    folders.extend(_DATA_DIRS)
+    exe = os.environ.get("CONTROL_TESSERACT", "").strip().strip('"')
+    if exe:
+        folders.append(str(Path(exe).parent / "tessdata"))
+    unique: list[str | None] = []
+    seen: set[str] = set()
+    for folder in folders:
+        key = "" if folder is None else folder
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(folder)
+    return unique
+
+
+def _open_line_api(lib: ctypes.CDLL) -> c_void_p | None:
+    api = lib.TessBaseAPICreate()
+    if not api:
+        return None
+    for language in (b"vie+eng", b"eng"):
+        for folder in _standard_dirs():
+            path = None if folder is None else folder.encode("utf-8")
+            if lib.TessBaseAPIInit2(api, path, language, _OEM_LSTM) == 0:
+                lib.TessBaseAPISetPageSegMode(api, _PSM_LINE)
+                _quiet(lib, api)
+                return api
+    lib.TessBaseAPIDelete(api)
+    return None
+
+
+def _open_one(lib: ctypes.CDLL, gate: _Gate, opener: _Opener) -> c_void_p | None:
     """Nạp thêm một bộ đọc khi còn chỗ. None khi đã đủ số bộ đọc hoặc nạp không được."""
-    with _gate.lock:
-        if _gate.broken or _gate.made >= _gate.limit:
+    with gate.lock:
+        if gate.broken or gate.made >= gate.limit:
             return None
-        _gate.made += 1
-    with _gate.opening:
-        api = _open_api(lib)
-    with _gate.lock:
+        gate.made += 1
+    with gate.opening:
+        api = opener(lib)
+    with gate.lock:
         if api is None:
-            _gate.made -= 1
-            if _gate.opened == 0:
-                _gate.broken = True
+            gate.made -= 1
+            if gate.opened == 0:
+                gate.broken = True
             return None
-        _gate.opened += 1
+        gate.opened += 1
     return api
 
 
-def _borrow(lib: ctypes.CDLL) -> c_void_p | None:
+def _borrow(lib: ctypes.CDLL, gate: _Gate, opener: _Opener) -> c_void_p | None:
     while True:
-        if _gate.broken:
+        if gate.broken:
             return None
         try:
-            return _gate.idle.get_nowait()
+            return gate.idle.get_nowait()
         except queue.Empty:
             pass
-        with _gate.lock:
-            room = _gate.made < _gate.limit
+        with gate.lock:
+            room = gate.made < gate.limit
         if room:
-            api = _open_one(lib)
+            api = _open_one(lib, gate, opener)
             if api is not None:
                 return api
-            if _gate.broken:
+            if gate.broken:
                 return None
-            with _gate.lock:
-                room = _gate.made < _gate.limit
+            with gate.lock:
+                room = gate.made < gate.limit
             if room:
                 return None
         # Đủ số bộ đọc rồi thì chờ một bộ được trả. Bộ đang nạp mà hỏng thì hỏi lại.
         try:
-            return _gate.idle.get(timeout=0.5)
+            return gate.idle.get(timeout=0.5)
         except queue.Empty:
             continue
 
 
+def _warm_gate(lib: ctypes.CDLL, gate: _Gate, opener: _Opener, target: int) -> int:
+    while True:
+        with gate.lock:
+            if gate.broken or gate.made >= target:
+                return gate.opened
+        api = _open_one(lib, gate, opener)
+        if api is None:
+            with gate.lock:
+                return gate.opened
+        gate.idle.put(api)
+
+
 def warm_readers(count: int | None = None) -> int:
-    """Nạp sẵn bộ đọc trước video đầu tiên. Trả về số bộ đọc đang có."""
+    """Nạp sẵn bộ đọc trước video đầu tiên. Trả về số bộ đọc khung đang có."""
     lib = _library()
     if lib is None:
         return 0
     with _gate.lock:
         target = _gate.limit if count is None else max(1, min(int(count), _gate.limit))
-    while True:
-        with _gate.lock:
-            if _gate.broken or _gate.made >= target:
-                return _gate.opened
-        api = _open_one(lib)
-        if api is None:
-            with _gate.lock:
-                return _gate.opened
-        _gate.idle.put(api)
+    opened = _warm_gate(lib, _gate, _open_api, target)
+    with _line_gate.lock:
+        line_target = _line_gate.limit if count is None else max(1, min(int(count), _line_gate.limit))
+    _warm_gate(lib, _line_gate, _open_line_api, line_target)
+    return opened
 
 
 def reader_mode() -> str:
@@ -220,17 +297,16 @@ def reader_mode() -> str:
     return "api"
 
 
-def _recognize(lib: ctypes.CDLL, api: c_void_p, image: Image.Image) -> str:
+def _pixels(image: Image.Image) -> tuple[object, int, int] | None:
     gray = image if image.mode == "L" else image.convert("L")
     width, height = gray.size
     if width < 2 or height < 2:
-        return ""
+        return None
     raw = gray.tobytes()
-    pixels = (c_ubyte * len(raw)).from_buffer_copy(raw)
-    lib.TessBaseAPIClearAdaptiveClassifier(api)
-    lib.TessBaseAPISetPageSegMode(api, _PSM_SPARSE)
-    lib.TessBaseAPISetImage(api, pixels, width, height, 1, width)
-    lib.TessBaseAPISetSourceResolution(api, _DPI)
+    return (c_ubyte * len(raw)).from_buffer_copy(raw), width, height
+
+
+def _tsv_from(lib: ctypes.CDLL, api: c_void_p) -> str:
     ptr = lib.TessBaseAPIGetTsvText(api, 0)
     try:
         if not ptr:
@@ -242,33 +318,115 @@ def _recognize(lib: ctypes.CDLL, api: c_void_p, image: Image.Image) -> str:
         lib.TessBaseAPIClear(api)
 
 
-def _shutdown() -> None:
+def _recognize(lib: ctypes.CDLL, api: c_void_p, image: Image.Image) -> str:
+    packed = _pixels(image)
+    if packed is None:
+        return ""
+    pixels, width, height = packed
+    lib.TessBaseAPIClearAdaptiveClassifier(api)
+    lib.TessBaseAPISetPageSegMode(api, _PSM_SPARSE)
+    lib.TessBaseAPISetImage(api, pixels, width, height, 1, width)
+    lib.TessBaseAPISetSourceResolution(api, _DPI)
+    return _tsv_from(lib, api)
+
+
+def _set_variable(lib: ctypes.CDLL, api: c_void_p, name: bytes, value: bytes) -> None:
+    if not hasattr(lib, "TessBaseAPISetVariable"):
+        return
+    lib.TessBaseAPISetVariable(api, name, value)
+
+
+def _recognize_line(lib: ctypes.CDLL, api: c_void_p, image: Image.Image, kind: str) -> str:
+    packed = _pixels(image)
+    if packed is None:
+        return ""
+    pixels, width, height = packed
+    lib.TessBaseAPIClearAdaptiveClassifier(api)
+    lib.TessBaseAPISetPageSegMode(api, _PSM_LINE)
+    if kind == "handle":
+        _set_variable(lib, api, b"tessedit_char_whitelist", _HANDLE_WHITELIST)
+    else:
+        _set_variable(lib, api, b"tessedit_char_whitelist", b"")
+    try:
+        lib.TessBaseAPISetImage(api, pixels, width, height, 1, width)
+        lib.TessBaseAPISetSourceResolution(api, _DPI)
+        return _tsv_from(lib, api)
+    finally:
+        _set_variable(lib, api, b"tessedit_char_whitelist", b"")
+
+
+def _drain(gate: _Gate) -> None:
     lib = _gate.lib
     if lib is None:
         return
     while True:
         try:
-            api = _gate.idle.get_nowait()
+            api = gate.idle.get_nowait()
         except queue.Empty:
             break
         lib.TessBaseAPIEnd(api)
         lib.TessBaseAPIDelete(api)
 
 
+def _shutdown() -> None:
+    _drain(_line_gate)
+    _drain(_gate)
+
+
 atexit.register(_shutdown)
+
+
+@contextmanager
+def _slot() -> Iterator[None]:
+    token = _slots
+    if token is not None:
+        token.acquire()
+    try:
+        yield
+    finally:
+        if token is not None:
+            token.release()
+
+
+def _read_with(
+    image: Image.Image,
+    gate: _Gate,
+    opener: _Opener,
+    recognize: Callable[[ctypes.CDLL, c_void_p, Image.Image], str],
+) -> str | None:
+    lib = _library()
+    if lib is None or gate.broken:
+        return None
+    with _slot():
+        api = _borrow(lib, gate, opener)
+        if api is None:
+            return None
+        try:
+            return recognize(lib, api, image)
+        except Exception:
+            return None
+        finally:
+            gate.idle.put(api)
 
 
 def read_tsv(image: Image.Image) -> str | None:
     """TSV của một ảnh đã làm nét. None khi phải gọi lệnh tesseract như cũ."""
-    lib = _library()
-    if lib is None or _gate.broken:
-        return None
-    api = _borrow(lib)
-    if api is None:
-        return None
-    try:
-        return _recognize(lib, api, image)
-    except Exception:
-        return None
-    finally:
-        _gate.idle.put(api)
+    return _read_with(image, _gate, _open_api, _recognize)
+
+
+def read_line_tsv(image: Image.Image, *, kind: str) -> str | None:
+    """TSV một dòng, PSM 7, bộ chữ chuẩn. None khi phải gọi lệnh tesseract."""
+
+    def recognize(lib: ctypes.CDLL, api: c_void_p, picture: Image.Image) -> str:
+        return _recognize_line(lib, api, picture, kind)
+
+    return _read_with(image, _line_gate, _open_line_api, recognize)
+
+
+def read_fast_line_tsv(image: Image.Image, *, kind: str) -> str | None:
+    """TSV một dòng, PSM 7, bộ chữ nhanh của cả khung. Khác bộ chuẩn của read_line_tsv nên là một hướng đọc riêng."""
+
+    def recognize(lib: ctypes.CDLL, api: c_void_p, picture: Image.Image) -> str:
+        return _recognize_line(lib, api, picture, kind)
+
+    return _read_with(image, _gate, _open_api, recognize)

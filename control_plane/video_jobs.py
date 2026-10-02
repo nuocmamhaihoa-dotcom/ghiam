@@ -21,6 +21,7 @@ class VideoJob:
         self.percent = 0
         self.task = "Đang chờ"
         self.problems: list[str] = []
+        self.learned = ""
         self.done = False
         self.error = ""
         self.people: list[dict[str, str]] = []
@@ -267,6 +268,13 @@ class VideoJob:
             if self.owner and self.owner != "hub":
                 self.lease = time.monotonic()
 
+    def note_learned(self, text: str) -> None:
+        cleaned = " ".join(str(text).split())[:400]
+        if not cleaned:
+            return
+        with self._lock:
+            self.learned = cleaned
+
     def add_problem(self, text: str) -> None:
         cleaned = " ".join(str(text).split())[:180]
         if not cleaned:
@@ -367,6 +375,8 @@ class VideoJob:
                 "done": self.done,
                 "error": self.error,
             }
+            if self.learned:
+                body["learned"] = self.learned
             if self.done and not self.error:
                 body["people"] = list(self.people)
                 body["savedPeople"] = self.saved_people
@@ -491,3 +501,6 @@ class JobProgress(ReadProgress):
 
     def note_blank(self) -> None:
         return
+
+    def note_learned(self, text: str) -> None:
+        self._job.note_learned(text)

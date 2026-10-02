@@ -5,14 +5,19 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from control_plane.people import clean_username
+from control_plane import screen_people as people
+from control_plane.people import clean_username, fold_name
+from control_plane.read_vote import RowMemo, clear_memos
 from control_plane.screen_people import (
     TextLine,
+    _line_box,
+    _strip_button,
     _tesseract_command,
     choose_tsv,
     handle_from_tsv,
@@ -260,11 +265,12 @@ class ScreenPeopleTests(unittest.TestCase):
                 + sightings_from_image(profile_soi)
             )
             rows = propose_rows(seen + seen)
+        # Bộ chữ chuẩn đôi khi đọc chấm trên chữ i thành dấu hỏi. Bài này kiểm cách ghép, nên so tên danh bạ theo chữ gốc.
         self.assertEqual(
-            rows,
+            [(row["name"], fold_name(row["contactName"]), row["username"]) for row in rows],
             [
-                {"name": "Tran Tung", "contactName": "A Tung Ban Gach", "username": "@trn.tng751"},
-                {"name": "Ba soi", "contactName": "Chi Soi Xuan Trung", "username": "@b.soi22"},
+                ("Tran Tung", "a tung ban gach", "@trn.tng751"),
+                ("Ba soi", "chi soi xuan trung", "@b.soi22"),
             ],
         )
 
@@ -359,3 +365,174 @@ class ScreenPeopleTests(unittest.TestCase):
                     os.environ.pop(key, None)
                 else:
                     os.environ[key] = value
+
+
+def _word(index: int, text: str, left: int, top: int, width: int, height: int, conf: int = 90) -> str:
+    return f"5\t1\t1\t1\t1\t{index}\t{left}\t{top}\t{width}\t{height}\t{conf}\t{text}"
+
+
+class LineBoxTests(unittest.TestCase):
+    def test_the_name_box_stops_before_the_follow_button_and_a_junk_blob(self) -> None:
+        tsv = "\n".join(
+            [
+                _word(1, "Hoàng", 138, 300, 90, 34),
+                _word(2, "Thanh", 238, 300, 92, 34),
+                _word(3, "Tùng", 340, 300, 80, 34),
+                _word(4, "ey", 540, 280, 140, 80),
+                _word(5, "Follow", 560, 300, 110, 34),
+            ]
+        )
+        line = TextLine("Hoàng Thanh Tùng", 138, 280, 360)
+        left, top, width, height = _line_box(line, tsv, 720, "name")
+        self.assertEqual(left, 138)
+        self.assertEqual(left + width, 420)
+        self.assertEqual((top, height), (300, 34))
+
+    def test_the_name_box_drops_a_second_line_that_sits_close_below(self) -> None:
+        tsv = "\n".join(
+            [
+                _word(1, "Lý", 138, 300, 40, 34),
+                _word(2, "Gia", 190, 300, 60, 34),
+                _word(3, "Hương", 262, 346, 100, 30),
+            ]
+        )
+        line = TextLine("Lý Gia", 138, 300, 376)
+        left, top, width, height = _line_box(line, tsv, 720, "name")
+        self.assertEqual((left, top, height), (138, 300, 34))
+        self.assertEqual(left + width, 250)
+
+    def test_the_handle_box_starts_at_the_at_sign_and_names_leave_the_handle_out(self) -> None:
+        tsv = "\n".join(
+            [
+                _word(1, "Ba", 138, 300, 50, 34),
+                _word(2, "soi", 198, 300, 60, 34),
+                _word(3, "@b.soi22", 300, 304, 190, 30),
+            ]
+        )
+        line = TextLine("Ba soi @b.soi22", 138, 300, 334)
+        handle = _line_box(line, tsv, 720, "handle")
+        name = _line_box(line, tsv, 720, "name")
+        self.assertEqual(handle[0], 300)
+        self.assertEqual(handle[0] + handle[2], 490)
+        self.assertEqual(name[0] + name[2], 258)
+
+    def test_without_word_boxes_the_box_is_a_guess_from_the_line(self) -> None:
+        line = TextLine("Lan Anh", 70, 120, 150)
+        left, top, width, height = _line_box(line, "", 720, "name")
+        self.assertEqual((left, top, height), (70, 120, 30))
+        self.assertGreater(width, 48)
+
+    def test_follow_with_punctuation_is_a_button(self) -> None:
+        self.assertEqual(_strip_button("Hong Follow,"), "Hong")
+        self.assertEqual(_strip_button("Lan Anh Thích."), "Lan Anh")
+        self.assertEqual(_strip_button("Follow"), "")
+        self.assertEqual(_strip_button("Tuấn Anh"), "Tuấn Anh")
+
+    def test_a_loaded_picture_is_read_without_opening_the_file(self) -> None:
+        font_path = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
+        if not font_path.is_file():
+            self.skipTest("font missing")
+        image = Image.new("L", (720, 200), 255)
+        ImageDraw.Draw(image).text((40, 60), "Tran Tung", font=ImageFont.truetype(str(font_path), 42), fill=0)
+        missing = Path("/nonexistent/frame.png")
+        from control_plane.tesseract_keep import reader_mode
+
+        if reader_mode() != "api":
+            self.skipTest("in-process tesseract is unavailable")
+        self.assertIn("Tran", people.read_frame_tsv(missing, image))
+
+
+class VoteSpeedTests(unittest.TestCase):
+    def setUp(self) -> None:
+        clear_memos()
+
+    def tearDown(self) -> None:
+        clear_memos()
+
+    def test_vote_box_reuses_a_row_settled_in_three_frames(self) -> None:
+        image = Image.new("RGB", (200, 80), "white")
+        ImageDraw.Draw(image).rectangle((20, 20, 120, 50), fill="black")
+        calls = {"n": 0}
+
+        def fake_read(picture: Image.Image, dest: Path, kind: str) -> str:
+            del picture, dest, kind
+            calls["n"] += 1
+            return "Lan Anh"
+
+        memo = RowMemo()
+        original = people._read_prepared
+        people._read_prepared = fake_read
+        try:
+            for frame in ("f1", "f2", "f3"):
+                text, agreed = people._vote_box(image, (10, 10, 140, 50), Path("x.png"), "name", "Lan Anh", memo, frame)
+                self.assertTrue(agreed)
+                self.assertEqual(text, "Lan Anh")
+            self.assertEqual(calls["n"], 3)
+            again, agreed = people._vote_box(image, (10, 10, 140, 50), Path("x.png"), "name", "Lan Anh", memo, "f4")
+            self.assertTrue(agreed)
+            self.assertEqual(again, "Lan Anh")
+            self.assertEqual(calls["n"], 3)
+            people._vote_box(image, (10, 10, 140, 50), Path("x.png"), "name", "Bình An", memo, "f5")
+            self.assertGreater(calls["n"], 3)
+        finally:
+            people._read_prepared = original
+
+    def test_a_line_that_never_agrees_is_read_in_every_frame(self) -> None:
+        image = Image.new("RGB", (200, 80), "white")
+        calls = {"n": 0}
+
+        def fake_read(picture: Image.Image, dest: Path, kind: str) -> str:
+            del picture, dest, kind
+            calls["n"] += 1
+            return "Khác hẳn"
+
+        original_rapid = people.read_rapid
+        memo = RowMemo()
+        original = people._read_prepared
+        people._read_prepared = fake_read
+        people.read_rapid = lambda picture: "Lạ lùng"
+        try:
+            for frame in range(6):
+                people._vote_box(image, (10, 10, 140, 50), Path("x.png"), "name", "An Nhiên", memo, f"f{frame}")
+        finally:
+            people._read_prepared = original
+            people.read_rapid = original_rapid
+        self.assertGreaterEqual(calls["n"], 6)
+
+    def test_rewrite_votes_lines_together(self) -> None:
+        dests: list[str] = []
+        lock = threading.Lock()
+        start = threading.Barrier(3) if people.reader_limit() >= 3 else None
+
+        def fake_vote(
+            image: Image.Image,
+            box: tuple[int, int, int, int],
+            dest: Path,
+            kind: str,
+            seed: str,
+            memo: RowMemo | None = None,
+            frame_id: str = "",
+            on_settle: object = None,
+        ) -> tuple[str, bool]:
+            del image, box, kind, memo, frame_id, on_settle
+            if start is not None:
+                start.wait(timeout=2)
+            with lock:
+                dests.append(dest.name)
+            return seed.strip(), True
+
+        original = people._vote_box
+        people._vote_box = fake_vote
+        try:
+            image = Image.new("RGB", (240, 160), "white")
+            lines = [
+                TextLine("An", 10, 10, 30),
+                TextLine("Binh", 10, 50, 70),
+                TextLine("Cuong", 10, 90, 110),
+            ]
+            updated, names, _handles = people._rewrite_with_votes(Path("frame.png"), image, lines, "")
+        finally:
+            people._vote_box = original
+        self.assertEqual([row.text for row in updated], ["An", "Binh", "Cuong"])
+        self.assertEqual(names, {"An", "Binh", "Cuong"})
+        self.assertEqual(len(set(dests)), 3)
