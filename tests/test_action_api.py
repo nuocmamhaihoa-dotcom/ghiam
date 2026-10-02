@@ -1263,7 +1263,10 @@ class ActionApiTests(unittest.TestCase):
 
     def test_hub_reads_when_the_pc_does_not_take_the_video(self) -> None:
         previous = video_helpers.OFFER_SECONDS
+        previous_fresh = video_helpers.FRESH_SECONDS
         video_helpers.OFFER_SECONDS = 0.2
+        # PC im quá hạn "còn nối" thì hub đọc. Hạn thật là 45 giây, ở đây rút ngắn để test không phải chờ.
+        video_helpers.FRESH_SECONDS = 0.6
         try:
             beat = self.client.post(
                 "/v1/video-workers/heartbeat",
@@ -1280,6 +1283,7 @@ class ActionApiTests(unittest.TestCase):
             body = self._wait_job(job_id)
         finally:
             video_helpers.OFFER_SECONDS = previous
+            video_helpers.FRESH_SECONDS = previous_fresh
         self.assertTrue(body.get("error"), body)
         self.assertLess(int(body.get("percent") or 0), 100)
 
