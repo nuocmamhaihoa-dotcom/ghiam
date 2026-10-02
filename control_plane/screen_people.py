@@ -1290,10 +1290,12 @@ def tighten_frame_reading(
     tsv: str = "",
     prepared: bool = True,
     loaded: Image.Image | None = None,
+    scroll_list: bool = False,
 ) -> tuple[list[TextLine], list[dict[str, str]]]:
     """Đối chiếu tên và @. Hai hoặc ba hướng trùng thì ghi. Lệch hết thì đọc lại năm lần.
 
     loaded là ảnh prepare_frame_image đã mở sẵn, đỡ mở lại file khung.
+    scroll_list là dải mới của danh bạ đang cuộn: khung đó là danh bạ, không đọc lại như trang hồ sơ.
     """
     del sightings
     source = loaded if loaded is not None else _open_frame_image(path, prepared=prepared)
@@ -1306,9 +1308,18 @@ def tighten_frame_reading(
     if source is None:
         updated = list(lines)
     else:
-        lines, tsv, rescued = _rescue_profile(source, learner, lines, tsv, frame_id)
+        if not scroll_list:
+            lines, tsv, rescued = _rescue_profile(source, learner, lines, tsv, frame_id)
         updated, agreed_names, agreed_handles = _rewrite_with_votes(
-            path, source, lines, tsv, memo_for(scope), frame_id, learner, _list_frame(lines), not rescued
+            path,
+            source,
+            lines,
+            tsv,
+            memo_for(scope),
+            frame_id,
+            learner,
+            scroll_list or _list_frame(lines),
+            not rescued,
         )
 
     found = sightings_from_lines(updated)

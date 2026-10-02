@@ -58,6 +58,8 @@ _TIMING_KEYS = (
     "rereads",
     "skipped",
     "rescued",
+    "strips",
+    "fades",
 )
 
 

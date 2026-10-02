@@ -1311,6 +1311,8 @@
           if (Number(timing.frames) > 0) detail += " Kỳ vừa rồi: đọc khung " + timing.readMs + " ms, đối chiếu tên và @ " + timing.voteMs + " ms mỗi khung.";
           if (Number(timing.rescued) > 0) detail += " Cứu " + timing.rescued + " trang hồ sơ bằng dải đã học.";
           if (Number(timing.skipped) > 0) detail += " Bỏ " + timing.skipped + " ô dòng sai hình.";
+          if (Number(timing.strips) > 0) detail += " Đọc dải mới " + timing.strips + " khung khi danh bạ cuộn.";
+          if (Number(timing.fades) > 0) detail += " Bỏ " + timing.fades + " khung mờ lúc chuyển trang.";
           $("helperLine").textContent = "PC phụ đang nối: " + (helper.count || 1) + " máy, " + (helper.cores || helper.cpus || 0) + " lõi" + share + gpu + ". Mỗi máy đọc tối đa hai video." + split + state + detail;
         } else {
           $("helperLine").textContent = "PC phụ chưa nối. Video được máy chủ đọc. Mở phần mềm PC nếu muốn máy tính đọc giúp.";

@@ -14,15 +14,16 @@ import time
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from PIL import Image, ImageChops, ImageOps, ImageStat
 
-from control_plane import layout_learn, stage_timing
+from control_plane import layout_learn, scroll_track, stage_timing
 from control_plane.gpu_read import fallback_note, prefers_single_worker, read_lines
 from control_plane.read_vote import forget_scope
 from control_plane.screen_people import (
     _accepted_sighting,
+    _list_frame,
     captions_from_sightings,
     lines_from_tsv,
     memo_scope,
@@ -527,7 +528,7 @@ def analyze_screen_video(
         ):
             if batch:
                 produced = True
-            part = _changed_frames(batch, sink, held)
+            part = _drop_fades(_changed_frames(batch, sink, held))
             chosen.extend(part)
             readings.extend(_read_frames(part, words, reserve=reserve))
         if not produced:
@@ -538,7 +539,7 @@ def analyze_screen_video(
             marker.write_text(f"{rate:.6f}", encoding="utf-8")
     else:
         sink.report(40, "Tách khung hình")
-        chosen = _changed_frames(images, sink)
+        chosen = _drop_fades(_changed_frames(images, sink))
         readings = _read_frames(chosen, words, reserve=reserve)
     if not keep_open:
         sink.note_samples(_sample_previews(chosen))
@@ -1270,7 +1271,68 @@ def _prefer_reading(
     return text_lines, sightings, captions, seen, kept
 
 
-def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str, str]], int, int]:
+class _FrameRead(NamedTuple):
+    seconds: float
+    captions: list[str]
+    sightings: list[dict[str, str]]
+    seen: int
+    kept: int
+    lines: list[Any]
+    height: int
+    strip: bool
+
+
+def _drop_fades(chosen: list[tuple[float, Path]]) -> list[tuple[float, Path]]:
+    """Bỏ khung mờ lúc chuyển trang hồ sơ. Danh bạ đang cuộn giữ nguyên."""
+    if len(chosen) < 3:
+        return chosen
+    thumbs = [scroll_track.thumb(path) for _seconds, path in chosen]
+    drop = set(scroll_track.fade_indexes(thumbs))
+    if not drop:
+        return chosen
+    stage_timing.bump("scroll.fades", len(drop))
+    return [item for index, item in enumerate(chosen) if index not in drop]
+
+
+def _try_strip(item: tuple[float, Path], thumb_dy: int) -> _FrameRead | None:
+    """Đọc dải mới khi danh bạ cuộn. None thì khung này đọc cả ảnh như thường."""
+    seconds, image = item
+    read_started = time.perf_counter()
+    loaded = prepare_frame_image(image)
+    if loaded is None or thumb_dy == 0:
+        return None
+    dy = scroll_track.prepared_dy(thumb_dy, loaded.height)
+    top, bottom = scroll_track.strip_bounds(loaded.height, dy)
+    if dy == 0 or bottom - top < 8 or bottom - top >= int(loaded.height * 0.85):
+        return None
+    crop = loaded.crop((0, top, loaded.width, bottom))
+    tsv = scroll_track.offset_tsv(read_frame_tsv(image, crop), top)
+    text_lines = lines_from_tsv(tsv) if tsv else []
+    stage_timing.add("read", time.perf_counter() - read_started)
+    if not text_lines:
+        return None
+    seen, kept = tsv_word_counts(tsv)
+    with stage_timing.timed("vote"):
+        text_lines, sightings = tighten_frame_reading(
+            image,
+            list(text_lines),
+            [],
+            tsv=tsv,
+            prepared=True,
+            loaded=loaded,
+            scroll_list=True,
+        )
+    if not text_lines:
+        return None
+    captions = captions_from_sightings(sightings)
+    return _FrameRead(seconds, captions, sightings, seen, kept, list(text_lines), loaded.height, True)
+
+
+def _read_one(item: tuple[float, Path], thumb_dy: int | None = None) -> _FrameRead:
+    if thumb_dy:
+        stripped = _try_strip(item, thumb_dy)
+        if stripped is not None:
+            return stripped
     seconds, image = item
     seen = 0
     kept = 0
@@ -1344,7 +1406,51 @@ def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str
         fallback = seen_line(text) if text else ""
         if fallback:
             captions = [fallback]
-    return seconds, captions, sightings, seen, kept
+    height = loaded.height if loaded is not None else 0
+    return _FrameRead(seconds, captions, sightings, seen, kept, list(text_lines), height, False)
+
+
+def _apply_scroll(
+    chosen: list[tuple[float, Path]],
+    reads: list[_FrameRead | None],
+    shifts: list[scroll_track.Shift],
+) -> None:
+    """Ghép dòng đã đọc của khung trước vào dải mới. Không có dòng cũ thì đọc lại cả khung."""
+    carried: list[Any] = []
+    prev_list = False
+    for index, item in enumerate(reads):
+        if item is None:
+            prev_list = False
+            carried = []
+            continue
+        if item.strip and not (prev_list and carried and shifts[index].confident):
+            try:
+                item = _read_one((item.seconds, chosen[index][1]))
+            except Exception:
+                pass
+            else:
+                reads[index] = item
+        lines = list(item.lines)
+        captions = list(item.captions)
+        sightings = [dict(found) for found in item.sightings]
+        if item.strip and prev_list and carried and item.height > 0 and shifts[index].confident:
+            dy = scroll_track.prepared_dy(shifts[index].dy, item.height)
+            top, bottom = scroll_track.strip_bounds(item.height, dy)
+            kept = [
+                line
+                for line in scroll_track.shift_lines(carried, dy, item.height)
+                if scroll_track.in_safe(line, item.height) and scroll_track.outside_strip(line, top, bottom)
+            ]
+            lines = sorted([*kept, *item.lines], key=lambda line: (line.top, line.left))
+            sightings = sightings_from_lines(lines)
+            captions = captions_from_sightings(sightings)
+            stage_timing.bump("scroll.strips")
+            item = item._replace(captions=captions, sightings=sightings, lines=lines)
+            reads[index] = item
+        prev_list = _list_frame(lines) or any(found.get("kind") == "contact" for found in sightings)
+        carried = []
+        if prev_list and item.height:
+            carried = [line for line in lines if scroll_track.in_safe(line, item.height)]
 
 
 def _rescue_empty(
@@ -1419,29 +1525,39 @@ def _read_frames(
         )
     else:
         progress.report(48, "Đọc chữ")
+    reads: list[_FrameRead | None] = [None] * total
+    shifts = [scroll_track.Shift(0, False)] * total
+    if pending and not prefers_single_worker():
+        shifts = scroll_track.plan([path for _seconds, path in chosen])
     if pending:
         workers = 1 if prefers_single_worker() else ocr_workers(len(pending), os.cpu_count() or 1, reserve)
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(_read_one, chosen[index]): index for index in pending}
+            futures = {
+                pool.submit(_read_one, chosen[index], shifts[index].dy if shifts[index].confident else None): index
+                for index in pending
+            }
             for future in as_completed(futures):
                 index = futures[future]
                 done_count += 1
                 try:
-                    reading = future.result()
+                    reads[index] = future.result()
                 except Exception:
                     failed += 1
                     results[index] = (chosen[index][0], [], [])
-                else:
-                    seconds, captions, sightings, seen, kept = reading
-                    word_seen += seen
-                    word_kept += kept
-                    if not captions and not sightings:
-                        blank += 1
-                    results[index] = (seconds, captions, sightings)
-                    progress.remember_frame(seconds, captions, sightings)
                 percent = 48 + int((done_count / total) * 44)
                 label = "Đọc tiếp" if known else "Đọc chữ"
                 progress.report(min(92, percent), f"{label}, khung {done_count}/{total}")
+        _apply_scroll(chosen, reads, shifts)
+        for index in pending:
+            item = reads[index]
+            if item is None:
+                continue
+            word_seen += item.seen
+            word_kept += item.kept
+            if not item.captions and not item.sightings:
+                blank += 1
+            results[index] = (item.seconds, list(item.captions), [dict(found) for found in item.sightings])
+            progress.remember_frame(item.seconds, item.captions, item.sightings)
     if pending:
         _rescued, unblanked = _rescue_empty(chosen, results, progress)
         blank = max(0, blank - unblanked)

@@ -44,11 +44,13 @@ _SOURCES = (
     "control_plane/__init__.py",
     "control_plane/gpu_read.py",
     "control_plane/layout_learn.py",
+    "control_plane/scroll_track.py",
     "control_plane/screen_steps.py",
     "control_plane/screen_people.py",
     "control_plane/people.py",
     "control_plane/read_vote.py",
     "control_plane/stage_timing.py",
+    "control_plane/syllables.py",
     "control_plane/tesseract_keep.py",
     "control_plane/version.py",
 )

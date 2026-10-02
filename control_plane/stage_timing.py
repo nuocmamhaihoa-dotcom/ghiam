@@ -71,6 +71,8 @@ def summary(data: dict[str, tuple[float, int]]) -> dict[str, int]:
         "rereads": data.get("vote.rereads", (0.0, 0))[1],
         "skipped": data.get("vote.skipped", (0.0, 0))[1],
         "rescued": data.get("zone.rescued", (0.0, 0))[1],
+        "strips": data.get("scroll.strips", (0.0, 0))[1],
+        "fades": data.get("scroll.fades", (0.0, 0))[1],
     }
 
 
@@ -91,4 +93,8 @@ def describe(data: dict[str, tuple[float, int]]) -> str:
         )
     if found["rescued"] > 0:
         text += f" Cứu {found['rescued']} trang hồ sơ."
+    if found["strips"] > 0:
+        text += f" Đọc dải cuộn {found['strips']} khung."
+    if found["fades"] > 0:
+        text += f" Bỏ {found['fades']} khung mờ lúc chuyển trang."
     return text

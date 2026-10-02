@@ -207,5 +207,17 @@ class ReadVoteTests(unittest.TestCase):
         self.assertEqual(built, [{"intra_op_num_threads": 1, "inter_op_num_threads": 1}])
         self.assertEqual(calls[0], {"use_det": False, "use_cls": False, "use_rec": True})
 
+    def test_a_tone_on_the_wrong_vowel_moves_when_the_votes_agree(self) -> None:
+        text, agreed = vote_line("Tóan Văn", "Tóan Văn", None, [], kind="name")
+        self.assertTrue(agreed)
+        self.assertEqual(text, "Toán Văn")
+        text, agreed = vote_line("Huỳnh", "Huỳnh", None, [], kind="name")
+        self.assertEqual(text, "Huỳnh")
+
+    def test_unaccented_votes_are_not_given_a_guessed_tone(self) -> None:
+        text, agreed = vote_line("Nguyen Van", "Nguyen Van", None, [], kind="name")
+        self.assertTrue(agreed)
+        self.assertEqual(text, "Nguyen Van")
+
 if __name__ == "__main__":
     unittest.main()

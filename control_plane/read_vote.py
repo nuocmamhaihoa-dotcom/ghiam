@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from PIL import Image, ImageChops, ImageFilter, ImageOps, ImageStat
 
 from control_plane.people import clean_name, clean_username, fold_name, mark_count
+from control_plane.syllables import restore_name
 
 try:
     import numpy as np
@@ -196,6 +197,20 @@ def _groups(reads: list[str], kind: str) -> dict[str, list[str]]:
     return found
 
 
+def _plain(texts: list[str]) -> bool:
+    """Mọi cách đọc trong nhóm đều không có dấu. Lúc đó mới được điền âm tiết duy nhất."""
+    named = [text for text in texts if vote_key(text, "name")]
+    return bool(named) and all(mark_count(text) == 0 for text in named)
+
+
+def _restore(text: str, texts: list[str]) -> str:
+    """Chuyển dấu thanh về đúng nguyên âm. Điền âm tiết duy nhất chỉ khi cả nhóm không có dấu."""
+    cleaned = clean_name(text)
+    if not cleaned:
+        return ""
+    return restore_name(cleaned, allow_unique=_plain(texts))
+
+
 def _show(texts: list[str], kind: str) -> str:
     """Chữ được ghi từ một nhóm cách đọc đã trùng chữ gốc. Tên: nhiều phiếu nhất, hòa thì nhiều dấu hơn, rồi thứ tự."""
     if kind == "handle":
@@ -247,13 +262,17 @@ def vote_line(seed: str, second: str, third: str | None, reruns: list[str], *, k
                 # Các hướng đã trùng chữ gốc, chỉ có thể khác dấu. Cách viết lấy từ bộ chữ chuẩn đọc riêng ô dòng (hướng 2):
                 # trên danh sách mẫu nó đúng 77% khi lệch dấu với bộ nhanh (bộ nhanh 12%), và không tự thêm dấu vào tên không dấu.
                 # RapidOCR chỉ trả chữ gốc nên không được lấn phiếu của hướng 2.
+                # Sau đó dấu thanh đặt sai nguyên âm được chuyển về đúng chỗ. Nhiều âm tiết cùng chữ gốc thì không đoán dấu.
                 if second in winner and vote_key(second, "name"):
-                    return clean_name(second), True
-                return _richest(winner), True
+                    return _restore(second, winner), True
+                return _restore(_richest(winner), winner), True
             return _show(winner, kind), True
     nonempty = [text for text in reads if vote_key(text, kind)]
     if len(nonempty) < 2:
-        return _show([seed], kind), False
+        shown = _show([seed], kind)
+        if kind == "name" and shown:
+            shown = restore_name(shown, allow_unique=False)
+        return shown, False
     rerun_groups = _groups(reruns, kind)
     if not rerun_groups:
         return "", False
@@ -262,7 +281,10 @@ def vote_line(seed: str, second: str, third: str | None, reruns: list[str], *, k
         return "", False
     if len(ranked) > 1 and len(ranked[1]) == len(ranked[0]):
         return "", False
-    return _show(ranked[0], kind), True
+    shown = _show(ranked[0], kind)
+    if kind == "name" and shown:
+        shown = _restore(shown, ranked[0])
+    return shown, True
 
 
 def five_variants(crop: Image.Image) -> list[Image.Image]:
