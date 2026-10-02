@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 from PIL import Image, ImageChops, ImageFilter, ImageOps, ImageStat
 
-from control_plane.people import clean_name, clean_username, fold_name
+from control_plane.people import clean_name, clean_username, fold_name, mark_count
 
 try:
     import numpy as np
@@ -116,15 +116,13 @@ class RowMemo:
         return row
 
     def agree(self, kind: str, seed: str, left: int, width: int, signature: Image.Image, frame: str, text: str) -> bool:
-        """Ghi một lần đối chiếu đã trùng ở khung này. Trả True khi dòng vừa được chốt hẳn."""
+        """Ghi một lần đối chiếu đã trùng ở khung này. Trả True đúng lúc dòng vừa được chốt hẳn."""
         key = self._key(kind, seed)
         if key is None or not text:
             return False
         with self._lock:
             row = self._row(key, left, width, signature)
-            if row.settled:
-                return row.settled == text
-            if frame in row.frames:
+            if row.settled or frame in row.frames:
                 return False
             if row.texts and row.texts[-1] != text:
                 row.frames.clear()
@@ -199,6 +197,7 @@ def _groups(reads: list[str], kind: str) -> dict[str, list[str]]:
 
 
 def _show(texts: list[str], kind: str) -> str:
+    """Chữ được ghi từ một nhóm cách đọc đã trùng chữ gốc. Tên: nhiều phiếu nhất, hòa thì nhiều dấu hơn, rồi thứ tự."""
     if kind == "handle":
         for text in texts:
             handle = clean_username(text)
@@ -209,13 +208,18 @@ def _show(texts: list[str], kind: str) -> str:
     if not names:
         return ""
     counts: dict[str, int] = {}
-    for name in names:
+    first: dict[str, int] = {}
+    for position, name in enumerate(names):
         counts[name] = counts.get(name, 0) + 1
-    best = max(counts.values())
-    for name in names:
-        if counts[name] == best:
-            return name
-    return names[0]
+        first.setdefault(name, position)
+    return max(counts, key=lambda name: (counts[name], mark_count(name), -first[name]))
+
+
+def _richest(texts: list[str]) -> str:
+    names = [clean_name(text) for text in texts if vote_key(text, "name")]
+    if not names:
+        return ""
+    return max(names, key=lambda name: (mark_count(name), -names.index(name)))
 
 
 def needs_reread(seed: str, second: str, third: str | None, kind: str) -> bool:
@@ -239,6 +243,13 @@ def vote_line(seed: str, second: str, third: str | None, reruns: list[str], *, k
     if groups:
         winner = max(groups.values(), key=len)
         if len(winner) >= 2:
+            if kind == "name":
+                # Các hướng đã trùng chữ gốc, chỉ có thể khác dấu. Cách viết lấy từ bộ chữ chuẩn đọc riêng ô dòng (hướng 2):
+                # trên danh sách mẫu nó đúng 77% khi lệch dấu với bộ nhanh (bộ nhanh 12%), và không tự thêm dấu vào tên không dấu.
+                # RapidOCR chỉ trả chữ gốc nên không được lấn phiếu của hướng 2.
+                if second in winner and vote_key(second, "name"):
+                    return clean_name(second), True
+                return _richest(winner), True
             return _show(winner, kind), True
     nonempty = [text for text in reads if vote_key(text, kind)]
     if len(nonempty) < 2:

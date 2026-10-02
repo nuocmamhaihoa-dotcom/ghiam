@@ -19,14 +19,46 @@ from control_plane.read_vote import (
 
 
 class ReadVoteTests(unittest.TestCase):
-    def test_two_names_agree_and_keep_the_marks(self) -> None:
+    def test_two_names_agree_and_take_the_standard_model_spelling(self) -> None:
         text, agreed = vote_line("Lan Anh", "Lân Anh", None, [], kind="name")
-        self.assertTrue(agreed)
-        self.assertEqual(text, "Lan Anh")
-        text, agreed = vote_line("Lan Anh", "Lân Anh", "Lân Anh", [], kind="name")
         self.assertTrue(agreed)
         self.assertEqual(text, "Lân Anh")
         self.assertFalse(needs_reread("Lan Anh", "Lân Anh", None, "name"))
+        text, agreed = vote_line("Lân Anh", "Lan Anh", None, [], kind="name")
+        self.assertTrue(agreed)
+        self.assertEqual(text, "Lan Anh")
+
+    def test_the_standard_model_beats_two_marks_blind_reads(self) -> None:
+        # RapidOCR chỉ trả chữ gốc. Hai phiếu không dấu không được thắng cách viết của hướng 2.
+        text, agreed = vote_line("Tran Quoc Hai", "Trần Quốc Hải", "Tran Quoc Hai", [], kind="name")
+        self.assertTrue(agreed)
+        self.assertEqual(text, "Trần Quốc Hải")
+        text, agreed = vote_line("Tran Quoc Hai", "Tran Quoc Hai", "Trần Quốc Hải", [], kind="name")
+        self.assertEqual(text, "Tran Quoc Hai")
+
+    def test_without_the_standard_model_the_richer_spelling_wins(self) -> None:
+        text, agreed = vote_line("Trần Quốc Hải", "Khác hẳn", "Tran Quoc Hai", [], kind="name")
+        self.assertTrue(agreed)
+        self.assertEqual(text, "Trần Quốc Hải")
+
+    def test_the_rerun_majority_keeps_the_most_votes_then_the_most_marks(self) -> None:
+        text, agreed = vote_line(
+            "An",
+            "Bình",
+            "Cường",
+            ["Trần Hải", "Tran Hai", "Tran Hai", "Trần Hải", "Khác"],
+            kind="name",
+        )
+        self.assertTrue(agreed)
+        self.assertEqual(text, "Trần Hải")
+        text, agreed = vote_line(
+            "An",
+            "Bình",
+            "Cường",
+            ["Tran Hai", "Trần Hải", "Tran Hai", "Khác", "Một"],
+            kind="name",
+        )
+        self.assertEqual(text, "Tran Hai")
 
     def test_handle_ignores_letter_case(self) -> None:
         text, agreed = vote_line("@User.name", "@user.name", "@user.name", [], kind="handle")

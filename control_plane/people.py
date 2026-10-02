@@ -21,6 +21,11 @@ def fold_name(name: str) -> str:
     return " ".join(stripped.casefold().replace("đ", "d").split())
 
 
+def mark_count(name: str) -> int:
+    """Số chữ có dấu hoặc đ trong tên. OCR bỏ dấu nhiều hơn nhiều so với thêm dấu, nên nhiều dấu hơn thường là đúng hơn."""
+    return sum(1 for char in unicodedata.normalize("NFC", str(name or "")) if fold_name(char) != char.casefold())
+
+
 def _name_char_ok(char: str) -> bool:
     if char.isspace() or char in "-'":
         return True
