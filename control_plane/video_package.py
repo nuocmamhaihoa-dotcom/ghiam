@@ -13,6 +13,8 @@ _REQUIREMENTS = "pillow\nrapidocr-onnxruntime\n"
 _GUIDE = """fb-poller video worker
 
 PC đọc video bằng CPU. Tên và @ được đối chiếu: Tesseract nhanh, Tesseract chuẩn, rồi RapidOCR trên đúng dòng chữ.
+Khi bạn đang dùng máy, PC đọc bằng 80% lõi. Máy rảnh 2 phút thì dùng gần hết lõi, chừa một lõi cho nhịp nối hub.
+Chương trình chạy ở mức ưu tiên thấp, nên các ứng dụng của bạn vẫn được ưu tiên.
 Gói này không chứa token và không chứa dữ liệu đã lưu.
 Thư viện GPU không nằm trong gói. Card NVIDIA vẫn đọc bằng CPU cho đến khi tự cài easyocr hoặc paddle sau.
 Token và địa chỉ hub nằm ngoài thư mục current, nên bản cập nhật không xóa chúng.
@@ -32,6 +34,8 @@ Khi hub nâng cấp, máy tự cập nhật lúc không đang đọc video.
 _SOURCES = (
     "pc_agent/video_worker.py",
     "pc_agent/video_watchdog.py",
+    "pc_agent/pc_power.py",
+    "pc_agent/pc_hardware.py",
     "pc_agent/windows/Install-VideoWorker.ps1",
     "pc_agent/windows/Run-VideoWorker.ps1",
     "pc_agent/windows/Cai-dat.bat",
@@ -43,6 +47,7 @@ _SOURCES = (
     "control_plane/screen_people.py",
     "control_plane/people.py",
     "control_plane/read_vote.py",
+    "control_plane/stage_timing.py",
     "control_plane/tesseract_keep.py",
     "control_plane/version.py",
 )

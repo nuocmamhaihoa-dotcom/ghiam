@@ -1335,11 +1335,17 @@ class ActionApiTests(unittest.TestCase):
                 "models": "fast",
                 "readerOk": True,
                 "readerMode": "api",
+                "hardware": {"cpu": "Intel Core i7-12700K", "physical": 12, "logical": 20, "gpus": ["Intel UHD 770"]},
+                "timing": {"frames": 240, "readMs": 260, "voteMs": 410, "reused": 4648},
             },
         )
         self.assertEqual(beat.status_code, 200, beat.text)
         self.assertEqual(beat.json()["build"], VIDEO_WORKER_BUILD)
         helper = self.client.get("/health").json()["videoHelper"]
+        self.assertEqual(helper["hardware"]["cpu"], "Intel Core i7-12700K")
+        self.assertEqual(helper["hardware"]["gpus"], ["Intel UHD 770"])
+        self.assertEqual(helper["timing"]["voteMs"], 410)
+        self.assertEqual(helper["timing"]["reused"], 4648)
         self.assertEqual(helper["build"], VIDEO_WORKER_BUILD)
         self.assertEqual(helper["latestBuild"], VIDEO_WORKER_BUILD)
         self.assertEqual(helper["models"], "fast")

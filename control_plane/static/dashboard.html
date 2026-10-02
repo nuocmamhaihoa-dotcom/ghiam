@@ -1302,7 +1302,12 @@
           else if (build && latest && build < latest) state = " PC đang tự lên bản " + latest + ".";
           else if (build) state = " PC bản " + build + (helper.models === "fast" ? ", bộ chữ nhanh." : ".");
           const split = (Number(helper.count) || 1) >= 2 ? " Video từ 4 phút được chia đôi cho hai máy." : "";
-          $("helperLine").textContent = "PC phụ đang nối: " + (helper.count || 1) + " máy, " + (helper.cores || helper.cpus || 0) + " lõi" + share + gpu + ". Mỗi máy đọc tối đa hai video." + split + state;
+          const hardware = helper.hardware || {};
+          const timing = helper.timing || {};
+          let detail = "";
+          if (hardware.cpu) detail += " Máy: " + hardware.cpu + (hardware.physical ? ", " + hardware.physical + " lõi vật lý" : "") + ".";
+          if (Number(timing.frames) > 0) detail += " Kỳ vừa rồi: đọc khung " + timing.readMs + " ms, đối chiếu tên và @ " + timing.voteMs + " ms mỗi khung.";
+          $("helperLine").textContent = "PC phụ đang nối: " + (helper.count || 1) + " máy, " + (helper.cores || helper.cpus || 0) + " lõi" + share + gpu + ". Mỗi máy đọc tối đa hai video." + split + state + detail;
         } else {
           $("helperLine").textContent = "PC phụ chưa nối. Video được máy chủ đọc. Mở phần mềm PC nếu muốn máy tính đọc giúp.";
         }

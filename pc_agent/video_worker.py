@@ -48,12 +48,14 @@ os.environ.setdefault("OMP_THREAD_LIMIT", "1")
 
 from PIL import Image, ImageDraw, ImageFont
 
+from control_plane import stage_timing
 from control_plane.gpu_read import fallback_note, nvidia_name, reader_ready
 from control_plane.read_vote import rapid_ready
 from control_plane.screen_people import lines_from_tsv, prepare_tesseract, read_frame_tsv
 from control_plane.screen_steps import ReadProgress, ScreenVideoError, analyze_screen_video
 from control_plane.tesseract_keep import reader_mode, set_reader_limit, warm_readers
 from control_plane.version import VIDEO_WORKER_BUILD
+from pc_agent import pc_hardware, pc_power
 
 _OCR_BYTES = 256 * 1024 * 1024
 _SHARE_PERCENT = 80
@@ -215,6 +217,16 @@ def worker_budget(cpu_count: int, ram_bytes: int | None) -> tuple[int, int]:
     return workers, cpus - workers
 
 
+def idle_budget(cpu_count: int, ram_bytes: int | None) -> int:
+    """Số bộ đọc khi máy rảnh: mọi lõi trừ một lõi cho nhịp nối hub, và không vượt 80% RAM."""
+    cpus = max(1, int(cpu_count or 1))
+    workers = max(1, cpus - 1)
+    if ram_bytes is not None and ram_bytes > 0:
+        by_ram = max(1, (int(ram_bytes) * _SHARE_PERCENT) // 100 // _OCR_BYTES)
+        workers = min(workers, by_ram)
+    return max(1, min(workers, cpus))
+
+
 class _JobSlots:
     """Đếm video đang giữ trên máy này và chia số lõi khi có hai video."""
 
@@ -222,6 +234,10 @@ class _JobSlots:
         self.workers = max(1, workers)
         self.held = 0
         self._lock = threading.Lock()
+
+    def set_workers(self, workers: int) -> None:
+        with self._lock:
+            self.workers = max(1, int(workers))
 
     def take(self) -> bool:
         with self._lock:
@@ -294,6 +310,25 @@ def say(text: str, *, err: bool = False) -> None:
         stream.flush()
     except Exception:
         return
+
+
+def hardware_line(found: dict[str, object]) -> str:
+    """Một câu về cấu hình máy cho cửa sổ PC. Rỗng khi không đọc được gì."""
+    parts: list[str] = []
+    cpu = str(found.get("cpu") or "")
+    if cpu:
+        parts.append(cpu)
+    physical = found.get("physical")
+    logical = found.get("logical")
+    if isinstance(physical, int) and physical > 0 and isinstance(logical, int) and logical > 0:
+        parts.append(f"{physical} lõi vật lý, {logical} luồng")
+    gpus = found.get("gpus")
+    if isinstance(gpus, list) and gpus:
+        parts.append("card đồ họa " + ", ".join(str(item) for item in gpus))
+    free = found.get("tempFreeMb")
+    if isinstance(free, int) and free > 0:
+        parts.append(f"ổ tạm trống {free // 1024} GB")
+    return "Cấu hình: " + "; ".join(parts) + "." if parts else ""
 
 
 class HubClient:
@@ -1042,7 +1077,10 @@ def main() -> None:
     global _reader_note
     cpus = os.cpu_count() or 1
     ram = machine_ram_bytes()
+    pc_power.lower_priority()
+    pc_power.keep_full_speed()
     workers, reserve = worker_budget(cpus, ram)
+    budget = pc_power.PowerBudget(workers, idle_budget(cpus, ram))
     os.environ["CONTROL_OCR_RESERVE"] = str(reserve)
     os.environ["CONTROL_FFMPEG_THREADS"] = str(workers)
     set_reader_limit(workers)
@@ -1065,10 +1103,23 @@ def main() -> None:
         models = "fast"
     use_gpu, gpu_name = _prepare_gpu()
     name = os.environ.get("COMPUTERNAME") or os.environ.get("HOSTNAME") or "PC"
-    report: dict[str, object] = {"build": VIDEO_WORKER_BUILD, "models": models}
+    # hardware và timing có sẵn khóa từ đầu: gán lại giá trị không làm đổi kích thước dict đang được chép lúc gửi nhịp.
+    report: dict[str, object] = {"build": VIDEO_WORKER_BUILD, "models": models, "hardware": {}, "timing": {}}
     report.update(reader_self_test())
     report["readerMode"] = reader_mode()
     threading.Thread(target=warm_readers, daemon=True).start()
+
+    def gather_hardware() -> None:
+        try:
+            found = pc_hardware.collect(cpus, ram)
+        except Exception:
+            return
+        report["hardware"] = found
+        text = hardware_line(found)
+        if text:
+            say(text)
+
+    threading.Thread(target=gather_hardware, daemon=True).start()
     slots = _JobSlots(workers)
     mark = ROOT.parent / "update-tried.json"
     state: dict[str, object] = {"worker_id": "", "latest": 0}
@@ -1077,10 +1128,35 @@ def main() -> None:
 
     link_down = False
 
+    def tune_cores() -> None:
+        """Máy rảnh đủ lâu thì dùng thêm lõi. Bạn quay lại dùng máy thì về mức 80% ngay."""
+        if not budget.update(pc_power.idle_seconds()):
+            return
+        os.environ["CONTROL_OCR_RESERVE"] = str(cpus - budget.workers)
+        os.environ["CONTROL_FFMPEG_THREADS"] = str(budget.workers)
+        set_reader_limit(budget.workers)
+        slots.set_workers(budget.workers)
+        if budget.is_resting:
+            threading.Thread(target=warm_readers, daemon=True).start()
+            say(f"Máy rảnh. Đọc video bằng {budget.workers} lõi.")
+        else:
+            say(f"Bạn đang dùng máy. Đọc video bằng {budget.workers} lõi.")
+
+    def note_timing() -> None:
+        """Hết video cuối cùng thì in và gửi lên hub thời gian từng bước của kỳ vừa rồi."""
+        if slots.busy() > 0:
+            return
+        data = stage_timing.take()
+        text = stage_timing.describe(data)
+        if not text:
+            return
+        report["timing"] = stage_timing.summary(data)
+        say(text)
+
     def pulse() -> bool:
         try:
             worker_id, latest = client.heartbeat(
-                str(state["worker_id"]), name, cpus, use_gpu, gpu_name, workers, dict(report)
+                str(state["worker_id"]), name, cpus, use_gpu, gpu_name, budget.workers, dict(report)
             )
         except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
             return False
@@ -1105,9 +1181,11 @@ def main() -> None:
         link_down = False
 
     def beat() -> None:
+        pc_power.raise_this_thread()
         tested = time.monotonic()
         while not stop.wait(_BEAT_SEC):
             refresh_worker_state()
+            tune_cores()
             if report.get("readerOk") is False and time.monotonic() - tested >= _RETEST_SEC:
                 report.update(reader_self_test())
                 report["readerMode"] = reader_mode()
@@ -1117,7 +1195,7 @@ def main() -> None:
     while True:
         try:
             state["worker_id"], state["latest"] = client.heartbeat(
-                "", name, cpus, use_gpu, gpu_name, workers, dict(report)
+                "", name, cpus, use_gpu, gpu_name, budget.workers, dict(report)
             )
             break
         except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
@@ -1125,12 +1203,13 @@ def main() -> None:
             time.sleep(5)
     if _reader_note:
         say(_reader_note, err=True)
+    resting = f" và {budget.resting} lõi khi máy rảnh {int(pc_power.IDLE_AFTER_SEC // 60)} phút" if budget.resting > workers else ""
     if ram > 0:
         say(
-            f"Đã nối hub. Máy này có {cpus} lõi, {ram // (1024 * 1024)} MB RAM, dùng {workers} lõi (80%) để đọc video. Tối đa hai video cùng lúc."
+            f"Đã nối hub. Máy này có {cpus} lõi, {ram // (1024 * 1024)} MB RAM, dùng {workers} lõi (80%) khi bạn đang dùng máy{resting} để đọc video. Tối đa hai video cùng lúc."
         )
     else:
-        say(f"Đã nối hub. Máy này có {cpus} lõi, dùng {workers} lõi (80%) để đọc video. Tối đa hai video cùng lúc.")
+        say(f"Đã nối hub. Máy này có {cpus} lõi, dùng {workers} lõi (80%) khi bạn đang dùng máy{resting} để đọc video. Tối đa hai video cùng lúc.")
     say(f"Bản {VIDEO_WORKER_BUILD}. " + ("Bộ chữ nhanh." if models == "fast" else "Bộ chữ chuẩn."))
     if report.get("readerOk") is True:
         say(f"Đọc thử ảnh mẫu được, mất {report.get('readerMs')} ms.")
@@ -1176,6 +1255,7 @@ def main() -> None:
                     slots.give()
                     set_reading(False)
                 say(f"Xong video {job_id}.")
+                note_timing()
 
             threading.Thread(target=_run, daemon=True).start()
             claimed = False

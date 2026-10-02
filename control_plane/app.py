@@ -1507,6 +1507,8 @@ class HelperBeatBody(BaseModel):
     readerOk: bool | None = None
     readerNote: str = ""
     readerMode: str = ""
+    hardware: dict[str, Any] = Field(default_factory=dict)
+    timing: dict[str, Any] = Field(default_factory=dict)
 
 
 class WorkerJobBody(BaseModel):
@@ -1560,6 +1562,8 @@ async def video_worker_heartbeat(
         body.readerOk,
         body.readerNote,
         body.readerMode,
+        body.hardware,
+        body.timing,
     )
     return {
         "ok": True,
