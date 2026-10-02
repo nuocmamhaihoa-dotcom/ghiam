@@ -16,7 +16,9 @@ from control_plane.screen_people import TextLine
 
 # Ảnh nhỏ cùng cách cắt với bước chọn khung đổi: bỏ 8% trên và 8% dưới, còn 80×130.
 _THUMB = (80, 130)
-# Tìm lệch tối đa 16 điểm trên ảnh nhỏ, khoảng 160 điểm trên ảnh đã làm nét. Lệch sát biên thì chưa chắc.
+# Ảnh cao hơn để đo lệch dọc. 130 điểm lượng tử hóa khoảng 5 điểm trên ảnh làm nét, lệch cộng dồn làm rời cặp tên.
+_SHIFT = (80, 520)
+# Tìm lệch tối đa 16 điểm trên ảnh 130 điểm, khoảng 160 điểm trên ảnh đã làm nét. Lệch sát biên thì chưa chắc.
 _SEARCH = 16
 # Trung bình lệch điểm ảnh sau khi đã khớp. Cuộn thật thường dưới 8. Cắt cảnh và khung mờ trên 20.
 _SCORE_LIMIT = 12.0
@@ -79,10 +81,23 @@ def _score(previous: Image.Image, current: Image.Image, dy: int) -> float:
     return float(ImageStat.Stat(ImageChops.difference(before, after)).mean[0])
 
 
+def _search_limit(height: int) -> int:
+    """Cùng một quãng tìm trên mọi độ cao ảnh: 16 điểm khi ảnh cao 130."""
+    if height <= 0:
+        return _SEARCH
+    return max(_SEARCH, int(round(_SEARCH * height / _THUMB[1])))
+
+
 def vertical_shift(previous: Image.Image, current: Image.Image) -> Shift:
-    """Lệch dọc tốt nhất giữa hai khung liền. Không chắc thì dy = 0."""
-    before = _motion_band(previous)
-    after = _motion_band(current)
+    """Lệch dọc tốt nhất giữa hai khung liền. Không chắc thì dy = 0.
+
+    Bước thô trên ảnh 130 điểm, rồi chỉnh trên chính ảnh đưa vào. dy tính bằng điểm của ảnh đó.
+    """
+    if previous.size != current.size:
+        current = current.resize(previous.size)
+    coarse_h = _THUMB[1]
+    before = _motion_band(previous if previous.height == coarse_h else previous.resize((previous.width, coarse_h)))
+    after = _motion_band(current if current.height == coarse_h else current.resize((current.width, coarse_h)))
     scores = {dy: _score(before, after, dy) for dy in range(-_SEARCH, _SEARCH + 1)}
     best = min(scores, key=lambda dy: (scores[dy], abs(dy)))
     best_score = scores[best]
@@ -94,14 +109,39 @@ def vertical_shift(previous: Image.Image, current: Image.Image) -> Shift:
     )
     if not sure:
         return Shift(0, False)
-    return Shift(best, True)
+    if previous.height == coarse_h:
+        return Shift(best, True)
+    scale = previous.height / coarse_h
+    center = int(round(best * scale))
+    radius = max(1, int(round(scale)))
+    fine_before = _motion_band(previous)
+    fine_after = _motion_band(current)
+    window = range(center - radius, center + radius + 1)
+    fine_scores = {dy: _score(fine_before, fine_after, dy) for dy in window}
+    fine = min(fine_scores, key=lambda dy: (fine_scores[dy], abs(dy - center)))
+    if abs(fine) >= _search_limit(previous.height):
+        return Shift(0, False)
+    return Shift(fine, True)
+
+
+def motion_image(path: Path) -> Image.Image | None:
+    """Ảnh xám cao để đo lệch dọc. Cùng vùng cắt với ảnh chọn khung đổi."""
+    try:
+        with Image.open(path) as full:
+            gray = full.convert("L")
+            width, height = gray.size
+            small = gray.crop((0, int(height * 0.08), width, int(height * 0.92))).resize(_SHIFT)
+            small.load()
+            return small
+    except OSError:
+        return None
 
 
 def plan(paths: list[Path]) -> list[Shift]:
     """Một nhịp cuộn cho từng khung so với khung được đọc ngay trước. Khung đầu không cuộn."""
-    thumbs = [thumb(path) for path in paths]
+    images = [motion_image(path) for path in paths]
     shifts = [Shift(0, False)]
-    for previous, current in zip(thumbs, thumbs[1:]):
+    for previous, current in zip(images, images[1:]):
         if previous is None or current is None:
             shifts.append(Shift(0, False))
             continue
@@ -109,14 +149,14 @@ def plan(paths: list[Path]) -> list[Shift]:
     return shifts
 
 
-def prepared_dy(thumb_dy: int, prepared_height: int, thumb_height: int = _THUMB[1]) -> int:
-    """Đổi lệch trên ảnh nhỏ sang ảnh đã cắt làm nét.
+def prepared_dy(shift_dy: int, prepared_height: int, shift_height: int = _SHIFT[1]) -> int:
+    """Đổi lệch trên ảnh đo sang ảnh đã cắt làm nét.
 
-    Ảnh nhỏ là 84% chiều cao gốc. Ảnh làm nét là 88% (cắt 4% trên và 8% dưới).
+    Ảnh đo là 84% chiều cao gốc. Ảnh làm nét là 88% (cắt 4% trên và 8% dưới).
     """
-    if thumb_height <= 0 or prepared_height <= 0 or thumb_dy == 0:
+    if shift_height <= 0 or prepared_height <= 0 or shift_dy == 0:
         return 0
-    return int(round(thumb_dy * prepared_height * 0.84 / (thumb_height * 0.88)))
+    return int(round(shift_dy * prepared_height * 0.84 / (shift_height * 0.88)))
 
 
 def strip_bounds(height: int, dy: int) -> tuple[int, int]:
@@ -141,6 +181,12 @@ def outside_strip(line: _Line, top: int, bottom: int) -> bool:
     """Phần lớn dòng nằm ngoài dải vừa đọc thì giữ chữ cũ."""
     overlap = min(line.bottom, bottom) - max(line.top, top)
     return overlap <= 0.4 * max(1, line.bottom - line.top)
+
+
+def overlaps(line: _Line, other: _Line) -> bool:
+    """Hai dòng chồng lên nhau theo chiều dọc. Dải cắt đôi một dòng thì giữ dòng cũ, bỏ mảnh mới."""
+    overlap = min(line.bottom, other.bottom) - max(line.top, other.top)
+    return overlap > 0.4 * max(1, min(line.bottom - line.top, other.bottom - other.top))
 
 
 def shift_lines(lines: list[_Line], dy: int, height: int) -> list[TextLine]:

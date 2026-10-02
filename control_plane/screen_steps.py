@@ -1441,7 +1441,8 @@ def _apply_scroll(
                 for line in scroll_track.shift_lines(carried, dy, item.height)
                 if scroll_track.in_safe(line, item.height) and scroll_track.outside_strip(line, top, bottom)
             ]
-            lines = sorted([*kept, *item.lines], key=lambda line: (line.top, line.left))
+            fresh = [line for line in item.lines if not any(scroll_track.overlaps(line, old) for old in kept)]
+            lines = sorted([*kept, *fresh], key=lambda line: (line.top, line.left))
             sightings = sightings_from_lines(lines)
             captions = captions_from_sightings(sightings)
             stage_timing.bump("scroll.strips")
@@ -1492,6 +1493,17 @@ def _rescue_empty(
     return rescued, unblanked
 
 
+# Đọc lại cả khung theo nhịp này. Lệch đo được còn sai khoảng một điểm ảnh, cộng dồn sẽ kéo rời hai dòng của một người.
+_SCROLL_ANCHOR = 5
+
+
+def _strip_dy(index: int, shift: scroll_track.Shift) -> int | None:
+    """Lệch để đọc dải. Khung mốc và khung không chắc là một nhịp cuộn thì đọc cả ảnh."""
+    if not shift.confident or index % _SCROLL_ANCHOR == 0:
+        return None
+    return shift.dy
+
+
 def _read_frames(
     chosen: list[tuple[float, Path]],
     progress: ReadProgress,
@@ -1533,7 +1545,7 @@ def _read_frames(
         workers = 1 if prefers_single_worker() else ocr_workers(len(pending), os.cpu_count() or 1, reserve)
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {
-                pool.submit(_read_one, chosen[index], shifts[index].dy if shifts[index].confident else None): index
+                pool.submit(_read_one, chosen[index], _strip_dy(index, shifts[index])): index
                 for index in pending
             }
             for future in as_completed(futures):

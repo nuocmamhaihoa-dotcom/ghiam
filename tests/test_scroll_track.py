@@ -44,8 +44,21 @@ class ScrollTrackTests(unittest.TestCase):
         self.assertEqual(scroll_track.vertical_shift(_bar(70), _bar(70)), scroll_track.Shift(0, False))
         self.assertFalse(scroll_track.vertical_shift(_bar(70), Image.new("L", (80, 130), 0)).confident)
 
+    def test_a_taller_image_keeps_the_fraction_of_the_shift(self) -> None:
+        def tall(top: int) -> Image.Image:
+            image = Image.new("L", (80, 520), 255)
+            ImageDraw.Draw(image).rectangle((8, top, 50, top + 36), fill=0)
+            return image
+
+        found = scroll_track.vertical_shift(tall(280), tall(248))
+        self.assertTrue(found.confident)
+        self.assertEqual(found.dy, 32)
+        self.assertTrue(scroll_track.overlaps(TextLine("a", 0, 100, 140), TextLine("b", 0, 120, 160)))
+        self.assertFalse(scroll_track.overlaps(TextLine("a", 0, 100, 140), TextLine("b", 0, 200, 240)))
+
     def test_thumb_pixels_scale_onto_the_prepared_frame(self) -> None:
-        self.assertEqual(scroll_track.prepared_dy(4, 1373), 40)
+        self.assertEqual(scroll_track.prepared_dy(16, 1373), 40)
+        self.assertEqual(scroll_track.prepared_dy(4, 1373, 130), 40)
         self.assertEqual(scroll_track.prepared_dy(0, 1373), 0)
         top, bottom = scroll_track.strip_bounds(1000, 29)
         self.assertGreater(top, 0)
