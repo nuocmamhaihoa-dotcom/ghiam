@@ -448,13 +448,13 @@ class HubClient:
             raise OSError("Chưa tải hết video.") from last_error
         raise OSError("Chưa tải hết video.")
 
-    def progress(self, job_id: str, worker_id: str, percent: int, task: str, problems: list[str]) -> None:
-        self._request(
-            "POST",
-            f"/v1/recordings/jobs/{job_id}/progress",
-            {"workerId": worker_id, "percent": percent, "task": task, "problems": problems},
-            timeout=60,
-        )
+    def progress(
+        self, job_id: str, worker_id: str, percent: int, task: str, problems: list[str], learned: str = ""
+    ) -> None:
+        body: dict[str, object] = {"workerId": worker_id, "percent": percent, "task": task, "problems": problems}
+        if learned:
+            body["learned"] = learned
+        self._request("POST", f"/v1/recordings/jobs/{job_id}/progress", body, timeout=60)
 
     def samples(self, job_id: str, worker_id: str, images: list[bytes]) -> None:
         payload = {
@@ -512,6 +512,7 @@ class RemoteProgress(ReadProgress):
         self._percent = 8
         self._task = "PC phụ đang đọc"
         self._problems: list[str] = []
+        self._learned = ""
         self._known: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
         self._pending: list[dict[str, object]] = []
         self._staged: list[dict[str, str]] | None = None
@@ -552,11 +553,16 @@ class RemoteProgress(ReadProgress):
         if not cleaned:
             return
         with self._lock:
-            if cleaned in self._problems:
-                return
-            self._problems.append(cleaned)
-        if cleaned.startswith("Quy luật học được"):
-            say(cleaned)
+            if cleaned not in self._problems:
+                self._problems.append(cleaned)
+
+    def note_learned(self, text: str) -> None:
+        cleaned = " ".join(str(text).split())
+        if not cleaned:
+            return
+        with self._lock:
+            self._learned = cleaned
+        say(cleaned)
 
     def remembered(self) -> dict[str, tuple[list[str], list[dict[str, str]]]]:
         with self._lock:
@@ -640,11 +646,16 @@ class RemoteProgress(ReadProgress):
 
     def _send(self) -> None:
         percent, task, problems, frames = self._snapshot()
+        with self._lock:
+            learned, self._learned = self._learned, ""
         try:
             if frames:
                 self._client.checkpoint(self._job_id, self._worker_id, frames)
-            self._client.progress(self._job_id, self._worker_id, percent, task, problems)
+            self._client.progress(self._job_id, self._worker_id, percent, task, problems, learned)
         except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            if learned:
+                with self._lock:
+                    self._learned = self._learned or learned
             for item in problems:
                 self.problem(item)
             if frames:

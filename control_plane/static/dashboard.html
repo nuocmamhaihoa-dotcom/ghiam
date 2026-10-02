@@ -603,6 +603,7 @@
         job.hubWordKept = data.hubWordKept || 0;
       }
       if (Array.isArray(data.samples)) job.samples = data.samples;
+      if (typeof data.learned === "string" && data.learned) job.learned = data.learned;
     }
     function paintWords() {
       const lines = [];
@@ -614,6 +615,7 @@
         if (job.hubWordSeen != null) {
           lines.push(prefix + "Máy chủ thấy " + job.hubWordSeen + " từ, giữ " + (job.hubWordKept || 0) + " từ trước khi ghép tên.");
         }
+        if (job.learned) lines.push(prefix + job.learned);
       });
       wordCount.textContent = lines.join(" ");
       wordCount.hidden = !lines.length;
@@ -1307,6 +1309,8 @@
           let detail = "";
           if (hardware.cpu) detail += " Máy: " + hardware.cpu + (hardware.physical ? ", " + hardware.physical + " lõi vật lý" : "") + ".";
           if (Number(timing.frames) > 0) detail += " Kỳ vừa rồi: đọc khung " + timing.readMs + " ms, đối chiếu tên và @ " + timing.voteMs + " ms mỗi khung.";
+          if (Number(timing.rescued) > 0) detail += " Cứu " + timing.rescued + " trang hồ sơ bằng dải đã học.";
+          if (Number(timing.skipped) > 0) detail += " Bỏ " + timing.skipped + " ô dòng sai hình.";
           $("helperLine").textContent = "PC phụ đang nối: " + (helper.count || 1) + " máy, " + (helper.cores || helper.cpus || 0) + " lõi" + share + gpu + ". Mỗi máy đọc tối đa hai video." + split + state + detail;
         } else {
           $("helperLine").textContent = "PC phụ chưa nối. Video được máy chủ đọc. Mở phần mềm PC nếu muốn máy tính đọc giúp.";

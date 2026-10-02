@@ -118,6 +118,10 @@ class ReadProgress:
         """Mọi khung đã chọn đều không có chữ."""
         return
 
+    def note_learned(self, text: str) -> None:
+        """Quy luật video này đã dạy: dải @, dải tên, chiều cao dòng. Là thông tin, không phải vấn đề."""
+        del text
+
 
 def _segment_count() -> int:
     """Số đoạn ffmpeg. CONTROL_FFMPEG_SEGMENTS ghi đè. Mặc định theo số lõi."""
@@ -558,7 +562,7 @@ def analyze_screen_video(
     if not keep_open:
         learned = layout_learn.learner_for(str(work)).describe()
         if learned:
-            sink.problem(learned)
+            sink.note_learned(learned)
     if words.blank and readings and all(not captions and not found for _seconds, captions, found in readings):
         sink.note_blank()
         sink.problem("Không đọc được chữ trên video.")

@@ -828,10 +828,18 @@ class ActionApiTests(unittest.TestCase):
         progress = self.client.post(
             f"/v1/recordings/jobs/{job_id}/progress",
             headers=self.headers,
-            json={"workerId": worker_id, "percent": 48, "task": "Đọc chữ, khung 1/1", "problems": []},
+            json={
+                "workerId": worker_id,
+                "percent": 48,
+                "task": "Đọc chữ, khung 1/1",
+                "problems": [],
+                "learned": "Quy luật học được: @ nằm ở dải y 430 đến 459.",
+            },
         )
         self.assertEqual(progress.status_code, 200, progress.text)
         self.assertGreaterEqual(progress.json()["percent"], 48)
+        self.assertEqual(progress.json()["learned"], "Quy luật học được: @ nằm ở dải y 430 đến 459.")
+        self.assertEqual(progress.json()["problems"], [])
         done = self.client.post(
             f"/v1/recordings/jobs/{job_id}/complete",
             headers=self.headers,

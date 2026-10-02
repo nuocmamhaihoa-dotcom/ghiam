@@ -11,8 +11,10 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from control_plane import layout_learn
 from control_plane.screen_steps import (
     _MAX_FRAMES,
+    _work_dir,
     _segment_count,
     _segment_ranges,
     _segment_threads,
@@ -347,6 +349,43 @@ class ScreenVideoTests(unittest.TestCase):
         self.assertEqual(percents, sorted(percents))
         self.assertGreaterEqual(percents[-1], 90)
         self.assertTrue(capture.problems)
+
+    def test_the_video_reports_what_it_learned_apart_from_problems(self) -> None:
+        if shutil.which("ffmpeg") is None or shutil.which("tesseract") is None:
+            self.skipTest("ffmpeg and tesseract are required")
+
+        class Capture(ReadProgress):
+            def __init__(self) -> None:
+                self.learned: list[str] = []
+                self.problems: list[str] = []
+
+            def problem(self, text: str) -> None:
+                self.problems.append(text)
+
+            def note_learned(self, text: str) -> None:
+                self.learned.append(text)
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "clip.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+                    "-f", "lavfi", "-i", "color=c=white:s=320x480:d=1",
+                    str(path),
+                ],
+                check=True,
+                timeout=30,
+            )
+            layout_learn.clear_learners()
+            learner = layout_learn.learner_for(str(_work_dir(path)))
+            for _ in range(3):
+                learner.learn_handle(430, 459)
+            capture = Capture()
+            analyze_screen_video(path, capture)
+            layout_learn.clear_learners()
+        self.assertEqual(len(capture.learned), 1)
+        self.assertIn("430 đến 459", capture.learned[0])
+        self.assertFalse(any("Quy luật" in text for text in capture.problems))
 
     def test_a_saved_frame_is_not_read_again(self) -> None:
         class Memory(ReadProgress):

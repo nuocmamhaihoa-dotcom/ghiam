@@ -1258,6 +1258,7 @@ def _merge_parts(parent: VideoJob) -> None:
     for part in live:
         for text in part.public().get("problems", []):
             parent.add_problem(str(text))
+        parent.note_learned(str(part.public().get("learned") or ""))
     failed = [part for part in live if part.error]
     if failed:
         parent.end_merge()
@@ -1370,6 +1371,9 @@ def _job_public(job: VideoJob) -> dict[str, Any]:
             if text not in problems:
                 problems.append(text)
     body["problems"] = problems[:20]
+    learned = next((str(part["learned"]) for part in parts if part.get("learned")), "")
+    if learned and not body.get("learned"):
+        body["learned"] = learned
     for key in ("wordSeen", "wordKept", "hubWordSeen", "hubWordKept"):
         values = [int(part[key]) for part in parts if part.get(key) is not None]
         if values:
@@ -1520,6 +1524,7 @@ class WorkerProgressBody(BaseModel):
     percent: int = 0
     task: str = ""
     problems: list[str] = Field(default_factory=list)
+    learned: str = Field(default="", max_length=600)
 
 
 class WorkerPeopleBody(BaseModel):
@@ -2089,6 +2094,8 @@ def video_job_progress(
         job.update(body.percent, body.task)
     for item in body.problems[:20]:
         job.add_problem(item)
+    if body.learned:
+        job.note_learned(body.learned)
     return job.public()
 
 
