@@ -43,6 +43,7 @@ _SOURCES = (
     "pc_agent/windows/Open-FbPoller.ps1",
     "control_plane/__init__.py",
     "control_plane/gpu_read.py",
+    "control_plane/layout_learn.py",
     "control_plane/screen_steps.py",
     "control_plane/screen_people.py",
     "control_plane/people.py",

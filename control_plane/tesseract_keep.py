@@ -421,3 +421,12 @@ def read_line_tsv(image: Image.Image, *, kind: str) -> str | None:
         return _recognize_line(lib, api, picture, kind)
 
     return _read_with(image, _line_gate, _open_line_api, recognize)
+
+
+def read_fast_line_tsv(image: Image.Image, *, kind: str) -> str | None:
+    """TSV một dòng, PSM 7, bộ chữ nhanh của cả khung. Khác bộ chuẩn của read_line_tsv nên là một hướng đọc riêng."""
+
+    def recognize(lib: ctypes.CDLL, api: c_void_p, picture: Image.Image) -> str:
+        return _recognize_line(lib, api, picture, kind)
+
+    return _read_with(image, _gate, _open_api, recognize)

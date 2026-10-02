@@ -87,8 +87,10 @@ class HardwareReportTests(unittest.TestCase):
         self.assertNotIn("\t", str(hardware["cpu"]))
         self.assertEqual(len(hardware["gpus"]), 4 - 1)  # type: ignore[arg-type]
         self.assertEqual(clean_hardware("x"), {})
-        timing = clean_timing({"frames": 240, "readMs": 1001.7, "voteMs": -5, "extra": 9, "third": "7", "rereads": False})
-        self.assertEqual(timing, {"frames": 240, "readMs": 1001, "voteMs": 0})
+        timing = clean_timing(
+            {"frames": 240, "readMs": 1001.7, "voteMs": -5, "extra": 9, "third": "7", "rereads": False, "skipped": 175, "rescued": 43}
+        )
+        self.assertEqual(timing, {"frames": 240, "readMs": 1001, "voteMs": 0, "skipped": 175, "rescued": 43})
 
     def test_the_hub_remembers_hardware_and_timing_of_the_best_pc(self) -> None:
         book = HelperBook()
@@ -126,6 +128,8 @@ class StageTimingTests(unittest.TestCase):
             stage_timing.bump("vote.lines")
         stage_timing.bump("vote.reused", 6)
         stage_timing.bump("vote.rereads", 2)
+        stage_timing.bump("vote.skipped", 3)
+        stage_timing.bump("zone.rescued", 5)
         found = stage_timing.summary(stage_timing.snapshot())
         self.assertEqual(found["frames"], 4)
         self.assertEqual(found["readMs"], 250)
@@ -133,9 +137,12 @@ class StageTimingTests(unittest.TestCase):
         self.assertEqual(found["thumbMs"], 10)
         self.assertEqual(found["ffmpegSec"], 8)
         self.assertEqual((found["voteLines"], found["reused"], found["rereads"]), (10, 6, 2))
+        self.assertEqual((found["skipped"], found["rescued"]), (3, 5))
         text = stage_timing.describe(stage_timing.snapshot())
         self.assertIn("4 khung", text)
         self.assertIn("dùng lại 6", text)
+        self.assertIn("bỏ ô sai hình 3", text)
+        self.assertIn("Cứu 5 trang hồ sơ", text)
 
     def test_take_clears_the_clock_and_an_empty_clock_says_nothing(self) -> None:
         stage_timing.add("read", 1.0)

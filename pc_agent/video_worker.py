@@ -552,8 +552,11 @@ class RemoteProgress(ReadProgress):
         if not cleaned:
             return
         with self._lock:
-            if cleaned not in self._problems:
-                self._problems.append(cleaned)
+            if cleaned in self._problems:
+                return
+            self._problems.append(cleaned)
+        if cleaned.startswith("Quy luật học được"):
+            say(cleaned)
 
     def remembered(self) -> dict[str, tuple[list[str], list[dict[str, str]]]]:
         with self._lock:

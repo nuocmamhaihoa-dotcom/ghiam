@@ -13,9 +13,10 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import NamedTuple
 
-from PIL import Image, ImageFilter, ImageOps
+from PIL import Image, ImageChops, ImageFilter, ImageOps, ImageStat
 
 from control_plane import stage_timing
+from control_plane.layout_learn import LayoutLearner, Zone, learner_for
 from control_plane.people import clean_name, clean_username, fold_name
 from control_plane.read_vote import (
     RowMemo,
@@ -27,7 +28,7 @@ from control_plane.read_vote import (
     vote_key,
     vote_line,
 )
-from control_plane.tesseract_keep import read_line_tsv, read_tsv, reader_limit
+from control_plane.tesseract_keep import read_fast_line_tsv, read_line_tsv, read_tsv, reader_limit
 
 _vote_pool: ThreadPoolExecutor | None = None
 _vote_pool_lock = threading.Lock()
@@ -329,7 +330,8 @@ def _contact_sightings(lines: list[TextLine]) -> list[dict[str, str]]:
     return found
 
 
-def _profile_sighting(lines: list[TextLine]) -> dict[str, str] | None:
+def _profile_pick(lines: list[TextLine]) -> tuple[TextLine, TextLine, str, str] | None:
+    """Dòng tên, dòng @, tên và tài khoản của trang hồ sơ. Dòng tên trùng dòng @ khi cả hai nằm chung một dòng."""
     handles = list(dict.fromkeys(handle for line in lines for handle in _valid_handles(line.text)))
     if len(handles) != 1:
         return None
@@ -340,7 +342,7 @@ def _profile_sighting(lines: list[TextLine]) -> dict[str, str] | None:
             name = clean_name(line.text.replace(handle, " "))
             username = clean_username(handle)
             if len(name) >= 2 and username:
-                return {"kind": "profile", "name": name, "contactName": "", "username": username}
+                return line, line, name, username
     if not short:
         return None
     anchor = min(short, key=lambda line: line.top)
@@ -358,6 +360,14 @@ def _profile_sighting(lines: list[TextLine]) -> dict[str, str] | None:
     name = clean_name(chosen.text)
     if len(name) < 2 or not username:
         return None
+    return chosen, anchor, name, username
+
+
+def _profile_sighting(lines: list[TextLine]) -> dict[str, str] | None:
+    picked = _profile_pick(lines)
+    if picked is None:
+        return None
+    _name_line, _handle_line, name, username = picked
     return {"kind": "profile", "name": name, "contactName": "", "username": username}
 
 
@@ -916,6 +926,16 @@ def _third_read(crop: Image.Image, dest: Path, kind: str) -> str | None:
     return _read_prepared(_scaled(contrasted, 3), dest, kind)
 
 
+def _reread(variant: Image.Image, dest: Path, kind: str) -> str:
+    """Một lần đọc lại. @ đọc bằng RapidOCR vì trên trang mẫu nó đúng 14 trên 14, Tesseract hay nhầm q với g.
+    Tên đọc bằng bộ chữ chuẩn vì chỉ nó giữ được dấu."""
+    if kind == "handle":
+        rapid = read_rapid(variant)
+        if rapid is not None:
+            return clean_username(rapid)
+    return _read_prepared(variant, dest, kind)
+
+
 def _vote_box(
     image: Image.Image,
     box: tuple[int, int, int, int],
@@ -924,10 +944,11 @@ def _vote_box(
     seed: str,
     memo: RowMemo | None = None,
     frame_id: str = "",
+    on_settle: Callable[[], None] | None = None,
 ) -> tuple[str, bool]:
     """Hướng 2 luôn chạy. Hướng 3 và năm lần đọc lại chỉ khi các hướng đã có còn lệch.
 
-    memo có dòng đã chốt ở đủ khung khác nhau thì dùng lại, không đọc nữa.
+    memo có dòng đã chốt ở đủ khung khác nhau thì dùng lại, không đọc nữa. on_settle chạy đúng lúc một dòng vừa chốt hẳn.
     """
     stage_timing.bump("vote.lines")
     mark: tuple[int, int, Image.Image] | None = None
@@ -948,14 +969,163 @@ def _vote_box(
             text, agreed = vote_line(seed, second, third, [], kind=kind)
         else:
             stage_timing.bump("vote.rereads")
-            reruns = [_read_prepared(variant, dest, kind) for variant in five_variants(crop)]
+            reruns = [_reread(variant, dest, kind) for variant in five_variants(crop)]
             text, agreed = vote_line(seed, second, third, reruns, kind=kind)
     if memo is not None and mark is not None:
         if agreed and text:
-            memo.agree(kind, seed, *mark, frame_id, text)
+            if memo.agree(kind, seed, *mark, frame_id, text) and on_settle is not None:
+                on_settle()
         else:
             memo.fail(kind, seed, *mark)
     return text, agreed
+
+
+def _list_frame(lines: list[TextLine]) -> bool:
+    """Khung danh bạ: có chữ Danh bạ hoặc từ hai cặp tên sát nhau."""
+    return _is_contacts(lines) or len(_contact_sightings(lines)) >= 2
+
+
+def _ink_box(image: Image.Image, rect: tuple[int, int, int, int]) -> tuple[int, int, int, int] | None:
+    """Hộp bao dòng chữ rõ nhất trong một dải: các hàng có chữ liền nhau, lấy cụm nhiều chữ nhất.
+
+    Một vệt nhỏ của dòng bên cạnh lọt vào mép dải không kéo hộp ra ngoài dòng chữ. None khi dải trống.
+    """
+    left, top, width, height = rect
+    if width < 2 or height < 2:
+        return None
+    gray = image.crop((left, top, left + width, top + height))
+    if gray.mode != "L":
+        gray = gray.convert("L")
+    background = int(ImageStat.Stat(gray).median[0])
+    diff = ImageChops.difference(gray, Image.new("L", gray.size, background))
+    mask = diff.point(lambda value: 255 if value > 40 else 0)
+    rows = list(mask.resize((1, mask.height), Image.Resampling.BOX).getdata())
+    # Hàng có chữ khi có ít nhất khoảng 1% điểm ảnh tối. Khe hở một hai hàng giữa nét chữ vẫn tính là liền.
+    inked = [value >= 3 for value in rows]
+    runs: list[tuple[int, int, int]] = []
+    start = None
+    gap = 0
+    for index, flag in enumerate(inked + [False, False, False]):
+        if flag:
+            if start is None:
+                start = index
+            gap = 0
+        elif start is not None:
+            gap += 1
+            if gap > 2:
+                stop = index - gap
+                runs.append((start, stop, sum(rows[start : stop + 1])))
+                start = None
+                gap = 0
+    if not runs:
+        return None
+    first, last, _weight = max(runs, key=lambda run: run[2])
+    band = mask.crop((0, first, mask.width, last + 1))
+    found = band.getbbox()
+    if found is None:
+        return None
+    box_left, _top, box_right, _bottom = found
+    box_width = box_right - box_left
+    box_height = last + 1 - first
+    if box_width < 24 or box_height < 8:
+        return None
+    return left + box_left, top + first, box_width, box_height
+
+
+def _band_read(source: Image.Image, zone: Zone, kind: str) -> tuple[str, tuple[int, int, int, int]] | None:
+    """Đọc đúng dải đã từng chốt được chữ: cắt sát chữ rồi đọc bằng bộ chữ nhanh một dòng. None khi không ra chữ hợp lệ."""
+    height = max(8, zone.bottom - zone.top)
+    pad = max(6, height // 2)
+    top = max(0, zone.top - pad)
+    bottom = min(source.height, zone.bottom + pad)
+    ink = _ink_box(source, (0, top, source.width, bottom - top))
+    if ink is None:
+        return None
+    fast = read_fast_line_tsv(_scaled(_crop_box(source, *ink), 2), kind=kind)
+    if fast is None:
+        return None
+    text = _text_from_line_tsv(fast, kind)
+    if kind == "handle":
+        return (text, ink) if _valid_handles(text) else None
+    return (text, ink) if vote_key(text, "name") else None
+
+
+# Chữ đọc từ dải đã học chưa được ai kiểm. Điểm thấp hơn ngưỡng giữ chữ đọc đơn lẻ (45 cho tên, 70 cho @),
+# nên chỉ vào bảng khi bỏ phiếu hai hướng trùng.
+_BAND_HANDLE_CONF = 50
+_BAND_NAME_CONF = 40
+
+
+def _tsv_row(block: str, text: str, box: tuple[int, int, int, int], conf: int) -> str:
+    left, top, width, height = box
+    return f"5\t1\t{block}\t1\t1\t1\t{left}\t{top}\t{width}\t{height}\t{conf}\t{text}"
+
+
+def _without_band(tsv: str, top: int, bottom: int) -> str:
+    """Bỏ các từ đọc cả khung rơi vào dải đã học. Chúng là chữ rác vì dải này đáng ra có @ hoặc tên."""
+    kept: list[str] = []
+    for raw in tsv.splitlines():
+        parts = raw.split("\t")
+        if len(parts) >= 12 and parts[0] == "5":
+            try:
+                center = int(float(parts[7])) + int(float(parts[9])) / 2
+            except ValueError:
+                center = None
+            if center is not None and top <= center <= bottom:
+                continue
+        kept.append(raw)
+    return "\n".join(kept)
+
+
+def _rescue_profile(
+    source: Image.Image,
+    learner: LayoutLearner,
+    lines: list[TextLine],
+    tsv: str,
+    frame: str,
+) -> tuple[list[TextLine], str, bool]:
+    """Trang hồ sơ: đọc đúng dải @ và dải tên đã học từ các trang đọc thành công, thay cho chữ rác của lần đọc cả khung.
+
+    Đọc cả khung có lúc không thấy @ (trang mẫu mất 5 trong 14 trang), có lúc thấy @ mà tên vỡ thành mảnh.
+    Chỉ chạy khi khung không phải danh bạ, tối đa một lần cho mỗi khung. Chữ đọc được vẫn qua bỏ phiếu như mọi dòng.
+    """
+    if _list_frame(lines):
+        return lines, tsv, False
+    handles = list(dict.fromkeys(handle for line in lines for handle in _valid_handles(line.text)))
+    if len(handles) > 1:
+        return lines, tsv, False
+    handle_zone = learner.handle_zone()
+    name_zone = learner.name_zone()
+    if handles:
+        # Đã thấy @: chỉ thay phần tên nếu đã biết dải tên.
+        if name_zone is None or not learner.first_try(frame):
+            return lines, tsv, False
+        handle_row = None
+    else:
+        if handle_zone is None or not learner.first_try(frame):
+            return lines, tsv, False
+        found = _band_read(source, handle_zone, "handle")
+        if found is None:
+            return lines, tsv, False
+        handle_row = found
+    cleaned = tsv
+    rows: list[str] = []
+    if handle_row is not None:
+        handle_text, handle_box = handle_row
+        top, bottom = handle_box[1], handle_box[1] + handle_box[3]
+        pad = max(6, (bottom - top) // 2)
+        cleaned = _without_band(cleaned, top - pad, bottom + pad)
+        rows.append(_tsv_row("90", handle_text, handle_box, _BAND_HANDLE_CONF))
+    named = _band_read(source, name_zone, "name") if name_zone is not None else None
+    if named is not None:
+        name_text, name_box = named
+        pad = max(6, name_box[3] // 2)
+        cleaned = _without_band(cleaned, name_box[1] - pad, name_box[1] + name_box[3] + pad)
+        rows.append(_tsv_row("91", name_text, name_box, _BAND_NAME_CONF))
+    if not rows:
+        return lines, tsv, False
+    merged = "\n".join(part for part in (cleaned, *rows) if part)
+    return lines_from_tsv(merged), merged, True
 
 
 def _open_frame_image(path: Path, *, prepared: bool) -> Image.Image | None:
@@ -987,6 +1157,9 @@ def _apply_line_votes(
     dest: Path,
     memo: RowMemo | None = None,
     frame_id: str = "",
+    learner: LayoutLearner | None = None,
+    list_frame: bool = False,
+    learn: bool = True,
 ) -> tuple[TextLine, str | None, str | None]:
     """Đối chiếu một dòng. Trả dòng đã sửa, tên đã trùng, @ đã trùng."""
     text = line.text
@@ -995,6 +1168,8 @@ def _apply_line_votes(
     if _valid_handles(text) or text.strip().startswith("@"):
         handle_box = _line_box(line, tsv, source.width, "handle")
         voted, handle_agreed = _vote_box(source, handle_box, dest, "handle", text, memo, frame_id)
+        if handle_agreed and voted and learner is not None and learn:
+            learner.learn_handle(handle_box[1], handle_box[1] + handle_box[3])
         sure = _handle_conf(tsv, voted or text)
         if voted and (handle_agreed or (sure is not None and sure >= _HANDLE_CONF)):
             if handle_agreed:
@@ -1008,7 +1183,14 @@ def _apply_line_votes(
     name_source = re.sub(r"@\S+", " ", text)
     if _is_name_line(name_source):
         name_box = _line_box(line, tsv, source.width, "name")
-        voted_name, name_agreed = _vote_box(source, name_box, dest, "name", name_source, memo, frame_id)
+        if learner is not None and list_frame and not learner.fits_name_box(name_box, source.height):
+            # Ô cao quá, thấp quá hoặc chạm mép ảnh: trong video này chưa lần nào chốt đúng ở dạng đó.
+            learner.note("skipped")
+            stage_timing.bump("vote.skipped")
+            voted_name, name_agreed = "", False
+        else:
+            settled = (lambda height=name_box[3]: learner.learn_height(height)) if learner is not None and list_frame else None
+            voted_name, name_agreed = _vote_box(source, name_box, dest, "name", name_source, memo, frame_id, settled)
         handle_part = " ".join(_valid_handles(text))
         if voted_name and name_agreed:
             agreed_name = voted_name
@@ -1029,10 +1211,15 @@ def _vote_one_line(
     stem: Path,
     memo: RowMemo | None = None,
     frame_id: str = "",
+    learner: LayoutLearner | None = None,
+    list_frame: bool = False,
+    learn: bool = True,
 ) -> tuple[int, TextLine, str | None, str | None]:
     dest = stem.with_name(f"{stem.stem}-vote-{index}.png")
     try:
-        updated, agreed_name, agreed_handle = _apply_line_votes(line, source, tsv, dest, memo, frame_id)
+        updated, agreed_name, agreed_handle = _apply_line_votes(
+            line, source, tsv, dest, memo, frame_id, learner, list_frame, learn
+        )
     finally:
         dest.unlink(missing_ok=True)
     return index, updated, agreed_name, agreed_handle
@@ -1053,6 +1240,9 @@ def _rewrite_with_votes(
     tsv: str,
     memo: RowMemo | None = None,
     frame_id: str = "",
+    learner: LayoutLearner | None = None,
+    list_frame: bool = False,
+    learn: bool = True,
 ) -> tuple[list[TextLine], set[str], list[str]]:
     """Mỗi dòng tên và @ đối chiếu riêng. Chuỗi đã trùng thì ghi, lệch hết thì bỏ."""
     agreed_names: set[str] = set()
@@ -1069,12 +1259,16 @@ def _rewrite_with_votes(
             agreed_handles.append(agreed_handle)
 
     if len(lines) == 1:
-        index, row, agreed_name, agreed_handle = _vote_one_line(0, lines[0], source, tsv, path, memo, frame_id)
+        index, row, agreed_name, agreed_handle = _vote_one_line(
+            0, lines[0], source, tsv, path, memo, frame_id, learner, list_frame, learn
+        )
         take(index, row, agreed_name, agreed_handle)
         return updated, agreed_names, agreed_handles
 
     futures = [
-        _vote_executor().submit(_vote_one_line, index, line, source, tsv, path, memo, frame_id)
+        _vote_executor().submit(
+            _vote_one_line, index, line, source, tsv, path, memo, frame_id, learner, list_frame, learn
+        )
         for index, line in enumerate(lines)
     ]
     for future in futures:
@@ -1100,11 +1294,16 @@ def tighten_frame_reading(
     source = loaded if loaded is not None else _open_frame_image(path, prepared=prepared)
     agreed_names: set[str] = set()
     agreed_handles: list[str] = []
+    scope = memo_scope(path)
+    learner = learner_for(scope)
+    frame_id = f"{path.parent.name}/{path.name}"
+    rescued = False
     if source is None:
         updated = list(lines)
     else:
+        lines, tsv, rescued = _rescue_profile(source, learner, lines, tsv, frame_id)
         updated, agreed_names, agreed_handles = _rewrite_with_votes(
-            path, source, lines, tsv, memo_for(memo_scope(path)), f"{path.parent.name}/{path.name}"
+            path, source, lines, tsv, memo_for(scope), frame_id, learner, _list_frame(lines), not rescued
         )
 
     found = sightings_from_lines(updated)
@@ -1139,7 +1338,32 @@ def tighten_frame_reading(
                 kept.append(
                     {"kind": "profile", "name": name, "contactName": "", "username": agreed_handles[0]}
                 )
+    if source is not None and agreed_handles and any(item.get("kind") == "profile" for item in kept):
+        if rescued:
+            learner.note("rescued")
+            stage_timing.bump("zone.rescued")
+        else:
+            _learn_profile_zones(learner, updated, tsv, source.width, agreed_names, agreed_handles)
     return updated, kept
+
+
+def _learn_profile_zones(
+    learner: LayoutLearner,
+    lines: list[TextLine],
+    tsv: str,
+    width: int,
+    agreed_names: set[str],
+    agreed_handles: list[str],
+) -> None:
+    """Trang hồ sơ đã đọc chắc cả tên lẫn @: nhớ dải ngang của tên để sau này đọc đúng chỗ."""
+    picked = _profile_pick(lines)
+    if picked is None:
+        return
+    name_line, handle_line, name, username = picked
+    if username not in agreed_handles or name not in agreed_names or name_line is handle_line:
+        return
+    _left, top, _width, height = _line_box(name_line, tsv, width, "name")
+    learner.learn_name_zone(top, top + height)
 
 
 def sightings_from_image(path: Path) -> list[dict[str, str]]:

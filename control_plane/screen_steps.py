@@ -18,13 +18,14 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageOps, ImageStat
 
-from control_plane import stage_timing
+from control_plane import layout_learn, stage_timing
 from control_plane.gpu_read import fallback_note, prefers_single_worker, read_lines
 from control_plane.read_vote import forget_scope
 from control_plane.screen_people import (
     _accepted_sighting,
     captions_from_sightings,
     lines_from_tsv,
+    memo_scope,
     prepare_frame_image,
     propose_rows,
     reading_counts,
@@ -417,6 +418,7 @@ def discard_video_work(path: Path) -> None:
     """Xóa video và khung đã tách sau khi ghi xong, hoặc khi bỏ tiến trình."""
     work = _work_dir(path)
     forget_scope(str(work))
+    layout_learn.forget_scope(str(work))
     if work.is_dir():
         shutil.rmtree(work, ignore_errors=True)
     path.unlink(missing_ok=True)
@@ -553,6 +555,10 @@ def analyze_screen_video(
             reserve=reserve,
         )
     sink.note_words(words.seen, words.kept)
+    if not keep_open:
+        learned = layout_learn.learner_for(str(work)).describe()
+        if learned:
+            sink.problem(learned)
     if words.blank and readings and all(not captions and not found for _seconds, captions, found in readings):
         sink.note_blank()
         sink.problem("Không đọc được chữ trên video.")
@@ -1337,6 +1343,45 @@ def _read_one(item: tuple[float, Path]) -> tuple[float, list[str], list[dict[str
     return seconds, captions, sightings, seen, kept
 
 
+def _rescue_empty(
+    chosen: list[tuple[float, Path]],
+    results: list[tuple[float, list[str], list[dict[str, str]]] | None],
+    progress: ReadProgress,
+) -> tuple[int, int]:
+    """Khung đã đọc mà không thấy ai, nhất là các trang hồ sơ đọc sớm khi video chưa dạy dải @.
+
+    Dải học được ở cuối lượt này đọc lại được chúng. Mỗi khung chỉ được cứu một lần trong cả video.
+    Trả số khung cứu được và số khung trong đó trước đó hoàn toàn trống.
+    """
+    if not chosen:
+        return 0, 0
+    learner = layout_learn.learner_for(memo_scope(chosen[0][1]))
+    if learner.handle_zone() is None:
+        return 0, 0
+    rescued = 0
+    unblanked = 0
+    for index, item in enumerate(results):
+        if item is None:
+            continue
+        seconds, captions, sightings = item
+        # Khung trống, hoặc khung chỉ có hồ sơ đọc lúc video chưa dạy dải: đọc lại bằng dải. Khung danh bạ giữ nguyên.
+        if any(found.get("kind") != "profile" for found in sightings):
+            continue
+        path = chosen[index][1]
+        loaded = prepare_frame_image(path)
+        if loaded is None:
+            continue
+        _lines, found = tighten_frame_reading(path, [], [], tsv="", loaded=loaded)
+        if not found:
+            continue
+        better = captions_from_sightings(found)
+        results[index] = (seconds, better, found)
+        progress.remember_frame(seconds, better, found)
+        rescued += 1
+        unblanked += 0 if captions or sightings else 1
+    return rescued, unblanked
+
+
 def _read_frames(
     chosen: list[tuple[float, Path]],
     progress: ReadProgress,
@@ -1393,6 +1438,9 @@ def _read_frames(
                 percent = 48 + int((done_count / total) * 44)
                 label = "Đọc tiếp" if known else "Đọc chữ"
                 progress.report(min(92, percent), f"{label}, khung {done_count}/{total}")
+    if pending:
+        rescued, unblanked = _rescue_empty(chosen, results, progress)
+        blank = max(0, blank - unblanked)
     if pending or not known:
         progress.note_words(word_seen, word_kept)
     if failed:

@@ -46,7 +46,19 @@ def _clean_label(value: object, limit: int) -> str:
     return "".join(ch for ch in cleaned if ch.isprintable())[:limit]
 
 
-_TIMING_KEYS = ("frames", "readMs", "voteMs", "thumbMs", "ffmpegSec", "voteLines", "reused", "third", "rereads")
+_TIMING_KEYS = (
+    "frames",
+    "readMs",
+    "voteMs",
+    "thumbMs",
+    "ffmpegSec",
+    "voteLines",
+    "reused",
+    "third",
+    "rereads",
+    "skipped",
+    "rescued",
+)
 
 
 def _whole(value: object, limit: int) -> int | None:

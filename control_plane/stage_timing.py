@@ -69,6 +69,8 @@ def summary(data: dict[str, tuple[float, int]]) -> dict[str, int]:
         "reused": data.get("vote.reused", (0.0, 0))[1],
         "third": data.get("vote.third", (0.0, 0))[1],
         "rereads": data.get("vote.rereads", (0.0, 0))[1],
+        "skipped": data.get("vote.skipped", (0.0, 0))[1],
+        "rescued": data.get("zone.rescued", (0.0, 0))[1],
     }
 
 
@@ -85,6 +87,8 @@ def describe(data: dict[str, tuple[float, int]]) -> str:
     if found["voteLines"] > 0:
         text += (
             f" Dòng đối chiếu {found['voteLines']}, dùng lại {found['reused']}, "
-            f"hướng 3 {found['third']}, đọc lại 5 lần {found['rereads']}."
+            f"hướng 3 {found['third']}, đọc lại 5 lần {found['rereads']}, bỏ ô sai hình {found['skipped']}."
         )
+    if found["rescued"] > 0:
+        text += f" Cứu {found['rescued']} trang hồ sơ."
     return text
