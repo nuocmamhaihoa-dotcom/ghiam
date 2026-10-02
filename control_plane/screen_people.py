@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import statistics
 import subprocess
 import threading
 from collections.abc import Callable
@@ -14,14 +15,15 @@ from typing import NamedTuple
 
 from PIL import Image, ImageFilter, ImageOps
 
+from control_plane import stage_timing
 from control_plane.people import clean_name, clean_username, fold_name
 from control_plane.read_vote import (
-    crop_mark,
+    RowMemo,
     five_variants,
+    memo_for,
     needs_reread,
     read_rapid,
-    recalled_agreed,
-    remember_agreed,
+    row_signature,
     vote_key,
     vote_line,
 )
@@ -117,9 +119,14 @@ def _is_name_line(text: str) -> bool:
     return len(letters) >= 2 and not _valid_handles(stripped)
 
 
+def _word_core(word: str) -> str:
+    """Chữ và số của một từ, bỏ dấu câu dính theo: Follow, thành follow."""
+    return "".join(char for char in fold_name(word) if char.isalnum())
+
+
 def _strip_button(text: str) -> str:
     words = text.split()
-    while words and fold_name(words[-1]) in {"follow", "thich"}:
+    while words and _word_core(words[-1]) in {"follow", "thich"}:
         words.pop()
     return " ".join(words)
 
@@ -718,8 +725,13 @@ def _tesseract_cli_with_prefix(prepared: Path, prefix: str | None) -> str:
     return _tesseract_cli_run(prepared, prefix=prefix)
 
 
-def _read_frame_tsv_impl(path: Path, *, standard: bool) -> str:
-    image = _prepared_image(path)
+def prepare_frame_image(path: Path) -> Image.Image | None:
+    """Ảnh khung đã làm nét, mở một lần để đọc khung, đọc lại bộ chuẩn, và đối chiếu dùng chung."""
+    return _prepared_image(path)
+
+
+def _read_frame_tsv_impl(path: Path, *, standard: bool, loaded: Image.Image | None = None) -> str:
+    image = loaded if loaded is not None else _prepared_image(path)
     if image is None:
         return ""
     if not standard:
@@ -738,14 +750,14 @@ def _read_frame_tsv_impl(path: Path, *, standard: bool) -> str:
     return choose_tsv(kept, cli)
 
 
-def read_frame_tsv(path: Path) -> str:
+def read_frame_tsv(path: Path, loaded: Image.Image | None = None) -> str:
     """Một lần Tesseract cho cả danh bạ và dòng chữ nhìn thấy."""
-    return _read_frame_tsv_impl(path, standard=False)
+    return _read_frame_tsv_impl(path, standard=False, loaded=loaded)
 
 
-def read_frame_tsv_standard(path: Path) -> str:
+def read_frame_tsv_standard(path: Path, loaded: Image.Image | None = None) -> str:
     """Đọc lại bằng bộ chữ chuẩn khi bộ chữ nhanh nghi ngờ."""
-    return _read_frame_tsv_impl(path, standard=True)
+    return _read_frame_tsv_impl(path, standard=True, loaded=loaded)
 
 
 def _crop_box(image: Image.Image, left: int, top: int, width: int, height: int) -> Image.Image:
@@ -775,22 +787,82 @@ def _handle_conf(tsv: str, handle: str) -> float | None:
     return min(confs)
 
 
-def _line_box(line: TextLine, tsv: str, width: int) -> tuple[int, int, int, int]:
-    """Hộp chữ của một dòng. Không có hộp từ thì ước theo chiều cao dòng."""
-    words = [
+_BUTTON_WORDS = {"follow", "thich", "dafollow", "follower"}
+# Từ nhiễu cao hơn 1,6 lần chữ thường là hình nút bị đọc thành chữ. Chữ cùng dòng lệch tâm không quá 0,6 chiều cao.
+_BOX_JUNK_HEIGHT = 1.6
+_BOX_SAME_LINE = 0.6
+# Khoảng trống rộng hơn 1,5 chiều cao chữ là sang phần tử khác, ví dụ nút Follow ở mép phải.
+_BOX_GAP = 1.5
+
+
+def _band_words(line: TextLine, tsv: str) -> list[_TsvWord]:
+    return [
         word
         for word in tsv_words(tsv, min_conf=0.0)
         if line.top - 4 <= word.top + (word.height / 2) <= line.bottom + 4 and word.left >= line.left - 12
     ]
+
+
+def _union_box(words: list[_TsvWord]) -> tuple[int, int, int, int]:
+    left = min(word.left for word in words)
+    top = min(word.top for word in words)
+    right = max(word.left + word.width for word in words)
+    bottom = max(word.top + word.height for word in words)
+    return left, top, max(1, right - left), max(1, bottom - top)
+
+
+def _wide_box(line: TextLine, tsv: str, width: int) -> tuple[int, int, int, int]:
+    """Hộp chữ của cả dòng. Không có hộp từ thì ước theo chiều cao dòng."""
+    words = _band_words(line, tsv)
     if words:
-        left = min(word.left for word in words)
-        top = min(word.top for word in words)
-        right = max(word.left + word.width for word in words)
-        bottom = max(word.top + word.height for word in words)
-        return left, top, max(1, right - left), max(1, bottom - top)
+        return _union_box(words)
     height = max(8, line.height)
     guess = max(48, int(len(line.text) * height * 0.55))
     return line.left, line.top, min(guess, max(1, width - line.left)), height
+
+
+def _is_button_word(text: str) -> bool:
+    core = _word_core(text)
+    return core in _BUTTON_WORDS or core.startswith(("follow", "ollow"))
+
+
+def _run_from_left(words: list[_TsvWord], reach: float) -> list[_TsvWord]:
+    ordered = sorted(words, key=lambda word: word.left)
+    run = [ordered[0]]
+    for word in ordered[1:]:
+        last = run[-1]
+        if word.left - (last.left + last.width) > reach:
+            break
+        run.append(word)
+    return run
+
+
+def _line_box(line: TextLine, tsv: str, width: int, kind: str = "name") -> tuple[int, int, int, int]:
+    """Hộp của đúng chữ cần đối chiếu. Tên bỏ @ và nút Follow, dừng ở khoảng trống rộng. @ bắt đầu từ từ có @."""
+    words = _band_words(line, tsv)
+    if not words:
+        return _wide_box(line, tsv, width)
+    middle = statistics.median(word.height for word in words)
+    if kind == "handle":
+        ordered = sorted(words, key=lambda word: word.left)
+        starts = [index for index, word in enumerate(ordered) if "@" in word.text]
+        if not starts:
+            return _wide_box(line, tsv, width)
+        return _union_box(_run_from_left(ordered[starts[0] :], _BOX_GAP * middle))
+    words = [word for word in words if "@" not in word.text and not _is_button_word(word.text)]
+    if not words:
+        return _wide_box(line, tsv, width)
+    middle = statistics.median(word.height for word in words)
+    center = statistics.median(word.top + word.height / 2 for word in words)
+    words = [
+        word
+        for word in words
+        if word.height <= _BOX_JUNK_HEIGHT * middle
+        and abs(word.top + word.height / 2 - center) <= _BOX_SAME_LINE * middle
+    ]
+    if not words:
+        return _wide_box(line, tsv, width)
+    return _union_box(_run_from_left(words, _BOX_GAP * middle))
 
 
 def _scaled(crop: Image.Image, scale: int) -> Image.Image:
@@ -850,25 +922,39 @@ def _vote_box(
     dest: Path,
     kind: str,
     seed: str,
+    memo: RowMemo | None = None,
+    frame_id: str = "",
 ) -> tuple[str, bool]:
-    """Hướng 2 luôn chạy. Hướng 3 và năm lần đọc lại chỉ khi các hướng đã có còn lệch."""
+    """Hướng 2 luôn chạy. Hướng 3 và năm lần đọc lại chỉ khi các hướng đã có còn lệch.
+
+    memo có dòng đã chốt ở đủ khung khác nhau thì dùng lại, không đọc nữa.
+    """
+    stage_timing.bump("vote.lines")
+    mark: tuple[int, int, Image.Image] | None = None
+    if memo is not None:
+        mark = (box[0], box[2], row_signature(image, box))
+        kept = memo.settled(kind, seed, *mark)
+        if kept is not None:
+            stage_timing.bump("vote.reused")
+            return kept, True
     crop = _crop_box(image, *box)
-    mark = crop_mark(crop)
-    remembered = recalled_agreed(kind, seed, mark)
-    if remembered is not None:
-        return remembered, True
     second = _read_prepared(_scaled(crop, 2), dest, kind)
     if vote_key(seed, kind) and vote_key(seed, kind) == vote_key(second, kind):
         text, agreed = vote_line(seed, second, None, [], kind=kind)
     else:
+        stage_timing.bump("vote.third")
         third = _third_read(crop, dest, kind)
         if not needs_reread(seed, second, third, kind):
             text, agreed = vote_line(seed, second, third, [], kind=kind)
         else:
+            stage_timing.bump("vote.rereads")
             reruns = [_read_prepared(variant, dest, kind) for variant in five_variants(crop)]
             text, agreed = vote_line(seed, second, third, reruns, kind=kind)
-    if agreed and text:
-        remember_agreed(kind, seed, mark, text)
+    if memo is not None and mark is not None:
+        if agreed and text:
+            memo.agree(kind, seed, *mark, frame_id, text)
+        else:
+            memo.fail(kind, seed, *mark)
     return text, agreed
 
 
@@ -888,7 +974,9 @@ def _vote_executor() -> ThreadPoolExecutor:
     global _vote_pool
     with _vote_pool_lock:
         if _vote_pool is None:
-            _vote_pool = ThreadPoolExecutor(max_workers=max(1, reader_limit()), thread_name_prefix="vote")
+            # Số lõi lúc rảnh có thể cao hơn số bộ đọc lúc đang dùng máy. Bộ đọc Tesseract tự giới hạn số lượt chạy cùng lúc.
+            size = max(1, reader_limit(), os.cpu_count() or 1)
+            _vote_pool = ThreadPoolExecutor(max_workers=size, thread_name_prefix="vote")
         return _vote_pool
 
 
@@ -897,14 +985,16 @@ def _apply_line_votes(
     source: Image.Image,
     tsv: str,
     dest: Path,
+    memo: RowMemo | None = None,
+    frame_id: str = "",
 ) -> tuple[TextLine, str | None, str | None]:
     """Đối chiếu một dòng. Trả dòng đã sửa, tên đã trùng, @ đã trùng."""
     text = line.text
-    box = _line_box(line, tsv, source.width)
     agreed_handle: str | None = None
     agreed_name: str | None = None
     if _valid_handles(text) or text.strip().startswith("@"):
-        voted, handle_agreed = _vote_box(source, box, dest, "handle", text)
+        handle_box = _line_box(line, tsv, source.width, "handle")
+        voted, handle_agreed = _vote_box(source, handle_box, dest, "handle", text, memo, frame_id)
         sure = _handle_conf(tsv, voted or text)
         if voted and (handle_agreed or (sure is not None and sure >= _HANDLE_CONF)):
             if handle_agreed:
@@ -917,7 +1007,8 @@ def _apply_line_votes(
             text = re.sub(r"@\S+", "", text)
     name_source = re.sub(r"@\S+", " ", text)
     if _is_name_line(name_source):
-        voted_name, name_agreed = _vote_box(source, box, dest, "name", name_source)
+        name_box = _line_box(line, tsv, source.width, "name")
+        voted_name, name_agreed = _vote_box(source, name_box, dest, "name", name_source, memo, frame_id)
         handle_part = " ".join(_valid_handles(text))
         if voted_name and name_agreed:
             agreed_name = voted_name
@@ -936,13 +1027,23 @@ def _vote_one_line(
     source: Image.Image,
     tsv: str,
     stem: Path,
+    memo: RowMemo | None = None,
+    frame_id: str = "",
 ) -> tuple[int, TextLine, str | None, str | None]:
     dest = stem.with_name(f"{stem.stem}-vote-{index}.png")
     try:
-        updated, agreed_name, agreed_handle = _apply_line_votes(line, source, tsv, dest)
+        updated, agreed_name, agreed_handle = _apply_line_votes(line, source, tsv, dest, memo, frame_id)
     finally:
         dest.unlink(missing_ok=True)
     return index, updated, agreed_name, agreed_handle
+
+
+def memo_scope(path: Path) -> str:
+    """Khóa bộ nhớ dòng là thư mục khung của video. Vùng đọc dày boost-N dùng chung với video."""
+    folder = path.parent
+    if folder.name.startswith("boost-"):
+        folder = folder.parent
+    return str(folder)
 
 
 def _rewrite_with_votes(
@@ -950,6 +1051,8 @@ def _rewrite_with_votes(
     source: Image.Image,
     lines: list[TextLine],
     tsv: str,
+    memo: RowMemo | None = None,
+    frame_id: str = "",
 ) -> tuple[list[TextLine], set[str], list[str]]:
     """Mỗi dòng tên và @ đối chiếu riêng. Chuỗi đã trùng thì ghi, lệch hết thì bỏ."""
     agreed_names: set[str] = set()
@@ -966,12 +1069,12 @@ def _rewrite_with_votes(
             agreed_handles.append(agreed_handle)
 
     if len(lines) == 1:
-        index, row, agreed_name, agreed_handle = _vote_one_line(0, lines[0], source, tsv, path)
+        index, row, agreed_name, agreed_handle = _vote_one_line(0, lines[0], source, tsv, path, memo, frame_id)
         take(index, row, agreed_name, agreed_handle)
         return updated, agreed_names, agreed_handles
 
     futures = [
-        _vote_executor().submit(_vote_one_line, index, line, source, tsv, path)
+        _vote_executor().submit(_vote_one_line, index, line, source, tsv, path, memo, frame_id)
         for index, line in enumerate(lines)
     ]
     for future in futures:
@@ -987,16 +1090,22 @@ def tighten_frame_reading(
     *,
     tsv: str = "",
     prepared: bool = True,
+    loaded: Image.Image | None = None,
 ) -> tuple[list[TextLine], list[dict[str, str]]]:
-    """Đối chiếu tên và @. Hai hoặc ba hướng trùng thì ghi. Lệch hết thì đọc lại năm lần."""
+    """Đối chiếu tên và @. Hai hoặc ba hướng trùng thì ghi. Lệch hết thì đọc lại năm lần.
+
+    loaded là ảnh prepare_frame_image đã mở sẵn, đỡ mở lại file khung.
+    """
     del sightings
-    source = _open_frame_image(path, prepared=prepared)
+    source = loaded if loaded is not None else _open_frame_image(path, prepared=prepared)
     agreed_names: set[str] = set()
     agreed_handles: list[str] = []
     if source is None:
         updated = list(lines)
     else:
-        updated, agreed_names, agreed_handles = _rewrite_with_votes(path, source, lines, tsv)
+        updated, agreed_names, agreed_handles = _rewrite_with_votes(
+            path, source, lines, tsv, memo_for(memo_scope(path)), f"{path.parent.name}/{path.name}"
+        )
 
     found = sightings_from_lines(updated)
     kept: list[dict[str, str]] = []

@@ -159,6 +159,11 @@ def _data_dirs() -> list[str | None]:
     return unique
 
 
+def _quiet(lib: ctypes.CDLL, api: c_void_p) -> None:
+    """Tesseract in lời báo như 'Image too small' ra cửa sổ PC. Đưa vào tệp rỗng."""
+    _set_variable(lib, api, b"debug_file", os.devnull.encode("utf-8"))
+
+
 def _open_api(lib: ctypes.CDLL) -> c_void_p | None:
     api = lib.TessBaseAPICreate()
     if not api:
@@ -168,6 +173,7 @@ def _open_api(lib: ctypes.CDLL) -> c_void_p | None:
             path = None if folder is None else folder.encode("utf-8")
             if lib.TessBaseAPIInit2(api, path, language, _OEM_LSTM) == 0:
                 lib.TessBaseAPISetPageSegMode(api, _PSM_SPARSE)
+                _quiet(lib, api)
                 return api
     lib.TessBaseAPIDelete(api)
     return None
@@ -206,6 +212,7 @@ def _open_line_api(lib: ctypes.CDLL) -> c_void_p | None:
             path = None if folder is None else folder.encode("utf-8")
             if lib.TessBaseAPIInit2(api, path, language, _OEM_LSTM) == 0:
                 lib.TessBaseAPISetPageSegMode(api, _PSM_LINE)
+                _quiet(lib, api)
                 return api
     lib.TessBaseAPIDelete(api)
     return None

@@ -1,92 +1,179 @@
 """Đối chiếu một dòng tên hoặc @ bằng ba hướng, rồi năm lần đọc lại khi lệch.
 
 Hướng 1 là chữ Tesseract nhanh đã có. Hướng 2 là bộ chữ chuẩn, cắt dòng, phóng đôi.
-Hướng 3 là RapidOCR trên đúng dòng đó. Chưa cài RapidOCR thì hướng 3 là một lần Tesseract khác.
+Hướng 3 là RapidOCR chỉ nhận dạng đúng dòng đó, không dò chữ lại. Chưa cài RapidOCR thì hướng 3 là một lần Tesseract khác.
 Hai hướng trùng thì không gọi hướng 3. Cả ba khác nhau thì đọc lại năm kiểu ảnh.
 """
 
 from __future__ import annotations
 
-import hashlib
-import os
-import tempfile
 import threading
-import time
+from collections import OrderedDict
+from dataclasses import dataclass, field
 
-from PIL import Image, ImageFilter, ImageOps
+from PIL import Image, ImageChops, ImageFilter, ImageOps, ImageStat
 
 from control_plane.people import clean_name, clean_username, fold_name
 
-AGREED_HOLD_SEC = 4.0
-_agreed: dict[str, tuple[str, float]] = {}
-_agreed_lock = threading.Lock()
-
 try:
+    import numpy as np
     from rapidocr_onnxruntime import RapidOCR
 except ImportError:
+    np = None  # type: ignore[assignment]
     RapidOCR = None  # type: ignore[misc, assignment]
 
 _engine: object | None = None
 _engine_failed = False
 _engine_lock = threading.Lock()
 
+# Một dòng danh bạ cuộn qua màn hình hiện ở nhiều khung. Ba khung khác nhau cùng chốt một chữ thì các khung sau dùng lại.
+SETTLE_VOTES = 3
+SIGNATURE_SIZE = (48, 8)
+# Trung bình lệch điểm ảnh giữa hai lần chụp cùng một dòng nằm dưới 30. Hai dòng khác nhau từ 60 trở lên.
+SIGNATURE_LIMIT = 30.0
+_LEFT_SLACK = 8
+_WIDTH_SLACK = 10
+_ROWS_PER_SEED = 6
+# Video dài vài chục phút có hàng chục nghìn cách đọc khác nhau. Quá mức này thì bỏ cách đọc cũ nhất.
+_MAX_SEEDS = 60_000
+_MEMO_SCOPES = 8
+
 
 def rapid_ready() -> bool:
     """RapidOCR nhập được. Lần khởi tạo lỗi thì coi như chưa có."""
-    return RapidOCR is not None and not _engine_failed
+    return RapidOCR is not None and np is not None and not _engine_failed
 
 
-def crop_mark(crop: Image.Image) -> str:
-    """Dấu vân nhỏ của dòng đã cắt. Cùng chữ, cùng vị trí thì cùng dấu."""
-    thumb = crop.resize((24, 8), Image.Resampling.BILINEAR).convert("L")
-    return hashlib.sha1(thumb.tobytes(), usedforsecurity=False).hexdigest()[:16]
+@dataclass
+class _Row:
+    left: int
+    width: int
+    signature: Image.Image
+    frames: list[str] = field(default_factory=list)
+    texts: list[str] = field(default_factory=list)
+    settled: str = ""
 
 
-def _agreed_token(kind: str, seed: str, mark: str) -> str:
-    key = vote_key(seed, kind)
-    if not key:
-        return ""
-    return f"{kind}:{key}:{mark}"
+def row_signature(image: Image.Image, box: tuple[int, int, int, int]) -> Image.Image:
+    """Ảnh xám rất nhỏ của đúng hộp chữ, để nhận ra cùng một dòng ở khung khác."""
+    left, top, width, height = box
+    gray = image if image.mode == "L" else image.convert("L")
+    crop = gray.crop((left, top, left + max(1, width), top + max(1, height)))
+    return crop.resize(SIGNATURE_SIZE, Image.Resampling.BOX)
 
 
-def _prune_agreed(now: float) -> None:
-    stale = [token for token, (_text, when) in _agreed.items() if now - when > AGREED_HOLD_SEC]
-    for token in stale:
-        _agreed.pop(token, None)
+def _alike(first: Image.Image, second: Image.Image) -> bool:
+    if first.size != second.size:
+        return False
+    diff = ImageChops.difference(first, second)
+    return ImageStat.Stat(diff).mean[0] <= SIGNATURE_LIMIT
 
 
-def clear_agreed() -> None:
-    """Xóa dòng đã nhớ. Dùng trong test."""
-    with _agreed_lock:
-        _agreed.clear()
+class RowMemo:
+    """Dòng đã chốt trong một video. Nhận ra dòng bằng chữ đọc nhanh y hệt, vị trí cột, và ảnh nhỏ gần giống.
 
+    Một dòng chỉ được dùng lại sau khi đủ SETTLE_VOTES khung khác nhau cùng chốt một chữ y hệt.
+    Một lần lệch hoặc không chốt được thì đếm lại từ đầu, dòng đó tiếp tục bỏ phiếu ở mọi khung.
+    """
 
-def remember_agreed(kind: str, seed: str, mark: str, text: str, now: float | None = None) -> None:
-    """Giữ chữ vừa trùng để khung sau vài giây không đọc lại."""
-    token = _agreed_token(kind, seed, mark)
-    if not token or not text:
-        return
-    stamp = time.monotonic() if now is None else now
-    with _agreed_lock:
-        _prune_agreed(stamp)
-        _agreed[token] = (text, stamp)
+    def __init__(self, settle: int = SETTLE_VOTES) -> None:
+        self._settle = max(1, int(settle))
+        self._rows: dict[tuple[str, str], list[_Row]] = {}
+        self._lock = threading.Lock()
 
+    @staticmethod
+    def _key(kind: str, seed: str) -> tuple[str, str] | None:
+        text = " ".join(str(seed or "").split())
+        return (kind, text) if text else None
 
-def recalled_agreed(kind: str, seed: str, mark: str, now: float | None = None) -> str | None:
-    """Chữ đã trùng trên cùng dòng trong vài giây vừa rồi. None khi phải đọc lại."""
-    token = _agreed_token(kind, seed, mark)
-    if not token:
+    def _find(self, key: tuple[str, str], left: int, width: int, signature: Image.Image) -> _Row | None:
+        for row in self._rows.get(key, []):
+            if abs(row.left - left) <= _LEFT_SLACK and abs(row.width - width) <= _WIDTH_SLACK and _alike(row.signature, signature):
+                return row
         return None
-    stamp = time.monotonic() if now is None else now
-    with _agreed_lock:
-        item = _agreed.get(token)
-        if item is None:
+
+    def settled(self, kind: str, seed: str, left: int, width: int, signature: Image.Image) -> str | None:
+        key = self._key(kind, seed)
+        if key is None:
             return None
-        text, when = item
-        if stamp - when > AGREED_HOLD_SEC:
-            _agreed.pop(token, None)
-            return None
-        return text
+        with self._lock:
+            row = self._find(key, left, width, signature)
+            return row.settled if row is not None and row.settled else None
+
+    def _row(self, key: tuple[str, str], left: int, width: int, signature: Image.Image) -> _Row:
+        row = self._find(key, left, width, signature)
+        if row is not None:
+            return row
+        rows = self._rows.get(key)
+        if rows is None:
+            if len(self._rows) >= _MAX_SEEDS:
+                self._rows.pop(next(iter(self._rows)))
+            rows = self._rows[key] = []
+        if len(rows) >= _ROWS_PER_SEED:
+            rows.pop(0)
+        row = _Row(left, width, signature)
+        rows.append(row)
+        return row
+
+    def agree(self, kind: str, seed: str, left: int, width: int, signature: Image.Image, frame: str, text: str) -> bool:
+        """Ghi một lần đối chiếu đã trùng ở khung này. Trả True khi dòng vừa được chốt hẳn."""
+        key = self._key(kind, seed)
+        if key is None or not text:
+            return False
+        with self._lock:
+            row = self._row(key, left, width, signature)
+            if row.settled:
+                return row.settled == text
+            if frame in row.frames:
+                return False
+            if row.texts and row.texts[-1] != text:
+                row.frames.clear()
+                row.texts.clear()
+            row.frames.append(frame)
+            row.texts.append(text)
+            if len(row.texts) >= self._settle:
+                row.settled = text
+                return True
+        return False
+
+    def fail(self, kind: str, seed: str, left: int, width: int, signature: Image.Image) -> None:
+        """Lần đối chiếu không chốt được: dòng này chưa ổn, đếm lại từ đầu."""
+        key = self._key(kind, seed)
+        if key is None:
+            return
+        with self._lock:
+            row = self._find(key, left, width, signature)
+            if row is not None and not row.settled:
+                row.frames.clear()
+                row.texts.clear()
+
+
+_memos: OrderedDict[str, RowMemo] = OrderedDict()
+_memos_lock = threading.Lock()
+
+
+def memo_for(scope: str) -> RowMemo:
+    """Bộ nhớ dòng của một video. Giữ vài video gần nhất."""
+    with _memos_lock:
+        found = _memos.get(scope)
+        if found is None:
+            found = RowMemo()
+            _memos[scope] = found
+            while len(_memos) > _MEMO_SCOPES:
+                _memos.popitem(last=False)
+        else:
+            _memos.move_to_end(scope)
+        return found
+
+
+def forget_scope(scope: str) -> None:
+    with _memos_lock:
+        _memos.pop(scope, None)
+
+
+def clear_memos() -> None:
+    with _memos_lock:
+        _memos.clear()
 
 
 def vote_key(text: str, kind: str) -> str:
@@ -181,6 +268,7 @@ def five_variants(crop: Image.Image) -> list[Image.Image]:
 
 
 def _rapid_text(out: object) -> str:
+    """Chữ từ kết quả RapidOCR. Chỉ nhận dạng cho [chữ, điểm]. Có dò chữ cho [khung, chữ, điểm]."""
     payload = out[0] if isinstance(out, tuple) else out
     if payload is None:
         return ""
@@ -194,40 +282,49 @@ def _rapid_text(out: object) -> str:
         if isinstance(item, str):
             lines.append(item)
             continue
-        if isinstance(item, (list, tuple)) and len(item) >= 2:
-            lines.append(str(item[1]))
+        if not isinstance(item, (list, tuple)) or len(item) < 2:
+            continue
+        if isinstance(item[0], str):
+            lines.append(item[0])
+        elif isinstance(item[1], str):
+            lines.append(item[1])
     return " ".join(line for line in lines if line)
 
 
+def _make_engine() -> object:
+    """Mỗi phiên một luồng: nhiều dòng đọc cùng lúc không giành nhau lõi."""
+    try:
+        return RapidOCR(intra_op_num_threads=1, inter_op_num_threads=1)
+    except TypeError:
+        return RapidOCR()
+
+
 def read_rapid(image: Image.Image) -> str | None:
-    """None khi máy chưa có RapidOCR. Chuỗi rỗng khi đã đọc mà không thấy chữ."""
+    """Nhận dạng một dòng đã cắt. None khi máy chưa có RapidOCR. Chuỗi rỗng khi không thấy chữ."""
     global _engine, _engine_failed
-    if RapidOCR is None or _engine_failed:
+    if RapidOCR is None or np is None or _engine_failed:
         return None
     with _engine_lock:
         if _engine is None:
             try:
-                _engine = RapidOCR()
+                _engine = _make_engine()
             except (OSError, RuntimeError, ValueError):
                 _engine_failed = True
                 return None
         engine = _engine
     if engine is None:
         return None
-    handle = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-    path = handle.name
-    handle.close()
     try:
-        image.save(path)
+        pixels = np.ascontiguousarray(np.asarray(image.convert("RGB"))[:, :, ::-1])
+    except (OSError, ValueError):
+        return ""
+    try:
+        out = engine(pixels, use_det=False, use_cls=False, use_rec=True)  # type: ignore[operator]
+    except TypeError:
         try:
-            out = engine(path)
+            out = engine(pixels)  # type: ignore[operator]
         except (OSError, RuntimeError, ValueError):
             return ""
-    except OSError:
+    except (OSError, RuntimeError, ValueError):
         return ""
-    finally:
-        try:
-            os.unlink(path)
-        except OSError:
-            pass
     return _rapid_text(out)
