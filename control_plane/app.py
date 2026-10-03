@@ -242,6 +242,19 @@ def health() -> dict[str, Any]:
     }
 
 
+@app.get("/sw.js")
+def upload_service_worker() -> Response:
+    """Worker gửi tiếp video khi trang iPhone đã đóng. Việc đọc nằm trên máy chủ."""
+    path = STATIC_DIR / "upload-sw.js"
+    if not path.is_file():
+        raise HTTPException(404, "missing worker")
+    return Response(
+        path.read_bytes(),
+        media_type="text/javascript",
+        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"},
+    )
+
+
 def _html(name: str, status_code: int = 200) -> HTMLResponse:
     path = STATIC_DIR / name
     if not path.exists():

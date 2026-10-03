@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from control_plane import db, video_ledger
 from control_plane.settings import settings
@@ -99,8 +100,10 @@ class VideoLedgerTests(unittest.TestCase):
         self._track(job.id)
         job.bind(path)
         video_ledger._SEEN.clear()
-        for index in range(1000):
-            job.remember_frame(index / 1000, ["a"], [])
+        # Đồng hồ đứng yên để bài thử không phụ thuộc máy chậm: ghi khung cách 2 giây.
+        with patch.object(video_ledger.time, "monotonic", return_value=1000.0):
+            for index in range(1000):
+                job.remember_frame(index / 1000, ["a"], [])
         with db.connect(self.db_path) as conn:
             raw = conn.execute("SELECT frames_json FROM video_jobs WHERE id=?", (job.id,)).fetchone()
         self.assertIsNotNone(raw)
