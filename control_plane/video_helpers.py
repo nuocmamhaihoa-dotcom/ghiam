@@ -355,6 +355,18 @@ class HelperBook:
             if item is not None and item.held > 0:
                 item.held -= 1
 
+    def name_for(self, worker_id: str) -> str:
+        """Tên máy đang đọc. Không có trong sổ thì gọi là PC."""
+        if worker_id == "hub":
+            return "Máy chủ"
+        if not worker_id:
+            return ""
+        with self._lock:
+            item = self._items.get(worker_id)
+        if item is None or not item.name:
+            return "PC"
+        return item.name
+
     def public(self) -> dict[str, object]:
         now = time.monotonic()
         with self._lock:

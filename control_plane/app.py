@@ -71,7 +71,9 @@ from control_plane.screen_steps import (
 )
 from control_plane.screen_people import locate_tesseract, propose_rows, reading_counts
 from control_plane.settings import settings
-from control_plane.video_jobs import JobProgress, VideoJob, jobs
+from control_plane.video_jobs import JobProgress, VideoJob, jobs, restore_open
+from control_plane.video_ledger import board as video_board
+from control_plane.video_ledger import open_upload, touch_upload
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 IOS_DIR = Path(__file__).resolve().parents[1] / "ios"
@@ -168,6 +170,10 @@ async def _startup() -> None:
         if not cd_copy.exists():
             cd_copy.write_text("\n".join(lines) + "\n", encoding="utf-8")
     _load_uploads()
+    for job_id, path in restore_open():
+        job = jobs.get(job_id)
+        target = _prepare_and_schedule if job is not None and job.path is None else _schedule_video_job
+        threading.Thread(target=target, args=(job_id, path), daemon=True).start()
     start_background_checker()
 
 
@@ -1307,10 +1313,15 @@ def _split_video_job(parent: VideoJob, path: Path) -> bool:
         made.append(dest)
     children: list[VideoJob] = []
     for index, dest in enumerate(made):
-        child = jobs.create()
+        try:
+            part_size = dest.stat().st_size
+        except OSError:
+            part_size = 0
+        child = jobs.create(name=parent.name, source=parent.source, size=part_size)
         child.parent_id = parent.id
         child.part_label = f"Phần {index + 1}"
-        child.update(8, "Đã nhận phần video")
+        child.percent = 8
+        child.task = "Đã nhận phần video"
         child.bind(dest)
         children.append(child)
     parent.set_parts([child.id for child in children])
@@ -1581,6 +1592,7 @@ async def video_worker_heartbeat(
 @app.post("/v1/recordings/from-video/job")
 async def recordings_from_video_job(
     file: UploadFile = File(...),
+    source: str = Form(default=""),
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     """Nhận video và trả mã tiến trình ngay. Trang hỏi phần trăm sau đó."""
@@ -1589,7 +1601,8 @@ async def recordings_from_video_job(
     if suffix not in {".mp4", ".mov", ".m4v", ".webm"}:
         suffix = ".mp4"
     dest = await _store_upload(file, suffix)
-    return _begin_video_job(dest)
+    name = " ".join(Path(file.filename or "video.mp4").name.split())[:120]
+    return _begin_video_job(dest, name=name, source=source)
 
 
 @app.post("/v1/recordings/jobs/claim")
@@ -1622,10 +1635,16 @@ def _prepare_and_schedule(job_id: str, path: Path) -> None:
     _schedule_video_job(job_id, ready)
 
 
-def _begin_video_job(dest: Path) -> dict[str, Any]:
-    job = jobs.create()
-    job.update(4, "Đang sắp xếp video")
-    threading.Thread(target=_prepare_and_schedule, args=(job.id, dest), daemon=True).start()
+def _begin_video_job(dest: Path, job_id: str = "", name: str = "", source: str = "") -> dict[str, Any]:
+    try:
+        size = dest.stat().st_size
+    except OSError:
+        size = 0
+    job = jobs.create(job_id, name=name, source=source, size=size)
+    if job.path is None and not job.done:
+        job.stage_file(dest)
+        job.update(4, "Đang sắp xếp video")
+        threading.Thread(target=_prepare_and_schedule, args=(job.id, dest), daemon=True).start()
     return {"ok": True, "jobId": job.id}
 
 
@@ -1734,6 +1753,7 @@ _uploads_lock = threading.Lock()
 class UploadStartBody(BaseModel):
     name: str = "video.mp4"
     size: int = Field(ge=1, le=1024 * 1024 * 1024 * 1024)
+    source: str = ""
 
 
 def _upload_frontier(ranges: list[tuple[int, int]]) -> int:
@@ -1788,6 +1808,7 @@ def _save_upload(upload_id: str, item: dict[str, Any]) -> None:
         "created": float(item["created"]),
         "finished": bool(item.get("finished")),
         "jobId": str(item.get("jobId") or ""),
+        "source": str(item.get("source") or ""),
     }
     target = _upload_record(upload_id)
     temporary = target.with_suffix(".tmp")
@@ -1835,6 +1856,7 @@ def _load_uploads() -> None:
                     "created": created,
                     "finished": bool(data.get("finished")),
                     "jobId": str(data.get("jobId") or ""),
+                    "source": str(data.get("source") or ""),
                     "lock": threading.Lock(),
                 },
             )
@@ -1903,24 +1925,29 @@ def start_video_upload(body: UploadStartBody, authorization: str | None = Header
         suffix = ".mp4"
     _drop_old_uploads()
     upload_id = uuid.uuid4().hex
+    ledger_id = uuid.uuid4().hex
     path = _upload_dir() / f"fb-video-{upload_id}{suffix}"
     try:
         path.touch()
         fd = os.open(path, os.O_RDWR)
     except OSError as error:
         raise HTTPException(507, "Hết chỗ trống trên máy chủ.") from error
+    name = " ".join(str(body.name or "").split())[:120]
+    source = " ".join(str(body.source or "").split())[:80]
     item: dict[str, Any] = {
         "path": path,
-        "name": " ".join(str(body.name or "").split())[:120],
+        "name": name,
         "size": body.size,
         "fd": fd,
         "ranges": [],
         "spans": set(),
         "created": time.time(),
         "finished": False,
-        "jobId": "",
+        "jobId": ledger_id,
+        "source": source,
         "lock": threading.Lock(),
     }
+    open_upload(ledger_id, name, source, body.size)
     with item["lock"]:
         _save_upload(upload_id, item)
     with _uploads_lock:
@@ -2004,8 +2031,17 @@ async def write_video_chunk(
             raise HTTPException(507, "Hết chỗ trống trên máy chủ.")
         spans.add((offset, end))
         item["ranges"] = _upload_add(ranges, offset, end)
+        frontier = _upload_frontier(item["ranges"])
         _save_upload(upload_id, item)
-        return JSONResponse({"ok": True, "offset": _upload_frontier(item["ranges"]), "end": end})
+        ledger_id = str(item.get("jobId") or "")
+        if ledger_id and not item.get("finished"):
+            percent = min(99, int(frontier * 100 / size)) if size else 0
+            touch_upload(
+                ledger_id,
+                percent,
+                f"Đang gửi {frontier / 1048576:.1f}/{size / 1048576:.1f} MB",
+            )
+        return JSONResponse({"ok": True, "offset": frontier, "end": end})
 
 
 @app.post("/v1/recordings/uploads/{upload_id}/finish")
@@ -2024,11 +2060,40 @@ def finish_video_upload(upload_id: str, authorization: str | None = Header(defau
                 _reopen_job(job)
             return {"ok": True, "jobId": str(item["jobId"])}
         _close_upload(item)
-        started = _begin_video_job(Path(item["path"]))
+        # Lần gửi đầu giữ mã trên bảng. Gửi lại sau khi việc trong bộ nhớ đã mất thì mở việc mới.
+        reuse = "" if item.get("finished") else str(item.get("jobId") or "")
+        started = _begin_video_job(
+            Path(item["path"]),
+            job_id=reuse,
+            name=str(item.get("name") or ""),
+            source=str(item.get("source") or ""),
+        )
         item["finished"] = True
         item["jobId"] = str(started["jobId"])
         _save_upload(upload_id, item)
     return started
+
+
+@app.get("/v1/recordings/board")
+def recordings_board(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Việc đang gửi, đang đọc, hàng chờ, và lịch sử gần đây. Mọi iPhone xem chung một bảng."""
+    _auth(authorization)
+    payload = video_board()
+    for group in ("active", "queued", "history"):
+        rows = payload.get(group)
+        if not isinstance(rows, list):
+            continue
+        for item in rows:
+            if not isinstance(item, dict):
+                continue
+            worker = str(item.get("worker") or "")
+            if worker == "hub":
+                item["workerName"] = "Máy chủ"
+            elif worker:
+                item["workerName"] = video_helpers.helpers.name_for(worker)
+            else:
+                item["workerName"] = ""
+    return payload
 
 
 @app.post("/v1/recordings/jobs/{job_id}/samples")

@@ -88,6 +88,12 @@
     #pick { background: #fff; color: #111; }
     #pick input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     #recordBtn:disabled, #pick.busy { opacity: 0.45; }
+    .board-job { margin: 0 0 0.75rem; }
+    .board-track { height: 10px; border-radius: 999px; background: #e7e0d4; overflow: hidden; margin-top: 0.3rem; }
+    .board-fill { height: 100%; width: 0; background: #111; }
+    .board-meta { margin: 0.25rem 0 0; color: #5c564c; font-size: 14px; }
+    .board-problems { margin: 0.25rem 0 0; padding-left: 1.1rem; color: #b42318; }
+    #boardBox h2 { margin: 0.9rem 0 0.35rem; font-size: 1.05rem; }
     #shareBox { margin: 0 0 0.8rem; }
     #shareLead { margin: 0 0 0.45rem; line-height: 1.4; font-size: 16px; }
     #shareText {
@@ -132,6 +138,14 @@
       <p id="problemLead" hidden>Vấn đề khi xử lý</p>
       <ul id="problemList" hidden></ul>
       <button id="continueBtn" type="button" hidden>Tiếp tục đọc nối</button>
+    </section>
+    <section id="boardBox">
+      <h2>Việc đang làm</h2>
+      <div id="boardActive"></div>
+      <h2>Hàng chờ</h2>
+      <div id="boardQueued"></div>
+      <h2>Lịch sử gần đây</h2>
+      <div id="boardHistory"></div>
     </section>
     <section id="savedBox">
       <p id="savedLead">Kết quả đã lưu. Kho chứa được 50 triệu kết quả. Hub tự ghi ngay sau mỗi video. Mở lại trang vẫn còn.</p>
@@ -243,6 +257,19 @@
     let shownOverall = 0;
     let batchJobs = [];
     let resumeSlots = [];
+
+    function phoneName() {
+      const key = "fb_phone_name";
+      let name = localStorage.getItem(key) || "";
+      if (!name) {
+        const bytes = new Uint8Array(2);
+        if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(bytes);
+        else bytes[0] = Math.floor(Math.random() * 256);
+        name = "iPhone " + Array.from(bytes).map((value) => value.toString(16).padStart(2, "0")).join("");
+        localStorage.setItem(key, name);
+      }
+      return name;
+    }
 
     function authHeaders() {
       const headers = {};
@@ -853,6 +880,7 @@
       return new Promise((resolve) => {
         const body = new FormData();
         body.append("file", file, file.name || "man-hinh.mp4");
+        body.append("source", phoneName());
         const request = new XMLHttpRequest();
         request.open("POST", "/v1/recordings/from-video/job");
         request.timeout = 0;
@@ -918,7 +946,7 @@
           const response = await fetch("/v1/recordings/uploads", {
             method: "POST",
             headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
-            body: JSON.stringify({ name: file.name || "man-hinh.mp4", size: file.size }),
+            body: JSON.stringify({ name: file.name || "man-hinh.mp4", size: file.size, source: phoneName() }),
           });
           if (response.status === 413) return { ok: false, error: "Video quá lớn." };
           if (response.status === 507) return { ok: false, error: "Hết chỗ trống trên máy chủ." };
@@ -1167,10 +1195,7 @@
     async function pumpQueue() {
       if (pumping) return;
       pumping = true;
-      busy = true;
       holdScreen();
-      pick.classList.add("busy");
-      recordBtn.disabled = true;
       carried = [];
       renderProblems([]);
       clearSamples();
@@ -1181,9 +1206,19 @@
       hidePlayback();
       hidePeople();
       hideTally();
-      await uploadRest();
-      while (batchJobs.some((job) => !job.done) || queue.length) {
+      const sendQueued = async () => {
+        if (!queue.length) return;
+        busy = true;
+        pick.classList.add("busy");
+        recordBtn.disabled = true;
         await uploadRest();
+        busy = false;
+        pick.classList.remove("busy");
+        recordBtn.disabled = recording;
+      };
+      await sendQueued();
+      while (batchJobs.some((job) => !job.done) || queue.length) {
+        await sendQueued();
         const pending = batchJobs.filter((job) => job.jobId && !job.done);
         if (!pending.length) break;
         await Promise.all(pending.map((job) => pollOnce(job)));
@@ -1251,11 +1286,8 @@
     async function resumeFailed() {
       if (pumping || !resumeSlots.length) return;
       pumping = true;
-      busy = true;
       holdScreen();
       continueBtn.hidden = true;
-      pick.classList.add("busy");
-      recordBtn.disabled = true;
       const slots = resumeSlots;
       batchJobs = slots;
       batchTotal = slots.length;
@@ -1367,6 +1399,7 @@
       pick.classList.remove("busy");
       recordBtn.disabled = recording;
       freeScreen();
+      if (queue.length) enqueue(queue.splice(0, queue.length));
     }
 
     function stopTracks() {
@@ -1608,11 +1641,79 @@
       history.replaceState(null, "", "/iphone");
     }
 
+    const boardState = {
+      uploading: "Đang gửi",
+      queued: "Đang chờ",
+      reading: "Đang đọc",
+      done: "Đã ghi",
+      failed: "Gặp vấn đề",
+    };
+    function renderBoardList(host, items) {
+      if (!host) return;
+      host.replaceChildren();
+      if (!items.length) {
+        const empty = document.createElement("p");
+        empty.textContent = "Chưa có video nào.";
+        host.appendChild(empty);
+        return;
+      }
+      items.forEach((item) => {
+        const box = document.createElement("div");
+        box.className = "board-job";
+        const title = document.createElement("strong");
+        const name = item.name || "video";
+        title.textContent = item.partLabel ? name + " · " + item.partLabel : name;
+        box.appendChild(title);
+        const meta = document.createElement("p");
+        meta.className = "board-meta";
+        const bits = [boardState[item.state] || item.state || ""];
+        if (item.source) bits.push(item.source);
+        const bytes = Number(item.size) || 0;
+        if (bytes > 0) bits.push((bytes / 1048576).toFixed(1) + " MB");
+        if (item.workerName) bits.push(item.workerName);
+        if (item.task) bits.push(item.task);
+        meta.textContent = bits.filter(Boolean).join(" · ");
+        box.appendChild(meta);
+        const track = document.createElement("div");
+        track.className = "board-track";
+        const fill = document.createElement("div");
+        fill.className = "board-fill";
+        fill.style.width = Math.max(0, Math.min(100, Number(item.percent) || 0)) + "%";
+        track.appendChild(fill);
+        box.appendChild(track);
+        const problems = Array.isArray(item.problems) ? item.problems.slice() : [];
+        if (item.error && problems.indexOf(item.error) < 0) problems.push(item.error);
+        if (problems.length) {
+          const list = document.createElement("ul");
+          list.className = "board-problems";
+          problems.forEach((text) => {
+            const line = document.createElement("li");
+            line.textContent = String(text);
+            list.appendChild(line);
+          });
+          box.appendChild(list);
+        }
+        host.appendChild(box);
+      });
+    }
+    async function loadBoard() {
+      try {
+        const response = await fetch("/v1/recordings/board", { headers: authHeaders() });
+        if (!response.ok) return;
+        const data = await response.json();
+        renderBoardList(document.getElementById("boardActive"), data.active || []);
+        renderBoardList(document.getElementById("boardQueued"), data.queued || []);
+        renderBoardList(document.getElementById("boardHistory"), data.history || []);
+      } catch (error) { /* giữ bảng cũ */ }
+    }
+
     pruneUploads();
     loadSaved();
     loadDuplicates();
     refreshHelper();
     window.setInterval(refreshHelper, 8000);
+    loadBoard();
+    window.setInterval(loadBoard, 2000);
   </script>
 </body>
 </html>

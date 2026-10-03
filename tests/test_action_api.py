@@ -489,7 +489,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "42")
+        self.assertEqual(build, "43")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -499,7 +499,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 42)
+        self.assertEqual(payload["iphoneBuild"], 43)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -1852,6 +1852,48 @@ class ActionApiTests(unittest.TestCase):
             self.assertNotIn("test-token", bat)
             self.assertIn("upgrade_allowed", archive.read("video_watchdog.py").decode("utf-8"))
             self.assertNotIn("winget", archive.read("Install-VideoWorker.ps1").decode("utf-8").lower())
+
+    def test_video_board_shows_the_upload_and_the_queue(self) -> None:
+        home = self.client.get("/")
+        self.assertIn("Hàng chờ", home.text)
+        phone = self.client.get("/iphone")
+        self.assertIn("Hàng chờ", phone.text)
+        started = self.client.post(
+            "/v1/recordings/uploads",
+            headers=self.headers,
+            json={"name": "hop.mp4", "size": 4, "source": "iPhone abcd"},
+        )
+        self.assertEqual(started.status_code, 200, started.text)
+        upload_id = started.json()["uploadId"]
+        listed = self.client.get("/v1/recordings/board", headers=self.headers)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        active = listed.json()["active"]
+        uploading = [item for item in active if item["name"] == "hop.mp4"]
+        self.assertEqual(len(uploading), 1)
+        self.assertEqual(uploading[0]["state"], "uploading")
+        self.assertEqual(uploading[0]["source"], "iPhone abcd")
+        sent = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}?offset=0",
+            headers=self.headers,
+            content=b"abcd",
+        )
+        self.assertEqual(sent.status_code, 200, sent.text)
+        finished = self.client.post(f"/v1/recordings/uploads/{upload_id}/finish", headers=self.headers)
+        self.assertEqual(finished.status_code, 200, finished.text)
+        job_id = finished.json()["jobId"]
+        self.assertTrue(job_id)
+
+        def _stop_board_job() -> None:
+            job = jobs.get(job_id)
+            if job is not None and not job.done:
+                job.fail("Dừng thử")
+
+        self.addCleanup(_stop_board_job)
+        again = self.client.get("/v1/recordings/board", headers=self.headers)
+        self.assertEqual(again.status_code, 200, again.text)
+        body = again.json()
+        seen = [item["jobId"] for item in body["active"] + body["queued"] + body["history"]]
+        self.assertIn(job_id, seen)
 
 
 if __name__ == "__main__":

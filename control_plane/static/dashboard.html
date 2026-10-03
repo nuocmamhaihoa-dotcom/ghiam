@@ -127,6 +127,13 @@
     .split { display: grid; grid-template-columns: 1.4fr 0.8fr; gap: 0.7rem; }
     a { color: var(--ink); }
     #fileList { margin: 0 0 0.8rem; padding-left: 1.2rem; }
+    #boardBox h2 { margin: 0.85rem 0 0.4rem; font-size: 1.05rem; }
+    #boardBox h2:first-child { margin-top: 0; }
+    .board-job { margin: 0 0 0.75rem; }
+    .board-track { height: 12px; border-radius: 999px; background: #e7e0d4; overflow: hidden; margin-top: 0.3rem; }
+    .board-fill { height: 100%; width: 0; background: #1c1915; }
+    .board-meta { margin: 0.25rem 0 0; }
+    .board-problems { margin: 0.25rem 0 0; padding-left: 1.2rem; color: var(--bad); }
     @media (max-width: 800px) {
       .split { grid-template-columns: 1fr; }
       .hide-sm { display: none; }
@@ -185,6 +192,14 @@
         <p id="problemLead" hidden>Vấn đề khi xử lý</p>
         <ul id="problemList" hidden></ul>
         <button id="continueBtn" type="button" hidden>Tiếp tục đọc nối</button>
+      </section>
+      <section class="panel" id="boardBox">
+        <h2>Việc đang làm</h2>
+        <div id="boardActive"></div>
+        <h2>Hàng chờ</h2>
+        <div id="boardQueued"></div>
+        <h2>Lịch sử gần đây</h2>
+        <div id="boardHistory"></div>
       </section>
       <p id="videoStatus" class="lead" hidden></p>
       <section class="panel" id="freshBox" hidden>
@@ -878,6 +893,7 @@
       return new Promise((resolve) => {
         const body = new FormData();
         body.append("file", file, file.name || "video.mp4");
+        body.append("source", "Trang chủ");
         const request = new XMLHttpRequest();
         request.open("POST", "/v1/recordings/from-video/job");
         request.timeout = 0;
@@ -929,7 +945,7 @@
           const response = await fetch("/v1/recordings/uploads", {
             method: "POST",
             headers: Object.assign({ "Content-Type": "application/json" }, headers()),
-            body: JSON.stringify({ name: file.name || "video.mp4", size: file.size }),
+            body: JSON.stringify({ name: file.name || "video.mp4", size: file.size, source: "Trang chủ" }),
           });
           if (response.status === 413) return { ok: false, error: "Video quá lớn." };
           if (response.status === 507) return { ok: false, error: "Hết chỗ trống trên máy chủ." };
@@ -1158,7 +1174,6 @@
     async function pumpQueue() {
       if (pumping) return;
       pumping = true;
-      drop.classList.add("busy");
       carried = [];
       renderProblems([]);
       clearSamples();
@@ -1179,12 +1194,12 @@
       }
       finishBatch();
       await loadAll();
+      const leftover = queue.splice(0, queue.length);
       if (!resumeSlots.length) { batchTotal = 0; shownOverall = 0; }
       batchJobs = [];
-      queue = [];
       paintFiles();
       pumping = false;
-      drop.classList.remove("busy");
+      if (leftover.length) enqueue(leftover);
     }
     function enqueue(files) {
       const accepted = Array.from(files || []).filter((file) => file && file.size >= 0);
@@ -1198,7 +1213,6 @@
     async function resumeFailed() {
       if (pumping || !resumeSlots.length) return;
       pumping = true;
-      drop.classList.add("busy");
       continueBtn.hidden = true;
       const slots = resumeSlots;
       batchJobs = slots;
@@ -1249,7 +1263,7 @@
       if (!resumeSlots.length) { batchTotal = 0; shownOverall = 0; }
       batchJobs = [];
       pumping = false;
-      drop.classList.remove("busy");
+      if (queue.length) pumpQueue();
     }
     ["dragenter", "dragover"].forEach((name) => {
       drop.addEventListener(name, (event) => { event.preventDefault(); drop.classList.add("over"); });
@@ -1320,7 +1334,73 @@
       } catch (error) { /* trang vẫn nhận video khi chưa hỏi được máy phụ */ }
     }
 
-    $("saveToken").onclick = () => { localStorage.setItem(tokenKey, $("token").value.trim()); loadAll(); loadIssues(); };
+    const boardState = {
+      uploading: "Đang gửi",
+      queued: "Đang chờ",
+      reading: "Đang đọc",
+      done: "Đã ghi",
+      failed: "Gặp vấn đề",
+    };
+    function renderBoardList(host, items) {
+      host.replaceChildren();
+      if (!items.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Chưa có video nào.";
+        host.appendChild(empty);
+        return;
+      }
+      items.forEach((item) => {
+        const box = document.createElement("div");
+        box.className = "board-job";
+        const title = document.createElement("strong");
+        const name = item.name || "video";
+        title.textContent = item.partLabel ? name + " · " + item.partLabel : name;
+        box.appendChild(title);
+        const meta = document.createElement("p");
+        meta.className = "meta board-meta";
+        const bits = [boardState[item.state] || item.state || ""];
+        if (item.source) bits.push(item.source);
+        const bytes = Number(item.size) || 0;
+        if (bytes > 0) bits.push((bytes / 1048576).toFixed(1) + " MB");
+        if (item.workerName) bits.push(item.workerName);
+        if (item.task) bits.push(item.task);
+        meta.textContent = bits.filter(Boolean).join(" · ");
+        box.appendChild(meta);
+        const track = document.createElement("div");
+        track.className = "board-track";
+        const fill = document.createElement("div");
+        fill.className = "board-fill";
+        fill.style.width = Math.max(0, Math.min(100, Number(item.percent) || 0)) + "%";
+        track.appendChild(fill);
+        box.appendChild(track);
+        const problems = Array.isArray(item.problems) ? item.problems.slice() : [];
+        if (item.error && problems.indexOf(item.error) < 0) problems.push(item.error);
+        if (problems.length) {
+          const list = document.createElement("ul");
+          list.className = "board-problems";
+          problems.forEach((text) => {
+            const line = document.createElement("li");
+            line.textContent = String(text);
+            list.appendChild(line);
+          });
+          box.appendChild(list);
+        }
+        host.appendChild(box);
+      });
+    }
+    async function loadBoard() {
+      if (!$("token").value.trim()) return;
+      try {
+        const response = await fetch("/v1/recordings/board", { headers: headers() });
+        if (!response.ok) return;
+        const data = await response.json();
+        renderBoardList($("boardActive"), data.active || []);
+        renderBoardList($("boardQueued"), data.queued || []);
+        renderBoardList($("boardHistory"), data.history || []);
+      } catch (error) { /* giữ bảng cũ */ }
+    }
+    $("saveToken").onclick = () => { localStorage.setItem(tokenKey, $("token").value.trim()); loadAll(); loadIssues(); loadBoard(); };
     $("refresh").onclick = loadAll;
     $("recheck").onclick = recheck;
     $("saveAction").onclick = saveAction;
@@ -1333,12 +1413,13 @@
       button.addEventListener("click", () => showView(button.getAttribute("data-tab")));
     });
     if (/iPhone|iPod/.test(navigator.userAgent)) $("openPhone").hidden = true;
-    if ($("token").value) { loadAll(); loadIssues(); }
+    if ($("token").value) { loadAll(); loadIssues(); loadBoard(); }
     pruneUploads();
     loadHelper();
     setInterval(() => { if ($("token").value && !pumping) loadAll(); }, 20000);
     setInterval(loadHelper, 5000);
     setInterval(loadIssues, 8000);
+    setInterval(loadBoard, 2000);
     try {
       const peopleChannel = new BroadcastChannel("fb-people");
       peopleChannel.onmessage = (event) => {
