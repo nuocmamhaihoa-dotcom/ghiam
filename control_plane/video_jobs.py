@@ -159,6 +159,39 @@ class VideoJob:
         with self._lock:
             return self.path
 
+    def located_file(self) -> tuple[Path | None, bool]:
+        """Đường dẫn đang nhớ, và cờ cho biết PC đã được phép nhận video này."""
+        with self._lock:
+            if self.path is not None:
+                return self.path, True
+            return self._stored_path, False
+
+    def has_frames(self) -> bool:
+        with self._lock:
+            return bool(self._frames)
+
+    def abandon_hub(self) -> bool:
+        """Máy chủ giữ video nhưng luồng đọc đã mất. Trả về hàng chờ."""
+        with self._lock:
+            if self.done or self.owner != "hub":
+                return False
+            self.owner = ""
+            self.lease = 0.0
+            self.task = "Đọc tiếp"
+            row = self._snapshot_locked()
+        self._persist(row, True)
+        return True
+
+    def clear_parts(self) -> bool:
+        with self._lock:
+            if self.done or not self.part_ids:
+                return False
+            self.part_ids = []
+            self.task = "Đọc tiếp"
+            row = self._snapshot_locked()
+        self._persist(row, True)
+        return True
+
     def succeeded(self) -> bool:
         with self._lock:
             return self.done and not self.error
@@ -626,6 +659,10 @@ class JobStore:
     def get(self, job_id: str) -> VideoJob | None:
         with self._lock:
             return self._jobs.get(job_id)
+
+    def all(self) -> list[VideoJob]:
+        with self._lock:
+            return list(self._jobs.values())
 
     def parts(self, job: VideoJob) -> list[VideoJob | None]:
         with self._lock:

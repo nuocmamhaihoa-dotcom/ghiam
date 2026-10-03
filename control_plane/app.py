@@ -71,6 +71,7 @@ from control_plane.screen_steps import (
 )
 from control_plane.screen_people import locate_tesseract, propose_rows, reading_counts
 from control_plane.settings import settings
+from control_plane import video_repair
 from control_plane.video_jobs import JobProgress, VideoJob, jobs, restore_open
 from control_plane.video_ledger import board as video_board
 from control_plane.video_ledger import open_upload, touch_upload
@@ -172,8 +173,9 @@ async def _startup() -> None:
     _load_uploads()
     for job_id, path in restore_open():
         job = jobs.get(job_id)
-        target = _prepare_and_schedule if job is not None and job.path is None else _schedule_video_job
-        threading.Thread(target=target, args=(job_id, path), daemon=True).start()
+        kind = "prepare" if job is not None and job.path is None else "schedule"
+        _spawn_video(job_id, path, kind)
+    threading.Thread(target=_repair_loop, daemon=True).start()
     start_background_checker()
 
 
@@ -1204,7 +1206,7 @@ async def recordings_from_video(
 
 def _commit_people(job: VideoJob, people: list[dict[str, str]], worker_id: str | None) -> bool:
     """Ghi dòng đủ ba cột. PC phụ chỉ ghi khi vẫn đang giữ video."""
-    rows = list(people)
+    rows = video_repair.heal_people(list(people))
     if len(rows) > _VIDEO_RESULT_LIMIT:
         job.add_problem(f"Video có hơn {_VIDEO_RESULT_LIMIT} người. Phần sau chưa ghi.")
         rows = rows[:_VIDEO_RESULT_LIMIT]
@@ -1328,7 +1330,9 @@ def _split_video_job(parent: VideoJob, path: Path) -> bool:
     parent.bind(path)
     parent.update(10, "Chia video cho hai PC")
     for child in children:
-        threading.Thread(target=_schedule_video_job, args=(child.id, child.source_path()), daemon=True).start()
+        child_path = child.source_path()
+        if child_path is not None:
+            _spawn_video(child.id, child_path, "schedule")
     return True
 
 
@@ -1352,12 +1356,12 @@ def _reopen_job(job: VideoJob) -> bool:
                 continue
             path = part.source_path()
             if path is not None and part.reopen():
-                threading.Thread(target=_schedule_video_job, args=(part.id, path), daemon=True).start()
+                _spawn_video(part.id, path, "schedule")
         return True
     path = job.source_path()
     if path is None or not job.reopen():
         return False
-    threading.Thread(target=_schedule_video_job, args=(job.id, path), daemon=True).start()
+    _spawn_video(job.id, path, "schedule")
     return True
 
 
@@ -1509,6 +1513,7 @@ def _hub_acquire() -> bool:
     with _HUB_LOCK:
         if _HUB_READS >= _HUB_LIMIT:
             return False
+        video_repair.note_hub_enter()
         _HUB_READS += 1
         return True
 
@@ -1516,7 +1521,76 @@ def _hub_acquire() -> bool:
 def _hub_release() -> None:
     global _HUB_READS
     with _HUB_LOCK:
+        video_repair.note_hub_leave()
         _HUB_READS = max(0, _HUB_READS - 1)
+
+
+def _heal_hub_slots() -> bool:
+    """Luồng đọc chết giữa chừng thì trả lại khe, để video sau không bị kẹt mãi."""
+    global _HUB_READS
+    with _HUB_LOCK:
+        live = video_repair.live_hub_slots()
+        if _HUB_READS == live:
+            return False
+        _HUB_READS = live
+        return True
+
+
+def _spawn_video(job_id: str, path: Path, kind: str) -> bool:
+    """Một video chỉ có một luồng xếp lịch. Vòng tự sửa không mở thêm luồng thứ hai."""
+    if not video_repair.claim_start(job_id):
+        return False
+    target = _prepare_and_schedule if kind == "prepare" else _schedule_video_job
+
+    def runner() -> None:
+        try:
+            target(job_id, path)
+        finally:
+            video_repair.drop(job_id)
+
+    threading.Thread(target=runner, daemon=True).start()
+    return True
+
+
+def _auto_retry(job: VideoJob) -> bool:
+    """Lỗi mạng hoặc lỗi bất ngờ thì đọc lại, tối đa hai lần. Video hỏng nội dung thì để trang bấm Tiếp tục."""
+    if not video_repair.should_retry(job):
+        return False
+    located, _bound = job.located_file()
+    if located is None or not located.is_file():
+        return False
+    job.add_problem(video_repair.retry_note(job))
+    return _reopen_job(job)
+
+
+def _repair_once() -> list[str]:
+    return video_repair.sweep(
+        video_repair.RepairHooks(
+            jobs=jobs,
+            uploads=_upload_snapshot,
+            complete_upload=_repair_upload,
+            spawn=_spawn_video,
+            retry=_auto_retry,
+            has_idle=video_helpers.helpers.has_idle,
+            heal_hub=_heal_hub_slots,
+            lease_seconds=video_helpers.LEASE_SECONDS,
+            frontier=_upload_frontier,
+        )
+    )
+
+
+def _repair_loop() -> None:
+    """Vài giây một lần. Bài thử không chạy vòng này, để số liệu của bài thử không bị sửa giữa chừng."""
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return
+    while True:
+        time.sleep(5)
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return
+        try:
+            _repair_once()
+        except Exception:
+            continue
 
 
 def _schedule_video_job(job_id: str, path: Path) -> None:
@@ -1694,7 +1768,7 @@ def _begin_video_job(dest: Path, job_id: str = "", name: str = "", source: str =
     if job.path is None and not job.done:
         job.stage_file(dest)
         job.update(4, "Đang sắp xếp video")
-        threading.Thread(target=_prepare_and_schedule, args=(job.id, dest), daemon=True).start()
+        _spawn_video(job.id, dest, "prepare")
     return {"ok": True, "jobId": job.id}
 
 
@@ -1939,6 +2013,38 @@ def _upload_job_alive(item: dict[str, Any]) -> bool:
     return job is not None and not job.succeeded()
 
 
+def _upload_snapshot() -> list[tuple[str, dict[str, Any]]]:
+    with _uploads_lock:
+        return list(_uploads.items())
+
+
+def _job_using_file(path: Path) -> VideoJob | None:
+    """Việc đã mở cho đúng file này. Vòng tự sửa không mở thêm một việc thứ hai."""
+    try:
+        wanted = path.resolve()
+    except OSError:
+        wanted = path
+    for job in jobs.all():
+        if job.succeeded():
+            continue
+        located, _bound = job.located_file()
+        if located is None:
+            continue
+        try:
+            same = located.resolve() == wanted
+        except OSError:
+            same = located == path
+        if same:
+            return job
+    return None
+
+
+def _repair_upload(upload_id: str) -> bool:
+    """Đủ byte mà trang chưa gọi xong. Không đọc lại video đã lỗi."""
+    result = _finish_received_upload(upload_id, reopen_failed=False)
+    return isinstance(result, dict) and bool(result.get("ok"))
+
+
 def _drop_old_uploads() -> None:
     now = time.time()
     stale: list[str] = []
@@ -2099,10 +2205,8 @@ def _store_chunk(upload_id: str, item: dict[str, Any], offset: int, raw: bytes) 
         return JSONResponse({"ok": True, "offset": frontier, "end": end})
 
 
-@app.post("/v1/recordings/uploads/{upload_id}/finish")
-def finish_video_upload(upload_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    """Nhận đủ thì mở tiến trình đọc. Tiến trình mất vì hub khởi động lại thì đọc lại từ file đã nhận."""
-    _auth(authorization)
+def _finish_received_upload(upload_id: str, *, reopen_failed: bool) -> dict[str, Any] | JSONResponse:
+    """Nhận đủ thì mở tiến trình đọc. Gửi lại sau khi việc trong bộ nhớ đã mất thì mở việc mới."""
     item = _live_upload(upload_id)
     lock = item["lock"]
     with lock:
@@ -2111,11 +2215,19 @@ def finish_video_upload(upload_id: str, authorization: str | None = Header(defau
             return JSONResponse({"ok": False, "offset": frontier}, status_code=409)
         if item.get("finished") and _upload_job_alive(item):
             job = jobs.get(str(item["jobId"]))
-            if job is not None and job.done and job.error:
+            if reopen_failed and job is not None and job.done and job.error:
                 _reopen_job(job)
             return {"ok": True, "jobId": str(item["jobId"])}
+        if not item.get("finished"):
+            existing = _job_using_file(Path(item["path"]))
+            if existing is not None:
+                item["finished"] = True
+                item["jobId"] = existing.id
+                _save_upload(upload_id, item)
+                if reopen_failed and existing.done and existing.error:
+                    _reopen_job(existing)
+                return {"ok": True, "jobId": existing.id}
         _close_upload(item)
-        # Lần gửi đầu giữ mã trên bảng. Gửi lại sau khi việc trong bộ nhớ đã mất thì mở việc mới.
         reuse = "" if item.get("finished") else str(item.get("jobId") or "")
         started = _begin_video_job(
             Path(item["path"]),
@@ -2127,6 +2239,13 @@ def finish_video_upload(upload_id: str, authorization: str | None = Header(defau
         item["jobId"] = str(started["jobId"])
         _save_upload(upload_id, item)
     return started
+
+
+@app.post("/v1/recordings/uploads/{upload_id}/finish")
+def finish_video_upload(upload_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Nhận đủ thì mở tiến trình đọc. Tiến trình mất vì hub khởi động lại thì đọc lại từ file đã nhận."""
+    _auth(authorization)
+    return _finish_received_upload(upload_id, reopen_failed=True)
 
 
 @app.get("/v1/recordings/board")
@@ -2326,6 +2445,8 @@ def video_job_fail(
     if not job.fail_from_worker(body.workerId, body.error or "Không đọc được video."):
         raise HTTPException(409, "PC phụ không giữ video này")
     video_helpers.helpers.mark_idle(body.workerId)
+    if _auto_retry(job):
+        return _job_public(job)
     _job_finished(job)
     return job.public()
 
