@@ -134,6 +134,31 @@ def init_db(db_path: Path) -> None:
               at TEXT NOT NULL,
               line TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS video_jobs (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL DEFAULT '',
+              source TEXT NOT NULL DEFAULT '',
+              size INTEGER NOT NULL DEFAULT 0,
+              state TEXT NOT NULL,
+              percent INTEGER NOT NULL DEFAULT 0,
+              task TEXT NOT NULL DEFAULT '',
+              problems_json TEXT NOT NULL DEFAULT '[]',
+              error TEXT NOT NULL DEFAULT '',
+              worker TEXT NOT NULL DEFAULT '',
+              path TEXT NOT NULL DEFAULT '',
+              created_at REAL NOT NULL,
+              started_at REAL,
+              finished_at REAL,
+              saved_people INTEGER NOT NULL DEFAULT 0,
+              parent_id TEXT NOT NULL DEFAULT '',
+              part_label TEXT NOT NULL DEFAULT '',
+              part_ids_json TEXT NOT NULL DEFAULT '[]',
+              frames_json TEXT NOT NULL DEFAULT '[]',
+              upload_id TEXT NOT NULL DEFAULT '',
+              rev INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_video_jobs_state_created
+              ON video_jobs(state, created_at);
             """
         )
         _ensure_people_extras(conn)

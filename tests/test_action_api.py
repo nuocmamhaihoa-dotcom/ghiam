@@ -11,6 +11,7 @@ import shutil
 import sqlite3
 import subprocess
 import tempfile
+import threading
 import time
 import unittest
 import zipfile
@@ -229,6 +230,18 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Video từ 4 phút được chia đôi cho hai máy", page.text)
         self.assertIn("navigator.wakeLock", page.text)
         self.assertIn("Đang giữ màn hình sáng", page.text)
+        self.assertIn("Thoát trang hoặc mở app khác không dừng việc đọc", page.text)
+        self.assertIn("Thoát trang vẫn đọc tiếp", page.text)
+        self.assertIn("/sw.js", page.text)
+        self.assertIn("fb-poller-carry", page.text)
+        self.assertIn("fb_live_jobs", page.text)
+        self.assertNotIn("Mở app khác thì iPhone dừng việc gửi", page.text)
+        worker = self.client.get("/sw.js")
+        self.assertEqual(worker.status_code, 200, worker.text)
+        self.assertIn("javascript", worker.headers["content-type"])
+        self.assertIn("video-carry", worker.text)
+        self.assertIn("/v1/recordings/uploads/", worker.text)
+        self.assertIn("fb-poller-carry", worker.text)
         self.assertIn("fb_upload:", page.text)
         self.assertIn("restartLostJob", page.text)
         self.assertIn("PC đang tự lên bản", page.text)
@@ -489,7 +502,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "42")
+        self.assertEqual(build, "44")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -499,7 +512,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 42)
+        self.assertEqual(payload["iphoneBuild"], 44)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -1269,6 +1282,104 @@ class ActionApiTests(unittest.TestCase):
             )
             self.assertEqual(closed.status_code, 200, closed.text)
 
+    def test_a_busy_pc_keeps_the_queue_instead_of_the_hub_reading(self) -> None:
+        previous = os.environ.get("CONTROL_PC_WAIT_SEC")
+        os.environ["CONTROL_PC_WAIT_SEC"] = "0.2"
+        job_ids: list[str] = []
+        try:
+            beat = self.client.post(
+                "/v1/video-workers/heartbeat",
+                headers=self.headers,
+                json={"name": "pc-day", "cpus": 16, "readerOk": True},
+            )
+            self.assertEqual(beat.status_code, 200, beat.text)
+            worker_id = beat.json()["workerId"]
+            opened = [
+                self.client.post(
+                    "/v1/recordings/from-video/job",
+                    headers=self.headers,
+                    files={"file": ("clip.mp4", body, "video/mp4")},
+                )
+                for body in (b"video-mot", b"video-hai", b"video-ba")
+            ]
+            job_ids = [item.json()["jobId"] for item in opened]
+            taken: list[str] = []
+            for _ in range(2):
+                claimed_id = ""
+                for _attempt in range(80):
+                    claimed = self.client.post(
+                        "/v1/recordings/jobs/claim",
+                        headers=self.headers,
+                        json={"workerId": worker_id},
+                    )
+                    claimed_id = claimed.json()["jobId"]
+                    if claimed_id:
+                        break
+                    time.sleep(0.05)
+                self.assertTrue(claimed_id)
+                taken.append(claimed_id)
+            third_id = next(job_id for job_id in job_ids if job_id not in taken)
+            time.sleep(0.9)
+            waiting = jobs.get(third_id)
+            self.assertIsNotNone(waiting)
+            assert waiting is not None
+            self.assertFalse(waiting.done)
+            self.assertNotEqual(waiting.owner_id(), "hub")
+            body = self.client.get(f"/v1/recordings/jobs/{third_id}", headers=self.headers).json()
+            self.assertIn("Chờ PC", str(body.get("task")), body)
+        finally:
+            if previous is None:
+                os.environ.pop("CONTROL_PC_WAIT_SEC", None)
+            else:
+                os.environ["CONTROL_PC_WAIT_SEC"] = previous
+            for job_id in job_ids:
+                job = jobs.get(job_id)
+                if job is not None and not job.done:
+                    job.fail("Dừng thử")
+
+    def test_the_hub_reads_one_video_and_leaves_the_next_queued(self) -> None:
+        release = threading.Event()
+        started = threading.Event()
+        real = app_module._run_video_job
+
+        def slow(job_id: str, path: object) -> None:
+            started.set()
+            release.wait(3)
+            job = jobs.get(job_id)
+            if job is not None and not job.done:
+                job.fail("Dừng thử")
+
+        app_module._run_video_job = slow
+        job_ids: list[str] = []
+        try:
+            for body in (b"video-mot", b"video-hai"):
+                opened = self.client.post(
+                    "/v1/recordings/from-video/job",
+                    headers=self.headers,
+                    files={"file": ("clip.mp4", body, "video/mp4")},
+                )
+                self.assertEqual(opened.status_code, 200, opened.text)
+                job_ids.append(opened.json()["jobId"])
+            self.assertTrue(started.wait(5))
+            queued = False
+            deadline = time.time() + 3
+            while time.time() < deadline:
+                live = [jobs.get(job_id) for job_id in job_ids]
+                readers = [job for job in live if job is not None and job.owner_id() == "hub" and not job.done]
+                waiting = [job for job in live if job is not None and job.owner_id() != "hub" and not job.done]
+                if len(readers) == 1 and waiting:
+                    queued = True
+                    break
+                time.sleep(0.05)
+            self.assertTrue(queued, [jobs.get(job_id).owner_id() if jobs.get(job_id) else None for job_id in job_ids])
+        finally:
+            release.set()
+            app_module._run_video_job = real
+            for job_id in job_ids:
+                job = jobs.get(job_id)
+                if job is not None and not job.done:
+                    job.fail("Dừng thử")
+
     def test_hub_reads_when_the_pc_does_not_take_the_video(self) -> None:
         previous = video_helpers.OFFER_SECONDS
         previous_fresh = video_helpers.FRESH_SECONDS
@@ -1852,6 +1963,48 @@ class ActionApiTests(unittest.TestCase):
             self.assertNotIn("test-token", bat)
             self.assertIn("upgrade_allowed", archive.read("video_watchdog.py").decode("utf-8"))
             self.assertNotIn("winget", archive.read("Install-VideoWorker.ps1").decode("utf-8").lower())
+
+    def test_video_board_shows_the_upload_and_the_queue(self) -> None:
+        home = self.client.get("/")
+        self.assertIn("Hàng chờ", home.text)
+        phone = self.client.get("/iphone")
+        self.assertIn("Hàng chờ", phone.text)
+        started = self.client.post(
+            "/v1/recordings/uploads",
+            headers=self.headers,
+            json={"name": "hop.mp4", "size": 4, "source": "iPhone abcd"},
+        )
+        self.assertEqual(started.status_code, 200, started.text)
+        upload_id = started.json()["uploadId"]
+        listed = self.client.get("/v1/recordings/board", headers=self.headers)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        active = listed.json()["active"]
+        uploading = [item for item in active if item["name"] == "hop.mp4"]
+        self.assertEqual(len(uploading), 1)
+        self.assertEqual(uploading[0]["state"], "uploading")
+        self.assertEqual(uploading[0]["source"], "iPhone abcd")
+        sent = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}?offset=0",
+            headers=self.headers,
+            content=b"abcd",
+        )
+        self.assertEqual(sent.status_code, 200, sent.text)
+        finished = self.client.post(f"/v1/recordings/uploads/{upload_id}/finish", headers=self.headers)
+        self.assertEqual(finished.status_code, 200, finished.text)
+        job_id = finished.json()["jobId"]
+        self.assertTrue(job_id)
+
+        def _stop_board_job() -> None:
+            job = jobs.get(job_id)
+            if job is not None and not job.done:
+                job.fail("Dừng thử")
+
+        self.addCleanup(_stop_board_job)
+        again = self.client.get("/v1/recordings/board", headers=self.headers)
+        self.assertEqual(again.status_code, 200, again.text)
+        body = again.json()
+        seen = [item["jobId"] for item in body["active"] + body["queued"] + body["history"]]
+        self.assertIn(job_id, seen)
 
 
 if __name__ == "__main__":

@@ -808,6 +808,23 @@ def _hold_while_downloading(client: HubClient, job_id: str, worker_id: str, stop
             return
 
 
+def _guarded_read(
+    client: HubClient,
+    worker_id: str,
+    job_id: str,
+    resume: dict[str, object] | None = None,
+    slots: _JobSlots | None = None,
+) -> None:
+    """Lỗi bất ngờ thì báo hub đọc tiếp. Mất cả đường báo thì hub vẫn nhận lại video khi hết hạn giữ."""
+    try:
+        _read_one(client, worker_id, job_id, resume, slots)
+    except Exception:
+        try:
+            client.fail(job_id, worker_id, "PC gặp lỗi khi đọc. Máy chủ sẽ đọc tiếp.")
+        except Exception:
+            return
+
+
 def _read_one(
     client: HubClient,
     worker_id: str,
@@ -1264,7 +1281,7 @@ def main() -> None:
 
             def _run(job_id: str = job_id, resume: dict[str, object] | None = resume) -> None:
                 try:
-                    _read_one(client, str(state["worker_id"]), job_id, resume, slots)
+                    _guarded_read(client, str(state["worker_id"]), job_id, resume, slots)
                 finally:
                     slots.give()
                     set_reading(False)
