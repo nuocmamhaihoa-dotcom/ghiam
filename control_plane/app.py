@@ -1450,18 +1450,22 @@ def _pc_wait_seconds() -> float:
         return 45.0
 
 
-def _wait_for_helper(job: VideoJob) -> None:
-    """PC đang nối thì để PC nhận. PC đang bận thì video nằm chờ, hub không đọc chen."""
+def _wait_for_helper(job: VideoJob) -> str:
+    """PC đang nối thì để PC nhận. PC đang bận thì video nằm chờ, hub không đọc chen.
+
+    Trả về owned khi đã có người đọc, gone khi PC mất, ignored khi PC rảnh mà không nhận.
+    """
     job.update(4, "Chờ PC phụ nhận video")
-    started = time.monotonic()
+    idle_since: float | None = None
     while not job.owner_id() and not job.done:
         if not video_helpers.helpers.has_fresh():
-            return
+            return "gone"
         if not video_helpers.helpers.has_idle():
-            if time.monotonic() - started >= _pc_wait_seconds():
-                return
-            time.sleep(0.2)
+            idle_since = None
+            time.sleep(0.4)
             continue
+        if idle_since is None:
+            idle_since = time.monotonic()
         deadline = time.monotonic() + video_helpers.OFFER_SECONDS
         while (
             time.monotonic() < deadline
@@ -1471,10 +1475,13 @@ def _wait_for_helper(job: VideoJob) -> None:
         ):
             time.sleep(0.1)
         if job.owner_id() or job.done:
-            return
+            return "owned"
         if not video_helpers.helpers.has_fresh():
-            return
-        if time.monotonic() - started >= _pc_wait_seconds():
+            return "gone"
+        if not video_helpers.helpers.has_idle():
+            idle_since = None
+            continue
+        if idle_since is not None and time.monotonic() - idle_since >= _pc_wait_seconds():
             try:
                 from control_plane.issues import record_issue
 
@@ -1486,28 +1493,70 @@ def _wait_for_helper(job: VideoJob) -> None:
                 )
             except Exception:
                 pass
-            return
+            return "ignored"
+    return "owned"
+
+
+_HUB_LOCK = threading.Lock()
+_HUB_READS = 0
+_HUB_LIMIT = 1
+_PREPARE_LIMIT = threading.Semaphore(2)
+
+
+def _hub_acquire() -> bool:
+    """Máy chủ chỉ đọc một video. Video còn lại nằm chờ để đường gửi không bị nghẽn."""
+    global _HUB_READS
+    with _HUB_LOCK:
+        if _HUB_READS >= _HUB_LIMIT:
+            return False
+        _HUB_READS += 1
+        return True
+
+
+def _hub_release() -> None:
+    global _HUB_READS
+    with _HUB_LOCK:
+        _HUB_READS = max(0, _HUB_READS - 1)
 
 
 def _schedule_video_job(job_id: str, path: Path) -> None:
-    """PC đang nối thì video chờ PC. PC mất hoặc PC rảnh không nhận thì hub đọc."""
+    """PC đang nối thì video chờ PC. PC mất hoặc PC rảnh không nhận thì hub đọc một video."""
     job = jobs.get(job_id)
     if job is None:
         discard_video_work(path)
         return
-    if video_helpers.helpers.has_fresh() and not job.owner_id():
-        _wait_for_helper(job)
-    if job.done:
-        _job_finished(job)
-        return
-    owner = job.owner_id()
-    if owner and owner != "hub":
-        _watch_helper_job(job_id, path)
-        return
-    if job.take_hub():
-        _run_video_job(job_id, path)
-        return
-    _watch_helper_job(job_id, path)
+    while not job.done:
+        reason = ""
+        if video_helpers.helpers.has_fresh() and not job.owner_id():
+            reason = _wait_for_helper(job)
+        if job.done:
+            break
+        owner = job.owner_id()
+        if owner and owner != "hub":
+            _watch_helper_job(job_id, path)
+            return
+        if owner == "hub":
+            _run_video_job(job_id, path)
+            return
+        if reason != "ignored" and video_helpers.helpers.has_fresh() and video_helpers.helpers.has_idle():
+            continue
+        if not _hub_acquire():
+            if job.task != "Đang chờ":
+                job.update(4, "Đang chờ")
+            time.sleep(0.4)
+            continue
+        try:
+            if job.done or job.owner_id():
+                continue
+            if reason != "ignored" and video_helpers.helpers.has_fresh() and video_helpers.helpers.has_idle():
+                continue
+            if not job.take_hub():
+                continue
+            _run_video_job(job_id, path)
+            return
+        finally:
+            _hub_release()
+    _job_finished(job)
 
 
 class HelperBeatBody(BaseModel):
@@ -1560,7 +1609,7 @@ class WorkerFailBody(BaseModel):
 
 
 @app.post("/v1/video-workers/heartbeat")
-async def video_worker_heartbeat(
+def video_worker_heartbeat(
     body: HelperBeatBody,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
@@ -1602,11 +1651,11 @@ async def recordings_from_video_job(
         suffix = ".mp4"
     dest = await _store_upload(file, suffix)
     name = " ".join(Path(file.filename or "video.mp4").name.split())[:120]
-    return _begin_video_job(dest, name=name, source=source)
+    return await anyio.to_thread.run_sync(lambda: _begin_video_job(dest, name=name, source=source))
 
 
 @app.post("/v1/recordings/jobs/claim")
-async def claim_video_job(body: WorkerJobBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+def claim_video_job(body: WorkerJobBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     """PC kéo một video chưa ai giữ. Không có video thì jobId rỗng."""
     _auth(authorization)
     if not video_helpers.helpers.fresh(body.workerId) and not video_helpers.helpers.note(body.workerId):
@@ -1623,15 +1672,16 @@ async def claim_video_job(body: WorkerJobBody, authorization: str | None = Heade
 
 def _prepare_and_schedule(job_id: str, path: Path) -> None:
     """Sắp mục lục lên đầu rồi mới cho PC nhận, để PC đọc được phần đã tải."""
-    ready = faststart_video(path)
-    job = jobs.get(job_id)
-    if job is None:
-        discard_video_work(ready)
-        return
-    if _split_video_job(job, ready):
-        return
-    job.bind(ready)
-    job.update(8, "Đã nhận video")
+    with _PREPARE_LIMIT:
+        ready = faststart_video(path)
+        job = jobs.get(job_id)
+        if job is None:
+            discard_video_work(ready)
+            return
+        if _split_video_job(job, ready):
+            return
+        job.bind(ready)
+        job.update(8, "Đã nhận video")
     _schedule_video_job(job_id, ready)
 
 
@@ -2011,6 +2061,11 @@ async def write_video_chunk(
         raise HTTPException(413, "chunk is too large")
     if not raw:
         raise HTTPException(400, "chunk trống")
+    return await anyio.to_thread.run_sync(_store_chunk, upload_id, item, offset, raw)
+
+
+def _store_chunk(upload_id: str, item: dict[str, Any], offset: int, raw: bytes) -> JSONResponse:
+    """Ghi khúc trên luồng riêng để nhiều iPhone gửi cùng lúc không chặn nhịp của PC."""
     lock = item["lock"]
     with lock:
         size = int(item["size"])

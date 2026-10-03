@@ -1,4 +1,4 @@
-"""PC phụ kéo video về đọc. Một PC giữ tối đa hai video. Hub đọc khi PC không còn chỗ."""
+"""PC phụ kéo video về đọc. Một PC giữ tối đa hai video. Hub chỉ đọc khi không còn PC đang nối."""
 
 from __future__ import annotations
 

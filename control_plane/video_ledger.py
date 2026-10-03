@@ -345,26 +345,32 @@ def open_rows() -> list[dict[str, Any]]:
     return [_open_item(row) for row in rows]
 
 
+_BOARD_COLUMNS = (
+    "id, name, source, size, state, percent, task, problems_json, error, worker, "
+    "saved_people, created_at, started_at, finished_at, part_label"
+)
+
+
 def board() -> dict[str, Any]:
     try:
         with db.connect(settings.db_path) as conn:
             active = conn.execute(
-                """
-                SELECT * FROM video_jobs
+                f"""
+                SELECT {_BOARD_COLUMNS} FROM video_jobs
                 WHERE state IN ('uploading', 'reading')
                 ORDER BY created_at ASC, id ASC
                 """
             ).fetchall()
             queued = conn.execute(
-                """
-                SELECT * FROM video_jobs
+                f"""
+                SELECT {_BOARD_COLUMNS} FROM video_jobs
                 WHERE state='queued'
                 ORDER BY created_at ASC, id ASC
                 """
             ).fetchall()
             history = conn.execute(
-                """
-                SELECT * FROM video_jobs
+                f"""
+                SELECT {_BOARD_COLUMNS} FROM video_jobs
                 WHERE state IN ('done', 'failed')
                 ORDER BY COALESCE(finished_at, created_at) DESC, id DESC
                 LIMIT ?

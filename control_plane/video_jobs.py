@@ -295,7 +295,7 @@ class VideoJob:
         with self._lock:
             return self.owner
 
-    def claim(self, worker_id: str) -> bool:
+    def _claim_mark(self, worker_id: str) -> bool:
         with self._lock:
             if self.done or self.owner or self.path is None or self.part_ids or not worker_id:
                 return False
@@ -305,8 +305,12 @@ class VideoJob:
             self.task = "PC phụ đang đọc"
             if self.started_at is None:
                 self.started_at = time.time()
-            row = self._snapshot_locked()
-        self._persist(row, True)
+            return True
+
+    def claim(self, worker_id: str) -> bool:
+        if not self._claim_mark(worker_id):
+            return False
+        self._persist(self.snapshot(), True)
         return True
 
     def take_hub(self) -> bool:
@@ -629,13 +633,17 @@ class JobStore:
 
     def claim_next(self, worker_id: str, spread: bool = False) -> VideoJob | None:
         """spread: PC đang giữ một phần của video thì để phần kia cho PC khác."""
+        chosen: VideoJob | None = None
         with self._lock:
             for job in self._jobs.values():
                 if spread and job.parent_id and self._holds_sibling(job, worker_id):
                     continue
-                if job.claim(worker_id):
-                    return job
-        return None
+                if job._claim_mark(worker_id):
+                    chosen = job
+                    break
+        if chosen is not None:
+            chosen._persist(chosen.snapshot(), True)
+        return chosen
 
     def _holds_sibling(self, job: VideoJob, worker_id: str) -> bool:
         parent = self._jobs.get(job.parent_id)
