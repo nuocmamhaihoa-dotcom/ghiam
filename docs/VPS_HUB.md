@@ -1,5 +1,18 @@
 # VPS Hub — máy chủ gốc hiển thị comment + nối PC
 
+## Địa chỉ và tài khoản
+
+| Mục | Giá trị |
+|---|---|
+| Link hub | http://222.255.214.202:8088 |
+| Trang chủ | http://222.255.214.202:8088/ |
+| Trang iPhone | http://222.255.214.202:8088/iphone |
+| Kiểm tra sống | http://222.255.214.202:8088/health |
+| Tài khoản SSH | `root` |
+| Máy | `root@222.255.214.202` |
+
+Trang web không có tên tài khoản. Mở link hub rồi dán `CONTROL_TOKEN` đang nằm trong `/opt/fb-poller/control_data/server.env`. Không ghi mật khẩu SSH và không ghi token vào tài liệu này.
+
 VPS đóng vai trò **trung tâm**:
 
 1. Nhận comment đồng bộ từ mọi PC scanner (`/v1/sync/comments`)  
@@ -13,8 +26,8 @@ PC chỉ dùng CPU/RAM/proxy local để quét; kết quả đẩy về VPS.
 
 ```bash
 # Trên máy local: rsync code → /opt/fb-poller
-rsync -az --exclude .venv --exclude .git ./ root@VPS_IP:/opt/fb-poller/
-ssh root@VPS_IP 'bash /opt/fb-poller/deploy/vps/install-hub.sh'
+rsync -az --exclude .venv --exclude .git ./ root@222.255.214.202:/opt/fb-poller/
+ssh root@222.255.214.202 'bash /opt/fb-poller/deploy/vps/install-hub.sh'
 ```
 
 Service systemd: `fb-poller-hub`  
@@ -24,7 +37,7 @@ Env/token: `/opt/fb-poller/control_data/server.env` (chmod 600)
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\pc_agent\windows\Install-Agent.ps1 `
-  -ControlUrl "http://VPS_IP:8088" `
+  -ControlUrl "http://222.255.214.202:8088" `
   -ControlToken "TOKEN_TU_server.env" `
   -StartNow
 ```
@@ -33,7 +46,7 @@ Agent sẽ: register → heartbeat → sync-push comment định kỳ → prefer
 
 ## Dashboard
 
-Mở `http://VPS_IP:8088/` → dán `CONTROL_TOKEN` → xem comments / agents.
+Mở `http://222.255.214.202:8088/` → dán `CONTROL_TOKEN` → xem comments / agents.
 
 ## API chính
 
