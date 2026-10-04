@@ -32,12 +32,45 @@ from PIL import Image  # noqa: E402
 
 from control_plane import app as app_module  # noqa: E402
 from control_plane import db as people_db  # noqa: E402
+from control_plane import scan_vault  # noqa: E402
 from control_plane import video_helpers  # noqa: E402
 from control_plane.app import app  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
 from control_plane.issues import record_issue, record_video_problem  # noqa: E402
 from control_plane.version import VIDEO_WORKER_BUILD  # noqa: E402
 from control_plane.video_jobs import VideoJob, jobs  # noqa: E402
+
+
+def _erase_vault_file(path: Path) -> None:
+    for extra in ("", "-wal", "-shm"):
+        item = Path(str(path) + extra)
+        if item.is_file():
+            item.unlink()
+
+
+def _forget_people(*usernames: str, duplicates: bool = False) -> None:
+    """Bài kiểm tra gỡ dòng vừa tạo. Sổ thật không có đường xoá này."""
+    db_path = Path(os.environ["CONTROL_DB"])
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("DROP TRIGGER IF EXISTS scan_facts_no_delete")
+        if usernames:
+            marks = ",".join("?" * len(usernames))
+            conn.execute(f"DELETE FROM scan_facts WHERE username IN ({marks})", usernames)
+            conn.execute(f"DELETE FROM saved_people WHERE username IN ({marks})", usernames)
+            conn.execute(f"DELETE FROM scan_duplicates WHERE username IN ({marks})", usernames)
+        if duplicates:
+            conn.execute("DELETE FROM scan_facts WHERE kind = 'duplicate'")
+            conn.execute("DELETE FROM scan_duplicates")
+        conn.execute("DELETE FROM people_meta")
+        conn.commit()
+        scan_vault.ensure(conn)
+        conn.commit()
+    finally:
+        conn.close()
+    for path in scan_vault.locations(db_path):
+        _erase_vault_file(path)
+    scan_vault.startup(db_path)
 
 
 class ActionApiTests(unittest.TestCase):
@@ -549,7 +582,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "47")
+        self.assertEqual(build, "48")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -559,7 +592,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 47)
+        self.assertEqual(payload["iphoneBuild"], 48)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -635,9 +668,7 @@ class ActionApiTests(unittest.TestCase):
         listed = self.client.get("/v1/screen/live", headers=self.headers)
         self.assertEqual(listed.status_code, 200, listed.text)
         self.assertEqual(listed.json()["count"], 1)
-        with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
-            conn.execute("DELETE FROM saved_people WHERE username = ?", ("@nguyen.anh",))
-            conn.execute("DELETE FROM people_meta")
+        _forget_people("@nguyen.anh")
 
     def test_from_link_keeps_handle_without_ocr(self) -> None:
         denied = self.client.post(
@@ -675,9 +706,8 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("/iphone?", shared.headers["location"])
         self.assertIn("tiktok.com", shared.headers["location"])
         with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
-            conn.execute("DELETE FROM saved_people WHERE username IN (?, ?)", ("@trn.tng751", "@hoanganh1116"))
             conn.execute("DELETE FROM screen_lines")
-            conn.execute("DELETE FROM people_meta")
+        _forget_people("@trn.tng751", "@hoanganh1116")
 
     def test_confirm_saves_chosen_rows_without_overwrite(self) -> None:
         denied = self.client.post(
@@ -714,10 +744,7 @@ class ActionApiTests(unittest.TestCase):
             json={"rows": [{"name": "Lê Hoa", "contactName": "Lê Hoa", "username": "@le.hoa"}]},
         )
         self.assertEqual(skipped.json()["saved"], 0)
-        with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
-            conn.execute("DELETE FROM saved_people WHERE username = ?", ("@le.hoa",))
-            conn.execute("DELETE FROM scan_duplicates")
-            conn.execute("DELETE FROM people_meta")
+        _forget_people("@le.hoa", duplicates=True)
 
     def test_repeat_scan_is_listed_as_duplicate(self) -> None:
         denied = self.client.get("/v1/people/duplicates")
@@ -803,12 +830,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(again.json()["saved"], 0)
         counted = self.client.get("/v1/people/duplicates", headers=self.headers)
         self.assertEqual(counted.json()["count"], body["count"])
-        with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
-            conn.execute(
-                "DELETE FROM saved_people WHERE username IN ('@do.nam.dup', '@mai.hoa.dup', '@pham.le.dup')"
-            )
-            conn.execute("DELETE FROM scan_duplicates")
-            conn.execute("DELETE FROM people_meta")
+        _forget_people("@do.nam.dup", "@mai.hoa.dup", "@pham.le.dup", duplicates=True)
 
     def _wait_job(self, job_id: str) -> dict[str, object]:
         deadline = time.time() + 20
@@ -922,9 +944,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertTrue(any(item.get("username") == "@mai.lan.pc" for item in again.get("archive", [])))
         listed = self.client.get("/v1/people", headers=self.headers)
         self.assertTrue(any(item["username"] == "@mai.lan.pc" for item in listed.json()["items"]))
-        with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
-            conn.execute("DELETE FROM saved_people WHERE username = ?", ("@mai.lan.pc",))
-            conn.execute("DELETE FROM people_meta")
+        _forget_people("@mai.lan.pc")
         failed_open = self.client.post(
             "/v1/recordings/from-video/job",
             headers=self.headers,
@@ -1708,9 +1728,7 @@ class ActionApiTests(unittest.TestCase):
             any(row.get("username") == "@mai.lan.chia" and row.get("contactName") == "Chị Mai Chia" for row in rows),
             rows,
         )
-        with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
-            conn.execute("DELETE FROM saved_people WHERE username = ?", ("@mai.lan.chia",))
-            conn.execute("DELETE FROM people_meta")
+        _forget_people("@mai.lan.chia")
 
     def test_fast_models_are_served_to_pcs(self) -> None:
         folder = Path(tempfile.mkdtemp(prefix="fb-fast-"))
@@ -1771,11 +1789,7 @@ class ActionApiTests(unittest.TestCase):
             self.assertNotIn("@ba.cc", seen)
         finally:
             people_db.PEOPLE_CAPACITY = previous
-            with sqlite3.connect(os.environ["CONTROL_DB"]) as conn:
-                conn.execute(
-                    "DELETE FROM saved_people WHERE username IN ('@mot.aa', '@hai.bb', '@ba.cc')"
-                )
-                conn.execute("DELETE FROM people_meta")
+            _forget_people("@mot.aa", "@hai.bb", "@ba.cc")
 
 
     def test_pc_without_text_makes_the_hub_reread(self) -> None:
