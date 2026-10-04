@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PC kéo video từ hub, đọc bằng 80% CPU và RAM của máy này, rồi gửi kết quả về.
 
-Mỗi máy nhận tối đa hai video. Một video dùng hết 80%. Hai video thì chia đôi phần đó.
+PC chỉ có CPU nhận tối đa hai video. PC có GPU nhận tối đa bốn video, một card đọc theo lô. Một video dùng hết 80%. Nhiều video thì chia phần đó.
 Máy có card NVIDIA và đã cài bộ đọc GPU thì đọc bằng GPU.
 Chưa cài thì đọc bằng CPU (Tesseract), cùng cách với hub.
 
@@ -65,7 +65,20 @@ _LANES = 4
 _PARALLEL_MIN = 8 * 1024 * 1024
 _PREFIX_BYTES = 8 * 1024 * 1024
 _WAVE_BYTES = 32 * 1024 * 1024
-_JOBS_PER_PC = 2
+_JOBS_CPU = 2
+_JOBS_GPU = 4
+
+
+def jobs_per_machine() -> int:
+    """CPU đọc hai video. GPU đã nạp thì đọc bốn video trên một card."""
+    try:
+        if reader_ready():
+            return _JOBS_GPU
+    except Exception:
+        return _JOBS_CPU
+    return _JOBS_CPU
+
+
 _FAST_URL = "https://github.com/tesseract-ocr/tessdata_fast/raw/main/{name}.traineddata"
 # Bộ chữ nhanh nhỏ hơn nhiều bộ chữ chuẩn (vie chuẩn 7,8 MB, eng chuẩn 23 MB). Ngoài khoảng này là tải nhầm.
 _FAST_BOUNDS = {"eng": (1_000_000, 12_000_000), "vie": (200_000, 3_000_000)}
@@ -228,7 +241,7 @@ def idle_budget(cpu_count: int, ram_bytes: int | None) -> int:
 
 
 class _JobSlots:
-    """Đếm video đang giữ trên máy này và chia số lõi khi có hai video."""
+    """Đếm video đang giữ trên máy này và chia số lõi cho số video đang đọc."""
 
     def __init__(self, workers: int) -> None:
         self.workers = max(1, workers)
@@ -241,7 +254,7 @@ class _JobSlots:
 
     def take(self) -> bool:
         with self._lock:
-            if self.held >= _JOBS_PER_PC:
+            if self.held >= jobs_per_machine():
                 return False
             self.held += 1
             return True
@@ -253,9 +266,9 @@ class _JobSlots:
     def share(self) -> int:
         with self._lock:
             running = self.held
-        if running >= 2:
-            return max(1, self.workers // 2)
-        return self.workers
+        if running <= 1:
+            return self.workers
+        return max(1, self.workers // running)
 
     def busy(self) -> int:
         with self._lock:
@@ -808,6 +821,23 @@ def _hold_while_downloading(client: HubClient, job_id: str, worker_id: str, stop
             return
 
 
+def _guarded_read(
+    client: HubClient,
+    worker_id: str,
+    job_id: str,
+    resume: dict[str, object] | None = None,
+    slots: _JobSlots | None = None,
+) -> None:
+    """Lỗi bất ngờ thì báo hub đọc tiếp. Mất cả đường báo thì hub vẫn nhận lại video khi hết hạn giữ."""
+    try:
+        _read_one(client, worker_id, job_id, resume, slots)
+    except Exception:
+        try:
+            client.fail(job_id, worker_id, "PC gặp lỗi khi đọc. Máy chủ sẽ đọc tiếp.")
+        except Exception:
+            return
+
+
 def _read_one(
     client: HubClient,
     worker_id: str,
@@ -1264,7 +1294,7 @@ def main() -> None:
 
             def _run(job_id: str = job_id, resume: dict[str, object] | None = resume) -> None:
                 try:
-                    _read_one(client, str(state["worker_id"]), job_id, resume, slots)
+                    _guarded_read(client, str(state["worker_id"]), job_id, resume, slots)
                 finally:
                     slots.give()
                     set_reading(False)

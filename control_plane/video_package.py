@@ -12,7 +12,8 @@ SETUP_NAME = "FbPollerVideo.zip"
 _REQUIREMENTS = "pillow\nrapidocr-onnxruntime\n"
 _GUIDE = """fb-poller video worker
 
-PC đọc video bằng CPU. Tên và @ được đối chiếu: Tesseract nhanh, Tesseract chuẩn, rồi RapidOCR trên đúng dòng chữ.
+PC chỉ có CPU nhận tối đa hai video. PC có GPU nhận tối đa bốn video. Cả video đọc 4 hình mỗi giây. Đoạn không ra tên thì đọc lại đúng đoạn đó ở 8 hình mỗi giây.
+PC đọc video bằng CPU khi chưa có bộ đọc GPU. Tên và @ được đối chiếu: Tesseract nhanh, Tesseract chuẩn, rồi RapidOCR trên đúng dòng chữ.
 Khi bạn đang dùng máy, PC đọc bằng 80% lõi. Máy rảnh 2 phút thì dùng gần hết lõi, chừa một lõi cho nhịp nối hub.
 Chương trình chạy ở mức ưu tiên thấp, nên các ứng dụng của bạn vẫn được ưu tiên.
 Gói này không chứa token và không chứa dữ liệu đã lưu.

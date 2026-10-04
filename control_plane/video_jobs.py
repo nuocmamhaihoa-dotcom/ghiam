@@ -1,4 +1,4 @@
-"""Tiến trình đọc một video. Nằm trong bộ nhớ, mất khi hub khởi động lại."""
+"""Tiến trình đọc một video. Việc đang chạy nằm trong bộ nhớ; sổ SQLite giữ hàng chờ và lịch sử."""
 
 from __future__ import annotations
 
@@ -9,10 +9,71 @@ from pathlib import Path
 from typing import Any
 
 from control_plane.screen_steps import _MAX_FRAMES, ReadProgress, discard_video_work
+from control_plane.video_ledger import current_rev, mark_missing, open_rows, save_job
 
 # Mỗi khung đã đọc đều được nhớ để đọc nối, và để ghép hai phần video của hai PC.
 _FRAME_LIMIT = _MAX_FRAMES
 _PEOPLE_LIMIT = 20_000
+
+
+def _step_rank(task: str) -> int:
+    """Thứ tự bước trên thanh. 0 là nhãn lạ, luôn được ghi. Bước sau không bị nhãn bước trước ghi đè."""
+    text = " ".join(task.split())
+    if not text:
+        return 0
+    if "Đọc lại" in text:
+        return 4
+    if text.startswith("Ghép") or text.startswith("Ghi"):
+        return 5
+    if "Đọc chữ" in text or "Đọc tiếp" in text:
+        return 3
+    if "Tách" in text or "Chọn khung" in text or "thời lượng" in text:
+        return 2
+    if "Đã nhận" in text or "Đang gửi" in text or "Đang chờ" in text or "PC phụ đang đọc" in text:
+        return 1
+    return 0
+
+
+def _load_frames(raw: object) -> dict[str, tuple[list[str], list[dict[str, str]]]]:
+    frames: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
+    if not isinstance(raw, list):
+        return frames
+    for frame in raw:
+        if not isinstance(frame, dict) or len(frames) >= _FRAME_LIMIT:
+            continue
+        try:
+            stamp = float(frame.get("t"))
+        except (TypeError, ValueError):
+            continue
+        captions = frame.get("captions") if isinstance(frame.get("captions"), list) else []
+        sightings = frame.get("sightings") if isinstance(frame.get("sightings"), list) else []
+        kept_captions = [" ".join(str(item).split())[:180] for item in captions[:20] if str(item).strip()]
+        kept_sightings: list[dict[str, str]] = []
+        for item in sightings[:30]:
+            if not isinstance(item, dict):
+                continue
+            kept_sightings.append(
+                {
+                    "kind": " ".join(str(item.get("kind") or "").split())[:40],
+                    "name": " ".join(str(item.get("name") or "").split())[:80],
+                    "contactName": " ".join(str(item.get("contactName") or "").split())[:80],
+                    "username": " ".join(str(item.get("username") or "").split())[:40],
+                }
+            )
+        frames[f"{stamp:.3f}"] = (kept_captions, kept_sightings)
+    return frames
+
+
+def _tally_from(row: dict[str, Any]) -> dict[str, int] | None:
+    try:
+        contacts = max(0, int(row.get("seenContacts") or 0))
+        accounts = max(0, int(row.get("seenAccounts") or 0))
+        saved = max(0, int(row.get("savedPeople") or 0))
+    except (TypeError, ValueError):
+        return None
+    if not contacts and not accounts and not saved:
+        return None
+    return {"contacts": contacts, "accounts": accounts, "saved": saved}
 
 
 class VideoJob:
@@ -30,6 +91,8 @@ class VideoJob:
         self.archive_count = 0
         self.duplicates: list[dict[str, str]] = []
         self.path: Path | None = None
+        # Đường dẫn ghi vào sổ trước khi cho PC nhận. PC chỉ nhận khi path đã gắn.
+        self._stored_path: Path | None = None
         self.owner = ""
         self.lease = 0.0
         self._frames: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
@@ -42,16 +105,86 @@ class VideoJob:
         self.parent_id = ""
         self.part_ids: list[str] = []
         self.part_label = ""
+        self.name = ""
+        self.source = ""
+        self.size = 0
+        self.created_at = time.time()
+        self.started_at: float | None = None
+        self.finished_at: float | None = None
+        self._rev = 0
         self._merging = False
         self._lock = threading.Lock()
+
+    def _state_locked(self) -> str:
+        if self.done and self.error:
+            return "failed"
+        if self.done:
+            return "done"
+        if self.owner:
+            return "reading"
+        return "queued"
+
+    def _snapshot_locked(self) -> dict[str, Any]:
+        frames = [
+            {"t": float(key), "captions": list(captions), "sightings": [dict(item) for item in sightings]}
+            for key, (captions, sightings) in self._frames.items()
+        ]
+        self._rev += 1
+        stored = self.path if self.path is not None else self._stored_path
+        return {
+            "id": self.id,
+            "name": self.name,
+            "source": self.source,
+            "size": self.size,
+            "state": self._state_locked(),
+            "percent": self.percent,
+            "task": self.task,
+            "problems": list(self.problems),
+            "error": self.error,
+            "worker": self.owner,
+            "path": str(stored) if stored is not None else "",
+            "createdAt": self.created_at,
+            "startedAt": self.started_at,
+            "finishedAt": self.finished_at,
+            "savedPeople": self.saved_people,
+            "seenContacts": max(0, int((self._tally or {}).get("contacts") or 0)),
+            "seenAccounts": max(0, int((self._tally or {}).get("accounts") or 0)),
+            "parentId": self.parent_id,
+            "partLabel": self.part_label,
+            "partIds": list(self.part_ids),
+            "frames": frames,
+            "rev": self._rev,
+        }
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return self._snapshot_locked()
+
+    def _persist(self, row: dict[str, Any], force: bool) -> None:
+        try:
+            save_job(row, force=force)
+        except Exception:
+            return
+
+    def stage_file(self, path: Path) -> None:
+        """Ghi đường dẫn vào sổ để hub khởi động lại còn file. Chưa cho PC nhận."""
+        with self._lock:
+            self._stored_path = path
+            row = self._snapshot_locked()
+        self._persist(row, True)
 
     def bind(self, path: Path) -> None:
         with self._lock:
             self.path = path
+            self._stored_path = path
+            row = self._snapshot_locked()
+        self._persist(row, True)
 
     def set_parts(self, part_ids: list[str]) -> None:
         with self._lock:
             self.part_ids = list(part_ids)
+            row = self._snapshot_locked()
+        self._persist(row, True)
 
     def begin_merge(self) -> bool:
         with self._lock:
@@ -79,11 +212,47 @@ class VideoJob:
             self.task = "Đã đọc xong phần này"
             self.done = True
             self.error = ""
-            return True
+            self.finished_at = time.time()
+            row = self._snapshot_locked()
+        self._persist(row, True)
+        return True
 
     def source_path(self) -> Path | None:
         with self._lock:
             return self.path
+
+    def located_file(self) -> tuple[Path | None, bool]:
+        """Đường dẫn đang nhớ, và cờ cho biết PC đã được phép nhận video này."""
+        with self._lock:
+            if self.path is not None:
+                return self.path, True
+            return self._stored_path, False
+
+    def has_frames(self) -> bool:
+        with self._lock:
+            return bool(self._frames)
+
+    def abandon_hub(self) -> bool:
+        """Máy chủ giữ video nhưng luồng đọc đã mất. Trả về hàng chờ."""
+        with self._lock:
+            if self.done or self.owner != "hub":
+                return False
+            self.owner = ""
+            self.lease = 0.0
+            self.task = "Đọc tiếp"
+            row = self._snapshot_locked()
+        self._persist(row, True)
+        return True
+
+    def clear_parts(self) -> bool:
+        with self._lock:
+            if self.done or not self.part_ids:
+                return False
+            self.part_ids = []
+            self.task = "Đọc tiếp"
+            row = self._snapshot_locked()
+        self._persist(row, True)
+        return True
 
     def succeeded(self) -> bool:
         with self._lock:
@@ -91,8 +260,11 @@ class VideoJob:
 
     def discard(self) -> None:
         with self._lock:
-            path = self.path
+            path = self.path if self.path is not None else self._stored_path
             self.path = None
+            self._stored_path = None
+            row = self._snapshot_locked()
+        self._persist(row, True)
         if path is not None:
             discard_video_work(path)
 
@@ -115,6 +287,8 @@ class VideoJob:
             if key not in self._frames and len(self._frames) >= _FRAME_LIMIT:
                 return
             self._frames[key] = (kept_captions, kept_sightings)
+            row = self._snapshot_locked()
+        self._persist(row, False)
 
     def remembered(self) -> dict[str, tuple[list[str], list[dict[str, str]]]]:
         with self._lock:
@@ -172,7 +346,9 @@ class VideoJob:
             self._reread = True
             self._frames.clear()
             self._staged = None
-            return True
+            row = self._snapshot_locked()
+        self._persist(row, True)
+        return True
 
     def reread_started(self) -> bool:
         with self._lock:
@@ -204,14 +380,17 @@ class VideoJob:
             self.error = ""
             self.owner = ""
             self.lease = 0.0
+            self.finished_at = None
             self.task = "Đọc tiếp"
-            return True
+            row = self._snapshot_locked()
+        self._persist(row, True)
+        return True
 
     def owner_id(self) -> str:
         with self._lock:
             return self.owner
 
-    def claim(self, worker_id: str) -> bool:
+    def _claim_mark(self, worker_id: str) -> bool:
         with self._lock:
             if self.done or self.owner or self.path is None or self.part_ids or not worker_id:
                 return False
@@ -219,7 +398,15 @@ class VideoJob:
             self.lease = time.monotonic()
             self.percent = max(self.percent, 8)
             self.task = "PC phụ đang đọc"
+            if self.started_at is None:
+                self.started_at = time.time()
             return True
+
+    def claim(self, worker_id: str) -> bool:
+        if not self._claim_mark(worker_id):
+            return False
+        self._persist(self.snapshot(), True)
+        return True
 
     def take_hub(self) -> bool:
         with self._lock:
@@ -227,7 +414,11 @@ class VideoJob:
                 return False
             self.owner = "hub"
             self.lease = time.monotonic()
-            return True
+            if self.started_at is None:
+                self.started_at = time.time()
+            row = self._snapshot_locked()
+        self._persist(row, True)
+        return True
 
     def release(self, worker_id: str) -> bool:
         with self._lock:
@@ -235,7 +426,9 @@ class VideoJob:
                 return False
             self.owner = ""
             self.lease = 0.0
-            return True
+            row = self._snapshot_locked()
+        self._persist(row, True)
+        return True
 
     def note_worker(self, worker_id: str) -> bool:
         with self._lock:
@@ -263,10 +456,14 @@ class VideoJob:
             clamped = max(0, min(99, int(percent)))
             self.percent = max(self.percent, clamped)
             cleaned = " ".join(task.split())[:180]
+            if cleaned and _step_rank(cleaned) and _step_rank(cleaned) < _step_rank(self.task):
+                cleaned = ""
             if cleaned:
                 self.task = cleaned
             if self.owner and self.owner != "hub":
                 self.lease = time.monotonic()
+            row = self._snapshot_locked()
+        self._persist(row, False)
 
     def note_learned(self, text: str) -> None:
         cleaned = " ".join(str(text).split())[:400]
@@ -283,6 +480,8 @@ class VideoJob:
             if len(self.problems) >= 20 or cleaned in self.problems:
                 return
             self.problems.append(cleaned)
+            row = self._snapshot_locked()
+        self._persist(row, True)
         try:
             from control_plane.issues import record_video_problem
 
@@ -302,6 +501,8 @@ class VideoJob:
             if self.done:
                 return
             self._finish_locked(people, saved_people, archive, archive_count, duplicates)
+            row = self._snapshot_locked()
+        self._persist(row, True)
 
     def finish_from_worker(
         self,
@@ -316,7 +517,9 @@ class VideoJob:
             if self.done or self.owner != worker_id or not worker_id:
                 return False
             self._finish_locked(people, saved_people, archive, archive_count, duplicates)
-            return True
+            row = self._snapshot_locked()
+        self._persist(row, True)
+        return True
 
     def _finish_locked(
         self,
@@ -335,6 +538,7 @@ class VideoJob:
         self.archive = archive
         self.archive_count = archive_count
         self.duplicates = list(duplicates or [])
+        self.finished_at = time.time()
 
     def fail(self, message: str) -> None:
         cleaned = " ".join(str(message).split())[:180] or "Gặp vấn đề"
@@ -342,6 +546,8 @@ class VideoJob:
             if self.done:
                 return
             self._fail_locked(cleaned)
+            row = self._snapshot_locked()
+        self._persist(row, True)
 
     def fail_from_worker(self, worker_id: str, message: str) -> bool:
         cleaned = " ".join(str(message).split())[:180] or "Gặp vấn đề"
@@ -349,12 +555,15 @@ class VideoJob:
             if self.done or self.owner != worker_id or not worker_id:
                 return False
             self._fail_locked(cleaned)
-            return True
+            row = self._snapshot_locked()
+        self._persist(row, True)
+        return True
 
     def _fail_locked(self, cleaned: str) -> None:
         self.task = "Gặp vấn đề"
         self.done = True
         self.error = cleaned
+        self.finished_at = time.time()
         if cleaned not in self.problems and len(self.problems) < 20:
             self.problems.append(cleaned)
         try:
@@ -410,19 +619,134 @@ class JobStore:
         self._jobs: dict[str, VideoJob] = {}
         self._lock = threading.Lock()
 
-    def create(self) -> VideoJob:
-        job = VideoJob(uuid.uuid4().hex)
-        dropped: list[VideoJob] = []
+    def create(self, job_id: str = "", *, name: str = "", source: str = "", size: int = 0) -> VideoJob:
+        key = "".join(ch for ch in str(job_id or "") if ch.isalnum())[:64] or uuid.uuid4().hex
+        job = VideoJob(key)
+        job.name = " ".join(str(name or "").split())[:120]
+        job.source = " ".join(str(source or "").split())[:80]
+        job.size = max(0, int(size or 0))
+        job.created_at = time.time()
+        job._rev = current_rev(key)
         with self._lock:
-            done_ids = [key for key, item in self._jobs.items() if item.done and not self._waiting_part(item)]
-            while len(self._jobs) >= 40 and done_ids:
-                old = self._jobs.pop(done_ids.pop(), None)
-                if old is not None:
-                    dropped.append(old)
+            current = self._jobs.get(key)
+            if current is not None:
+                return current
+            dropped = self._take_room_locked()
             self._jobs[job.id] = job
-        for old in dropped:
-            old.discard()
+        self._release_dropped(dropped)
+        job._persist(job.snapshot(), True)
         return job
+
+    def adopt(self, row: dict[str, Any]) -> VideoJob | None:
+        """Dựng lại việc chưa xong. Máy đang đọc được bỏ, để nhận lại từ đầu hàng."""
+        job_id = "".join(ch for ch in str(row.get("id") or "") if ch.isalnum())[:64]
+        if not job_id:
+            return None
+        job = VideoJob(job_id)
+        job.name = " ".join(str(row.get("name") or "").split())[:120]
+        job.source = " ".join(str(row.get("source") or "").split())[:80]
+        job.size = max(0, int(row.get("size") or 0))
+        job.percent = max(0, min(100, int(row.get("percent") or 0)))
+        job.problems = [str(item) for item in row.get("problems") or [] if str(item).strip()][:20]
+        job.saved_people = max(0, int(row.get("savedPeople") or 0))
+        job.parent_id = " ".join(str(row.get("parentId") or "").split())[:64]
+        job.part_label = " ".join(str(row.get("partLabel") or "").split())[:40]
+        job.part_ids = [str(item) for item in row.get("partIds") or [] if str(item).strip()]
+        raw_path = str(row.get("path") or "")
+        stored = Path(raw_path) if raw_path else None
+        job._stored_path = stored
+        created = row.get("createdAt")
+        job.created_at = float(created) if isinstance(created, (int, float)) else time.time()
+        started = row.get("startedAt")
+        job.started_at = float(started) if isinstance(started, (int, float)) else None
+        previous = str(row.get("state") or "")
+        task = " ".join(str(row.get("task") or "").split())[:180]
+        arranging = task == "Đang sắp xếp video"
+        job.path = None if arranging else stored
+        if arranging:
+            job.task = task
+        elif job.part_ids:
+            job.task = task or "Chia video cho hai PC"
+        elif previous == "reading":
+            job.task = "Đọc tiếp"
+        else:
+            job.task = task or "Đang chờ"
+        try:
+            job._rev = max(0, int(row.get("rev") or 0))
+        except (TypeError, ValueError):
+            job._rev = 0
+        job._frames = _load_frames(row.get("frames"))
+        job._tally = _tally_from(row)
+        with self._lock:
+            if job_id in self._jobs:
+                return None
+            self._jobs[job_id] = job
+        job._persist(job.snapshot(), True)
+        return job
+
+    def recall(self, row: dict[str, Any]) -> VideoJob | None:
+        """Dựng lại video đã lỗi để bấm Đọc lại. Chưa ghi sổ cho đến khi đọc nối."""
+        job_id = "".join(ch for ch in str(row.get("id") or "") if ch.isalnum())[:64]
+        if not job_id:
+            return None
+        with self._lock:
+            current = self._jobs.get(job_id)
+            if current is not None:
+                return current
+        job = VideoJob(job_id)
+        job.name = " ".join(str(row.get("name") or "").split())[:120]
+        job.source = " ".join(str(row.get("source") or "").split())[:80]
+        job.size = max(0, int(row.get("size") or 0))
+        job.percent = max(0, min(100, int(row.get("percent") or 0)))
+        job.task = " ".join(str(row.get("task") or "").split())[:180] or "Gặp vấn đề"
+        job.problems = [str(item) for item in row.get("problems") or [] if str(item).strip()][:20]
+        job.saved_people = max(0, int(row.get("savedPeople") or 0))
+        job._tally = _tally_from(row)
+        job.parent_id = " ".join(str(row.get("parentId") or "").split())[:64]
+        job.part_label = " ".join(str(row.get("partLabel") or "").split())[:40]
+        job.part_ids = [str(item) for item in row.get("partIds") or [] if str(item).strip()]
+        raw_path = str(row.get("path") or "")
+        if raw_path:
+            job.path = Path(raw_path)
+            job._stored_path = job.path
+        created = row.get("createdAt")
+        job.created_at = float(created) if isinstance(created, (int, float)) else time.time()
+        started = row.get("startedAt")
+        job.started_at = float(started) if isinstance(started, (int, float)) else None
+        finished = row.get("finishedAt")
+        job.finished_at = float(finished) if isinstance(finished, (int, float)) else time.time()
+        job.done = True
+        job.error = " ".join(str(row.get("error") or "").split())[:180] or "Gặp vấn đề"
+        try:
+            job._rev = max(0, int(row.get("rev") or 0))
+        except (TypeError, ValueError):
+            job._rev = 0
+        job._frames = _load_frames(row.get("frames"))
+        with self._lock:
+            current = self._jobs.get(job_id)
+            if current is not None:
+                return current
+            dropped = self._take_room_locked()
+            self._jobs[job_id] = job
+        self._release_dropped(dropped)
+        return job
+
+    def _take_room_locked(self) -> list[VideoJob]:
+        """Đẩy việc đã xong ra khỏi bộ nhớ. Gọi khi đang giữ khóa kho."""
+        dropped: list[VideoJob] = []
+        done_ids = [item_id for item_id, item in self._jobs.items() if item.done and not self._waiting_part(item)]
+        while len(self._jobs) >= 40 and done_ids:
+            old = self._jobs.pop(done_ids.pop(), None)
+            if old is not None:
+                dropped.append(old)
+        return dropped
+
+    def _release_dropped(self, dropped: list[VideoJob]) -> None:
+        """Video ghi xong thì xóa file. Video lỗi chỉ rời bộ nhớ, file còn để đọc lại."""
+        for old in dropped:
+            if old.error:
+                continue
+            old.discard()
 
     def _waiting_part(self, item: VideoJob) -> bool:
         """Phần đã xong nhưng việc cha chưa ghép thì giữ lại. Gọi khi đang giữ khóa."""
@@ -435,19 +759,27 @@ class JobStore:
         with self._lock:
             return self._jobs.get(job_id)
 
+    def all(self) -> list[VideoJob]:
+        with self._lock:
+            return list(self._jobs.values())
+
     def parts(self, job: VideoJob) -> list[VideoJob | None]:
         with self._lock:
             return [self._jobs.get(part_id) for part_id in job.part_ids]
 
     def claim_next(self, worker_id: str, spread: bool = False) -> VideoJob | None:
         """spread: PC đang giữ một phần của video thì để phần kia cho PC khác."""
+        chosen: VideoJob | None = None
         with self._lock:
             for job in self._jobs.values():
                 if spread and job.parent_id and self._holds_sibling(job, worker_id):
                     continue
-                if job.claim(worker_id):
-                    return job
-        return None
+                if job._claim_mark(worker_id):
+                    chosen = job
+                    break
+        if chosen is not None:
+            chosen._persist(chosen.snapshot(), True)
+        return chosen
 
     def _holds_sibling(self, job: VideoJob, worker_id: str) -> bool:
         parent = self._jobs.get(job.parent_id)
@@ -461,6 +793,25 @@ class JobStore:
 
 
 jobs = JobStore()
+
+
+def restore_open() -> list[tuple[str, Path]]:
+    """Dựng lại việc còn file. Việc đang gửi nằm ở sổ lần gửi, không đọc ở đây."""
+    ready: list[tuple[str, Path]] = []
+    for row in open_rows():
+        job_id = str(row.get("id") or "")
+        if not job_id or jobs.get(job_id) is not None:
+            continue
+        raw_path = str(row.get("path") or "")
+        path = Path(raw_path) if raw_path else None
+        if path is None or not path.is_file():
+            mark_missing(job_id)
+            continue
+        job = jobs.adopt(row)
+        if job is None or job.part_ids:
+            continue
+        ready.append((job.id, path))
+    return ready
 
 
 class JobProgress(ReadProgress):

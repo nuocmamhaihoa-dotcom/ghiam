@@ -6,7 +6,7 @@ import os
 import unittest
 
 from control_plane import stage_timing
-from control_plane.video_helpers import HelperBook, clean_hardware, clean_timing
+from control_plane.video_helpers import HelperBook, clean_hardware, clean_timing, slots_for
 from pc_agent import pc_hardware, pc_power
 from pc_agent.video_worker import hardware_line, idle_budget, worker_budget
 
@@ -47,6 +47,21 @@ class PowerBudgetTests(unittest.TestCase):
         self.assertIsNone(pc_power.idle_seconds())
         self.assertFalse(pc_power.keep_full_speed())
         self.assertFalse(pc_power.raise_this_thread())
+
+
+class HelperSlotTests(unittest.TestCase):
+    def test_a_gpu_pc_holds_four_and_a_cpu_pc_holds_two(self) -> None:
+        self.assertEqual(slots_for(False), 2)
+        self.assertEqual(slots_for(True), 4)
+        book = HelperBook(None)
+        book.beat("cpu", "cpu", 8, gpu=False)
+        book.beat("gpu", "gpu", 8, gpu=True, gpu_name="RTX")
+        self.assertTrue(book.try_hold("cpu"))
+        self.assertTrue(book.try_hold("cpu"))
+        self.assertFalse(book.try_hold("cpu"))
+        for _ in range(4):
+            self.assertTrue(book.try_hold("gpu"))
+        self.assertFalse(book.try_hold("gpu"))
 
 
 class HardwareReportTests(unittest.TestCase):

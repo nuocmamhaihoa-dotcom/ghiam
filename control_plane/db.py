@@ -134,9 +134,37 @@ def init_db(db_path: Path) -> None:
               at TEXT NOT NULL,
               line TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS video_jobs (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL DEFAULT '',
+              source TEXT NOT NULL DEFAULT '',
+              size INTEGER NOT NULL DEFAULT 0,
+              state TEXT NOT NULL,
+              percent INTEGER NOT NULL DEFAULT 0,
+              task TEXT NOT NULL DEFAULT '',
+              problems_json TEXT NOT NULL DEFAULT '[]',
+              error TEXT NOT NULL DEFAULT '',
+              worker TEXT NOT NULL DEFAULT '',
+              path TEXT NOT NULL DEFAULT '',
+              created_at REAL NOT NULL,
+              started_at REAL,
+              finished_at REAL,
+              saved_people INTEGER NOT NULL DEFAULT 0,
+              seen_contacts INTEGER NOT NULL DEFAULT 0,
+              seen_accounts INTEGER NOT NULL DEFAULT 0,
+              parent_id TEXT NOT NULL DEFAULT '',
+              part_label TEXT NOT NULL DEFAULT '',
+              part_ids_json TEXT NOT NULL DEFAULT '[]',
+              frames_json TEXT NOT NULL DEFAULT '[]',
+              upload_id TEXT NOT NULL DEFAULT '',
+              rev INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_video_jobs_state_created
+              ON video_jobs(state, created_at);
             """
         )
         _ensure_people_extras(conn)
+        _ensure_video_counts(conn)
         conn.commit()
 
 
@@ -604,6 +632,17 @@ def _ensure_people_extras(conn: sqlite3.Connection) -> None:
     columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(people_meta)").fetchall()}
     if columns and "duplicates" not in columns:
         conn.execute("ALTER TABLE people_meta ADD COLUMN duplicates INTEGER NOT NULL DEFAULT 0")
+
+
+def _ensure_video_counts(conn: sqlite3.Connection) -> None:
+    """Số người thấy trong danh bạ và số người có tài khoản, cho sổ video đã tạo từ bản trước."""
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(video_jobs)").fetchall()}
+    if not columns:
+        return
+    if "seen_contacts" not in columns:
+        conn.execute("ALTER TABLE video_jobs ADD COLUMN seen_contacts INTEGER NOT NULL DEFAULT 0")
+    if "seen_accounts" not in columns:
+        conn.execute("ALTER TABLE video_jobs ADD COLUMN seen_accounts INTEGER NOT NULL DEFAULT 0")
 
 
 def _ensure_people_meta(conn: sqlite3.Connection) -> tuple[int, int, int]:

@@ -26,8 +26,11 @@ from control_plane.screen_steps import (
     _media_env,
     _media_seconds,
     _read_frames,
+    _read_label,
+    _read_span,
     _sample_previews,
     _sample_rate,
+    _unread_windows,
     _saved_frames,
     analyze_screen_video,
     clean_ocr,
@@ -215,15 +218,39 @@ class ScreenVideoTests(unittest.TestCase):
         self.assertEqual(len(chosen), 1001)
         self.assertFalse(any("1000" in text for text in sink.problems))
 
-    def test_a_long_video_is_sampled_across_its_whole_length(self) -> None:
-        rate = _sample_rate(7200)
-        self.assertGreater(rate, 0)
-        self.assertAlmostEqual(rate * 7200, _MAX_FRAMES, places=3)
+    def test_a_video_past_three_hours_is_spread_across_the_frame_cap(self) -> None:
+        duration = 4 * 60 * 60
+        rate = _sample_rate(duration)
+        self.assertLess(rate, 4.0)
+        self.assertAlmostEqual(rate * duration, _MAX_FRAMES, places=3)
 
-    def test_a_twenty_minute_video_keeps_eight_frames_a_second(self) -> None:
-        self.assertEqual(_sample_rate(20 * 60), 8.0)
-        self.assertEqual(_sample_rate(30 * 60), 8.0)
-        self.assertLess(_sample_rate(40 * 60), 8.0)
+    def test_read_span_follows_the_whole_video(self) -> None:
+        early = [(0.0, Path("a.png")), (10.0, Path("b.png"))]
+        late = [(1800.0, Path("c.png")), (3590.0, Path("d.png"))]
+        _early_lo, early_hi = _read_span(early, 3600.0)
+        late_lo, _late_hi = _read_span(late, 3600.0)
+        self.assertLess(early_hi, late_lo)
+        self.assertEqual(_read_label(late, 3600.0), "Đọc chữ, phút 59/60")
+        self.assertTrue(_read_label(late, 3600.0, continued=True).startswith("Đọc tiếp"))
+
+    def test_a_full_video_keeps_four_frames_a_second(self) -> None:
+        self.assertEqual(_sample_rate(20 * 60), 4.0)
+        self.assertEqual(_sample_rate(30 * 60), 4.0)
+        self.assertEqual(_sample_rate(40 * 60), 4.0)
+        self.assertEqual(_sample_rate(60 * 60), 4.0)
+        self.assertEqual(_sample_rate(3 * 60 * 60), 4.0)
+
+    def test_unread_windows_merge_misses_and_keep_a_named_frame_out(self) -> None:
+        person = {"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"}
+        readings = [
+            (0.0, [], []),
+            (0.5, [], []),
+            (2.0, [], [person]),
+            (3.0, [], []),
+            (3.4, [], []),
+        ]
+        self.assertEqual(_unread_windows(readings), [(0.0, 1.5), (2.0, 4.4)])
+        self.assertEqual(_unread_windows([(1.0, [], [person])]), [])
 
     def test_a_long_extract_is_split_into_four_ranges(self) -> None:
         ranges = _segment_ranges(96, 0)
