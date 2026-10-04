@@ -214,7 +214,7 @@
         <h2>Hàng chờ</h2>
         <div id="boardQueued"></div>
         <h2>Báo cáo 24 giờ</h2>
-        <p class="board-note">Mỗi video ghi tên máy, số người thấy trong danh bạ, số người có tài khoản, và số người ghi được. Báo cáo giữ 24 giờ rồi xóa. Video lỗi còn file, bấm Đọc lại để làm tiếp.</p>
+        <p class="board-note">Mỗi video ghi tên máy, số người thấy trong danh bạ, số người có tài khoản, và số người ghi được. Báo cáo giữ 24 giờ rồi xóa. Người đã quét được giữ vĩnh viễn. Video lỗi còn file, bấm Đọc lại để làm tiếp.</p>
         <div id="boardPhones"></div>
         <div id="boardHistory"></div>
       </section>
@@ -262,7 +262,7 @@
 
     <section data-view="people" hidden>
       <h2>Kết quả đã lưu</h2>
-      <p class="lead">Mỗi người đủ tên, tên trong danh bạ và tài khoản là một dòng. Kho chứa được 50 triệu kết quả.</p>
+      <p class="lead">Mỗi người đủ tên, tên trong danh bạ và tài khoản là một dòng. Kho chứa được 50 triệu kết quả. Dữ liệu đã quét được giữ vĩnh viễn, có hai bản dự phòng.</p>
       <div class="scroll">
         <table>
           <thead>
@@ -395,7 +395,7 @@
       $("peopleRows").innerHTML = personTable(items, "Chưa có người đủ ba cột.");
       $("savedHomeBody").innerHTML = personTable(items, "Chưa có người đủ ba cột.");
       const count = typeof total === "number" ? total : items.length;
-      $("storeCount").textContent = count + " người đã lưu. Kho chứa được 50 triệu kết quả.";
+      $("storeCount").textContent = count + " người đã lưu. Kho chứa được 50 triệu kết quả. Dữ liệu đã quét được giữ vĩnh viễn, có hai bản dự phòng.";
       $("savedMore").hidden = !peopleCursor;
     }
     function renderDuplicates(items) {

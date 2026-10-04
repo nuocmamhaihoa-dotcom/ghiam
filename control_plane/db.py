@@ -7,6 +7,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
+from control_plane import scan_vault
+
 # Một người là một kết quả. Kho dừng nhận người mới khi đủ số này.
 PEOPLE_CAPACITY = 50_000_000
 people_write_lock = threading.RLock()
@@ -165,7 +167,9 @@ def init_db(db_path: Path) -> None:
         )
         _ensure_people_extras(conn)
         _ensure_video_counts(conn)
+        scan_vault.ensure(conn)
         conn.commit()
+    scan_vault.startup(db_path)
 
 
 @contextmanager
@@ -814,8 +818,12 @@ def _load_duplicate_map(conn: sqlite3.Connection, keys: list[str]) -> dict[str, 
 
 
 def save_duplicates(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> list[str]:
-    """Một dòng cho mỗi người đã có trong kho. Lần quét sau ghi đè dòng trùng đó."""
+    """Một dòng cho mỗi người đã có trong kho. Lần quét sau ghi đè dòng trùng đó.
+
+    Mỗi lần nội dung đổi vẫn được thêm vào sổ vĩnh viễn, kể cả khi bảng đang dùng đã đủ chỗ.
+    """
     skipped: list[str] = []
+    fresh: list[dict[str, Any]] = []
     with people_write_lock:
         with session(db_path) as conn:
             conn.execute("PRAGMA synchronous=FULL;")
@@ -836,36 +844,56 @@ def save_duplicates(db_path: Path, rows: list[dict[str, str]], updated_at: str) 
                     and old["username"] == username
                 ):
                     continue
+                kept = True
                 if old is None:
                     if duplicates >= PEOPLE_CAPACITY:
                         skipped.append(key)
-                        continue
-                    duplicates += 1
-                conn.execute(
-                    """
-                    INSERT INTO scan_duplicates(name_key, name, contact_name, username, updated_at)
-                    VALUES(?,?,?,?,?)
-                    ON CONFLICT(name_key) DO UPDATE SET
-                      name=excluded.name,
-                      contact_name=excluded.contact_name,
-                      username=excluded.username,
-                      updated_at=excluded.updated_at
-                    """,
-                    (key, name, contact_name, username, updated_at),
+                        kept = False
+                    else:
+                        duplicates += 1
+                if kept:
+                    conn.execute(
+                        """
+                        INSERT INTO scan_duplicates(name_key, name, contact_name, username, updated_at)
+                        VALUES(?,?,?,?,?)
+                        ON CONFLICT(name_key) DO UPDATE SET
+                          name=excluded.name,
+                          contact_name=excluded.contact_name,
+                          username=excluded.username,
+                          updated_at=excluded.updated_at
+                        """,
+                        (key, name, contact_name, username, updated_at),
+                    )
+                    current[key] = {
+                        "name_key": key,
+                        "name": name,
+                        "contact_name": contact_name,
+                        "username": username,
+                    }
+                noted = scan_vault.remember(
+                    conn,
+                    recorded_at=updated_at,
+                    kind="duplicate",
+                    name_key=key,
+                    name=name,
+                    contact_name=contact_name,
+                    username=username,
+                    kept=kept,
                 )
-                current[key] = {
-                    "name_key": key,
-                    "name": name,
-                    "contact_name": contact_name,
-                    "username": username,
-                }
+                if noted is not None:
+                    fresh.append(noted)
             conn.execute("UPDATE people_meta SET duplicates=? WHERE id=1", (duplicates,))
+        scan_vault.replicate(db_path, fresh)
     return skipped
 
 
 def save_people(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> list[str]:
-    """Ghi các dòng được đưa vào. Trả về khóa mới bị bỏ vì kho đã đủ."""
+    """Ghi các dòng được đưa vào. Trả về khóa mới bị bỏ vì kho đang dùng đã đủ.
+
+    Kho đang dùng vẫn dừng ở PEOPLE_CAPACITY. Sổ vĩnh viễn vẫn giữ dòng bị bỏ.
+    """
     skipped: list[str] = []
+    fresh: list[dict[str, Any]] = []
     with people_write_lock:
         with session(db_path) as conn:
             conn.execute("PRAGMA synchronous=FULL;")
@@ -889,35 +917,50 @@ def save_people(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> l
                 ):
                     continue
                 now_ready = bool(contact_name and username)
+                kept = True
                 if old is None:
                     if total >= PEOPLE_CAPACITY:
                         skipped.append(key)
-                        continue
-                    total += 1
-                    if now_ready:
-                        ready += 1
-                else:
+                        kept = False
+                    else:
+                        total += 1
+                        if now_ready:
+                            ready += 1
+                elif kept:
                     was_ready = bool(old["contact_name"] and old["username"])
                     if was_ready != now_ready:
                         ready += 1 if now_ready else -1
-                conn.execute(
-                    """
-                    INSERT INTO saved_people(name_key, name, contact_name, username, updated_at)
-                    VALUES(?,?,?,?,?)
-                    ON CONFLICT(name_key) DO UPDATE SET
-                      name=excluded.name,
-                      contact_name=excluded.contact_name,
-                      username=excluded.username,
-                      updated_at=excluded.updated_at
-                    """,
-                    (key, name, contact_name, username, updated_at),
+                if kept:
+                    conn.execute(
+                        """
+                        INSERT INTO saved_people(name_key, name, contact_name, username, updated_at)
+                        VALUES(?,?,?,?,?)
+                        ON CONFLICT(name_key) DO UPDATE SET
+                          name=excluded.name,
+                          contact_name=excluded.contact_name,
+                          username=excluded.username,
+                          updated_at=excluded.updated_at
+                        """,
+                        (key, name, contact_name, username, updated_at),
+                    )
+                    current[key] = {
+                        "name_key": key,
+                        "name": name,
+                        "contact_name": contact_name,
+                        "username": username,
+                    }
+                noted = scan_vault.remember(
+                    conn,
+                    recorded_at=updated_at,
+                    kind="person",
+                    name_key=key,
+                    name=name,
+                    contact_name=contact_name,
+                    username=username,
+                    kept=kept,
                 )
-                current[key] = {
-                    "name_key": key,
-                    "name": name,
-                    "contact_name": contact_name,
-                    "username": username,
-                }
+                if noted is not None:
+                    fresh.append(noted)
             ready = max(0, ready)
             conn.execute(
                 """
@@ -926,6 +969,7 @@ def save_people(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> l
                 """,
                 (total, ready),
             )
+        scan_vault.replicate(db_path, fresh)
     return skipped
 
 

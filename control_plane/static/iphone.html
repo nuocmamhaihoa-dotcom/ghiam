@@ -176,12 +176,12 @@
       <h2>Hàng chờ</h2>
       <div id="boardQueued"></div>
       <h2>Báo cáo 24 giờ</h2>
-      <p class="board-note">Mỗi video ghi tên máy, số người thấy trong danh bạ, số người có tài khoản, và số người ghi được. Báo cáo giữ 24 giờ rồi xóa. Video lỗi còn file, bấm Đọc lại để làm tiếp.</p>
+      <p class="board-note">Mỗi video ghi tên máy, số người thấy trong danh bạ, số người có tài khoản, và số người ghi được. Báo cáo giữ 24 giờ rồi xóa. Người đã quét được giữ vĩnh viễn. Video lỗi còn file, bấm Đọc lại để làm tiếp.</p>
       <div id="boardPhones"></div>
       <div id="boardHistory"></div>
     </section>
     <section id="savedBox">
-      <p id="savedLead">Kết quả đã lưu. Kho chứa được 50 triệu kết quả. Hub tự ghi ngay sau mỗi video. Mở lại trang vẫn còn.</p>
+      <p id="savedLead">Kết quả đã lưu. Kho chứa được 50 triệu kết quả. Dữ liệu đã quét được giữ vĩnh viễn, có hai bản dự phòng. Hub tự ghi ngay sau mỗi video. Mở lại trang vẫn còn.</p>
       <p id="savedEmpty">Chưa có người đủ ba cột.</p>
       <table id="savedTable" hidden>
         <thead>
@@ -515,7 +515,7 @@
     function paintSavedCount(count) {
       const n = Number(count) || 0;
       savedLead.textContent = "Kết quả đã lưu: " + n.toLocaleString("vi-VN")
-        + " người. Kho chứa được 50 triệu kết quả.";
+        + " người. Kho chứa được 50 triệu kết quả. Dữ liệu đã quét được giữ vĩnh viễn, có hai bản dự phòng.";
     }
 
     function showDuplicates(rows) {
