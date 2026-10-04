@@ -11,6 +11,8 @@ from control_plane.screen_people import TextLine
 
 _MIN_CONF = 0.45
 _LOCK = threading.Lock()
+_INFER = threading.Lock()
+_BATCH = 8
 _reader: tuple[str, object] | None = None
 _failed = False
 _note_sent = False
@@ -173,18 +175,11 @@ def reader_ready() -> bool:
 
 
 def prefers_single_worker() -> bool:
-    """Một card đọc một video. Không chia khung của video đó cho nhiều luồng GPU."""
+    """GPU đã nạp thì một card đọc theo lô, không chia khung cho nhiều luồng Tesseract."""
     return reader_ready()
 
 
-def read_lines(image: Path) -> list[TextLine] | None:
-    """Dòng chữ từ GPU, hoặc None để khung đó đọc bằng Tesseract."""
-    if not enabled():
-        return None
-    reader = _load_reader()
-    if reader is None:
-        return None
-    kind, engine = reader
+def _one_image(kind: str, engine: object, image: Path) -> list[TextLine] | None:
     try:
         if kind == "paddle":
             raw = engine.ocr(str(image), cls=False) if hasattr(engine, "ocr") else engine.predict(str(image))
@@ -194,6 +189,50 @@ def read_lines(image: Path) -> list[TextLine] | None:
     except Exception:
         return None
     return lines_from_boxes(boxes)
+
+
+def _easy_batch(engine: object, images: list[Path]) -> list[list[TextLine] | None] | None:
+    batched = getattr(engine, "readtext_batched", None)
+    if not callable(batched):
+        return None
+    try:
+        raws = batched([str(image) for image in images])
+    except Exception:
+        return None
+    if not isinstance(raws, list) or len(raws) != len(images):
+        return None
+    return [lines_from_boxes(_easy_boxes(raw)) for raw in raws]
+
+
+def read_lines_batch(images: list[Path]) -> list[list[TextLine] | None]:
+    """Một lô hình trên cùng một card. None ở vị trí nào thì khung đó đọc bằng Tesseract."""
+    if not images:
+        return []
+    if not enabled():
+        return [None] * len(images)
+    reader = _load_reader()
+    if reader is None:
+        return [None] * len(images)
+    kind, engine = reader
+    found: list[list[TextLine] | None] = []
+    with _INFER:
+        for offset in range(0, len(images), _BATCH):
+            chunk = images[offset : offset + _BATCH]
+            batched = _easy_batch(engine, chunk) if kind == "easy" else None
+            if batched is not None:
+                found.extend(batched)
+                continue
+            for image in chunk:
+                found.append(_one_image(kind, engine, image))
+    return found
+
+
+def read_lines(image: Path) -> list[TextLine] | None:
+    """Dòng chữ từ GPU, hoặc None để khung đó đọc bằng Tesseract."""
+    lines = read_lines_batch([image])
+    if not lines:
+        return None
+    return lines[0]
 
 
 def fallback_note() -> str:

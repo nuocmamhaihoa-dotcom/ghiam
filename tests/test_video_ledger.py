@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from control_plane import db, video_ledger
+from control_plane import db, video_ledger, video_repair
 from control_plane.settings import settings
 from control_plane.video_jobs import jobs, restore_open
 from control_plane.video_ledger import board, open_upload, save_job, touch_upload
@@ -99,19 +99,25 @@ class VideoLedgerTests(unittest.TestCase):
         job = jobs.create(name="nhieu.mp4", source="Trang chủ", size=5)
         self._track(job.id)
         job.bind(path)
+        self.assertTrue(job.claim("pc-giu"))
+        self.assertTrue(video_repair.claim_start(job.id))
         video_ledger._SEEN.clear()
         # Đồng hồ đứng yên để bài thử không phụ thuộc máy chậm: ghi khung cách 2 giây.
-        with patch.object(video_ledger.time, "monotonic", return_value=1000.0):
-            for index in range(1000):
-                job.remember_frame(index / 1000, ["a"], [])
-        with db.connect(self.db_path) as conn:
-            raw = conn.execute("SELECT frames_json FROM video_jobs WHERE id=?", (job.id,)).fetchone()
-        self.assertIsNotNone(raw)
-        self.assertLess(len(json.loads(raw["frames_json"])), 20)
-        save_job(job.snapshot(), force=True)
-        with db.connect(self.db_path) as conn:
-            raw = conn.execute("SELECT frames_json FROM video_jobs WHERE id=?", (job.id,)).fetchone()
-        self.assertEqual(len(json.loads(raw["frames_json"])), 1000)
+        # Việc đã có PC giữ và vé đọc, vòng tự sửa không ghi đè sổ giữa chừng.
+        try:
+            with patch.object(video_ledger.time, "monotonic", return_value=1000.0):
+                for index in range(1000):
+                    job.remember_frame(index / 1000, ["a"], [])
+            with db.connect(self.db_path) as conn:
+                raw = conn.execute("SELECT frames_json FROM video_jobs WHERE id=?", (job.id,)).fetchone()
+            self.assertIsNotNone(raw)
+            self.assertLess(len(json.loads(raw["frames_json"])), 20)
+            save_job(job.snapshot(), force=True)
+            with db.connect(self.db_path) as conn:
+                raw = conn.execute("SELECT frames_json FROM video_jobs WHERE id=?", (job.id,)).fetchone()
+            self.assertEqual(len(json.loads(raw["frames_json"])), 1000)
+        finally:
+            video_repair.drop(job.id)
 
 
 if __name__ == "__main__":

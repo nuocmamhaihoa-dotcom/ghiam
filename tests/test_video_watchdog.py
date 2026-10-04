@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from unittest import mock
 import io
 import os
 import shutil
@@ -121,14 +122,23 @@ class VideoWatchdogTests(unittest.TestCase):
         self.assertGreater(machine_ram_bytes(), 0)
 
     def test_two_videos_split_the_reader_cores(self) -> None:
-        slots = _JobSlots(16)
-        self.assertTrue(slots.take())
-        self.assertEqual(slots.share(), 16)
-        self.assertTrue(slots.take())
-        self.assertEqual(slots.share(), 8)
-        self.assertFalse(slots.take())
-        slots.give()
-        self.assertEqual(slots.share(), 16)
+        with mock.patch("pc_agent.video_worker.reader_ready", return_value=False):
+            slots = _JobSlots(16)
+            self.assertTrue(slots.take())
+            self.assertEqual(slots.share(), 16)
+            self.assertTrue(slots.take())
+            self.assertEqual(slots.share(), 8)
+            self.assertFalse(slots.take())
+            slots.give()
+            self.assertEqual(slots.share(), 16)
+
+    def test_a_gpu_pc_holds_four_videos(self) -> None:
+        with mock.patch("pc_agent.video_worker.reader_ready", return_value=True):
+            slots = _JobSlots(16)
+            for _ in range(4):
+                self.assertTrue(slots.take())
+            self.assertFalse(slots.take())
+            self.assertEqual(slots.share(), 4)
 
     def test_one_reading_blocks_an_update(self) -> None:
         self.assertEqual(

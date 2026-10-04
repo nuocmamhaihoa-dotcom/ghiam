@@ -89,6 +89,15 @@
     #pick input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     #recordBtn:disabled, #pick.busy { opacity: 0.45; }
     .board-job { margin: 0 0 0.75rem; }
+    .board-note { margin: 0 0 0.45rem; color: #5c564c; font-size: 14px; line-height: 1.35; }
+    .board-steps { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.35rem 0 0; }
+    .board-step {
+      border: 1px solid #c8c0b4; border-radius: 999px;
+      padding: 0.1rem 0.45rem; font-size: 12px; color: #5c564c; background: #fff;
+    }
+    .board-step-done { background: #111; color: #fff; border-color: #111; }
+    .board-step-now { background: #fff4d6; color: #111; border-color: #111; font-weight: 800; }
+    .board-detail { margin: 0.3rem 0 0; font-size: 14px; line-height: 1.35; }
     .board-track { height: 10px; border-radius: 999px; background: #e7e0d4; overflow: hidden; margin-top: 0.3rem; }
     .board-fill { height: 100%; width: 0; background: #111; }
     .board-meta { margin: 0.25rem 0 0; color: #5c564c; font-size: 14px; }
@@ -115,7 +124,7 @@
 <body>
   <p id="updateNote" hidden></p>
   <main>
-    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. Đọc 8 hình mỗi giây. Thoát trang hoặc mở app khác không dừng việc đọc. Sau khi máy chủ nhận đủ video, máy chủ và PC đọc tiếp. Nếu chưa gửi hết, máy này gửi nốt ở nền và khi mở lại trang thì nối tiếp, không cần chọn lại video. Mỗi PC đọc tối đa hai video. Một video thì dùng 80% CPU và RAM của PC. Hai video thì chia đôi phần 80% đó. Có hai PC thì video từ 4 phút được chia đôi cho hai máy. PC có card NVIDIA thì đọc bằng GPU. Dán link hồ sơ hoặc chữ hệ thống, hoặc Chia sẻ từ TikTok / Facebook / Instagram, để lấy @handle đúng chữ, không đọc lại bằng Tesseract. <a href="/tai-pc">Tải phần mềm cho PC</a>. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
+    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. Đọc 4 hình mỗi giây trên cả video. Đoạn không ra tên hoặc tài khoản thì đọc lại đúng đoạn đó ở 8 hình mỗi giây. Thoát trang hoặc mở app khác không dừng việc đọc. Sau khi máy chủ nhận đủ video, máy chủ và PC đọc tiếp. Nếu chưa gửi hết, máy này gửi nốt ở nền và khi mở lại trang thì nối tiếp, không cần chọn lại video. PC chỉ có CPU đọc tối đa hai video. PC có GPU đọc tối đa bốn video. Một video thì dùng 80% CPU và RAM của PC. Hai video thì chia đôi phần 80% đó. Có hai PC thì video từ 4 phút được chia đôi cho hai máy. PC có card NVIDIA thì đọc bằng GPU. Dán link hồ sơ hoặc chữ hệ thống, hoặc Chia sẻ từ TikTok / Facebook / Instagram, để lấy @handle đúng chữ, không đọc lại bằng Tesseract. <a href="/tai-pc">Tải phần mềm cho PC</a>. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
     <section id="shareBox">
       <p id="shareLead">Dán link hồ sơ, chữ hệ thống, hoặc nội dung vừa chia sẻ. Hub lấy @handle từ URL / QR, không đoán chữ từ video.</p>
       <textarea id="shareText" placeholder="https://www.tiktok.com/@ten.tai.khoan"></textarea>
@@ -141,6 +150,7 @@
     </section>
     <section id="boardBox">
       <h2>Việc đang làm</h2>
+      <p class="board-note">Video đang chờ hiện thứ tự. Video đang đọc hiện bước: Chờ, Tách hình, Đọc chữ, Đọc lại, Ghép tên, Ghi xong.</p>
       <div id="boardActive"></div>
       <h2>Hàng chờ</h2>
       <div id="boardQueued"></div>
@@ -550,6 +560,7 @@
           line = "PC phụ đang nối. Máy đó đọc tối đa hai video bằng 80% CPU và RAM.";
         }
         if (gpu > 0) line += " " + gpu + " máy đọc bằng GPU.";
+        line += " Máy GPU đọc tối đa bốn video.";
         line += " " + helperState(helper);
         helperLine.textContent = line.trim();
       } catch (error) {
@@ -2125,7 +2136,38 @@
       done: "Đã ghi",
       failed: "Gặp vấn đề",
     };
-    function renderBoardList(host, items) {
+    const boardStepOrder = ["wait", "extract", "read", "reread", "merge", "done"];
+    const boardStepLabel = {
+      wait: "Chờ",
+      extract: "Tách hình",
+      read: "Đọc chữ",
+      reread: "Đọc lại",
+      merge: "Ghép tên",
+      done: "Ghi xong",
+    };
+    function boardStep(item) {
+      const state = item.state || "";
+      const task = String(item.task || "");
+      if (state === "done") return "done";
+      if (/Đọc lại/.test(task)) return "reread";
+      if (/Ghép|Ghi /.test(task)) return "merge";
+      if (/Đọc chữ|Đọc tiếp/.test(task)) return "read";
+      if (/Tách|Chọn khung|thời lượng/.test(task)) return "extract";
+      if (/Đã nhận|Đang gửi|Đang chờ/.test(task)) return "wait";
+      if (state === "reading") return "read";
+      return "wait";
+    }
+    function boardDetail(item, kind, index) {
+      if (kind === "queue") return "Đang đợi. Thứ " + (index + 1) + " trong hàng chờ.";
+      if (kind === "history") {
+        if (item.state === "done") return "Đã ghi xong.";
+        return item.error || item.task || "Gặp vấn đề.";
+      }
+      const task = item.task || "Đang xử lý.";
+      const percent = Math.max(0, Math.min(100, Number(item.percent) || 0));
+      return task + " · " + percent + "%.";
+    }
+    function renderBoardList(host, items, kind) {
       if (!host) return;
       host.replaceChildren();
       if (!items.length) {
@@ -2134,13 +2176,26 @@
         host.appendChild(empty);
         return;
       }
-      items.forEach((item) => {
+      items.forEach((item, index) => {
         const box = document.createElement("div");
         box.className = "board-job";
         const title = document.createElement("strong");
         const name = item.name || "video";
         title.textContent = item.partLabel ? name + " · " + item.partLabel : name;
         box.appendChild(title);
+        const steps = document.createElement("div");
+        steps.className = "board-steps";
+        const current = boardStep(item);
+        const at = boardStepOrder.indexOf(current);
+        boardStepOrder.forEach((id, stepIndex) => {
+          const chip = document.createElement("span");
+          chip.className = "board-step";
+          if (item.state === "done" || stepIndex < at) chip.className += " board-step-done";
+          else if (stepIndex === at) chip.className += " board-step-now";
+          chip.textContent = boardStepLabel[id];
+          steps.appendChild(chip);
+        });
+        box.appendChild(steps);
         const meta = document.createElement("p");
         meta.className = "board-meta";
         const bits = [boardState[item.state] || item.state || ""];
@@ -2148,9 +2203,12 @@
         const bytes = Number(item.size) || 0;
         if (bytes > 0) bits.push((bytes / 1048576).toFixed(1) + " MB");
         if (item.workerName) bits.push(item.workerName);
-        if (item.task) bits.push(item.task);
         meta.textContent = bits.filter(Boolean).join(" · ");
         box.appendChild(meta);
+        const detail = document.createElement("p");
+        detail.className = "board-detail";
+        detail.textContent = boardDetail(item, kind, index);
+        box.appendChild(detail);
         const track = document.createElement("div");
         track.className = "board-track";
         const fill = document.createElement("div");
@@ -2178,9 +2236,9 @@
         const response = await fetch("/v1/recordings/board", { headers: authHeaders() });
         if (!response.ok) return;
         const data = await response.json();
-        renderBoardList(document.getElementById("boardActive"), data.active || []);
-        renderBoardList(document.getElementById("boardQueued"), data.queued || []);
-        renderBoardList(document.getElementById("boardHistory"), data.history || []);
+        renderBoardList(document.getElementById("boardActive"), data.active || [], "active");
+        renderBoardList(document.getElementById("boardQueued"), data.queued || [], "queue");
+        renderBoardList(document.getElementById("boardHistory"), data.history || [], "history");
       } catch (error) { /* giữ bảng cũ */ }
     }
 

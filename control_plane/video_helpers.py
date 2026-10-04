@@ -1,4 +1,4 @@
-"""PC phụ kéo video về đọc. Một PC giữ tối đa hai video. Hub chỉ đọc khi không còn PC đang nối."""
+"""PC phụ kéo video từ hub. PC chỉ có CPU giữ tối đa hai video. PC có GPU giữ tối đa bốn. Hub chỉ đọc khi không còn PC đang nối."""
 
 from __future__ import annotations
 
@@ -17,7 +17,13 @@ OFFER_SECONDS = 8.0
 LEASE_SECONDS = 90.0
 # Nhịp PC là 3 giây. Mạng chập một lúc vẫn tính là đang nối. Im 45 giây thì hub đọc thay.
 FRESH_SECONDS = 45.0
-JOBS_PER_PC = 2
+JOBS_CPU = 2
+JOBS_GPU = 4
+
+
+def slots_for(gpu: bool) -> int:
+    """CPU giữ hai video. PC đã báo GPU thì giữ bốn video trên một card."""
+    return JOBS_GPU if gpu else JOBS_CPU
 
 
 def _clean_name(name: str) -> str:
@@ -320,22 +326,22 @@ class HelperBook:
                 if item.worker_id != skip
                 and (now - item.seen) <= FRESH_SECONDS
                 and item.usable()
-                and item.held < JOBS_PER_PC
+                and item.held < slots_for(item.gpu)
             )
 
     def has_idle(self) -> bool:
-        """Còn PC vừa nối và đang giữ ít hơn hai video."""
+        """Còn PC vừa nối và còn chỗ nhận thêm video."""
         return self.idle_count() > 0
 
     def try_hold(self, worker_id: str) -> bool:
-        """Giữ thêm một video. Đủ hai video, PC không còn tươi, hoặc PC đọc thử không ra chữ, thì từ chối."""
+        """Giữ thêm một video. Hết chỗ, PC không còn tươi, hoặc PC đọc thử không ra chữ, thì từ chối."""
         now = time.monotonic()
         with self._lock:
             item = self._items.get(worker_id)
             if (
                 item is None
                 or (now - item.seen) > FRESH_SECONDS
-                or item.held >= JOBS_PER_PC
+                or item.held >= slots_for(item.gpu)
                 or not item.usable()
             ):
                 return False

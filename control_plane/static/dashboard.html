@@ -130,6 +130,15 @@
     #boardBox h2 { margin: 0.85rem 0 0.4rem; font-size: 1.05rem; }
     #boardBox h2:first-child { margin-top: 0; }
     .board-job { margin: 0 0 0.75rem; }
+    .board-note { margin: 0 0 0.45rem; color: var(--muted); font-size: 0.9rem; line-height: 1.35; }
+    .board-steps { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.35rem 0 0; }
+    .board-step {
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: 0.1rem 0.45rem; font-size: 0.78rem; color: var(--muted); background: #fff;
+    }
+    .board-step-done { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .board-step-now { background: #fff4d6; color: var(--ink); border-color: var(--ink); font-weight: 800; }
+    .board-detail { margin: 0.3rem 0 0; font-size: 0.9rem; line-height: 1.35; }
     .board-track { height: 12px; border-radius: 999px; background: #e7e0d4; overflow: hidden; margin-top: 0.3rem; }
     .board-fill { height: 100%; width: 0; background: #1c1915; }
     .board-meta { margin: 0.25rem 0 0; }
@@ -146,7 +155,7 @@
     <header class="top">
       <div>
         <h1>Đọc video</h1>
-        <p class="sub">Thả video. Hub đọc người nhìn thấy và lưu ngay.</p>
+        <p class="sub">Thả video. Hub đọc 4 hình mỗi giây trên cả video. Đoạn không ra tên hoặc tài khoản thì đọc lại đúng đoạn đó ở 8 hình mỗi giây.</p>
       </div>
       <div class="tools" data-norecord>
         <a class="sr" href="/iphone">Mở trên iPhone</a>
@@ -195,6 +204,7 @@
       </section>
       <section class="panel" id="boardBox">
         <h2>Việc đang làm</h2>
+        <p class="board-note">Video đang chờ hiện thứ tự. Video đang đọc hiện bước: Chờ, Tách hình, Đọc chữ, Đọc lại, Ghép tên, Ghi xong.</p>
         <div id="boardActive"></div>
         <h2>Hàng chờ</h2>
         <div id="boardQueued"></div>
@@ -1327,7 +1337,7 @@
           if (Number(timing.skipped) > 0) detail += " Bỏ " + timing.skipped + " ô dòng sai hình.";
           if (Number(timing.strips) > 0) detail += " Đọc dải mới " + timing.strips + " khung khi danh bạ cuộn.";
           if (Number(timing.fades) > 0) detail += " Bỏ " + timing.fades + " khung mờ lúc chuyển trang.";
-          $("helperLine").textContent = "PC phụ đang nối: " + (helper.count || 1) + " máy, " + (helper.cores || helper.cpus || 0) + " lõi" + share + gpu + ". Mỗi máy đọc tối đa hai video." + split + state + detail;
+          $("helperLine").textContent = "PC phụ đang nối: " + (helper.count || 1) + " máy, " + (helper.cores || helper.cpus || 0) + " lõi" + share + gpu + ". Mỗi máy đọc tối đa hai video. Máy GPU đọc tối đa bốn video." + split + state + detail;
         } else {
           $("helperLine").textContent = "PC phụ chưa nối. Video được máy chủ đọc. Mở phần mềm PC nếu muốn máy tính đọc giúp.";
         }
@@ -1341,7 +1351,38 @@
       done: "Đã ghi",
       failed: "Gặp vấn đề",
     };
-    function renderBoardList(host, items) {
+    const boardStepOrder = ["wait", "extract", "read", "reread", "merge", "done"];
+    const boardStepLabel = {
+      wait: "Chờ",
+      extract: "Tách hình",
+      read: "Đọc chữ",
+      reread: "Đọc lại",
+      merge: "Ghép tên",
+      done: "Ghi xong",
+    };
+    function boardStep(item) {
+      const state = item.state || "";
+      const task = String(item.task || "");
+      if (state === "done") return "done";
+      if (/Đọc lại/.test(task)) return "reread";
+      if (/Ghép|Ghi /.test(task)) return "merge";
+      if (/Đọc chữ|Đọc tiếp/.test(task)) return "read";
+      if (/Tách|Chọn khung|thời lượng/.test(task)) return "extract";
+      if (/Đã nhận|Đang gửi|Đang chờ/.test(task)) return "wait";
+      if (state === "reading") return "read";
+      return "wait";
+    }
+    function boardDetail(item, kind, index) {
+      if (kind === "queue") return "Đang đợi. Thứ " + (index + 1) + " trong hàng chờ.";
+      if (kind === "history") {
+        if (item.state === "done") return "Đã ghi xong.";
+        return item.error || item.task || "Gặp vấn đề.";
+      }
+      const task = item.task || "Đang xử lý.";
+      const percent = Math.max(0, Math.min(100, Number(item.percent) || 0));
+      return task + " · " + percent + "%.";
+    }
+    function renderBoardList(host, items, kind) {
       host.replaceChildren();
       if (!items.length) {
         const empty = document.createElement("p");
@@ -1350,13 +1391,26 @@
         host.appendChild(empty);
         return;
       }
-      items.forEach((item) => {
+      items.forEach((item, index) => {
         const box = document.createElement("div");
         box.className = "board-job";
         const title = document.createElement("strong");
         const name = item.name || "video";
         title.textContent = item.partLabel ? name + " · " + item.partLabel : name;
         box.appendChild(title);
+        const steps = document.createElement("div");
+        steps.className = "board-steps";
+        const current = boardStep(item);
+        const at = boardStepOrder.indexOf(current);
+        boardStepOrder.forEach((id, stepIndex) => {
+          const chip = document.createElement("span");
+          chip.className = "board-step";
+          if (item.state === "done" || stepIndex < at) chip.className += " board-step-done";
+          else if (stepIndex === at) chip.className += " board-step-now";
+          chip.textContent = boardStepLabel[id];
+          steps.appendChild(chip);
+        });
+        box.appendChild(steps);
         const meta = document.createElement("p");
         meta.className = "meta board-meta";
         const bits = [boardState[item.state] || item.state || ""];
@@ -1364,9 +1418,12 @@
         const bytes = Number(item.size) || 0;
         if (bytes > 0) bits.push((bytes / 1048576).toFixed(1) + " MB");
         if (item.workerName) bits.push(item.workerName);
-        if (item.task) bits.push(item.task);
         meta.textContent = bits.filter(Boolean).join(" · ");
         box.appendChild(meta);
+        const detail = document.createElement("p");
+        detail.className = "board-detail";
+        detail.textContent = boardDetail(item, kind, index);
+        box.appendChild(detail);
         const track = document.createElement("div");
         track.className = "board-track";
         const fill = document.createElement("div");
@@ -1395,9 +1452,9 @@
         const response = await fetch("/v1/recordings/board", { headers: headers() });
         if (!response.ok) return;
         const data = await response.json();
-        renderBoardList($("boardActive"), data.active || []);
-        renderBoardList($("boardQueued"), data.queued || []);
-        renderBoardList($("boardHistory"), data.history || []);
+        renderBoardList($("boardActive"), data.active || [], "active");
+        renderBoardList($("boardQueued"), data.queued || [], "queue");
+        renderBoardList($("boardHistory"), data.history || [], "history");
       } catch (error) { /* giữ bảng cũ */ }
     }
     $("saveToken").onclick = () => { localStorage.setItem(tokenKey, $("token").value.trim()); loadAll(); loadIssues(); loadBoard(); };

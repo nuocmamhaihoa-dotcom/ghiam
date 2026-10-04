@@ -19,7 +19,7 @@ from typing import Any, NamedTuple
 from PIL import Image, ImageChops, ImageOps, ImageStat
 
 from control_plane import layout_learn, scroll_track, stage_timing
-from control_plane.gpu_read import fallback_note, prefers_single_worker, read_lines
+from control_plane.gpu_read import fallback_note, prefers_single_worker, read_lines, read_lines_batch
 from control_plane.read_vote import forget_scope
 from control_plane.screen_people import (
     _accepted_sighting,
@@ -37,20 +37,21 @@ from control_plane.screen_people import (
     tsv_word_counts,
 )
 
-# 8 khung/giây cho video đến 30 phút. Video dài hơn thì dàn đều số khung này.
-_MAX_FRAMES = 30 * 60 * 8
+# 4 hình mỗi giây trên suốt video, đủ 3 giờ. Dài hơn thì dàn đều trong trần này.
+_MAX_FRAMES = 3 * 60 * 60 * 4
 # Khung chỉ nhích vài điểm ảnh thì bỏ. Một dòng chữ đổi (khoảng 3) vẫn được đọc.
 _MIN_DIFF = 2.0
 # Trang cùng bố cục mà chỉ đổi tên và tài khoản thì trung bình đổi chưa tới 1, nhưng ô 10x10 đổi mạnh nhất lên
 # khoảng 29. Nhiễu nén, một điểm ảnh, hay cả khung dịch 1 điểm ảnh chỉ tới 3.
 _BLOCK_DIFF = 12.0
 # Rộng tối đa 720. Đo trên video iPhone thật: rộng 1080 đọc chậm hơn và nhận ra ít tên hơn.
-# 8 khung/giây đọc được khoảng một nửa tên danh bạ hơn 4 khung/giây. Giải mã gần như không chậm thêm.
-_SAMPLE_FPS = 8.0
+# Lượt đầu 4 hình mỗi giây. Đoạn không ra tên hoặc tài khoản thì đọc lại đúng đoạn đó ở 8 hình mỗi giây.
+_SAMPLE_FPS = 4.0
+_REREAD_FPS = 8.0
 _FRAME_EXT = ".png"
 # Đoạn ffmpeg song song. PC nhiều lõi thì tách nhiều hơn.
 _SEGMENT_MIN_FRAMES = 64
-# Đoạn danh bạ lướt nhanh: đọc thêm 12 khung/giây trong cửa sổ 45 giây có nhiều tên danh bạ.
+# Cửa sổ cũ để nhận vùng danh bạ dày. Lượt đọc lại không dùng tốc độ này.
 _BOOST_FPS = 12.0
 _BOOST_WINDOW = 45.0
 _BOOST_MIN_CONTACTS = 3
@@ -550,11 +551,10 @@ def analyze_screen_video(
         readings.append((float(key), list(captions), [dict(item) for item in sightings]))
     readings.sort(key=lambda item: item[0])
     if not keep_open and readings:
-        readings = _apply_dense_boost(
+        readings = _reread_unread(
             path,
             work,
             readings,
-            rate,
             sink,
             threads=threads,
             reserve=reserve,
@@ -605,12 +605,37 @@ def _earlier_frames(work: Path, rate: float) -> int:
 
 
 def _sample_rate(duration: float | None) -> float:
-    """Đọc 8 hình mỗi giây. Video dài thì dàn đều trong giới hạn khung."""
+    """4 hình mỗi giây trên suốt video. Video dài hơn trần khung thì dàn đều."""
     if duration is None or duration <= 0:
         return _SAMPLE_FPS
     if duration * _SAMPLE_FPS <= _MAX_FRAMES:
         return _SAMPLE_FPS
     return _MAX_FRAMES / duration
+
+
+def _frame_has_person(found: list[dict[str, str]]) -> bool:
+    for item in found:
+        if _accepted_sighting(item) is not None:
+            return True
+    return False
+
+
+def _unread_windows(readings: list[tuple[float, list[str], list[dict[str, str]]]]) -> list[tuple[float, float]]:
+    """Các đoạn liền nhau không ra tên hoặc tài khoản. Mỗi đoạn nới một giây ở hai đầu."""
+    misses = [seconds for seconds, _captions, found in readings if not _frame_has_person(found)]
+    if not misses:
+        return []
+    windows: list[tuple[float, float]] = []
+    start = misses[0]
+    previous = misses[0]
+    for seconds in misses[1:]:
+        if seconds - previous <= 1.0:
+            previous = seconds
+            continue
+        windows.append((max(0.0, start - 1.0), previous + 1.0))
+        start = previous = seconds
+    windows.append((max(0.0, start - 1.0), previous + 1.0))
+    return windows
 
 
 def _contact_keys_between(
@@ -719,6 +744,87 @@ def _merge_readings(
                 merged_caps.append(caption)
         by_key[key] = (seconds, merged_caps, merged_found)
     return sorted(by_key.values(), key=lambda item: item[0])
+
+
+class _HoldPercent(ReadProgress):
+    """Giữ thanh không tụt khi tách lại đoạn hỏng. Việc đó vẫn là bước đọc lại."""
+
+    def __init__(self, inner: ReadProgress, floor: int, task: str) -> None:
+        self._inner = inner
+        self._floor = floor
+        self._task = task
+
+    def report(self, percent: int, task: str) -> None:
+        if int(percent) < self._floor:
+            self._inner.report(self._floor, self._task)
+            return
+        self._inner.report(int(percent), task)
+
+    def problem(self, text: str) -> None:
+        self._inner.problem(text)
+
+
+def _reread_unread(
+    path: Path,
+    work: Path,
+    readings: list[tuple[float, list[str], list[dict[str, str]]]],
+    progress: ReadProgress,
+    *,
+    threads: str | None = None,
+    reserve: int | None = None,
+) -> list[tuple[float, list[str], list[dict[str, str]]]]:
+    """Đọc lại 8 hình mỗi giây, chỉ trên đoạn lượt 4 hình mỗi giây không ra người."""
+    windows = _unread_windows(readings)
+    if not windows:
+        return readings
+    known = {_frame_key(seconds) for seconds, _captions, _found in readings}
+    extra: list[tuple[float, list[str], list[dict[str, str]]]] = []
+    words = _AddWords(progress)
+    used = 0
+    for index, (start, end) in enumerate(windows):
+        task = f"Đọc lại đoạn chưa ra chữ, 8 hình/giây, đoạn {index + 1}/{len(windows)}"
+        held_bar = _HoldPercent(progress, 93, task)
+        held_bar.report(93, task)
+        sub = work / f"reread-{index}"
+        sub.mkdir(parents=True, exist_ok=True)
+        for old in sub.glob("r-*.*"):
+            if old.suffix.lower() in {".png", ".jpg", ".jpeg"}:
+                old.unlink(missing_ok=True)
+        pattern = sub / f"r-%05d{_FRAME_EXT}"
+        argv = _ffmpeg_extract_range(path, pattern, _REREAD_FPS, start, end, threads)
+        code = _run_ffmpeg(argv, end - start, held_bar, start)
+        boosted = sorted(item for item in sub.glob("r-*.*") if item.suffix.lower() in {".png", ".jpg", ".jpeg"})
+        if code != 0 and not boosted:
+            continue
+        timed: list[tuple[float, Path]] = []
+        for image in boosted:
+            try:
+                number = int(image.stem.split("-", 1)[1])
+            except (IndexError, ValueError):
+                continue
+            seconds = start + (number - 1) / _REREAD_FPS
+            if _frame_key(seconds) in known:
+                continue
+            timed.append((seconds, image))
+        if not timed:
+            continue
+        used += 1
+        held: list[Image.Image] = []
+        chosen = _changed_frames(timed, held_bar, held)
+        extra.extend(
+            _read_frames(
+                chosen,
+                words,
+                reserve=reserve,
+                percent_lo=93,
+                percent_hi=93,
+                label="Đọc lại đoạn chưa ra chữ, 8 hình/giây",
+            )
+        )
+    if not extra:
+        return readings
+    progress.problem(f"Đọc lại {used} đoạn chưa ra tên ở 8 khung/giây.")
+    return _merge_readings(readings, extra)
 
 
 def _apply_dense_boost(
@@ -1328,7 +1434,13 @@ def _try_strip(item: tuple[float, Path], thumb_dy: int) -> _FrameRead | None:
     return _FrameRead(seconds, captions, sightings, seen, kept, list(text_lines), loaded.height, True)
 
 
-def _read_one(item: tuple[float, Path], thumb_dy: int | None = None) -> _FrameRead:
+def _read_one(
+    item: tuple[float, Path],
+    thumb_dy: int | None = None,
+    preset_lines: list[Any] | None = None,
+    *,
+    use_preset: bool = False,
+) -> _FrameRead:
     if thumb_dy:
         stripped = _try_strip(item, thumb_dy)
         if stripped is not None:
@@ -1340,10 +1452,13 @@ def _read_one(item: tuple[float, Path], thumb_dy: int | None = None) -> _FrameRe
     tsv = ""
     loaded: Image.Image | None = None
     read_started = time.perf_counter()
-    try:
-        text_lines = read_lines(image)
-    except Exception:
-        text_lines = None
+    if use_preset:
+        text_lines = preset_lines
+    else:
+        try:
+            text_lines = read_lines(image)
+        except Exception:
+            text_lines = None
     if text_lines is None:
         used_tesseract = True
         loaded = prepare_frame_image(image)
@@ -1508,9 +1623,13 @@ def _read_frames(
     chosen: list[tuple[float, Path]],
     progress: ReadProgress,
     reserve: int | None = None,
+    *,
+    percent_lo: int = 48,
+    percent_hi: int = 92,
+    label: str = "",
 ) -> list[tuple[float, list[str], list[dict[str, str]]]]:
     if not chosen:
-        progress.report(92, "Đọc chữ")
+        progress.report(percent_hi, label or "Đọc chữ")
         return []
     total = len(chosen)
     known = progress.remembered()
@@ -1530,19 +1649,36 @@ def _read_frames(
         results[index] = (seconds, list(captions), [dict(item) for item in sightings])
         done_count += 1
     pending = [index for index, item in enumerate(results) if item is None]
+    def _span(done: int) -> int:
+        if total <= 0 or percent_hi <= percent_lo:
+            return percent_hi
+        return min(percent_hi, percent_lo + int((done / total) * (percent_hi - percent_lo)))
+
+    def _task(done: int, continued: bool) -> str:
+        name = label or ("Đọc tiếp" if continued else "Đọc chữ")
+        return f"{name}, khung {done}/{total}"
+
     if done_count:
-        progress.report(
-            min(92, 48 + int((done_count / total) * 44)),
-            f"Đọc tiếp, khung {done_count}/{total}",
-        )
+        progress.report(_span(done_count), _task(done_count, True))
     else:
-        progress.report(48, "Đọc chữ")
+        progress.report(percent_lo, label or "Đọc chữ")
     reads: list[_FrameRead | None] = [None] * total
     shifts = [scroll_track.Shift(0, False)] * total
     if pending and not prefers_single_worker():
         shifts = scroll_track.plan([path for _seconds, path in chosen])
-    if pending:
-        workers = 1 if prefers_single_worker() else ocr_workers(len(pending), os.cpu_count() or 1, reserve)
+    if pending and prefers_single_worker():
+        presets = read_lines_batch([chosen[index][1] for index in pending])
+        for offset, index in enumerate(pending):
+            done_count += 1
+            lines = presets[offset] if offset < len(presets) else None
+            try:
+                reads[index] = _read_one(chosen[index], None, lines, use_preset=True)
+            except Exception:
+                failed += 1
+                results[index] = (chosen[index][0], [], [])
+            progress.report(_span(done_count), _task(done_count, bool(known)))
+    elif pending:
+        workers = ocr_workers(len(pending), os.cpu_count() or 1, reserve)
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {
                 pool.submit(_read_one, chosen[index], _strip_dy(index, shifts[index])): index
@@ -1556,9 +1692,7 @@ def _read_frames(
                 except Exception:
                     failed += 1
                     results[index] = (chosen[index][0], [], [])
-                percent = 48 + int((done_count / total) * 44)
-                label = "Đọc tiếp" if known else "Đọc chữ"
-                progress.report(min(92, percent), f"{label}, khung {done_count}/{total}")
+                progress.report(_span(done_count), _task(done_count, bool(known)))
         _apply_scroll(chosen, reads, shifts)
         for index in pending:
             item = reads[index]
