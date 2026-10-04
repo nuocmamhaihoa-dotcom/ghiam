@@ -34,6 +34,48 @@ def _step_rank(task: str) -> int:
     return 0
 
 
+def _load_frames(raw: object) -> dict[str, tuple[list[str], list[dict[str, str]]]]:
+    frames: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
+    if not isinstance(raw, list):
+        return frames
+    for frame in raw:
+        if not isinstance(frame, dict) or len(frames) >= _FRAME_LIMIT:
+            continue
+        try:
+            stamp = float(frame.get("t"))
+        except (TypeError, ValueError):
+            continue
+        captions = frame.get("captions") if isinstance(frame.get("captions"), list) else []
+        sightings = frame.get("sightings") if isinstance(frame.get("sightings"), list) else []
+        kept_captions = [" ".join(str(item).split())[:180] for item in captions[:20] if str(item).strip()]
+        kept_sightings: list[dict[str, str]] = []
+        for item in sightings[:30]:
+            if not isinstance(item, dict):
+                continue
+            kept_sightings.append(
+                {
+                    "kind": " ".join(str(item.get("kind") or "").split())[:40],
+                    "name": " ".join(str(item.get("name") or "").split())[:80],
+                    "contactName": " ".join(str(item.get("contactName") or "").split())[:80],
+                    "username": " ".join(str(item.get("username") or "").split())[:40],
+                }
+            )
+        frames[f"{stamp:.3f}"] = (kept_captions, kept_sightings)
+    return frames
+
+
+def _tally_from(row: dict[str, Any]) -> dict[str, int] | None:
+    try:
+        contacts = max(0, int(row.get("seenContacts") or 0))
+        accounts = max(0, int(row.get("seenAccounts") or 0))
+        saved = max(0, int(row.get("savedPeople") or 0))
+    except (TypeError, ValueError):
+        return None
+    if not contacts and not accounts and not saved:
+        return None
+    return {"contacts": contacts, "accounts": accounts, "saved": saved}
+
+
 class VideoJob:
     def __init__(self, job_id: str) -> None:
         self.id = job_id
@@ -105,6 +147,8 @@ class VideoJob:
             "startedAt": self.started_at,
             "finishedAt": self.finished_at,
             "savedPeople": self.saved_people,
+            "seenContacts": max(0, int((self._tally or {}).get("contacts") or 0)),
+            "seenAccounts": max(0, int((self._tally or {}).get("accounts") or 0)),
             "parentId": self.parent_id,
             "partLabel": self.part_label,
             "partIds": list(self.part_ids),
@@ -583,19 +627,13 @@ class JobStore:
         job.size = max(0, int(size or 0))
         job.created_at = time.time()
         job._rev = current_rev(key)
-        dropped: list[VideoJob] = []
         with self._lock:
             current = self._jobs.get(key)
             if current is not None:
                 return current
-            done_ids = [item_id for item_id, item in self._jobs.items() if item.done and not self._waiting_part(item)]
-            while len(self._jobs) >= 40 and done_ids:
-                old = self._jobs.pop(done_ids.pop(), None)
-                if old is not None:
-                    dropped.append(old)
+            dropped = self._take_room_locked()
             self._jobs[job.id] = job
-        for old in dropped:
-            old.discard()
+        self._release_dropped(dropped)
         job._persist(job.snapshot(), True)
         return job
 
@@ -637,37 +675,78 @@ class JobStore:
             job._rev = max(0, int(row.get("rev") or 0))
         except (TypeError, ValueError):
             job._rev = 0
-        frames: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
-        for frame in row.get("frames") or []:
-            if not isinstance(frame, dict) or len(frames) >= _FRAME_LIMIT:
-                continue
-            try:
-                stamp = float(frame.get("t"))
-            except (TypeError, ValueError):
-                continue
-            captions = frame.get("captions") if isinstance(frame.get("captions"), list) else []
-            sightings = frame.get("sightings") if isinstance(frame.get("sightings"), list) else []
-            kept_captions = [" ".join(str(item).split())[:180] for item in captions[:20] if str(item).strip()]
-            kept_sightings: list[dict[str, str]] = []
-            for item in sightings[:30]:
-                if not isinstance(item, dict):
-                    continue
-                kept_sightings.append(
-                    {
-                        "kind": " ".join(str(item.get("kind") or "").split())[:40],
-                        "name": " ".join(str(item.get("name") or "").split())[:80],
-                        "contactName": " ".join(str(item.get("contactName") or "").split())[:80],
-                        "username": " ".join(str(item.get("username") or "").split())[:40],
-                    }
-                )
-            frames[f"{stamp:.3f}"] = (kept_captions, kept_sightings)
-        job._frames = frames
+        job._frames = _load_frames(row.get("frames"))
+        job._tally = _tally_from(row)
         with self._lock:
             if job_id in self._jobs:
                 return None
             self._jobs[job_id] = job
         job._persist(job.snapshot(), True)
         return job
+
+    def recall(self, row: dict[str, Any]) -> VideoJob | None:
+        """Dựng lại video đã lỗi để bấm Đọc lại. Chưa ghi sổ cho đến khi đọc nối."""
+        job_id = "".join(ch for ch in str(row.get("id") or "") if ch.isalnum())[:64]
+        if not job_id:
+            return None
+        with self._lock:
+            current = self._jobs.get(job_id)
+            if current is not None:
+                return current
+        job = VideoJob(job_id)
+        job.name = " ".join(str(row.get("name") or "").split())[:120]
+        job.source = " ".join(str(row.get("source") or "").split())[:80]
+        job.size = max(0, int(row.get("size") or 0))
+        job.percent = max(0, min(100, int(row.get("percent") or 0)))
+        job.task = " ".join(str(row.get("task") or "").split())[:180] or "Gặp vấn đề"
+        job.problems = [str(item) for item in row.get("problems") or [] if str(item).strip()][:20]
+        job.saved_people = max(0, int(row.get("savedPeople") or 0))
+        job._tally = _tally_from(row)
+        job.parent_id = " ".join(str(row.get("parentId") or "").split())[:64]
+        job.part_label = " ".join(str(row.get("partLabel") or "").split())[:40]
+        job.part_ids = [str(item) for item in row.get("partIds") or [] if str(item).strip()]
+        raw_path = str(row.get("path") or "")
+        if raw_path:
+            job.path = Path(raw_path)
+            job._stored_path = job.path
+        created = row.get("createdAt")
+        job.created_at = float(created) if isinstance(created, (int, float)) else time.time()
+        started = row.get("startedAt")
+        job.started_at = float(started) if isinstance(started, (int, float)) else None
+        finished = row.get("finishedAt")
+        job.finished_at = float(finished) if isinstance(finished, (int, float)) else time.time()
+        job.done = True
+        job.error = " ".join(str(row.get("error") or "").split())[:180] or "Gặp vấn đề"
+        try:
+            job._rev = max(0, int(row.get("rev") or 0))
+        except (TypeError, ValueError):
+            job._rev = 0
+        job._frames = _load_frames(row.get("frames"))
+        with self._lock:
+            current = self._jobs.get(job_id)
+            if current is not None:
+                return current
+            dropped = self._take_room_locked()
+            self._jobs[job_id] = job
+        self._release_dropped(dropped)
+        return job
+
+    def _take_room_locked(self) -> list[VideoJob]:
+        """Đẩy việc đã xong ra khỏi bộ nhớ. Gọi khi đang giữ khóa kho."""
+        dropped: list[VideoJob] = []
+        done_ids = [item_id for item_id, item in self._jobs.items() if item.done and not self._waiting_part(item)]
+        while len(self._jobs) >= 40 and done_ids:
+            old = self._jobs.pop(done_ids.pop(), None)
+            if old is not None:
+                dropped.append(old)
+        return dropped
+
+    def _release_dropped(self, dropped: list[VideoJob]) -> None:
+        """Video ghi xong thì xóa file. Video lỗi chỉ rời bộ nhớ, file còn để đọc lại."""
+        for old in dropped:
+            if old.error:
+                continue
+            old.discard()
 
     def _waiting_part(self, item: VideoJob) -> bool:
         """Phần đã xong nhưng việc cha chưa ghép thì giữ lại. Gọi khi đang giữ khóa."""

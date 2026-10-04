@@ -6,16 +6,16 @@ import json
 import sqlite3
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 from control_plane import db
+from control_plane.screen_steps import discard_video_work
 from control_plane.settings import settings
 
 _LOCK = threading.Lock()
 _SEEN: dict[str, float] = {}
-_KEEP_SECONDS = 7 * 24 * 3600
-_KEEP_FINISHED = 400
-_HISTORY = 80
+_KEEP_SECONDS = 24 * 3600
 
 
 def _text(value: object, limit: int) -> str:
@@ -80,13 +80,30 @@ def _number(value: object) -> float | None:
         return None
 
 
+def _cell(row: sqlite3.Row, key: str) -> object:
+    try:
+        return row[key]
+    except (IndexError, KeyError):
+        return None
+
+
+def _count_cell(row: sqlite3.Row, key: str) -> int:
+    try:
+        return max(0, int(_cell(row, key) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _public_item(row: sqlite3.Row) -> dict[str, Any]:
+    state = str(row["state"] or "")
+    raw_path = str(_cell(row, "path") or "")
+    file_ready = bool(raw_path) and Path(raw_path).is_file()
     return {
         "jobId": str(row["id"]),
         "name": str(row["name"] or ""),
         "source": str(row["source"] or ""),
         "size": int(row["size"] or 0),
-        "state": str(row["state"] or ""),
+        "state": state,
         "percent": int(row["percent"] or 0),
         "task": str(row["task"] or ""),
         "problems": _problems(row["problems_json"]),
@@ -94,6 +111,9 @@ def _public_item(row: sqlite3.Row) -> dict[str, Any]:
         "worker": str(row["worker"] or ""),
         "workerName": "",
         "savedPeople": int(row["saved_people"] or 0),
+        "seenContacts": _count_cell(row, "seen_contacts"),
+        "seenAccounts": _count_cell(row, "seen_accounts"),
+        "canContinue": state == "failed" and file_ready,
         "createdAt": float(row["created_at"] or 0),
         "startedAt": _number(row["started_at"]),
         "finishedAt": _number(row["finished_at"]),
@@ -126,9 +146,9 @@ def _upsert(row: dict[str, Any]) -> None:
             """
             INSERT INTO video_jobs (
               id, name, source, size, state, percent, task, problems_json, error, worker, path,
-              created_at, started_at, finished_at, saved_people, parent_id, part_label,
-              part_ids_json, frames_json, upload_id, rev
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              created_at, started_at, finished_at, saved_people, seen_contacts, seen_accounts,
+              parent_id, part_label, part_ids_json, frames_json, upload_id, rev
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
               name=excluded.name,
               source=excluded.source,
@@ -144,6 +164,14 @@ def _upsert(row: dict[str, Any]) -> None:
               started_at=COALESCE(video_jobs.started_at, excluded.started_at),
               finished_at=excluded.finished_at,
               saved_people=excluded.saved_people,
+              seen_contacts=CASE
+                WHEN excluded.seen_contacts > 0 THEN excluded.seen_contacts
+                ELSE video_jobs.seen_contacts
+              END,
+              seen_accounts=CASE
+                WHEN excluded.seen_accounts > 0 THEN excluded.seen_accounts
+                ELSE video_jobs.seen_accounts
+              END,
               parent_id=excluded.parent_id,
               part_label=excluded.part_label,
               part_ids_json=excluded.part_ids_json,
@@ -171,6 +199,8 @@ def _upsert(row: dict[str, Any]) -> None:
                 _number(row.get("startedAt")),
                 _number(row.get("finishedAt")),
                 max(0, int(row.get("savedPeople") or 0)),
+                max(0, int(row.get("seenContacts") or 0)),
+                max(0, int(row.get("seenAccounts") or 0)),
                 _text(row.get("parentId"), 64),
                 _text(row.get("partLabel"), 40),
                 _dump(_ids(row.get("partIds"))),
@@ -182,26 +212,30 @@ def _upsert(row: dict[str, Any]) -> None:
 
 
 def _prune(conn: sqlite3.Connection) -> None:
+    """Xong hoặc lỗi quá 24 giờ thì xóa báo cáo. Video lỗi còn file thì xóa file cùng lúc."""
     cutoff = time.time() - _KEEP_SECONDS
-    conn.execute(
+    rows = conn.execute(
         """
-        DELETE FROM video_jobs
+        SELECT id, path FROM video_jobs
         WHERE state IN ('done', 'failed')
           AND finished_at IS NOT NULL
           AND finished_at < ?
         """,
         (cutoff,),
-    )
-    rows = conn.execute(
-        """
-        SELECT id FROM video_jobs
-        WHERE state IN ('done', 'failed')
-        ORDER BY COALESCE(finished_at, created_at) DESC
-        """
     ).fetchall()
-    stale = [str(row["id"]) for row in rows[_KEEP_FINISHED:]]
-    if stale:
-        conn.executemany("DELETE FROM video_jobs WHERE id=?", [(item,) for item in stale])
+    for row in rows:
+        raw = str(row["path"] or "").strip()
+        if not raw:
+            continue
+        target = Path(raw)
+        if not target.is_absolute():
+            continue
+        try:
+            discard_video_work(target)
+        except Exception:
+            continue
+    if rows:
+        conn.executemany("DELETE FROM video_jobs WHERE id=?", [(str(row["id"]),) for row in rows])
 
 
 def save_job(row: dict[str, Any], force: bool = False) -> None:
@@ -346,8 +380,8 @@ def open_rows() -> list[dict[str, Any]]:
 
 
 _BOARD_COLUMNS = (
-    "id, name, source, size, state, percent, task, problems_json, error, worker, "
-    "saved_people, created_at, started_at, finished_at, part_label"
+    "id, name, source, size, state, percent, task, problems_json, error, worker, path, "
+    "saved_people, seen_contacts, seen_accounts, created_at, started_at, finished_at, part_label"
 )
 
 
@@ -373,15 +407,53 @@ def board() -> dict[str, Any]:
                 SELECT {_BOARD_COLUMNS} FROM video_jobs
                 WHERE state IN ('done', 'failed')
                 ORDER BY COALESCE(finished_at, created_at) DESC, id DESC
-                LIMIT ?
-                """,
-                (_HISTORY,),
+                """
+            ).fetchall()
+            phones = conn.execute(
+                """
+                SELECT source,
+                       COUNT(*) AS videos,
+                       SUM(CASE WHEN state='done' THEN saved_people ELSE 0 END) AS saved,
+                       SUM(CASE WHEN state='failed' THEN 1 ELSE 0 END) AS failed
+                FROM video_jobs
+                WHERE source != ''
+                GROUP BY source
+                ORDER BY source COLLATE NOCASE
+                """
             ).fetchall()
     except Exception:
-        return {"ok": True, "active": [], "queued": [], "history": []}
+        return {"ok": True, "active": [], "queued": [], "history": [], "phones": []}
     return {
         "ok": True,
         "active": [_public_item(row) for row in active],
         "queued": [_public_item(row) for row in queued],
         "history": [_public_item(row) for row in history],
+        "phones": [_phone_item(row) for row in phones],
     }
+
+
+def _phone_item(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "source": str(row["source"] or ""),
+        "videos": max(0, int(row["videos"] or 0)),
+        "saved": max(0, int(row["saved"] or 0)),
+        "failed": max(0, int(row["failed"] or 0)),
+    }
+
+
+def failed_row(job_id: str) -> dict[str, Any] | None:
+    """Một video đã lỗi, kể cả khi không còn trong bộ nhớ. Đường dẫn chỉ dùng ở hub."""
+    key = _text(job_id, 64)
+    if not key:
+        return None
+    try:
+        with db.connect(settings.db_path) as conn:
+            row = conn.execute(
+                "SELECT * FROM video_jobs WHERE id=? AND state='failed'",
+                (key,),
+            ).fetchone()
+    except Exception:
+        return None
+    if row is None:
+        return None
+    return _open_item(row)

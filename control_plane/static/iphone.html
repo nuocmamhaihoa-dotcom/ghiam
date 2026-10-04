@@ -102,6 +102,21 @@
     .board-fill { height: 100%; width: 0; background: #111; }
     .board-meta { margin: 0.25rem 0 0; color: #5c564c; font-size: 14px; }
     .board-problems { margin: 0.25rem 0 0; padding-left: 1.1rem; color: #b42318; }
+    .board-retry {
+      min-height: 48px; margin-top: 0.45rem; border-radius: 12px; border: 2px solid #111;
+      background: #fff; color: #111; font: inherit; font-weight: 800; font-size: 16px;
+    }
+    #phoneBox { display: grid; grid-template-columns: 1fr auto; gap: 0.45rem; align-items: end; margin: 0 0 0.8rem; }
+    #phoneBox label { grid-column: 1 / -1; font-weight: 800; }
+    #phoneNameInput {
+      min-height: 48px; border-radius: 12px; border: 2px solid #111;
+      padding: 0.4rem 0.7rem; font: inherit; font-size: 16px;
+    }
+    #phoneNameSave {
+      min-height: 48px; border-radius: 12px; border: 2px solid #111;
+      background: #fff; color: #111; font: inherit; font-weight: 800; font-size: 16px;
+    }
+    #phoneNameNote { grid-column: 1 / -1; margin: 0; font-size: 14px; }
     #boardBox h2 { margin: 0.9rem 0 0.35rem; font-size: 1.05rem; }
     #shareBox { margin: 0 0 0.8rem; }
     #shareLead { margin: 0 0 0.45rem; line-height: 1.4; font-size: 16px; }
@@ -125,6 +140,12 @@
   <p id="updateNote" hidden></p>
   <main>
     <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. Đọc 4 hình mỗi giây trên cả video. Đoạn không ra tên hoặc tài khoản thì đọc lại đúng đoạn đó ở 8 hình mỗi giây. Thoát trang hoặc mở app khác không dừng việc đọc. Sau khi máy chủ nhận đủ video, máy chủ và PC đọc tiếp. Nếu chưa gửi hết, máy này gửi nốt ở nền và khi mở lại trang thì nối tiếp, không cần chọn lại video. PC chỉ có CPU đọc tối đa hai video. PC có GPU đọc tối đa bốn video. Một video thì dùng 80% CPU và RAM của PC. Hai video thì chia đôi phần 80% đó. Có hai PC thì video từ 4 phút được chia đôi cho hai máy. PC có card NVIDIA thì đọc bằng GPU. Dán link hồ sơ hoặc chữ hệ thống, hoặc Chia sẻ từ TikTok / Facebook / Instagram, để lấy @handle đúng chữ, không đọc lại bằng Tesseract. <a href="/tai-pc">Tải phần mềm cho PC</a>. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
+    <section id="phoneBox">
+      <label for="phoneNameInput">Tên máy này</label>
+      <input id="phoneNameInput" maxlength="40" placeholder="iPhone 8 số 1" autocomplete="off" />
+      <button id="phoneNameSave" type="button">Lưu tên</button>
+      <p id="phoneNameNote" hidden></p>
+    </section>
     <section id="shareBox">
       <p id="shareLead">Dán link hồ sơ, chữ hệ thống, hoặc nội dung vừa chia sẻ. Hub lấy @handle từ URL / QR, không đoán chữ từ video.</p>
       <textarea id="shareText" placeholder="https://www.tiktok.com/@ten.tai.khoan"></textarea>
@@ -154,7 +175,9 @@
       <div id="boardActive"></div>
       <h2>Hàng chờ</h2>
       <div id="boardQueued"></div>
-      <h2>Lịch sử gần đây</h2>
+      <h2>Báo cáo 24 giờ</h2>
+      <p class="board-note">Mỗi video ghi tên máy, số người thấy trong danh bạ, số người có tài khoản, và số người ghi được. Báo cáo giữ 24 giờ rồi xóa. Video lỗi còn file, bấm Đọc lại để làm tiếp.</p>
+      <div id="boardPhones"></div>
       <div id="boardHistory"></div>
     </section>
     <section id="savedBox">
@@ -270,17 +293,36 @@
     let watchingDetached = false;
     let resumeSlots = [];
 
+    const phoneNameInput = document.getElementById("phoneNameInput");
+    const phoneNameNote = document.getElementById("phoneNameNote");
+    function rememberPhoneName(name) {
+      const kept = String(name || "").trim().slice(0, 40);
+      if (!kept) return "";
+      localStorage.setItem("fb_phone_name", kept);
+      return kept;
+    }
     function phoneName() {
-      const key = "fb_phone_name";
-      let name = localStorage.getItem(key) || "";
-      if (!name) {
-        const bytes = new Uint8Array(2);
-        if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(bytes);
-        else bytes[0] = Math.floor(Math.random() * 256);
-        name = "iPhone " + Array.from(bytes).map((value) => value.toString(16).padStart(2, "0")).join("");
-        localStorage.setItem(key, name);
-      }
-      return name;
+      const typed = phoneNameInput ? phoneNameInput.value.trim().slice(0, 40) : "";
+      if (typed) return rememberPhoneName(typed);
+      const stored = (localStorage.getItem("fb_phone_name") || "").trim().slice(0, 40);
+      if (stored) return stored;
+      const bytes = new Uint8Array(2);
+      if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(bytes);
+      else bytes[0] = Math.floor(Math.random() * 256);
+      const generated = "iPhone " + Array.from(bytes).map((value) => value.toString(16).padStart(2, "0")).join("");
+      return rememberPhoneName(generated);
+    }
+    if (phoneNameInput && !phoneNameInput.value.trim()) phoneNameInput.value = phoneName();
+    const phoneNameSave = document.getElementById("phoneNameSave");
+    if (phoneNameSave) {
+      phoneNameSave.addEventListener("click", () => {
+        const name = phoneName();
+        if (phoneNameInput) phoneNameInput.value = name;
+        if (phoneNameNote) {
+          phoneNameNote.hidden = false;
+          phoneNameNote.textContent = "Đã lưu tên " + name + ".";
+        }
+      });
     }
 
     function authHeaders() {
@@ -2157,11 +2199,28 @@
       if (state === "reading") return "read";
       return "wait";
     }
+    function boardResult(item) {
+      const contacts = Math.max(0, Number(item.seenContacts) || 0);
+      const accounts = Math.max(0, Number(item.seenAccounts) || 0);
+      const saved = Math.max(0, Number(item.savedPeople) || 0);
+      return "Thấy " + contacts + " người trong danh bạ, " + accounts + " người có tài khoản, ghi được " + saved + ".";
+    }
+    function boardWhen(item) {
+      const stamp = Number(item.finishedAt || item.createdAt) || 0;
+      if (!stamp) return "";
+      const date = new Date(stamp * 1000);
+      if (Number.isNaN(date.getTime())) return "";
+      const pad = (value) => String(value).padStart(2, "0");
+      return pad(date.getDate()) + "/" + pad(date.getMonth() + 1) + " " + pad(date.getHours()) + ":" + pad(date.getMinutes());
+    }
     function boardDetail(item, kind, index) {
       if (kind === "queue") return "Đang đợi. Thứ " + (index + 1) + " trong hàng chờ.";
       if (kind === "history") {
-        if (item.state === "done") return "Đã ghi xong.";
-        return item.error || item.task || "Gặp vấn đề.";
+        const result = boardResult(item);
+        const clock = boardWhen(item);
+        const when = clock ? " Lúc " + clock + "." : "";
+        if (item.state === "done") return "Đã ghi xong. " + result + when;
+        return (item.error || item.task || "Gặp vấn đề.") + " " + result + when;
       }
       const task = item.task || "Đang xử lý.";
       const percent = Math.max(0, Math.min(100, Number(item.percent) || 0));
@@ -2228,7 +2287,55 @@
           });
           box.appendChild(list);
         }
+        if (kind === "history" && item.state === "failed" && item.canContinue) {
+          const retry = document.createElement("button");
+          retry.type = "button";
+          retry.className = "board-retry";
+          retry.textContent = "Đọc lại";
+          retry.addEventListener("click", async () => {
+            retry.disabled = true;
+            try {
+              const response = await fetch("/v1/recordings/jobs/" + encodeURIComponent(item.jobId) + "/continue", {
+                method: "POST",
+                headers: authHeaders(),
+              });
+              if (!response.ok) {
+                retry.textContent = "Chưa đọc lại được";
+                retry.disabled = false;
+                return;
+              }
+              loadBoard();
+            } catch (error) {
+              retry.textContent = "Chưa đọc lại được";
+              retry.disabled = false;
+            }
+          });
+          box.appendChild(retry);
+        }
         host.appendChild(box);
+      });
+    }
+    function renderPhoneSummary(phones) {
+      const host = document.getElementById("boardPhones");
+      if (!host) return;
+      host.replaceChildren();
+      const rows = Array.isArray(phones) ? phones : [];
+      if (!rows.length) {
+        const empty = document.createElement("p");
+        empty.className = "board-note";
+        empty.textContent = "Chưa có báo cáo trong 24 giờ.";
+        host.appendChild(empty);
+        return;
+      }
+      rows.forEach((item) => {
+        const line = document.createElement("p");
+        line.className = "board-note";
+        const source = item.source || "Máy";
+        const videos = Math.max(0, Number(item.videos) || 0);
+        const saved = Math.max(0, Number(item.saved) || 0);
+        const failed = Math.max(0, Number(item.failed) || 0);
+        line.textContent = source + ": " + videos + " video, ghi được " + saved + " người, " + failed + " video lỗi.";
+        host.appendChild(line);
       });
     }
     async function loadBoard() {
@@ -2239,6 +2346,7 @@
         renderBoardList(document.getElementById("boardActive"), data.active || [], "active");
         renderBoardList(document.getElementById("boardQueued"), data.queued || [], "queue");
         renderBoardList(document.getElementById("boardHistory"), data.history || [], "history");
+        renderPhoneSummary(data.phones || []);
       } catch (error) { /* giữ bảng cũ */ }
     }
 

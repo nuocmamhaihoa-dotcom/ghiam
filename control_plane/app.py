@@ -74,7 +74,7 @@ from control_plane.settings import settings
 from control_plane import video_repair
 from control_plane.video_jobs import JobProgress, VideoJob, jobs, restore_open
 from control_plane.video_ledger import board as video_board
-from control_plane.video_ledger import open_upload, touch_upload
+from control_plane.video_ledger import failed_row, open_upload, touch_upload
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 IOS_DIR = Path(__file__).resolve().parents[1] / "ios"
@@ -1359,11 +1359,24 @@ def _finish_read(job: VideoJob, people: list[dict[str, str]], worker_id: str | N
     return _commit_people(job, people, worker_id)
 
 
+def _load_failed(job_id: str) -> VideoJob | None:
+    """Việc đang nằm trong bộ nhớ, hoặc video lỗi còn trong sổ 24 giờ."""
+    current = jobs.get(job_id)
+    if current is not None:
+        return current
+    row = failed_row(job_id)
+    if row is None:
+        return None
+    return jobs.recall(row)
+
+
 def _reopen_job(job: VideoJob) -> bool:
     """Đọc nối việc đã lỗi. Video chia hai phần thì chỉ đọc lại phần lỗi."""
     if job.part_ids:
         if not job.reopen():
             return False
+        for part_id in list(job.part_ids):
+            _load_failed(part_id)
         for part in jobs.parts(job):
             if part is None or not part.done or not part.error:
                 continue
@@ -2263,7 +2276,7 @@ def finish_video_upload(upload_id: str, authorization: str | None = Header(defau
 
 @app.get("/v1/recordings/board")
 def recordings_board(authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    """Việc đang gửi, đang đọc, hàng chờ, và lịch sử gần đây. Mọi iPhone xem chung một bảng."""
+    """Việc đang gửi, đang đọc, hàng chờ, và báo cáo 24 giờ. Mọi iPhone xem chung một bảng."""
     _auth(authorization)
     payload = video_board()
     for group in ("active", "queued", "history"):
@@ -2434,9 +2447,9 @@ def video_job_checkpoint(
 
 @app.post("/v1/recordings/jobs/{job_id}/continue")
 def continue_video_job(job_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    """Đọc nối video đã lỗi. Khung và người đã xong được giữ."""
+    """Đọc nối video đã lỗi. Khung và người đã xong được giữ. Video đã rời bộ nhớ thì lấy lại từ sổ."""
     _auth(authorization)
-    job = jobs.get(job_id)
+    job = _load_failed(job_id)
     if job is None:
         raise HTTPException(404, "không thấy tiến trình")
     if not _reopen_job(job):

@@ -150,6 +150,8 @@ def init_db(db_path: Path) -> None:
               started_at REAL,
               finished_at REAL,
               saved_people INTEGER NOT NULL DEFAULT 0,
+              seen_contacts INTEGER NOT NULL DEFAULT 0,
+              seen_accounts INTEGER NOT NULL DEFAULT 0,
               parent_id TEXT NOT NULL DEFAULT '',
               part_label TEXT NOT NULL DEFAULT '',
               part_ids_json TEXT NOT NULL DEFAULT '[]',
@@ -162,6 +164,7 @@ def init_db(db_path: Path) -> None:
             """
         )
         _ensure_people_extras(conn)
+        _ensure_video_counts(conn)
         conn.commit()
 
 
@@ -629,6 +632,17 @@ def _ensure_people_extras(conn: sqlite3.Connection) -> None:
     columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(people_meta)").fetchall()}
     if columns and "duplicates" not in columns:
         conn.execute("ALTER TABLE people_meta ADD COLUMN duplicates INTEGER NOT NULL DEFAULT 0")
+
+
+def _ensure_video_counts(conn: sqlite3.Connection) -> None:
+    """Số người thấy trong danh bạ và số người có tài khoản, cho sổ video đã tạo từ bản trước."""
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(video_jobs)").fetchall()}
+    if not columns:
+        return
+    if "seen_contacts" not in columns:
+        conn.execute("ALTER TABLE video_jobs ADD COLUMN seen_contacts INTEGER NOT NULL DEFAULT 0")
+    if "seen_accounts" not in columns:
+        conn.execute("ALTER TABLE video_jobs ADD COLUMN seen_accounts INTEGER NOT NULL DEFAULT 0")
 
 
 def _ensure_people_meta(conn: sqlite3.Connection) -> tuple[int, int, int]:

@@ -15,6 +15,7 @@ import threading
 import time
 import unittest
 import zipfile
+from unittest.mock import patch
 from pathlib import Path
 
 _TMP = tempfile.mkdtemp(prefix="fb-actions-")
@@ -117,6 +118,8 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("người trong danh bạ", response.text)
         self.assertIn("Kết quả đã lưu", response.text)
         self.assertIn("PC phụ đang đọc", response.text)
+        self.assertIn("Báo cáo 24 giờ", response.text)
+        self.assertIn("Chưa có báo cáo trong 24 giờ.", response.text)
         self.assertNotIn("test-token", (self.client.get("/static/dashboard.html")).text)
 
     def test_phone_emulator_page(self) -> None:
@@ -231,6 +234,10 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Tách hình", page.text)
         self.assertIn("PC phụ đang đọc", page.text)
         self.assertIn("Đọc lại", page.text)
+        self.assertIn("Tên máy này", page.text)
+        self.assertIn("Lưu tên", page.text)
+        self.assertIn("iPhone 8 số 1", page.text)
+        self.assertIn("Báo cáo 24 giờ", page.text)
         self.assertIn("Thứ ", page.text)
         self.assertIn("80% CPU và RAM", page.text)
         self.assertIn("Mỗi máy đọc tối đa hai video", page.text)
@@ -479,6 +486,39 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(blocked.status_code, 409, blocked.text)
         job.discard()
 
+    def test_continue_reloads_a_failed_video_after_it_leaves_memory(self) -> None:
+        video = Path(_TMP) / "nho-lai.mp4"
+        video.write_bytes(b"x")
+        job = jobs.create(name="nho-lai.mp4", source="iPhone 8 số 1")
+        job.bind(video)
+        job.remember_frame(2.0, ["An"], [])
+        job.note_tally(5, 2, 0)
+        job.fail("Không đọc được video.")
+        job_id = job.id
+        listed = self.client.get("/v1/recordings/board", headers=self.headers)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        body = listed.json()
+        card = next(item for item in body["history"] if item["jobId"] == job_id)
+        self.assertEqual(card["seenContacts"], 5)
+        self.assertEqual(card["seenAccounts"], 2)
+        self.assertTrue(card["canContinue"])
+        self.assertNotIn("path", card)
+        phones = [item for item in body["phones"] if item["source"] == "iPhone 8 số 1"]
+        self.assertTrue(phones)
+        self.assertGreaterEqual(phones[0]["failed"], 1)
+        jobs._jobs.pop(job_id, None)
+        with patch.object(app_module, "_spawn_video", return_value=True):
+            continued = self.client.post(f"/v1/recordings/jobs/{job_id}/continue", headers=self.headers)
+        self.assertEqual(continued.status_code, 200, continued.text)
+        self.assertFalse(continued.json()["done"])
+        self.assertEqual(continued.json()["task"], "Đọc tiếp")
+        restored = jobs.get(job_id)
+        self.assertIsNotNone(restored)
+        assert restored is not None
+        self.assertEqual(restored.remembered()["2.000"][0], ["An"])
+        restored.fail("Dừng thử")
+        jobs._jobs.pop(job_id, None)
+
     def test_upload_size_is_open_unless_a_cap_is_set(self) -> None:
         previous = settings.max_upload_mb
         payload = b"x" * (2 * 1024 * 1024)
@@ -509,7 +549,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "46")
+        self.assertEqual(build, "47")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -519,7 +559,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 46)
+        self.assertEqual(payload["iphoneBuild"], 47)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]

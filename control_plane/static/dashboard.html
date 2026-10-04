@@ -143,6 +143,11 @@
     .board-fill { height: 100%; width: 0; background: #1c1915; }
     .board-meta { margin: 0.25rem 0 0; }
     .board-problems { margin: 0.25rem 0 0; padding-left: 1.2rem; color: var(--bad); }
+    .board-retry {
+      min-height: 40px; margin-top: 0.45rem; border-radius: 10px;
+      border: 1px solid var(--ink); background: #fff; color: var(--ink);
+      font: inherit; font-weight: 700;
+    }
     @media (max-width: 800px) {
       .split { grid-template-columns: 1fr; }
       .hide-sm { display: none; }
@@ -208,7 +213,9 @@
         <div id="boardActive"></div>
         <h2>Hàng chờ</h2>
         <div id="boardQueued"></div>
-        <h2>Lịch sử gần đây</h2>
+        <h2>Báo cáo 24 giờ</h2>
+        <p class="board-note">Mỗi video ghi tên máy, số người thấy trong danh bạ, số người có tài khoản, và số người ghi được. Báo cáo giữ 24 giờ rồi xóa. Video lỗi còn file, bấm Đọc lại để làm tiếp.</p>
+        <div id="boardPhones"></div>
         <div id="boardHistory"></div>
       </section>
       <p id="videoStatus" class="lead" hidden></p>
@@ -1372,11 +1379,28 @@
       if (state === "reading") return "read";
       return "wait";
     }
+    function boardResult(item) {
+      const contacts = Math.max(0, Number(item.seenContacts) || 0);
+      const accounts = Math.max(0, Number(item.seenAccounts) || 0);
+      const saved = Math.max(0, Number(item.savedPeople) || 0);
+      return "Thấy " + contacts + " người trong danh bạ, " + accounts + " người có tài khoản, ghi được " + saved + ".";
+    }
+    function boardWhen(item) {
+      const stamp = Number(item.finishedAt || item.createdAt) || 0;
+      if (!stamp) return "";
+      const date = new Date(stamp * 1000);
+      if (Number.isNaN(date.getTime())) return "";
+      const pad = (value) => String(value).padStart(2, "0");
+      return pad(date.getDate()) + "/" + pad(date.getMonth() + 1) + " " + pad(date.getHours()) + ":" + pad(date.getMinutes());
+    }
     function boardDetail(item, kind, index) {
       if (kind === "queue") return "Đang đợi. Thứ " + (index + 1) + " trong hàng chờ.";
       if (kind === "history") {
-        if (item.state === "done") return "Đã ghi xong.";
-        return item.error || item.task || "Gặp vấn đề.";
+        const result = boardResult(item);
+        const clock = boardWhen(item);
+        const when = clock ? " Lúc " + clock + "." : "";
+        if (item.state === "done") return "Đã ghi xong. " + result + when;
+        return (item.error || item.task || "Gặp vấn đề.") + " " + result + when;
       }
       const task = item.task || "Đang xử lý.";
       const percent = Math.max(0, Math.min(100, Number(item.percent) || 0));
@@ -1443,7 +1467,55 @@
           });
           box.appendChild(list);
         }
+        if (kind === "history" && item.state === "failed" && item.canContinue) {
+          const retry = document.createElement("button");
+          retry.type = "button";
+          retry.className = "board-retry";
+          retry.textContent = "Đọc lại";
+          retry.addEventListener("click", async () => {
+            retry.disabled = true;
+            try {
+              const response = await fetch("/v1/recordings/jobs/" + encodeURIComponent(item.jobId) + "/continue", {
+                method: "POST",
+                headers: headers(),
+              });
+              if (!response.ok) {
+                retry.textContent = "Chưa đọc lại được";
+                retry.disabled = false;
+                return;
+              }
+              loadBoard();
+            } catch (error) {
+              retry.textContent = "Chưa đọc lại được";
+              retry.disabled = false;
+            }
+          });
+          box.appendChild(retry);
+        }
         host.appendChild(box);
+      });
+    }
+    function renderPhoneSummary(phones) {
+      const host = $("boardPhones");
+      if (!host) return;
+      host.replaceChildren();
+      const rows = Array.isArray(phones) ? phones : [];
+      if (!rows.length) {
+        const empty = document.createElement("p");
+        empty.className = "board-note";
+        empty.textContent = "Chưa có báo cáo trong 24 giờ.";
+        host.appendChild(empty);
+        return;
+      }
+      rows.forEach((item) => {
+        const line = document.createElement("p");
+        line.className = "board-note";
+        const source = item.source || "Máy";
+        const videos = Math.max(0, Number(item.videos) || 0);
+        const saved = Math.max(0, Number(item.saved) || 0);
+        const failed = Math.max(0, Number(item.failed) || 0);
+        line.textContent = source + ": " + videos + " video, ghi được " + saved + " người, " + failed + " video lỗi.";
+        host.appendChild(line);
       });
     }
     async function loadBoard() {
@@ -1455,6 +1527,7 @@
         renderBoardList($("boardActive"), data.active || [], "active");
         renderBoardList($("boardQueued"), data.queued || [], "queue");
         renderBoardList($("boardHistory"), data.history || [], "history");
+        renderPhoneSummary(data.phones || []);
       } catch (error) { /* giữ bảng cũ */ }
     }
     $("saveToken").onclick = () => { localStorage.setItem(tokenKey, $("token").value.trim()); loadAll(); loadIssues(); loadBoard(); };
