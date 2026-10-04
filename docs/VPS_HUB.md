@@ -5,6 +5,7 @@
 | Mục | Giá trị |
 |---|---|
 | Link hub | http://222.255.214.202:8088 |
+| Trang mở bằng IP | http://222.255.214.202/ |
 | Trang chủ | http://222.255.214.202:8088/ |
 | Trang iPhone | http://222.255.214.202:8088/iphone |
 | Kiểm tra sống | http://222.255.214.202:8088/health |
@@ -12,6 +13,8 @@
 | Máy | `root@222.255.214.202` |
 
 Trang web không có tên tài khoản. Mở link hub rồi dán `CONTROL_TOKEN` đang nằm trong `/opt/fb-poller/control_data/server.env`. Không ghi mật khẩu SSH và không ghi token vào tài liệu này.
+
+Hub nghe cổng 8088. Cổng 80 trên cùng máy chuyển tiếp tới cổng đó, nên mở đúng IP cũng vào trang. Nếu hub im, máy tự khởi động lại dịch vụ.
 
 VPS đóng vai trò **trung tâm**:
 

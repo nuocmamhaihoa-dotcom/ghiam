@@ -74,11 +74,16 @@ EOF
 chmod 600 "$APP_DIR/control_data/server.env"
 
 cp -f "$APP_DIR/deploy/vps/fb-poller-hub.service" /etc/systemd/system/fb-poller-hub.service
+cp -f "$APP_DIR/deploy/vps/fb-poller-hub-health.service" /etc/systemd/system/fb-poller-hub-health.service
+cp -f "$APP_DIR/deploy/vps/fb-poller-hub-health.timer" /etc/systemd/system/fb-poller-hub-health.timer
+chmod 755 "$APP_DIR/deploy/vps/hub-healthcheck.sh"
 systemctl daemon-reload
 systemctl enable fb-poller-hub
 systemctl restart fb-poller-hub
+systemctl enable --now fb-poller-hub-health.timer
 
 if command -v ufw >/dev/null 2>&1; then
+  ufw allow 80/tcp || true
   ufw allow "${PORT}/tcp" || true
   ufw allow OpenSSH || true
   # Do not force-enable ufw if admin left it inactive

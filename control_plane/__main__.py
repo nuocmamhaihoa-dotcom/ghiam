@@ -7,11 +7,15 @@ import sys
 
 import uvicorn
 
+from control_plane.port_door import start_door, start_watchdog
 from control_plane.settings import settings
 
 
 def main() -> None:
     settings.ensure_dirs()
+    door_port = int(os.environ.get("CONTROL_DOOR_PORT", "80"))
+    start_door(door_port, settings.port, host=settings.host)
+    start_watchdog(settings.port)
     # Tuned for LAN / multi-client fan-in without early congestion collapse.
     kwargs: dict = {
         "app": "control_plane.app:app",
