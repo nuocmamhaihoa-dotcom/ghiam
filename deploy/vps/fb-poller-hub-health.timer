@@ -1,0 +1,10 @@
+[Unit]
+Description=Kiểm tra hub fb-poller mỗi 30 giây
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=30
+AccuracySec=5
+
+[Install]
+WantedBy=timers.target

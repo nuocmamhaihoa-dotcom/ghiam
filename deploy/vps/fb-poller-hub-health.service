@@ -1,0 +1,6 @@
+[Unit]
+Description=Kiểm tra hub fb-poller và khởi động lại nếu im
+
+[Service]
+Type=oneshot
+ExecStart=/opt/fb-poller/deploy/vps/hub-healthcheck.sh
