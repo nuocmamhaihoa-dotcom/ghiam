@@ -531,7 +531,19 @@ def analyze_screen_video(
                 produced = True
             part = _drop_fades(_changed_frames(batch, sink, held))
             chosen.extend(part)
-            readings.extend(_read_frames(part, words, reserve=reserve))
+            if not part:
+                continue
+            lo, hi = _read_span(part, duration)
+            readings.extend(
+                _read_frames(
+                    part,
+                    words,
+                    reserve=reserve,
+                    percent_lo=lo,
+                    percent_hi=hi,
+                    label=_read_label(part, duration, continued=keep_open),
+                )
+            )
         if not produced:
             if keep_open:
                 return [], []
@@ -541,7 +553,18 @@ def analyze_screen_video(
     else:
         sink.report(40, "Tách khung hình")
         chosen = _drop_fades(_changed_frames(images, sink))
-        readings = _read_frames(chosen, words, reserve=reserve)
+        if chosen:
+            lo, hi = _read_span(chosen, duration)
+            readings = _read_frames(
+                chosen,
+                words,
+                reserve=reserve,
+                percent_lo=lo,
+                percent_hi=hi,
+                label=_read_label(chosen, duration),
+            )
+        else:
+            readings = []
     if not keep_open:
         sink.note_samples(_sample_previews(chosen))
     seen_keys = {_frame_key(seconds) for seconds, _captions, _found in readings}
@@ -611,6 +634,40 @@ def _sample_rate(duration: float | None) -> float:
     if duration * _SAMPLE_FPS <= _MAX_FRAMES:
         return _SAMPLE_FPS
     return _MAX_FRAMES / duration
+
+
+def _read_span(frames: list[tuple[float, Path]], duration: float | None) -> tuple[int, int]:
+    """Đặt đoạn khung này vào dải 48–92 theo vị trí trên cả video."""
+    if not frames:
+        return 48, 48
+    start = min(seconds for seconds, _image in frames)
+    end = max(seconds for seconds, _image in frames)
+    whole = duration if duration is not None and duration > 0 else max(end, 0.001)
+    width = 92 - 48
+
+    def place(seconds: float) -> int:
+        ratio = min(1.0, max(0.0, seconds / whole))
+        return 48 + int(ratio * width)
+
+    lo = place(start)
+    hi = place(end)
+    if hi <= lo:
+        hi = min(92, lo + 1)
+    return lo, hi
+
+
+def _read_label(frames: list[tuple[float, Path]], duration: float | None, continued: bool = False) -> str:
+    """Nhãn đọc chữ kèm phút hiện tại trên tổng số phút của video."""
+    prefix = "Đọc tiếp" if continued else "Đọc chữ"
+    if not frames:
+        return prefix
+    end = max(seconds for seconds, _image in frames)
+    minute = int(end // 60)
+    if duration is not None and duration > 0:
+        total = max(1, math.ceil(duration / 60))
+    else:
+        total = max(1, minute)
+    return f"{prefix}, phút {minute}/{total}"
 
 
 def _frame_has_person(found: list[dict[str, str]]) -> bool:

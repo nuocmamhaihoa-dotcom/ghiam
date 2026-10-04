@@ -116,6 +116,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("multiple", response.text)
         self.assertIn("người trong danh bạ", response.text)
         self.assertIn("Kết quả đã lưu", response.text)
+        self.assertIn("PC phụ đang đọc", response.text)
         self.assertNotIn("test-token", (self.client.get("/static/dashboard.html")).text)
 
     def test_phone_emulator_page(self) -> None:
@@ -228,6 +229,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("8 hình mỗi giây", page.text)
         self.assertIn("tối đa bốn video", page.text)
         self.assertIn("Tách hình", page.text)
+        self.assertIn("PC phụ đang đọc", page.text)
         self.assertIn("Đọc lại", page.text)
         self.assertIn("Thứ ", page.text)
         self.assertIn("80% CPU và RAM", page.text)
@@ -507,7 +509,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "45")
+        self.assertEqual(build, "46")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -517,7 +519,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 45)
+        self.assertEqual(payload["iphoneBuild"], 46)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]

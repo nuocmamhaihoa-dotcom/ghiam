@@ -2153,7 +2153,7 @@
       if (/Ghép|Ghi /.test(task)) return "merge";
       if (/Đọc chữ|Đọc tiếp/.test(task)) return "read";
       if (/Tách|Chọn khung|thời lượng/.test(task)) return "extract";
-      if (/Đã nhận|Đang gửi|Đang chờ/.test(task)) return "wait";
+      if (/Đã nhận|Đang gửi|Đang chờ|PC phụ đang đọc/.test(task)) return "wait";
       if (state === "reading") return "read";
       return "wait";
     }

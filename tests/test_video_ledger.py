@@ -119,6 +119,21 @@ class VideoLedgerTests(unittest.TestCase):
         finally:
             video_repair.drop(job.id)
 
+    def test_a_later_step_does_not_rewind(self) -> None:
+        job = jobs.create(name="dai.mp4", source="Trang chủ", size=5)
+        self._track(job.id)
+        job.update(70, "Đọc chữ, phút 10/60, khung 1/8")
+        job.update(40, "Tách khung hình")
+        job.update(42, "Chọn khung đổi")
+        self.assertEqual(job.task, "Đọc chữ, phút 10/60, khung 1/8")
+        self.assertEqual(job.percent, 70)
+        job.update(60, "Đọc chữ, phút 20/60")
+        self.assertEqual(job.task, "Đọc chữ, phút 20/60")
+        self.assertEqual(job.percent, 70)
+        job.update(93, "Đọc lại đoạn chưa ra chữ, 8 hình/giây")
+        self.assertEqual(job.task, "Đọc lại đoạn chưa ra chữ, 8 hình/giây")
+        self.assertEqual(job.percent, 93)
+
 
 if __name__ == "__main__":
     unittest.main()

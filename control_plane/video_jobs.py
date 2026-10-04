@@ -16,6 +16,24 @@ _FRAME_LIMIT = _MAX_FRAMES
 _PEOPLE_LIMIT = 20_000
 
 
+def _step_rank(task: str) -> int:
+    """Thứ tự bước trên thanh. 0 là nhãn lạ, luôn được ghi. Bước sau không bị nhãn bước trước ghi đè."""
+    text = " ".join(task.split())
+    if not text:
+        return 0
+    if "Đọc lại" in text:
+        return 4
+    if text.startswith("Ghép") or text.startswith("Ghi"):
+        return 5
+    if "Đọc chữ" in text or "Đọc tiếp" in text:
+        return 3
+    if "Tách" in text or "Chọn khung" in text or "thời lượng" in text:
+        return 2
+    if "Đã nhận" in text or "Đang gửi" in text or "Đang chờ" in text or "PC phụ đang đọc" in text:
+        return 1
+    return 0
+
+
 class VideoJob:
     def __init__(self, job_id: str) -> None:
         self.id = job_id
@@ -394,6 +412,8 @@ class VideoJob:
             clamped = max(0, min(99, int(percent)))
             self.percent = max(self.percent, clamped)
             cleaned = " ".join(task.split())[:180]
+            if cleaned and _step_rank(cleaned) and _step_rank(cleaned) < _step_rank(self.task):
+                cleaned = ""
             if cleaned:
                 self.task = cleaned
             if self.owner and self.owner != "hub":
