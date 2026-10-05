@@ -36,6 +36,8 @@ VPS đóng vai trò **trung tâm**:
 
 PC chỉ dùng CPU/RAM/proxy local để quét; kết quả đẩy về VPS.
 
+Phần phân tích và đọc video trên VPS dùng 90% CPU và 90% RAM suốt thời gian đang đọc. PC đang nối dùng 80% CPU và 80% RAM của máy đó suốt thời gian nối, không tăng khi máy rảnh. Phần còn lại để trang hub và nhịp nối vẫn trả lời.
+
 ## Cài trên VPS (đã có sẵn script)
 
 ```bash

@@ -12,16 +12,24 @@ from pc_agent.video_worker import hardware_line, idle_budget, worker_budget
 
 
 class PowerBudgetTests(unittest.TestCase):
-    def test_a_rested_pc_uses_all_cores_but_one(self) -> None:
+    def test_a_connected_pc_stays_at_eighty_percent(self) -> None:
         self.assertEqual(worker_budget(20, 65277 * 1024 * 1024), (16, 4))
-        self.assertEqual(idle_budget(20, 65277 * 1024 * 1024), 19)
+        self.assertEqual(idle_budget(20, 65277 * 1024 * 1024), 16)
         self.assertEqual(idle_budget(1, None), 1)
         self.assertEqual(idle_budget(2, None), 1)
-        self.assertEqual(idle_budget(8, None), 7)
+        self.assertEqual(idle_budget(8, None), 6)
 
-    def test_ram_still_caps_the_rested_budget(self) -> None:
+    def test_ram_still_caps_the_connected_budget(self) -> None:
         self.assertEqual(idle_budget(20, 2 * 1024 * 1024 * 1024), 6)
         self.assertEqual(idle_budget(20, 100 * 1024 * 1024), 1)
+
+    def test_the_hub_keeps_ten_percent(self) -> None:
+        from control_plane.read_budget import share_budget
+
+        self.assertEqual(share_budget(20, 32 * 1024 * 1024 * 1024, 90), (18, 2))
+        self.assertEqual(share_budget(4, None, 90), (3, 1))
+        self.assertEqual(share_budget(1, None, 90), (1, 0))
+        self.assertEqual(share_budget(20, 2 * 1024 * 1024 * 1024, 90), (7, 13))
 
     def test_budget_rises_after_the_idle_wait_and_drops_at_once(self) -> None:
         budget = pc_power.PowerBudget(16, 19, idle_after=120)

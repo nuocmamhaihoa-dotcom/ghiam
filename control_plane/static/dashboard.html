@@ -1421,7 +1421,7 @@
         if (helper.connected) {
           const gpu = helper.gpu ? ", có máy đọc bằng GPU" : "";
           const used = Number(helper.workers) || 0;
-          const share = used > 0 ? ", dùng " + used + " lõi (80% CPU và RAM)" : ", mỗi máy dùng 80% CPU và RAM";
+          const share = used > 0 ? ", dùng " + used + " lõi (80% CPU và RAM) suốt thời gian nối" : ", mỗi máy dùng 80% CPU và RAM suốt thời gian nối";
           const build = Number(helper.build) || 0;
           const latest = Number(helper.latestBuild) || 0;
           let state = "";
@@ -1440,7 +1440,7 @@
           if (Number(timing.fades) > 0) detail += " Bỏ " + timing.fades + " khung mờ lúc chuyển trang.";
           $("helperLine").textContent = "PC phụ đang nối: " + (helper.count || 1) + " máy, " + (helper.cores || helper.cpus || 0) + " lõi" + share + gpu + ". Mỗi máy đọc tối đa hai video. Máy GPU đọc tối đa bốn video." + split + state + detail;
         } else {
-          $("helperLine").textContent = "PC phụ chưa nối. Video được máy chủ đọc. Mở phần mềm PC nếu muốn máy tính đọc giúp.";
+          $("helperLine").textContent = "PC phụ chưa nối. Video được máy chủ đọc bằng 90% CPU và RAM của VPS. Mở phần mềm PC nếu muốn máy tính đọc giúp.";
         }
       } catch (error) { /* trang vẫn nhận video khi chưa hỏi được máy phụ */ }
     }
