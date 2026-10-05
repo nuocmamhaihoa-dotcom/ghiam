@@ -296,20 +296,24 @@ class _Pool:
         return added, duplicate
 
     def add(self, phone: str, source_name: str) -> bool:
+        stored, alt = storage_forms(phone)
         existing = self.connection.execute(
-            "SELECT book_id FROM numbers WHERE phone = ?",
-            (phone,),
+            "SELECT book_id FROM numbers WHERE phone = ? OR phone = ?",
+            (stored, alt or stored),
         ).fetchone()
         if existing is not None:
             return False
         book_id = self._open_book()
-        self.connection.execute(
-            """
-            INSERT INTO numbers (phone, book_id, added_at, source_name)
-            VALUES (?, ?, ?, ?)
-            """,
-            (phone, book_id, _now(), source_name),
-        )
+        try:
+            self.connection.execute(
+                """
+                INSERT INTO numbers (phone, book_id, added_at, source_name)
+                VALUES (?, ?, ?, ?)
+                """,
+                (stored, book_id, _now(), source_name),
+            )
+        except sqlite3.IntegrityError:
+            return False
         self.connection.execute(
             "UPDATE books SET contact_count = contact_count + 1 WHERE id = ?",
             (book_id,),
@@ -423,6 +427,15 @@ def _ensure_schema(connection: sqlite3.Connection) -> None:
     )
     connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_numbers_book ON numbers (book_id)"
+    )
+    connection.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS numbers_book_locked
+        BEFORE UPDATE OF book_id ON numbers
+        BEGIN
+            SELECT RAISE(ABORT, 'Số đã chia danh bạ, không được chuyển danh bạ khác');
+        END
+        """
     )
     connection.execute(
         "CREATE TABLE IF NOT EXISTS pool_meta (key TEXT PRIMARY KEY, value TEXT)"

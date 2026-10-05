@@ -823,6 +823,13 @@ def test_assigned_number_never_moves_to_another_book(tmp_path: Path) -> None:
     assert book_of(folder, "0911111111") == 2
     assert pool_total(folder) == 3
 
+    locked = sqlite3.connect(folder / "kho.sqlite")
+    with pytest.raises(sqlite3.IntegrityError, match="không được chuyển danh bạ khác"):
+        locked.execute("UPDATE numbers SET book_id = 9 WHERE phone = '0901234567'")
+        locked.commit()
+    locked.close()
+    assert book_of(folder, "0901234567") == 1
+
 
 def test_txt_keeps_every_number_and_names_each_contact_with_it(tmp_path: Path) -> None:
     from processors.pool import book_of, export_book, import_file
