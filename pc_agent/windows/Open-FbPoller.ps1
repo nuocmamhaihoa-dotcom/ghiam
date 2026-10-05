@@ -28,7 +28,7 @@ if ($mutex) {
 }
 
 try {
-  $hub = if ($env:CONTROL_HUB) { $env:CONTROL_HUB.TrimEnd("/") } else { "http://222.255.214.202:8088" }
+  $hub = if ($env:CONTROL_HUB) { $env:CONTROL_HUB.TrimEnd("/") } else { "http://14.225.224.16:8088" }
   $token = [string]$env:CONTROL_TOKEN
   $cfgPath = Join-Path $Root "config.json"
   if ($token) {

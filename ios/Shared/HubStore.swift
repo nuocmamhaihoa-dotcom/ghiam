@@ -2,7 +2,7 @@ import Foundation
 
 enum HubStore {
     static let suiteName = "group.com.fbpoller.screen"
-    static let defaultBase = "http://222.255.214.202:8088"
+    static let defaultBase = "http://14.225.224.16:8088"
 
     private static let defaults: UserDefaults = {
         if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suiteName) != nil,

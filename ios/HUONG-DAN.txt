@@ -2,7 +2,7 @@ Cài fb-poller lên iPhone
 
 iPhone một mình không cài được app này. Cần máy Mac có Xcode, làm một lần.
 
-1. Tải http://222.255.214.202:8088/tai/ios.zip
+1. Tải http://14.225.224.16:8088/tai/ios.zip
 2. Giải nén và mở ios/FbPoller.xcodeproj
 3. Cắm iPhone, chọn máy đó trong Xcode
 4. Chọn Team là Apple ID của bạn

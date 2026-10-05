@@ -1954,7 +1954,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("RestartCount", script)
         self.assertIn("PSScriptRoot", script)
         self.assertIn("watchdog-replaced", script)
-        self.assertIn("222.255.214.202:8088", script)
+        self.assertIn("14.225.224.16:8088", script)
         self.assertIn("tessdata_fast", script)
         self.assertIn("/v1/updates/tessdata/", script)
         for banned in ("chromium", "playwright", "easyocr", "paddle"):
