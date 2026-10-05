@@ -31,6 +31,7 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
         assert "Vào phần mềm" in page
         assert "Tạo danh bạ" in page
         assert "50.000" in page
+        assert "Mỗi danh bạ bao nhiêu số điện thoại?" in page
         assert "Tải trên iPhone" in page
         assert "min-width: 900px" in page
         assert "width=device-width" in page
@@ -147,9 +148,51 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
         server.shutdown()
 
 
-def _form(files: dict[str, tuple[str, bytes]]) -> tuple[bytes, str]:
+def test_book_size_follows_the_number_asked_at_import(tmp_path: Path) -> None:
+    server = serve(tmp_path / "kho", host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_address[1]
+    opener = build_opener(HTTPCookieProcessor(CookieJar()))
+    try:
+        opener.open(
+            Request(
+                f"http://127.0.0.1:{port}/api/login",
+                data=json.dumps({"user": "danhba", "password": "danhba123"}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        body, content_type = _form(
+            {"file": ("so.txt", b"0901111001\n0901111002\n0901111003\n")},
+            {"per_file": b"2"},
+        )
+        imported = json.load(
+            opener.open(
+                Request(
+                    f"http://127.0.0.1:{port}/api/import-now",
+                    data=body,
+                    headers={"Content-Type": content_type},
+                )
+            )
+        )
+        assert imported["added"] == 3
+        books = json.load(opener.open(f"http://127.0.0.1:{port}/api/books"))
+        assert sorted(book["count"] for book in books["books"]) == [1, 2]
+    finally:
+        server.shutdown()
+
+
+def _form(
+    files: dict[str, tuple[str, bytes]],
+    fields: dict[str, bytes] | None = None,
+) -> tuple[bytes, str]:
     boundary = "----danhba"
     chunks: list[bytes] = []
+    for name, payload in (fields or {}).items():
+        chunks.append(f"--{boundary}\r\n".encode())
+        chunks.append(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode())
+        chunks.append(payload)
+        chunks.append(b"\r\n")
     for name, (filename, payload) in files.items():
         chunks.append(f"--{boundary}\r\n".encode())
         chunks.append(

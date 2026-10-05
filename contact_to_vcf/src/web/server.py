@@ -18,7 +18,14 @@ from urllib.parse import parse_qs, urlparse
 
 from parsers.column_suggest import suggest_columns
 from parsers.detect import detect_format, inspect_source, prepare_source
-from processors.pool import ImportStats, export_book, import_file, list_books, pool_total
+from processors.pool import (
+    CONTACTS_PER_FILE,
+    ImportStats,
+    export_book,
+    import_file,
+    list_books,
+    pool_total,
+)
 
 PAGE = Path(__file__).with_name("index.html")
 USER = os.environ.get("DANHBA_USER", "danhba")
@@ -220,6 +227,7 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 detected = detect_format(ready)
                 info = inspect_source(ready, file_format=detected)
                 _name_index, phone_index = suggest_columns(info.columns, info.samples)
+                per_file = _per_file_value(form.get("per_file"))
                 stats = import_file(
                     app.kho,
                     ready,
@@ -228,6 +236,7 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                     has_header=info.has_header,
                     encoding=info.encoding or "utf-8-sig",
                     phone_column=phone_index,
+                    contacts_per_file=per_file,
                 )
             except (OSError, ValueError) as exc:
                 target.unlink(missing_ok=True)
@@ -392,6 +401,20 @@ def _book_id(path: str) -> int | None:
     if not parts[2].isdigit():
         return None
     return int(parts[2])
+
+
+def _per_file_value(field: tuple[str, bytes] | None) -> int:
+    if field is None or not field[1].strip():
+        return CONTACTS_PER_FILE
+    text = field[1].decode("utf-8", "replace").strip().replace(" ", "")
+    if re.fullmatch(r"\d{1,3}(?:\.\d{3})+", text) or re.fullmatch(r"\d{1,3}(?:,\d{3})+", text):
+        text = text.replace(".", "").replace(",", "")
+    if not text.isdigit():
+        raise ValueError("Số điện thoại mỗi danh bạ phải là số nguyên")
+    value = int(text)
+    if value < 1 or value > 1_000_000:
+        raise ValueError("Số điện thoại mỗi danh bạ phải từ 1 đến 1.000.000")
+    return value
 
 
 def _safe_suffix(filename: str) -> str:

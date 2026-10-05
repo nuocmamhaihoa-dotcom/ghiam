@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QGridLayout,
     QHBoxLayout,
+    QInputDialog,
     QHeaderView,
     QLabel,
     QLineEdit,
@@ -605,6 +606,17 @@ class MainWindow(QMainWindow):
         if phone_index is None:
             QMessageBox.warning(self, "Thiếu thông tin", "Hãy chọn cột số điện thoại")
             return
+        per_file, accepted = QInputDialog.getInt(
+            self,
+            "Chia danh bạ",
+            "Mỗi danh bạ bao nhiêu số điện thoại?",
+            self.per_file.value(),
+            1,
+            1_000_000,
+        )
+        if not accepted:
+            return
+        self.per_file.setValue(per_file)
         self.pool_worker = PoolImportWorker(
             config.output_dir,
             config.input_path,
@@ -613,12 +625,13 @@ class MainWindow(QMainWindow):
             config.has_header,
             config.encoding,
             int(phone_index),
+            per_file,
         )
         self.pool_worker.progressed.connect(self._on_pool_progress)
         self.pool_worker.succeeded.connect(self._on_pool_done)
         self.pool_worker.failed.connect(self._on_failed)
         self.pool_worker.start()
-        self._log(f"Đang nạp {config.input_path.name} vào kho.")
+        self._log(f"Đang nạp {config.input_path.name} vào kho, mỗi danh bạ {format_int(per_file)} số.")
         self._refresh_buttons()
 
     def _on_pool_progress(self, seen: int) -> None:

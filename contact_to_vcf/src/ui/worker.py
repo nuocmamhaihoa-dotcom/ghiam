@@ -10,7 +10,7 @@ from PySide6.QtCore import QThread, Signal
 from core.control import RunControl
 from models.records import JobConfig
 from parsers.detect import inspect_source
-from processors.pool import ImportStats, import_file
+from processors.pool import CONTACTS_PER_FILE, ImportStats, import_file
 from processors.streaming_engine import execute
 
 
@@ -62,6 +62,7 @@ class PoolImportWorker(QThread):
         has_header: bool,
         encoding: str,
         phone_column: int,
+        contacts_per_file: int = CONTACTS_PER_FILE,
     ) -> None:
         super().__init__()
         self.folder = folder
@@ -71,6 +72,7 @@ class PoolImportWorker(QThread):
         self.has_header = has_header
         self.encoding = encoding
         self.phone_column = phone_column
+        self.contacts_per_file = contacts_per_file
         self._stop = False
 
     def request_cancel(self) -> None:
@@ -86,6 +88,7 @@ class PoolImportWorker(QThread):
                 has_header=self.has_header,
                 encoding=self.encoding,
                 phone_column=self.phone_column,
+                contacts_per_file=self.contacts_per_file,
                 should_stop=lambda: self._stop,
                 on_progress=self.progressed.emit,
             )
