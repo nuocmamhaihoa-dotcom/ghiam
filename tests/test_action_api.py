@@ -132,6 +132,44 @@ class ActionApiTests(unittest.TestCase):
         self.assertGreaterEqual(listed.json()["count"], 1)
         self.assertIn("Check proxy", listed.json()["items"][0]["summary"])
 
+    def test_scans_filter_by_phone_and_day(self) -> None:
+        denied = self.client.get("/v1/scans")
+        self.assertEqual(denied.status_code, 401)
+        people_db.save_people(
+            settings.db_path,
+            [
+                {
+                    "nameKey": "scan-filter-an",
+                    "name": "An Quet",
+                    "contactName": "A Ban Quet",
+                    "username": "@scan.filter.an",
+                    "source": "iPhone 8 số 1",
+                }
+            ],
+            "2026-10-04T03:00:00+00:00",
+        )
+        try:
+            listed = self.client.get(
+                "/v1/scans",
+                headers=self.headers,
+                params={"source": "iPhone 8 số 1", "since": "2026-10-04", "until": "2026-10-04"},
+            )
+            self.assertEqual(listed.status_code, 200, listed.text)
+            body = listed.json()
+            self.assertGreaterEqual(body["count"], 1)
+            self.assertEqual(body["items"][0]["source"], "iPhone 8 số 1")
+            self.assertEqual(body["items"][0]["username"], "@scan.filter.an")
+            self.assertIn("iPhone 8 số 1", body["phones"])
+            missed = self.client.get(
+                "/v1/scans",
+                headers=self.headers,
+                params={"source": "iPhone 8 số 1", "since": "2026-10-05", "until": "2026-10-05"},
+            )
+            self.assertEqual(missed.status_code, 200, missed.text)
+            self.assertEqual(missed.json()["count"], 0)
+        finally:
+            _forget_people("@scan.filter.an")
+
     def test_dashboard_has_journal(self) -> None:
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
@@ -150,6 +188,9 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("multiple", response.text)
         self.assertIn("người trong danh bạ", response.text)
         self.assertIn("Kết quả đã lưu", response.text)
+        self.assertIn("Kết quả đã quét", response.text)
+        self.assertIn("Máy iPhone", response.text)
+        self.assertIn("/v1/scans", response.text)
         self.assertIn("PC phụ đang đọc", response.text)
         self.assertIn("Báo cáo 24 giờ", response.text)
         self.assertIn("Chưa có báo cáo trong 24 giờ.", response.text)
@@ -582,7 +623,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "48")
+        self.assertEqual(build, "49")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -592,7 +633,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 48)
+        self.assertEqual(payload["iphoneBuild"], 49)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]

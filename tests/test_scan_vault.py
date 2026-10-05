@@ -159,6 +159,124 @@ class ScanVaultTests(unittest.TestCase):
         kinds = [item["kind"] for item in scan_vault.list_facts(self.db_path)]
         self.assertEqual(kinds, ["person", "duplicate"])
 
+    def test_another_phone_keeps_its_own_scan(self) -> None:
+        self._save("@an", "2026-10-04T01:00:00+00:00")
+        db.save_people(
+            self.db_path,
+            [
+                {
+                    "nameKey": "an",
+                    "name": "An",
+                    "contactName": "A Ban",
+                    "username": "@an",
+                    "source": "iPhone 8 số 2",
+                }
+            ],
+            "2026-10-04T05:00:00+00:00",
+        )
+        db.save_people(
+            self.db_path,
+            [
+                {
+                    "nameKey": "an",
+                    "name": "An",
+                    "contactName": "A Ban",
+                    "username": "@an",
+                    "source": "iPhone 8 số 2",
+                }
+            ],
+            "2026-10-04T06:00:00+00:00",
+        )
+        facts = scan_vault.list_facts(self.db_path)
+        self.assertEqual([item["source"] for item in facts], ["", "iPhone 8 số 2"])
+        self.assertEqual(db.people_by_keys(self.db_path, ["an"])["an"]["username"], "@an")
+
+    def test_scans_filter_by_phone_and_day(self) -> None:
+        db.save_people(
+            self.db_path,
+            [
+                {
+                    "nameKey": "an",
+                    "name": "An",
+                    "contactName": "A Ban",
+                    "username": "@an",
+                    "source": "iPhone 8 số 1",
+                }
+            ],
+            "2026-10-01T08:00:00+00:00",
+        )
+        db.save_people(
+            self.db_path,
+            [
+                {
+                    "nameKey": "binh",
+                    "name": "Binh",
+                    "contactName": "A Binh",
+                    "username": "@binh",
+                    "source": "iPhone 8 số 2",
+                }
+            ],
+            "2026-10-03T08:00:00+00:00",
+        )
+        listed = scan_vault.list_scans(
+            self.db_path,
+            source="iPhone 8 số 1",
+            since="2026-10-01",
+            until="2026-10-01",
+            limit=1,
+        )
+        self.assertEqual(listed["count"], 1)
+        self.assertEqual(listed["items"][0]["username"], "@an")
+        self.assertEqual(listed["items"][0]["source"], "iPhone 8 số 1")
+        self.assertEqual(listed["cursor"], "")
+        self.assertEqual(listed["phones"], ["iPhone 8 số 1", "iPhone 8 số 2"])
+        missed = scan_vault.list_scans(
+            self.db_path,
+            source="iPhone 8 số 1",
+            since="2026-10-02",
+            until="2026-10-02",
+        )
+        self.assertEqual(missed["count"], 0)
+        self.assertEqual(missed["items"], [])
+
+    def test_old_rows_without_a_phone_still_list(self) -> None:
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("DROP TRIGGER IF EXISTS scan_facts_no_delete")
+        conn.execute("DROP TRIGGER IF EXISTS scan_facts_no_update")
+        conn.execute("DROP TABLE scan_facts")
+        conn.execute(
+            """
+            CREATE TABLE scan_facts (
+              fact_key TEXT PRIMARY KEY,
+              recorded_at TEXT NOT NULL,
+              kind TEXT NOT NULL,
+              name_key TEXT NOT NULL,
+              name TEXT NOT NULL,
+              contact_name TEXT NOT NULL DEFAULT '',
+              username TEXT NOT NULL DEFAULT '',
+              kept INTEGER NOT NULL DEFAULT 1
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO scan_facts(
+              fact_key, recorded_at, kind, name_key, name, contact_name, username, kept
+            ) VALUES(?,?,?,?,?,?,?,?)
+            """,
+            ("abc", "2026-10-02T01:00:00+00:00", "person", "an", "An", "A Ban", "@an", 1),
+        )
+        conn.commit()
+        conn.close()
+        page = scan_vault.list_scans(self.db_path, since="2026-10-02", until="2026-10-02")
+        self.assertEqual(page["items"][0]["username"], "@an")
+        self.assertEqual(page["items"][0]["source"], "")
+        conn = sqlite3.connect(self.db_path)
+        with self.assertRaises(sqlite3.IntegrityError):
+            conn.execute("DELETE FROM scan_facts")
+            conn.commit()
+        conn.close()
+
     def test_pages_say_scans_stay_forever(self) -> None:
         root = Path(__file__).resolve().parents[1]
         iphone = (root / "control_plane" / "static" / "iphone.html").read_text(encoding="utf-8")
@@ -166,4 +284,6 @@ class ScanVaultTests(unittest.TestCase):
         for page in (iphone, dashboard):
             self.assertIn("50 triệu", page)
             self.assertIn("giữ vĩnh viễn", page)
-            self.assertIn("hai bản dự phòng", page)
+            self.assertIn("ba hướng lưu", page)
+            self.assertIn("Kết quả đã quét", page)
+            self.assertNotIn("hai bản dự phòng", page)

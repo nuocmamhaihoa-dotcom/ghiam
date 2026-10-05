@@ -122,6 +122,9 @@
     .err { margin: 0 1rem 0.4rem; padding: 0.45rem 0.7rem; border-radius: 10px; background: #fde8e8; color: var(--bad); }
     .err.ok { background: #e5f6ec; color: var(--ok); }
     .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
+    .scan-filters { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: end; margin: 0.2rem 0 0.7rem; }
+    .scan-filters label { display: flex; flex-direction: column; gap: 0.2rem; color: var(--muted); font-size: 0.85rem; font-weight: 650; }
+    .scan-filters input, .scan-filters select { min-height: 42px; min-width: 10rem; }
     .token-row, .toolbar { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.4rem; }
     .token-row input, .toolbar input { flex: 1; min-width: 160px; }
     .split { display: grid; grid-template-columns: 1.4fr 0.8fr; gap: 0.7rem; }
@@ -172,6 +175,7 @@
     <nav class="tabs" data-norecord>
       <button type="button" class="ghost on" data-tab="home">Video</button>
       <button type="button" class="ghost" data-tab="people">Đã lưu</button>
+      <button type="button" class="ghost" data-tab="scans">Kết quả quét</button>
       <button type="button" class="ghost" data-tab="journal">Nhật ký</button>
       <button type="button" class="ghost" data-tab="proxy">Proxy</button>
       <button type="button" class="ghost" data-tab="comments">Comment</button>
@@ -262,7 +266,7 @@
 
     <section data-view="people" hidden>
       <h2>Kết quả đã lưu</h2>
-      <p class="lead">Mỗi người đủ tên, tên trong danh bạ và tài khoản là một dòng. Kho chứa được 50 triệu kết quả. Dữ liệu đã quét được giữ vĩnh viễn, có hai bản dự phòng.</p>
+      <p class="lead">Mỗi người đủ tên, tên trong danh bạ và tài khoản là một dòng. Kho chứa được 50 triệu kết quả. Dữ liệu đã quét được giữ vĩnh viễn, ba hướng lưu.</p>
       <div class="scroll">
         <table>
           <thead>
@@ -277,6 +281,37 @@
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section data-view="scans" hidden>
+      <h2>Kết quả đã quét</h2>
+      <p class="lead">Mỗi lần quét ra một người là một dòng, mới nhất ở trên. Lọc theo ngày hoặc theo tên máy iPhone. Ba hướng lưu: sổ trong cơ sở chính, một cơ sở SQLite riêng, và một nhật ký chữ. Ba hướng nằm ở ba chỗ khác nhau trên máy chủ. Mất một hoặc hai chỗ thì chỗ còn dựng lại đủ. Không xoá, không sửa.</p>
+      <div class="scan-filters">
+        <label>Từ ngày<input id="scanSince" type="date" /></label>
+        <label>Đến ngày<input id="scanUntil" type="date" /></label>
+        <label>Máy iPhone
+          <select id="scanPhone"><option value="">Mọi máy</option></select>
+        </label>
+        <button id="scanApply" type="button">Lọc</button>
+      </div>
+      <p class="lead" id="scanCount">Đang tải kết quả đã quét…</p>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Thời gian</th>
+              <th>Máy iPhone</th>
+              <th>Tên</th>
+              <th>Tên danh bạ</th>
+              <th>Tài khoản</th>
+            </tr>
+          </thead>
+          <tbody id="scanRows">
+            <tr><td colspan="5" class="empty">Chưa có kết quả đã quét.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <button id="scanMore" class="ghost" type="button" hidden>Xem thêm</button>
     </section>
 
     <section data-view="journal" hidden>
@@ -395,7 +430,7 @@
       $("peopleRows").innerHTML = personTable(items, "Chưa có người đủ ba cột.");
       $("savedHomeBody").innerHTML = personTable(items, "Chưa có người đủ ba cột.");
       const count = typeof total === "number" ? total : items.length;
-      $("storeCount").textContent = count + " người đã lưu. Kho chứa được 50 triệu kết quả. Dữ liệu đã quét được giữ vĩnh viễn, có hai bản dự phòng.";
+      $("storeCount").textContent = count + " người đã lưu. Kho chứa được 50 triệu kết quả. Dữ liệu đã quét được giữ vĩnh viễn, ba hướng lưu.";
       $("savedMore").hidden = !peopleCursor;
     }
     function renderDuplicates(items) {
@@ -594,6 +629,65 @@
       document.querySelectorAll("[data-tab]").forEach((button) => {
         button.classList.toggle("on", button.getAttribute("data-tab") === name);
       });
+      if (name === "scans") loadScans();
+    }
+    let scanCursor = "";
+    function scanPhoneLabel(source) {
+      return source ? source : "Chưa ghi tên máy";
+    }
+    function fillScanPhones(phones) {
+      const current = $("scanPhone").value;
+      const options = ['<option value="">Mọi máy</option>'];
+      (phones || []).forEach((name) => {
+        options.push(`<option value="${esc(name)}">${esc(name)}</option>`);
+      });
+      $("scanPhone").innerHTML = options.join("");
+      if ([...$("scanPhone").options].some((opt) => opt.value === current)) $("scanPhone").value = current;
+    }
+    function scanTable(items) {
+      if (!items.length) return `<tr><td colspan="5" class="empty">Chưa có kết quả trong khoảng này.</td></tr>`;
+      return items.map((item) => {
+        const note = item.kind === "duplicate" ? " · trùng" : "";
+        const full = item.kept ? "" : " · kho đầy";
+        return `<tr>
+          <td class="meta">${esc(fmtTime(item.recordedAt))}</td>
+          <td>${esc(scanPhoneLabel(item.source))}</td>
+          <td>${esc(item.name)}<span class="meta">${esc(note + full)}</span></td>
+          <td>${esc(item.contactName)}</td>
+          <td>${esc(item.username)}</td>
+        </tr>`;
+      }).join("");
+    }
+    async function loadScans(cursor) {
+      if (!$("token").value.trim()) {
+        $("scanCount").textContent = "Nhập token hub rồi bấm Lọc.";
+        return;
+      }
+      const params = new URLSearchParams();
+      params.set("limit", "50");
+      if (cursor) params.set("cursor", cursor);
+      if ($("scanSince").value) params.set("since", $("scanSince").value);
+      if ($("scanUntil").value) params.set("until", $("scanUntil").value);
+      if ($("scanPhone").value) params.set("source", $("scanPhone").value);
+      try {
+        const response = await fetch("/v1/scans?" + params.toString(), { headers: headers() });
+        if (!response.ok) throw new Error("scans " + response.status);
+        const data = await response.json();
+        fillScanPhones(data.phones || []);
+        const rows = data.items || [];
+        if (cursor) {
+          if (rows.length) $("scanRows").insertAdjacentHTML("beforeend", scanTable(rows));
+        } else {
+          $("scanRows").innerHTML = scanTable(rows);
+        }
+        scanCursor = data.cursor || "";
+        $("scanMore").hidden = !scanCursor;
+        const count = typeof data.count === "number" ? data.count : rows.length;
+        $("scanCount").textContent = count.toLocaleString("vi-VN")
+          + " kết quả trong bộ lọc. Ba hướng lưu, không xoá, không sửa.";
+      } catch (error) {
+        $("scanCount").textContent = "Chưa mở được kết quả đã quét. Bấm Lọc lại.";
+      }
     }
 
     const drop = $("drop");
@@ -1530,6 +1624,8 @@
         renderPhoneSummary(data.phones || []);
       } catch (error) { /* giữ bảng cũ */ }
     }
+    $("scanApply").onclick = () => loadScans();
+    $("scanMore").onclick = () => { if (scanCursor) loadScans(scanCursor); };
     $("saveToken").onclick = () => { localStorage.setItem(tokenKey, $("token").value.trim()); loadAll(); loadIssues(); loadBoard(); };
     $("refresh").onclick = loadAll;
     $("recheck").onclick = recheck;

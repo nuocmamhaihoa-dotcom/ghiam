@@ -144,7 +144,10 @@ class VideoRepairTests(unittest.TestCase):
     def test_results_are_healed_before_they_are_saved(self) -> None:
         seen: dict[str, list[dict[str, str]]] = {}
 
-        def save(rows: list[dict[str, str]]) -> tuple[int, int, int, list[dict[str, str]], list[dict[str, str]]]:
+        def save(
+            rows: list[dict[str, str]], source: str = ""
+        ) -> tuple[int, int, int, list[dict[str, str]], list[dict[str, str]]]:
+            del source
             seen["rows"] = rows
             return 0, 1, 0, [], rows
 
