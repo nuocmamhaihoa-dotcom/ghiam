@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="theme-color" content="#f4f1ea" />
+      <meta name="theme-color" content="#f3f4f6" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <meta name="iphone-build" content="__IPHONE_BUILD__" />
@@ -22,15 +22,15 @@
   <style>
     [hidden] { display: none !important; }
     :root {
-      --bg: #f4f1ea;
-      --card: #fffdf8;
-      --ink: #1c1915;
-      --muted: #5e584e;
-      --line: #e4dccf;
-      --accent: #1c1915;
-      --ok: #1f7a45;
+      --bg: #f3f4f6;
+      --card: #fff;
+      --ink: #111827;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --accent: #111827;
+      --ok: #047857;
       --warn: #8a5a10;
-      --bad: #9d2c2c;
+      --bad: #b42318;
       --font: "Segoe UI", system-ui, sans-serif;
     }
     * { box-sizing: border-box; }
@@ -44,8 +44,9 @@
     }
     .shell {
       position: sticky; top: 0; z-index: 20;
-      background: rgba(244, 241, 234, 0.96);
+      background: rgba(243, 244, 246, 0.96);
       border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(10px);
     }
     .top {
       display: flex; flex-wrap: wrap; gap: 0.6rem 1rem;
@@ -70,25 +71,28 @@
     button.ghost { background: transparent; color: var(--ink); border-color: var(--line); font-weight: 650; }
     button.danger { background: var(--bad); color: #fff; }
     button:disabled { opacity: 0.5; cursor: default; }
-    .tabs { display: flex; gap: 0.35rem; flex-wrap: wrap; padding: 0 1rem 0.7rem; }
-    .tabs button { min-height: 42px; }
+    .tabs { display: flex; gap: 0.3rem; flex-wrap: wrap; padding: 0 1rem 0.7rem; }
+    .tabs button { min-height: 36px; border-radius: 999px; padding: 0.3rem 0.75rem; }
     .tabs button.ghost.on { background: var(--accent); color: #fff; border-color: transparent; }
     main { padding: 1rem 1rem 2.5rem; max-width: 920px; }
     .lead { color: var(--muted); margin: 0 0 0.8rem; }
+    details.help { margin: 0 0 0.7rem; }
+    details.help summary { cursor: pointer; font-weight: 700; }
+    details.help .lead { margin: 0.4rem 0 0; }
     .drop {
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 0.35rem; min-height: 180px; margin: 0 0 1rem; padding: 1.2rem;
-      border: 2px dashed #1c1915; border-radius: 18px; background: #fff;
+      gap: 0.3rem; min-height: 148px; margin: 0 0 0.8rem; padding: 1rem;
+      border: 1px dashed #9ca3af; border-radius: 16px; background: #fff;
       text-align: center; cursor: pointer;
     }
     .drop strong { font-size: 1.35rem; }
     .drop span { color: var(--muted); max-width: 36rem; }
     .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-    .drop.over, .drop:hover { background: #fff7e8; }
+    .drop.over, .drop:hover { background: #f9fafb; }
     .drop.busy { opacity: 0.55; pointer-events: none; }
     #progressBox { margin: 0 0 1rem; }
-    #progressTrack { height: 14px; border-radius: 999px; background: #e7e0d4; overflow: hidden; }
-    #progressFill { height: 100%; width: 0; background: #1c1915; }
+    #progressTrack { height: 8px; border-radius: 999px; background: #eef0f3; overflow: hidden; }
+    #progressFill { height: 100%; width: 0; background: var(--accent); }
     #progressLabel, #readTally, #wordCount, #videoStatus { margin: 0.45rem 0 0; }
     #readTally, #wordCount { font-weight: 700; }
     #sampleBox { display: flex; gap: 0.6rem; overflow-x: auto; margin-top: 0.6rem; align-items: flex-start; }
@@ -142,8 +146,8 @@
     .board-step-done { background: var(--ink); color: #fff; border-color: var(--ink); }
     .board-step-now { background: #fff4d6; color: var(--ink); border-color: var(--ink); font-weight: 800; }
     .board-detail { margin: 0.3rem 0 0; font-size: 0.9rem; line-height: 1.35; }
-    .board-track { height: 12px; border-radius: 999px; background: #e7e0d4; overflow: hidden; margin-top: 0.3rem; }
-    .board-fill { height: 100%; width: 0; background: #1c1915; }
+    .board-track { height: 8px; border-radius: 999px; background: #eef0f3; overflow: hidden; margin-top: 0.3rem; }
+    .board-fill { height: 100%; width: 0; background: var(--accent); }
     .board-meta { margin: 0.25rem 0 0; }
     .board-problems { margin: 0.25rem 0 0; padding-left: 1.2rem; color: var(--bad); }
     .board-retry {
@@ -163,7 +167,7 @@
     <header class="top">
       <div>
         <h1>Đọc video</h1>
-        <p class="sub">Thả video. Hub đọc 4 hình mỗi giây trên cả video. Đoạn không ra tên hoặc tài khoản thì đọc lại đúng đoạn đó ở 8 hình mỗi giây.</p>
+        <p class="sub">Thả video. Hub đọc 4 hình mỗi giây, đoạn thiếu tên thì đọc lại 8 hình mỗi giây.</p>
       </div>
       <div class="tools" data-norecord>
         <a class="sr" href="/iphone">Mở trên iPhone</a>
@@ -285,14 +289,17 @@
 
     <section data-view="scans" hidden>
       <h2>Kết quả đã quét</h2>
-      <p class="lead">Mỗi lần quét ra một người là một dòng, mới nhất ở trên. Lọc theo ngày hoặc theo tên máy iPhone. Ba hướng lưu: sổ trong cơ sở chính, một cơ sở SQLite riêng, và một nhật ký chữ. Ba hướng nằm ở ba chỗ khác nhau trên máy chủ. Mất một hoặc hai chỗ thì chỗ còn dựng lại đủ. Không xoá, không sửa.</p>
+      <details class="help">
+        <summary>Cách lưu</summary>
+        <p class="lead">Mỗi lần quét ra một người là một dòng, mới nhất ở trên. Lọc theo ngày hoặc theo tên máy iPhone. Ba hướng lưu: sổ trong cơ sở chính, một cơ sở SQLite riêng, và một nhật ký chữ. Ba hướng nằm ở ba chỗ khác nhau trên máy chủ. Mất một hoặc hai chỗ thì chỗ còn dựng lại đủ. Không xoá, không sửa.</p>
+      </details>
       <div class="scan-filters">
         <label>Từ ngày<input id="scanSince" type="date" /></label>
         <label>Đến ngày<input id="scanUntil" type="date" /></label>
         <label>Máy iPhone
           <select id="scanPhone"><option value="">Mọi máy</option></select>
         </label>
-        <button id="scanApply" type="button">Lọc</button>
+        <button id="scanApply" class="ghost" type="button">Lọc</button>
       </div>
       <div class="scan-filters">
         <label>Mật khẩu tải về<input id="scanPassword" type="password" autocomplete="off" maxlength="200" /></label>
