@@ -296,7 +296,8 @@ def iter_scan_csv(db_path: Path) -> Iterator[bytes]:
 
 def _csv_cell(value: str) -> str:
     text = str(value or "")
-    if text[:1] in "=+-@\t\r":
+    # Chuỗi rỗng vẫn nằm trong mọi chuỗi, nên phải xem đúng ký tự đầu.
+    if text and text[0] in "=+-@\t\r":
         return "'" + text
     return text
 

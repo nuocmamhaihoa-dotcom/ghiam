@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import csv
 import hashlib
 import io
 import json
@@ -218,12 +219,22 @@ class ActionApiTests(unittest.TestCase):
             self.assertEqual(opened.status_code, 200, opened.text)
             self.assertIn("ket-qua-da-quet.csv", opened.headers["content-disposition"])
             text = opened.content.decode("utf-8-sig")
-            self.assertIn("Thời gian,Máy iPhone,Loại,Tên,Tên danh bạ,Tài khoản,Giữ", text)
-            self.assertIn("iPhone 8 số 1", text)
-            self.assertIn("iPhone 8 số 2", text)
-            self.assertIn("'=An", text)
-            self.assertIn("người mới", text)
-            self.assertIn("trùng", text)
+            rows = list(csv.reader(io.StringIO(text)))
+            self.assertEqual(
+                rows[0],
+                ["Thời gian", "Máy iPhone", "Loại", "Tên", "Tên danh bạ", "Tài khoản", "Giữ"],
+            )
+            an = next(row for row in rows if "@scan.export.an" in row[5])
+            binh = next(row for row in rows if "@scan.export.binh" in row[5])
+            self.assertEqual(an[1], "iPhone 8 số 1")
+            self.assertEqual(an[2], "người mới")
+            self.assertEqual(an[3], "'=An")
+            self.assertEqual(an[4], "A Ban")
+            self.assertEqual(an[5], "'@scan.export.an")
+            self.assertEqual(binh[1], "iPhone 8 số 2")
+            self.assertEqual(binh[2], "trùng")
+            self.assertEqual(binh[4], "")
+            self.assertEqual(binh[5], "'@scan.export.binh")
             self.assertLess(text.index("@scan.export.an"), text.index("@scan.export.binh"))
         finally:
             if previous is None:
