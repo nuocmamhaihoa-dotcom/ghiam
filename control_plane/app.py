@@ -71,6 +71,7 @@ from control_plane.screen_steps import (
     video_duration,
 )
 from control_plane.screen_people import locate_tesseract, propose_rows, reading_counts
+from control_plane.tesseract_keep import set_reader_limit
 from control_plane.settings import settings
 from control_plane import video_repair
 from control_plane.video_jobs import JobProgress, VideoJob, jobs, restore_open
@@ -159,6 +160,9 @@ def _remember_hub(kind: str, summary: str, detail: str | None = None, actor: str
 @app.on_event("startup")
 async def _startup() -> None:
     settings.ensure_dirs()
+    raw_limit = os.environ.get("CONTROL_READER_LIMIT", "").strip()
+    if raw_limit.isdigit():
+        set_reader_limit(int(raw_limit))
     db.init_db(settings.db_path)
     # Việc đọc video chiếm luồng. Nhịp sống và lệnh nhận video không xếp hàng sau chúng.
     anyio.to_thread.current_default_thread_limiter().total_tokens = 80

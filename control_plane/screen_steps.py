@@ -132,14 +132,19 @@ def _segment_count() -> int:
         return max(1, min(16, int(raw)))
     cpus = os.cpu_count() or 4
     if cpus >= 16:
-        return 8
-    if cpus >= 8:
-        return 6
-    return 4
+        parts = 8
+    elif cpus >= 8:
+        parts = 6
+    else:
+        parts = 4
+    threads = os.environ.get("CONTROL_FFMPEG_THREADS", "").strip()
+    if threads.isdigit() and int(threads) > 0:
+        parts = min(parts, int(threads))
+    return max(1, parts)
 
 
 def ocr_workers(frame_count: int, cpu_count: int, reserve: int | None = None) -> int:
-    """Số tiến trình Tesseract. Hub giữ một lõi. PC giữ phần lõi còn lại sau mức 80%."""
+    """Số tiến trình Tesseract. Máy chủ giữ 10% lõi. PC giữ 20% suốt thời gian nối."""
     if reserve is None:
         raw = os.environ.get("CONTROL_OCR_RESERVE", "1")
         try:
@@ -152,7 +157,7 @@ def ocr_workers(frame_count: int, cpu_count: int, reserve: int | None = None) ->
 
 
 def _ffmpeg_thread_count() -> str:
-    """0 là ffmpeg tự dùng hết lõi. PC đặt số lõi bằng mức 80%."""
+    """0 là ffmpeg tự dùng hết lõi. Máy chủ đặt 90% lõi. PC đặt 80% lõi."""
     raw = os.environ.get("CONTROL_FFMPEG_THREADS", "0").strip()
     if raw.isdigit():
         return raw

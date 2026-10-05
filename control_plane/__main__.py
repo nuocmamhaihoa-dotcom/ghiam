@@ -8,11 +8,14 @@ import sys
 import uvicorn
 
 from control_plane.port_door import start_door, start_watchdog
+from control_plane.read_budget import apply_hub_share
 from control_plane.settings import settings
 
 
 def main() -> None:
     settings.ensure_dirs()
+    readers, cpus = apply_hub_share()
+    print(f"Đọc video bằng {readers}/{cpus} lõi (90% CPU và RAM).", file=sys.stderr)
     door_port = int(os.environ.get("CONTROL_DOOR_PORT", "80"))
     start_door(door_port, settings.port, host=settings.host)
     start_watchdog(settings.port)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""PC kéo video từ hub, đọc bằng 80% CPU và RAM của máy này, rồi gửi kết quả về.
+"""PC kéo video từ hub, đọc bằng 80% CPU và RAM của máy này suốt thời gian đang nối.
 
-PC chỉ có CPU nhận tối đa hai video. PC có GPU nhận tối đa bốn video, một card đọc theo lô. Một video dùng hết 80%. Nhiều video thì chia phần đó.
+PC chỉ có CPU nhận tối đa hai video. PC có GPU nhận tối đa bốn video, một card đọc theo lô. Một video dùng hết 80%. Nhiều video thì chia phần đó. Mức 80% không tăng khi máy rảnh và không giảm khi bạn đang dùng máy.
 Máy có card NVIDIA và đã cài bộ đọc GPU thì đọc bằng GPU.
 Chưa cài thì đọc bằng CPU (Tesseract), cùng cách với hub.
 
@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import ctypes
 import http.client
 import io
 import json
@@ -51,14 +50,15 @@ from PIL import Image, ImageDraw, ImageFont
 from control_plane import stage_timing
 from control_plane.gpu_read import fallback_note, nvidia_name, reader_ready
 from control_plane.read_vote import rapid_ready
+from control_plane import read_budget
+from control_plane.read_budget import PC_SHARE_PERCENT, share_budget
 from control_plane.screen_people import lines_from_tsv, prepare_tesseract, read_frame_tsv
 from control_plane.screen_steps import ReadProgress, ScreenVideoError, analyze_screen_video
 from control_plane.tesseract_keep import reader_mode, set_reader_limit, warm_readers
 from control_plane.version import VIDEO_WORKER_BUILD
 from pc_agent import pc_hardware, pc_power
 
-_OCR_BYTES = 256 * 1024 * 1024
-_SHARE_PERCENT = 80
+_SHARE_PERCENT = PC_SHARE_PERCENT
 _READ_STALL_SEC = 45
 _LANE_BYTES = 8 * 1024 * 1024
 _LANES = 4
@@ -218,26 +218,13 @@ class _DirectLane:
 
 
 def worker_budget(cpu_count: int, ram_bytes: int | None) -> tuple[int, int]:
-    """Số bộ đọc và số lõi để dành. Lấy mức nhỏ hơn giữa 80% lõi và 80% RAM."""
-    cpus = max(1, int(cpu_count or 1))
-    by_cpu = max(1, (cpus * _SHARE_PERCENT) // 100)
-    if ram_bytes is None or ram_bytes <= 0:
-        workers = by_cpu
-    else:
-        by_ram = max(1, (int(ram_bytes) * _SHARE_PERCENT) // 100 // _OCR_BYTES)
-        workers = max(1, min(by_cpu, by_ram))
-    workers = min(workers, cpus)
-    return workers, cpus - workers
+    """Số bộ đọc và số lõi để dành. Suốt thời gian nối hub, lấy mức nhỏ hơn giữa 80% lõi và 80% RAM."""
+    return share_budget(cpu_count, ram_bytes, _SHARE_PERCENT)
 
 
 def idle_budget(cpu_count: int, ram_bytes: int | None) -> int:
-    """Số bộ đọc khi máy rảnh: mọi lõi trừ một lõi cho nhịp nối hub, và không vượt 80% RAM."""
-    cpus = max(1, int(cpu_count or 1))
-    workers = max(1, cpus - 1)
-    if ram_bytes is not None and ram_bytes > 0:
-        by_ram = max(1, (int(ram_bytes) * _SHARE_PERCENT) // 100 // _OCR_BYTES)
-        workers = min(workers, by_ram)
-    return max(1, min(workers, cpus))
+    """Mức cũ khi máy rảnh. PC đang nối không dùng mức này nữa; luôn ở 80%."""
+    return worker_budget(cpu_count, ram_bytes)[0]
 
 
 class _JobSlots:
@@ -277,36 +264,7 @@ class _JobSlots:
 
 def machine_ram_bytes() -> int:
     """RAM vật lý. 0 khi không đọc được, lúc đó chỉ giới hạn theo số lõi."""
-    if os.name == "nt":
-        class MemoryStatus(ctypes.Structure):
-            _fields_ = [
-                ("dwLength", ctypes.c_ulong),
-                ("dwMemoryLoad", ctypes.c_ulong),
-                ("ullTotalPhys", ctypes.c_ulonglong),
-                ("ullAvailPhys", ctypes.c_ulonglong),
-                ("ullTotalPageFile", ctypes.c_ulonglong),
-                ("ullAvailPageFile", ctypes.c_ulonglong),
-                ("ullTotalVirtual", ctypes.c_ulonglong),
-                ("ullAvailVirtual", ctypes.c_ulonglong),
-                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
-            ]
-
-        status = MemoryStatus()
-        status.dwLength = ctypes.sizeof(MemoryStatus)
-        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel.GlobalMemoryStatusEx.argtypes = [ctypes.POINTER(MemoryStatus)]
-        kernel.GlobalMemoryStatusEx.restype = ctypes.c_int
-        if kernel.GlobalMemoryStatusEx(ctypes.byref(status)):
-            return int(status.ullTotalPhys)
-        return 0
-    try:
-        pages = os.sysconf("SC_PHYS_PAGES")
-        size = os.sysconf("SC_PAGE_SIZE")
-    except (AttributeError, OSError, ValueError):
-        return 0
-    if not isinstance(pages, int) or not isinstance(size, int) or pages <= 0 or size <= 0:
-        return 0
-    return pages * size
+    return read_budget.machine_ram_bytes()
 
 
 def say(text: str, *, err: bool = False) -> None:
@@ -1124,7 +1082,7 @@ def main() -> None:
     pc_power.lower_priority()
     pc_power.keep_full_speed()
     workers, reserve = worker_budget(cpus, ram)
-    budget = pc_power.PowerBudget(workers, idle_budget(cpus, ram))
+    budget = pc_power.PowerBudget(workers, workers)
     os.environ["CONTROL_OCR_RESERVE"] = str(reserve)
     os.environ["CONTROL_FFMPEG_THREADS"] = str(workers)
     set_reader_limit(workers)
@@ -1173,18 +1131,13 @@ def main() -> None:
     link_down = False
 
     def tune_cores() -> None:
-        """Máy rảnh đủ lâu thì dùng thêm lõi. Bạn quay lại dùng máy thì về mức 80% ngay."""
+        """Giữ đúng 80% suốt thời gian nối. Không tăng khi máy rảnh."""
         if not budget.update(pc_power.idle_seconds()):
             return
         os.environ["CONTROL_OCR_RESERVE"] = str(cpus - budget.workers)
         os.environ["CONTROL_FFMPEG_THREADS"] = str(budget.workers)
         set_reader_limit(budget.workers)
         slots.set_workers(budget.workers)
-        if budget.is_resting:
-            threading.Thread(target=warm_readers, daemon=True).start()
-            say(f"Máy rảnh. Đọc video bằng {budget.workers} lõi.")
-        else:
-            say(f"Bạn đang dùng máy. Đọc video bằng {budget.workers} lõi.")
 
     def note_timing() -> None:
         """Hết video cuối cùng thì in và gửi lên hub thời gian từng bước của kỳ vừa rồi."""
@@ -1247,13 +1200,12 @@ def main() -> None:
             time.sleep(5)
     if _reader_note:
         say(_reader_note, err=True)
-    resting = f" và {budget.resting} lõi khi máy rảnh {int(pc_power.IDLE_AFTER_SEC // 60)} phút" if budget.resting > workers else ""
     if ram > 0:
         say(
-            f"Đã nối hub. Máy này có {cpus} lõi, {ram // (1024 * 1024)} MB RAM, dùng {workers} lõi (80%) khi bạn đang dùng máy{resting} để đọc video. Tối đa hai video cùng lúc."
+            f"Đã nối hub. Máy này có {cpus} lõi, {ram // (1024 * 1024)} MB RAM, dùng {workers} lõi (80% CPU và RAM) suốt thời gian nối để đọc video. Tối đa hai video cùng lúc."
         )
     else:
-        say(f"Đã nối hub. Máy này có {cpus} lõi, dùng {workers} lõi (80%) khi bạn đang dùng máy{resting} để đọc video. Tối đa hai video cùng lúc.")
+        say(f"Đã nối hub. Máy này có {cpus} lõi, dùng {workers} lõi (80% CPU và RAM) suốt thời gian nối để đọc video. Tối đa hai video cùng lúc.")
     say(f"Bản {VIDEO_WORKER_BUILD}. " + ("Bộ chữ nhanh." if models == "fast" else "Bộ chữ chuẩn."))
     if report.get("readerOk") is True:
         say(f"Đọc thử ảnh mẫu được, mất {report.get('readerMs')} ms.")
