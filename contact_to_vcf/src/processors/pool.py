@@ -13,7 +13,7 @@ from models.records import JobConfig
 from parsers.detect import detect_encoding, open_reader, prepare_source
 from processors.phone_normalizer import canonical_phones, storage_forms, to_vietnam_10
 
-CONTACTS_PER_FILE = 50000
+CONTACTS_PER_FILE = 2000
 
 
 @dataclass(frozen=True)

@@ -72,7 +72,7 @@ def test_nine_hundred_ninety_nine_scenarios(tmp_path: Path) -> None:
             contacts_per_file=per,
         )
 
-    check("default book size", CONTACTS_PER_FILE == 50000, str(CONTACTS_PER_FILE))
+    check("default book size", CONTACTS_PER_FILE == 2000, str(CONTACTS_PER_FILE))
 
     for prefix in PREFIXES:
         ten = prefix + "1234567"
