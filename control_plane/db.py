@@ -817,6 +817,50 @@ def _load_duplicate_map(conn: sqlite3.Connection, keys: list[str]) -> dict[str, 
     return found
 
 
+def _scan_source(row: dict[str, Any]) -> str:
+    return " ".join(str(row.get("source") or "").split())[:80]
+
+
+def _remember_scan(
+    conn: sqlite3.Connection,
+    fresh: list[dict[str, Any]],
+    *,
+    recorded_at: str,
+    kind: str,
+    name_key: str,
+    name: str,
+    contact_name: str,
+    username: str,
+    source: str,
+    kept: bool,
+    same_content: bool,
+) -> None:
+    """Ghi sổ vĩnh viễn. Cùng chữ và cùng máy thì không thêm dòng mới."""
+    if same_content and scan_vault.already_noted(
+        conn,
+        kind=kind,
+        name_key=name_key,
+        name=name,
+        contact_name=contact_name,
+        username=username,
+        source=source,
+    ):
+        return
+    noted = scan_vault.remember(
+        conn,
+        recorded_at=recorded_at,
+        kind=kind,
+        name_key=name_key,
+        name=name,
+        contact_name=contact_name,
+        username=username,
+        kept=kept,
+        source=source,
+    )
+    if noted is not None:
+        fresh.append(noted)
+
+
 def save_duplicates(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> list[str]:
     """Một dòng cho mỗi người đã có trong kho. Lần quét sau ghi đè dòng trùng đó.
 
@@ -836,13 +880,28 @@ def save_duplicates(db_path: Path, rows: list[dict[str, str]], updated_at: str) 
                 name = row.get("name") or ""
                 contact_name = row.get("contactName") or ""
                 username = row.get("username") or ""
+                source = _scan_source(row)
                 old = current.get(key)
-                if (
+                same = bool(
                     old
                     and old["name"] == name
                     and old["contact_name"] == contact_name
                     and old["username"] == username
-                ):
+                )
+                if same:
+                    _remember_scan(
+                        conn,
+                        fresh,
+                        recorded_at=updated_at,
+                        kind="duplicate",
+                        name_key=key,
+                        name=name,
+                        contact_name=contact_name,
+                        username=username,
+                        source=source,
+                        kept=True,
+                        same_content=True,
+                    )
                     continue
                 kept = True
                 if old is None:
@@ -870,18 +929,19 @@ def save_duplicates(db_path: Path, rows: list[dict[str, str]], updated_at: str) 
                         "contact_name": contact_name,
                         "username": username,
                     }
-                noted = scan_vault.remember(
+                _remember_scan(
                     conn,
+                    fresh,
                     recorded_at=updated_at,
                     kind="duplicate",
                     name_key=key,
                     name=name,
                     contact_name=contact_name,
                     username=username,
+                    source=source,
                     kept=kept,
+                    same_content=False,
                 )
-                if noted is not None:
-                    fresh.append(noted)
             conn.execute("UPDATE people_meta SET duplicates=? WHERE id=1", (duplicates,))
         scan_vault.replicate(db_path, fresh)
     return skipped
@@ -908,13 +968,28 @@ def save_people(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> l
                 contact_name = row.get("contactName") or ""
                 username = row.get("username") or ""
                 name = row.get("name") or ""
+                source = _scan_source(row)
                 old = current.get(key)
-                if (
+                same = bool(
                     old
                     and old["name"] == name
                     and old["contact_name"] == contact_name
                     and old["username"] == username
-                ):
+                )
+                if same:
+                    _remember_scan(
+                        conn,
+                        fresh,
+                        recorded_at=updated_at,
+                        kind="person",
+                        name_key=key,
+                        name=name,
+                        contact_name=contact_name,
+                        username=username,
+                        source=source,
+                        kept=True,
+                        same_content=True,
+                    )
                     continue
                 now_ready = bool(contact_name and username)
                 kept = True
@@ -949,18 +1024,19 @@ def save_people(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> l
                         "contact_name": contact_name,
                         "username": username,
                     }
-                noted = scan_vault.remember(
+                _remember_scan(
                     conn,
+                    fresh,
                     recorded_at=updated_at,
                     kind="person",
                     name_key=key,
                     name=name,
                     contact_name=contact_name,
                     username=username,
+                    source=source,
                     kept=kept,
+                    same_content=False,
                 )
-                if noted is not None:
-                    fresh.append(noted)
             ready = max(0, ready)
             conn.execute(
                 """

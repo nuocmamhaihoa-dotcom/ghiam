@@ -63,11 +63,29 @@
     #savedEmpty, #dupEmpty { margin: 0; color: #444; }
     #savedEmpty[hidden], #savedTable[hidden], #savedMore[hidden],
     #dupEmpty[hidden], #dupTable[hidden], #dupMore[hidden] { display: none !important; }
-    #savedMore, #dupMore {
+    #savedMore, #dupMore, #scanMore, #scanApply {
       display: block; width: 100%; margin: 0.7rem 0 0.2rem; min-height: 48px;
       border-radius: 12px; border: 2px solid #111; background: #fff;
       font: inherit; font-weight: 800; font-size: 16px;
     }
+    #scanBox { margin-top: 1.1rem; }
+    #scanLead { margin: 0 0 0.6rem; line-height: 1.4; }
+    #scanCount { margin: 0.45rem 0 0.6rem; font-weight: 700; }
+    #scanEmpty { margin: 0; color: #444; }
+    #scanEmpty[hidden], #scanTable[hidden], #scanMore[hidden] { display: none !important; }
+    #scanFilters { display: grid; gap: 0.45rem; margin: 0 0 0.4rem; }
+    #scanFilters label { font-weight: 800; font-size: 15px; }
+    #scanSince, #scanUntil, #scanPhone {
+      display: block; width: 100%; min-height: 48px; margin-top: 0.2rem;
+      border-radius: 12px; border: 2px solid #111; padding: 0.4rem 0.7rem;
+      font: inherit; font-size: 16px; background: #fff;
+    }
+    #scanTable { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
+    #scanTable th, #scanTable td {
+      border-bottom: 1px solid #ddd; padding: 0.45rem 0.2rem;
+      text-align: left; vertical-align: top; word-break: break-word; overflow-wrap: anywhere;
+    }
+    #scanTable th { font-size: 13px; font-weight: 800; }
     #peopleTable, #savedTable, #dupTable { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
     #peopleTable th, #peopleTable td, #savedTable th, #savedTable td, #dupTable th, #dupTable td {
       border-bottom: 1px solid #ddd; padding: 0.45rem 0.2rem;
@@ -181,7 +199,7 @@
       <div id="boardHistory"></div>
     </section>
     <section id="savedBox">
-      <p id="savedLead">Kết quả đã lưu. Kho chứa được 50 triệu kết quả. Dữ liệu đã quét được giữ vĩnh viễn, có hai bản dự phòng. Hub tự ghi ngay sau mỗi video. Mở lại trang vẫn còn.</p>
+      <p id="savedLead">Kết quả đã lưu. Kho chứa được 50 triệu kết quả. Dữ liệu đã quét được giữ vĩnh viễn, ba hướng lưu. Hub tự ghi ngay sau mỗi video. Mở lại trang vẫn còn.</p>
       <p id="savedEmpty">Chưa có người đủ ba cột.</p>
       <table id="savedTable" hidden>
         <thead>
@@ -209,6 +227,33 @@
         <tbody id="dupBody"></tbody>
       </table>
       <button id="dupMore" type="button" hidden>Xem thêm</button>
+    </section>
+    <section id="scanBox">
+      <h2>Kết quả đã quét</h2>
+      <p id="scanLead">Mỗi lần quét ra một người là một dòng, mới nhất ở trên. Lọc theo ngày hoặc theo tên máy iPhone. Ba hướng lưu: sổ trong cơ sở chính, một cơ sở SQLite riêng, và một nhật ký chữ. Ba hướng nằm ở ba chỗ khác nhau trên máy chủ. Mất một hoặc hai chỗ thì chỗ còn dựng lại đủ. Không xoá, không sửa.</p>
+      <div id="scanFilters">
+        <label>Từ ngày<input id="scanSince" type="date" /></label>
+        <label>Đến ngày<input id="scanUntil" type="date" /></label>
+        <label>Máy iPhone
+          <select id="scanPhone"><option value="">Mọi máy</option></select>
+        </label>
+      </div>
+      <button id="scanApply" type="button">Lọc</button>
+      <p id="scanCount">Đang tải kết quả đã quét…</p>
+      <p id="scanEmpty">Chưa có kết quả đã quét.</p>
+      <table id="scanTable" hidden>
+        <thead>
+          <tr>
+            <th>Thời gian</th>
+            <th>Máy</th>
+            <th>Tên</th>
+            <th>Danh bạ</th>
+            <th>Tài khoản</th>
+          </tr>
+        </thead>
+        <tbody id="scanBody"></tbody>
+      </table>
+      <button id="scanMore" type="button" hidden>Xem thêm</button>
     </section>
     <section id="peopleBox" hidden>
       <p id="peopleLead">Video vừa đọc. Cột đã có sẵn được giữ nguyên.</p>
@@ -515,7 +560,7 @@
     function paintSavedCount(count) {
       const n = Number(count) || 0;
       savedLead.textContent = "Kết quả đã lưu: " + n.toLocaleString("vi-VN")
-        + " người. Kho chứa được 50 triệu kết quả. Dữ liệu đã quét được giữ vĩnh viễn, có hai bản dự phòng.";
+        + " người. Kho chứa được 50 triệu kết quả. Dữ liệu đã quét được giữ vĩnh viễn, ba hướng lưu.";
     }
 
     function showDuplicates(rows) {
@@ -624,10 +669,88 @@
         else showSaved(rows);
         savedCursor = data.cursor || "";
         savedMore.hidden = !savedCursor;
+        if (!cursor) loadScans();
       } catch (error) {
         setStatus("Chưa mở được kết quả đã lưu. Mở lại trang.", false);
       }
     }
+
+    const scanSince = document.getElementById("scanSince");
+    const scanUntil = document.getElementById("scanUntil");
+    const scanPhone = document.getElementById("scanPhone");
+    const scanCount = document.getElementById("scanCount");
+    const scanEmpty = document.getElementById("scanEmpty");
+    const scanTable = document.getElementById("scanTable");
+    const scanBody = document.getElementById("scanBody");
+    const scanMore = document.getElementById("scanMore");
+    let scanCursor = "";
+
+    function fmtWhen(iso) {
+      const parsed = new Date(iso);
+      if (Number.isNaN(parsed.getTime())) return iso || "";
+      return parsed.toLocaleString("vi-VN");
+    }
+
+    function fillScanPhones(phones) {
+      const current = scanPhone.value;
+      scanPhone.replaceChildren();
+      const all = document.createElement("option");
+      all.value = "";
+      all.textContent = "Mọi máy";
+      scanPhone.appendChild(all);
+      (phones || []).forEach((name) => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        scanPhone.appendChild(option);
+      });
+      if ([...scanPhone.options].some((option) => option.value === current)) scanPhone.value = current;
+    }
+
+    function appendScans(rows) {
+      (rows || []).forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.appendChild(cell(fmtWhen(row.recordedAt)));
+        tr.appendChild(cell(row.source || "Chưa ghi tên máy"));
+        const name = row.name || "";
+        const mark = (row.kind === "duplicate" ? " · trùng" : "") + (row.kept ? "" : " · kho đầy");
+        tr.appendChild(cell(name + mark));
+        tr.appendChild(cell(row.contactName));
+        tr.appendChild(cell(row.username));
+        scanBody.appendChild(tr);
+      });
+      const hasRows = scanBody.children.length > 0;
+      scanEmpty.hidden = hasRows;
+      scanTable.hidden = !hasRows;
+    }
+
+    async function loadScans(cursor) {
+      try {
+        const params = new URLSearchParams();
+        params.set("limit", "50");
+        if (cursor) params.set("cursor", cursor);
+        if (scanSince.value) params.set("since", scanSince.value);
+        if (scanUntil.value) params.set("until", scanUntil.value);
+        if (scanPhone.value) params.set("source", scanPhone.value);
+        const response = await fetch("/v1/scans?" + params.toString(), { headers: authHeaders() });
+        if (!response.ok) return;
+        const data = await response.json();
+        fillScanPhones(data.phones || []);
+        if (!cursor) scanBody.replaceChildren();
+        appendScans(data.items || []);
+        scanCursor = data.cursor || "";
+        scanMore.hidden = !scanCursor;
+        const count = Number(data.count) || 0;
+        scanCount.textContent = count.toLocaleString("vi-VN") + " kết quả trong bộ lọc.";
+      } catch (error) {
+        scanCount.textContent = "Chưa mở được kết quả đã quét. Bấm Lọc lại.";
+      }
+    }
+
+    document.getElementById("scanApply").addEventListener("click", () => loadScans());
+    scanMore.addEventListener("click", () => {
+      if (scanCursor) loadScans(scanCursor);
+    });
 
     savedMore.addEventListener("click", () => {
       if (savedCursor) loadSaved(savedCursor);

@@ -1,12 +1,13 @@
 """Sổ dữ liệu đã quét: chỉ thêm, không sửa, không xoá.
 
-Ba bản đủ cùng một nội dung:
+Ba hướng đủ cùng một nội dung, mỗi hướng một file riêng:
 - bảng scan_facts trong cơ sở chính
-- cơ sở SQLite riêng (scan_vault/scan_facts.db)
-- nhật ký JSONL đã fsync (scan_log/scan_facts.jsonl)
+- cơ sở SQLite riêng (mặc định scan_vault/scan_facts.db)
+- nhật ký JSONL đã fsync (mặc định scan_log/scan_facts.jsonl)
 
-Mất một hoặc hai bản thì lần mở máy dựng lại từ bản còn. Đặt CONTROL_SCAN_MIRROR
-hoặc CONTROL_SCAN_LOG trỏ sang đĩa khác nếu muốn một bản nằm ngoài thư mục dữ liệu.
+Mất một hoặc hai hướng thì lần mở máy dựng lại từ hướng còn. Đặt
+CONTROL_SCAN_MIRROR và CONTROL_SCAN_LOG trỏ sang hai thư mục khác thư mục
+dữ liệu (hoặc hai đĩa khác) để xoá một chỗ không kéo theo hai chỗ kia.
 """
 
 from __future__ import annotations
@@ -14,10 +15,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sqlite3
 from contextlib import contextmanager
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Iterator
+
+_TIME_TEXT = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}(?:[T ][0-9:.+\-Zz]*)?$")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS scan_facts (
@@ -28,7 +33,8 @@ CREATE TABLE IF NOT EXISTS scan_facts (
   name TEXT NOT NULL,
   contact_name TEXT NOT NULL DEFAULT '',
   username TEXT NOT NULL DEFAULT '',
-  kept INTEGER NOT NULL DEFAULT 1
+  kept INTEGER NOT NULL DEFAULT 1,
+  source TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_scan_facts_person
   ON scan_facts(name_key, recorded_at);
@@ -58,6 +64,15 @@ def locations(db_path: Path) -> tuple[Path, Path, Path]:
 
 def ensure(conn: sqlite3.Connection) -> None:
     conn.executescript(_SCHEMA)
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(scan_facts)")}
+    if "source" not in columns:
+        conn.execute("ALTER TABLE scan_facts ADD COLUMN source TEXT NOT NULL DEFAULT ''")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_scan_facts_source ON scan_facts(source, recorded_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_scan_facts_time ON scan_facts(recorded_at, fact_key)"
+    )
 
 
 def remember(
@@ -70,6 +85,7 @@ def remember(
     contact_name: str,
     username: str,
     kept: bool,
+    source: str = "",
 ) -> dict[str, Any] | None:
     """Thêm một lần quét vào giao dịch đang mở. Dòng đã có thì bỏ qua."""
     ensure(conn)
@@ -81,12 +97,13 @@ def remember(
         contact_name=contact_name,
         username=username,
         kept=kept,
+        source=source,
     )
     conn.execute(
         """
         INSERT OR IGNORE INTO scan_facts(
-          fact_key, recorded_at, kind, name_key, name, contact_name, username, kept
-        ) VALUES(?,?,?,?,?,?,?,?)
+          fact_key, recorded_at, kind, name_key, name, contact_name, username, kept, source
+        ) VALUES(?,?,?,?,?,?,?,?,?)
         """,
         _tuple(fact),
     )
@@ -97,7 +114,7 @@ def remember(
 
 
 def replicate(db_path: Path, facts: list[dict[str, Any]]) -> None:
-    """Ghi các dòng mới ra hai bản dự phòng, rồi bù nếu một bản đang thiếu."""
+    """Ghi các dòng mới ra hai hướng còn lại, rồi bù nếu một hướng đang thiếu."""
     # db.py gọi module này. Khoá lấy lúc chạy để không vòng import lúc nạp file.
     from control_plane.db import people_write_lock
 
@@ -107,7 +124,7 @@ def replicate(db_path: Path, facts: list[dict[str, Any]]) -> None:
         if not _aligned(db_path):
             _heal(db_path)
         if not _aligned(db_path):
-            raise RuntimeError("Chưa lưu đủ hai bản dự phòng của dữ liệu đã quét")
+            raise RuntimeError("Chưa lưu đủ ba hướng của dữ liệu đã quét")
 
 
 def startup(db_path: Path) -> None:
@@ -120,7 +137,7 @@ def startup(db_path: Path) -> None:
             _heal(db_path)
         _restore_working(db_path)
         if not _aligned(db_path):
-            raise RuntimeError("Chưa lưu đủ hai bản dự phòng của dữ liệu đã quét")
+            raise RuntimeError("Chưa lưu đủ ba hướng của dữ liệu đã quét")
 
 
 def list_facts(db_path: Path) -> list[dict[str, Any]]:
@@ -128,12 +145,110 @@ def list_facts(db_path: Path) -> list[dict[str, Any]]:
         ensure(conn)
         rows = conn.execute(
             """
-            SELECT fact_key, recorded_at, kind, name_key, name, contact_name, username, kept
+            SELECT fact_key, recorded_at, kind, name_key, name, contact_name, username, kept, source
             FROM scan_facts
             ORDER BY recorded_at ASC, fact_key ASC
             """
         ).fetchall()
     return [_public(row) for row in rows]
+
+
+def already_noted(
+    conn: sqlite3.Connection,
+    *,
+    kind: str,
+    name_key: str,
+    name: str,
+    contact_name: str,
+    username: str,
+    source: str,
+) -> bool:
+    """Cùng nội dung và cùng máy đã có trong sổ thì không ghi thêm một dòng."""
+    ensure(conn)
+    row = conn.execute(
+        """
+        SELECT 1 FROM scan_facts
+        WHERE kind = ? AND name_key = ? AND name = ? AND contact_name = ?
+          AND username = ? AND source = ?
+        LIMIT 1
+        """,
+        (kind, name_key, name, contact_name, username, _clean_source(source)),
+    ).fetchone()
+    return row is not None
+
+
+def list_scans(
+    db_path: Path,
+    *,
+    limit: int = 50,
+    cursor: str = "",
+    source: str = "",
+    since: str = "",
+    until: str = "",
+) -> dict[str, Any]:
+    """Một trang kết quả đã quét, mới nhất trước. Lọc theo máy và khoảng ngày."""
+    size = max(1, min(int(limit), 200))
+    phone = _clean_source(source)
+    start, end = _time_bounds(since, until)
+    filters: list[str] = []
+    filter_params: list[Any] = []
+    if phone:
+        filters.append("source = ?")
+        filter_params.append(phone)
+    if start:
+        filters.append("recorded_at >= ?")
+        filter_params.append(start)
+    if end:
+        filters.append("recorded_at < ?")
+        filter_params.append(end)
+    parsed = _scan_cursor(cursor[:300])
+    clauses = list(filters)
+    params = list(filter_params)
+    if parsed is not None:
+        recorded_at, fact_key = parsed
+        clauses.append("(recorded_at < ? OR (recorded_at = ? AND fact_key < ?))")
+        params.extend([recorded_at, recorded_at, fact_key])
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    count_where = ("WHERE " + " AND ".join(filters)) if filters else ""
+    params.append(size + 1)
+    with _open(db_path) as conn:
+        ensure(conn)
+        total = int(
+            conn.execute(f"SELECT COUNT(*) AS n FROM scan_facts {count_where}", filter_params).fetchone()["n"]
+        )
+        rows = conn.execute(
+            f"""
+            SELECT fact_key, recorded_at, kind, name_key, name, contact_name, username, kept, source
+            FROM scan_facts
+            {where}
+            ORDER BY recorded_at DESC, fact_key DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+        phones = [
+            str(row["source"])
+            for row in conn.execute(
+                """
+                SELECT source FROM scan_facts
+                WHERE source != ''
+                GROUP BY source
+                ORDER BY source COLLATE NOCASE
+                LIMIT 200
+                """
+            )
+        ]
+    page = rows[:size]
+    next_cursor = ""
+    if len(rows) > size and page:
+        last = page[-1]
+        next_cursor = f"{last['recorded_at']}\n{last['fact_key']}"
+    return {
+        "count": total,
+        "items": [_scan_item(row) for row in page],
+        "cursor": next_cursor,
+        "phones": phones,
+    }
 
 
 def _fact(
@@ -145,9 +260,13 @@ def _fact(
     contact_name: str,
     username: str,
     kept: bool,
+    source: str = "",
 ) -> dict[str, Any]:
     kept_bit = 1 if kept else 0
-    raw = "\n".join([recorded_at, kind, name_key, name, contact_name, username, str(kept_bit)])
+    phone = _clean_source(source)
+    raw = "\n".join(
+        [recorded_at, kind, name_key, name, contact_name, username, str(kept_bit), phone]
+    )
     return {
         "factKey": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
         "recordedAt": recorded_at,
@@ -157,6 +276,7 @@ def _fact(
         "contactName": contact_name,
         "username": username,
         "kept": kept_bit,
+        "source": phone,
     }
 
 
@@ -170,6 +290,7 @@ def _tuple(fact: dict[str, Any]) -> tuple[Any, ...]:
         fact["contactName"],
         fact["username"],
         int(fact["kept"]),
+        _clean_source(str(fact.get("source") or "")),
     )
 
 
@@ -183,6 +304,7 @@ def _public(row: sqlite3.Row) -> dict[str, Any]:
         "contactName": row["contact_name"],
         "username": row["username"],
         "kept": int(row["kept"]),
+        "source": str(row["source"] or ""),
     }
 
 
@@ -211,8 +333,8 @@ def _insert(conn: sqlite3.Connection, fact: dict[str, Any]) -> None:
     conn.execute(
         """
         INSERT OR IGNORE INTO scan_facts(
-          fact_key, recorded_at, kind, name_key, name, contact_name, username, kept
-        ) VALUES(?,?,?,?,?,?,?,?)
+          fact_key, recorded_at, kind, name_key, name, contact_name, username, kept, source
+        ) VALUES(?,?,?,?,?,?,?,?,?)
         """,
         _tuple(fact),
     )
@@ -309,7 +431,7 @@ def _load(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
     ensure(conn)
     rows = conn.execute(
         """
-        SELECT fact_key, recorded_at, kind, name_key, name, contact_name, username, kept
+        SELECT fact_key, recorded_at, kind, name_key, name, contact_name, username, kept, source
         FROM scan_facts
         """
     ).fetchall()
@@ -331,8 +453,58 @@ def _read_log(log: Path) -> dict[str, dict[str, Any]]:
                 continue
             key = str(item.get("factKey") or "")
             if key:
+                item["source"] = _clean_source(str(item.get("source") or ""))
                 found[key] = item
     return found
+
+
+def _clean_source(value: str) -> str:
+    return " ".join(str(value or "").split())[:80]
+
+
+def _time_bounds(since: str, until: str) -> tuple[str, str]:
+    """Mốc đầu gồm trong ngày. Mốc cuối là đầu ngày hôm sau, không gồm."""
+    start = _time_text(since)
+    end_text = _time_text(until)
+    end = ""
+    if len(end_text) == 10:
+        year, month, day = (int(end_text[0:4]), int(end_text[5:7]), int(end_text[8:10]))
+        try:
+            end = (date(year, month, day) + timedelta(days=1)).isoformat()
+        except ValueError:
+            end = ""
+    elif end_text:
+        end = end_text
+    return start, end
+
+
+def _time_text(value: str) -> str:
+    text = str(value or "").strip()[:40]
+    if text and _TIME_TEXT.fullmatch(text):
+        return text
+    return ""
+
+
+def _scan_cursor(cursor: str) -> tuple[str, str] | None:
+    text = cursor.strip()
+    if "\n" not in text:
+        return None
+    recorded_at, fact_key = text.split("\n", 1)
+    if not recorded_at or not fact_key:
+        return None
+    return recorded_at, fact_key
+
+
+def _scan_item(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "recordedAt": row["recorded_at"],
+        "kind": row["kind"],
+        "name": row["name"],
+        "contactName": row["contact_name"],
+        "username": row["username"],
+        "source": str(row["source"] or ""),
+        "kept": int(row["kept"]),
+    }
 
 
 def _write_seal(db_path: Path) -> None:

@@ -17,6 +17,16 @@ Trang web không có tên tài khoản. Mở link hub rồi dán `CONTROL_TOKEN`
 
 Hub nghe cổng 8088. Cổng 80 trên cùng máy chuyển tiếp tới cổng đó, nên mở đúng IP cũng vào trang. Nếu hub im, máy tự khởi động lại dịch vụ.
 
+Kết quả đã quét nằm ở mục **Kết quả quét** trên trang chủ và mục **Kết quả đã quét** trên trang iPhone. Lọc theo ngày hoặc theo tên máy. Mỗi kết quả được ghi ba hướng, chỉ thêm, không sửa, không xoá:
+
+| Hướng | Chỗ trên VPS |
+|---|---|
+| Sổ trong cơ sở chính | `/opt/fb-poller/control_data/server.db` |
+| Cơ sở SQLite riêng | `/var/lib/fb-poller/scan_vault/scan_facts.db` |
+| Nhật ký chữ | `/var/backups/fb-poller/scan_facts.jsonl` |
+
+Mất một hoặc hai hướng thì lần mở máy dựng lại từ hướng còn. Ba hướng này cùng một ổ đĩa của VPS; mất cả ổ thì không còn bản nào trên máy đó.
+
 VPS đóng vai trò **trung tâm**:
 
 1. Nhận comment đồng bộ từ mọi PC scanner (`/v1/sync/comments`)  

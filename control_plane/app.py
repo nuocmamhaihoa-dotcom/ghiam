@@ -44,6 +44,7 @@ from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from control_plane import db
+from control_plane import scan_vault
 from control_plane.delivery import PACKAGE_NAME, ensure_package
 from control_plane.handles import exact_line, profile_from_share
 from control_plane.people import (
@@ -497,6 +498,27 @@ def people_duplicates(
     return {"count": db.duplicate_count(settings.db_path), "items": items, "cursor": next_cursor}
 
 
+@app.get("/v1/scans")
+def scans_list(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    cursor: str = Query(default=""),
+    source: str = Query(default=""),
+    since: str = Query(default=""),
+    until: str = Query(default=""),
+) -> dict[str, Any]:
+    """Kết quả đã quét, lọc theo ngày và tên máy iPhone."""
+    _auth(authorization)
+    return scan_vault.list_scans(
+        settings.db_path,
+        limit=limit,
+        cursor=cursor,
+        source=source,
+        since=since,
+        until=until,
+    )
+
+
 @app.post("/v1/people/sightings")
 def people_sightings(
     body: SightingsBody,
@@ -583,8 +605,17 @@ def _prepared_person(row: dict[str, str]) -> dict[str, str] | None:
     }
 
 
+def _stamp_phone(rows: list[dict[str, str]], source: str) -> None:
+    phone = " ".join(str(source or "").split())[:80]
+    if not phone:
+        return
+    for row in rows:
+        row["source"] = phone
+
+
 def _save_proposed(
     rows: list[dict[str, str]],
+    source: str = "",
 ) -> tuple[int, int, list[str], list[dict[str, str]], list[dict[str, str]]]:
     """Ghi người mới. Người đã đủ ba cột trong kho thì đưa sang bảng trùng.
 
@@ -645,9 +676,11 @@ def _save_proposed(
                     != (row["name"], row.get("contactName") or "", row.get("username") or "")
                 ]
                 if to_write:
+                    _stamp_phone(to_write, source)
                     skipped = _write_people(to_write)
         duplicates = list(duplicate_rows.values())
         if duplicates:
+            _stamp_phone(duplicates, source)
             db.save_duplicates(settings.db_path, duplicates, utcnow())
     fresh_by_key: dict[str, dict[str, str]] = {}
     for row in fresh:
@@ -1226,7 +1259,7 @@ def _commit_people(job: VideoJob, people: list[dict[str, str]], worker_id: str |
     job.update(97, "Ghi kết quả")
     try:
         _store_seen([f"{len(rows)} người"] if rows else ["Đã đọc video"])
-        _added, people_saved, skipped, duplicates, fresh = _save_proposed(rows)
+        _added, people_saved, skipped, duplicates, fresh = _save_proposed(rows, job.source)
         if skipped:
             job.add_problem(_STORE_FULL)
         archive = _video_archive(rows)

@@ -33,7 +33,8 @@ uv venv --python 3.12 .venv
 source .venv/bin/activate
 uv pip install -e ".[control]"
 
-mkdir -p "$APP_DIR/control_data/packages" "$APP_DIR/control_data/sync" "$APP_DIR/logs"
+mkdir -p "$APP_DIR/control_data/packages" "$APP_DIR/control_data/sync" "$APP_DIR/logs" \
+  /var/lib/fb-poller/scan_vault /var/backups/fb-poller
 
 if [[ -z "$TOKEN" ]]; then
   if [[ -f "$APP_DIR/control_data/server.env" ]]; then
@@ -70,6 +71,8 @@ CONTROL_KEEPALIVE=75
 CONTROL_PROXY_CHECK_SEC=300
 CONTROL_PROXY_CHECK_CONCURRENCY=40
 CONTROL_PROXY_CHECK_TIMEOUT=8
+CONTROL_SCAN_MIRROR=/var/lib/fb-poller/scan_vault/scan_facts.db
+CONTROL_SCAN_LOG=/var/backups/fb-poller/scan_facts.jsonl
 EOF
 chmod 600 "$APP_DIR/control_data/server.env"
 
