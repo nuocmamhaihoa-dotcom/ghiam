@@ -63,7 +63,7 @@
     #savedEmpty, #dupEmpty { margin: 0; color: #444; }
     #savedEmpty[hidden], #savedTable[hidden], #savedMore[hidden],
     #dupEmpty[hidden], #dupTable[hidden], #dupMore[hidden] { display: none !important; }
-    #savedMore, #dupMore, #scanMore, #scanApply {
+    #savedMore, #dupMore, #scanMore, #scanApply, #scanExport {
       display: block; width: 100%; margin: 0.7rem 0 0.2rem; min-height: 48px;
       border-radius: 12px; border: 2px solid #111; background: #fff;
       font: inherit; font-weight: 800; font-size: 16px;
@@ -71,11 +71,13 @@
     #scanBox { margin-top: 1.1rem; }
     #scanLead { margin: 0 0 0.6rem; line-height: 1.4; }
     #scanCount { margin: 0.45rem 0 0.6rem; font-weight: 700; }
+    #scanExportNote { margin: 0.35rem 0 0; color: #b42318; font-weight: 700; }
+    #scanExportNote[hidden] { display: none !important; }
     #scanEmpty { margin: 0; color: #444; }
     #scanEmpty[hidden], #scanTable[hidden], #scanMore[hidden] { display: none !important; }
     #scanFilters { display: grid; gap: 0.45rem; margin: 0 0 0.4rem; }
     #scanFilters label { font-weight: 800; font-size: 15px; }
-    #scanSince, #scanUntil, #scanPhone {
+    #scanSince, #scanUntil, #scanPhone, #scanPassword {
       display: block; width: 100%; min-height: 48px; margin-top: 0.2rem;
       border-radius: 12px; border: 2px solid #111; padding: 0.4rem 0.7rem;
       font: inherit; font-size: 16px; background: #fff;
@@ -237,8 +239,11 @@
         <label>Máy iPhone
           <select id="scanPhone"><option value="">Mọi máy</option></select>
         </label>
+        <label>Mật khẩu tải về<input id="scanPassword" type="password" autocomplete="off" maxlength="200" /></label>
       </div>
       <button id="scanApply" type="button">Lọc</button>
+      <button id="scanExport" type="button">Tải toàn bộ</button>
+      <p id="scanExportNote" hidden></p>
       <p id="scanCount">Đang tải kết quả đã quét…</p>
       <p id="scanEmpty">Chưa có kết quả đã quét.</p>
       <table id="scanTable" hidden>
@@ -724,6 +729,44 @@
       scanTable.hidden = !hasRows;
     }
 
+    async function downloadScans() {
+      const note = document.getElementById("scanExportNote");
+      const password = document.getElementById("scanPassword").value.trim();
+      note.hidden = false;
+      if (!password) {
+        note.textContent = "Nhập mật khẩu tải về.";
+        return;
+      }
+      note.textContent = "Đang tải toàn bộ kết quả…";
+      try {
+        const response = await fetch("/v1/scans/export", {
+          method: "POST",
+          headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+          body: JSON.stringify({ password: password }),
+        });
+        if (!response.ok) {
+          let message = "Chưa tải được.";
+          try {
+            const data = await response.json();
+            if (data && data.detail) message = String(data.detail);
+          } catch (error) { /* giữ câu mặc định */ }
+          note.textContent = message;
+          return;
+        }
+        const blob = await response.blob();
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "ket-qua-da-quet.csv";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        document.getElementById("scanPassword").value = "";
+        note.textContent = "Đã tải file ket-qua-da-quet.csv.";
+      } catch (error) {
+        note.textContent = "Chưa tải được. Thử lại.";
+      }
+    }
+
     async function loadScans(cursor) {
       try {
         const params = new URLSearchParams();
@@ -748,6 +791,7 @@
     }
 
     document.getElementById("scanApply").addEventListener("click", () => loadScans());
+    document.getElementById("scanExport").addEventListener("click", downloadScans);
     scanMore.addEventListener("click", () => {
       if (scanCursor) loadScans(scanCursor);
     });

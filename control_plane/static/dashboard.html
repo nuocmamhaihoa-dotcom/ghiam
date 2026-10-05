@@ -294,6 +294,11 @@
         </label>
         <button id="scanApply" type="button">Lọc</button>
       </div>
+      <div class="scan-filters">
+        <label>Mật khẩu tải về<input id="scanPassword" type="password" autocomplete="off" maxlength="200" /></label>
+        <button id="scanExport" type="button">Tải toàn bộ</button>
+      </div>
+      <p class="lead" id="scanExportNote" hidden></p>
       <p class="lead" id="scanCount">Đang tải kết quả đã quét…</p>
       <div class="scroll">
         <table>
@@ -657,6 +662,47 @@
           <td>${esc(item.username)}</td>
         </tr>`;
       }).join("");
+    }
+    async function downloadScans() {
+      const note = $("scanExportNote");
+      const password = $("scanPassword").value.trim();
+      note.hidden = false;
+      if (!$("token").value.trim()) {
+        note.textContent = "Nhập token hub rồi nhập mật khẩu tải về.";
+        return;
+      }
+      if (!password) {
+        note.textContent = "Nhập mật khẩu tải về.";
+        return;
+      }
+      note.textContent = "Đang tải toàn bộ kết quả…";
+      try {
+        const response = await fetch("/v1/scans/export", {
+          method: "POST",
+          headers: Object.assign({ "Content-Type": "application/json" }, headers()),
+          body: JSON.stringify({ password }),
+        });
+        if (!response.ok) {
+          let message = "Chưa tải được.";
+          try {
+            const data = await response.json();
+            if (data && data.detail) message = String(data.detail);
+          } catch (error) { /* giữ câu mặc định */ }
+          note.textContent = message;
+          return;
+        }
+        const blob = await response.blob();
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "ket-qua-da-quet.csv";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        $("scanPassword").value = "";
+        note.textContent = "Đã tải file ket-qua-da-quet.csv. File gồm hết kết quả, không theo bộ lọc đang xem.";
+      } catch (error) {
+        note.textContent = "Chưa tải được. Thử lại.";
+      }
     }
     async function loadScans(cursor) {
       if (!$("token").value.trim()) {
@@ -1625,6 +1671,7 @@
       } catch (error) { /* giữ bảng cũ */ }
     }
     $("scanApply").onclick = () => loadScans();
+    $("scanExport").onclick = downloadScans;
     $("scanMore").onclick = () => { if (scanCursor) loadScans(scanCursor); };
     $("saveToken").onclick = () => { localStorage.setItem(tokenKey, $("token").value.trim()); loadAll(); loadIssues(); loadBoard(); };
     $("refresh").onclick = loadAll;

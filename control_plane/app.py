@@ -44,6 +44,7 @@ from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from control_plane import db
+from control_plane import scan_export
 from control_plane import scan_vault
 from control_plane.delivery import PACKAGE_NAME, ensure_package
 from control_plane.handles import exact_line, profile_from_share
@@ -458,6 +459,10 @@ class SightingsBody(BaseModel):
     items: list[Sighting] = Field(default_factory=list)
 
 
+class ScanExportBody(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+
+
 class PeopleRow(BaseModel):
     name: str = ""
     contactName: str = ""
@@ -520,6 +525,27 @@ def scans_list(
         source=source,
         since=since,
         until=until,
+    )
+
+
+@app.post("/v1/scans/export")
+def scans_export(
+    body: ScanExportBody,
+    authorization: str | None = Header(default=None),
+) -> StreamingResponse:
+    """Tải hết sổ quét. Cần token hub và mật khẩu tải về."""
+    _auth(authorization)
+    if not scan_export.export_configured():
+        raise HTTPException(status_code=403, detail="Chưa đặt mật khẩu tải về.")
+    if not scan_export.export_password_ok(body.password):
+        raise HTTPException(status_code=403, detail="Sai mật khẩu tải về.")
+    return StreamingResponse(
+        scan_vault.iter_scan_csv(settings.db_path),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="ket-qua-da-quet.csv"',
+            "Cache-Control": "no-store",
+        },
     )
 
 

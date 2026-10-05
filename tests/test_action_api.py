@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import csv
 import hashlib
 import io
 import json
@@ -32,6 +33,7 @@ from PIL import Image  # noqa: E402
 
 from control_plane import app as app_module  # noqa: E402
 from control_plane import db as people_db  # noqa: E402
+from control_plane import scan_export  # noqa: E402
 from control_plane import scan_vault  # noqa: E402
 from control_plane import video_helpers  # noqa: E402
 from control_plane.app import app  # noqa: E402
@@ -170,6 +172,78 @@ class ActionApiTests(unittest.TestCase):
         finally:
             _forget_people("@scan.filter.an")
 
+    def test_scan_export_needs_the_download_password(self) -> None:
+        previous = os.environ.get("CONTROL_SCAN_EXPORT_PASSWORD")
+        os.environ.pop("CONTROL_SCAN_EXPORT_PASSWORD", None)
+        people_db.save_people(
+            settings.db_path,
+            [
+                {
+                    "nameKey": "scan-export-an",
+                    "name": "=An",
+                    "contactName": "A Ban",
+                    "username": "@scan.export.an",
+                    "source": "iPhone 8 số 1",
+                }
+            ],
+            "2026-10-04T03:00:00+00:00",
+        )
+        people_db.save_duplicates(
+            settings.db_path,
+            [
+                {
+                    "nameKey": "scan-export-binh",
+                    "name": "Binh",
+                    "contactName": "",
+                    "username": "@scan.export.binh",
+                    "source": "iPhone 8 số 2",
+                }
+            ],
+            "2026-10-05T04:00:00+00:00",
+        )
+        try:
+            closed = self.client.post("/v1/scans/export", headers=self.headers, json={"password": "mat-khau"})
+            self.assertEqual(closed.status_code, 403, closed.text)
+            self.assertIn("Chưa đặt mật khẩu", closed.text)
+            os.environ["CONTROL_SCAN_EXPORT_PASSWORD"] = scan_export.seal_export_password("mat-khau-tai")
+            denied = self.client.post("/v1/scans/export", json={"password": "mat-khau-tai"})
+            self.assertEqual(denied.status_code, 401)
+            wrong = self.client.post("/v1/scans/export", headers=self.headers, json={"password": "sai"})
+            self.assertEqual(wrong.status_code, 403, wrong.text)
+            self.assertIn("Sai mật khẩu", wrong.text)
+            opened = self.client.post(
+                "/v1/scans/export",
+                headers=self.headers,
+                json={"password": "mat-khau-tai"},
+            )
+            self.assertEqual(opened.status_code, 200, opened.text)
+            self.assertIn("ket-qua-da-quet.csv", opened.headers["content-disposition"])
+            text = opened.content.decode("utf-8-sig")
+            rows = list(csv.reader(io.StringIO(text)))
+            self.assertEqual(
+                rows[0],
+                ["Thời gian", "Máy iPhone", "Loại", "Tên", "Tên danh bạ", "Tài khoản", "Giữ"],
+            )
+            an = next(row for row in rows if "@scan.export.an" in row[5])
+            binh = next(row for row in rows if "@scan.export.binh" in row[5])
+            self.assertEqual(an[1], "iPhone 8 số 1")
+            self.assertEqual(an[2], "người mới")
+            self.assertEqual(an[3], "'=An")
+            self.assertEqual(an[4], "A Ban")
+            self.assertEqual(an[5], "'@scan.export.an")
+            self.assertEqual(binh[1], "iPhone 8 số 2")
+            self.assertEqual(binh[2], "trùng")
+            self.assertEqual(binh[4], "")
+            self.assertEqual(binh[5], "'@scan.export.binh")
+            self.assertLess(text.index("@scan.export.an"), text.index("@scan.export.binh"))
+        finally:
+            if previous is None:
+                os.environ.pop("CONTROL_SCAN_EXPORT_PASSWORD", None)
+            else:
+                os.environ["CONTROL_SCAN_EXPORT_PASSWORD"] = previous
+            _forget_people("@scan.export.an")
+            _forget_people("@scan.export.binh")
+
     def test_dashboard_has_journal(self) -> None:
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
@@ -191,6 +265,9 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Kết quả đã quét", response.text)
         self.assertIn("Máy iPhone", response.text)
         self.assertIn("/v1/scans", response.text)
+        self.assertIn("Tải toàn bộ", response.text)
+        self.assertIn("/v1/scans/export", response.text)
+        self.assertIn('id="scanPassword"', response.text)
         self.assertIn("90% CPU và RAM", response.text)
         self.assertIn("suốt thời gian nối", response.text)
         self.assertIn("PC phụ đang đọc", response.text)
@@ -318,6 +395,9 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("80% CPU và RAM", page.text)
         self.assertIn("suốt thời gian", page.text)
         self.assertIn("90% CPU và RAM", page.text)
+        self.assertIn("Tải toàn bộ", page.text)
+        self.assertIn('id="scanPassword"', page.text)
+        self.assertIn("/v1/scans/export", page.text)
         self.assertIn("Mỗi máy đọc tối đa hai video", page.text)
         self.assertIn("Video từ 4 phút được chia đôi cho hai máy", page.text)
         self.assertIn("navigator.wakeLock", page.text)
@@ -627,7 +707,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "50")
+        self.assertEqual(build, "51")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -637,7 +717,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 50)
+        self.assertEqual(payload["iphoneBuild"], 51)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
