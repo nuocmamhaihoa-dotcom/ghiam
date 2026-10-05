@@ -12,161 +12,162 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>fb-poller</title>
   <style>
-    :root { --font: -apple-system, "Segoe UI", system-ui, sans-serif; }
+    :root {
+      --bg: #f3f4f6;
+      --card: #fff;
+      --ink: #111827;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --accent: #111827;
+      --ok: #047857;
+      --bad: #b42318;
+      --font: -apple-system, "Segoe UI", system-ui, sans-serif;
+    }
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     html, body { margin: 0; height: 100%; }
     body {
       font-family: var(--font);
-      color: #111;
-      background: #fff;
-      font-size: 18px;
+      color: var(--ink);
+      background: var(--bg);
+      font-size: 16px;
+      line-height: 1.4;
       display: flex;
       flex-direction: column;
       height: 100dvh;
       overflow: hidden;
     }
-    #updateNote[hidden] { display: none !important; }
-    #updateNote { margin: 0; padding: 0.7rem 1rem 0; color: #0a7a32; font-weight: 700; }
-    main { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; padding: 1rem 1.1rem 0.6rem; }
-    p.lead { margin: 0.2rem 0 0.8rem; line-height: 1.45; }
-    p.lead a { color: #111; }
-    #status { margin: 0 0 0.7rem; font-weight: 700; line-height: 1.4; }
-    #status[hidden] { display: none !important; }
-    #status.live { color: #b42318; }
-    #awakeNote { margin: 0 0 0.7rem; line-height: 1.4; font-size: 16px; font-weight: 700; color: #0a7a32; }
-    #awakeNote.warn { color: #b42318; }
-    #awakeNote[hidden] { display: none !important; }
-    #playback { width: 100%; border-radius: 12px; background: #000; margin-bottom: 0.8rem; }
-    #playback[hidden] { display: none !important; }
-    #progressBox { margin: 0 0 0.8rem; }
-    #progressBox[hidden], #problemLead[hidden], #problemList[hidden], #continueBtn[hidden], #wordCount[hidden], #sampleBox[hidden] { display: none !important; }
-    #progressTrack { height: 14px; border-radius: 8px; background: #eee; overflow: hidden; border: 1px solid #ddd; }
-    #progressFill { height: 100%; width: 0%; background: #111; transition: width 0.2s linear; }
-    #progressLabel { margin: 0.4rem 0 0; font-weight: 700; line-height: 1.35; font-size: 16px; word-break: break-word; }
-    #readTally, #wordCount { margin: 0.45rem 0 0; line-height: 1.4; font-size: 16px; font-weight: 700; }
-    #sampleBox { display: flex; gap: 0.5rem; overflow-x: auto; margin-top: 0.6rem; align-items: flex-start; }
-    #sampleBox figure { margin: 0; flex: 0 0 auto; width: auto; }
-    #sampleBox img { display: block; width: auto; height: 280px; max-width: 46vw; object-fit: contain; object-position: center top; border-radius: 8px; border: 1px solid #ddd; background: #111; }
-    #sampleBox figcaption { font-size: 13px; font-weight: 700; margin-top: 0.2rem; }
-    #helperLine { margin: 0 0 0.8rem; line-height: 1.4; font-size: 16px; color: #333; }
-    #problemLead { margin: 0.6rem 0 0.25rem; color: #b42318; font-weight: 800; }
-    #problemList { margin: 0; padding-left: 1.15rem; color: #b42318; font-size: 15px; overflow-wrap: anywhere; }
-    #continueBtn {
-      display: block; width: 100%; margin: 0.7rem 0 0; min-height: 48px;
-      border-radius: 12px; border: 2px solid #111; background: #111; color: #fff;
-      font: inherit; font-weight: 800; font-size: 16px;
+    .topbar {
+      flex: none; display: flex; align-items: center; justify-content: space-between;
+      padding: 0.7rem 1rem 0.55rem;
+      padding-top: calc(0.7rem + env(safe-area-inset-top));
     }
-    #peopleBox, #savedBox, #dupBox { margin-top: 0.4rem; }
-    #peopleBox[hidden] { display: none !important; }
-    #dupBox { margin-top: 1.1rem; }
-    #peopleLead, #savedLead, #dupLead { margin: 0 0 0.6rem; line-height: 1.4; }
-    #savedEmpty, #dupEmpty { margin: 0; color: #444; }
-    #savedEmpty[hidden], #savedTable[hidden], #savedMore[hidden],
-    #dupEmpty[hidden], #dupTable[hidden], #dupMore[hidden] { display: none !important; }
-    #savedMore, #dupMore, #scanMore, #scanApply, #scanExport {
-      display: block; width: 100%; margin: 0.7rem 0 0.2rem; min-height: 48px;
-      border-radius: 12px; border: 2px solid #111; background: #fff;
-      font: inherit; font-weight: 800; font-size: 16px;
+    .brand { margin: 0; font-size: 1.15rem; font-weight: 750; letter-spacing: -0.03em; }
+    #updateNote { margin: 0 1rem 0.35rem; color: var(--ok); font-weight: 700; font-size: 14px; }
+    main {
+      flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch;
+      padding: 0.15rem 0.75rem 0.8rem;
     }
-    #scanBox { margin-top: 1.1rem; }
-    #scanLead { margin: 0 0 0.6rem; line-height: 1.4; }
-    #scanCount { margin: 0.45rem 0 0.6rem; font-weight: 700; }
-    #scanExportNote { margin: 0.35rem 0 0; color: #b42318; font-weight: 700; }
-    #scanExportNote[hidden] { display: none !important; }
-    #scanEmpty { margin: 0; color: #444; }
-    #scanEmpty[hidden], #scanTable[hidden], #scanMore[hidden] { display: none !important; }
-    #scanFilters { display: grid; gap: 0.45rem; margin: 0 0 0.4rem; }
-    #scanFilters label { font-weight: 800; font-size: 15px; }
-    #scanSince, #scanUntil, #scanPhone, #scanPassword {
-      display: block; width: 100%; min-height: 48px; margin-top: 0.2rem;
-      border-radius: 12px; border: 2px solid #111; padding: 0.4rem 0.7rem;
-      font: inherit; font-size: 16px; background: #fff;
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+      padding: 0.8rem 0.85rem; margin: 0 0 0.65rem;
     }
-    #scanTable { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
-    #scanTable th, #scanTable td {
-      border-bottom: 1px solid #ddd; padding: 0.45rem 0.2rem;
-      text-align: left; vertical-align: top; word-break: break-word; overflow-wrap: anywhere;
+    .card h2 { margin: 0.85rem 0 0.3rem; font-size: 1rem; letter-spacing: -0.02em; }
+    .card h2:first-child { margin-top: 0; }
+    p.lead, #scanLead, #shareLead, #peopleLead, #savedLead, #dupLead, .board-note {
+      margin: 0 0 0.55rem; color: var(--muted); font-size: 14px; line-height: 1.4;
     }
-    #scanTable th { font-size: 13px; font-weight: 800; }
-    #peopleTable, #savedTable, #dupTable { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
-    #peopleTable th, #peopleTable td, #savedTable th, #savedTable td, #dupTable th, #dupTable td {
-      border-bottom: 1px solid #ddd; padding: 0.45rem 0.2rem;
-      text-align: left; vertical-align: top; word-break: break-word; overflow-wrap: anywhere;
+    p.lead a, a { color: var(--ink); }
+    details.help { margin: 0 0 0.65rem; }
+    details.help summary { font-weight: 700; cursor: pointer; }
+    details.help .lead { margin: 0.45rem 0 0; }
+    #helperLine { margin: 0; font-weight: 650; }
+    #status { margin: 0.45rem 0 0; font-weight: 700; }
+    #status.live { color: var(--bad); }
+    #awakeNote { margin: 0.4rem 0 0; font-weight: 700; color: var(--ok); }
+    #awakeNote.warn { color: var(--bad); }
+    #playback { width: 100%; border-radius: 12px; background: #111; margin: 0 0 0.65rem; }
+    #progressTrack { height: 8px; border-radius: 999px; background: #eef0f3; overflow: hidden; }
+    #progressFill { height: 100%; width: 0%; background: var(--accent); transition: width 0.2s linear; }
+    #progressLabel { margin: 0.4rem 0 0; font-weight: 700; word-break: break-word; }
+    #readTally, #wordCount { margin: 0.35rem 0 0; font-weight: 700; }
+    #sampleBox { display: flex; gap: 0.45rem; overflow-x: auto; margin-top: 0.55rem; }
+    #sampleBox figure { margin: 0; flex: 0 0 auto; }
+    #sampleBox img { display: block; height: 180px; max-width: 42vw; object-fit: contain; border-radius: 10px; background: #111; }
+    #sampleBox figcaption { font-size: 12px; font-weight: 700; margin-top: 0.2rem; }
+    #problemLead { margin: 0.5rem 0 0.2rem; color: var(--bad); font-weight: 750; }
+    #problemList, .board-problems { margin: 0; padding-left: 1.1rem; color: var(--bad); font-size: 14px; overflow-wrap: anywhere; }
+    button, input, select, textarea { font: inherit; color: var(--ink); }
+    #continueBtn, #savedMore, #dupMore, #scanMore, .board-retry {
+      display: block; width: 100%; margin: 0.55rem 0 0; min-height: 44px;
+      border-radius: 12px; border: 1px solid var(--line); background: #fff;
+      font-weight: 700;
     }
-    #peopleTable th, #savedTable th, #dupTable th { font-size: 13px; font-weight: 800; }
+    #continueBtn, #shareBtn, #recordBtn { background: var(--accent); color: #fff; border-color: transparent; }
+    #scanEmpty, #savedEmpty, #dupEmpty { margin: 0; color: var(--muted); }
+    #scanCount { margin: 0.45rem 0 0.35rem; font-weight: 700; font-size: 14px; }
+    #scanExportNote { margin: 0.4rem 0 0; color: var(--bad); font-weight: 700; }
+    #scanFilters { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; }
+    #scanFilters label { font-size: 12px; font-weight: 700; color: var(--muted); }
+    #scanFilters label.wide { grid-column: 1 / -1; }
+    #scanSince, #scanUntil, #scanPhone, #scanPassword, #phoneNameInput, #shareText {
+      display: block; width: 100%; min-height: 44px; margin-top: 0.2rem;
+      border-radius: 12px; border: 1px solid var(--line); padding: 0.4rem 0.65rem;
+      font-size: 16px; background: #fff;
+    }
+    #shareText { min-height: 72px; resize: vertical; }
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; margin-top: 0.55rem; }
+    .pair button, #phoneNameSave, #pasteBtn {
+      min-height: 44px; border-radius: 12px; border: 1px solid var(--line);
+      background: #fff; font-weight: 700;
+    }
+    #scanExport, #shareBtn { background: var(--accent); color: #fff; border-color: transparent; }
+    .table-wrap { overflow-x: auto; margin-top: 0.45rem; }
+    .table-wrap:has(table[hidden]) { display: none; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td {
+      border-bottom: 1px solid var(--line); padding: 0.4rem 0.25rem;
+      text-align: left; vertical-align: top; word-break: break-word;
+    }
+    th { font-size: 12px; color: var(--muted); font-weight: 700; }
     #actions {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;
-      padding: 0.7rem max(0.8rem, env(safe-area-inset-right)) calc(0.7rem + env(safe-area-inset-bottom)) max(0.8rem, env(safe-area-inset-left));
+      flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;
+      background: #fff; border-top: 1px solid var(--line);
+      padding: 0.55rem max(0.75rem, env(safe-area-inset-right)) calc(0.55rem + env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
     }
     #recordBtn, #pick {
       display: flex; align-items: center; justify-content: center;
-      min-height: 64px; border-radius: 16px; border: 2px solid #111;
-      font: inherit; font-size: 18px; font-weight: 800; text-align: center;
+      min-height: 52px; border-radius: 14px; border: 1px solid var(--line);
+      font-size: 16px; font-weight: 750; text-align: center;
     }
-    #recordBtn { background: #111; color: #fff; }
-    #recordBtn.live { background: #b42318; border-color: #b42318; }
-    #pick { background: #fff; color: #111; }
+    #recordBtn { background: var(--accent); color: #fff; border-color: transparent; }
+    #recordBtn.live { background: var(--bad); }
+    #pick { background: #fff; color: var(--ink); }
     #pick input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     #recordBtn:disabled, #pick.busy { opacity: 0.45; }
-    .board-job { margin: 0 0 0.75rem; }
-    .board-note { margin: 0 0 0.45rem; color: #5c564c; font-size: 14px; line-height: 1.35; }
+    .board-job { margin: 0 0 0.7rem; padding-bottom: 0.55rem; border-bottom: 1px solid var(--line); }
+    .board-job:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
     .board-steps { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.35rem 0 0; }
     .board-step {
-      border: 1px solid #c8c0b4; border-radius: 999px;
-      padding: 0.1rem 0.45rem; font-size: 12px; color: #5c564c; background: #fff;
+      border-radius: 999px; padding: 0.12rem 0.45rem; font-size: 12px;
+      color: var(--muted); background: var(--bg);
     }
-    .board-step-done { background: #111; color: #fff; border-color: #111; }
-    .board-step-now { background: #fff4d6; color: #111; border-color: #111; font-weight: 800; }
-    .board-detail { margin: 0.3rem 0 0; font-size: 14px; line-height: 1.35; }
-    .board-track { height: 10px; border-radius: 999px; background: #e7e0d4; overflow: hidden; margin-top: 0.3rem; }
-    .board-fill { height: 100%; width: 0; background: #111; }
-    .board-meta { margin: 0.25rem 0 0; color: #5c564c; font-size: 14px; }
-    .board-problems { margin: 0.25rem 0 0; padding-left: 1.1rem; color: #b42318; }
-    .board-retry {
-      min-height: 48px; margin-top: 0.45rem; border-radius: 12px; border: 2px solid #111;
-      background: #fff; color: #111; font: inherit; font-weight: 800; font-size: 16px;
-    }
-    #phoneBox { display: grid; grid-template-columns: 1fr auto; gap: 0.45rem; align-items: end; margin: 0 0 0.8rem; }
-    #phoneBox label { grid-column: 1 / -1; font-weight: 800; }
-    #phoneNameInput {
-      min-height: 48px; border-radius: 12px; border: 2px solid #111;
-      padding: 0.4rem 0.7rem; font: inherit; font-size: 16px;
-    }
-    #phoneNameSave {
-      min-height: 48px; border-radius: 12px; border: 2px solid #111;
-      background: #fff; color: #111; font: inherit; font-weight: 800; font-size: 16px;
-    }
-    #phoneNameNote { grid-column: 1 / -1; margin: 0; font-size: 14px; }
-    #boardBox h2 { margin: 0.9rem 0 0.35rem; font-size: 1.05rem; }
-    #shareBox { margin: 0 0 0.8rem; }
-    #shareLead { margin: 0 0 0.45rem; line-height: 1.4; font-size: 16px; }
-    #shareText {
-      display: block; width: 100%; min-height: 72px; margin: 0 0 0.5rem;
-      border-radius: 12px; border: 2px solid #111; padding: 0.55rem 0.7rem;
-      font: inherit; font-size: 16px; resize: vertical;
-    }
-    #shareActions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-    #shareBtn, #pasteBtn {
-      min-height: 48px; border-radius: 12px; border: 2px solid #111;
-      font: inherit; font-weight: 800; font-size: 16px;
-    }
-    #shareBtn { background: #111; color: #fff; }
-    #pasteBtn { background: #fff; color: #111; }
-    #shareNote { margin: 0.45rem 0 0; font-size: 15px; line-height: 1.4; }
-    #shareNote[hidden] { display: none !important; }
+    .board-step-done { background: var(--accent); color: #fff; }
+    .board-step-now { background: #fff4d6; color: var(--ink); font-weight: 750; }
+    .board-detail, .board-meta { margin: 0.25rem 0 0; font-size: 13px; color: var(--muted); }
+    .board-track { height: 8px; border-radius: 999px; background: #eef0f3; overflow: hidden; margin-top: 0.35rem; }
+    .board-fill { height: 100%; width: 0; background: var(--accent); }
+    #phoneBox { display: grid; grid-template-columns: 1fr auto; gap: 0.45rem; align-items: end; }
+    #phoneBox label { grid-column: 1 / -1; font-weight: 700; }
+    #phoneNameSave { white-space: nowrap; padding: 0 0.8rem; }
+    #scanFilters label { display: block; }
+    #phoneNameNote { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--muted); }
+    #shareActions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; }
+    #shareNote { margin: 0.4rem 0 0; font-size: 14px; }
   </style>
 </head>
 <body>
+  <header class="topbar">
+    <p class="brand">fb-poller</p>
+  </header>
   <p id="updateNote" hidden></p>
   <main>
-    <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. Đọc 4 hình mỗi giây trên cả video. Đoạn không ra tên hoặc tài khoản thì đọc lại đúng đoạn đó ở 8 hình mỗi giây. Thoát trang hoặc mở app khác không dừng việc đọc. Sau khi máy chủ nhận đủ video, máy chủ và PC đọc tiếp. Nếu chưa gửi hết, máy này gửi nốt ở nền và khi mở lại trang thì nối tiếp, không cần chọn lại video. PC chỉ có CPU đọc tối đa hai video. PC có GPU đọc tối đa bốn video. Một video thì dùng 80% CPU và RAM của PC suốt thời gian máy đó đang nối. Hai video thì chia đôi phần 80% đó. Máy chủ đọc bằng 90% CPU và RAM của VPS. Có hai PC thì video từ 4 phút được chia đôi cho hai máy. PC có card NVIDIA thì đọc bằng GPU. Dán link hồ sơ hoặc chữ hệ thống, hoặc Chia sẻ từ TikTok / Facebook / Instagram, để lấy @handle đúng chữ, không đọc lại bằng Tesseract. <a href="/tai-pc">Tải phần mềm cho PC</a>. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
-    <section id="phoneBox">
+    <details class="card help">
+      <summary>Cách dùng</summary>
+      <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. Đọc 4 hình mỗi giây trên cả video. Đoạn không ra tên hoặc tài khoản thì đọc lại đúng đoạn đó ở 8 hình mỗi giây. Thoát trang hoặc mở app khác không dừng việc đọc. Sau khi máy chủ nhận đủ video, máy chủ và PC đọc tiếp. Nếu chưa gửi hết, máy này gửi nốt ở nền và khi mở lại trang thì nối tiếp, không cần chọn lại video. PC chỉ có CPU đọc tối đa hai video. PC có GPU đọc tối đa bốn video. Một video thì dùng 80% CPU và RAM của PC suốt thời gian máy đó đang nối. Hai video thì chia đôi phần 80% đó. Máy chủ đọc bằng 90% CPU và RAM của VPS. Có hai PC thì video từ 4 phút được chia đôi cho hai máy. PC có card NVIDIA thì đọc bằng GPU. Dán link hồ sơ hoặc chữ hệ thống, hoặc Chia sẻ từ TikTok / Facebook / Instagram, để lấy @handle đúng chữ, không đọc lại bằng Tesseract. <a href="/tai-pc">Tải phần mềm cho PC</a>. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
+    </details>
+    <section class="card" id="nowBox">
+      <p id="helperLine">PC phụ chưa nối. Video được máy chủ đọc bằng 90% CPU và RAM của VPS.</p>
+      <p id="awakeNote" hidden></p>
+      <p id="status" hidden></p>
+    </section>
+    <section class="card" id="phoneBox">
       <label for="phoneNameInput">Tên máy này</label>
       <input id="phoneNameInput" maxlength="40" placeholder="iPhone 8 số 1" autocomplete="off" />
       <button id="phoneNameSave" type="button">Lưu tên</button>
       <p id="phoneNameNote" hidden></p>
     </section>
-    <section id="shareBox">
+    <section class="card" id="shareBox">
       <p id="shareLead">Dán link hồ sơ, chữ hệ thống, hoặc nội dung vừa chia sẻ. Hub lấy @handle từ URL / QR, không đoán chữ từ video.</p>
       <textarea id="shareText" placeholder="https://www.tiktok.com/@ten.tai.khoan"></textarea>
       <div id="shareActions">
@@ -175,11 +176,8 @@
       </div>
       <p id="shareNote" hidden></p>
     </section>
-    <p id="helperLine">PC phụ chưa nối. Video được máy chủ đọc bằng 90% CPU và RAM của VPS.</p>
-    <p id="awakeNote" hidden></p>
-    <p id="status" hidden></p>
     <video id="playback" controls playsinline hidden></video>
-    <section id="progressBox" hidden>
+    <section class="card" id="progressBox" hidden>
       <div id="progressTrack"><div id="progressFill"></div></div>
       <p id="progressLabel"></p>
       <p id="readTally" hidden></p>
@@ -189,7 +187,7 @@
       <ul id="problemList" hidden></ul>
       <button id="continueBtn" type="button" hidden>Tiếp tục đọc nối</button>
     </section>
-    <section id="boardBox">
+    <section class="card" id="boardBox">
       <h2>Việc đang làm</h2>
       <p class="board-note">Video đang chờ hiện thứ tự. Video đang đọc hiện bước: Chờ, Tách hình, Đọc chữ, Đọc lại, Ghép tên, Ghi xong.</p>
       <div id="boardActive"></div>
@@ -200,7 +198,7 @@
       <div id="boardPhones"></div>
       <div id="boardHistory"></div>
     </section>
-    <section id="savedBox">
+    <section class="card" id="savedBox">
       <p id="savedLead">Kết quả đã lưu. Kho chứa được 50 triệu kết quả. Dữ liệu đã quét được giữ vĩnh viễn, ba hướng lưu. Hub tự ghi ngay sau mỗi video. Mở lại trang vẫn còn.</p>
       <p id="savedEmpty">Chưa có người đủ ba cột.</p>
       <table id="savedTable" hidden>
@@ -215,7 +213,7 @@
       </table>
       <button id="savedMore" type="button" hidden>Xem thêm</button>
     </section>
-    <section id="dupBox">
+    <section class="card" id="dupBox">
       <p id="dupLead">Dữ liệu trùng. Người vừa quét đã có trong kho.</p>
       <p id="dupEmpty">Chưa có dữ liệu trùng.</p>
       <table id="dupTable" hidden>
@@ -230,22 +228,28 @@
       </table>
       <button id="dupMore" type="button" hidden>Xem thêm</button>
     </section>
-    <section id="scanBox">
+    <section class="card" id="scanBox">
       <h2>Kết quả đã quét</h2>
-      <p id="scanLead">Mỗi lần quét ra một người là một dòng, mới nhất ở trên. Lọc theo ngày hoặc theo tên máy iPhone. Ba hướng lưu: sổ trong cơ sở chính, một cơ sở SQLite riêng, và một nhật ký chữ. Ba hướng nằm ở ba chỗ khác nhau trên máy chủ. Mất một hoặc hai chỗ thì chỗ còn dựng lại đủ. Không xoá, không sửa.</p>
+      <details class="help">
+        <summary>Ba hướng lưu</summary>
+        <p id="scanLead">Mỗi lần quét ra một người là một dòng, mới nhất ở trên. Lọc theo ngày hoặc theo tên máy iPhone. Ba hướng lưu: sổ trong cơ sở chính, một cơ sở SQLite riêng, và một nhật ký chữ. Ba hướng nằm ở ba chỗ khác nhau trên máy chủ. Mất một hoặc hai chỗ thì chỗ còn dựng lại đủ. Không xoá, không sửa.</p>
+      </details>
       <div id="scanFilters">
         <label>Từ ngày<input id="scanSince" type="date" /></label>
         <label>Đến ngày<input id="scanUntil" type="date" /></label>
-        <label>Máy iPhone
+        <label class="wide">Máy iPhone
           <select id="scanPhone"><option value="">Mọi máy</option></select>
         </label>
-        <label>Mật khẩu tải về<input id="scanPassword" type="password" autocomplete="off" maxlength="200" /></label>
+        <label class="wide">Mật khẩu tải về<input id="scanPassword" type="password" autocomplete="off" maxlength="200" /></label>
       </div>
-      <button id="scanApply" type="button">Lọc</button>
-      <button id="scanExport" type="button">Tải toàn bộ</button>
+      <div class="pair">
+        <button id="scanApply" type="button">Lọc</button>
+        <button id="scanExport" type="button">Tải toàn bộ</button>
+      </div>
       <p id="scanExportNote" hidden></p>
       <p id="scanCount">Đang tải kết quả đã quét…</p>
       <p id="scanEmpty">Chưa có kết quả đã quét.</p>
+      <div class="table-wrap">
       <table id="scanTable" hidden>
         <thead>
           <tr>
@@ -258,9 +262,10 @@
         </thead>
         <tbody id="scanBody"></tbody>
       </table>
+      </div>
       <button id="scanMore" type="button" hidden>Xem thêm</button>
     </section>
-    <section id="peopleBox" hidden>
+    <section class="card" id="peopleBox" hidden>
       <p id="peopleLead">Video vừa đọc. Cột đã có sẵn được giữ nguyên.</p>
       <table id="peopleTable">
         <thead>
