@@ -12,7 +12,9 @@ dữ liệu (hoặc hai đĩa khác) để xoá một chỗ không kéo theo hai
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
 import os
 import re
@@ -249,6 +251,60 @@ def list_scans(
         "cursor": next_cursor,
         "phones": phones,
     }
+
+
+def iter_scan_csv(db_path: Path) -> Iterator[bytes]:
+    """Toàn bộ sổ quét, cũ trước. File CSV có dấu để Excel đọc tiếng Việt."""
+    yield "\ufeff".encode("utf-8")
+    yield _csv_line(["Thời gian", "Máy iPhone", "Loại", "Tên", "Tên danh bạ", "Tài khoản", "Giữ"])
+    conn = _connect(db_path)
+    try:
+        ensure(conn)
+        cursor = conn.execute(
+            """
+            SELECT recorded_at, kind, name, contact_name, username, kept, source
+            FROM scan_facts
+            ORDER BY recorded_at ASC, fact_key ASC
+            """
+        )
+        while True:
+            batch = cursor.fetchmany(200)
+            if not batch:
+                break
+            chunks: list[bytes] = []
+            for row in batch:
+                kind = "trùng" if str(row["kind"]) == "duplicate" else "người mới"
+                kept = "có" if int(row["kept"]) else "kho đầy"
+                phone = str(row["source"] or "") or "Chưa ghi tên máy"
+                chunks.append(
+                    _csv_line(
+                        [
+                            str(row["recorded_at"] or ""),
+                            phone,
+                            kind,
+                            str(row["name"] or ""),
+                            str(row["contact_name"] or ""),
+                            str(row["username"] or ""),
+                            kept,
+                        ]
+                    )
+                )
+            yield b"".join(chunks)
+    finally:
+        conn.close()
+
+
+def _csv_cell(value: str) -> str:
+    text = str(value or "")
+    if text[:1] in "=+-@\t\r":
+        return "'" + text
+    return text
+
+
+def _csv_line(fields: list[str]) -> bytes:
+    buffer = io.StringIO()
+    csv.writer(buffer, lineterminator="\r\n").writerow([_csv_cell(item) for item in fields])
+    return buffer.getvalue().encode("utf-8")
 
 
 def _fact(

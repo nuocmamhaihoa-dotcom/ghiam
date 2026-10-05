@@ -27,6 +27,8 @@ Kết quả đã quét nằm ở mục **Kết quả quét** trên trang chủ v
 
 Mất một hoặc hai hướng thì lần mở máy dựng lại từ hướng còn. Ba hướng này cùng một ổ đĩa của VPS; mất cả ổ thì không còn bản nào trên máy đó.
 
+Nút **Tải toàn bộ** trong mục kết quả đã quét gửi hết sổ về máy dưới dạng file CSV. Lần tải cần mật khẩu riêng, ngoài token của trang. Bản lưu trên máy chủ là chuỗi scrypt trong `CONTROL_SCAN_EXPORT_PASSWORD`. Tài liệu này không ghi mật khẩu gốc.
+
 VPS đóng vai trò **trung tâm**:
 
 1. Nhận comment đồng bộ từ mọi PC scanner (`/v1/sync/comments`)  
