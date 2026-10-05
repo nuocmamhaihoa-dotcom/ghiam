@@ -4,13 +4,14 @@
 
 | Mục | Giá trị |
 |---|---|
-| Link hub | http://222.255.214.202:8088 |
-| Trang mở bằng IP | http://222.255.214.202/ |
-| Trang chủ | http://222.255.214.202:8088/ |
-| Trang iPhone | http://222.255.214.202:8088/iphone |
-| Kiểm tra sống | http://222.255.214.202:8088/health |
+| Link hub | http://14.225.224.16:8088 |
+| Trang mở bằng IP | http://14.225.224.16/ |
+| Trang chủ | http://14.225.224.16:8088/ |
+| Trang iPhone | http://14.225.224.16:8088/iphone |
+| Kiểm tra sống | http://14.225.224.16:8088/health |
 | Tài khoản SSH | `root` |
-| Máy | `root@222.255.214.202` |
+| Máy | `root@14.225.224.16` |
+| Nhà cung cấp | Vietnix |
 
 Trang web không có tên tài khoản. Mở link hub rồi dán `CONTROL_TOKEN` đang nằm trong `/opt/fb-poller/control_data/server.env`. Không ghi mật khẩu SSH và không ghi token vào tài liệu này.
 
@@ -29,8 +30,8 @@ PC chỉ dùng CPU/RAM/proxy local để quét; kết quả đẩy về VPS.
 
 ```bash
 # Trên máy local: rsync code → /opt/fb-poller
-rsync -az --exclude .venv --exclude .git ./ root@222.255.214.202:/opt/fb-poller/
-ssh root@222.255.214.202 'bash /opt/fb-poller/deploy/vps/install-hub.sh'
+rsync -az --exclude .venv --exclude .git ./ root@14.225.224.16:/opt/fb-poller/
+ssh root@14.225.224.16 'bash /opt/fb-poller/deploy/vps/install-hub.sh'
 ```
 
 Service systemd: `fb-poller-hub`  
@@ -40,7 +41,7 @@ Env/token: `/opt/fb-poller/control_data/server.env` (chmod 600)
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\pc_agent\windows\Install-Agent.ps1 `
-  -ControlUrl "http://222.255.214.202:8088" `
+  -ControlUrl "http://14.225.224.16:8088" `
   -ControlToken "TOKEN_TU_server.env" `
   -StartNow
 ```
@@ -49,7 +50,7 @@ Agent sẽ: register → heartbeat → sync-push comment định kỳ → prefer
 
 ## Dashboard
 
-Mở `http://222.255.214.202:8088/` → dán `CONTROL_TOKEN` → xem comments / agents.
+Mở `http://14.225.224.16:8088/` → dán `CONTROL_TOKEN` → xem comments / agents.
 
 ## API chính
 

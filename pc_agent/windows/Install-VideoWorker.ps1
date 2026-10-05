@@ -1,11 +1,11 @@
 # Một lệnh trên Windows. Không cài máy quét comment.
 # Không cài thư viện GPU. Card NVIDIA vẫn đọc bằng CPU cho đến khi tự cài sau.
 #
-# powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:CONTROL_TOKEN='TOKEN'; irm http://222.255.214.202:8088/cai-video.ps1 | iex"
+# powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:CONTROL_TOKEN='TOKEN'; irm http://14.225.224.16:8088/cai-video.ps1 | iex"
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-$Hub = if ($env:CONTROL_HUB) { $env:CONTROL_HUB.TrimEnd("/") } else { "http://222.255.214.202:8088" }
+$Hub = if ($env:CONTROL_HUB) { $env:CONTROL_HUB.TrimEnd("/") } else { "http://14.225.224.16:8088" }
 $Root = Join-Path $env:LOCALAPPDATA "FbPollerVideo"
 New-Item -ItemType Directory -Force -Path $Root, (Join-Path $Root "logs"), (Join-Path $Root "tessdata") | Out-Null
 

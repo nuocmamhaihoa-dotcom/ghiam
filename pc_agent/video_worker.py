@@ -14,7 +14,7 @@ Chạy tay: đặt CONTROL_TOKEN bằng token của hub, rồi
 
     python pc_agent/video_worker.py
 
-Hub mặc định là http://222.255.214.202:8088. Đổi bằng --hub hoặc CONTROL_HUB.
+Hub mặc định là http://14.225.224.16:8088. Đổi bằng --hub hoặc CONTROL_HUB.
 Card NVIDIA mà chưa có thư viện: pip install easyocr
 hoặc pip install paddlepaddle-gpu paddleocr
 """
@@ -1129,7 +1129,7 @@ def main() -> None:
     os.environ["CONTROL_FFMPEG_THREADS"] = str(workers)
     set_reader_limit(workers)
     parser = argparse.ArgumentParser(description="PC phụ đọc video màn hình cho hub")
-    parser.add_argument("--hub", default=os.environ.get("CONTROL_HUB", "http://222.255.214.202:8088"))
+    parser.add_argument("--hub", default=os.environ.get("CONTROL_HUB", "http://14.225.224.16:8088"))
     args = parser.parse_args()
     token = os.environ.get("CONTROL_TOKEN", "")
     if not token:
