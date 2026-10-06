@@ -3,4 +3,4 @@
 IPHONE_BUILD = 53
 
 # Gói mã PC đọc video. Tăng khi sửa worker để PC đang rảnh tự tải bản mới.
-VIDEO_WORKER_BUILD = 26
+VIDEO_WORKER_BUILD = 27

@@ -249,8 +249,37 @@ class ScreenVideoTests(unittest.TestCase):
             (3.0, [], []),
             (3.4, [], []),
         ]
-        self.assertEqual(_unread_windows(readings), [(0.0, 1.5), (2.0, 4.4)])
+        # 0.0 và 0.5 cách tên hơn một giây nên bỏ. 3.0 đúng một giây sau tên nên giữ.
+        # 3.4 cách 1.4 giây nên bỏ. Khung giữ được nới một giây hai đầu.
+        self.assertEqual(_unread_windows(readings), [(2.0, 4.0)])
         self.assertEqual(_unread_windows([(1.0, [], [person])]), [])
+
+    def test_words_without_a_person_still_open_a_reread(self) -> None:
+        self.assertEqual(_unread_windows([(0.0, ["Trần"], [])]), [(0.0, 1.0)])
+        stray = {"kind": "profile", "name": "Trần Tùng", "username": ""}
+        self.assertEqual(_unread_windows([(2.0, [], [stray])]), [(1.0, 3.0)])
+
+    def test_a_long_blank_run_is_not_reread(self) -> None:
+        person = {"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"}
+        readings: list[tuple[float, list[str], list[dict[str, str]]]] = [
+            (float(second), [], []) for second in (0, 2, 4, 6, 8)
+        ]
+        readings.append((20.0, [], [person]))
+        self.assertEqual(_unread_windows(readings), [])
+
+    def test_a_blank_just_before_a_person_is_reread(self) -> None:
+        person = {"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"}
+        readings = [
+            (0.0, [], []),
+            (1.5, [], []),
+            (2.0, [], [person]),
+            (9.0, [], []),
+        ]
+        self.assertEqual(_unread_windows(readings), [(0.5, 2.5)])
+        self.assertEqual(
+            _unread_windows([(5.5, [], []), (9.0, [], []), (5.0, ["Trần"], [])]),
+            [(4.0, 6.5)],
+        )
 
     def test_a_long_extract_is_split_into_four_ranges(self) -> None:
         ranges = _segment_ranges(96, 0)
