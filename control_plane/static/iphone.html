@@ -6,21 +6,22 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="theme-color" content="#ffffff" />
+  <meta name="theme-color" content="#efece6" />
   <meta name="iphone-build" content="__IPHONE_BUILD__" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>fb-poller</title>
   <style>
     :root {
-      --bg: #f3f4f6;
-      --card: #fff;
-      --ink: #111827;
-      --muted: #6b7280;
-      --line: #e5e7eb;
-      --accent: #111827;
+      --bg: #efece6;
+      --card: #fffdfb;
+      --ink: #1c1917;
+      --muted: #78716c;
+      --line: #e7e5e4;
+      --accent: #0f6e56;
       --ok: #047857;
       --bad: #b42318;
+      --soft: #f4f1eb;
       --font: -apple-system, "Segoe UI", system-ui, sans-serif;
     }
     * { box-sizing: border-box; }
@@ -38,27 +39,39 @@
       overflow: hidden;
     }
     .topbar {
-      flex: none; display: flex; align-items: center; justify-content: space-between;
-      padding: 0.7rem 1rem 0.55rem;
-      padding-top: calc(0.7rem + env(safe-area-inset-top));
+      flex: none;
+      padding: 0.45rem 0.75rem 0.55rem;
+      padding-top: calc(0.4rem + env(safe-area-inset-top));
+      background: var(--bg);
     }
-    .brand { margin: 0; font-size: 1.15rem; font-weight: 750; letter-spacing: -0.03em; }
-    #updateNote { margin: 0 1rem 0.35rem; color: var(--ok); font-weight: 700; font-size: 14px; }
+    .brand { margin: 0 0 0.4rem; font-size: 1.05rem; font-weight: 750; letter-spacing: -0.03em; }
+    .switch {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.2rem;
+      padding: 0.2rem; border-radius: 12px; background: #e6e1d8;
+    }
+    .switch button {
+      min-height: 36px; border: 0; border-radius: 10px;
+      background: transparent; color: var(--muted); font-weight: 700; font-size: 15px;
+    }
+    .switch button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(28, 25, 23, 0.08); }
+    #updateNote { margin: 0 0.75rem 0.3rem; color: var(--ok); font-weight: 700; font-size: 14px; }
     main {
       flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch;
-      padding: 0.15rem 0.75rem 0.8rem;
+      padding: 0.1rem 0.7rem 0.65rem;
     }
     .card {
-      background: var(--card); border: 1px solid var(--line); border-radius: 16px;
-      padding: 0.8rem 0.85rem; margin: 0 0 0.65rem;
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      padding: 0.65rem 0.7rem; margin: 0 0 0.45rem;
+      box-shadow: 0 1px 0 rgba(28, 25, 23, 0.03);
     }
-    .card h2 { margin: 0.85rem 0 0.3rem; font-size: 1rem; letter-spacing: -0.02em; }
+    .card h2 { margin: 0.7rem 0 0.25rem; font-size: 0.95rem; letter-spacing: -0.02em; }
     .card h2:first-child { margin-top: 0; }
     p.lead, #scanLead, #shareLead, #peopleLead, #savedLead, #dupLead, .board-note {
       margin: 0 0 0.55rem; color: var(--muted); font-size: 14px; line-height: 1.4;
     }
     p.lead a, a { color: var(--ink); }
-    details.help { margin: 0 0 0.65rem; }
+    details.help { margin: 0 0 0.45rem; }
+    .card details.help { margin: 0 0 0.4rem; }
     details.help summary { font-weight: 700; cursor: pointer; }
     details.help .lead { margin: 0.45rem 0 0; }
     #helperLine { margin: 0; font-weight: 650; }
@@ -84,6 +97,7 @@
       font-weight: 700;
     }
     #continueBtn, #shareBtn, #recordBtn { background: var(--accent); color: #fff; border-color: transparent; }
+    #scanApply { background: #fff; color: var(--ink); }
     #scanEmpty, #savedEmpty, #dupEmpty { margin: 0; color: var(--muted); }
     #scanCount { margin: 0.45rem 0 0.35rem; font-weight: 700; font-size: 14px; }
     #scanExportNote { margin: 0.4rem 0 0; color: var(--bad); font-weight: 700; }
@@ -95,13 +109,14 @@
       border-radius: 12px; border: 1px solid var(--line); padding: 0.4rem 0.65rem;
       font-size: 16px; background: #fff;
     }
-    #shareText { min-height: 72px; resize: vertical; }
+    #shareText { min-height: 52px; resize: vertical; }
     .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; margin-top: 0.55rem; }
     .pair button, #phoneNameSave, #pasteBtn {
       min-height: 44px; border-radius: 12px; border: 1px solid var(--line);
       background: #fff; font-weight: 700;
     }
     #scanExport, #shareBtn { background: var(--accent); color: #fff; border-color: transparent; }
+    #pasteBtn, #phoneNameSave, #scanApply { background: var(--soft); }
     .table-wrap { overflow-x: auto; margin-top: 0.45rem; }
     .table-wrap:has(table[hidden]) { display: none; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -122,7 +137,7 @@
     }
     #recordBtn { background: var(--accent); color: #fff; border-color: transparent; }
     #recordBtn.live { background: var(--bad); }
-    #pick { background: #fff; color: var(--ink); }
+    #pick { background: var(--soft); color: var(--ink); }
     #pick input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     #recordBtn:disabled, #pick.busy { opacity: 0.45; }
     .board-job { margin: 0 0 0.7rem; padding-bottom: 0.55rem; border-bottom: 1px solid var(--line); }
@@ -149,9 +164,15 @@
 <body>
   <header class="topbar">
     <p class="brand">fb-poller</p>
+    <nav id="views" class="switch" aria-label="Phần">
+      <button type="button" class="on" data-view="work" aria-pressed="true">Đang làm</button>
+      <button type="button" data-view="store" aria-pressed="false">Đã lưu</button>
+      <button type="button" data-view="scans" aria-pressed="false">Đã quét</button>
+    </nav>
   </header>
   <p id="updateNote" hidden></p>
   <main>
+    <div data-sheet="work">
     <details class="card help">
       <summary>Cách dùng</summary>
       <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. Đọc 4 hình mỗi giây trên cả video. Đoạn không ra tên hoặc tài khoản thì đọc lại đúng đoạn đó ở 8 hình mỗi giây. Thoát trang hoặc mở app khác không dừng việc đọc. Sau khi máy chủ nhận đủ video, máy chủ và PC đọc tiếp. Nếu chưa gửi hết, máy này gửi nốt ở nền và khi mở lại trang thì nối tiếp, không cần chọn lại video. PC chỉ có CPU đọc tối đa hai video. PC có GPU đọc tối đa bốn video. Một video thì dùng 80% CPU và RAM của PC suốt thời gian máy đó đang nối. Hai video thì chia đôi phần 80% đó. Máy chủ đọc bằng 90% CPU và RAM của VPS. Có hai PC thì video từ 4 phút được chia đôi cho hai máy. PC có card NVIDIA thì đọc bằng GPU. Dán link hồ sơ hoặc chữ hệ thống, hoặc Chia sẻ từ TikTok / Facebook / Instagram, để lấy @handle đúng chữ, không đọc lại bằng Tesseract. <a href="/tai-pc">Tải phần mềm cho PC</a>. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
@@ -168,7 +189,10 @@
       <p id="phoneNameNote" hidden></p>
     </section>
     <section class="card" id="shareBox">
-      <p id="shareLead">Dán link hồ sơ, chữ hệ thống, hoặc nội dung vừa chia sẻ. Hub lấy @handle từ URL / QR, không đoán chữ từ video.</p>
+      <details class="help">
+        <summary>Gửi link</summary>
+        <p id="shareLead">Dán link hồ sơ, chữ hệ thống, hoặc nội dung vừa chia sẻ. Hub lấy @handle từ URL / QR, không đoán chữ từ video.</p>
+      </details>
       <textarea id="shareText" placeholder="https://www.tiktok.com/@ten.tai.khoan"></textarea>
       <div id="shareActions">
         <button id="shareBtn" type="button">Gửi chữ / link</button>
@@ -189,17 +213,42 @@
     </section>
     <section class="card" id="boardBox">
       <h2>Việc đang làm</h2>
-      <p class="board-note">Video đang chờ hiện thứ tự. Video đang đọc hiện bước: Chờ, Tách hình, Đọc chữ, Đọc lại, Ghép tên, Ghi xong.</p>
+      <details class="help">
+        <summary>Các bước</summary>
+        <p class="board-note">Video đang chờ hiện thứ tự. Video đang đọc hiện bước: Chờ, Tách hình, Đọc chữ, Đọc lại, Ghép tên, Ghi xong.</p>
+      </details>
       <div id="boardActive"></div>
       <h2>Hàng chờ</h2>
       <div id="boardQueued"></div>
       <h2>Báo cáo 24 giờ</h2>
-      <p class="board-note">Mỗi video ghi tên máy, số người thấy trong danh bạ, số người có tài khoản, và số người ghi được. Báo cáo giữ 24 giờ rồi xóa. Người đã quét được giữ vĩnh viễn. Video lỗi còn file, bấm Đọc lại để làm tiếp.</p>
+      <details class="help">
+        <summary>Báo cáo giữ bao lâu</summary>
+        <p class="board-note">Mỗi video ghi tên máy, số người thấy trong danh bạ, số người có tài khoản, và số người ghi được. Báo cáo giữ 24 giờ rồi xóa. Người đã quét được giữ vĩnh viễn. Video lỗi còn file, bấm Đọc lại để làm tiếp.</p>
+      </details>
       <div id="boardPhones"></div>
       <div id="boardHistory"></div>
     </section>
+    <section class="card" id="peopleBox" hidden>
+      <p id="peopleLead">Video vừa đọc. Cột đã có sẵn được giữ nguyên.</p>
+      <table id="peopleTable">
+        <thead>
+          <tr>
+            <th>Tên</th>
+            <th>Tên danh bạ</th>
+            <th>Tài khoản</th>
+          </tr>
+        </thead>
+        <tbody id="peopleBody"></tbody>
+      </table>
+    </section>
+    </div>
+    <div data-sheet="store" hidden>
     <section class="card" id="savedBox">
-      <p id="savedLead">Kết quả đã lưu. Kho chứa được 50 triệu kết quả. Dữ liệu đã quét được giữ vĩnh viễn, ba hướng lưu. Hub tự ghi ngay sau mỗi video. Mở lại trang vẫn còn.</p>
+      <h2>Kết quả đã lưu</h2>
+      <details class="help">
+        <summary>Kho</summary>
+        <p id="savedLead">Kết quả đã lưu. Kho chứa được 50 triệu kết quả. Dữ liệu đã quét được giữ vĩnh viễn, ba hướng lưu. Hub tự ghi ngay sau mỗi video. Mở lại trang vẫn còn.</p>
+      </details>
       <p id="savedEmpty">Chưa có người đủ ba cột.</p>
       <table id="savedTable" hidden>
         <thead>
@@ -228,6 +277,8 @@
       </table>
       <button id="dupMore" type="button" hidden>Xem thêm</button>
     </section>
+    </div>
+    <div data-sheet="scans" hidden>
     <section class="card" id="scanBox">
       <h2>Kết quả đã quét</h2>
       <details class="help">
@@ -265,19 +316,7 @@
       </div>
       <button id="scanMore" type="button" hidden>Xem thêm</button>
     </section>
-    <section class="card" id="peopleBox" hidden>
-      <p id="peopleLead">Video vừa đọc. Cột đã có sẵn được giữ nguyên.</p>
-      <table id="peopleTable">
-        <thead>
-          <tr>
-            <th>Tên</th>
-            <th>Tên danh bạ</th>
-            <th>Tài khoản</th>
-          </tr>
-        </thead>
-        <tbody id="peopleBody"></tbody>
-      </table>
-    </section>
+    </div>
   </main>
   <div id="actions">
     <button id="recordBtn" type="button">Bắt đầu ghi</button>
@@ -285,6 +324,28 @@
       <input id="videoFile" type="file" accept="video/*" multiple />
     </label>
   </div>
+  <script>
+    (function () {
+      var buttons = document.querySelectorAll("#views [data-view]");
+      function show(name) {
+        document.querySelectorAll("[data-sheet]").forEach(function (sheet) {
+          sheet.hidden = sheet.getAttribute("data-sheet") !== name;
+        });
+        buttons.forEach(function (button) {
+          var on = button.getAttribute("data-view") === name;
+          button.classList.toggle("on", on);
+          button.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+      }
+      buttons.forEach(function (button) {
+        button.addEventListener("click", function () {
+          show(button.getAttribute("data-view"));
+        });
+      });
+      document.getElementById("recordBtn").addEventListener("click", function () { show("work"); });
+      document.getElementById("videoFile").addEventListener("change", function () { show("work"); });
+    })();
+  </script>
   <script>
     const hubToken = __CONTROL_TOKEN_JSON__;
     if (hubToken) localStorage.setItem("fb_poller_control_token", hubToken);
