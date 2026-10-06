@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import bisect
 import io
 import math
 import os
@@ -45,7 +46,8 @@ _MIN_DIFF = 2.0
 # khoảng 29. Nhiễu nén, một điểm ảnh, hay cả khung dịch 1 điểm ảnh chỉ tới 3.
 _BLOCK_DIFF = 12.0
 # Rộng tối đa 720. Đo trên video iPhone thật: rộng 1080 đọc chậm hơn và nhận ra ít tên hơn.
-# Lượt đầu 4 hình mỗi giây. Đoạn không ra tên hoặc tài khoản thì đọc lại đúng đoạn đó ở 8 hình mỗi giây.
+# Lượt đầu 4 hình mỗi giây. Đoạn có chữ mà chưa ra tên thì đọc lại đúng đoạn đó ở 8 hình mỗi giây.
+# Đoạn trống dài, xa mọi chữ, lượt đầu đã đọc rồi nên không tách lại.
 _SAMPLE_FPS = 4.0
 _REREAD_FPS = 8.0
 _FRAME_EXT = ".png"
@@ -682,15 +684,39 @@ def _frame_has_person(found: list[dict[str, str]]) -> bool:
     return False
 
 
+def _within_second(seconds: float, anchors: list[float]) -> bool:
+    """True khi mốc gần nhất nằm trong một giây. anchors đã sắp tăng dần."""
+    if not anchors:
+        return False
+    index = bisect.bisect_left(anchors, seconds)
+    if index < len(anchors) and anchors[index] - seconds <= 1.0:
+        return True
+    return index > 0 and seconds - anchors[index - 1] <= 1.0
+
+
 def _unread_windows(readings: list[tuple[float, list[str], list[dict[str, str]]]]) -> list[tuple[float, float]]:
-    """Các đoạn liền nhau không ra tên hoặc tài khoản. Mỗi đoạn nới một giây ở hai đầu."""
-    misses = [seconds for seconds, _captions, found in readings if not _frame_has_person(found)]
-    if not misses:
+    """Đoạn chưa ra tên, nới một giây ở hai đầu.
+
+    Khung có chữ mà chưa ra người vẫn đọc lại ở 8 hình mỗi giây. Khung không có
+    chữ chỉ đọc lại khi cách khung có chữ hoặc đã ra người không quá một giây.
+    Đoạn trống dài không tách lại: lượt 4 hình mỗi giây đã đọc chúng, đọc lại
+    chỉ để bắt tên lọt giữa hai khung có nội dung.
+    """
+    if not readings:
+        return []
+    ordered = sorted(readings, key=lambda item: item[0])
+    anchors = [seconds for seconds, captions, found in ordered if captions or found]
+    leads: list[float] = []
+    for seconds, captions, found in ordered:
+        if _frame_has_person(found):
+            continue
+        if captions or found or _within_second(seconds, anchors):
+            leads.append(seconds)
+    if not leads:
         return []
     windows: list[tuple[float, float]] = []
-    start = misses[0]
-    previous = misses[0]
-    for seconds in misses[1:]:
+    start = previous = leads[0]
+    for seconds in leads[1:]:
         if seconds - previous <= 1.0:
             previous = seconds
             continue
@@ -835,7 +861,10 @@ def _reread_unread(
     threads: str | None = None,
     reserve: int | None = None,
 ) -> list[tuple[float, list[str], list[dict[str, str]]]]:
-    """Đọc lại 8 hình mỗi giây, chỉ trên đoạn lượt 4 hình mỗi giây không ra người."""
+    """Đọc lại 8 hình mỗi giây ở đoạn có chữ mà chưa ra người, và một giây sát đó.
+
+    Đoạn trống dài không tách lại. Lượt 4 hình mỗi giây đã đọc những khung đó.
+    """
     windows = _unread_windows(readings)
     if not windows:
         return readings
