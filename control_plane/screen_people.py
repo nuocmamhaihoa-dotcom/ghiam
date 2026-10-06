@@ -8,6 +8,7 @@ import shutil
 import statistics
 import subprocess
 import threading
+import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -692,6 +693,7 @@ def _tesseract_cli_run(
     psm: str = "11",
     langs: tuple[str, ...] = ("vie+eng", "eng"),
     extra: list[str] | None = None,
+    timeout: float | None = None,
 ) -> str:
     env = os.environ.copy()
     env["OMP_THREAD_LIMIT"] = "1"
@@ -700,7 +702,14 @@ def _tesseract_cli_run(
         env["TESSDATA_PREFIX"] = folder
     command = _tesseract_command()
     added = list(extra or [])
+    started = time.monotonic()
     for lang in langs:
+        if timeout is None:
+            remaining = 25.0
+        else:
+            remaining = float(timeout) - (time.monotonic() - started)
+        if remaining <= 0.05:
+            return ""
         argv = [
             command,
             str(prepared),
@@ -721,7 +730,7 @@ def _tesseract_cli_run(
                 argv,
                 capture_output=True,
                 text=True,
-                timeout=25,
+                timeout=remaining,
                 check=False,
                 env=env,
             )
@@ -745,7 +754,22 @@ def prepare_frame_image(path: Path) -> Image.Image | None:
     return _prepared_image(path)
 
 
-def _read_frame_tsv_impl(path: Path, *, standard: bool, loaded: Image.Image | None = None) -> str:
+def _read_frame_tsv_impl(
+    path: Path,
+    *,
+    standard: bool,
+    loaded: Image.Image | None = None,
+    seconds: float | None = None,
+) -> str:
+    started = time.monotonic()
+
+    def left() -> float | None:
+        if seconds is None:
+            return None
+        return float(seconds) - (time.monotonic() - started)
+
+    if left() is not None and left() <= 0.05:
+        return ""
     image = loaded if loaded is not None else _prepared_image(path)
     if image is None:
         return ""
@@ -753,6 +777,8 @@ def _read_frame_tsv_impl(path: Path, *, standard: bool, loaded: Image.Image | No
         kept = read_tsv(image)
         if kept is not None and tsv_word_counts(kept)[1] > 0:
             return kept
+        if left() is not None and left() <= 0.05:
+            return kept or ""
     else:
         kept = None
     prepared = path.with_name(path.stem + "-people.png")
@@ -760,19 +786,22 @@ def _read_frame_tsv_impl(path: Path, *, standard: bool, loaded: Image.Image | No
         image.save(prepared)
     except OSError:
         return kept or ""
+    if left() is not None and left() <= 0.05:
+        return kept or ""
     prefix = _standard_prefix() if standard else None
-    cli = _tesseract_cli_with_prefix(prepared, prefix)
+    allowance = None if left() is None else max(0.0, left())
+    cli = _tesseract_cli_run(prepared, prefix=prefix, timeout=allowance)
     return choose_tsv(kept, cli)
 
 
-def read_frame_tsv(path: Path, loaded: Image.Image | None = None) -> str:
+def read_frame_tsv(path: Path, loaded: Image.Image | None = None, *, seconds: float | None = None) -> str:
     """Một lần Tesseract cho cả danh bạ và dòng chữ nhìn thấy."""
-    return _read_frame_tsv_impl(path, standard=False, loaded=loaded)
+    return _read_frame_tsv_impl(path, standard=False, loaded=loaded, seconds=seconds)
 
 
-def read_frame_tsv_standard(path: Path, loaded: Image.Image | None = None) -> str:
+def read_frame_tsv_standard(path: Path, loaded: Image.Image | None = None, *, seconds: float | None = None) -> str:
     """Đọc lại bằng bộ chữ chuẩn khi bộ chữ nhanh nghi ngờ."""
-    return _read_frame_tsv_impl(path, standard=True, loaded=loaded)
+    return _read_frame_tsv_impl(path, standard=True, loaded=loaded, seconds=seconds)
 
 
 def _crop_box(image: Image.Image, left: int, top: int, width: int, height: int) -> Image.Image:
