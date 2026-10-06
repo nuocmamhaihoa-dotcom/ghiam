@@ -30,7 +30,7 @@ class JobConfig:
     has_header: bool
     name_column: int
     phone_column: int
-    contacts_per_file: int = 2000
+    contacts_per_file: int = 5000
     dedupe: bool = True
     normalize_phone: bool = True
     vn_to_e164: bool = True
