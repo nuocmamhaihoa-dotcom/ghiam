@@ -164,14 +164,14 @@ class ProfileBandTests(unittest.TestCase):
         junk = (
             "5\t1\t1\t1\t1\t1\t300\t372\t40\t30\t55\tOd\n"
             "5\t1\t1\t1\t2\t1\t320\t436\t60\t20\t49\tWQSG\n"
-            "5\t1\t2\t1\t1\t1\t100\t700\t90\t30\t95\tFollower"
+            "5\t1\t2\t1\t1\t1\t100\t700\t90\t30\t95\tHanoi"
         )
         lines, _tsv, rescued = people._rescue_profile(page, learner, [], junk, "v/f-00002.png")
         self.assertTrue(rescued)
         texts = [line.text for line in lines]
         self.assertNotIn("Od", texts)
         self.assertNotIn("WQSG", texts)
-        self.assertIn("Follower", texts)
+        self.assertIn("Hanoi", texts)
 
     def test_no_rescue_on_a_list_page_or_when_the_handle_was_already_seen_without_a_name_zone(self) -> None:
         page = _profile_page("Tran Tung", "@trn.tng751")
