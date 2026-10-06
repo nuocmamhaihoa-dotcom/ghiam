@@ -183,6 +183,7 @@ class ScreenPeopleTests(unittest.TestCase):
                 {"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"},
                 {"kind": "contact", "name": "Trần Tùng", "contactName": "Tên khác"},
                 {"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"},
+                {"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"},
             ]
         )
         self.assertEqual(rows[0]["contactName"], "A Tùng Bán Gạch")
@@ -294,10 +295,7 @@ class ScreenPeopleTests(unittest.TestCase):
             {"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"},
             {"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"},
         ]
-        self.assertEqual(
-            propose_rows(once),
-            [{"name": "Trần Tùng", "contactName": "A Tùng Bán Gạch", "username": "@trn.tng751"}],
-        )
+        self.assertEqual(propose_rows(once), [])
 
     def test_reading_counts_separate_the_list_from_accounts(self) -> None:
         sightings = [
@@ -308,8 +306,8 @@ class ScreenPeopleTests(unittest.TestCase):
             {"kind": "contact", "name": "Bấm nút ba lần để dừng", "contactName": "Cấu hình không hợp lệ"},
             {"kind": "profile", "name": "Bấm nút ba lần để dừng", "username": "@kol"},
         ]
-        self.assertEqual(reading_counts(sightings), {"contacts": 2, "accounts": 2, "saved": 1})
-        self.assertEqual(len(propose_rows(sightings)), 1)
+        self.assertEqual(reading_counts(sightings), {"contacts": 2, "accounts": 2, "saved": 0})
+        self.assertEqual(len(propose_rows(sightings)), 0)
 
     def test_instruction_text_and_short_handle_are_not_saved(self) -> None:
         found = sightings_from_lines(
@@ -428,6 +426,53 @@ class LineBoxTests(unittest.TestCase):
         self.assertEqual(_strip_button("Lan Anh Thích."), "Lan Anh")
         self.assertEqual(_strip_button("Follow"), "")
         self.assertEqual(_strip_button("Tuấn Anh"), "Tuấn Anh")
+        self.assertEqual(_strip_button("Đã follow Follower Thích Quang"), "Đã Quang")
+
+    def test_button_text_is_not_a_handle_or_a_name(self) -> None:
+        tsv = "\n".join(
+            [
+                "5\t1\t1\t1\t1\t1\t10\t10\t40\t20\t90\tDa",
+                "5\t1\t1\t1\t1\t2\t55\t10\t70\t20\t90\tfollow",
+                "5\t1\t1\t1\t1\t3\t130\t10\t90\t20\t90\tFollower",
+                "5\t1\t1\t1\t1\t4\t230\t10\t55\t20\t90\tThich",
+                "5\t1\t1\t1\t1\t5\t290\t10\t70\t20\t90\tQuang",
+            ]
+        )
+        self.assertEqual(handle_from_tsv(tsv)[0], "")
+        glued = "5\t1\t1\t1\t1\t1\t10\t10\t220\t20\t90\t@DafollowFollower_ThichQuang"
+        self.assertEqual(handle_from_tsv(glued)[0], "")
+        self.assertEqual(lines_from_tsv(tsv), [])
+        found = sightings_from_lines(
+            [
+                _line("Lanh Phung", 100),
+                _line("làm lại từ đầu", 140),
+                _line("U55595UZ 0 9", 200),
+                _line("Ở 850V9G65V", 250),
+                _line("0974668652 Da", 310),
+            ]
+        )
+        self.assertEqual(found, [])
+        rows = propose_rows(
+            [
+                {"kind": "contact", "name": "Sỹ", "contactName": "làm lại từ đầu"},
+                {"kind": "contact", "name": "Sỹ", "contactName": "làm lại từ đầu"},
+                {"kind": "profile", "name": "Sỹ", "username": "@DafollowFollower_ThichQuang"},
+                {"kind": "profile", "name": "Sỹ", "username": "@DafollowFollower_ThichQuang"},
+            ]
+        )
+        self.assertEqual(rows, [])
+
+    def test_letters_then_digits_stay_a_contact_name(self) -> None:
+        found = sightings_from_lines(
+            [
+                _line("user7457244303237", 100),
+                _line("Dịu 93", 140),
+            ]
+        )
+        self.assertEqual(
+            found,
+            [{"kind": "contact", "name": "Dịu 93", "contactName": "user7457244303237", "username": ""}],
+        )
 
     def test_a_loaded_picture_is_read_without_opening_the_file(self) -> None:
         font_path = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")

@@ -112,12 +112,18 @@ def _is_instruction(text: str) -> bool:
 
 def _is_name_line(text: str) -> bool:
     stripped = text.strip()
-    if _is_instruction(stripped) or _is_label(stripped) or _TIME.match(stripped) or "@" in stripped:
+    if (
+        _is_instruction(stripped)
+        or _is_label(stripped)
+        or _ui_phrase(stripped)
+        or _TIME.match(stripped)
+        or "@" in stripped
+    ):
         return False
     if re.fullmatch(r"[\d.\s]+", stripped):
         return False
     words = stripped.split()
-    if len(words) > 6:
+    if len(words) > 6 or any(_noise_token(word) for word in words):
         return False
     lowered = f" {stripped.casefold()} "
     if " thì " in lowered or "đổi tên" in lowered:
@@ -131,11 +137,72 @@ def _word_core(word: str) -> str:
     return "".join(char for char in fold_name(word) if char.isalnum())
 
 
+_BUTTON_CORES = {"follow", "thich", "dafollow", "follower", "nhantin", "tinnhan"}
+
+
+def _is_button_core(core: str) -> bool:
+    return core in _BUTTON_CORES or core.startswith("follow")
+
+
 def _strip_button(text: str) -> str:
+    """Gỡ từ nút ở bất kỳ chỗ nào trên dòng, không chỉ từ cuối."""
+    return " ".join(word for word in text.split() if not _is_button_core(_word_core(word)))
+
+
+def _ui_phrase(text: str) -> bool:
+    """Nút và câu trên giao diện. Không phải tên người đọc được."""
+    compact = fold_name(text).replace(" ", "")
+    if any(part in compact for part in ("dafollow", "follower", "lamlaitudau", "nhantin", "tinnhan")):
+        return True
     words = text.split()
-    while words and _word_core(words[-1]) in {"follow", "thich"}:
-        words.pop()
-    return " ".join(words)
+    return bool(words) and all(_is_button_core(_word_core(word)) or _word_core(word) == "da" for word in words)
+
+
+def _screen_text(text: str) -> str:
+    """Bỏ cả dòng khi đó là nút hoặc câu giao diện. Còn lại thì gỡ từ nút dính vào tên."""
+    if _ui_phrase(text):
+        return ""
+    return _strip_button(text)
+
+
+def _noise_token(word: str) -> bool:
+    """Mã lẫn chữ và số, hoặc dãy số dài. user7457… (chữ rồi chỉ số) thì giữ."""
+    core = "".join(char for char in word if char.isalnum())
+    if len(core) < 4:
+        return False
+    letters = 0
+    for char in core:
+        if char.isalpha():
+            letters += 1
+        else:
+            break
+    rest = core[letters:]
+    if letters >= 3 and rest.isdigit():
+        return False
+    has_alpha = any(char.isalpha() for char in core)
+    has_digit = any(char.isdigit() for char in core)
+    if has_digit and not has_alpha and len(core) >= 8:
+        return True
+    return has_alpha and has_digit
+
+
+def _literal_name(text: str) -> str:
+    """Tên chỉ khi chữ đọc được không phải nút, câu giao diện, hay mã lẫn chữ số."""
+    cleaned = clean_name(text)
+    if not cleaned or not _is_name_line(cleaned):
+        return ""
+    return cleaned
+
+
+def _literal_handle(value: str) -> str:
+    """Tài khoản đã đọc. Chữ nút ghép lại thì bỏ."""
+    handle = clean_username(value)
+    if not handle:
+        return ""
+    core = fold_name(handle.lstrip("@")).replace(" ", "")
+    if any(part in core for part in ("follow", "thich", "dafollow", "follower", "nhantin")):
+        return ""
+    return handle
 
 
 def tsv_word_counts(tsv: str) -> tuple[int, int]:
@@ -202,13 +269,10 @@ def handle_from_tsv(tsv: str, *, min_conf: float = _HANDLE_CONF) -> tuple[str, f
     blob = "".join(word.text for word in words)
     conf = min(word.conf for word in words)
     found = _HANDLE.findall(blob)
-    if found:
-        handle = clean_username(found[0])
-    elif any(char not in _HANDLE_CHARSET and not char.isspace() for char in blob):
-        handle = ""
-    else:
-        cleaned = "".join(char for char in blob if char in _HANDLE_CHARSET)
-        handle = clean_username(cleaned if cleaned.startswith("@") else f"@{cleaned}")
+    # Không có dấu @ trên dòng thì không bịa tài khoản từ chữ nút ghép lại.
+    if not found:
+        return "", conf
+    handle = _literal_handle(found[0])
     if not handle or conf < min_conf:
         return "", conf
     return handle, conf
@@ -268,7 +332,7 @@ def lines_from_tsv(tsv: str) -> list[TextLine]:
     lines: list[TextLine] = []
     for words in groups.values():
         words.sort(key=lambda item: int(item["left"]))
-        text = _strip_button(" ".join(str(item["text"]) for item in words))
+        text = _screen_text(" ".join(str(item["text"]) for item in words))
         if len(text) < 2:
             continue
         left = min(int(item["left"]) for item in words)
@@ -293,7 +357,9 @@ def _merge_same_row(lines: list[TextLine]) -> list[TextLine]:
         if not same_row or not same_column:
             merged.append(line)
             continue
-        text = _strip_button(f"{previous.text} {line.text}")
+        if _ui_phrase(line.text):
+            continue
+        text = _screen_text(f"{previous.text} {line.text}")
         merged[-1] = TextLine(
             text,
             min(previous.left, line.left),
@@ -326,8 +392,8 @@ def _contact_sightings(lines: list[TextLine]) -> list[dict[str, str]]:
         upper = names[index]
         lower = names[index + 1]
         if _tight_pair(upper, lower):
-            contact_name = clean_name(upper.text)
-            name = clean_name(lower.text)
+            contact_name = _literal_name(upper.text)
+            name = _literal_name(lower.text)
             if contact_name and name and fold_name(contact_name) != fold_name(name):
                 found.append({"kind": "contact", "name": name, "contactName": contact_name, "username": ""})
             index += 2
@@ -342,13 +408,14 @@ def _profile_pick(lines: list[TextLine]) -> tuple[TextLine, TextLine, str, str] 
     if len(handles) != 1:
         return None
     handle = handles[0]
+    username = _literal_handle(handle)
+    if not username:
+        return None
     short = [line for line in lines if handle in line.text and len(line.text.split()) <= 4]
     for line in short:
-        if _is_name_line(line.text.replace(handle, " ")):
-            name = clean_name(line.text.replace(handle, " "))
-            username = clean_username(handle)
-            if len(name) >= 2 and username:
-                return line, line, name, username
+        name = _literal_name(line.text.replace(handle, " "))
+        if len(name) >= 2:
+            return line, line, name, username
     if not short:
         return None
     anchor = min(short, key=lambda line: line.top)
@@ -357,14 +424,13 @@ def _profile_pick(lines: list[TextLine]) -> tuple[TextLine, TextLine, str, str] 
         for line in lines
         if line.bottom <= anchor.top + 6
         and anchor.top - line.bottom <= max(80, int(2.2 * max(line.height, anchor.height)))
-        and _is_name_line(line.text)
+        and _literal_name(line.text)
     ]
     if not above:
         return None
     chosen = max(above, key=lambda line: line.bottom)
-    username = clean_username(handle)
-    name = clean_name(chosen.text)
-    if len(name) < 2 or not username:
+    name = _literal_name(chosen.text)
+    if len(name) < 2:
         return None
     return chosen, anchor, name, username
 
@@ -436,7 +502,7 @@ def _winning_spellings(
     minimum: int = 3,
     multiple: int = 3,
 ) -> list[str] | None:
-    """Cụm đọc nhiều nhất. Hai cách đọc khác nhau ngang nhau thì không chọn."""
+    """Cụm đọc nhiều nhất. Một lần đọc, hoặc hai cách đọc ngang nhau, thì không chọn."""
     groups: list[list[str]] = []
     for value in values:
         placed = False
@@ -451,6 +517,8 @@ def _winning_spellings(
         return None
     groups.sort(key=len, reverse=True)
     if len(groups) == 1:
+        if len(groups[0]) < minimum:
+            return None
         return groups[0]
     leader = len(groups[0])
     runner = len(groups[1])
@@ -464,24 +532,18 @@ def _mode(values: list[str]) -> str:
 
 
 def _accepted_sighting(item: dict[str, str]) -> tuple[str, str] | None:
-    """Tên đã lọc và loại lần nhìn. Câu hướng dẫn và tài khoản ngắn không tính."""
-    name = clean_name(item.get("name") or "")
+    """Tên đã lọc và loại lần nhìn. Câu giao diện, mã lẫn chữ số và tài khoản nút không tính."""
+    name = _literal_name(item.get("name") or "")
     key = fold_name(name)
-    if not key or _is_instruction(name):
+    if not key:
         return None
     kind = item.get("kind") or ""
     if kind == "contact":
-        contact_name = clean_name(item.get("contactName") or "")
-        if (
-            not contact_name
-            or _is_instruction(contact_name)
-            or "@" in contact_name
-            or "@" in name
-            or fold_name(contact_name) == key
-        ):
+        contact_name = _literal_name(item.get("contactName") or "")
+        if not contact_name or fold_name(contact_name) == key:
             return None
         return key, "contact"
-    if kind == "profile" and clean_username(item.get("username") or ""):
+    if kind == "profile" and _literal_handle(item.get("username") or ""):
         return key, "profile"
     return None
 
@@ -508,26 +570,20 @@ def propose_rows(sightings: list[dict[str, str]]) -> list[dict[str, str]]:
     profiles: dict[str, list[tuple[str, str]]] = {}
     order: list[str] = []
     for item in sightings:
-        name = clean_name(item.get("name") or "")
+        name = _literal_name(item.get("name") or "")
         key = fold_name(name)
-        if not key or _is_instruction(name):
+        if not key:
             continue
         kind = item.get("kind") or ""
         if kind == "contact":
-            contact_name = clean_name(item.get("contactName") or "")
-            if (
-                not contact_name
-                or _is_instruction(contact_name)
-                or "@" in contact_name
-                or "@" in name
-                or fold_name(contact_name) == key
-            ):
+            contact_name = _literal_name(item.get("contactName") or "")
+            if not contact_name or fold_name(contact_name) == key:
                 continue
             if key not in contacts and key not in profiles:
                 order.append(key)
             contacts.setdefault(key, []).append((name, contact_name))
         elif kind == "profile":
-            username = clean_username(item.get("username") or "")
+            username = _literal_handle(item.get("username") or "")
             if not username:
                 continue
             if key not in contacts and key not in profiles:

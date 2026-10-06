@@ -1832,7 +1832,13 @@ class ActionApiTests(unittest.TestCase):
                 noted = self.client.post(
                     f"/v1/recordings/jobs/{part_id}/checkpoint",
                     headers=self.headers,
-                    json={"workerId": worker_id, "frames": [{"t": 1.0, "captions": [], "sightings": [sighting]}]},
+                    json={
+                        "workerId": worker_id,
+                        "frames": [
+                            {"t": 1.0, "captions": [], "sightings": [sighting]},
+                            {"t": 1.25, "captions": [], "sightings": [sighting]},
+                        ],
+                    },
                 )
                 self.assertEqual(noted.status_code, 200, noted.text)
             for worker_id, part_id, _sighting in seen:

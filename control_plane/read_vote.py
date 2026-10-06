@@ -197,18 +197,12 @@ def _groups(reads: list[str], kind: str) -> dict[str, list[str]]:
     return found
 
 
-def _plain(texts: list[str]) -> bool:
-    """Mọi cách đọc trong nhóm đều không có dấu. Lúc đó mới được điền âm tiết duy nhất."""
-    named = [text for text in texts if vote_key(text, "name")]
-    return bool(named) and all(mark_count(text) == 0 for text in named)
-
-
-def _restore(text: str, texts: list[str]) -> str:
-    """Chuyển dấu thanh về đúng nguyên âm. Điền âm tiết duy nhất chỉ khi cả nhóm không có dấu."""
+def _restore(text: str, _texts: list[str]) -> str:
+    """Chuyển dấu thanh đã đọc về đúng nguyên âm. Không điền dấu khi chữ đọc được không có dấu."""
     cleaned = clean_name(text)
     if not cleaned:
         return ""
-    return restore_name(cleaned, allow_unique=_plain(texts))
+    return restore_name(cleaned, allow_unique=False)
 
 
 def _show(texts: list[str], kind: str) -> str:
@@ -262,7 +256,7 @@ def vote_line(seed: str, second: str, third: str | None, reruns: list[str], *, k
                 # Các hướng đã trùng chữ gốc, chỉ có thể khác dấu. Cách viết lấy từ bộ chữ chuẩn đọc riêng ô dòng (hướng 2):
                 # trên danh sách mẫu nó đúng 77% khi lệch dấu với bộ nhanh (bộ nhanh 12%), và không tự thêm dấu vào tên không dấu.
                 # RapidOCR chỉ trả chữ gốc nên không được lấn phiếu của hướng 2.
-                # Sau đó dấu thanh đặt sai nguyên âm được chuyển về đúng chỗ. Nhiều âm tiết cùng chữ gốc thì không đoán dấu.
+                # Sau đó dấu thanh đặt sai nguyên âm được chuyển về đúng chỗ. Không điền dấu khi chữ đọc được không có dấu.
                 if second in winner and vote_key(second, "name"):
                     return _restore(second, winner), True
                 return _restore(_richest(winner), winner), True
