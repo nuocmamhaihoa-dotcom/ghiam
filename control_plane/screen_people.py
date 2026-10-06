@@ -443,10 +443,24 @@ def _profile_sighting(lines: list[TextLine]) -> dict[str, str] | None:
     return {"kind": "profile", "name": name, "contactName": "", "username": username}
 
 
+def _single_profile_screen(lines: list[TextLine]) -> bool:
+    """Trang hồ sơ là một người: một @, và không có tên người thứ hai trên cùng khung."""
+    handles = list(dict.fromkeys(handle for line in lines for handle in _valid_handles(line.text)))
+    if len(handles) != 1:
+        return False
+    names = [line for line in lines if _is_name_line(line.text)]
+    if len(names) > 1:
+        return False
+    if len(names) == 1:
+        return True
+    handle = handles[0]
+    return any(_is_name_line(line.text.replace(handle, " ")) for line in lines if handle in line.text)
+
+
 def sightings_from_lines(lines: list[TextLine]) -> list[dict[str, str]]:
-    """Danh bạ cho cặp tên. Hồ sơ cho một tên và đúng một @."""
+    """Danh bạ cho cặp tên. Hồ sơ chỉ khi khung có một tên và đúng một @ của người đó."""
     pairs = _contact_sightings(lines)
-    if _is_contacts(lines) or len(pairs) >= 2:
+    if _is_contacts(lines) or len(pairs) >= 2 or not _single_profile_screen(lines):
         return pairs
     profile = _profile_sighting(lines)
     if profile is not None:
@@ -531,6 +545,20 @@ def _mode(values: list[str]) -> str:
     return max(values, key=lambda value: (values.count(value), len(value)))
 
 
+def _shared_usernames(profiles: dict[str, list[tuple[str, str]]]) -> set[str]:
+    """Một @ đứng với hai tên khác nhau thì không thuộc về ai."""
+    owner: dict[str, str] = {}
+    shared: set[str] = set()
+    for key, pairs in profiles.items():
+        for _name, username in pairs:
+            previous = owner.get(username)
+            if previous is None:
+                owner[username] = key
+            elif previous != key:
+                shared.add(username)
+    return shared
+
+
 def _accepted_sighting(item: dict[str, str]) -> tuple[str, str] | None:
     """Tên đã lọc và loại lần nhìn. Câu giao diện, mã lẫn chữ số và tài khoản nút không tính."""
     name = _literal_name(item.get("name") or "")
@@ -589,15 +617,24 @@ def propose_rows(sightings: list[dict[str, str]]) -> list[dict[str, str]]:
             if key not in contacts and key not in profiles:
                 order.append(key)
             profiles.setdefault(key, []).append((name, username))
+    shared = _shared_usernames(profiles)
+    if shared:
+        for key, pairs in list(profiles.items()):
+            kept_pairs = [pair for pair in pairs if pair[1] not in shared]
+            if kept_pairs:
+                profiles[key] = kept_pairs
+            else:
+                del profiles[key]
     rows: list[dict[str, str]] = []
     for key in order:
         if key not in contacts or key not in profiles:
             continue
         contact_names = [contact_name for _name, contact_name in contacts[key]]
         usernames = [username for _name, username in profiles[key]]
-        # Tên danh bạ đọc giống nhau 2 lần thì thắng một cách đọc khác. Tài khoản vẫn cần lệch rõ hơn.
+        # Tên danh bạ đọc giống nhau 2 lần thì thắng một cách đọc khác.
+        # Tài khoản chỉ lấy trên trang hồ sơ, và phải nhiều gấp ba lần cách đọc khác.
         chosen_contacts = _winning_spellings(contact_names, _near_contact, minimum=2, multiple=1)
-        chosen_usernames = _winning_spellings(usernames, _near_username, minimum=2, multiple=1)
+        chosen_usernames = _winning_spellings(usernames, _near_username, minimum=2, multiple=3)
         if not chosen_contacts or not chosen_usernames:
             continue
         display = _richer_name([name for name, _extra in contacts[key] + profiles[key]])
@@ -1258,11 +1295,11 @@ def _apply_line_votes(
     if _valid_handles(text) or text.strip().startswith("@"):
         handle_box = _line_box(line, tsv, source.width, "handle")
         voted, handle_agreed = _vote_box(source, handle_box, dest, "handle", text, memo, frame_id)
-        if handle_agreed and voted and learner is not None and learn:
+        if handle_agreed and voted and learner is not None and learn and not list_frame:
             learner.learn_handle(handle_box[1], handle_box[1] + handle_box[3])
         sure = _handle_conf(tsv, voted or text)
         if voted and (handle_agreed or (sure is not None and sure >= _HANDLE_CONF)):
-            if handle_agreed:
+            if handle_agreed and not list_frame:
                 agreed_handle = voted
             for old in _valid_handles(text):
                 text = text.replace(old, voted)
@@ -1404,7 +1441,7 @@ def tighten_frame_reading(
             frame_id,
             learner,
             scroll_list or _list_frame(lines),
-            not rescued,
+            not rescued and not scroll_list and _single_profile_screen(lines),
         )
 
     found = sightings_from_lines(updated)
@@ -1430,15 +1467,6 @@ def tighten_frame_reading(
             continue
         if kind == "contact" and name and contact:
             kept.append({"kind": "contact", "name": name, "contactName": contact, "username": ""})
-    if agreed_handles and not any(item.get("kind") == "profile" for item in kept):
-        names = [line for line in updated if _is_name_line(line.text)]
-        if names:
-            name = clean_name(names[-1].text)
-            name_conf = name_min_conf(tsv, name)
-            if name and (name in agreed_names or name_conf is None or name_conf >= _NAME_CONF):
-                kept.append(
-                    {"kind": "profile", "name": name, "contactName": "", "username": agreed_handles[0]}
-                )
     if source is not None and agreed_handles and any(item.get("kind") == "profile" for item in kept):
         if rescued:
             learner.note("rescued")
