@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-      <meta name="theme-color" content="#f3f4f6" />
+      <meta name="theme-color" content="#efece6" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <meta name="iphone-build" content="__IPHONE_BUILD__" />
@@ -22,12 +22,12 @@
   <style>
     [hidden] { display: none !important; }
     :root {
-      --bg: #f3f4f6;
-      --card: #fff;
-      --ink: #111827;
-      --muted: #6b7280;
-      --line: #e5e7eb;
-      --accent: #111827;
+      --bg: #efece6;
+      --card: #fffdfb;
+      --ink: #1c1917;
+      --muted: #78716c;
+      --line: #e7e5e4;
+      --accent: #0f6e56;
       --ok: #047857;
       --warn: #8a5a10;
       --bad: #b42318;
@@ -44,7 +44,7 @@
     }
     .shell {
       position: sticky; top: 0; z-index: 20;
-      background: rgba(243, 244, 246, 0.96);
+      background: rgba(239, 236, 230, 0.94);
       border-bottom: 1px solid var(--line);
       backdrop-filter: blur(10px);
     }
@@ -71,21 +71,25 @@
     button.ghost { background: transparent; color: var(--ink); border-color: var(--line); font-weight: 650; }
     button.danger { background: var(--bad); color: #fff; }
     button:disabled { opacity: 0.5; cursor: default; }
-    .tabs { display: flex; gap: 0.3rem; flex-wrap: wrap; padding: 0 1rem 0.7rem; }
-    .tabs button { min-height: 36px; border-radius: 999px; padding: 0.3rem 0.75rem; }
+    .tabs { display: flex; gap: 0.3rem; flex-wrap: nowrap; overflow-x: auto; padding: 0 1rem 0.65rem; -webkit-overflow-scrolling: touch; }
+    .tabs button { flex: none; min-height: 36px; border-radius: 999px; padding: 0.3rem 0.75rem; }
     .tabs button.ghost.on { background: var(--accent); color: #fff; border-color: transparent; }
-    main { padding: 1rem 1rem 2.5rem; max-width: 920px; }
+    main { padding: 0.8rem 1rem 2.5rem; max-width: 920px; }
+    #helperLine {
+      margin: 0 0 0.65rem; padding: 0.55rem 0.75rem; font-weight: 650;
+      background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    }
     .lead { color: var(--muted); margin: 0 0 0.8rem; }
     details.help { margin: 0 0 0.7rem; }
     details.help summary { cursor: pointer; font-weight: 700; }
     details.help .lead { margin: 0.4rem 0 0; }
     .drop {
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 0.3rem; min-height: 148px; margin: 0 0 0.8rem; padding: 1rem;
+      gap: 0.25rem; min-height: 112px; margin: 0 0 0.7rem; padding: 0.85rem;
       border: 1px dashed #9ca3af; border-radius: 16px; background: #fff;
       text-align: center; cursor: pointer;
     }
-    .drop strong { font-size: 1.35rem; }
+    .drop strong { font-size: 1.15rem; }
     .drop span { color: var(--muted); max-width: 36rem; }
     .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     .drop.over, .drop:hover { background: #f9fafb; }
@@ -106,8 +110,10 @@
     #continueBtn { min-height: 48px; margin-top: 0.4rem; }
     .panel {
       background: var(--card); border: 1px solid var(--line);
-      border-radius: 16px; padding: 0.9rem 1rem; margin: 0 0 0.8rem;
+      border-radius: 14px; padding: 0.75rem 0.85rem; margin: 0 0 0.6rem;
     }
+    details.fold > summary { font-weight: 750; cursor: pointer; }
+    details.fold > :not(summary) { margin-top: 0.55rem; }
     .scroll { max-height: 420px; overflow: auto; }
     table { width: 100%; border-collapse: collapse; }
     th, td { text-align: left; padding: 0.45rem 0.4rem; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -188,17 +194,7 @@
   <p id="err" class="err" hidden></p>
   <main>
     <section data-view="home">
-      <p class="lead" id="helperLine">PC phụ chưa nối. Video được máy chủ đọc.</p>
-      <section class="panel" id="issueBox">
-        <h2>Lỗi và vấn đề gần đây</h2>
-        <p class="lead" id="issueMeta">Ghi lại cảnh báo khi đọc video, PC phụ, và máy chủ.</p>
-        <div class="scroll">
-          <table>
-            <thead><tr><th>Thời gian</th><th>Nguồn</th><th>Chi tiết</th></tr></thead>
-            <tbody id="issueRows"><tr><td colspan="3" class="empty">Chưa có mục nào.</td></tr></tbody>
-          </table>
-        </div>
-      </section>
+      <p class="lead" id="helperLine">PC phụ chưa nối. Video được máy chủ đọc bằng 90% CPU và RAM của VPS.</p>
       <label id="drop" class="drop">
         <strong>Thả video vào đây</strong>
         <span>Hoặc bấm để chọn. Nhiều video một lúc. Hub tự đọc và lưu người nhìn thấy, không cần bấm phát.</span>
@@ -217,12 +213,18 @@
       </section>
       <section class="panel" id="boardBox">
         <h2>Việc đang làm</h2>
-        <p class="board-note">Video đang chờ hiện thứ tự. Video đang đọc hiện bước: Chờ, Tách hình, Đọc chữ, Đọc lại, Ghép tên, Ghi xong.</p>
+        <details class="help">
+          <summary>Các bước</summary>
+          <p class="board-note">Video đang chờ hiện thứ tự. Video đang đọc hiện bước: Chờ, Tách hình, Đọc chữ, Đọc lại, Ghép tên, Ghi xong.</p>
+        </details>
         <div id="boardActive"></div>
         <h2>Hàng chờ</h2>
         <div id="boardQueued"></div>
         <h2>Báo cáo 24 giờ</h2>
-        <p class="board-note">Mỗi video ghi tên máy, số người thấy trong danh bạ, số người có tài khoản, và số người ghi được. Báo cáo giữ 24 giờ rồi xóa. Người đã quét được giữ vĩnh viễn. Video lỗi còn file, bấm Đọc lại để làm tiếp.</p>
+        <details class="help">
+          <summary>Báo cáo giữ bao lâu</summary>
+          <p class="board-note">Mỗi video ghi tên máy, số người thấy trong danh bạ, số người có tài khoản, và số người ghi được. Báo cáo giữ 24 giờ rồi xóa. Người đã quét được giữ vĩnh viễn. Video lỗi còn file, bấm Đọc lại để làm tiếp.</p>
+        </details>
         <div id="boardPhones"></div>
         <div id="boardHistory"></div>
       </section>
@@ -236,8 +238,18 @@
           </table>
         </div>
       </section>
-      <section class="panel">
-        <h2>Kết quả đã lưu</h2>
+      <details class="panel fold" id="issueBox">
+        <summary>Lỗi và vấn đề gần đây</summary>
+        <p class="lead" id="issueMeta">Ghi lại cảnh báo khi đọc video, PC phụ, và máy chủ.</p>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Thời gian</th><th>Nguồn</th><th>Chi tiết</th></tr></thead>
+            <tbody id="issueRows"><tr><td colspan="3" class="empty">Chưa có mục nào.</td></tr></tbody>
+          </table>
+        </div>
+      </details>
+      <details class="panel fold">
+        <summary>Kết quả đã lưu</summary>
         <p class="lead" id="storeCount">Đang tải kho…</p>
         <div class="scroll">
           <table>
@@ -246,9 +258,9 @@
           </table>
         </div>
         <button id="savedMore" class="ghost" type="button" hidden>Xem thêm</button>
-      </section>
-      <section class="panel">
-        <h2>Dữ liệu trùng</h2>
+      </details>
+      <details class="panel fold">
+        <summary>Dữ liệu trùng</summary>
         <p class="lead">Người vừa quét đã có trong kho. Kho giữ dòng cũ.</p>
         <div class="scroll">
           <table>
@@ -256,8 +268,8 @@
             <tbody id="dupHomeBody"><tr><td colspan="3" class="empty">Chưa có dữ liệu trùng.</td></tr></tbody>
           </table>
         </div>
-      </section>
-      <details class="token-box">
+      </details>
+      <details class="panel fold token-box">
         <summary>Token hub</summary>
         <div class="token-row">
           <input id="token" type="password" placeholder="Token hub" autocomplete="off" />
