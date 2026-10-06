@@ -30,7 +30,7 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
         page = opener.open(f"http://127.0.0.1:{port}/").read().decode()
         assert "Vào phần mềm" in page
         assert "Tạo danh bạ" in page
-        assert "5.000" in page
+        assert "4.000" in page
         assert "Mỗi danh bạ bao nhiêu số điện thoại?" not in page
         assert "Tải trên iPhone" in page
         assert "min-width: 900px" in page
@@ -148,7 +148,7 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
         server.shutdown()
 
 
-def test_books_stay_fixed_at_5000_even_if_a_size_is_sent(tmp_path: Path) -> None:
+def test_books_stay_fixed_at_4000_even_if_a_size_is_sent(tmp_path: Path) -> None:
     server = serve(tmp_path / "kho", host="127.0.0.1", port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

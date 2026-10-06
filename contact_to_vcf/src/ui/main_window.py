@@ -158,7 +158,7 @@ class MainWindow(QMainWindow):
         self.start_btn.clicked.connect(self._import_pool)
         layout.addWidget(self.start_btn)
 
-        self.plan_label = QLabel("Mỗi danh bạ 5.000 số. Số đã chia thì không chuyển danh bạ khác.")
+        self.plan_label = QLabel("Mỗi danh bạ 4.000 số. Số đã chia thì không chuyển danh bạ khác.")
         self.plan_label.setWordWrap(True)
         self.plan_label.setObjectName("hint")
         self.kho_label = QLabel("Chưa chọn thư mục kho.")

@@ -35,7 +35,7 @@ Workflow GitHub `contact-to-vcf-windows` cũng đóng gói file exe này khi có
 3. Xem vài dòng đầu. Cột nền xanh lá là cột số sẽ được nạp. CSV nhận dấu phẩy, chấm phẩy, tab hoặc gạch đứng theo nội dung file.
 4. Chọn thư mục kho.
 5. Bấm **NẠP VÀO KHO**. Số Việt Nam rõ ràng được lưu thành 10 số của nhà mạng, ví dụ `0901234567`. Tên liên hệ ghi đúng số đó, giống hệt số điện thoại. Số khác vẫn được nhận nếu có chữ số. Số đã có trong kho không được thêm lại.
-6. Mỗi danh bạ tự chia cố định 5.000 số. Số đã nằm trong danh bạ nào thì giữ nguyên danh bạ đó. Cơ sở dữ liệu từ chối lệnh chuyển số đó sang danh bạ khác, kể cả khi nạp lại.
+6. Mỗi danh bạ tự chia cố định 4.000 số. Số đã nằm trong danh bạ nào thì giữ nguyên danh bạ đó. Cơ sở dữ liệu từ chối lệnh chuyển số đó sang danh bạ khác, kể cả khi nạp lại.
 7. Bấm **Tải về** trên từng dòng, hoặc **Tải các file chưa tải**. Dòng đã tải hiện thời điểm tải. Trên iPhone: Tệp → chọn file → Chia sẻ → Thêm vào Danh bạ.
 
 Kho nằm trong `kho.sqlite` ở thư mục đã chọn. Mở lại phần mềm, chọn đúng thư mục kho, bấm **LÀM MỚI KHO** để thấy các danh bạ và mốc đã tải. Nạp thêm file mới chỉ bổ sung số chưa có.
@@ -96,7 +96,7 @@ END:VCARD
 
 File dùng UTF-8 và xuống dòng CRLF, đúng file mẫu máy đã thêm được: năm dòng, không dòng trống, số giữ dạng `+84` và chín chữ số. Tên Unicode, dấu tiếng Việt, dấu phẩy, dấu chấm phẩy và xuống dòng được thoát theo vCard để không làm vỡ contact phía sau.
 
-`5.001` liên hệ hợp lệ tạo `contacts_00001.vcf` với 5.000 contact và `contacts_00002.vcf` với 1 contact.
+`4.001` liên hệ hợp lệ tạo `contacts_00001.vcf` với 4.000 contact và `contacts_00002.vcf` với 1 contact.
 
 Nếu bật chia thư mục, mỗi thư mục `batch_0001`, `batch_0002`, … chứa tối đa 1.000 file VCF.
 
