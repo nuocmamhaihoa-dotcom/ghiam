@@ -15,7 +15,7 @@ import time
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, Callable, NamedTuple, TypeVar
 
 from PIL import Image, ImageChops, ImageOps, ImageStat
 
@@ -50,6 +50,8 @@ _BLOCK_DIFF = 12.0
 # Đoạn trống dài, xa mọi chữ, lượt đầu đã đọc rồi nên không tách lại.
 _SAMPLE_FPS = 4.0
 _REREAD_FPS = 8.0
+# Một khung quá ngần này mà vẫn chưa đọc được thì bỏ khung đó và làm bước sau.
+_FRAME_READ_SECONDS = 30.0
 _FRAME_EXT = ".png"
 # Đoạn ffmpeg song song. PC nhiều lõi thì tách nhiều hơn.
 _SEGMENT_MIN_FRAMES = 64
@@ -1477,6 +1479,7 @@ class _FrameRead(NamedTuple):
     lines: list[Any]
     height: int
     strip: bool
+    timed_out: bool = False
 
 
 def _drop_fades(chosen: list[tuple[float, Path]]) -> list[tuple[float, Path]]:
@@ -1491,8 +1494,11 @@ def _drop_fades(chosen: list[tuple[float, Path]]) -> list[tuple[float, Path]]:
     return [item for index, item in enumerate(chosen) if index not in drop]
 
 
-def _try_strip(item: tuple[float, Path], thumb_dy: int) -> _FrameRead | None:
+def _try_strip(item: tuple[float, Path], thumb_dy: int, *, seconds: float | None = None) -> _FrameRead | None:
     """Đọc dải mới khi danh bạ cuộn. None thì khung này đọc cả ảnh như thường."""
+    seconds_left = None if seconds is None else max(0.0, seconds)
+    if seconds_left is not None and seconds_left <= 0.05:
+        return None
     seconds, image = item
     read_started = time.perf_counter()
     loaded = prepare_frame_image(image)
@@ -1503,7 +1509,7 @@ def _try_strip(item: tuple[float, Path], thumb_dy: int) -> _FrameRead | None:
     if dy == 0 or bottom - top < 8 or bottom - top >= int(loaded.height * 0.85):
         return None
     crop = loaded.crop((0, top, loaded.width, bottom))
-    tsv = scroll_track.offset_tsv(read_frame_tsv(image, crop), top)
+    tsv = scroll_track.offset_tsv(read_frame_tsv(image, crop, seconds=seconds_left), top)
     text_lines = lines_from_tsv(tsv) if tsv else []
     stage_timing.add("read", time.perf_counter() - read_started)
     if not text_lines:
@@ -1525,18 +1531,81 @@ def _try_strip(item: tuple[float, Path], thumb_dy: int) -> _FrameRead | None:
     return _FrameRead(seconds, captions, sightings, seen, kept, list(text_lines), loaded.height, True)
 
 
+_T = TypeVar("_T")
+
+
+class _StillReading:
+    """Lần đọc chưa xong khi hết giờ của khung."""
+
+
+_STILL_READING = _StillReading()
+
+
+def _finish_in(seconds: float, work: Callable[[], _T]) -> _T | _StillReading:
+    """Chạy work. Hết giờ thì trả về ngay; lần đọc đó không được dùng nữa."""
+    if seconds <= 0.05:
+        return _STILL_READING
+    box: list[_T | Exception] = []
+    done = threading.Event()
+
+    def run() -> None:
+        try:
+            box.append(work())
+        except Exception as exc:
+            box.append(exc)
+        finally:
+            done.set()
+
+    threading.Thread(target=run, name="frame-read", daemon=True).start()
+    if not done.wait(seconds):
+        return _STILL_READING
+    if not box:
+        return _STILL_READING
+    outcome = box[0]
+    if isinstance(outcome, Exception):
+        raise outcome
+    return outcome
+
+
+def _caption_list(lines: list[Any], found: list[dict[str, str]]) -> list[str]:
+    captions = captions_from_sightings(found)
+    if captions:
+        return captions
+    raw = "\n".join(line.text for line in lines)
+    text = clean_ocr(raw)
+    fallback = seen_line(text) if text else ""
+    return [fallback] if fallback else []
+
+
 def _read_one(
     item: tuple[float, Path],
     thumb_dy: int | None = None,
     preset_lines: list[Any] | None = None,
     *,
     use_preset: bool = False,
+    clock: Callable[[], float] | None = None,
 ) -> _FrameRead:
+    """Đọc một khung. Quá 30 giây mà chưa ra chữ thì trả khung trống, không đọc thêm."""
+    now = clock or time.monotonic
+    started = now()
+    stamp, image = item
+
+    def left() -> float:
+        return _FRAME_READ_SECONDS - (now() - started)
+
+    def give_up() -> _FrameRead:
+        return _FrameRead(stamp, [], [], 0, 0, [], 0, False, True)
+
     if thumb_dy:
-        stripped = _try_strip(item, thumb_dy)
+        if left() <= 0.05:
+            return give_up()
+        stripped = _finish_in(left(), lambda: _try_strip(item, thumb_dy, seconds=left()))
+        if stripped is _STILL_READING:
+            return give_up()
         if stripped is not None:
             return stripped
-    seconds, image = item
+        if left() <= 0.05:
+            return give_up()
     seen = 0
     kept = 0
     used_tesseract = False
@@ -1546,40 +1615,49 @@ def _read_one(
     if use_preset:
         text_lines = preset_lines
     else:
+        if left() <= 0.05:
+            return give_up()
         try:
-            text_lines = read_lines(image)
+            text_lines = _finish_in(left(), lambda: read_lines(image))
         except Exception:
             text_lines = None
+        if text_lines is _STILL_READING:
+            return give_up()
     if text_lines is None:
+        if left() <= 0.05:
+            return give_up()
         used_tesseract = True
         loaded = prepare_frame_image(image)
-        tsv = read_frame_tsv(image, loaded)
+        tsv_read = _finish_in(
+            left(),
+            lambda: read_frame_tsv(image, loaded, seconds=max(0.0, left())),
+        )
+        if tsv_read is _STILL_READING:
+            return give_up()
+        tsv = tsv_read or ""
         text_lines = lines_from_tsv(tsv) if tsv else []
         if tsv:
             seen, kept = tsv_word_counts(tsv)
     else:
-        seen = kept = _line_words(text_lines)
+        seen = kept = _line_words(text_lines or [])
+    text_lines = list(text_lines or [])
     sightings = sightings_from_lines(text_lines)
-    captions = captions_from_sightings(sightings)
-    if not captions:
-        raw = "\n".join(line.text for line in text_lines)
-        text = clean_ocr(raw)
-        fallback = seen_line(text) if text else ""
-        if fallback:
-            captions = [fallback]
-    if used_tesseract and _suspicious_read(seen, kept, captions, sightings):
-        tsv_std = read_frame_tsv_standard(image, loaded)
-        if tsv_std:
-            std_lines = lines_from_tsv(tsv_std)
-            std_seen, std_kept = tsv_word_counts(tsv_std)
+    captions = _caption_list(text_lines, sightings)
+    if left() <= 0.05 and not captions and not sightings:
+        return give_up()
+    if used_tesseract and _suspicious_read(seen, kept, captions, sightings) and left() > 0.05:
+        std_read = _finish_in(
+            left(),
+            lambda: read_frame_tsv_standard(image, loaded, seconds=max(0.0, left())),
+        )
+        if std_read is _STILL_READING:
+            if not captions and not sightings:
+                return give_up()
+        elif std_read:
+            std_lines = lines_from_tsv(std_read)
+            std_seen, std_kept = tsv_word_counts(std_read)
             std_sightings = sightings_from_lines(std_lines)
-            std_captions = captions_from_sightings(std_sightings)
-            if not std_captions:
-                raw = "\n".join(line.text for line in std_lines)
-                text = clean_ocr(raw)
-                fallback = seen_line(text) if text else ""
-                if fallback:
-                    std_captions = [fallback]
+            std_captions = _caption_list(std_lines, std_sightings)
             chosen = _prefer_reading(
                 text_lines,
                 sightings,
@@ -1593,27 +1671,32 @@ def _read_one(
                 std_kept,
             )
             if chosen[0] is std_lines:
-                tsv = tsv_std
+                tsv = std_read
             text_lines, sightings, captions, seen, kept = chosen
+    if left() <= 0.05 and not captions and not sightings:
+        return give_up()
     stage_timing.add("read", time.perf_counter() - read_started)
-    with stage_timing.timed("vote"):
-        text_lines, sightings = tighten_frame_reading(
-            image,
-            list(text_lines),
-            sightings,
-            tsv=tsv,
-            prepared=used_tesseract,
-            loaded=loaded,
-        )
-    captions = captions_from_sightings(sightings)
-    if not captions:
-        raw = "\n".join(line.text for line in text_lines)
-        text = clean_ocr(raw)
-        fallback = seen_line(text) if text else ""
-        if fallback:
-            captions = [fallback]
+    if left() > 0.05:
+        with stage_timing.timed("vote"):
+            tightened = _finish_in(
+                left(),
+                lambda: tighten_frame_reading(
+                    image,
+                    list(text_lines),
+                    sightings,
+                    tsv=tsv,
+                    prepared=used_tesseract,
+                    loaded=loaded,
+                ),
+            )
+        if tightened is _STILL_READING:
+            if not captions and not sightings:
+                return give_up()
+        else:
+            text_lines, sightings = tightened
+            captions = _caption_list(text_lines, sightings)
     height = loaded.height if loaded is not None else 0
-    return _FrameRead(seconds, captions, sightings, seen, kept, list(text_lines), height, False)
+    return _FrameRead(stamp, captions, sightings, seen, kept, list(text_lines), height, False, False)
 
 
 def _apply_scroll(
@@ -1664,6 +1747,7 @@ def _rescue_empty(
     chosen: list[tuple[float, Path]],
     results: list[tuple[float, list[str], list[dict[str, str]]] | None],
     progress: ReadProgress,
+    skip: set[int] | None = None,
 ) -> tuple[int, int]:
     """Khung đã đọc mà không thấy ai, nhất là các trang hồ sơ đọc sớm khi video chưa dạy dải @.
 
@@ -1677,8 +1761,9 @@ def _rescue_empty(
         return 0, 0
     rescued = 0
     unblanked = 0
+    skipped = skip or set()
     for index, item in enumerate(results):
-        if item is None:
+        if item is None or index in skipped:
             continue
         seconds, captions, sightings = item
         # Khung trống, hoặc khung chỉ có hồ sơ đọc lúc video chưa dạy dải: đọc lại bằng dải. Khung danh bạ giữ nguyên.
@@ -1755,19 +1840,38 @@ def _read_frames(
         progress.report(percent_lo, label or "Đọc chữ")
     reads: list[_FrameRead | None] = [None] * total
     shifts = [scroll_track.Shift(0, False)] * total
+    skipped = 0
+    skip_rescue: set[int] = set()
+
+    def _note_done() -> None:
+        nonlocal done_count
+        done_count += 1
+        progress.report(_span(done_count), _task(done_count, bool(known)))
+
+    def _skip_frame(index: int, *, report: bool = True) -> None:
+        nonlocal skipped
+        if index in skip_rescue:
+            return
+        skipped += 1
+        skip_rescue.add(index)
+        stamp = chosen[index][0]
+        results[index] = (stamp, [], [])
+        progress.remember_frame(stamp, [], [])
+        if report:
+            _note_done()
+
     if pending and not prefers_single_worker():
         shifts = scroll_track.plan([path for _seconds, path in chosen])
     if pending and prefers_single_worker():
         presets = read_lines_batch([chosen[index][1] for index in pending])
         for offset, index in enumerate(pending):
-            done_count += 1
             lines = presets[offset] if offset < len(presets) else None
             try:
                 reads[index] = _read_one(chosen[index], None, lines, use_preset=True)
             except Exception:
                 failed += 1
                 results[index] = (chosen[index][0], [], [])
-            progress.report(_span(done_count), _task(done_count, bool(known)))
+            _note_done()
     elif pending:
         workers = ocr_workers(len(pending), os.cpu_count() or 1, reserve)
         with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -1777,27 +1881,39 @@ def _read_frames(
             }
             for future in as_completed(futures):
                 index = futures[future]
-                done_count += 1
                 try:
                     reads[index] = future.result()
                 except Exception:
                     failed += 1
                     results[index] = (chosen[index][0], [], [])
-                progress.report(_span(done_count), _task(done_count, bool(known)))
+                else:
+                    item = reads[index]
+                    if item is not None and item.timed_out:
+                        reads[index] = None
+                        _skip_frame(index)
+                        continue
+                _note_done()
         _apply_scroll(chosen, reads, shifts)
-        for index in pending:
-            item = reads[index]
-            if item is None:
-                continue
-            word_seen += item.seen
-            word_kept += item.kept
-            if not item.captions and not item.sightings:
-                blank += 1
-            results[index] = (item.seconds, list(item.captions), [dict(found) for found in item.sightings])
-            progress.remember_frame(item.seconds, item.captions, item.sightings)
+    for index in pending:
+        if index in skip_rescue or results[index] is not None:
+            continue
+        item = reads[index]
+        if item is None:
+            continue
+        if item.timed_out:
+            _skip_frame(index, report=False)
+            continue
+        word_seen += item.seen
+        word_kept += item.kept
+        if not item.captions and not item.sightings:
+            blank += 1
+        results[index] = (item.seconds, list(item.captions), [dict(found) for found in item.sightings])
+        progress.remember_frame(item.seconds, item.captions, item.sightings)
     if pending:
-        _rescued, unblanked = _rescue_empty(chosen, results, progress)
+        _rescued, unblanked = _rescue_empty(chosen, results, progress, skip_rescue)
         blank = max(0, blank - unblanked)
+    if skipped:
+        progress.problem(f"{skipped} khung quá 30 giây, bỏ qua.")
     if pending or not known:
         progress.note_words(word_seen, word_kept)
     if failed:

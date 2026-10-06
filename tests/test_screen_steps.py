@@ -6,14 +6,19 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
 from control_plane import layout_learn
+from control_plane import screen_steps
 from control_plane.screen_steps import (
+    _FRAME_READ_SECONDS,
     _MAX_FRAMES,
+    _read_one,
     _work_dir,
     _segment_count,
     _segment_ranges,
@@ -280,6 +285,184 @@ class ScreenVideoTests(unittest.TestCase):
             _unread_windows([(5.5, [], []), (9.0, [], []), (5.0, ["Trần"], [])]),
             [(4.0, 6.5)],
         )
+
+    def test_a_frame_unread_after_thirty_seconds_is_skipped(self) -> None:
+        self.assertEqual(_FRAME_READ_SECONDS, 30.0)
+        clock = {"now": 0.0}
+        calls: list[str] = []
+
+        def now() -> float:
+            return clock["now"]
+
+        def no_gpu(_image: Path) -> None:
+            return None
+
+        def slow_read(_path: Path, _loaded: object = None, *, seconds: float | None = None) -> str:
+            self.assertIsNotNone(seconds)
+            assert seconds is not None
+            self.assertLessEqual(seconds, 30.0)
+            clock["now"] += 31
+            calls.append("fast")
+            return ""
+
+        def standard_read(*_args: object, **_kwargs: object) -> str:
+            calls.append("standard")
+            return ""
+
+        def tighten(*_args: object, **_kwargs: object) -> tuple[list[object], list[dict[str, str]]]:
+            calls.append("tighten")
+            return [], []
+
+        with tempfile.TemporaryDirectory() as folder:
+            image = Path(folder) / "khung.png"
+            Image.new("RGB", (40, 40), "white").save(image)
+            original = (
+                screen_steps.read_lines,
+                screen_steps.read_frame_tsv,
+                screen_steps.read_frame_tsv_standard,
+                screen_steps.tighten_frame_reading,
+            )
+            screen_steps.read_lines = no_gpu
+            screen_steps.read_frame_tsv = slow_read
+            screen_steps.read_frame_tsv_standard = standard_read
+            screen_steps.tighten_frame_reading = tighten
+            try:
+                read = _read_one((0.0, image), clock=now)
+            finally:
+                (
+                    screen_steps.read_lines,
+                    screen_steps.read_frame_tsv,
+                    screen_steps.read_frame_tsv_standard,
+                    screen_steps.tighten_frame_reading,
+                ) = original
+        self.assertTrue(read.timed_out)
+        self.assertEqual(read.captions, [])
+        self.assertEqual(calls, ["fast"])
+
+    def test_a_frame_inside_thirty_seconds_still_gets_a_second_read(self) -> None:
+        clock = {"now": 0.0}
+        calls: list[str] = []
+
+        def now() -> float:
+            return clock["now"]
+
+        def no_gpu(_image: Path) -> None:
+            return None
+
+        def fast_read(_path: Path, _loaded: object = None, *, seconds: float | None = None) -> str:
+            clock["now"] += 1
+            calls.append("fast")
+            return ""
+
+        def standard_read(*_args: object, **_kwargs: object) -> str:
+            calls.append("standard")
+            return ""
+
+        def tighten(*_args: object, **_kwargs: object) -> tuple[list[object], list[dict[str, str]]]:
+            calls.append("tighten")
+            return [], []
+
+        with tempfile.TemporaryDirectory() as folder:
+            image = Path(folder) / "khung.png"
+            Image.new("RGB", (40, 40), "white").save(image)
+            original = (
+                screen_steps.read_lines,
+                screen_steps.read_frame_tsv,
+                screen_steps.read_frame_tsv_standard,
+                screen_steps.tighten_frame_reading,
+            )
+            screen_steps.read_lines = no_gpu
+            screen_steps.read_frame_tsv = fast_read
+            screen_steps.read_frame_tsv_standard = standard_read
+            screen_steps.tighten_frame_reading = tighten
+            try:
+                read = _read_one((1.0, image), clock=now)
+            finally:
+                (
+                    screen_steps.read_lines,
+                    screen_steps.read_frame_tsv,
+                    screen_steps.read_frame_tsv_standard,
+                    screen_steps.tighten_frame_reading,
+                ) = original
+        self.assertFalse(read.timed_out)
+        self.assertEqual(calls, ["fast", "standard", "tighten"])
+
+    def test_a_frame_that_hangs_is_left_behind_within_the_budget(self) -> None:
+        release = threading.Event()
+
+        def no_gpu(_image: Path) -> None:
+            return None
+
+        def hang(_path: Path, _loaded: object = None, *, seconds: float | None = None) -> str:
+            release.wait(3)
+            return ""
+
+        def unused(*_args: object, **_kwargs: object) -> str:
+            raise AssertionError("không đọc thêm sau khi hết giờ")
+
+        with tempfile.TemporaryDirectory() as folder:
+            image = Path(folder) / "khung.png"
+            Image.new("RGB", (40, 40), "white").save(image)
+            original = (
+                screen_steps._FRAME_READ_SECONDS,
+                screen_steps.read_lines,
+                screen_steps.read_frame_tsv,
+                screen_steps.read_frame_tsv_standard,
+                screen_steps.tighten_frame_reading,
+            )
+            screen_steps._FRAME_READ_SECONDS = 0.25
+            screen_steps.read_lines = no_gpu
+            screen_steps.read_frame_tsv = hang
+            screen_steps.read_frame_tsv_standard = unused
+            screen_steps.tighten_frame_reading = unused
+            started = time.monotonic()
+            try:
+                read = _read_one((0.0, image))
+            finally:
+                release.set()
+                (
+                    screen_steps._FRAME_READ_SECONDS,
+                    screen_steps.read_lines,
+                    screen_steps.read_frame_tsv,
+                    screen_steps.read_frame_tsv_standard,
+                    screen_steps.tighten_frame_reading,
+                ) = original
+        self.assertTrue(read.timed_out)
+        self.assertEqual(read.captions, [])
+        self.assertLess(time.monotonic() - started, 1.5)
+
+    def test_a_skipped_frame_does_not_stop_the_next_frame(self) -> None:
+        class Sink(ReadProgress):
+            def __init__(self) -> None:
+                self.problems: list[str] = []
+
+            def problem(self, text: str) -> None:
+                self.problems.append(text)
+
+        def fake_read(item: tuple[float, Path], *_args: object, **_kwargs: object) -> object:
+            from control_plane.screen_steps import _FrameRead
+
+            if item[0] == 0.0:
+                return _FrameRead(item[0], [], [], 0, 0, [], 0, False, True)
+            return _FrameRead(item[0], ["Trần Tùng"], [], 1, 1, [], 10, False, False)
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            chosen = []
+            for index, name in enumerate(("cham.png", "kip.png")):
+                path = root / name
+                Image.new("RGB", (40, 40), "white").save(path)
+                chosen.append((index / 4, path))
+            sink = Sink()
+            original_read = screen_steps._read_one
+            screen_steps._read_one = fake_read
+            try:
+                rows = _read_frames(chosen, sink)
+            finally:
+                screen_steps._read_one = original_read
+        self.assertTrue(any("1 khung quá 30 giây, bỏ qua." == text for text in sink.problems))
+        self.assertTrue(any(captions == ["Trần Tùng"] for _stamp, captions, _found in rows))
+        self.assertTrue(any(captions == [] for _stamp, captions, _found in rows))
 
     def test_a_long_extract_is_split_into_four_ranges(self) -> None:
         ranges = _segment_ranges(96, 0)

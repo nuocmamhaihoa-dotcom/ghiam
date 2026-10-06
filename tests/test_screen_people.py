@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -536,3 +537,38 @@ class VoteSpeedTests(unittest.TestCase):
         self.assertEqual([row.text for row in updated], ["An", "Binh", "Cuong"])
         self.assertEqual(names, {"An", "Binh", "Cuong"})
         self.assertEqual(len(set(dests)), 3)
+
+    def test_tesseract_cli_shares_one_budget_and_stops(self) -> None:
+        calls: list[float] = []
+
+        def fake_run(_argv: list[str], **kwargs: object) -> object:
+            calls.append(float(kwargs["timeout"]))
+
+            class Result:
+                returncode = 1
+                stdout = ""
+
+            return Result()
+
+        original = people.subprocess.run
+        people.subprocess.run = fake_run
+        try:
+            self.assertEqual(people._tesseract_cli_run(Path("x.png"), timeout=0), "")
+            self.assertEqual(calls, [])
+            self.assertEqual(people._tesseract_cli_run(Path("x.png"), timeout=4), "")
+            self.assertEqual(len(calls), 2)
+            self.assertGreater(calls[0], 0)
+            self.assertLessEqual(calls[0], 4)
+            self.assertGreater(calls[1], 0)
+            self.assertLessEqual(calls[1], calls[0])
+            calls.clear()
+
+            def expired(_argv: list[str], **_kwargs: object) -> object:
+                calls.append(1)
+                raise subprocess.TimeoutExpired(cmd="tesseract", timeout=1)
+
+            people.subprocess.run = expired
+            self.assertEqual(people._tesseract_cli_run(Path("x.png"), timeout=4), "")
+            self.assertEqual(calls, [1])
+        finally:
+            people.subprocess.run = original
