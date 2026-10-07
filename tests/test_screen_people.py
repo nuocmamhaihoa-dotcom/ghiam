@@ -297,6 +297,40 @@ class ScreenPeopleTests(unittest.TestCase):
         ]
         self.assertEqual(propose_rows(once), [])
 
+    def test_two_contacts_and_one_clear_handle_are_saved(self) -> None:
+        rows = propose_rows(
+            [
+                {"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"},
+                {"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"},
+                {"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"},
+            ]
+        )
+        self.assertEqual(rows[0]["username"], "@trn.tng751")
+        self.assertEqual(rows[0]["contactName"], "A Tùng Bán Gạch")
+
+    def test_two_handles_and_one_clear_contact_are_saved(self) -> None:
+        rows = propose_rows(
+            [
+                {"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"},
+                {"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"},
+                {"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"},
+            ]
+        )
+        self.assertEqual(rows[0]["username"], "@trn.tng751")
+        self.assertEqual(rows[0]["contactName"], "A Tùng Bán Gạch")
+
+    def test_two_handles_still_lose_to_one_different_handle(self) -> None:
+        rows = propose_rows(
+            [
+                {"kind": "contact", "name": "Dịu 93", "contactName": "user7457244303237"},
+                {"kind": "contact", "name": "Dịu 93", "contactName": "user7457244303237"},
+                {"kind": "profile", "name": "Dịu 93", "username": "@daodiu100693"},
+                {"kind": "profile", "name": "Dịu 93", "username": "@daodiu100693"},
+                {"kind": "profile", "name": "Dịu 93", "username": "@other.handle1"},
+            ]
+        )
+        self.assertEqual(rows, [])
+
     def test_reading_counts_separate_the_list_from_accounts(self) -> None:
         sightings = [
             {"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"},

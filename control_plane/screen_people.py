@@ -702,9 +702,14 @@ def propose_rows(sightings: list[dict[str, str]]) -> list[dict[str, str]]:
         contact_names = [contact_name for _name, contact_name in contacts[key]]
         usernames = [username for _name, username in profiles[key]]
         # Tên danh bạ đọc giống nhau 2 lần thì thắng một cách đọc khác.
-        # Tài khoản chỉ lấy trên trang hồ sơ, và phải nhiều gấp ba lần cách đọc khác.
+        # Tài khoản phải nhiều gấp ba lần cách đọc khác. Một cột đã chắc thì cột
+        # còn lại chỉ cần một cách đọc không cạnh tranh, để trang hồ sơ đứng ngắn vẫn ghi.
         chosen_contacts = _winning_spellings(contact_names, _near_contact, minimum=2, multiple=1)
         chosen_usernames = _winning_spellings(usernames, _near_username, minimum=2, multiple=3)
+        if not chosen_usernames and chosen_contacts:
+            chosen_usernames = _winning_spellings(usernames, _near_username, minimum=1, multiple=3)
+        if not chosen_contacts and chosen_usernames:
+            chosen_contacts = _winning_spellings(contact_names, _near_contact, minimum=1, multiple=1)
         if not chosen_contacts or not chosen_usernames:
             continue
         names = [name for name, _extra in contacts[key] + profiles[key]]

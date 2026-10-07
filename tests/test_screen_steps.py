@@ -35,6 +35,7 @@ from control_plane.screen_steps import (
     _read_span,
     _sample_previews,
     _sample_rate,
+    _incomplete_windows,
     _unread_windows,
     _saved_frames,
     analyze_screen_video,
@@ -285,6 +286,29 @@ class ScreenVideoTests(unittest.TestCase):
             _unread_windows([(5.5, [], []), (9.0, [], []), (5.0, ["Trần"], [])]),
             [(4.0, 6.5)],
         )
+
+    def test_incomplete_windows_cover_people_seen_once(self) -> None:
+        contact = {"kind": "contact", "name": "Trần Tùng", "contactName": "A Tùng Bán Gạch"}
+        profile = {"kind": "profile", "name": "Trần Tùng", "username": "@trn.tng751"}
+        once = [(10.0, [], [contact]), (20.0, [], [profile])]
+        windows = _incomplete_windows(once)
+        self.assertEqual(len(windows), 2)
+        self.assertAlmostEqual(windows[0][0], 10.0 - 1.25)
+        self.assertAlmostEqual(windows[0][1], 10.0 + 1.25)
+        self.assertAlmostEqual(windows[1][0], 20.0 - 1.25)
+        self.assertAlmostEqual(windows[1][1], 20.0 + 1.25)
+        complete = [
+            (1.0, [], [contact]),
+            (1.2, [], [contact]),
+            (2.0, [], [profile]),
+            (2.2, [], [profile]),
+        ]
+        self.assertEqual(_incomplete_windows(complete), [])
+        near = [(5.0, [], [contact]), (5.5, [], [profile])]
+        merged = _incomplete_windows(near)
+        self.assertEqual(len(merged), 1)
+        self.assertAlmostEqual(merged[0][0], 5.0 - 1.25)
+        self.assertAlmostEqual(merged[0][1], 5.5 + 1.25)
 
     def test_a_frame_unread_after_thirty_seconds_is_skipped(self) -> None:
         self.assertEqual(_FRAME_READ_SECONDS, 30.0)
