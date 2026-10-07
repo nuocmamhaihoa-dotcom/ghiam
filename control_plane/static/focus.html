@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Focus: quét lik" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="theme-color" content="#0f6e56" />
+  <meta name="focus-build" content="__FOCUS_BUILD__" />
+  <link rel="manifest" href="/focus/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <title>Focus: quét lik</title>
+  <style>
+    :root { --font: -apple-system, "Segoe UI", system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: var(--font); font-size: 16px; color: #1c1917; background: #efece6;
+      padding: calc(1.1rem + env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) calc(1.4rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    }
+    h1 { font-size: 1.5rem; margin: 0 0 0.35rem; letter-spacing: -0.03em; }
+    p { margin: 0 0 0.75rem; line-height: 1.4; }
+    .muted { color: #78716c; }
+    .id {
+      margin: 0 0 1rem; padding: 0.75rem 0.8rem; background: #fffdfb; border-radius: 12px;
+      word-break: break-all; font-weight: 750;
+    }
+    a.btn, button {
+      display: flex; align-items: center; justify-content: center;
+      width: 100%; min-height: 48px; margin: 0 0 0.55rem;
+      border: 0; border-radius: 12px; font-size: 16px; font-weight: 700;
+      text-decoration: none; color: #fff; background: #0f6e56;
+    }
+    a.ghost, button.ghost { background: #e7e5e4; color: #1c1917; }
+    ol { margin: 0.2rem 0 1rem; padding-left: 1.2rem; }
+    li { margin: 0.35rem 0; }
+  </style>
+</head>
+<body>
+  <h1>Focus: quét lik</h1>
+  <p class="muted">Phần mềm quét like. Icon trên màn hình chính mang đúng tên này.</p>
+  <p class="id" id="envId">Môi trường __FOCUS_ENVIRONMENT_ID__</p>
+  <a class="btn" id="openApp" href="__FOCUS_LIVE_APP__">Mở phần mềm trên iPhone</a>
+  <a class="btn ghost" id="openChat" href="__FOCUS_CHAT_URL__">Mở đoạn chat đang viết</a>
+  <a class="btn ghost" id="openEnv" href="__FOCUS_ENV_URL__">Mở môi trường trên Cursor</a>
+  <p class="muted" id="install">Trên Safari: bấm Chia sẻ, rồi Thêm vào Màn hình chính. Đặt tên Focus: quét lik.</p>
+  <ol>
+    <li>Bấm Mở phần mềm trên iPhone.</li>
+    <li>Trong app, bấm Đã quét.</li>
+    <li>Muốn tiếp tục đoạn chat cũ, bấm Mở đoạn chat đang viết.</li>
+  </ol>
+  <p class="muted">Bản __FOCUS_BUILD__</p>
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/focus/sw.js", { scope: "/focus/" }).catch(function () {});
+    }
+    var live = document.getElementById("openApp").href;
+    var standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+    if (standalone) {
+      document.getElementById("install").hidden = true;
+      location.replace(live);
+    }
+  </script>
+</body>
+</html>
