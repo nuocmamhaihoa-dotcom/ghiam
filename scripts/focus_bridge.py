@@ -49,8 +49,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0") or "0")
         payload = self.rfile.read(length) if length else None
         conn = http.client.HTTPConnection(UPSTREAM.hostname, UPSTREAM.port or 80, timeout=30)
-        headers = {key: value for key, value in self.headers.items() if key.lower() != "host"}
+        headers = {
+            key: value
+            for key, value in self.headers.items()
+            if key.lower() not in {"host", "accept-encoding"}
+        }
         headers["Host"] = UPSTREAM.netloc
+        headers["Accept-Encoding"] = "identity"
         try:
             conn.request(self.command, self.path, body=payload, headers=headers)
             response = conn.getresponse()
