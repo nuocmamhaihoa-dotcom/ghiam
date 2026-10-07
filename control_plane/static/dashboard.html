@@ -1078,7 +1078,7 @@
         Object.keys(headerMap).forEach((key) => request.setRequestHeader(key, headerMap[key]));
         let touched = Date.now();
         const timer = window.setInterval(() => {
-          if (Date.now() - touched < 180000) return;
+          if (Date.now() - touched < 60000) return;
           window.clearInterval(timer);
           request.abort();
         }, 1000);

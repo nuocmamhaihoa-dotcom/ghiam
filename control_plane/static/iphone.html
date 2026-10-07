@@ -1025,6 +1025,7 @@
     let pausedWhileHidden = false;
     let wokeAt = 0;
     let leavingPage = false;
+    let carryPaused = false;
     let carryActive = false;
     let carryOwner = null;
     let resumingCarry = false;
@@ -1082,6 +1083,9 @@
     }
 
     function handOffCarry() {
+      // Nhả khóa fb-carry ngay để service worker gửi tiếp. Giữ khóa khi nền sẽ làm cả trang và worker đứng.
+      carryPaused = true;
+      yieldCarry();
       if (pumping || carryActive || queue.length || recording) holdBackground();
       askBackgroundCarry();
     }
@@ -1096,6 +1100,7 @@
         return;
       }
       leavingPage = false;
+      carryPaused = false;
       wokeAt = Date.now();
       if (pausedWhileHidden) {
         pausedWhileHidden = false;
@@ -1105,18 +1110,22 @@
       resumeCarryIfIdle();
     });
     window.addEventListener("pagehide", () => {
+      leavingPage = true;
       handOffCarry();
     });
     window.addEventListener("pageshow", () => {
       leavingPage = false;
+      carryPaused = false;
       wokeAt = Date.now();
       resumeCarryIfIdle();
     });
     document.addEventListener("freeze", () => {
+      leavingPage = true;
       handOffCarry();
     });
     document.addEventListener("resume", () => {
       leavingPage = false;
+      carryPaused = false;
       wokeAt = Date.now();
       resumeCarryIfIdle();
     });
@@ -1694,8 +1703,14 @@
         request.timeout = 0;
         Object.keys(headerMap).forEach((key) => request.setRequestHeader(key, headerMap[key]));
         let touched = Date.now();
+        // 60 giây không tiến thì cắt khúc. Nền / tạm dừng thì cắt ngay để worker gửi tiếp.
         const timer = window.setInterval(() => {
-          if (Date.now() - touched < 180000) return;
+          if (carryPaused || document.visibilityState === "hidden" || leavingPage) {
+            window.clearInterval(timer);
+            request.abort();
+            return;
+          }
+          if (Date.now() - touched < 60000) return;
           window.clearInterval(timer);
           request.abort();
         }, 1000);
@@ -1703,12 +1718,8 @@
           touched = Date.now();
           if (onLoaded && event.lengthComputable) onLoaded(event.loaded);
         };
-        const stall = window.setInterval(() => {
-          if (document.visibilityState === "hidden") touched = Date.now();
-        }, 1000);
         const done = (status, data) => {
           window.clearInterval(timer);
-          window.clearInterval(stall);
           resolve({ status: status, data: data });
         };
         request.onload = () => {
@@ -1884,8 +1895,13 @@
         missing = true;
         failure = "Mất kết nối khi đang gửi video.";
       };
+      const shouldYield = () => carryPaused || document.visibilityState === "hidden" || leavingPage;
       const pump = async () => {
         while (!failure && !yielded) {
+          if (shouldYield()) {
+            yielded = true;
+            return;
+          }
           const piece = pieces[cursor];
           cursor += 1;
           if (!piece) return;
@@ -1905,7 +1921,11 @@
           }
           const payload = read.bytes;
           let landed = false;
-          for (let attempt = 0; attempt < 10 && !landed && !failure; attempt += 1) {
+          for (let attempt = 0; attempt < 10 && !landed && !failure && !yielded; attempt += 1) {
+            if (shouldYield()) {
+              yielded = true;
+              return;
+            }
             const before = await readUpload(uploadId);
             if (before.missing) { markMissing(); return; }
             if (chunkHeld(before.status, piece)) { landed = true; break; }
@@ -1917,12 +1937,21 @@
             );
             let reply = null;
             const waitReply = flight.promise.then((value) => { reply = value; });
-            while (!landed && !failure && reply === null) {
-              await Promise.race([waitReply, sleep(4000)]);
+            while (!landed && !failure && !yielded && reply === null) {
+              if (shouldYield()) {
+                flight.stop();
+                yielded = true;
+                return;
+              }
+              await Promise.race([waitReply, sleep(2000)]);
               if (reply) break;
               const live = await readUpload(uploadId);
               if (live.missing) { flight.stop(); markMissing(); return; }
               if (chunkHeld(live.status, piece)) { flight.stop(); landed = true; }
+            }
+            if (yielded) {
+              flight.stop();
+              return;
             }
             if (!landed && reply) {
               const data = reply.data || {};
@@ -1932,11 +1961,12 @@
               if (reply.status >= 200 && reply.status < 300 && typeof mark === "number" && mark >= piece.end) landed = true;
               else if (reply.status === 409 && typeof data.offset === "number" && data.offset >= piece.end) landed = true;
             }
-            if (!landed && !failure) {
+            if (!landed && !failure && !yielded) {
               flight.stop();
               await sleep(Math.min(3000, 400 * (attempt + 1)));
             }
           }
+          if (yielded) return;
           if (!landed) { failure = failure || "Mất kết nối khi đang gửi video."; return; }
           piece.done = true;
           piece.loaded = piece.end - piece.offset;
