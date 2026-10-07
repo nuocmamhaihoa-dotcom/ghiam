@@ -483,7 +483,10 @@ class LineBoxTests(unittest.TestCase):
                 _line("S.W", 400),
             ]
         )
-        self.assertEqual(smeared, [])
+        self.assertEqual(
+            smeared,
+            [{"kind": "profile", "name": "quyet", "contactName": "", "username": "@qanh2014"}],
+        )
         profile = sightings_from_lines(
             [
                 _line("quyet", 80, 48),
@@ -541,6 +544,78 @@ class LineBoxTests(unittest.TestCase):
         self.assertEqual(
             rows,
             [{"name": "quyet", "contactName": "A Quyết Ca Xã Hải Hậu", "username": "@quyet8131"}],
+        )
+
+    def test_a_bio_does_not_block_the_handle_above_the_name(self) -> None:
+        found = sightings_from_lines(
+            [
+                _line("quyet", 80, 48),
+                _line("@quyet8131", 140, 28),
+                _line("đời nó nhạt", 220),
+            ]
+        )
+        self.assertEqual(
+            found,
+            [{"kind": "profile", "name": "quyet", "contactName": "", "username": "@quyet8131"}],
+        )
+
+    def test_a_list_handle_stays_with_the_name_directly_above_it(self) -> None:
+        found = sightings_from_lines(
+            [
+                _line("A Quyết Ca Xã Hải Hậu", 80),
+                _line("quyet", 114),
+                _line("@quyet8131", 148, 24),
+                _line("Bác Dương Hiền", 230),
+                _line("S.W", 264),
+            ]
+        )
+        profiles = [item for item in found if item["kind"] == "profile"]
+        self.assertEqual(
+            profiles,
+            [{"kind": "profile", "name": "quyet", "contactName": "", "username": "@quyet8131"}],
+        )
+        self.assertTrue(any(item["kind"] == "contact" and item["name"] == "S W" for item in found))
+        self.assertFalse(any(item["name"] == "S W" and item.get("username") for item in found))
+
+    def test_a_truncated_name_keeps_the_longer_one_and_its_handle(self) -> None:
+        contact = "Bạn Thoảng"
+        short = [
+            {"kind": "contact", "name": "Thoảng bỏ phố về", "contactName": contact},
+            {"kind": "profile", "name": "Thoảng bỏ phố về", "username": "@usethoang90"},
+        ]
+        long = [
+            {"kind": "contact", "name": "Thoảng bỏ phố về quê", "contactName": contact},
+            {"kind": "profile", "name": "Thoảng bỏ phố về quê", "username": "@usethoang90"},
+        ]
+        rows = propose_rows(short + short + long + long)
+        self.assertEqual(
+            rows,
+            [{"name": "Thoảng bỏ phố về quê", "contactName": contact, "username": "@usethoang90"}],
+        )
+        fragment = [
+            {"kind": "contact", "name": "cũng chỉ là kỉ I", "contactName": contact},
+            {"kind": "contact", "name": "cũng chỉ là kỉ ni", "contactName": contact},
+            {"kind": "profile", "name": "cũng chỉ là kỉ I", "username": "@badungnguyen6"},
+            {"kind": "profile", "name": "cũng chỉ là kỉ ni", "username": "@badungnguyen6"},
+        ]
+        merged = propose_rows(fragment + fragment)
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0]["name"], "cũng chỉ là kỉ ni")
+        self.assertEqual(merged[0]["username"], "@badungnguyen6")
+
+    def test_different_last_words_stay_two_people(self) -> None:
+        lan = [
+            {"kind": "contact", "name": "Nguyễn Thị Lan", "contactName": "Chị Lan"},
+            {"kind": "profile", "name": "Nguyễn Thị Lan", "username": "@nguyen.lan"},
+        ]
+        hoa = [
+            {"kind": "contact", "name": "Nguyễn Thị Hoa", "contactName": "Chị Hoa"},
+            {"kind": "profile", "name": "Nguyễn Thị Hoa", "username": "@nguyen.hoa"},
+        ]
+        rows = propose_rows(lan + lan + hoa + hoa)
+        self.assertEqual(
+            {(row["name"], row["username"]) for row in rows},
+            {("Nguyễn Thị Lan", "@nguyen.lan"), ("Nguyễn Thị Hoa", "@nguyen.hoa")},
         )
 
     def test_letters_then_digits_stay_a_contact_name(self) -> None:

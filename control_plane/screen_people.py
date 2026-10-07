@@ -444,28 +444,24 @@ def _profile_sighting(lines: list[TextLine]) -> dict[str, str] | None:
 
 
 def _single_profile_screen(lines: list[TextLine]) -> bool:
-    """Trang hồ sơ là một người: một @, và không có tên người thứ hai trên cùng khung."""
+    """Một @ và có tên ngay phía trên hoặc cùng dòng. Tiểu sử không làm mất @."""
     handles = list(dict.fromkeys(handle for line in lines for handle in _valid_handles(line.text)))
     if len(handles) != 1:
         return False
-    names = [line for line in lines if _is_name_line(line.text)]
-    if len(names) > 1:
-        return False
-    if len(names) == 1:
-        return True
-    handle = handles[0]
-    return any(_is_name_line(line.text.replace(handle, " ")) for line in lines if handle in line.text)
+    return _profile_pick(lines) is not None
 
 
 def sightings_from_lines(lines: list[TextLine]) -> list[dict[str, str]]:
-    """Danh bạ cho cặp tên. Hồ sơ chỉ khi khung có một tên và đúng một @ của người đó."""
+    """Danh bạ cho cặp tên. @ chỉ gắn với tên ngay phía trên nó."""
     pairs = _contact_sightings(lines)
-    if _is_contacts(lines) or len(pairs) >= 2 or not _single_profile_screen(lines):
+    if not _single_profile_screen(lines):
         return pairs
     profile = _profile_sighting(lines)
-    if profile is not None:
-        return [profile]
-    return pairs
+    if profile is None:
+        return pairs
+    if _is_contacts(lines) or pairs:
+        return [*pairs, profile]
+    return [profile]
 
 
 def _edit_distance(left: str, right: str, limit: int) -> int:
@@ -545,6 +541,79 @@ def _mode(values: list[str]) -> str:
     return max(values, key=lambda value: (values.count(value), len(value)))
 
 
+def _same_trailing_name(left: str, right: str) -> bool:
+    """Cùng một người khi tên dài hơn chỉ thêm một cụm cuối, hoặc cụm cuối bị đọc cụt."""
+    left_words = fold_name(left).split()
+    right_words = fold_name(right).split()
+    if not left_words or not right_words or left_words == right_words:
+        return False
+    short, long = (left_words, right_words) if len(left_words) <= len(right_words) else (right_words, left_words)
+    if len(short) < 3:
+        return False
+    if long[: len(short)] == short:
+        return len(long) - len(short) <= 2
+    if len(short) < 4 or len(short) != len(long) or short[:-1] != long[:-1]:
+        return False
+    smaller, larger = (short[-1], long[-1]) if len(short[-1]) <= len(long[-1]) else (long[-1], short[-1])
+    return larger.startswith(smaller) or len(smaller) <= 2
+
+
+def _person_label(key: str, contacts: dict[str, list[tuple[str, str]]], profiles: dict[str, list[tuple[str, str]]]) -> str:
+    raws = [name for name, _extra in contacts.get(key, [])] + [name for name, _extra in profiles.get(key, [])]
+    if not raws:
+        return key
+    return max(raws, key=lambda name: (len(fold_name(name).split()), len(name)))
+
+
+def _merge_truncated_people(
+    contacts: dict[str, list[tuple[str, str]]],
+    profiles: dict[str, list[tuple[str, str]]],
+    order: list[str],
+) -> tuple[dict[str, list[tuple[str, str]]], dict[str, list[tuple[str, str]]], list[str]]:
+    """Gộp tên lệch một cụm cuối vào tên dài hơn, rồi giữ một tài khoản."""
+    keys = list(dict.fromkeys(order))
+    if len(keys) < 2:
+        return contacts, profiles, order
+    labels = {key: _person_label(key, contacts, profiles) for key in keys}
+    parent = {key: key for key in keys}
+
+    def find(key: str) -> str:
+        while parent[key] != key:
+            parent[key] = parent[parent[key]]
+            key = parent[key]
+        return key
+
+    def longer(left: str, right: str) -> str:
+        left_label = labels[left]
+        right_label = labels[right]
+        left_rank = (len(fold_name(left_label).split()), len(left_label))
+        right_rank = (len(fold_name(right_label).split()), len(right_label))
+        return left if left_rank >= right_rank else right
+
+    for index, left in enumerate(keys):
+        for right in keys[index + 1 :]:
+            if not _same_trailing_name(labels[left], labels[right]):
+                continue
+            keep = longer(find(left), find(right))
+            drop = find(right) if keep == find(left) else find(left)
+            if keep != drop:
+                parent[drop] = keep
+    grouped_contacts: dict[str, list[tuple[str, str]]] = {}
+    grouped_profiles: dict[str, list[tuple[str, str]]] = {}
+    new_order: list[str] = []
+    seen: set[str] = set()
+    for key in keys:
+        root = find(key)
+        if key in contacts:
+            grouped_contacts.setdefault(root, []).extend(contacts[key])
+        if key in profiles:
+            grouped_profiles.setdefault(root, []).extend(profiles[key])
+        if root not in seen:
+            seen.add(root)
+            new_order.append(root)
+    return grouped_contacts, grouped_profiles, new_order
+
+
 def _shared_usernames(profiles: dict[str, list[tuple[str, str]]]) -> set[str]:
     """Một @ đứng với hai tên khác nhau thì không thuộc về ai."""
     owner: dict[str, str] = {}
@@ -617,6 +686,7 @@ def propose_rows(sightings: list[dict[str, str]]) -> list[dict[str, str]]:
             if key not in contacts and key not in profiles:
                 order.append(key)
             profiles.setdefault(key, []).append((name, username))
+    contacts, profiles, order = _merge_truncated_people(contacts, profiles, order)
     shared = _shared_usernames(profiles)
     if shared:
         for key, pairs in list(profiles.items()):
@@ -637,7 +707,8 @@ def propose_rows(sightings: list[dict[str, str]]) -> list[dict[str, str]]:
         chosen_usernames = _winning_spellings(usernames, _near_username, minimum=2, multiple=3)
         if not chosen_contacts or not chosen_usernames:
             continue
-        display = _richer_name([name for name, _extra in contacts[key] + profiles[key]])
+        names = [name for name, _extra in contacts[key] + profiles[key]]
+        display = max(names, key=lambda name: (len(fold_name(name).split()), _mark_count(name), len(name)))
         rows.append(
             {
                 "name": display,
