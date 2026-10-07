@@ -276,6 +276,11 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Chưa có báo cáo trong 24 giờ.", response.text)
         self.assertIn('id="boardPhoneTable"', response.text)
         self.assertIn('id="boardHistoryTable"', response.text)
+        self.assertIn('id="boardActiveTable"', response.text)
+        self.assertIn('id="boardQueuedTable"', response.text)
+        self.assertIn("renderActiveTable", response.text)
+        self.assertIn("renderQueuedTable", response.text)
+        self.assertIn('send: "Gửi"', response.text)
         self.assertIn("Có tài khoản", response.text)
         self.assertIn("Cách đọc bảng", response.text)
         self.assertNotIn("test-token", (self.client.get("/static/dashboard.html")).text)
@@ -398,6 +403,12 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Báo cáo 24 giờ", page.text)
         self.assertIn('id="boardPhoneTable"', page.text)
         self.assertIn('id="boardHistoryTable"', page.text)
+        self.assertIn('id="boardActiveTable"', page.text)
+        self.assertIn('id="boardQueuedTable"', page.text)
+        self.assertIn("renderActiveTable", page.text)
+        self.assertIn("renderQueuedTable", page.text)
+        self.assertIn('send: "Gửi"', page.text)
+        self.assertIn("Đang chờ iPhone", page.text)
         self.assertIn("Có tài khoản", page.text)
         self.assertIn("Cách đọc bảng", page.text)
         self.assertIn("renderHistoryTable", page.text)
@@ -723,7 +734,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "60")
+        self.assertEqual(build, "61")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -733,7 +744,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 60)
+        self.assertEqual(payload["iphoneBuild"], 61)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -1837,6 +1848,38 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(put.status_code, 200, put.text)
         self.assertEqual(put.json()["end"], 4)
         self.assertTrue(path.is_file())
+
+    def test_idle_upload_asks_the_iphone_to_keep_sending(self) -> None:
+        payload = b"0123456789abcdef"
+        started = self.client.post(
+            "/v1/recordings/uploads",
+            headers=self.headers,
+            json={"name": "dung-gui.mp4", "size": len(payload)},
+        )
+        self.assertEqual(started.status_code, 200, started.text)
+        upload_id = started.json()["uploadId"]
+        first = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}",
+            headers=self.headers,
+            params={"offset": 0},
+            content=payload[:4],
+        )
+        self.assertEqual(first.status_code, 200, first.text)
+        with app_module._uploads_lock:
+            item = app_module._uploads[upload_id]
+            ledger = str(item["jobId"])
+            path = Path(item["path"])
+            item["created"] = time.time() - 120
+        old = time.time() - 120
+        os.utime(path, (old, old))
+        from control_plane import video_ledger as ledger_module
+
+        ledger_module._SEEN.clear()
+        actions = app_module._nudge_idle_uploads()
+        self.assertIn("upload_idle_wait", actions)
+        board = self.client.get("/v1/recordings/board", headers=self.headers).json()
+        row = next(item for item in board["active"] if item["jobId"] == ledger)
+        self.assertIn("Đang chờ iPhone gửi tiếp", row["task"])
 
     def test_abandon_keeps_received_bytes(self) -> None:
         payload = b"abcdef"

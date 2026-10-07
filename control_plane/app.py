@@ -1671,10 +1671,35 @@ def _auto_retry(job: VideoJob) -> bool:
     return _reopen_job(job)
 
 
+def _nudge_idle_uploads() -> list[str]:
+    """Lần gửi im quá lâu thì ghi rõ đang chờ iPhone, để bảng không đứng im như đang gửi."""
+    actions: list[str] = []
+    for _upload_id, item in _upload_snapshot():
+        if item.get("finished"):
+            continue
+        size = int(item.get("size") or 0)
+        frontier = _upload_frontier(_range_pairs(item.get("ranges")))
+        if size > 0 and frontier >= size:
+            continue
+        if _upload_idle_seconds(item) < 90:
+            continue
+        ledger = str(item.get("jobId") or "")
+        if not ledger:
+            continue
+        percent = min(99, int(frontier * 100 / size)) if size else 0
+        touch_upload(
+            ledger,
+            percent,
+            f"Đang chờ iPhone gửi tiếp · {percent}%",
+        )
+        actions.append("upload_idle_wait")
+    return actions
+
+
 def _repair_once() -> list[str]:
     _sweep_uploads()
     _consider_partial_reads()
-    return video_repair.sweep(
+    actions = video_repair.sweep(
         video_repair.RepairHooks(
             jobs=jobs,
             uploads=_upload_snapshot,
@@ -1688,6 +1713,11 @@ def _repair_once() -> list[str]:
             skip=lambda job: job.id in _PARTIAL_IDS,
         )
     )
+    try:
+        actions.extend(_nudge_idle_uploads())
+    except Exception:
+        pass
+    return actions
 
 
 def _repair_loop() -> None:

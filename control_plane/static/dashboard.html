@@ -241,12 +241,41 @@
       <section class="panel" id="boardBox">
         <h2>Việc đang làm</h2>
         <details class="help">
-          <summary>Các bước</summary>
-          <p class="board-note">Video đang chờ hiện thứ tự. Video đang đọc hiện bước: Chờ, Tách hình, Đọc chữ, Đọc lại, Ghép tên, Ghi xong.</p>
+          <summary>Cách đọc bảng</summary>
+          <p class="board-note">Mỗi dòng một video đang gửi hoặc đang đọc. Cột Bước: Gửi, Chờ, Tách hình, Đọc chữ, Đọc lại, Ghép tên, Ghi xong. Cột % và Việc cho biết tiến độ chi tiết.</p>
         </details>
-        <div id="boardActive"></div>
+        <div class="report-wrap">
+          <table id="boardActiveTable" class="report-table" hidden>
+            <thead>
+              <tr>
+                <th>Video</th>
+                <th>Máy</th>
+                <th>Trạng thái</th>
+                <th>Bước</th>
+                <th class="num">%</th>
+                <th>Việc</th>
+              </tr>
+            </thead>
+            <tbody id="boardActive"></tbody>
+          </table>
+        </div>
+        <p id="boardActiveEmpty" class="board-note">Chưa có video nào.</p>
         <h2>Hàng chờ</h2>
-        <div id="boardQueued"></div>
+        <div class="report-wrap">
+          <table id="boardQueuedTable" class="report-table" hidden>
+            <thead>
+              <tr>
+                <th class="num">#</th>
+                <th>Video</th>
+                <th>Máy</th>
+                <th class="num">MB</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody id="boardQueued"></tbody>
+          </table>
+        </div>
+        <p id="boardQueuedEmpty" class="board-note">Chưa có video nào.</p>
         <h2>Báo cáo 24 giờ</h2>
         <details class="help">
           <summary>Cách đọc bảng</summary>
@@ -1593,8 +1622,9 @@
       done: "Đã ghi",
       failed: "Gặp vấn đề",
     };
-    const boardStepOrder = ["wait", "extract", "read", "reread", "merge", "done"];
+    const boardStepOrder = ["send", "wait", "extract", "read", "reread", "merge", "done"];
     const boardStepLabel = {
+      send: "Gửi",
       wait: "Chờ",
       extract: "Tách hình",
       read: "Đọc chữ",
@@ -1606,12 +1636,14 @@
       const state = item.state || "";
       const task = String(item.task || "");
       if (state === "done") return "done";
+      if (state === "uploading" || /Đang gửi|Đang chờ iPhone/.test(task)) return "send";
       if (/Đọc lại/.test(task)) return "reread";
       if (/Ghép|Ghi /.test(task)) return "merge";
       if (/Đọc chữ|Đọc tiếp/.test(task)) return "read";
       if (/Tách|Chọn khung|thời lượng/.test(task)) return "extract";
-      if (/Đã nhận|Đang gửi|Đang chờ|PC phụ đang đọc/.test(task)) return "wait";
+      if (/Đã nhận|Đang chờ|PC phụ đang đọc/.test(task)) return "wait";
       if (state === "reading") return "read";
+      if (state === "queued") return "wait";
       return "wait";
     }
     function boardResult(item) {
@@ -1687,68 +1719,75 @@
       });
       host.appendChild(retry);
     }
-    function renderBoardList(host, items, kind) {
+    function boardSizeMb(item) {
+      const bytes = Number(item.size) || 0;
+      if (bytes <= 0) return "—";
+      return (bytes / 1048576).toFixed(1);
+    }
+    function renderActiveTable(items) {
+      const host = $("boardActive");
+      const table = $("boardActiveTable");
+      const empty = $("boardActiveEmpty");
+      if (!host || !table || !empty) return;
       host.replaceChildren();
-      if (!items.length) {
-        const empty = document.createElement("p");
-        empty.className = "empty";
-        empty.textContent = "Chưa có video nào.";
-        host.appendChild(empty);
-        return;
-      }
-      items.forEach((item, index) => {
-        const box = document.createElement("div");
-        box.className = "board-job";
-        const title = document.createElement("strong");
-        const name = item.name || "video";
-        title.textContent = item.partLabel ? name + " · " + item.partLabel : name;
-        box.appendChild(title);
-        const steps = document.createElement("div");
-        steps.className = "board-steps";
-        const current = boardStep(item);
-        const at = boardStepOrder.indexOf(current);
-        boardStepOrder.forEach((id, stepIndex) => {
-          const chip = document.createElement("span");
-          chip.className = "board-step";
-          if (item.state === "done" || stepIndex < at) chip.className += " board-step-done";
-          else if (stepIndex === at) chip.className += " board-step-now";
-          chip.textContent = boardStepLabel[id];
-          steps.appendChild(chip);
-        });
-        box.appendChild(steps);
-        const meta = document.createElement("p");
-        meta.className = "meta board-meta";
-        const bits = [boardState[item.state] || item.state || ""];
-        if (item.source) bits.push(item.source);
-        const bytes = Number(item.size) || 0;
-        if (bytes > 0) bits.push((bytes / 1048576).toFixed(1) + " MB");
+      const rows = Array.isArray(items) ? items : [];
+      table.hidden = !rows.length;
+      empty.hidden = rows.length > 0;
+      rows.forEach((item) => {
+        const tr = document.createElement("tr");
+        const video = document.createElement("td");
+        video.appendChild(videoTitle(item));
+        tr.appendChild(video);
+        const machine = document.createElement("td");
+        machine.className = "machine";
+        machine.textContent = item.source || "—";
+        tr.appendChild(machine);
+        const state = document.createElement("td");
+        state.textContent = boardState[item.state] || item.state || "—";
+        tr.appendChild(state);
+        const step = document.createElement("td");
+        const stepId = boardStep(item);
+        step.textContent = boardStepLabel[stepId] || "Chờ";
+        tr.appendChild(step);
+        tr.appendChild(numCell(Math.max(0, Math.min(100, Number(item.percent) || 0))));
+        const task = document.createElement("td");
+        const bits = [item.task || "Đang xử lý"];
         if (item.workerName) bits.push(item.workerName);
-        meta.textContent = bits.filter(Boolean).join(" · ");
-        box.appendChild(meta);
-        const detail = document.createElement("p");
-        detail.className = "board-detail";
-        detail.textContent = boardDetail(item, kind, index);
-        box.appendChild(detail);
-        const track = document.createElement("div");
-        track.className = "board-track";
-        const fill = document.createElement("div");
-        fill.className = "board-fill";
-        fill.style.width = Math.max(0, Math.min(100, Number(item.percent) || 0)) + "%";
-        track.appendChild(fill);
-        box.appendChild(track);
         const problems = Array.isArray(item.problems) ? item.problems.slice() : [];
         if (item.error && problems.indexOf(item.error) < 0) problems.push(item.error);
-        if (problems.length) {
-          const list = document.createElement("ul");
-          list.className = "board-problems";
-          problems.forEach((text) => {
-            const line = document.createElement("li");
-            line.textContent = String(text);
-            list.appendChild(line);
-          });
-          box.appendChild(list);
-        }
-        host.appendChild(box);
+        if (problems.length) bits.push(problems[0]);
+        task.textContent = bits.filter(Boolean).join(" · ");
+        tr.appendChild(task);
+        host.appendChild(tr);
+      });
+    }
+    function renderQueuedTable(items) {
+      const host = $("boardQueued");
+      const table = $("boardQueuedTable");
+      const empty = $("boardQueuedEmpty");
+      if (!host || !table || !empty) return;
+      host.replaceChildren();
+      const rows = Array.isArray(items) ? items : [];
+      table.hidden = !rows.length;
+      empty.hidden = rows.length > 0;
+      rows.forEach((item, index) => {
+        const tr = document.createElement("tr");
+        tr.appendChild(numCell(index + 1));
+        const video = document.createElement("td");
+        video.appendChild(videoTitle(item));
+        tr.appendChild(video);
+        const machine = document.createElement("td");
+        machine.className = "machine";
+        machine.textContent = item.source || "—";
+        tr.appendChild(machine);
+        const size = document.createElement("td");
+        size.className = "num";
+        size.textContent = boardSizeMb(item);
+        tr.appendChild(size);
+        const state = document.createElement("td");
+        state.textContent = boardState[item.state] || item.state || "Đang chờ";
+        tr.appendChild(state);
+        host.appendChild(tr);
       });
     }
     function renderPhoneSummary(phones) {
@@ -1818,8 +1857,8 @@
         const response = await fetch("/v1/recordings/board", { headers: headers() });
         if (!response.ok) return;
         const data = await response.json();
-        renderBoardList($("boardActive"), data.active || [], "active");
-        renderBoardList($("boardQueued"), data.queued || [], "queue");
+        renderActiveTable(data.active || []);
+        renderQueuedTable(data.queued || []);
         renderHistoryTable(data.history || []);
         renderPhoneSummary(data.phones || []);
       } catch (error) { /* giữ bảng cũ */ }
