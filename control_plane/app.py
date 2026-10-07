@@ -48,6 +48,7 @@ from control_plane import scan_export
 from control_plane import scan_vault
 from control_plane.delivery import PACKAGE_NAME, ensure_package
 from control_plane.handles import exact_line, profile_from_share
+from control_plane.media_boxes import moov_ready
 from control_plane.people import (
     apply_novel,
     clean_name,
@@ -178,6 +179,12 @@ async def _startup() -> None:
             cd_copy.write_text("\n".join(lines) + "\n", encoding="utf-8")
     _load_uploads()
     for job_id, path in restore_open():
+        if _growing_upload(job_id):
+            _PARTIAL_IDS.add(job_id)
+            held = jobs.get(job_id)
+            if held is not None:
+                held.hold_for_growth()
+            continue
         job = jobs.get(job_id)
         kind = "prepare" if job is not None and job.path is None else "schedule"
         _spawn_video(job_id, path, kind)
@@ -1595,6 +1602,8 @@ _HUB_LOCK = threading.Lock()
 _HUB_READS = 0
 _HUB_LIMIT = 1
 _PREPARE_LIMIT = threading.Semaphore(2)
+_PARTIAL_IDS: set[str] = set()
+_PARTIAL_FLOOR = 256 * 1024
 
 
 def _hub_acquire() -> bool:
@@ -1630,7 +1639,12 @@ def _spawn_video(job_id: str, path: Path, kind: str) -> bool:
     """Một video chỉ có một luồng xếp lịch. Vòng tự sửa không mở thêm luồng thứ hai."""
     if not video_repair.claim_start(job_id):
         return False
-    target = _prepare_and_schedule if kind == "prepare" else _schedule_video_job
+    if kind == "partial":
+        target = _read_partial
+    elif kind == "prepare":
+        target = _prepare_and_schedule
+    else:
+        target = _schedule_video_job
 
     def runner() -> None:
         try:
@@ -1643,18 +1657,23 @@ def _spawn_video(job_id: str, path: Path, kind: str) -> bool:
 
 
 def _auto_retry(job: VideoJob) -> bool:
-    """Lỗi mạng hoặc lỗi bất ngờ thì đọc lại, tối đa hai lần. Video hỏng nội dung thì để trang bấm Tiếp tục."""
-    if not video_repair.should_retry(job):
+    """Lỗi tạm thì đọc lại ngay. Video hỏng nội dung thì đọc lại sau một lúc, khe đọc được trả giữa các lần."""
+    transient = video_repair.should_retry(job)
+    if not transient and not video_repair.content_waits(job, time.time()):
         return False
     located, _bound = job.located_file()
     if located is None or not located.is_file():
         return False
-    job.add_problem(video_repair.retry_note(job))
+    if transient:
+        job.add_problem(video_repair.retry_note(job))
+    else:
+        job.add_problem("Tự sửa: đọc lại video đã lỗi.")
     return _reopen_job(job)
 
 
 def _repair_once() -> list[str]:
     _sweep_uploads()
+    _consider_partial_reads()
     return video_repair.sweep(
         video_repair.RepairHooks(
             jobs=jobs,
@@ -1666,6 +1685,7 @@ def _repair_once() -> list[str]:
             heal_hub=_heal_hub_slots,
             lease_seconds=video_helpers.LEASE_SECONDS,
             frontier=_upload_frontier,
+            skip=lambda job: job.id in _PARTIAL_IDS,
         )
     )
 
@@ -1961,7 +1981,6 @@ def download_job_video(
 
 
 _CHUNK_MAX = 8 * 1024 * 1024
-_UPLOAD_QUIET_SECONDS = 20 * 60
 _UPLOAD_KEEP_SECONDS = 48 * 3600
 _uploads: dict[str, dict[str, Any]] = {}
 _uploads_lock = threading.Lock()
@@ -2171,7 +2190,7 @@ def _upload_idle_seconds(item: dict[str, Any]) -> float:
 
 
 def _sweep_uploads() -> None:
-    """Gửi im 20 phút thì ghi là đứt, file vẫn giữ để gửi tiếp. Quá hai ngày thì xóa."""
+    """Lần gửi dở vẫn nằm trên bảng để gửi và đọc tiếp. Quá hai ngày mà không còn việc thì xóa file."""
     with _uploads_lock:
         held = list(_uploads.items())
     for upload_id, item in held:
@@ -2182,13 +2201,177 @@ def _sweep_uploads() -> None:
             if ledger and not item.get("finished"):
                 fail_upload(ledger, "Gửi bị dừng quá lâu.")
             _forget_upload(upload_id, remove_video=True)
+
+
+def _same_path(left: Path, right: Path) -> bool:
+    try:
+        return left.resolve() == right.resolve()
+    except OSError:
+        return left == right
+
+
+def _range_pairs(raw: object) -> list[tuple[int, int]]:
+    pairs: list[tuple[int, int]] = []
+    if not isinstance(raw, list):
+        return pairs
+    for pair in raw:
+        if isinstance(pair, (list, tuple)) and len(pair) == 2:
+            pairs.append((int(pair[0]), int(pair[1])))
+    return pairs
+
+
+def _upload_by_path(path: Path) -> tuple[str, dict[str, Any]] | None:
+    for upload_id, item in _upload_snapshot():
+        if _same_path(Path(item["path"]), path):
+            return upload_id, item
+    return None
+
+
+def _received_span(path: Path) -> tuple[int, int]:
+    found = _upload_by_path(path)
+    if found is None:
+        try:
+            size = path.stat().st_size
+        except OSError:
+            return 0, 0
+        return size, size
+    _upload_id, item = found
+    frontier = _upload_frontier(_range_pairs(item.get("ranges")))
+    return frontier, int(item.get("size") or 0)
+
+
+def _growing_upload(job_id: str) -> bool:
+    for _upload_id, item in _upload_snapshot():
+        if str(item.get("jobId") or "") != job_id or item.get("finished"):
             continue
-        if item.get("finished") or alive:
+        size = int(item.get("size") or 0)
+        frontier = _upload_frontier(_range_pairs(item.get("ranges")))
+        return size > 0 and frontier < size
+    return False
+
+
+def _note_partial_frontier(path: Path, frontier: int) -> None:
+    found = _upload_by_path(path)
+    if found is None:
+        return
+    _upload_id, item = found
+    item["readFrontier"] = frontier
+    item["readAt"] = time.time()
+
+
+def _prefix_can_start(path: Path, frontier: int, size: int) -> bool:
+    if size <= 0 or frontier < _PARTIAL_FLOOR or frontier >= size:
+        return False
+    if path.suffix.lower() not in {".mp4", ".mov", ".m4v"}:
+        return False
+    return moov_ready(path, frontier)
+
+
+def _consider_partial_reads() -> None:
+    """Phần đã nhận có mục lục thì đọc ngay. File chưa đủ thì chưa sắp xếp lại."""
+    for upload_id, item in _upload_snapshot():
+        try:
+            _consider_one_partial(upload_id, item)
+        except Exception:
             continue
-        if idle > _UPLOAD_QUIET_SECONDS:
-            ledger = str(item.get("jobId") or "")
-            if ledger:
-                fail_upload(ledger, "Gửi bị đứt. Mở lại trang để gửi tiếp phần còn thiếu.")
+
+
+def _consider_one_partial(upload_id: str, item: dict[str, Any]) -> None:
+    del upload_id
+    if item.get("finished"):
+        return
+    path = Path(item["path"])
+    size = int(item.get("size") or 0)
+    frontier = _upload_frontier(_range_pairs(item.get("ranges")))
+    if not _prefix_can_start(path, frontier, size):
+        return
+    ledger = str(item.get("jobId") or "")
+    if not ledger or video_repair.running(ledger):
+        return
+    if frontier <= int(item.get("readFrontier") or 0):
+        tried = float(item.get("readAt") or 0)
+        if time.time() - tried < 60:
+            return
+    job = jobs.get(ledger)
+    if job is not None and (job.done or (job.path is not None and ledger not in _PARTIAL_IDS)):
+        return
+    if job is None:
+        job = jobs.create(
+            ledger,
+            name=str(item.get("name") or ""),
+            source=str(item.get("source") or ""),
+            size=size,
+        )
+    if job.done or (job.path is not None and ledger not in _PARTIAL_IDS):
+        return
+    job.stage_file(path)
+    job.hold_for_growth()
+    _PARTIAL_IDS.add(job.id)
+    _spawn_video(job.id, path, "partial")
+
+
+def _read_partial(job_id: str, path: Path) -> None:
+    """Đọc phần đã có mục lục. File đủ thì mới sắp xếp và ghi người."""
+    job = jobs.get(job_id)
+    if job is None or job.done:
+        return
+    frontier, size = _received_span(path)
+    complete = size > 0 and frontier >= size
+    _note_partial_frontier(path, frontier)
+    ready = path
+    if complete:
+        _PARTIAL_IDS.discard(job_id)
+        found = _upload_by_path(path)
+        if found is not None:
+            _close_upload(found[1])
+        ready = faststart_video(path)
+        job.bind(ready)
+    if job.owner_id() != "hub" and not job.take_hub():
+        return
+    job.update(4, "Đọc phần đã nhận" if not complete else "Đọc video")
+    while True:
+        current = jobs.get(job_id)
+        if current is None or current.done:
+            return
+        if _hub_acquire():
+            break
+        time.sleep(0.4)
+    try:
+        current = jobs.get(job_id)
+        if current is None or current.done:
+            return
+        try:
+            _steps, people = analyze_screen_video(ready, JobProgress(current), keep_open=not complete)
+            if complete:
+                if not current.done:
+                    _finish_read(current, people, None)
+                return
+            later, later_size = _received_span(path)
+            if later_size > 0 and later >= later_size and not current.done:
+                _PARTIAL_IDS.discard(job_id)
+                found = _upload_by_path(path)
+                if found is not None:
+                    _close_upload(found[1])
+                final = faststart_video(path)
+                current.bind(final)
+                _steps, people = analyze_screen_video(final, JobProgress(current), keep_open=False)
+                if not current.done:
+                    _finish_read(current, people, None)
+        except ScreenVideoError as error:
+            if complete or job_id not in _PARTIAL_IDS:
+                current.fail(str(error))
+            else:
+                current.add_problem("Phần đã nhận chưa đọc được. Sẽ đọc tiếp khi video dài thêm.")
+        except Exception:
+            if complete or job_id not in _PARTIAL_IDS:
+                current.fail("Không xử lý được video.")
+            else:
+                current.add_problem("Phần đã nhận chưa đọc được. Sẽ đọc tiếp khi video dài thêm.")
+        finally:
+            if current is not None and not current.done and current.owner_id() == "hub" and job_id not in _PARTIAL_IDS:
+                current.abandon_hub()
+    finally:
+        _hub_release()
 
 
 def _upload_fd(item: dict[str, Any]) -> int:
@@ -2363,8 +2546,17 @@ def _finish_received_upload(upload_id: str, *, reopen_failed: bool) -> dict[str,
                 item["finished"] = True
                 item["jobId"] = existing.id
                 _save_upload(upload_id, item)
+                _PARTIAL_IDS.discard(existing.id)
+                if existing.succeeded():
+                    return {"ok": True, "jobId": existing.id}
                 if reopen_failed and existing.done and existing.error:
                     _reopen_job(existing)
+                    return {"ok": True, "jobId": existing.id}
+                if not video_repair.running(existing.id) and not existing.done:
+                    if existing.owner_id() == "hub":
+                        existing.abandon_hub()
+                    kind = "prepare" if existing.path is None else "schedule"
+                    _spawn_video(existing.id, Path(item["path"]), kind)
                 return {"ok": True, "jobId": existing.id}
         _close_upload(item)
         reuse = "" if item.get("finished") else str(item.get("jobId") or "")
@@ -2594,7 +2786,7 @@ def video_job_fail(
     body: WorkerFailBody,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    """Video hỏng thì dừng. Hub không tự đọc lại. Trang bấm Tiếp tục thì đọc nối."""
+    """Video hỏng thì ghi lỗi. Lỗi tạm được đọc lại ngay. Lỗi nội dung được đọc lại sau một lúc."""
     _auth(authorization)
     job = jobs.get(job_id)
     if job is None:

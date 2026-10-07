@@ -1,6 +1,7 @@
 """Tự sửa các lỗi đã gặp khi hub và PC đọc video.
 
-Vòng này chạy trên hub. Nó không đọc lại một video đã hỏng nội dung.
+Vòng này chạy trên hub. Lỗi tạm được đọc lại không giới hạn số lần.
+Video hỏng nội dung được đọc lại sau một lúc, và khe đọc được trả giữa các lần.
 Nó gỡ các trạng thái kẹt mà các bản trước đã sửa trong mã, phòng khi
 trạng thái đó xuất hiện lại lúc đang chạy: PC ngừng gửi tiến trình,
 máy chủ nhận video trong khi PC đang rảnh, khe đọc của máy chủ bị kẹt,
@@ -17,11 +18,15 @@ from control_plane.syllables import restore_name
 from control_plane.video_jobs import JobStore, VideoJob
 
 RETRY_MARK = "Tự sửa lần"
-RETRY_LIMIT = 2
+_CONTENT_GAP = 120.0
 _TRANSIENT = (
     "Mất kết nối",
     "Không xử lý được video",
     "PC gặp lỗi khi đọc",
+)
+_GAVE_UP = (
+    "Video không còn",
+    "Mất file video",
 )
 
 _runtime_lock = threading.Lock()
@@ -83,14 +88,25 @@ def is_transient(message: str) -> bool:
 
 
 def should_retry(job: VideoJob) -> bool:
+    """Lỗi tạm thì đọc lại, không chặn sau vài lần. Khe đọc được trả giữa các lần."""
     body = job.public()
     if not body.get("done") or not body.get("error"):
         return False
-    if not is_transient(str(body.get("error") or "")):
+    return is_transient(str(body.get("error") or ""))
+
+
+def content_waits(job: VideoJob, now: float) -> bool:
+    """Video lỗi nội dung thì đọc lại sau một lúc, để video khác dùng khe đọc trước."""
+    body = job.public()
+    if not body.get("done") or not body.get("error"):
         return False
-    problems = body.get("problems") if isinstance(body.get("problems"), list) else []
-    used = sum(1 for item in problems if str(item).startswith(RETRY_MARK))
-    return used < RETRY_LIMIT
+    error = str(body.get("error") or "")
+    if is_transient(error) or any(error.startswith(prefix) for prefix in _GAVE_UP):
+        return False
+    finished = job.finished_at
+    if finished is None:
+        return False
+    return float(now) - float(finished) >= _CONTENT_GAP
 
 
 def retry_note(job: VideoJob) -> str:
@@ -131,6 +147,7 @@ class RepairHooks:
         heal_hub: Callable[[], bool],
         lease_seconds: float,
         frontier: Callable[[list[tuple[int, int]]], int],
+        skip: Callable[[VideoJob], bool] | None = None,
     ) -> None:
         self.jobs = jobs
         self.uploads = uploads
@@ -141,6 +158,7 @@ class RepairHooks:
         self.heal_hub = heal_hub
         self.lease_seconds = lease_seconds
         self.frontier = frontier
+        self.skip = skip if skip is not None else (lambda _job: False)
 
 
 def sweep(hooks: RepairHooks) -> list[str]:
@@ -176,6 +194,8 @@ def sweep(hooks: RepairHooks) -> list[str]:
 
 
 def _heal_job(hooks: RepairHooks, job: VideoJob, actions: list[str]) -> None:
+    if hooks.skip(job):
+        return
     if job.done:
         if hooks.retry(job):
             actions.append("transient_failure_retry")

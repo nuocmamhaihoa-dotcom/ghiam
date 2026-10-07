@@ -999,8 +999,11 @@
       return { ok: false, error: "Không gửi được video." };
     }
     async function restartLostJob(job) {
-      if (!job.uploadId || (job.restarts || 0) >= 2) return false;
+      if (!job.uploadId) return false;
+      const wait = Math.min(30000, 1000 * ((job.restarts || 0) + 1));
+      if (job.restartAt && Date.now() < job.restartAt) return false;
       job.restarts = (job.restarts || 0) + 1;
+      job.restartAt = Date.now() + wait;
       const again = await finishUpload(job.uploadId);
       if (!again.ok) return false;
       job.jobId = again.jobId;
@@ -1101,30 +1104,16 @@
       }
       return { ok: false, bytes: null };
     }
-    async function abandonUpload(uploadId, message) {
-      if (!uploadId) return;
-      try {
-        await fetch("/v1/recordings/uploads/" + uploadId + "/abandon", {
-          method: "POST",
-          headers: Object.assign({ "Content-Type": "application/json" }, headers()),
-          body: JSON.stringify({ error: message || "Không gửi được video." }),
-        });
-      } catch (error) { /* máy chủ tự ghi gửi bị đứt nếu trang không báo được */ }
-    }
     async function postJobChunked(file, onUpload) {
       const chunkSize = 4 * 1024 * 1024;
       let lastError = "Không gửi được video.";
-      let uploadId = "";
-      for (let round = 0; round < 4; round += 1) {
+      for (let round = 0; ; round += 1) {
         const outcome = await sendVideoPieces(file, onUpload, chunkSize, 1);
-        if (outcome.uploadId) uploadId = String(outcome.uploadId);
         if (outcome.ok) return outcome;
         lastError = outcome.error || lastError;
-        if (outcome.fatal) break;
-        await sleep(Math.min(4000, 800 * (round + 1)));
+        if (outcome.fatal) return { ok: false, error: lastError };
+        await sleep(Math.min(8000, 800 * (round + 1)));
       }
-      await abandonUpload(uploadId, lastError);
-      return { ok: false, error: lastError };
     }
     async function sendVideoPieces(file, onUpload, chunkSize, lanes) {
       let uploadId = "";
@@ -1147,7 +1136,7 @@
             body: JSON.stringify({ name: file.name || "video.mp4", size: file.size, source: "Trang chủ" }),
           });
           if (response.status === 413) return { ok: false, fatal: true, error: "Video quá lớn." };
-          if (response.status === 507) return { ok: false, fatal: true, error: "Hết chỗ trống trên máy chủ." };
+          if (response.status === 507) return { ok: false, error: "Hết chỗ trống trên máy chủ." };
           if (!response.ok) throw new Error("start");
           const started = await response.json();
           if (started && started.uploadId) {
@@ -1198,8 +1187,7 @@
           }
           const read = await readPiece(file, piece.offset, piece.end);
           if (!read.ok) {
-            failure = "Không đọc được video trên máy. Hãy chọn lại video.";
-            fatal = true;
+            failure = "Không đọc được video trên máy. Sẽ đọc lại.";
             return;
           }
           const payload = read.bytes;
@@ -1225,7 +1213,7 @@
             }
             if (!landed && reply) {
               const data = reply.data || {};
-              if (reply.status === 507) { failure = "Hết chỗ trống trên máy chủ."; fatal = true; return; }
+              if (reply.status === 507) { failure = "Hết chỗ trống trên máy chủ."; return; }
               if (reply.status === 404) { markMissing(); return; }
               const mark = typeof data.end === "number" ? data.end : data.offset;
               if (reply.status >= 200 && reply.status < 300 && typeof mark === "number" && mark >= piece.end) landed = true;
@@ -1257,7 +1245,7 @@
           ok: false,
           missing: !!closed.missing,
           short: !!closed.short,
-          fatal: closed.error === "Hết chỗ trống trên máy chủ.",
+          fatal: false,
           error: closed.error,
           uploadId: uploadId,
         };
@@ -1267,12 +1255,11 @@
     async function postJob(file, onUpload) {
       if (file.size > 8 * 1024 * 1024) return postJobChunked(file, onUpload);
       let last = { ok: false, error: "Không gửi được video." };
-      for (let attempt = 0; attempt < 3; attempt += 1) {
+      for (let attempt = 0; ; attempt += 1) {
         last = await postJobOnce(file, onUpload);
-        if (last.ok || last.error === "Video quá lớn." || last.error === "Hết chỗ trống trên máy chủ.") return last;
-        await sleep(400 * (attempt + 1));
+        if (last.ok || last.error === "Video quá lớn.") return last;
+        await sleep(Math.min(8000, 400 * (attempt + 1)));
       }
-      return last;
     }
     async function pollOnce(job) {
       if (!job.jobId || job.done) return;
@@ -1281,17 +1268,17 @@
         response = await fetch("/v1/recordings/jobs/" + job.jobId, { headers: headers() });
       } catch (error) {
         job.misses += 1;
-        if (job.misses >= 8) { job.done = true; job.ok = false; job.error = "Mất kết nối khi đang xử lý."; }
+        job.task = "Mất kết nối. Vẫn đọc tiếp.";
         return;
       }
       if (response.status === 404) {
         if (await restartLostJob(job)) return;
-        job.done = true; job.ok = false; job.error = "Mất tiến trình xử lý. Chọn lại video để gửi tiếp phần còn thiếu.";
+        job.task = "Đang nối lại việc đọc.";
         return;
       }
       if (!response.ok) {
         job.misses += 1;
-        if (job.misses >= 8) { job.done = true; job.ok = false; job.error = "Mất kết nối khi đang xử lý."; }
+        job.task = "Mất kết nối. Vẫn đọc tiếp.";
         return;
       }
       job.misses = 0;
@@ -1301,9 +1288,9 @@
       job.problems = data.problems || [];
       job.canContinue = !!data.canContinue;
       copyReading(job, data);
-      if (!data.done) return;
+      if (!data.done) { job.error = ""; return; }
+      if (data.error) { job.ok = false; job.error = data.error; job.task = data.task || "Đọc lại"; return; }
       job.done = true;
-      if (data.error) { job.ok = false; job.error = data.error; return; }
       job.ok = true;
       forgetUpload(job.file);
       job.people = data.people || [];
@@ -1431,17 +1418,18 @@
         try {
           response = await fetch("/v1/recordings/jobs/" + slot.jobId + "/continue", { method: "POST", headers: headers() });
         } catch (error) {
-          slot.done = true; slot.ok = false; slot.canContinue = false; slot.error = "Mất kết nối khi đang xử lý.";
+          slot.done = false;
+          slot.task = "Mất kết nối. Vẫn đọc tiếp.";
           continue;
         }
         if (response.status === 404 && await restartLostJob(slot)) continue;
         if (!response.ok) {
-          slot.done = true; slot.ok = false;
-          slot.error = response.status === 404 ? "Mất tiến trình xử lý. Chọn lại video để gửi tiếp phần còn thiếu." : "Chưa đọc tiếp được.";
+          slot.done = false;
+          slot.task = response.status === 404 ? "Đang nối lại việc đọc." : "Đang đọc tiếp.";
           continue;
         }
         const data = await response.json();
-        slot.done = !!data.done;
+        slot.done = !!data.done && !data.error;
         slot.ok = !data.error;
         slot.percent = Math.max(slot.percent || 0, data.percent || 0);
         slot.task = data.task || "Đọc tiếp";

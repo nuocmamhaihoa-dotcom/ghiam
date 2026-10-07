@@ -169,6 +169,10 @@ async function putChunk(row, uploadId, offset, bytes) {
   return { status: response.status, data: data };
 }
 
+function pause(misses) {
+  return new Promise((resolve) => setTimeout(resolve, Math.min(8000, 500 * Math.max(1, misses))));
+}
+
 async function carryRow(row) {
   if (!row || !row.key) return;
   if (Date.now() - (Number(row.at) || 0) > CARRY_KEEP_MS) {
@@ -180,39 +184,48 @@ async function carryRow(row) {
       const response = await fetch("/v1/recordings/jobs/" + row.jobId, { headers: authHeaders(row) });
       if (response.ok) {
         const job = await response.json();
-        if (job && job.done) await deleteRow(row.key);
+        if (job && job.done && !job.error) await deleteRow(row.key);
+        return;
       }
-    } catch (error) { /* trang mở lại sẽ hỏi tiếp */ }
-    return;
-  }
-  if (!row.blob || !row.size) return;
-  let uploadId = row.uploadId ? String(row.uploadId) : "";
-  if (uploadId) {
-    const found = await readUpload(row, uploadId);
-    if (found.missing) uploadId = "";
-    else if (found.status && found.status.finished && found.status.jobId) {
-      await markJob(row, String(found.status.jobId), uploadId);
+      if (response.status !== 404) return;
+      row.jobId = "";
+    } catch (error) {
       return;
     }
   }
-  if (!uploadId) {
-    uploadId = await startUpload(row);
-    if (!uploadId) return;
-    row.uploadId = uploadId;
-    await putRow(row);
-  }
-  let guard = 0;
+  if (!row.blob || !row.size) return;
+  let uploadId = row.uploadId ? String(row.uploadId) : "";
   let misses = 0;
-  while (guard < 10000) {
-    guard += 1;
+  while (Date.now() - (Number(row.at) || 0) <= CARRY_KEEP_MS) {
+    if (!uploadId) {
+      uploadId = await startUpload(row);
+      if (!uploadId) {
+        misses += 1;
+        await pause(misses);
+        continue;
+      }
+      row.uploadId = uploadId;
+      await putRow(row);
+    }
     const found = await readUpload(row, uploadId);
-    if (found.missing) return;
+    if (found.missing) {
+      uploadId = "";
+      row.uploadId = "";
+      misses += 1;
+      await pause(misses);
+      continue;
+    }
     const status = found.status || {};
     if (status.finished && status.jobId) {
       await markJob(row, String(status.jobId), uploadId);
       return;
     }
     const size = Number(status.size) || Number(row.size) || 0;
+    if (!size) {
+      misses += 1;
+      await pause(misses);
+      continue;
+    }
     let offset = -1;
     for (let cursor = 0; cursor < size; cursor += CHUNK) {
       const end = Math.min(size, cursor + CHUNK);
@@ -223,8 +236,13 @@ async function carryRow(row) {
     }
     if (offset < 0) {
       const jobId = await finishUpload(row, uploadId);
-      if (jobId) await markJob(row, jobId, uploadId);
-      return;
+      if (jobId) {
+        await markJob(row, jobId, uploadId);
+        return;
+      }
+      misses += 1;
+      await pause(misses);
+      continue;
     }
     const end = Math.min(size, offset + CHUNK);
     let bytes = null;
@@ -235,9 +253,14 @@ async function carryRow(row) {
         await new Promise((resolve) => setTimeout(resolve, 300 * (readTry + 1)));
       }
     }
-    if (!bytes) return;
+    if (!bytes) {
+      misses += 1;
+      await pause(misses);
+      continue;
+    }
     let landed = false;
-    for (let attempt = 0; attempt < 8 && !landed; attempt += 1) {
+    let lost = false;
+    for (let attempt = 0; attempt < 8 && !landed && !lost; attempt += 1) {
       let reply;
       try {
         reply = await putChunk(row, uploadId, offset, bytes);
@@ -245,16 +268,29 @@ async function carryRow(row) {
         await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
         continue;
       }
-      if (reply.status === 404 || reply.status === 401 || reply.status === 413 || reply.status === 507) return;
+      if (reply.status === 404) {
+        lost = true;
+        break;
+      }
+      if (reply.status === 401 || reply.status === 413 || reply.status === 507) {
+        await pause(attempt + 1);
+        continue;
+      }
       const mark = typeof reply.data.end === "number" ? reply.data.end : reply.data.offset;
       landed = (reply.status >= 200 && reply.status < 300 && typeof mark === "number" && mark >= end)
         || (reply.status === 409 && typeof reply.data.offset === "number" && reply.data.offset >= end);
       if (!landed) await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
     }
+    if (lost) {
+      uploadId = "";
+      row.uploadId = "";
+      misses += 1;
+      await pause(misses);
+      continue;
+    }
     if (!landed) {
       misses += 1;
-      if (misses >= 12) return;
-      await new Promise((resolve) => setTimeout(resolve, Math.min(8000, 500 * misses)));
+      await pause(misses);
       continue;
     }
     misses = 0;

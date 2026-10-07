@@ -430,6 +430,17 @@ class VideoJob:
         self._persist(row, True)
         return True
 
+    def hold_for_growth(self) -> None:
+        """File còn đang dài. Giữ đường dẫn nhưng chưa cho PC nhận, để khỏi sắp xếp lại file dở."""
+        with self._lock:
+            if self.done:
+                return
+            if self.path is not None:
+                self._stored_path = self.path
+                self.path = None
+            row = self._snapshot_locked()
+        self._persist(row, True)
+
     def note_worker(self, worker_id: str) -> bool:
         with self._lock:
             if self.done or self.owner != worker_id or not worker_id:

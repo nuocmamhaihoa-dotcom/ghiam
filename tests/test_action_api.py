@@ -707,7 +707,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "55")
+        self.assertEqual(build, "56")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -717,7 +717,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 55)
+        self.assertEqual(payload["iphoneBuild"], 56)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -1809,10 +1809,8 @@ class ActionApiTests(unittest.TestCase):
         os.utime(path, (old, old))
         app_module._sweep_uploads()
         board = self.client.get("/v1/recordings/board", headers=self.headers).json()
-        self.assertFalse(any(row["name"] == "im-lang.mp4" for row in board["active"]))
-        failed = [row for row in board["history"] if row["jobId"] == ledger]
-        self.assertEqual(len(failed), 1)
-        self.assertIn("Gửi bị đứt", failed[0]["error"])
+        self.assertTrue(any(row["name"] == "im-lang.mp4" for row in board["active"]))
+        self.assertFalse(any(row["jobId"] == ledger for row in board["history"]))
         self.assertTrue(path.is_file())
         put = self.client.put(
             f"/v1/recordings/uploads/{upload_id}",
