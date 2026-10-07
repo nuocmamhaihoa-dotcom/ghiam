@@ -68,6 +68,20 @@ class VideoLedgerTests(unittest.TestCase):
         self.assertNotEqual(int(row["percent"]), 80)
         self.assertEqual(float(row["created_at"]), created)
 
+    def test_fail_upload_does_not_touch_a_queued_job(self) -> None:
+        open_upload("clip-up", "a.mp4", "iPhone", 4)
+        self.assertTrue(video_ledger.fail_upload("clip-up", "Gửi bị đứt."))
+        self.assertFalse(video_ledger.fail_upload("clip-up", "lần hai"))
+        job = jobs.create("clip-keep", name="b.mp4", source="iPhone", size=2)
+        self._track(job.id)
+        self.assertFalse(video_ledger.fail_upload(job.id, "không được"))
+        listed = board()
+        failed = [item for item in listed["history"] if item["jobId"] == "clip-up"]
+        self.assertEqual(len(failed), 1)
+        self.assertEqual(failed[0]["error"], "Gửi bị đứt.")
+        self.assertEqual(failed[0]["state"], "failed")
+        self.assertTrue(any(item["jobId"] == job.id and item["state"] == "queued" for item in listed["queued"]))
+
     def test_restore_keeps_frames_and_skips_a_missing_file(self) -> None:
         path = Path(self._dir.name) / "doc.mp4"
         path.write_bytes(b"video")

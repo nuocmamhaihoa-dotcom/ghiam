@@ -232,12 +232,22 @@ async function carryRow(row) {
     } catch (error) {
       return;
     }
-    const reply = await putChunk(row, uploadId, offset, bytes);
-    if (reply.status === 404 || reply.status === 401 || reply.status === 413 || reply.status === 507) return;
-    const mark = typeof reply.data.end === "number" ? reply.data.end : reply.data.offset;
-    const landed = (reply.status >= 200 && reply.status < 300 && typeof mark === "number" && mark >= end)
-      || (reply.status === 409 && typeof reply.data.offset === "number" && reply.data.offset >= end);
-    if (!landed && reply.status !== 409) return;
+    let landed = false;
+    for (let attempt = 0; attempt < 4 && !landed; attempt += 1) {
+      let reply;
+      try {
+        reply = await putChunk(row, uploadId, offset, bytes);
+      } catch (error) {
+        await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+        continue;
+      }
+      if (reply.status === 404 || reply.status === 401 || reply.status === 413 || reply.status === 507) return;
+      const mark = typeof reply.data.end === "number" ? reply.data.end : reply.data.offset;
+      landed = (reply.status >= 200 && reply.status < 300 && typeof mark === "number" && mark >= end)
+        || (reply.status === 409 && typeof reply.data.offset === "number" && reply.data.offset >= end);
+      if (!landed) await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+    }
+    if (!landed) return;
     await tell({
       type: "progress",
       key: row.key,

@@ -707,7 +707,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "53")
+        self.assertEqual(build, "54")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -717,7 +717,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 53)
+        self.assertEqual(payload["iphoneBuild"], 54)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -1758,6 +1758,127 @@ class ActionApiTests(unittest.TestCase):
         self.assertNotEqual(restarted.json()["jobId"], job_id)
         body = self._wait_job(restarted.json()["jobId"])
         self.assertTrue(body.get("error"), body)
+
+    def test_a_torn_piece_is_replaced_by_the_full_piece(self) -> None:
+        piece = 4 * 1024 * 1024
+        started = self.client.post(
+            "/v1/recordings/uploads",
+            headers=self.headers,
+            json={"name": "dut-khuc.mp4", "size": piece + 10},
+        )
+        self.assertEqual(started.status_code, 200, started.text)
+        upload_id = started.json()["uploadId"]
+        with app_module._uploads_lock:
+            item = app_module._uploads[upload_id]
+        with item["lock"]:
+            item["spans"].add((0, 50))
+            item["ranges"] = [(0, 50)]
+        whole = b"z" * piece
+        put = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}",
+            headers=self.headers,
+            params={"offset": 0},
+            content=whole,
+        )
+        self.assertEqual(put.status_code, 200, put.text)
+        self.assertEqual(put.json()["offset"], piece)
+        seen = self.client.get(f"/v1/recordings/uploads/{upload_id}", headers=self.headers)
+        self.assertEqual(seen.json()["spans"], [[0, piece]])
+        with app_module._uploads_lock:
+            stored = Path(app_module._uploads[upload_id]["path"])
+        self.assertEqual(stored.read_bytes()[:piece], whole)
+
+    def test_a_quiet_upload_stays_on_disk_and_can_finish(self) -> None:
+        payload = b"0123456789"
+        started = self.client.post(
+            "/v1/recordings/uploads",
+            headers=self.headers,
+            json={"name": "im-lang.mp4", "size": len(payload)},
+        )
+        self.assertEqual(started.status_code, 200, started.text)
+        upload_id = started.json()["uploadId"]
+        with app_module._uploads_lock:
+            item = app_module._uploads[upload_id]
+            ledger = str(item["jobId"])
+            path = Path(item["path"])
+            item["created"] = time.time() - 21 * 60
+        old = time.time() - 21 * 60
+        os.utime(path, (old, old))
+        app_module._sweep_uploads()
+        board = self.client.get("/v1/recordings/board", headers=self.headers).json()
+        self.assertFalse(any(row["name"] == "im-lang.mp4" for row in board["active"]))
+        failed = [row for row in board["history"] if row["jobId"] == ledger]
+        self.assertEqual(len(failed), 1)
+        self.assertIn("Gửi bị đứt", failed[0]["error"])
+        self.assertTrue(path.is_file())
+        put = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}",
+            headers=self.headers,
+            params={"offset": 0},
+            content=payload[:4],
+        )
+        self.assertEqual(put.status_code, 200, put.text)
+        self.assertEqual(put.json()["end"], 4)
+        self.assertTrue(path.is_file())
+
+    def test_abandon_keeps_received_bytes(self) -> None:
+        payload = b"abcdef"
+        started = self.client.post(
+            "/v1/recordings/uploads",
+            headers=self.headers,
+            json={"name": "bo-giua.mp4", "size": len(payload)},
+        )
+        upload_id = started.json()["uploadId"]
+        first = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}",
+            headers=self.headers,
+            params={"offset": 0},
+            content=b"abc",
+        )
+        self.assertEqual(first.status_code, 200, first.text)
+        stopped = self.client.post(
+            f"/v1/recordings/uploads/{upload_id}/abandon",
+            headers=self.headers,
+            json={"error": "Không gửi được video."},
+        )
+        self.assertEqual(stopped.status_code, 200, stopped.text)
+        with app_module._uploads_lock:
+            item = app_module._uploads[upload_id]
+            path = Path(item["path"])
+            ledger = str(item["jobId"])
+        self.assertEqual(path.read_bytes()[:3], b"abc")
+        board = self.client.get("/v1/recordings/board", headers=self.headers).json()
+        self.assertFalse(any(row["jobId"] == ledger for row in board["active"]))
+        self.assertTrue(any(row["jobId"] == ledger and row["error"] == "Không gửi được video." for row in board["history"]))
+        rest = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}",
+            headers=self.headers,
+            params={"offset": 3},
+            content=b"de",
+        )
+        self.assertEqual(rest.status_code, 200, rest.text)
+        self.assertEqual(path.read_bytes()[:5], b"abcde")
+
+    def test_an_old_upload_is_removed_after_two_days(self) -> None:
+        started = self.client.post(
+            "/v1/recordings/uploads",
+            headers=self.headers,
+            json={"name": "qua-han.mp4", "size": 4},
+        )
+        upload_id = started.json()["uploadId"]
+        with app_module._uploads_lock:
+            item = app_module._uploads[upload_id]
+            path = Path(item["path"])
+            ledger = str(item["jobId"])
+            item["created"] = time.time() - 49 * 3600
+        old = time.time() - 49 * 3600
+        os.utime(path, (old, old))
+        app_module._sweep_uploads()
+        self.assertFalse(path.is_file())
+        missing = self.client.get(f"/v1/recordings/uploads/{upload_id}", headers=self.headers)
+        self.assertEqual(missing.status_code, 404)
+        board = self.client.get("/v1/recordings/board", headers=self.headers).json()
+        self.assertTrue(any(row["jobId"] == ledger and "quá lâu" in row["error"] for row in board["history"]))
 
     def test_a_long_video_is_split_between_two_pcs(self) -> None:
         if shutil.which("ffmpeg") is None:

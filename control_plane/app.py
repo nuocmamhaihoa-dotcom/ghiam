@@ -77,7 +77,7 @@ from control_plane.settings import settings
 from control_plane import video_repair
 from control_plane.video_jobs import JobProgress, VideoJob, jobs, restore_open
 from control_plane.video_ledger import board as video_board
-from control_plane.video_ledger import failed_row, open_upload, touch_upload
+from control_plane.video_ledger import fail_upload, failed_row, open_upload, touch_upload
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 IOS_DIR = Path(__file__).resolve().parents[1] / "ios"
@@ -181,6 +181,7 @@ async def _startup() -> None:
         job = jobs.get(job_id)
         kind = "prepare" if job is not None and job.path is None else "schedule"
         _spawn_video(job_id, path, kind)
+    _sweep_uploads()
     threading.Thread(target=_repair_loop, daemon=True).start()
     start_background_checker()
 
@@ -1653,6 +1654,7 @@ def _auto_retry(job: VideoJob) -> bool:
 
 
 def _repair_once() -> list[str]:
+    _sweep_uploads()
     return video_repair.sweep(
         video_repair.RepairHooks(
             jobs=jobs,
@@ -1959,6 +1961,8 @@ def download_job_video(
 
 
 _CHUNK_MAX = 8 * 1024 * 1024
+_UPLOAD_QUIET_SECONDS = 20 * 60
+_UPLOAD_KEEP_SECONDS = 48 * 3600
 _uploads: dict[str, dict[str, Any]] = {}
 _uploads_lock = threading.Lock()
 
@@ -1969,14 +1973,37 @@ class UploadStartBody(BaseModel):
     source: str = ""
 
 
+class UploadStopBody(BaseModel):
+    error: str = ""
+
+
 def _upload_frontier(ranges: list[tuple[int, int]]) -> int:
     if ranges and ranges[0][0] == 0:
         return ranges[0][1]
     return 0
 
 
-def _upload_overlaps(ranges: list[tuple[int, int]], start: int, end: int) -> bool:
-    return any(start < stop and end > begin for begin, stop in ranges)
+def _span_blocked(spans: set[tuple[int, int]], start: int, end: int) -> bool:
+    """Khúc mới đè lên một khúc đã nhận mà không nuốt trọn khúc đó."""
+    for begin, stop in spans:
+        if start < stop and end > begin and (begin < start or stop > end):
+            return True
+    return False
+
+
+def _take_covered(spans: set[tuple[int, int]], start: int, end: int) -> None:
+    """Ghi đè mẩu đứt nằm trọn trong khúc đủ. Khúc lệch ô thì không vào đây."""
+    covered = [item for item in spans if start < item[1] and end > item[0]]
+    for item in covered:
+        spans.discard(item)
+    spans.add((start, end))
+
+
+def _ranges_from_spans(spans: set[tuple[int, int]]) -> list[tuple[int, int]]:
+    ranges: list[tuple[int, int]] = []
+    for start, end in sorted(spans):
+        ranges = _upload_add(ranges, start, end)
+    return ranges
 
 
 def _upload_add(ranges: list[tuple[int, int]], start: int, end: int) -> list[tuple[int, int]]:
@@ -2134,15 +2161,34 @@ def _repair_upload(upload_id: str) -> bool:
     return isinstance(result, dict) and bool(result.get("ok"))
 
 
-def _drop_old_uploads() -> None:
-    now = time.time()
-    stale: list[str] = []
+def _upload_idle_seconds(item: dict[str, Any]) -> float:
+    created = float(item.get("created") or 0)
+    try:
+        changed = Path(item["path"]).stat().st_mtime
+    except OSError:
+        changed = created
+    return time.time() - max(created, changed)
+
+
+def _sweep_uploads() -> None:
+    """Gửi im 20 phút thì ghi là đứt, file vẫn giữ để gửi tiếp. Quá hai ngày thì xóa."""
     with _uploads_lock:
-        for key, item in list(_uploads.items()):
-            if now - float(item["created"]) > 6 * 3600 and not _upload_job_alive(item):
-                stale.append(key)
-    for key in stale:
-        _forget_upload(key, remove_video=True)
+        held = list(_uploads.items())
+    for upload_id, item in held:
+        idle = _upload_idle_seconds(item)
+        alive = _upload_job_alive(item)
+        if idle > _UPLOAD_KEEP_SECONDS and not alive:
+            ledger = str(item.get("jobId") or "")
+            if ledger and not item.get("finished"):
+                fail_upload(ledger, "Gửi bị dừng quá lâu.")
+            _forget_upload(upload_id, remove_video=True)
+            continue
+        if item.get("finished") or alive:
+            continue
+        if idle > _UPLOAD_QUIET_SECONDS:
+            ledger = str(item.get("jobId") or "")
+            if ledger:
+                fail_upload(ledger, "Gửi bị đứt. Mở lại trang để gửi tiếp phần còn thiếu.")
 
 
 def _upload_fd(item: dict[str, Any]) -> int:
@@ -2168,7 +2214,7 @@ def start_video_upload(body: UploadStartBody, authorization: str | None = Header
     suffix = Path(body.name or "clip.mp4").suffix.lower()
     if suffix not in {".mp4", ".mov", ".m4v", ".webm"}:
         suffix = ".mp4"
-    _drop_old_uploads()
+    _sweep_uploads()
     upload_id = uuid.uuid4().hex
     ledger_id = uuid.uuid4().hex
     path = _upload_dir() / f"fb-video-{upload_id}{suffix}"
@@ -2244,6 +2290,7 @@ async def write_video_chunk(
     _auth(authorization)
     item = _live_upload(upload_id)
     declared = request.headers.get("content-length")
+    announced: int | None = None
     if declared is not None:
         try:
             announced = int(declared)
@@ -2252,6 +2299,8 @@ async def write_video_chunk(
         if announced > _CHUNK_MAX:
             raise HTTPException(413, "chunk is too large")
     raw = await request.body()
+    if announced is not None and announced != len(raw):
+        raise HTTPException(400, "chunk đứt giữa chừng")
     if len(raw) > _CHUNK_MAX:
         raise HTTPException(413, "chunk is too large")
     if not raw:
@@ -2271,7 +2320,7 @@ def _store_chunk(upload_id: str, item: dict[str, Any], offset: int, raw: bytes) 
         ranges: list[tuple[int, int]] = item["ranges"]
         if (offset, end) in spans:
             return JSONResponse({"ok": True, "offset": _upload_frontier(ranges), "end": end})
-        if _upload_overlaps(ranges, offset, end):
+        if _span_blocked(spans, offset, end):
             return JSONResponse({"ok": False, "offset": _upload_frontier(ranges)}, status_code=409)
         try:
             stored = os.pwrite(_upload_fd(item), raw, offset)
@@ -2279,17 +2328,18 @@ def _store_chunk(upload_id: str, item: dict[str, Any], offset: int, raw: bytes) 
             raise HTTPException(507, "Hết chỗ trống trên máy chủ.") from error
         if stored != len(raw):
             raise HTTPException(507, "Hết chỗ trống trên máy chủ.")
-        spans.add((offset, end))
-        item["ranges"] = _upload_add(ranges, offset, end)
+        _take_covered(spans, offset, end)
+        item["ranges"] = _ranges_from_spans(spans)
         frontier = _upload_frontier(item["ranges"])
+        received = sum(stop - begin for begin, stop in spans)
         _save_upload(upload_id, item)
         ledger_id = str(item.get("jobId") or "")
         if ledger_id and not item.get("finished"):
-            percent = min(99, int(frontier * 100 / size)) if size else 0
+            percent = min(99, int(received * 100 / size)) if size else 0
             touch_upload(
                 ledger_id,
                 percent,
-                f"Đang gửi {frontier / 1048576:.1f}/{size / 1048576:.1f} MB",
+                f"Đang gửi {received / 1048576:.1f}/{size / 1048576:.1f} MB",
             )
         return JSONResponse({"ok": True, "offset": frontier, "end": end})
 
@@ -2335,6 +2385,24 @@ def finish_video_upload(upload_id: str, authorization: str | None = Header(defau
     """Nhận đủ thì mở tiến trình đọc. Tiến trình mất vì hub khởi động lại thì đọc lại từ file đã nhận."""
     _auth(authorization)
     return _finish_received_upload(upload_id, reopen_failed=True)
+
+
+@app.post("/v1/recordings/uploads/{upload_id}/abandon")
+def abandon_video_upload(
+    upload_id: str,
+    body: UploadStopBody,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Trang đã thử hết mà vẫn không gửi xong. Giữ byte đã nhận để lần sau gửi tiếp."""
+    _auth(authorization)
+    item = _live_upload(upload_id)
+    if item.get("finished") and _upload_job_alive(item):
+        return {"ok": True, "kept": True}
+    ledger = str(item.get("jobId") or "")
+    message = " ".join(str(body.error or "").split())[:180] or "Không gửi được video."
+    if ledger:
+        fail_upload(ledger, message)
+    return {"ok": True}
 
 
 @app.get("/v1/recordings/board")
