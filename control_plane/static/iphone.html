@@ -1007,7 +1007,7 @@
           showAwake("App trên màn hình chính chưa tự giữ được màn hình sáng ở bản iOS này. Mở trang bằng Safari, hoặc chạm màn hình vài lần đến khi xong.", true);
           return;
         }
-        showAwake("Đang giữ màn hình sáng. Thoát trang vẫn không dừng việc đọc sau khi máy chủ đã nhận video.", false);
+        showAwake("Đang giữ màn hình sáng. Có thể chuyển sang phần mềm khác. Việc gửi vẫn chạy, máy chủ đọc tiếp sau khi nhận đủ video.", false);
       } catch (error) {
         showAwake("Chưa giữ được màn hình sáng. Chạm vào trang để giữ, hoặc chạm màn hình vài lần đến khi xong.", true);
       }
@@ -1023,8 +1023,7 @@
     }
 
     function handOffCarry() {
-      leavingPage = true;
-      yieldCarry();
+      if (pumping || carryActive || queue.length || recording) holdBackground();
       askBackgroundCarry();
     }
 
@@ -1032,6 +1031,9 @@
       if (document.visibilityState === "hidden") {
         if (awakeWanted) pausedWhileHidden = true;
         handOffCarry();
+        if (pumping || carryActive || queue.length) {
+          setStatus("Đang gửi và đọc ở nền. Có thể dùng phần mềm khác.", false);
+        }
         return;
       }
       leavingPage = false;
@@ -1062,8 +1064,77 @@
     ["click", "touchend"].forEach((name) => {
       document.addEventListener(name, () => {
         if (awakeWanted && !awakeLock) holdScreen();
+        if (pumping || carryActive || queue.length) holdBackground();
       }, { passive: true });
     });
+
+    let backgroundAudio = null;
+    let backgroundClip = "";
+
+    function quietClip() {
+      if (backgroundClip) return backgroundClip;
+      const rate = 8000;
+      const samples = rate;
+      const bytes = new Uint8Array(44 + samples);
+      const view = new DataView(bytes.buffer);
+      const mark = (offset, text) => {
+        for (let index = 0; index < text.length; index += 1) bytes[offset + index] = text.charCodeAt(index);
+      };
+      mark(0, "RIFF");
+      view.setUint32(4, 36 + samples, true);
+      mark(8, "WAVE");
+      mark(12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, rate, true);
+      view.setUint32(28, rate, true);
+      view.setUint16(32, 1, true);
+      view.setUint16(34, 8, true);
+      mark(36, "data");
+      view.setUint32(40, samples, true);
+      for (let index = 0; index < samples; index += 1) {
+        const tone = Math.sin((2 * Math.PI * 220 * index) / rate);
+        bytes[44 + index] = 128 + Math.round(tone * 8);
+      }
+      backgroundClip = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+      return backgroundClip;
+    }
+
+    function holdBackground() {
+      if (!backgroundAudio) {
+        const audio = document.createElement("audio");
+        audio.setAttribute("playsinline", "");
+        audio.setAttribute("webkit-playsinline", "");
+        audio.loop = true;
+        audio.preload = "auto";
+        audio.src = quietClip();
+        audio.volume = 0.08;
+        backgroundAudio = audio;
+      }
+      const playing = backgroundAudio.play();
+      if (playing && typeof playing.catch === "function") playing.catch(() => {});
+      if (navigator.mediaSession) {
+        try {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: "Đang gửi và đọc video",
+            artist: "fb-poller",
+          });
+          navigator.mediaSession.playbackState = "playing";
+        } catch (error) { /* máy không có khung nghe nhạc thì việc gửi vẫn chạy */ }
+      }
+      return true;
+    }
+
+    function freeBackground() {
+      if (backgroundAudio) {
+        backgroundAudio.pause();
+        backgroundAudio = null;
+      }
+      if (navigator.mediaSession) {
+        try { navigator.mediaSession.playbackState = "none"; } catch (error) { /* bỏ qua */ }
+      }
+    }
 
     const UPLOAD_KEEP_MS = 2 * 86400000;
 
@@ -1373,9 +1444,7 @@
       try {
         while (detachedJobs.some((job) => !job.done)) {
           const pending = detachedJobs.filter((job) => job.jobId && !job.done);
-          if (pending.length && document.visibilityState !== "hidden") {
-            await Promise.all(pending.map((job) => pollOnce(job)));
-          }
+          if (pending.length) await Promise.all(pending.map((job) => pollOnce(job)));
           const continuable = detachedJobs.filter((job) => job.done && job.ok === false && job.canContinue);
           if (continuable.length && !pumping) {
             resumeSlots = continuable;
@@ -1773,10 +1842,6 @@
       };
       const pump = async () => {
         while (!failure && !yielded) {
-          if (document.visibilityState === "hidden" || leavingPage) {
-            yielded = true;
-            return;
-          }
           const piece = pieces[cursor];
           cursor += 1;
           if (!piece) return;
@@ -1810,11 +1875,6 @@
             let reply = null;
             const waitReply = flight.promise.then((value) => { reply = value; });
             while (!landed && !failure && reply === null) {
-              if (document.visibilityState === "hidden" || leavingPage) {
-                flight.stop();
-                yielded = true;
-                return;
-              }
               await Promise.race([waitReply, sleep(4000)]);
               if (reply) break;
               const live = await readUpload(uploadId);
@@ -1884,12 +1944,11 @@
 
     async function pollOnce(job) {
       if (!job.jobId || job.done) return;
-      if (document.visibilityState === "hidden" || leavingPage) return;
       let response;
       try {
         response = await fetch("/v1/recordings/jobs/" + job.jobId, { headers: authHeaders() });
       } catch (error) {
-        if (Date.now() - wokeAt < 20000) return;
+        if (document.visibilityState === "hidden" || leavingPage || Date.now() - wokeAt < 20000) return;
         job.misses += 1;
         if (job.misses >= 8) {
           job.done = true;
@@ -1906,7 +1965,7 @@
         return;
       }
       if (!response.ok) {
-        if (Date.now() - wokeAt < 20000) return;
+        if (document.visibilityState === "hidden" || leavingPage || Date.now() - wokeAt < 20000) return;
         job.misses += 1;
         if (job.misses >= 8) {
           job.done = true;
@@ -1973,7 +2032,7 @@
         };
         batchJobs.push(slot);
         paintBatch();
-        setStatus("Đang đọc " + batchTotal + " video. Không cần bấm phát. Thoát trang không dừng việc đọc.", false);
+        setStatus("Đang gửi và đọc. Không cần bấm phát. Có thể chuyển sang phần mềm khác, việc không dừng.", false);
         await settleSlot(slot, file);
         paintBatch();
       }
@@ -1983,6 +2042,7 @@
       if (pumping) return;
       pumping = true;
       holdScreen();
+      holdBackground();
       carried = [];
       renderProblems([]);
       clearSamples();
@@ -2006,19 +2066,18 @@
       await sendQueued();
       while (batchJobs.some((job) => !job.done) || queue.length) {
         await sendQueued();
-        if (document.visibilityState !== "hidden" && !leavingPage) {
-          const again = batchJobs.filter((job) => job.yielded && !job.jobId && !job.done && job.file);
-          for (let index = 0; index < again.length; index += 1) {
-            again[index].yielded = false;
-            await settleSlot(again[index], again[index].file);
-          }
-        } else {
-          askBackgroundCarry();
+        const again = batchJobs.filter((job) => job.yielded && !job.jobId && !job.done && job.file);
+        for (let index = 0; index < again.length; index += 1) {
+          again[index].yielded = false;
+          await settleSlot(again[index], again[index].file);
         }
+        if (document.visibilityState === "hidden" || leavingPage) askBackgroundCarry();
         const pending = batchJobs.filter((job) => job.jobId && !job.done);
         if (!pending.length && !queue.length && !batchJobs.some((job) => job.yielded && !job.done)) break;
         if (pending.length) await Promise.all(pending.map((job) => pollOnce(job)));
         paintBatch();
+        const stillSending = queue.length || batchJobs.some((job) => !job.done && !job.jobId);
+        if (!stillSending) freeBackground();
         if (batchJobs.some((job) => !job.done) || queue.length) await sleep(document.hidden || leavingPage ? 1000 : 400);
       }
       carryActive = batchJobs.some((job) => job.yielded && !job.done);
@@ -2076,6 +2135,7 @@
       busy = false;
       pick.classList.remove("busy");
       recordBtn.disabled = recording;
+      if (!carryActive) freeBackground();
       freeScreen();
       if (leftover.length) enqueue(leftover);
     }
@@ -2084,6 +2144,7 @@
       if (pumping || !resumeSlots.length) return;
       pumping = true;
       holdScreen();
+      holdBackground();
       continueBtn.hidden = true;
       const slots = resumeSlots;
       batchJobs = slots;
@@ -2195,6 +2256,7 @@
       busy = false;
       pick.classList.remove("busy");
       recordBtn.disabled = recording;
+      if (!carryActive) freeBackground();
       freeScreen();
       if (queue.length) enqueue(queue.splice(0, queue.length));
     }
@@ -2363,6 +2425,7 @@
     });
 
     recordBtn.addEventListener("click", () => {
+      holdBackground();
       if (recording) stopRecording();
       else startRecording();
     });
@@ -2371,6 +2434,7 @@
       const files = Array.from(fileInput.files || []);
       fileInput.value = "";
       if (!files.length || recording) return;
+      holdBackground();
       enqueue(files);
     });
 

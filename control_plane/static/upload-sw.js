@@ -9,7 +9,7 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(Promise.resolve(self.clients.claim()).then(() => carryWhenFree()));
 });
 
 self.addEventListener("message", (event) => {
@@ -202,6 +202,7 @@ async function carryRow(row) {
     await putRow(row);
   }
   let guard = 0;
+  let misses = 0;
   while (guard < 10000) {
     guard += 1;
     const found = await readUpload(row, uploadId);
@@ -226,14 +227,17 @@ async function carryRow(row) {
       return;
     }
     const end = Math.min(size, offset + CHUNK);
-    let bytes;
-    try {
-      bytes = await row.blob.slice(offset, end).arrayBuffer();
-    } catch (error) {
-      return;
+    let bytes = null;
+    for (let readTry = 0; readTry < 4 && !bytes; readTry += 1) {
+      try {
+        bytes = await row.blob.slice(offset, end).arrayBuffer();
+      } catch (error) {
+        await new Promise((resolve) => setTimeout(resolve, 300 * (readTry + 1)));
+      }
     }
+    if (!bytes) return;
     let landed = false;
-    for (let attempt = 0; attempt < 4 && !landed; attempt += 1) {
+    for (let attempt = 0; attempt < 8 && !landed; attempt += 1) {
       let reply;
       try {
         reply = await putChunk(row, uploadId, offset, bytes);
@@ -247,7 +251,13 @@ async function carryRow(row) {
         || (reply.status === 409 && typeof reply.data.offset === "number" && reply.data.offset >= end);
       if (!landed) await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
     }
-    if (!landed) return;
+    if (!landed) {
+      misses += 1;
+      if (misses >= 12) return;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(8000, 500 * misses)));
+      continue;
+    }
+    misses = 0;
     await tell({
       type: "progress",
       key: row.key,
