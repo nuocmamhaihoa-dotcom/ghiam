@@ -311,6 +311,39 @@ def open_upload(job_id: str, name: str, source: str, size: int) -> None:
         _SEEN[key] = time.monotonic()
 
 
+def fail_upload(job_id: str, error: str) -> bool:
+    """Lần gửi dừng giữa chừng. Việc đã vào hàng đọc thì không đụng tới."""
+    key = _text(job_id, 64)
+    message = _text(error, 180) or "Gửi bị đứt giữa chừng."
+    if not key:
+        return False
+    now = time.time()
+    with _LOCK:
+        try:
+            with db.connect(settings.db_path) as conn:
+                row = conn.execute(
+                    "SELECT problems_json FROM video_jobs WHERE id=? AND state='uploading'",
+                    (key,),
+                ).fetchone()
+                if row is None:
+                    return False
+                problems = _problems(row["problems_json"])
+                if message not in problems and len(problems) < 20:
+                    problems.append(message)
+                changed = conn.execute(
+                    """
+                    UPDATE video_jobs
+                    SET state='failed', error=?, task='Gặp vấn đề',
+                        finished_at=COALESCE(finished_at, ?), problems_json=?
+                    WHERE id=? AND state='uploading'
+                    """,
+                    (message, now, _dump(problems), key),
+                )
+                return changed.rowcount > 0
+        except Exception:
+            return False
+
+
 def touch_upload(job_id: str, percent: int, task: str) -> None:
     """Chỉ cập nhật lần đang gửi. Việc đã vào hàng chờ không bị kéo về đang gửi."""
     key = _text(job_id, 64)

@@ -1567,7 +1567,7 @@
         Object.keys(headerMap).forEach((key) => request.setRequestHeader(key, headerMap[key]));
         let touched = Date.now();
         const timer = window.setInterval(() => {
-          if (Date.now() - touched < 30000) return;
+          if (Date.now() - touched < 180000) return;
           window.clearInterval(timer);
           request.abort();
         }, 1000);
@@ -1659,16 +1659,41 @@
       });
     }
 
+    async function readPiece(file, offset, end) {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          return { ok: true, bytes: await file.slice(offset, end).arrayBuffer() };
+        } catch (error) {
+          await sleep(300 * (attempt + 1));
+        }
+      }
+      return { ok: false, bytes: null };
+    }
+
+    async function abandonUpload(uploadId, message) {
+      if (!uploadId) return;
+      try {
+        await fetch("/v1/recordings/uploads/" + uploadId + "/abandon", {
+          method: "POST",
+          headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+          body: JSON.stringify({ error: message || "Không gửi được video." }),
+        });
+      } catch (error) { /* máy chủ tự ghi gửi bị đứt nếu trang không báo được */ }
+    }
+
     async function postJobChunked(file, onUpload) {
       const chunkSize = 4 * 1024 * 1024;
-      const lanes = 4;
       let lastError = "Không gửi được video.";
-      for (let round = 0; round < 3; round += 1) {
-        const outcome = await sendVideoPieces(file, onUpload, chunkSize, lanes);
+      let uploadId = "";
+      for (let round = 0; round < 4; round += 1) {
+        const outcome = await sendVideoPieces(file, onUpload, chunkSize, 1);
+        if (outcome.uploadId) uploadId = String(outcome.uploadId);
         if (outcome.ok || outcome.yielded) return outcome;
         lastError = outcome.error || lastError;
-        if (!outcome.missing) return { ok: false, error: lastError };
+        if (outcome.fatal) break;
+        await sleep(Math.min(4000, 800 * (round + 1)));
       }
+      await abandonUpload(uploadId, lastError);
       return { ok: false, error: lastError };
     }
 
@@ -1708,8 +1733,8 @@
             headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
             body: JSON.stringify({ name: file.name || "man-hinh.mp4", size: file.size, source: phoneName() }),
           });
-          if (response.status === 413) return { ok: false, error: "Video quá lớn." };
-          if (response.status === 507) return { ok: false, error: "Hết chỗ trống trên máy chủ." };
+          if (response.status === 413) return { ok: false, fatal: true, error: "Video quá lớn." };
+          if (response.status === 507) return { ok: false, fatal: true, error: "Hết chỗ trống trên máy chủ." };
           if (!response.ok) throw new Error("start");
           const started = await response.json();
           if (started && started.uploadId) {
@@ -1721,7 +1746,7 @@
           await sleep(Math.min(3000, 400 * (attempt + 1)));
         }
       }
-      if (!uploadId) return { ok: false, error: "Không gửi được video." };
+      if (!uploadId) return { ok: false, error: "Không mở được lần gửi. Kiểm tra mạng rồi chọn lại video." };
       const pieces = [];
       for (let offset = 0; offset < file.size; offset += chunkSize) {
         const piece = { offset: offset, end: Math.min(file.size, offset + chunkSize), done: false, loaded: 0 };
@@ -1739,6 +1764,7 @@
       report();
       let cursor = 0;
       let failure = "";
+      let fatal = false;
       let missing = false;
       let yielded = false;
       const markMissing = () => {
@@ -1763,13 +1789,13 @@
             report();
             continue;
           }
-          let payload = null;
-          try {
-            payload = await file.slice(piece.offset, piece.end).arrayBuffer();
-          } catch (error) {
-            failure = "Không gửi được video.";
+          const read = await readPiece(file, piece.offset, piece.end);
+          if (!read.ok) {
+            failure = "Không đọc được video trên máy. Hãy chọn lại video.";
+            fatal = true;
             return;
           }
+          const payload = read.bytes;
           let landed = false;
           for (let attempt = 0; attempt < 10 && !landed && !failure; attempt += 1) {
             const before = await readUpload(uploadId);
@@ -1783,14 +1809,13 @@
             );
             let reply = null;
             const waitReply = flight.promise.then((value) => { reply = value; });
-            const deadline = Date.now() + 30000;
-            while (!landed && !failure && reply === null && Date.now() < deadline) {
+            while (!landed && !failure && reply === null) {
               if (document.visibilityState === "hidden" || leavingPage) {
                 flight.stop();
                 yielded = true;
                 return;
               }
-              await Promise.race([waitReply, sleep(300)]);
+              await Promise.race([waitReply, sleep(4000)]);
               if (reply) break;
               const live = await readUpload(uploadId);
               if (live.missing) { flight.stop(); markMissing(); return; }
@@ -1798,7 +1823,7 @@
             }
             if (!landed && reply) {
               const data = reply.data || {};
-              if (reply.status === 507) { failure = "Hết chỗ trống trên máy chủ."; return; }
+              if (reply.status === 507) { failure = "Hết chỗ trống trên máy chủ."; fatal = true; return; }
               if (reply.status === 404) { markMissing(); return; }
               const mark = typeof data.end === "number" ? data.end : data.offset;
               if (reply.status >= 200 && reply.status < 300 && typeof mark === "number" && mark >= piece.end) landed = true;
@@ -1820,13 +1845,22 @@
       await Promise.all(workers);
       if (missing) {
         forgetUpload(file);
-        return { ok: false, missing: true, error: failure };
+        return { ok: false, missing: true, error: failure, uploadId: uploadId };
       }
-      if (yielded && pieces.some((piece) => !piece.done)) return { ok: false, yielded: true };
-      if (failure) return { ok: false, error: failure };
+      if (yielded && pieces.some((piece) => !piece.done)) return { ok: false, yielded: true, uploadId: uploadId };
+      if (failure) return { ok: false, fatal: fatal, error: failure, uploadId: uploadId };
       const closed = await finishUpload(uploadId);
       if (closed.missing) forgetUpload(file);
-      if (!closed.ok) return closed;
+      if (!closed.ok) {
+        return {
+          ok: false,
+          missing: !!closed.missing,
+          short: !!closed.short,
+          fatal: closed.error === "Hết chỗ trống trên máy chủ.",
+          error: closed.error,
+          uploadId: uploadId,
+        };
+      }
       return { ok: true, jobId: closed.jobId, uploadId: uploadId };
     }
 
