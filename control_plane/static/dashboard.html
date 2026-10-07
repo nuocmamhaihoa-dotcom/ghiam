@@ -156,6 +156,31 @@
     .board-fill { height: 100%; width: 0; background: var(--accent); }
     .board-meta { margin: 0.25rem 0 0; }
     .board-problems { margin: 0.25rem 0 0; padding-left: 1.2rem; color: var(--bad); }
+    .report-wrap { overflow-x: auto; margin: 0.35rem 0 0.55rem; -webkit-overflow-scrolling: touch; }
+    .report-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; min-width: 34rem; }
+    .report-table th {
+      position: sticky; top: 0; background: var(--card); white-space: nowrap;
+      font-size: 0.82rem; color: var(--muted); font-weight: 750; border-bottom: 1px solid var(--line);
+      padding: 0.45rem 0.35rem; text-align: left;
+    }
+    .report-table th.num, .report-table td.num {
+      text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
+    }
+    .report-table td {
+      border-bottom: 1px solid var(--line); padding: 0.5rem 0.35rem;
+      vertical-align: top; word-break: break-word;
+    }
+    .report-table td.when { white-space: nowrap; color: var(--muted); font-size: 0.82rem; }
+    .report-table td.machine { white-space: nowrap; font-weight: 650; }
+    .report-table td.num { font-weight: 750; }
+    .report-table .video-name { font-weight: 750; line-height: 1.3; }
+    .report-table .video-note { display: block; margin-top: 0.2rem; font-size: 0.82rem; font-weight: 500; color: var(--muted); }
+    .report-table .ok { color: var(--ok); font-weight: 750; white-space: nowrap; }
+    .report-table .bad { color: var(--bad); font-weight: 750; white-space: nowrap; }
+    .report-table .board-retry {
+      width: auto; display: inline-block; margin: 0.3rem 0 0; min-height: 36px;
+      padding: 0.2rem 0.7rem; font-size: 0.88rem;
+    }
     .board-retry {
       min-height: 40px; margin-top: 0.45rem; border-radius: 10px;
       border: 1px solid var(--ink); background: #fff; color: var(--ink);
@@ -222,11 +247,40 @@
         <div id="boardQueued"></div>
         <h2>Báo cáo 24 giờ</h2>
         <details class="help">
-          <summary>Báo cáo giữ bao lâu</summary>
-          <p class="board-note">Mỗi video ghi tên máy, số người thấy trong danh bạ, số người có tài khoản, và số người ghi được. Báo cáo giữ 24 giờ rồi xóa. Người đã quét được giữ vĩnh viễn. Video lỗi còn file, bấm Đọc lại để làm tiếp.</p>
+          <summary>Cách đọc bảng</summary>
+          <p class="board-note">Bảng máy tổng hợp theo từng iPhone. Bảng video hiện thời gian, máy, tên file, số người trong danh bạ, số người có tài khoản, số người ghi được, và kết quả. Báo cáo giữ 24 giờ rồi xóa. Người đã quét được giữ vĩnh viễn. Video lỗi còn file, bấm Đọc lại để làm tiếp.</p>
         </details>
-        <div id="boardPhones"></div>
-        <div id="boardHistory"></div>
+        <div class="report-wrap">
+          <table id="boardPhoneTable" class="report-table" hidden>
+            <thead>
+              <tr>
+                <th>Máy</th>
+                <th class="num">Video</th>
+                <th class="num">Ghi được</th>
+                <th class="num">Lỗi</th>
+              </tr>
+            </thead>
+            <tbody id="boardPhones"></tbody>
+          </table>
+        </div>
+        <p id="boardPhoneEmpty" class="board-note">Chưa có báo cáo trong 24 giờ.</p>
+        <div class="report-wrap">
+          <table id="boardHistoryTable" class="report-table" hidden>
+            <thead>
+              <tr>
+                <th>Thời gian</th>
+                <th>Máy</th>
+                <th>Video</th>
+                <th class="num">Danh bạ</th>
+                <th class="num">Có tài khoản</th>
+                <th class="num">Ghi được</th>
+                <th>Kết quả</th>
+              </tr>
+            </thead>
+            <tbody id="boardHistory"></tbody>
+          </table>
+        </div>
+        <p id="boardHistoryEmpty" class="board-note" hidden>Chưa có video nào.</p>
       </section>
       <p id="videoStatus" class="lead" hidden></p>
       <section class="panel" id="freshBox" hidden>
@@ -1585,6 +1639,52 @@
       const percent = Math.max(0, Math.min(100, Number(item.percent) || 0));
       return task + " · " + percent + "%.";
     }
+    function numCell(value) {
+      const td = document.createElement("td");
+      td.className = "num";
+      td.textContent = String(Math.max(0, Number(value) || 0));
+      return td;
+    }
+    function videoTitle(item) {
+      const wrap = document.createElement("div");
+      const name = document.createElement("span");
+      name.className = "video-name";
+      name.textContent = item.name || "video";
+      wrap.appendChild(name);
+      if (item.partLabel) {
+        const note = document.createElement("span");
+        note.className = "video-note";
+        note.textContent = item.partLabel;
+        wrap.appendChild(note);
+      }
+      return wrap;
+    }
+    function attachRetry(host, item) {
+      if (item.state !== "failed" || !item.canContinue) return;
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "board-retry";
+      retry.textContent = "Đọc lại";
+      retry.addEventListener("click", async () => {
+        retry.disabled = true;
+        try {
+          const response = await fetch("/v1/recordings/jobs/" + encodeURIComponent(item.jobId) + "/continue", {
+            method: "POST",
+            headers: headers(),
+          });
+          if (!response.ok) {
+            retry.textContent = "Chưa đọc lại được";
+            retry.disabled = false;
+            return;
+          }
+          loadBoard();
+        } catch (error) {
+          retry.textContent = "Chưa đọc lại được";
+          retry.disabled = false;
+        }
+      });
+      host.appendChild(retry);
+    }
     function renderBoardList(host, items, kind) {
       host.replaceChildren();
       if (!items.length) {
@@ -1646,55 +1746,68 @@
           });
           box.appendChild(list);
         }
-        if (kind === "history" && item.state === "failed" && item.canContinue) {
-          const retry = document.createElement("button");
-          retry.type = "button";
-          retry.className = "board-retry";
-          retry.textContent = "Đọc lại";
-          retry.addEventListener("click", async () => {
-            retry.disabled = true;
-            try {
-              const response = await fetch("/v1/recordings/jobs/" + encodeURIComponent(item.jobId) + "/continue", {
-                method: "POST",
-                headers: headers(),
-              });
-              if (!response.ok) {
-                retry.textContent = "Chưa đọc lại được";
-                retry.disabled = false;
-                return;
-              }
-              loadBoard();
-            } catch (error) {
-              retry.textContent = "Chưa đọc lại được";
-              retry.disabled = false;
-            }
-          });
-          box.appendChild(retry);
-        }
         host.appendChild(box);
       });
     }
     function renderPhoneSummary(phones) {
       const host = $("boardPhones");
-      if (!host) return;
+      const table = $("boardPhoneTable");
+      const empty = $("boardPhoneEmpty");
+      if (!host || !table || !empty) return;
       host.replaceChildren();
       const rows = Array.isArray(phones) ? phones : [];
-      if (!rows.length) {
-        const empty = document.createElement("p");
-        empty.className = "board-note";
-        empty.textContent = "Chưa có báo cáo trong 24 giờ.";
-        host.appendChild(empty);
-        return;
-      }
+      table.hidden = !rows.length;
+      empty.hidden = rows.length > 0;
       rows.forEach((item) => {
-        const line = document.createElement("p");
-        line.className = "board-note";
-        const source = item.source || "Máy";
-        const videos = Math.max(0, Number(item.videos) || 0);
-        const saved = Math.max(0, Number(item.saved) || 0);
-        const failed = Math.max(0, Number(item.failed) || 0);
-        line.textContent = source + ": " + videos + " video, ghi được " + saved + " người, " + failed + " video lỗi.";
-        host.appendChild(line);
+        const tr = document.createElement("tr");
+        const machine = document.createElement("td");
+        machine.className = "machine";
+        machine.textContent = item.source || "Máy";
+        tr.appendChild(machine);
+        tr.appendChild(numCell(item.videos));
+        tr.appendChild(numCell(item.saved));
+        tr.appendChild(numCell(item.failed));
+        host.appendChild(tr);
+      });
+    }
+    function renderHistoryTable(items) {
+      const host = $("boardHistory");
+      const table = $("boardHistoryTable");
+      const empty = $("boardHistoryEmpty");
+      if (!host || !table || !empty) return;
+      host.replaceChildren();
+      const rows = Array.isArray(items) ? items : [];
+      table.hidden = !rows.length;
+      empty.hidden = rows.length > 0;
+      rows.forEach((item) => {
+        const tr = document.createElement("tr");
+        const when = document.createElement("td");
+        when.className = "when";
+        when.textContent = boardWhen(item) || "—";
+        tr.appendChild(when);
+        const machine = document.createElement("td");
+        machine.className = "machine";
+        machine.textContent = item.source || "—";
+        tr.appendChild(machine);
+        const video = document.createElement("td");
+        video.appendChild(videoTitle(item));
+        tr.appendChild(video);
+        tr.appendChild(numCell(item.seenContacts));
+        tr.appendChild(numCell(item.seenAccounts));
+        tr.appendChild(numCell(item.savedPeople));
+        const result = document.createElement("td");
+        const label = document.createElement("span");
+        if (item.state === "done") {
+          label.className = "ok";
+          label.textContent = "Đã ghi";
+        } else {
+          label.className = "bad";
+          label.textContent = item.error || "Gặp vấn đề";
+        }
+        result.appendChild(label);
+        attachRetry(result, item);
+        tr.appendChild(result);
+        host.appendChild(tr);
       });
     }
     async function loadBoard() {
@@ -1705,7 +1818,7 @@
         const data = await response.json();
         renderBoardList($("boardActive"), data.active || [], "active");
         renderBoardList($("boardQueued"), data.queued || [], "queue");
-        renderBoardList($("boardHistory"), data.history || [], "history");
+        renderHistoryTable(data.history || []);
         renderPhoneSummary(data.phones || []);
       } catch (error) { /* giữ bảng cũ */ }
     }
