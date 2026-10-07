@@ -175,10 +175,10 @@
     <div data-sheet="work">
     <details class="card help">
       <summary>Cách dùng</summary>
-      <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. Đọc 4 hình mỗi giây trên cả video. Đoạn không ra tên hoặc tài khoản thì đọc lại đúng đoạn đó ở 8 hình mỗi giây. Thoát trang hoặc mở app khác không dừng việc đọc. Sau khi máy chủ nhận đủ video, máy chủ và PC đọc tiếp. Nếu chưa gửi hết, máy này gửi nốt ở nền và khi mở lại trang thì nối tiếp, không cần chọn lại video. PC chỉ có CPU đọc tối đa hai video. PC có GPU đọc tối đa bốn video. Một video thì dùng 80% CPU và RAM của PC suốt thời gian máy đó đang nối. Hai video thì chia đôi phần 80% đó. Máy chủ đọc bằng 90% CPU và RAM của VPS. Có hai PC thì video từ 4 phút được chia đôi cho hai máy. PC có card NVIDIA thì đọc bằng GPU. Dán link hồ sơ hoặc chữ hệ thống, hoặc Chia sẻ từ TikTok / Facebook / Instagram, để lấy @handle đúng chữ, không đọc lại bằng Tesseract. <a href="/tai-pc">Tải phần mềm cho PC</a>. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
+      <p class="lead">Bấm Bắt đầu ghi. Trang ghi màn hình liên tục và đọc tên, tài khoản, chữ nhìn thấy đến khi bạn bấm Dừng ghi. Chọn video, kể cả nhiều video cùng lúc, thì hub đọc ngay và tự lưu, không cần bấm phát. Không giới hạn số video, dung lượng hay thời lượng. Đọc 4 hình mỗi giây trên cả video. Đoạn không ra tên hoặc tài khoản thì đọc lại đúng đoạn đó ở 8 hình mỗi giây. Thoát trang hoặc mở app khác không dừng việc đọc. Sau khi máy chủ nhận đủ video, máy chủ và PC đọc tiếp. Nếu chưa gửi hết, máy này gửi nốt ở nền và khi mở lại trang thì nối tiếp, không cần chọn lại video. PC chỉ có CPU đọc tối đa hai video. PC có GPU đọc tối đa bốn video. Một video thì dùng 80% CPU và RAM của PC suốt thời gian máy đó đang nối. Hai video thì chia đôi phần 80% đó. Máy chủ đọc bằng 95% CPU và RAM của VPS suốt thời gian hub chạy. Có hai PC thì video từ 4 phút được chia đôi cho hai máy. PC có card NVIDIA thì đọc bằng GPU. Dán link hồ sơ hoặc chữ hệ thống, hoặc Chia sẻ từ TikTok / Facebook / Instagram, để lấy @handle đúng chữ, không đọc lại bằng Tesseract. <a href="/tai-pc">Tải phần mềm cho PC</a>. <a href="/cai-app">Cài app để đọc ứng dụng khác</a>.</p>
     </details>
     <section class="card" id="nowBox">
-      <p id="helperLine">PC phụ chưa nối. Video được máy chủ đọc bằng 90% CPU và RAM của VPS.</p>
+      <p id="helperLine">PC phụ chưa nối. Video được máy chủ đọc bằng 95% CPU và RAM của VPS suốt thời gian hub chạy.</p>
       <p id="awakeNote" hidden></p>
       <p id="status" hidden></p>
     </section>
@@ -704,7 +704,7 @@
         const used = Number(helper.workers) || 0;
         const gpu = Number(helper.gpu) || 0;
         if (!helper.connected || count < 1) {
-          helperLine.textContent = "PC phụ chưa nối. Video được máy chủ đọc bằng 90% CPU và RAM của VPS.";
+          helperLine.textContent = "PC phụ chưa nối. Video được máy chủ đọc bằng 95% CPU và RAM của VPS suốt thời gian hub chạy.";
           return;
         }
         let line;

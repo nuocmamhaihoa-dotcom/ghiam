@@ -148,7 +148,7 @@ def _segment_count() -> int:
 
 
 def ocr_workers(frame_count: int, cpu_count: int, reserve: int | None = None) -> int:
-    """Số tiến trình Tesseract. Máy chủ giữ 10% lõi. PC giữ 20% suốt thời gian nối."""
+    """Số tiến trình Tesseract. Máy chủ giữ 5% lõi. PC giữ 20% suốt thời gian nối."""
     if reserve is None:
         raw = os.environ.get("CONTROL_OCR_RESERVE", "1")
         try:
@@ -161,7 +161,7 @@ def ocr_workers(frame_count: int, cpu_count: int, reserve: int | None = None) ->
 
 
 def _ffmpeg_thread_count() -> str:
-    """0 là ffmpeg tự dùng hết lõi. Máy chủ đặt 90% lõi. PC đặt 80% lõi."""
+    """0 là ffmpeg tự dùng hết lõi. Máy chủ đặt 95% lõi. PC đặt 80% lõi."""
     raw = os.environ.get("CONTROL_FFMPEG_THREADS", "0").strip()
     if raw.isdigit():
         return raw

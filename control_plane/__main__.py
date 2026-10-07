@@ -15,7 +15,10 @@ from control_plane.settings import settings
 def main() -> None:
     settings.ensure_dirs()
     readers, cpus = apply_hub_share()
-    print(f"Đọc video bằng {readers}/{cpus} lõi (90% CPU và RAM).", file=sys.stderr)
+    print(
+        f"Đọc video bằng {readers}/{cpus} lõi (95% CPU và RAM), suốt thời gian hub chạy.",
+        file=sys.stderr,
+    )
     door_port = int(os.environ.get("CONTROL_DOOR_PORT", "80"))
     start_door(door_port, settings.port, host=settings.host)
     start_watchdog(settings.port)

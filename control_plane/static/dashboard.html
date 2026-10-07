@@ -194,7 +194,7 @@
   <p id="err" class="err" hidden></p>
   <main>
     <section data-view="home">
-      <p class="lead" id="helperLine">PC phụ chưa nối. Video được máy chủ đọc bằng 90% CPU và RAM của VPS.</p>
+      <p class="lead" id="helperLine">PC phụ chưa nối. Video được máy chủ đọc bằng 95% CPU và RAM của VPS suốt thời gian hub chạy.</p>
       <label id="drop" class="drop">
         <strong>Thả video vào đây</strong>
         <span>Hoặc bấm để chọn. Nhiều video một lúc. Hub tự đọc và lưu người nhìn thấy, không cần bấm phát.</span>
@@ -1525,7 +1525,7 @@
           if (Number(timing.fades) > 0) detail += " Bỏ " + timing.fades + " khung mờ lúc chuyển trang.";
           $("helperLine").textContent = "PC phụ đang nối: " + (helper.count || 1) + " máy, " + (helper.cores || helper.cpus || 0) + " lõi" + share + gpu + ". Mỗi máy đọc tối đa hai video. Máy GPU đọc tối đa bốn video." + split + state + detail;
         } else {
-          $("helperLine").textContent = "PC phụ chưa nối. Video được máy chủ đọc bằng 90% CPU và RAM của VPS. Mở phần mềm PC nếu muốn máy tính đọc giúp.";
+          $("helperLine").textContent = "PC phụ chưa nối. Video được máy chủ đọc bằng 95% CPU và RAM của VPS suốt thời gian hub chạy. Mở phần mềm PC nếu muốn máy tính đọc giúp.";
         }
       } catch (error) { /* trang vẫn nhận video khi chưa hỏi được máy phụ */ }
     }

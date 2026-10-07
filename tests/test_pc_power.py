@@ -23,13 +23,33 @@ class PowerBudgetTests(unittest.TestCase):
         self.assertEqual(idle_budget(20, 2 * 1024 * 1024 * 1024), 6)
         self.assertEqual(idle_budget(20, 100 * 1024 * 1024), 1)
 
-    def test_the_hub_keeps_ten_percent(self) -> None:
-        from control_plane.read_budget import share_budget
+    def test_the_hub_keeps_five_percent(self) -> None:
+        from control_plane.read_budget import HUB_SHARE_PERCENT, share_budget
 
-        self.assertEqual(share_budget(20, 32 * 1024 * 1024 * 1024, 90), (18, 2))
-        self.assertEqual(share_budget(4, None, 90), (3, 1))
-        self.assertEqual(share_budget(1, None, 90), (1, 0))
-        self.assertEqual(share_budget(20, 2 * 1024 * 1024 * 1024, 90), (7, 13))
+        self.assertEqual(HUB_SHARE_PERCENT, 95)
+        self.assertEqual(share_budget(20, 32 * 1024 * 1024 * 1024, 95), (19, 1))
+        self.assertEqual(share_budget(8, None, 95), (7, 1))
+        self.assertEqual(share_budget(4, None, 95), (3, 1))
+        self.assertEqual(share_budget(1, None, 95), (1, 0))
+        self.assertEqual(share_budget(20, 2 * 1024 * 1024 * 1024, 95), (7, 13))
+
+    def test_the_hub_share_stays_on_for_the_process(self) -> None:
+        from control_plane.read_budget import apply_hub_share
+
+        keys = ("CONTROL_OCR_RESERVE", "CONTROL_FFMPEG_THREADS", "CONTROL_READER_LIMIT")
+        saved = {key: os.environ.get(key) for key in keys}
+        try:
+            workers, cpus = apply_hub_share()
+            self.assertEqual(os.environ["CONTROL_FFMPEG_THREADS"], str(workers))
+            self.assertEqual(os.environ["CONTROL_READER_LIMIT"], str(workers))
+            self.assertEqual(int(os.environ["CONTROL_OCR_RESERVE"]) + workers, cpus)
+            self.assertGreaterEqual(workers, 1)
+        finally:
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
     def test_budget_rises_after_the_idle_wait_and_drops_at_once(self) -> None:
         budget = pc_power.PowerBudget(16, 19, idle_after=120)
