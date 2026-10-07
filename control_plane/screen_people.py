@@ -443,15 +443,25 @@ def _profile_sighting(lines: list[TextLine]) -> dict[str, str] | None:
     return {"kind": "profile", "name": name, "contactName": "", "username": username}
 
 
+def _single_profile_screen(lines: list[TextLine]) -> bool:
+    """Một @ và có tên ngay phía trên hoặc cùng dòng. Tiểu sử không làm mất @."""
+    handles = list(dict.fromkeys(handle for line in lines for handle in _valid_handles(line.text)))
+    if len(handles) != 1:
+        return False
+    return _profile_pick(lines) is not None
+
+
 def sightings_from_lines(lines: list[TextLine]) -> list[dict[str, str]]:
-    """Danh bạ cho cặp tên. Hồ sơ cho một tên và đúng một @."""
+    """Danh bạ cho cặp tên. @ chỉ gắn với tên ngay phía trên nó."""
     pairs = _contact_sightings(lines)
-    if _is_contacts(lines) or len(pairs) >= 2:
+    if not _single_profile_screen(lines):
         return pairs
     profile = _profile_sighting(lines)
-    if profile is not None:
-        return [profile]
-    return pairs
+    if profile is None:
+        return pairs
+    if _is_contacts(lines) or pairs:
+        return [*pairs, profile]
+    return [profile]
 
 
 def _edit_distance(left: str, right: str, limit: int) -> int:
@@ -531,6 +541,93 @@ def _mode(values: list[str]) -> str:
     return max(values, key=lambda value: (values.count(value), len(value)))
 
 
+def _same_trailing_name(left: str, right: str) -> bool:
+    """Cùng một người khi tên dài hơn chỉ thêm một cụm cuối, hoặc cụm cuối bị đọc cụt."""
+    left_words = fold_name(left).split()
+    right_words = fold_name(right).split()
+    if not left_words or not right_words or left_words == right_words:
+        return False
+    short, long = (left_words, right_words) if len(left_words) <= len(right_words) else (right_words, left_words)
+    if len(short) < 3:
+        return False
+    if long[: len(short)] == short:
+        return len(long) - len(short) <= 2
+    if len(short) < 4 or len(short) != len(long) or short[:-1] != long[:-1]:
+        return False
+    smaller, larger = (short[-1], long[-1]) if len(short[-1]) <= len(long[-1]) else (long[-1], short[-1])
+    return larger.startswith(smaller) or len(smaller) <= 2
+
+
+def _person_label(key: str, contacts: dict[str, list[tuple[str, str]]], profiles: dict[str, list[tuple[str, str]]]) -> str:
+    raws = [name for name, _extra in contacts.get(key, [])] + [name for name, _extra in profiles.get(key, [])]
+    if not raws:
+        return key
+    return max(raws, key=lambda name: (len(fold_name(name).split()), len(name)))
+
+
+def _merge_truncated_people(
+    contacts: dict[str, list[tuple[str, str]]],
+    profiles: dict[str, list[tuple[str, str]]],
+    order: list[str],
+) -> tuple[dict[str, list[tuple[str, str]]], dict[str, list[tuple[str, str]]], list[str]]:
+    """Gộp tên lệch một cụm cuối vào tên dài hơn, rồi giữ một tài khoản."""
+    keys = list(dict.fromkeys(order))
+    if len(keys) < 2:
+        return contacts, profiles, order
+    labels = {key: _person_label(key, contacts, profiles) for key in keys}
+    parent = {key: key for key in keys}
+
+    def find(key: str) -> str:
+        while parent[key] != key:
+            parent[key] = parent[parent[key]]
+            key = parent[key]
+        return key
+
+    def longer(left: str, right: str) -> str:
+        left_label = labels[left]
+        right_label = labels[right]
+        left_rank = (len(fold_name(left_label).split()), len(left_label))
+        right_rank = (len(fold_name(right_label).split()), len(right_label))
+        return left if left_rank >= right_rank else right
+
+    for index, left in enumerate(keys):
+        for right in keys[index + 1 :]:
+            if not _same_trailing_name(labels[left], labels[right]):
+                continue
+            keep = longer(find(left), find(right))
+            drop = find(right) if keep == find(left) else find(left)
+            if keep != drop:
+                parent[drop] = keep
+    grouped_contacts: dict[str, list[tuple[str, str]]] = {}
+    grouped_profiles: dict[str, list[tuple[str, str]]] = {}
+    new_order: list[str] = []
+    seen: set[str] = set()
+    for key in keys:
+        root = find(key)
+        if key in contacts:
+            grouped_contacts.setdefault(root, []).extend(contacts[key])
+        if key in profiles:
+            grouped_profiles.setdefault(root, []).extend(profiles[key])
+        if root not in seen:
+            seen.add(root)
+            new_order.append(root)
+    return grouped_contacts, grouped_profiles, new_order
+
+
+def _shared_usernames(profiles: dict[str, list[tuple[str, str]]]) -> set[str]:
+    """Một @ đứng với hai tên khác nhau thì không thuộc về ai."""
+    owner: dict[str, str] = {}
+    shared: set[str] = set()
+    for key, pairs in profiles.items():
+        for _name, username in pairs:
+            previous = owner.get(username)
+            if previous is None:
+                owner[username] = key
+            elif previous != key:
+                shared.add(username)
+    return shared
+
+
 def _accepted_sighting(item: dict[str, str]) -> tuple[str, str] | None:
     """Tên đã lọc và loại lần nhìn. Câu giao diện, mã lẫn chữ số và tài khoản nút không tính."""
     name = _literal_name(item.get("name") or "")
@@ -589,18 +686,29 @@ def propose_rows(sightings: list[dict[str, str]]) -> list[dict[str, str]]:
             if key not in contacts and key not in profiles:
                 order.append(key)
             profiles.setdefault(key, []).append((name, username))
+    contacts, profiles, order = _merge_truncated_people(contacts, profiles, order)
+    shared = _shared_usernames(profiles)
+    if shared:
+        for key, pairs in list(profiles.items()):
+            kept_pairs = [pair for pair in pairs if pair[1] not in shared]
+            if kept_pairs:
+                profiles[key] = kept_pairs
+            else:
+                del profiles[key]
     rows: list[dict[str, str]] = []
     for key in order:
         if key not in contacts or key not in profiles:
             continue
         contact_names = [contact_name for _name, contact_name in contacts[key]]
         usernames = [username for _name, username in profiles[key]]
-        # Tên danh bạ đọc giống nhau 2 lần thì thắng một cách đọc khác. Tài khoản vẫn cần lệch rõ hơn.
+        # Tên danh bạ đọc giống nhau 2 lần thì thắng một cách đọc khác.
+        # Tài khoản chỉ lấy trên trang hồ sơ, và phải nhiều gấp ba lần cách đọc khác.
         chosen_contacts = _winning_spellings(contact_names, _near_contact, minimum=2, multiple=1)
-        chosen_usernames = _winning_spellings(usernames, _near_username, minimum=2, multiple=1)
+        chosen_usernames = _winning_spellings(usernames, _near_username, minimum=2, multiple=3)
         if not chosen_contacts or not chosen_usernames:
             continue
-        display = _richer_name([name for name, _extra in contacts[key] + profiles[key]])
+        names = [name for name, _extra in contacts[key] + profiles[key]]
+        display = max(names, key=lambda name: (len(fold_name(name).split()), _mark_count(name), len(name)))
         rows.append(
             {
                 "name": display,
@@ -1258,11 +1366,11 @@ def _apply_line_votes(
     if _valid_handles(text) or text.strip().startswith("@"):
         handle_box = _line_box(line, tsv, source.width, "handle")
         voted, handle_agreed = _vote_box(source, handle_box, dest, "handle", text, memo, frame_id)
-        if handle_agreed and voted and learner is not None and learn:
+        if handle_agreed and voted and learner is not None and learn and not list_frame:
             learner.learn_handle(handle_box[1], handle_box[1] + handle_box[3])
         sure = _handle_conf(tsv, voted or text)
         if voted and (handle_agreed or (sure is not None and sure >= _HANDLE_CONF)):
-            if handle_agreed:
+            if handle_agreed and not list_frame:
                 agreed_handle = voted
             for old in _valid_handles(text):
                 text = text.replace(old, voted)
@@ -1404,7 +1512,7 @@ def tighten_frame_reading(
             frame_id,
             learner,
             scroll_list or _list_frame(lines),
-            not rescued,
+            not rescued and not scroll_list and _single_profile_screen(lines),
         )
 
     found = sightings_from_lines(updated)
@@ -1430,15 +1538,6 @@ def tighten_frame_reading(
             continue
         if kind == "contact" and name and contact:
             kept.append({"kind": "contact", "name": name, "contactName": contact, "username": ""})
-    if agreed_handles and not any(item.get("kind") == "profile" for item in kept):
-        names = [line for line in updated if _is_name_line(line.text)]
-        if names:
-            name = clean_name(names[-1].text)
-            name_conf = name_min_conf(tsv, name)
-            if name and (name in agreed_names or name_conf is None or name_conf >= _NAME_CONF):
-                kept.append(
-                    {"kind": "profile", "name": name, "contactName": "", "username": agreed_handles[0]}
-                )
     if source is not None and agreed_handles and any(item.get("kind") == "profile" for item in kept):
         if rescued:
             learner.note("rescued")
