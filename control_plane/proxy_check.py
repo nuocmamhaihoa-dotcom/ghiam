@@ -231,6 +231,8 @@ async def _checker_loop() -> None:
 
 def start_background_checker() -> None:
     global _checker_task
+    if settings.proxy_check_interval_sec <= 0:
+        return
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
