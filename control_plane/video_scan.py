@@ -36,16 +36,17 @@ VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mkv", ".avi", ".webm"}
 SCAN_FPS = 15.0
 THUMB_W = 48
 THUMB_H = 104
-# ~0.2s đứng yên là đủ đưa khung vào hàng đọc — mở hồ sơ rồi thoát nhanh vẫn bắt được.
-SETTLE_LAG = 3
+# ~0.1s @15fps: hai khung liên tiếp giống nhau (~67–133ms) là đủ đưa vào hàng đọc.
+SETTLE_LAG = 1
 SETTLED = 3.5
 # Hai hồ sơ khác nhau gần như cùng một màn hình trắng, nên ngưỡng "đã đổi cảnh" phải rất thấp.
 CHANGED = 1.2
 MOVING = 2.5
+# Hồ sơ vs danh bạ lệch rất mạnh; dùng ngưỡng cao để bắt spike 1 khung mà không lấy hết khung lúc cuộn.
+FLASH_CHANGED = 12.0
 TAP_WINDOW = 5
-# Số khung cuối của mỗi lần bắt đầu chuyển cảnh cũng OCR thường (không chỉ tìm chấm bấm).
-# Khi thoát hồ sơ nhanh, các khung này chính là trang hồ sơ chưa kịp "đứng yên".
-BRIEF_EXIT_READS = 2
+# OCR thường toàn bộ khung trong cửa sổ trước lúc chuyển cảnh (không chỉ tìm chấm bấm).
+BRIEF_EXIT_READS = TAP_WINDOW
 
 Submit = Callable[..., Future]
 
@@ -233,25 +234,35 @@ class _Planner:
 
     Đứng yên: khung giống khung SETTLE_LAG bước sau. Giữ khi khác khung đã giữ.
     Bắt đầu chuyển: bước đầu tiên có độ khác lớn. Lấy TAP_WINDOW khung ngay trước đó.
-    Màn hình đứng rất ngắn (mở hồ sơ rồi thoát) cũng được giữ khi vừa bắt đầu chuyển.
+    Hồ sơ chỉ ló 1 khung (danh bạ → hồ sơ → danh bạ) bắt bằng spike giữa hai cạnh chuyển động.
     """
 
     def __init__(self) -> None:
         self.ring: deque[np.ndarray] = deque(maxlen=SETTLE_LAG + 1)
+        self.history: deque[tuple[int, np.ndarray]] = deque(maxlen=TAP_WINDOW + 3)
         self.last_kept: np.ndarray | None = None
         self.was_moving = False
+        self.spike_kept = False
         self.count = 0
         self.plan = VideoPlan()
 
     def push(self, thumb: np.ndarray) -> None:
         number = self.count
         self.count += 1
-        if self.ring:
-            moving = _mean_abs(self.ring[-1], thumb) >= MOVING
+        if self.history:
+            prev_number, prev = self.history[-1]
+            moving = _mean_abs(prev, thumb) >= MOVING
+            if len(self.history) >= 2:
+                pre_number, pre = self.history[-2]
+                self._keep_spike(prev_number, prev, pre, thumb)
             if moving and not self.was_moving:
-                self._tap_window(number - 1)
-                self._keep_brief_scene(number - 1, self.ring[-1])
+                self._tap_window(prev_number)
+                self._keep_brief_scene(prev_number)
+                self.spike_kept = False
+            if not moving and self.was_moving:
+                self.spike_kept = False
             self.was_moving = moving
+        self.history.append((number, thumb.copy()))
         self.ring.append(thumb)
         if len(self.ring) == SETTLE_LAG + 1:
             self._consider(number - SETTLE_LAG, self.ring[0], thumb)
@@ -274,16 +285,38 @@ class _Planner:
         self.plan.reads.append(number)
         self.last_kept = thumb
 
-    def _keep_brief_scene(self, number: int, thumb: np.ndarray) -> None:
-        """Hồ sơ mở dưới ngưỡng đứng yên: vẫn đọc khung cuối trước lúc chuyển cảnh."""
+    def _keep_brief_scene(self, number: int) -> None:
+        """Hồ sơ mở ~0.1s: đọc các khung đứng yên vừa có trước lúc chuyển cảnh."""
         if number < 0:
             return
-        if self.last_kept is not None and _mean_abs(thumb, self.last_kept) < CHANGED:
+        for frame_number, frame in self.history:
+            if frame_number > number:
+                continue
+            if self.last_kept is not None and _mean_abs(frame, self.last_kept) < CHANGED:
+                continue
+            if frame_number in self.plan.reads:
+                continue
+            if self.plan.reads and frame_number < self.plan.reads[-1]:
+                continue
+            self.plan.reads.append(frame_number)
+            self.last_kept = frame.copy()
+
+    def _keep_spike(self, mid_number: int, mid: np.ndarray, left: np.ndarray, right: np.ndarray) -> None:
+        """Hó hồ sơ 1 khung: hai bên giống nhau (về lại danh bạ), khung giữa khác hẳn."""
+        if self.spike_kept or mid_number < 0:
             return
-        if self.plan.reads and number - self.plan.reads[-1] <= 1:
+        if _mean_abs(mid, left) < MOVING or _mean_abs(mid, right) < MOVING:
             return
-        self.plan.reads.append(number)
-        self.last_kept = thumb.copy()
+        # Cuộn danh bạ: trái/phải cũng đang đổi — không phải mở rồi đóng hồ sơ.
+        if _mean_abs(left, right) >= SETTLED:
+            return
+        if self.last_kept is not None and _mean_abs(mid, self.last_kept) < FLASH_CHANGED:
+            return
+        if mid_number in self.plan.reads:
+            return
+        self.plan.reads.append(mid_number)
+        self.last_kept = mid.copy()
+        self.spike_kept = True
 
     def _tap_window(self, last: int) -> None:
         if last < 0:
