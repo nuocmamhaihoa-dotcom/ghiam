@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import os
+import shutil
 import tempfile
 import unittest
 import zipfile
@@ -21,6 +22,11 @@ Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from control_plane.app import app  # noqa: E402
+from control_plane.settings import settings  # noqa: E402
+
+
+def tearDownModule() -> None:
+    shutil.rmtree(_TMP, ignore_errors=True)
 
 
 class ActionApiTests(unittest.TestCase):
@@ -150,11 +156,60 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Thêm video", response.text)
         self.assertIn("Tải bản sao lưu về PC", response.text)
         self.assertIn("Thống kê", response.text)
-        self.assertIn('var serverToken = "test-token";', response.text)
+        self.assertIn('var serverToken = "%s";' % settings.page_token, response.text)
+        self.assertNotIn("test-token", response.text)
         self.assertNotIn("__CONTROL_TOKEN__", response.text)
         self.assertNotIn("Mã kết nối", response.text)
         self.assertNotIn("Check proxy ngay", response.text)
         self.assertNotIn("Mở giả lập điện thoại trên PC", response.text)
+
+    def test_page_token_opens_only_the_video_api(self) -> None:
+        page = {"Authorization": f"Bearer {settings.page_token}"}
+        self.assertTrue(settings.page_token)
+        self.assertNotEqual(settings.page_token, "test-token")
+        self.assertEqual(self.client.get("/v1/videos/stats", headers=page).status_code, 200)
+        self.assertEqual(self.client.get("/v1/results", headers=page).status_code, 200)
+        self.assertEqual(self.client.post("/v1/backup/ticket", headers=page).status_code, 200)
+        self.assertEqual(self.client.get("/v1/actions", headers=page).status_code, 401)
+        self.assertEqual(self.client.get("/v1/agents", headers=page).status_code, 401)
+        self.assertEqual(
+            self.client.post("/v1/updates/packages/upload", headers=page, files={"file": ("x.zip", b"x")}).status_code,
+            401,
+        )
+        self.assertEqual(self.client.get("/v1/actions", headers=self.headers).status_code, 200)
+
+    def test_api_docs_are_not_published(self) -> None:
+        for path in ("/docs", "/redoc", "/openapi.json"):
+            self.assertEqual(self.client.get(path).status_code, 404, path)
+
+    def test_backup_ticket_cannot_be_forged_or_reused_after_expiry(self) -> None:
+        from control_plane.video_api import make_ticket, ticket_ok
+
+        ticket = make_ticket(1000.0)
+        self.assertTrue(ticket_ok(ticket, 1000.0))
+        self.assertFalse(ticket_ok(ticket, 1000.0 + 601))
+        expiry, _, signature = ticket.partition("-")
+        self.assertFalse(ticket_ok(f"{int(expiry) + 3600}-{signature}", 1000.0))
+        self.assertFalse(ticket_ok("garbage", 1000.0))
+        self.assertEqual(self.client.get(f"/v1/backup/{expiry}-{'0' * 32}").status_code, 404)
+
+    def test_same_video_after_it_is_read_is_read_again(self) -> None:
+        from control_plane.video_store import connect
+
+        first = self.client.post(
+            "/v1/videos", headers=self.headers, files={"file": ("again.mp4", b"read-me-twice", "video/mp4")}
+        )
+        video_id = first.json()["id"]
+        with connect(settings.video_db_path) as conn:
+            conn.execute("UPDATE videos SET status = 'done', path = '' WHERE id = ?", (video_id,))
+        second = self.client.post(
+            "/v1/videos", headers=self.headers, files={"file": ("again.mp4", b"read-me-twice", "video/mp4")}
+        )
+        self.assertEqual(second.status_code, 200, second.text)
+        self.assertFalse(second.json()["duplicate"])
+        self.assertEqual(second.json()["id"], video_id)
+        self.assertEqual(second.json()["status"], "queued")
+        self.assertNotIn("old_path", second.json())
 
     def test_phone_emulator_page(self) -> None:
         response = self.client.get("/phone")

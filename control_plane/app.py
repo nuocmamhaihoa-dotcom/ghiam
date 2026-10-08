@@ -49,7 +49,13 @@ from control_plane.video_store import merge_close_results
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
-app = FastAPI(title="fb-poller high-bandwidth control plane", version="1.3.0")
+app = FastAPI(
+    title="fb-poller high-bandwidth control plane",
+    version="1.3.0",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 app.include_router(video_router)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
@@ -183,7 +189,7 @@ def _html(name: str) -> HTMLResponse:
     if not path.exists():
         return HTMLResponse("<p>Missing page.</p>", status_code=404)
     text = path.read_text(encoding="utf-8").replace("__IPHONE_BUILD__", str(IPHONE_BUILD))
-    baked = json.dumps(settings.token or "").replace("<", "\\u003c")
+    baked = json.dumps(settings.page_token or "").replace("<", "\\u003c")
     text = text.replace("__CONTROL_TOKEN__", baked)
     return HTMLResponse(text, headers={"Cache-Control": "no-cache"})
 

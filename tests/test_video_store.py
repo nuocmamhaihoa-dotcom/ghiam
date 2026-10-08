@@ -10,6 +10,7 @@ from pathlib import Path
 
 from control_plane.screen_table import Review, Row, Table, Unopened
 from control_plane.video_store import (
+    abort_upload,
     begin_upload,
     can_accept,
     claim,
@@ -18,6 +19,7 @@ from control_plane.video_store import (
     finish,
     init_db,
     iter_backup,
+    list_videos,
     merge_close_results,
     queued_bytes,
     recover_dead,
@@ -187,6 +189,44 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual([item["phone"] for item in search_results(self.db, "dangtam")], ["0982117072"])
         self.assertEqual([item["phone"] for item in search_results(self.db, "@khac")], ["0332001753"])
         self.assertEqual(search_results(self.db, "0999"), [])
+
+    def test_finished_video_can_be_uploaded_again_and_reread(self) -> None:
+        video_id = self._add("a.mp4", "same")
+        claim(self.db, 7)
+        finish(self.db, video_id, Table())
+        again = begin_upload(self.db, name="a.mp4", size_bytes=10, sha256="same")
+        self.assertFalse(again["duplicate"])
+        self.assertTrue(again["reopened"])
+        self.assertEqual(again["id"], video_id)
+        self.assertEqual(stats(self.db)["uploading"], 1)
+        abort_upload(self.db, video_id, reopened=True)
+        self.assertEqual(stats(self.db)["error"], 1)
+        self.assertEqual(len(list_videos(self.db)), 1)
+
+    def test_video_waiting_in_the_queue_is_still_a_duplicate(self) -> None:
+        self._add("a.mp4", "same")
+        again = begin_upload(self.db, name="a.mp4", size_bytes=10, sha256="same")
+        self.assertTrue(again["duplicate"])
+
+    def test_error_videos_kept_on_disk_count_toward_the_limit(self) -> None:
+        video_id = self._add("a.mp4", "err", size=500)
+        claim(self.db, 7)
+        fail(self.db, video_id, "hỏng")
+        self.assertEqual(queued_bytes(self.db), 500)
+
+    def test_unopened_phone_keeps_the_username_seen_later(self) -> None:
+        first = self._add("a.mp4", "a")
+        finish(self.db, first, Table(unopened=[Unopened("0332001753", "khactam")]))
+        second = self._add("b.mp4", "b")
+        finish(
+            self.db,
+            second,
+            Table(review=[Review("0332001753", "khactam", "", "@khactam60", "không đọc được tên hồ sơ")]),
+        )
+        found = search_results(self.db, "0332001753")[0]
+        self.assertEqual(found["username"], "@khactam60")
+        self.assertEqual(found["bucket"], "Cần xem")
+        self.assertEqual((stats(self.db)["review"], stats(self.db)["unopened"]), (1, 0))
 
     def test_startup_returns_half_read_videos_to_the_queue(self) -> None:
         self._add("a.mp4", "a")

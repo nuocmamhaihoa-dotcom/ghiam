@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def derive_secret(secret: str, label: str) -> str:
+    if not secret:
+        return ""
+    return hmac.new(secret.encode("utf-8"), label.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
 
 
 class ServerSettings:
@@ -11,6 +19,8 @@ class ServerSettings:
         self.host = os.environ.get("CONTROL_HOST", "0.0.0.0")
         self.port = int(os.environ.get("CONTROL_PORT", "8088"))
         self.token = os.environ.get("CONTROL_TOKEN", "")
+        # Trang video tự điền mã này vào trình duyệt, nên nó chỉ mở được API video, không mở API quản trị cũ.
+        self.page_token = os.environ.get("CONTROL_PAGE_TOKEN", "") or derive_secret(self.token, "video-page")
         self.data_dir = Path(os.environ.get("CONTROL_DATA_DIR", ROOT / "control_data"))
         self.packages_dir = Path(os.environ.get("CONTROL_PACKAGES_DIR", self.data_dir / "packages"))
         self.db_path = Path(os.environ.get("CONTROL_DB", self.data_dir / "server.db"))

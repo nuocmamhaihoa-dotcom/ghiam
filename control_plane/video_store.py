@@ -130,9 +130,13 @@ def init_db(db_path: Path) -> None:
 
 
 def queued_bytes(db_path: Path) -> int:
+    """Dung lượng video còn nằm trên đĩa, kể cả video lỗi được giữ lại để bấm Đọc lại."""
     with connect(db_path) as conn:
         row = conn.execute(
-            "SELECT COALESCE(SUM(size_bytes), 0) AS n FROM videos WHERE status IN ('uploading', 'queued', 'running')"
+            """
+            SELECT COALESCE(SUM(size_bytes), 0) AS n FROM videos
+            WHERE status IN ('uploading', 'queued', 'running') OR (status = 'error' AND path != '')
+            """
         ).fetchone()
     return int(row["n"])
 
@@ -144,9 +148,29 @@ def can_accept(used_bytes: int, new_bytes: int, limit_bytes: int, free_bytes: in
 
 
 def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str) -> dict[str, object]:
+    """Cùng một file đang chờ hoặc đang đọc thì bỏ qua. Đã đọc xong hoặc lỗi thì đọc lại bằng bộ đọc hiện tại."""
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
-        existing = conn.execute("SELECT id, status, name FROM videos WHERE sha256 = ?", (sha256,)).fetchone()
+        existing = conn.execute("SELECT id, status, name, path FROM videos WHERE sha256 = ?", (sha256,)).fetchone()
+        if existing and existing["status"] in ("done", "error"):
+            conn.execute(
+                """
+                UPDATE videos
+                SET name = ?, size_bytes = ?, path = '', status = 'uploading', error = '',
+                    pid = NULL, started_at = NULL, finished_at = NULL, created_at = ?
+                WHERE id = ?
+                """,
+                (name, size_bytes, utcnow(), existing["id"]),
+            )
+            conn.execute("COMMIT")
+            return {
+                "id": int(existing["id"]),
+                "status": "uploading",
+                "name": name,
+                "duplicate": False,
+                "reopened": True,
+                "old_path": existing["path"],
+            }
         if existing:
             conn.execute("COMMIT")
             return {
@@ -174,8 +198,14 @@ def commit_upload(db_path: Path, video_id: int, path: str) -> None:
         )
 
 
-def abort_upload(db_path: Path, video_id: int) -> None:
+def abort_upload(db_path: Path, video_id: int, reopened: bool = False) -> None:
     with connect(db_path) as conn:
+        if reopened:
+            conn.execute(
+                "UPDATE videos SET status = 'error', error = ? WHERE id = ? AND status = 'uploading'",
+                ("Tải lên bị gián đoạn. Tải lại video.", video_id),
+            )
+            return
         conn.execute("DELETE FROM videos WHERE id = ? AND status = 'uploading'", (video_id,))
 
 
@@ -492,10 +522,16 @@ def _drop_lone_username(conn: sqlite3.Connection, username: str, bucket: int) ->
 def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
     if item.phone:
         existing = conn.execute(
-            "SELECT bucket FROM results WHERE phone = ? AND phone != ''",
+            "SELECT id, bucket, username FROM results WHERE phone = ? AND phone != ''",
             (item.phone,),
         ).fetchone()
         if existing is not None:
+            # Số đang "chưa mở hồ sơ" mà video sau đã mở được hồ sơ: giữ username lại để người xem quyết định.
+            if int(existing["bucket"]) == BUCKET_UNOPENED and item.username and not existing["username"]:
+                conn.execute(
+                    "UPDATE results SET username = ?, bucket = ?, reason = ?, video_id = ? WHERE id = ?",
+                    (item.username, BUCKET_REVIEW, item.reason, video_id, existing["id"]),
+                )
             return
         conn.execute(
             """
