@@ -36,6 +36,14 @@ def worker_count() -> int:
     return max(1, cpus - 1)
 
 
+def feeder_count() -> int:
+    """Số video tách khung cùng lúc. Một video đang tách khung thì video kia đang được đọc."""
+    raw = os.environ.get("CONTROL_VIDEO_FEEDERS", "").strip()
+    if raw:
+        return max(1, int(raw))
+    return 3
+
+
 @contextmanager
 def connect(db_path: Path) -> Iterator[sqlite3.Connection]:
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -191,6 +199,28 @@ def claim(db_path: Path, pid: int) -> dict[str, object] | None:
         if cur.rowcount != 1:
             return None
         return {"id": int(row["id"]), "name": row["name"], "path": row["path"]}
+
+
+def requeue(db_path: Path, video_id: int) -> None:
+    with connect(db_path) as conn:
+        conn.execute(
+            "UPDATE videos SET status = 'queued', pid = NULL, started_at = NULL WHERE id = ? AND status = 'running'",
+            (video_id,),
+        )
+
+
+def requeue_running(db_path: Path, keep_pid: int) -> int:
+    """Lúc bộ đọc khởi động, mọi video đang đọc dở thuộc tiến trình cũ đã chết. Không dựa vào pid còn sống,
+    vì sau khi khởi động lại máy, pid cũ có thể đã thuộc về chương trình khác."""
+    with connect(db_path) as conn:
+        cur = conn.execute(
+            """
+            UPDATE videos SET status = 'queued', pid = NULL, started_at = NULL
+            WHERE status = 'running' AND (pid IS NULL OR pid != ?)
+            """,
+            (keep_pid,),
+        )
+        return cur.rowcount
 
 
 def recover_dead(db_path: Path) -> int:

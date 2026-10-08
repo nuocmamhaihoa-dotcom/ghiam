@@ -1,14 +1,20 @@
 """Đọc video trong hàng đợi. Đóng trình duyệt không dừng việc này.
 
-Mỗi tiến trình đọc một video và chỉ dùng một luồng OCR, để đủ tiến trình
-lấp các nhân trừ một nhân cho trang web và cơ sở dữ liệu.
+Một nhóm tiến trình đọc khung dùng chung cho mọi video, mỗi tiến trình một
+nhân, chừa một nhân cho trang web. Vài luồng nhận video và tách khung; khung
+của video nào vào trước thì được đọc trước. Chỉ có một video thì cả nhóm
+cùng đọc video đó, nên một video dài không còn nằm trên một nhân.
 """
 
 from __future__ import annotations
 
+import functools
 import multiprocessing
 import os
+import shutil
+import threading
 import time
+from concurrent.futures import BrokenExecutor, ProcessPoolExecutor
 from pathlib import Path
 
 from control_plane.settings import settings
@@ -16,10 +22,12 @@ from control_plane.video_scan import scan_paths
 from control_plane.video_store import (
     claim,
     fail,
+    feeder_count,
     finish,
     init_db,
     merge_close_results,
-    recover_dead,
+    requeue,
+    requeue_running,
     touch_heartbeat,
     worker_count,
 )
@@ -35,49 +43,62 @@ def run_job(db_path: Path, job: dict[str, object], scan=scan_paths) -> None:
     try:
         table, _frames = scan([path])
         finish(db_path, video_id, table)
+    except BrokenExecutor:
+        requeue(db_path, video_id)
+        raise
     except Exception as exc:
         fail(db_path, video_id, str(exc) or "Không đọc được video.")
         return
     path.unlink(missing_ok=True)
 
 
-def worker_loop(db_path: str) -> None:
-    os.environ["OMP_NUM_THREADS"] = "1"
-    os.environ["OMP_THREAD_LIMIT"] = "1"
-    path = Path(db_path)
-    init_db(path)
-    while True:
+def _feed(db_path: Path, pool: ProcessPoolExecutor, work_dir: Path, stop: threading.Event, broken: threading.Event) -> None:
+    scan = functools.partial(scan_paths, submit=pool.submit, work_dir=work_dir)
+    while not stop.is_set():
         touch_heartbeat(heartbeat_path())
-        recover_dead(path)
-        job = claim(path, os.getpid())
+        job = claim(db_path, os.getpid())
         if job is None:
-            time.sleep(0.8)
+            stop.wait(1.0)
             continue
-        run_job(path, job)
+        try:
+            run_job(db_path, job, scan)
+        except BrokenExecutor:
+            broken.set()
+            return
 
 
 def main() -> None:
-    init_db(settings.video_db_path)
-    merge_close_results(settings.video_db_path)
-    recover_dead(settings.video_db_path)
+    db_path = settings.video_db_path
+    init_db(db_path)
+    merge_close_results(db_path)
+    requeue_running(db_path, os.getpid())
+    work_dir = settings.data_dir / "frames"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    work_dir.mkdir(parents=True, exist_ok=True)
     count = worker_count()
-    print(f"Đọc video bằng {count} tiến trình. Để trống một nhân cho trang web.", flush=True)
-    if count == 1:
-        worker_loop(str(settings.video_db_path))
-        return
+    feeders = feeder_count()
+    print(f"Đọc video bằng {count} tiến trình, nhận {feeders} video một lúc. Để trống một nhân cho trang web.", flush=True)
+    stop = threading.Event()
+    broken = threading.Event()
     context = multiprocessing.get_context("spawn")
-    processes = [context.Process(target=worker_loop, args=(str(settings.video_db_path),), daemon=False) for _ in range(count)]
-    for process in processes:
-        process.start()
-    while True:
-        for index, process in enumerate(processes):
-            if process.is_alive():
-                continue
-            process.join()
-            replacement = context.Process(target=worker_loop, args=(str(settings.video_db_path),), daemon=False)
-            replacement.start()
-            processes[index] = replacement
-        time.sleep(2)
+    with ProcessPoolExecutor(max_workers=count, mp_context=context, max_tasks_per_child=400) as pool:
+        threads: list[threading.Thread] = []
+
+        def start_feeder() -> threading.Thread:
+            thread = threading.Thread(target=_feed, args=(db_path, pool, work_dir, stop, broken), daemon=True)
+            thread.start()
+            return thread
+
+        threads = [start_feeder() for _ in range(feeders)]
+        while not broken.is_set():
+            touch_heartbeat(heartbeat_path())
+            for index, thread in enumerate(threads):
+                if not thread.is_alive() and not broken.is_set():
+                    threads[index] = start_feeder()
+            time.sleep(2)
+        stop.set()
+    # Một tiến trình đọc chết giữa chừng làm hỏng cả nhóm. Thoát để systemd khởi động lại sạch sẽ.
+    raise SystemExit(1)
 
 
 if __name__ == "__main__":
