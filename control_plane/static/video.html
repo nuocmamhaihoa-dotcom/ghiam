@@ -71,7 +71,7 @@
 
   <section>
     <h2>Kết quả đã lưu</h2>
-    <input id="query" type="search" placeholder="Gõ số điện thoại" />
+    <input id="query" type="search" placeholder="Gõ đầu số điện thoại hoặc @username" />
     <div id="results"></div>
   </section>
 
@@ -122,7 +122,7 @@
       stat(body.review, "Cần xem") +
       stat(body.unopened, "Chưa mở hồ sơ") +
       stat(body.queued, "Video đang chờ") +
-      stat(body.running + " / " + body.workers, "Đang đọc") +
+      stat(body.running, "Video đang đọc") +
       stat(body.done, "Video đã xong") +
       stat(body.error, "Video lỗi");
     var reader = document.getElementById("reader");
@@ -130,7 +130,7 @@
       reader.textContent = "Hàng đợi còn video nhưng bộ đọc trên máy chủ chưa chạy.";
       reader.className = "note warn";
     } else if (body.reader_alive) {
-      reader.textContent = "Máy chủ đang đọc bằng " + body.workers + " tiến trình. Đóng trang không làm dừng.";
+      reader.textContent = "Máy chủ đang đọc bằng " + body.workers + " tiến trình, chia nhau từng khung hình. Đóng trang không làm dừng.";
       reader.className = "note ok";
     } else {
       reader.textContent = "Sẵn sàng nhận video. Máy đọc dùng " + body.workers + " nhân, chừa một nhân cho trang này.";

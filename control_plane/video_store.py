@@ -60,10 +60,22 @@ def connect(db_path: Path) -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+_READY: set[str] = set()
+
+
 def init_db(db_path: Path) -> None:
+    """Tạo bảng một lần cho mỗi tiến trình.
+
+    result_counts giữ số dòng theo loại, do trigger cập nhật trong cùng giao
+    dịch, để trang thống kê không phải đếm lại cả bảng mỗi vài giây.
+    """
+    key = str(Path(db_path).resolve())
+    if key in _READY and Path(db_path).exists():
+        return
     with connect(db_path) as conn:
         conn.executescript(
             """
+            BEGIN IMMEDIATE;
             CREATE TABLE IF NOT EXISTS videos (
               id INTEGER PRIMARY KEY,
               name TEXT NOT NULL,
@@ -91,8 +103,30 @@ def init_db(db_path: Path) -> None:
             );
             CREATE UNIQUE INDEX IF NOT EXISTS idx_results_phone ON results(phone) WHERE phone != '';
             CREATE INDEX IF NOT EXISTS idx_results_bucket ON results(bucket, id);
+            CREATE INDEX IF NOT EXISTS idx_results_username ON results(username) WHERE username != '';
+            CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS result_counts (bucket INTEGER PRIMARY KEY, n INTEGER NOT NULL);
+            INSERT INTO result_counts (bucket, n)
+              SELECT bucket, COUNT(*) FROM results
+              WHERE NOT EXISTS (SELECT 1 FROM result_counts)
+              GROUP BY bucket;
+            CREATE TRIGGER IF NOT EXISTS results_count_insert AFTER INSERT ON results BEGIN
+              INSERT INTO result_counts (bucket, n) VALUES (NEW.bucket, 1)
+                ON CONFLICT(bucket) DO UPDATE SET n = n + 1;
+            END;
+            CREATE TRIGGER IF NOT EXISTS results_count_delete AFTER DELETE ON results BEGIN
+              UPDATE result_counts SET n = n - 1 WHERE bucket = OLD.bucket;
+            END;
+            CREATE TRIGGER IF NOT EXISTS results_count_update AFTER UPDATE OF bucket ON results
+            WHEN OLD.bucket != NEW.bucket BEGIN
+              UPDATE result_counts SET n = n - 1 WHERE bucket = OLD.bucket;
+              INSERT INTO result_counts (bucket, n) VALUES (NEW.bucket, 1)
+                ON CONFLICT(bucket) DO UPDATE SET n = n + 1;
+            END;
+            COMMIT;
             """
         )
+    _READY.add(key)
 
 
 def queued_bytes(db_path: Path) -> int:
@@ -166,7 +200,7 @@ def stats(db_path: Path) -> dict[str, int]:
         for row in conn.execute("SELECT status, COUNT(*) AS n FROM videos GROUP BY status"):
             if row["status"] in counts:
                 counts[row["status"]] = int(row["n"])
-        for row in conn.execute("SELECT bucket, COUNT(*) AS n FROM results GROUP BY bucket"):
+        for row in conn.execute("SELECT bucket, n FROM result_counts"):
             if row["bucket"] == BUCKET_OK:
                 buckets["saved"] = int(row["n"])
             elif row["bucket"] == BUCKET_REVIEW:
@@ -275,10 +309,17 @@ def retry(db_path: Path, video_id: int) -> bool:
 
 
 def merge_close_results(db_path: Path) -> int:
-    """Ghép số và username cùng một video khi tên gần giống và chỉ có một cặp."""
+    """Ghép số và username cùng một video khi tên gần giống và chỉ có một cặp.
+
+    Video mới đã được ghép như vậy trước khi lưu, nên việc quét cả bảng này chỉ chạy một lần cho dữ liệu cũ.
+    """
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
+            done = conn.execute("SELECT value FROM meta WHERE key = 'close_merge'").fetchone()
+            if done is not None:
+                conn.execute("COMMIT")
+                return 0
             rows = conn.execute(
                 """
                 SELECT id, phone, name, username, video_id
@@ -317,6 +358,7 @@ def merge_close_results(db_path: Path) -> int:
                         continue
                     conn.execute("DELETE FROM results WHERE id = ? AND phone = ''", (user["id"],))
                     merged += 1
+            conn.execute("INSERT INTO meta (key, value) VALUES ('close_merge', ?)", (utcnow(),))
             conn.execute("COMMIT")
         except Exception:
             conn.execute("ROLLBACK")
@@ -325,18 +367,33 @@ def merge_close_results(db_path: Path) -> int:
 
 
 def search_results(db_path: Path, query: str = "", limit: int = 50) -> list[dict[str, object]]:
-    text = " ".join(query.split())
+    """Tìm theo đầu số hoặc đầu username. Tìm theo khoảng trên chỉ mục, không quét cả bảng."""
+    text = "".join(query.split())
+    if text.startswith("+84"):
+        text = "0" + text[3:]
     with connect(db_path) as conn:
-        if text:
+        if text.isdigit():
             rows = conn.execute(
                 """
                 SELECT id, phone, name, username, bucket, reason
                 FROM results
-                WHERE phone = ? OR phone LIKE ?
-                ORDER BY id DESC
+                WHERE phone >= ? AND phone < ? AND phone != ''
+                ORDER BY phone
                 LIMIT ?
                 """,
-                (text, text + "%", limit),
+                (text, text + ":", limit),
+            ).fetchall()
+        elif text:
+            handle = text if text.startswith("@") else "@" + text
+            rows = conn.execute(
+                """
+                SELECT id, phone, name, username, bucket, reason
+                FROM results
+                WHERE username >= ? AND username < ? AND username != ''
+                ORDER BY username
+                LIMIT ?
+                """,
+                (handle, handle + "\U0010ffff", limit),
             ).fetchall()
         else:
             rows = conn.execute(
@@ -395,7 +452,10 @@ def _put(
 ) -> None:
     if not phone:
         return
-    existing = conn.execute("SELECT id, bucket, username FROM results WHERE phone = ?", (phone,)).fetchone()
+    existing = conn.execute(
+        "SELECT id, bucket, username FROM results WHERE phone = ? AND phone != ''",
+        (phone,),
+    ).fetchone()
     if existing is None:
         conn.execute(
             """
@@ -404,6 +464,7 @@ def _put(
             """,
             (phone, name, username, bucket, reason, video_id, utcnow()),
         )
+        _drop_lone_username(conn, username, bucket)
         return
     if not upgrade:
         return
@@ -415,13 +476,25 @@ def _put(
         "UPDATE results SET name = ?, username = ?, bucket = ?, reason = '', video_id = ? WHERE id = ?",
         (name, username, BUCKET_OK, video_id, existing["id"]),
     )
+    _drop_lone_username(conn, username, bucket)
+
+
+def _drop_lone_username(conn: sqlite3.Connection, username: str, bucket: int) -> None:
+    """Username đã có số thì dòng username đứng riêng từ video trước là thừa."""
+    if bucket != BUCKET_OK or not username:
+        return
+    conn.execute(
+        "DELETE FROM results WHERE username = ? AND username != '' AND phone = ''",
+        (username,),
+    )
 
 
 def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
     if item.phone:
-        existing = conn.execute("SELECT bucket FROM results WHERE phone = ?", (item.phone,)).fetchone()
-        if existing is not None and int(existing["bucket"]) == BUCKET_OK:
-            return
+        existing = conn.execute(
+            "SELECT bucket FROM results WHERE phone = ? AND phone != ''",
+            (item.phone,),
+        ).fetchone()
         if existing is not None:
             return
         conn.execute(
@@ -443,7 +516,7 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
     if not item.username:
         return
     existing = conn.execute(
-        "SELECT id FROM results WHERE username = ? AND phone = ''",
+        "SELECT id FROM results WHERE username = ? AND username != '' LIMIT 1",
         (item.username,),
     ).fetchone()
     if existing is not None:

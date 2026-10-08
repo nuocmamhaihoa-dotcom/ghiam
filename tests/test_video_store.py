@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gzip
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -20,6 +21,7 @@ from control_plane.video_store import (
     merge_close_results,
     queued_bytes,
     recover_dead,
+    requeue_running,
     retry,
     search_results,
     stats,
@@ -143,6 +145,55 @@ class VideoStoreTests(unittest.TestCase):
         self.assertTrue(any(item["username"] == "@user1" and item["phone"] == "" for item in listed))
         self.assertTrue(any(item["username"] == "@quang.le354" and item["phone"] == "" for item in listed))
         self.assertEqual(merge_close_results(self.db), 0)
+
+    def test_counts_follow_every_insert_upgrade_and_merge(self) -> None:
+        first = self._add("a.mp4", "a")
+        finish(
+            self.db,
+            first,
+            Table(
+                unopened=[Unopened("0332001753", "khactam")],
+                review=[Review("", "", "khactam", "@khactam60", "đã mở hồ sơ nhưng chưa thấy số")],
+            ),
+        )
+        self.assertEqual((stats(self.db)["saved"], stats(self.db)["review"], stats(self.db)["unopened"]), (0, 1, 1))
+        second = self._add("b.mp4", "b")
+        finish(self.db, second, Table(rows=[Row("0332001753", "khactam", "@khactam60")]))
+        counted = stats(self.db)
+        self.assertEqual((counted["saved"], counted["review"], counted["unopened"]), (1, 0, 0))
+        listed = search_results(self.db, limit=20)
+        self.assertEqual([(item["phone"], item["username"]) for item in listed], [("0332001753", "@khactam60")])
+
+    def test_lone_username_is_not_added_when_it_already_has_a_phone(self) -> None:
+        first = self._add("a.mp4", "a")
+        finish(self.db, first, Table(rows=[Row("0332001753", "khactam", "@khactam60")]))
+        second = self._add("b.mp4", "b")
+        finish(
+            self.db,
+            second,
+            Table(review=[Review("", "", "khactam", "@khactam60", "đã mở hồ sơ nhưng chưa thấy số")]),
+        )
+        self.assertEqual(stats(self.db)["results"], 1)
+
+    def test_search_by_phone_prefix_and_username(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        finish(
+            self.db,
+            video_id,
+            Table(rows=[Row("0332001753", "khactam", "@khactam60"), Row("0982117072", "Đặng Thị Tâm", "@dangtam.3")]),
+        )
+        self.assertEqual([item["phone"] for item in search_results(self.db, "0332")], ["0332001753"])
+        self.assertEqual([item["phone"] for item in search_results(self.db, "+84982")], ["0982117072"])
+        self.assertEqual([item["phone"] for item in search_results(self.db, "dangtam")], ["0982117072"])
+        self.assertEqual([item["phone"] for item in search_results(self.db, "@khac")], ["0332001753"])
+        self.assertEqual(search_results(self.db, "0999"), [])
+
+    def test_startup_returns_half_read_videos_to_the_queue(self) -> None:
+        self._add("a.mp4", "a")
+        claim(self.db, 4242)
+        self.assertEqual(stats(self.db)["running"], 1)
+        self.assertEqual(requeue_running(self.db, os.getpid()), 1)
+        self.assertEqual(stats(self.db)["queued"], 1)
 
     def test_backup_contains_the_saved_row(self) -> None:
         video_id = self._add("clip.mp4", "a")
