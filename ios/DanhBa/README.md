@@ -2,15 +2,27 @@
 
 App nạp liên hệ vào iPhone của bạn và xoá liên hệ bạn chọn. Máy tin nhà phát triển một lần. App hỏi quyền Danh bạ một lần.
 
-## Cài trên iPhone để tự chạy và tự cập nhật
+## Nạp từ máy tính, dùng trên iPhone
 
-File zip không chạy trên iPhone. App cài từ Safari:
+Danh sách nằm trên hub, mỗi người một dòng gồm tên ghi nhớ và số điện thoại. Không gom mọi số vào một file chung.
 
-1. Mở Safari trên iPhone, vào `/tai` của hub, bấm **Cài Danh bạ trên iPhone**. Đường thẳng là `/danhba/`.
-2. Bấm Chia sẻ, rồi Thêm vào Màn hình chính.
-3. Mở icon **Danh bạ**.
+1. Trên máy tính, mở `/danhba/nap` của hub. Dán danh sách hoặc chọn file, bấm **Nạp lên VPS**. Hub chia mỗi 5000 số một danh bạ. Một số chỉ nằm trong một danh bạ.
+2. Trên iPhone, mở Safari vào `/danhba/`. Bấm **Nạp lên iPhone**. iPhone hỏi thì bấm **Thêm tất cả**.
+3. Danh bạ vừa nạp chuyển sang mục **Đã dùng**. Các danh bạ chưa nạp ở mục **Chưa dùng**. Nếu bạn bấm Huỷ trên hộp của iPhone, xuất file danh bạ rồi bấm **Đối chiếu iPhone** và tick file toàn bộ để trả danh bạ về **Chưa dùng**.
 
-Lần sau phần mềm có bản mới, mở lại icon. iPhone tự lấy phiên bản đó khi có mạng. Không cần App Store, không cần Xcode, không cần cài lại.
+## Khớp danh sách đã lưu với danh bạ trên iPhone
+
+Trang web và máy tính cùng đọc một danh sách trên hub, tự cập nhật mỗi vài giây.
+
+Safari không đọc được app Danh bạ. Để khớp theo số đang có trên máy:
+
+1. Trong app Danh bạ, chia sẻ liên hệ ra file `.vcf`.
+2. Trên trang iPhone, bấm **Đối chiếu iPhone** và chọn file đó. Danh bạ nào đủ số thì sang **Đã dùng**. Số lạ không bị thêm vào hub.
+3. Chỉ tick **File này là toàn bộ danh bạ trên iPhone** khi file chứa hết số trên máy. Danh bạ đã dùng mà không còn số nào trong file sẽ về **Chưa dùng**.
+
+Phím tắt của iPhone có thể gửi số tới `POST /v1/danhba/sync` với JSON `{"phones":["090..."],"full":false}`. App Xcode đọc được Danh bạ của máy, nhưng gói zip không cài được lên iPhone.
+
+File zip không chạy trên iPhone.
 
 Trong app: tên mặc định `Khach`. Dán số hoặc chọn file, bấm **Nạp lên iPhone**. App chia mỗi 5000 số một nhóm và đưa nhóm đó sang Danh bạ của máy. Một số chỉ nằm trong một nhóm. iPhone hỏi thì bấm **Thêm tất cả**.
 

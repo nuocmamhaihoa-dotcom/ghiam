@@ -230,10 +230,11 @@
       var group = escapeValue(book.name);
       lines.push("BEGIN:VCARD");
       lines.push("VERSION:3.0");
+      lines.push("N:" + name + ";;;;");
       lines.push("FN:" + name);
       lines.push("ORG:" + group);
       lines.push("TEL;TYPE=CELL:" + entries[i].phone);
-      lines.push("NOTE:" + group);
+      lines.push("NOTE:" + group + ". " + escapeValue("Bấm nút chia sẻ góc trên. Chọn Danh bạ. Bấm Thêm tất cả."));
       lines.push("END:VCARD");
     }
     return lines.join("\r\n") + "\r\n";
