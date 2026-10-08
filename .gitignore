@@ -16,6 +16,9 @@ pc_agent/windows/state/
 deploy/update-manifest.json
 .mypy_cache/
 .ruff_cache/
+/dist/
+/build/
+contact_to_vcf/release/*.exe
 playwright-report/
 test-results/
 *.log
