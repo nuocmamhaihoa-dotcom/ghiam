@@ -135,10 +135,32 @@ def init_db(db_path: Path) -> None:
             COMMIT;
             """
         )
-        video_cols = {str(row[1]) for row in conn.execute("PRAGMA table_info(videos)")}
-        if "device" not in video_cols:
-            conn.execute("ALTER TABLE videos ADD COLUMN device TEXT NOT NULL DEFAULT ''")
+        _ensure_video_device_column(conn)
+        _reconcile_result_counts(conn)
     _READY.add(key)
+
+
+def _ensure_video_device_column(conn: sqlite3.Connection) -> None:
+    """Thêm cột device cho DB cũ. An toàn khi nhiều tiến trình khởi động cùng lúc."""
+    video_cols = {str(row[1]) for row in conn.execute("PRAGMA table_info(videos)")}
+    if "device" in video_cols:
+        return
+    try:
+        conn.execute("ALTER TABLE videos ADD COLUMN device TEXT NOT NULL DEFAULT ''")
+    except sqlite3.OperationalError as exc:
+        if "duplicate column" not in str(exc).lower():
+            raise
+
+
+def _reconcile_result_counts(conn: sqlite3.Connection) -> None:
+    """Nếu bộ đếm lệch so với bảng results (hiếm) thì đếm lại ngay."""
+    cached = {int(row["bucket"]): int(row["n"]) for row in conn.execute("SELECT bucket, n FROM result_counts")}
+    real = {int(row["bucket"]): int(row["n"]) for row in conn.execute("SELECT bucket, COUNT(*) AS n FROM results GROUP BY bucket")}
+    if cached == real:
+        return
+    conn.execute("DELETE FROM result_counts")
+    for bucket, n in real.items():
+        conn.execute("INSERT INTO result_counts (bucket, n) VALUES (?, ?)", (bucket, n))
 
 
 def queued_bytes(db_path: Path) -> int:
@@ -476,11 +498,12 @@ def _absorb_ocr_phone_twins(conn: sqlite3.Connection, video_id: int | None = Non
             """,
             (video_id,),
         ).fetchall()
+    by_video: dict[int, list[sqlite3.Row]] = defaultdict(list)
+    for row in complete:
+        by_video[int(row["video_id"])].append(row)
     removed = 0
     for weak in incomplete:
-        for strong in complete:
-            if int(weak["video_id"]) != int(strong["video_id"]):
-                continue
+        for strong in by_video.get(int(weak["video_id"]), []):
             if phone_distance(str(weak["phone"]), str(strong["phone"])) > 2:
                 continue
             if not same_person_name(str(weak["name"]), str(strong["name"])):
