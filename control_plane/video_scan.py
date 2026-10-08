@@ -16,9 +16,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from collections import deque
 from collections.abc import Callable
-from concurrent.futures import Future
+from concurrent.futures import Future, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -26,6 +27,8 @@ import numpy as np
 
 from control_plane.screen_read import read_image, read_tap
 from control_plane.screen_table import FrameObs, Table, build_table
+
+Progress = Callable[[str], None]
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mkv", ".avi", ".webm"}
@@ -83,6 +86,7 @@ def scan_paths(
     fps: float = SCAN_FPS,
     submit: Submit | None = None,
     work_dir: Path | None = None,
+    on_progress: Progress | None = None,
 ) -> tuple[Table, list[tuple[Path, FrameObs]]]:
     """Đọc ảnh và video theo thứ tự. submit là executor.submit để đọc nhiều khung cùng lúc."""
     for path in paths:
@@ -95,6 +99,8 @@ def scan_paths(
         image_paths = [(index, path) for index, path in enumerate(paths) if path.suffix.lower() in IMAGE_SUFFIXES]
         image_hits: dict[int, FrameObs] = {}
         if image_paths:
+            if on_progress is not None:
+                on_progress(f"Đang đọc {len(image_paths)} ảnh")
             if submit is None:
                 for index, path in image_paths:
                     image_hits[index] = read_image(path)
@@ -110,16 +116,27 @@ def scan_paths(
                 continue
             folder = tempfile.TemporaryDirectory(prefix="danhba-frames-", dir=work_dir)
             temps.append(folder)
-            ordered.extend(_scan_video(path, Path(folder.name), fps, submit))
+            ordered.extend(_scan_video(path, Path(folder.name), fps, submit, on_progress))
         return build_table([obs for _, obs in ordered]), ordered
     finally:
         for folder in temps:
             folder.cleanup()
 
 
-def _scan_video(path: Path, folder: Path, fps: float, submit: Submit | None) -> list[tuple[Path, FrameObs]]:
+def _scan_video(
+    path: Path,
+    folder: Path,
+    fps: float,
+    submit: Submit | None,
+    on_progress: Progress | None = None,
+) -> list[tuple[Path, FrameObs]]:
+    if on_progress is not None:
+        on_progress(f"Đang xem trước {path.name}")
     plan = plan_video(path, fps)
-    files = extract_frames(path, folder, plan.needed(), fps)
+    needed = plan.needed()
+    if on_progress is not None:
+        on_progress(f"Đang tách {len(needed)} khung từ {path.name}")
+    files = extract_frames(path, folder, needed, fps, on_progress=on_progress)
     jobs: list[tuple[float, int, Path, Callable[..., FrameObs], tuple]] = []
     for number in plan.reads:
         jobs.append((number / fps, 0, files[number], read_frame_at, (str(files[number]), number / fps)))
@@ -128,15 +145,29 @@ def _scan_video(path: Path, folder: Path, fps: float, submit: Submit | None) -> 
         paths = [str(files[number]) for number in window]
         jobs.append((last / fps, 1, files[last], read_tap_at, (paths, last / fps)))
     jobs.sort(key=lambda job: (job[0], job[1]))
+    total = len(jobs)
+    if on_progress is not None:
+        on_progress(f"Đang đọc chữ 0/{total} khung")
     if submit is None:
-        results = [fn(*args) for _, _, _, fn, args in jobs]
+        results: list[FrameObs] = []
+        for index, (_, _, _, fn, args) in enumerate(jobs, start=1):
+            results.append(fn(*args))
+            if on_progress is not None and (index == total or index % max(1, total // 20) == 0):
+                on_progress(f"Đang đọc chữ {index}/{total} khung")
     else:
-        futures = [submit(fn, *args) for _, _, _, fn, args in jobs]
+        future_map = {submit(fn, *args): index for index, (_, _, _, fn, args) in enumerate(jobs)}
+        results = [FrameObs("unknown")] * total
         try:
-            results = [future.result() for future in futures]
+            done = 0
+            for future in as_completed(future_map):
+                index = future_map[future]
+                results[index] = future.result()
+                done += 1
+                if on_progress is not None and (done == total or done % max(1, total // 20) == 0):
+                    on_progress(f"Đang đọc chữ {done}/{total} khung")
         except BaseException:
             # Video đã hỏng thì các khung còn chờ không được chiếm nhân của video khác.
-            for future in futures:
+            for future in future_map:
                 future.cancel()
             raise
     return [(job[2], obs) for job, obs in zip(jobs, results)]
@@ -241,7 +272,13 @@ class _Planner:
         self.plan.taps.append(list(range(start, last + 1)))
 
 
-def extract_frames(path: Path, folder: Path, numbers: list[int], fps: float = SCAN_FPS) -> dict[int, Path]:
+def extract_frames(
+    path: Path,
+    folder: Path,
+    numbers: list[int],
+    fps: float = SCAN_FPS,
+    on_progress: Progress | None = None,
+) -> dict[int, Path]:
     """Lượt hai: chỉ ghi ra đĩa các khung đã chọn, đủ độ phân giải."""
     _require_ffmpeg(path)
     if not numbers:
@@ -250,35 +287,54 @@ def extract_frames(path: Path, folder: Path, numbers: list[int], fps: float = SC
     picks = "+".join(f"eq(n,{number})" for number in numbers)
     script.write_text(f"fps={fps},select='{picks}'", encoding="utf-8")
     pattern = folder / "f_%06d.jpg"
-    done = subprocess.run(
-        [
-            "ffmpeg",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-threads",
-            "0",
-            "-i",
-            str(path),
-            "-filter_script:v",
-            str(script),
-            "-vsync",
-            "0",
-            "-q:v",
-            "2",
-            str(pattern),
-        ],
-        capture_output=True,
-        text=True,
-        errors="replace",
-        check=False,
-        timeout=3 * 3600,
-    )
+    stop = threading.Event()
+    watcher: threading.Thread | None = None
+    if on_progress is not None:
+        expected = len(numbers)
+
+        def _watch() -> None:
+            while not stop.wait(5.0):
+                written = len(list(folder.glob("f_*.jpg")))
+                on_progress(f"Đang tách khung {written}/{expected}")
+
+        watcher = threading.Thread(target=_watch, daemon=True)
+        watcher.start()
+    try:
+        done = subprocess.run(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-threads",
+                "0",
+                "-i",
+                str(path),
+                "-filter_script:v",
+                str(script),
+                "-vsync",
+                "0",
+                "-q:v",
+                "2",
+                str(pattern),
+            ],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            check=False,
+            timeout=3 * 3600,
+        )
+    finally:
+        stop.set()
+        if watcher is not None:
+            watcher.join(timeout=1.0)
     if done.returncode != 0:
         raise RuntimeError(done.stderr.strip() or f"ffmpeg không đọc được {path.name}.")
     written = sorted(folder.glob("f_*.jpg"))
     if len(written) < len(numbers):
         raise RuntimeError(f"Video {path.name} chỉ ra {len(written)}/{len(numbers)} khung cần đọc.")
+    if on_progress is not None:
+        on_progress(f"Đã tách {len(written)} khung")
     return dict(zip(numbers, written))
 
 

@@ -25,6 +25,7 @@ from control_plane.video_store import (
     clean_device,
     commit_upload,
     count_results,
+    feeder_count,
     init_db,
     iter_backup,
     list_videos,
@@ -78,6 +79,7 @@ def video_stats(authorization: str | None = Header(default=None)) -> dict[str, o
     init_db(settings.video_db_path)
     body = stats(settings.video_db_path)
     body["workers"] = worker_count()
+    body["feeders"] = feeder_count()
     body["reader_alive"] = reader_alive(settings.data_dir / "video-worker.heartbeat")
     body["disk_used_bytes"] = queued_bytes(settings.video_db_path)
     body["disk_limit_bytes"] = _limit_bytes()

@@ -184,10 +184,14 @@
         : "Bộ đọc trên máy chủ chưa chạy.";
       reader.className = "note warn";
     } else if (body.running > 0 || body.queued > 0) {
-      reader.textContent = "Máy chủ đang đọc bằng " + body.workers + " tiến trình, chia nhau từng khung hình. Đóng trang không làm dừng.";
+      var feeders = body.feeders || 1;
+      reader.textContent = "Nhiều máy đẩy lên cùng lúc được xếp hàng. Máy chủ đọc lần lượt bằng " +
+        body.workers + " tiến trình/video" + (feeders > 1 ? (", tối đa " + feeders + " video song song") : "") +
+        ". Đóng trang không làm dừng.";
       reader.className = "note ok";
     } else {
-      reader.textContent = "Bộ đọc đang chạy, sẵn sàng nhận video. Dùng " + body.workers + " nhân, chừa một nhân cho trang này.";
+      reader.textContent = "Bộ đọc đang chạy, sẵn sàng nhận video từ nhiều máy. Dùng " + body.workers +
+        " nhân/video, xếp hàng ổn định, chừa một nhân cho trang này.";
       reader.className = "note ok";
     }
     var queueResponse = await api("/v1/videos");
@@ -208,12 +212,16 @@
     items.forEach(function (item) {
       var extra = item.error ? "<div class='warn'>" + escapeHtml(item.error) + "</div>" : "";
       var retry = item.status === "error" ? " <button class='ghost' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
+      var progress = "";
+      if (item.status === "running" && item.progress) {
+        progress = "<div class='note'>" + escapeHtml(item.progress) + "</div>";
+      }
       var resultText = "—";
       if (item.status === "done") {
         resultText = (item.saved_count || 0) + " đủ / " + (item.result_count || 0) + " dòng";
         resultText += " <button class='ghost' type='button' data-filter='" + escapeHtml(item.name) + "'>Xem</button>";
       }
-      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + escapeHtml(item.device || "") + "</td><td>" + statusText(item.status) + retry + "</td><td>" + resultText + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + escapeHtml(item.device || "") + "</td><td>" + statusText(item.status) + progress + retry + "</td><td>" + resultText + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-retry]").forEach(function (button) {

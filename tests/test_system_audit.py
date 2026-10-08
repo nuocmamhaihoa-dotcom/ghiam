@@ -148,11 +148,11 @@ class SystemAuditTests(unittest.TestCase):
         init_db(self.db)
         init_db(self.db)
         # Giả lập tiến trình thứ hai gặp cột device đã có.
-        from control_plane.video_store import connect, _ensure_video_device_column, _reconcile_result_counts
+        from control_plane.video_store import connect, _ensure_video_columns, _reconcile_result_counts
 
         with connect(self.db) as conn:
-            _ensure_video_device_column(conn)
-            _ensure_video_device_column(conn)
+            _ensure_video_columns(conn)
+            _ensure_video_columns(conn)
             conn.execute("DELETE FROM result_counts")
             conn.execute("INSERT INTO result_counts (bucket, n) VALUES (1, 999)")
             _reconcile_result_counts(conn)

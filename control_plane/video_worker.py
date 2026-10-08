@@ -1,9 +1,10 @@
 """Đọc video trong hàng đợi. Đóng trình duyệt không dừng việc này.
 
-Một nhóm tiến trình đọc khung dùng chung cho mọi video, mỗi tiến trình một
-nhân, chừa một nhân cho trang web. Vài luồng nhận video và tách khung; khung
-của video nào vào trước thì được đọc trước. Chỉ có một video thì cả nhóm
-cùng đọc video đó, nên một video dài không còn nằm trên một nhân.
+Nhiều máy (iPhone) đẩy video lên cùng lúc vẫn chỉ xếp hàng; mỗi video được đọc
+bằng một nhóm tiến trình riêng, xong mới sang video kế. Không dùng chung một
+nhóm tiến trình cho nhiều video — cách đó từng làm cả hàng đợi nghẽn im khi một
+tiến trình OCR chết giữa chừng. Nếu một video đứng im quá lâu, bộ đọc tự xếp
+lại hàng và khởi động lại sạch.
 """
 
 from __future__ import annotations
@@ -28,6 +29,8 @@ from control_plane.video_store import (
     rematch_results,
     requeue,
     requeue_running,
+    set_progress,
+    stale_running,
     touch_heartbeat,
     worker_count,
 )
@@ -37,12 +40,34 @@ def heartbeat_path() -> Path:
     return settings.data_dir / "video-worker.heartbeat"
 
 
-def run_job(db_path: Path, job: dict[str, object], scan=scan_paths) -> None:
+def run_job(
+    db_path: Path,
+    job: dict[str, object],
+    workers: int,
+    work_dir: Path,
+    context: multiprocessing.context.BaseContext,
+) -> None:
     video_id = int(job["id"])
     path = Path(str(job["path"]))
     started = time.monotonic()
+
+    def on_progress(message: str) -> None:
+        set_progress(db_path, video_id, message)
+        touch_heartbeat(heartbeat_path())
+
     try:
-        table, frames = scan([path])
+        with ProcessPoolExecutor(
+            max_workers=workers,
+            mp_context=context,
+            max_tasks_per_child=400,
+        ) as pool:
+            scan = functools.partial(
+                scan_paths,
+                submit=pool.submit,
+                work_dir=work_dir,
+                on_progress=on_progress,
+            )
+            table, frames = scan([path])
         finish(db_path, video_id, table)
     except BrokenExecutor:
         requeue(db_path, video_id)
@@ -60,8 +85,14 @@ def run_job(db_path: Path, job: dict[str, object], scan=scan_paths) -> None:
     )
 
 
-def _feed(db_path: Path, pool: ProcessPoolExecutor, work_dir: Path, stop: threading.Event, broken: threading.Event) -> None:
-    scan = functools.partial(scan_paths, submit=pool.submit, work_dir=work_dir)
+def _feed(
+    db_path: Path,
+    workers: int,
+    work_dir: Path,
+    context: multiprocessing.context.BaseContext,
+    stop: threading.Event,
+    broken: threading.Event,
+) -> None:
     current: dict[str, object] | None = None
     try:
         while not stop.is_set():
@@ -71,7 +102,7 @@ def _feed(db_path: Path, pool: ProcessPoolExecutor, work_dir: Path, stop: thread
                 stop.wait(1.0)
                 continue
             try:
-                run_job(db_path, current, scan)
+                run_job(db_path, current, workers, work_dir, context)
             except BrokenExecutor:
                 # run_job đã đưa video về hàng đợi.
                 current = None
@@ -90,33 +121,52 @@ def main() -> None:
     joined = rematch_results(db_path)
     if joined:
         print(f"Đã ghép thêm {joined} hàng số + username từ kết quả cũ.", flush=True)
-    requeue_running(db_path, os.getpid())
+    returned = requeue_running(db_path, os.getpid())
+    if returned:
+        print(f"Đưa {returned} video đọc dở về hàng đợi.", flush=True)
     work_dir = settings.data_dir / "frames"
     shutil.rmtree(work_dir, ignore_errors=True)
     work_dir.mkdir(parents=True, exist_ok=True)
-    count = worker_count()
+    total_workers = worker_count()
     feeders = feeder_count()
-    print(f"Đọc video bằng {count} tiến trình, nhận {feeders} video một lúc. Để trống một nhân cho trang web.", flush=True)
+    per_workers = max(1, total_workers // feeders)
+    print(
+        f"Đọc video bằng {per_workers} tiến trình/video, xếp hàng {feeders} video một lúc "
+        f"(tối đa {per_workers * feeders} nhân). Nhiều máy đẩy lên vẫn xếp hàng ổn định.",
+        flush=True,
+    )
     stop = threading.Event()
     broken = threading.Event()
     context = multiprocessing.get_context("spawn")
-    with ProcessPoolExecutor(max_workers=count, mp_context=context, max_tasks_per_child=400) as pool:
-        threads: list[threading.Thread] = []
+    threads: list[threading.Thread] = []
 
-        def start_feeder() -> threading.Thread:
-            thread = threading.Thread(target=_feed, args=(db_path, pool, work_dir, stop, broken), daemon=True)
-            thread.start()
-            return thread
+    def start_feeder() -> threading.Thread:
+        thread = threading.Thread(
+            target=_feed,
+            args=(db_path, per_workers, work_dir, context, stop, broken),
+            daemon=True,
+        )
+        thread.start()
+        return thread
 
-        threads = [start_feeder() for _ in range(feeders)]
-        while not broken.is_set():
-            touch_heartbeat(heartbeat_path())
-            for index, thread in enumerate(threads):
-                if not thread.is_alive() and not broken.is_set():
-                    threads[index] = start_feeder()
-            time.sleep(2)
-        stop.set()
-    # Một tiến trình đọc chết giữa chừng làm hỏng cả nhóm. Thoát để systemd khởi động lại sạch sẽ.
+    threads = [start_feeder() for _ in range(feeders)]
+    while not broken.is_set():
+        touch_heartbeat(heartbeat_path())
+        for index, thread in enumerate(threads):
+            if not thread.is_alive() and not broken.is_set():
+                threads[index] = start_feeder()
+        stuck = stale_running(db_path)
+        if stuck:
+            for video_id in stuck:
+                requeue(db_path, video_id)
+                print(f"Video {video_id} đứng im quá lâu — xếp lại hàng và khởi động lại bộ đọc.", flush=True)
+            broken.set()
+            break
+        time.sleep(2)
+    stop.set()
+    for thread in threads:
+        thread.join(timeout=5)
+    # Thoát để systemd khởi động lại sạch: nhóm tiến trình hỏng hoặc video nghẽn.
     raise SystemExit(1)
 
 

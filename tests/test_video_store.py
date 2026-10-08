@@ -17,6 +17,7 @@ from control_plane.video_store import (
     commit_upload,
     count_results,
     fail,
+    feeder_count,
     finish,
     init_db,
     iter_backup,
@@ -24,9 +25,12 @@ from control_plane.video_store import (
     rematch_results,
     queued_bytes,
     recover_dead,
+    requeue,
     requeue_running,
     retry,
     search_results,
+    set_progress,
+    stale_running,
     stats,
 )
 
@@ -286,6 +290,30 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(stats(self.db)["running"], 1)
         self.assertEqual(requeue_running(self.db, os.getpid()), 1)
         self.assertEqual(stats(self.db)["queued"], 1)
+
+    def test_default_feeder_count_is_one(self) -> None:
+        old = os.environ.pop("CONTROL_VIDEO_FEEDERS", None)
+        try:
+            self.assertEqual(feeder_count(), 1)
+        finally:
+            if old is not None:
+                os.environ["CONTROL_VIDEO_FEEDERS"] = old
+
+    def test_progress_and_stale_running_detect_quiet_jobs(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        claim(self.db, os.getpid())
+        set_progress(self.db, video_id, "Đang tách khung 10/100")
+        item = next(row for row in list_videos(self.db) if row["id"] == video_id)
+        self.assertEqual(item["progress"], "Đang tách khung 10/100")
+        self.assertTrue(item["progress_at"])
+        self.assertEqual(stale_running(self.db, quiet_sec=3600, max_sec=7200), [])
+        stuck = stale_running(self.db, quiet_sec=0.0, max_sec=7200)
+        self.assertEqual(stuck, [video_id])
+        requeue(self.db, video_id)
+        self.assertEqual(stats(self.db)["queued"], 1)
+        item = next(row for row in list_videos(self.db) if row["id"] == video_id)
+        self.assertEqual(item["progress"], "")
+        self.assertIsNone(item["progress_at"])
 
     def test_backup_contains_the_saved_row(self) -> None:
         video_id = self._add("clip.mp4", "a", device="iPhone 13")

@@ -44,11 +44,31 @@ def worker_count() -> int:
 
 
 def feeder_count() -> int:
-    """Số video tách khung cùng lúc. Một video đang tách khung thì video kia đang được đọc."""
+    """Số video đọc cùng lúc. Mặc định 1: nhiều máy vẫn đẩy lên song song, xếp hàng đọc lần lượt.
+
+    Mỗi video dùng riêng một nhóm tiến trình. Tăng CONTROL_VIDEO_FEEDERS chỉ khi chắc
+    máy chủ đủ RAM; chia sẻ chung một nhóm tiến trình đã từng làm nghẽn cả hàng đợi.
+    """
     raw = os.environ.get("CONTROL_VIDEO_FEEDERS", "").strip()
     if raw:
         return max(1, int(raw))
-    return 3
+    return 1
+
+
+def stale_quiet_sec() -> float:
+    """Không có tiến độ mới trong khoảng này thì coi video đang đọc bị nghẽn."""
+    raw = os.environ.get("CONTROL_VIDEO_STALE_SEC", "").strip()
+    if raw:
+        return max(60.0, float(raw))
+    return 600.0
+
+
+def stale_max_sec() -> float:
+    """Thời gian đọc tối đa cho một video, kể cả khi vẫn còn tiến độ thưa."""
+    raw = os.environ.get("CONTROL_VIDEO_MAX_SEC", "").strip()
+    if raw:
+        return max(stale_quiet_sec(), float(raw))
+    return 4 * 3600.0
 
 
 @contextmanager
@@ -95,7 +115,9 @@ def init_db(db_path: Path) -> None:
               created_at TEXT NOT NULL,
               started_at TEXT,
               finished_at TEXT,
-              device TEXT NOT NULL DEFAULT ''
+              device TEXT NOT NULL DEFAULT '',
+              progress TEXT NOT NULL DEFAULT '',
+              progress_at TEXT
             );
             CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_sha ON videos(sha256);
             CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status, id);
@@ -135,21 +157,26 @@ def init_db(db_path: Path) -> None:
             COMMIT;
             """
         )
-        _ensure_video_device_column(conn)
+        _ensure_video_columns(conn)
         _reconcile_result_counts(conn)
     _READY.add(key)
 
 
-def _ensure_video_device_column(conn: sqlite3.Connection) -> None:
-    """Thêm cột device cho DB cũ. An toàn khi nhiều tiến trình khởi động cùng lúc."""
+def _ensure_video_columns(conn: sqlite3.Connection) -> None:
+    """Thêm cột mới cho DB cũ. An toàn khi nhiều tiến trình khởi động cùng lúc."""
     video_cols = {str(row[1]) for row in conn.execute("PRAGMA table_info(videos)")}
-    if "device" in video_cols:
-        return
-    try:
-        conn.execute("ALTER TABLE videos ADD COLUMN device TEXT NOT NULL DEFAULT ''")
-    except sqlite3.OperationalError as exc:
-        if "duplicate column" not in str(exc).lower():
-            raise
+    for name, ddl in (
+        ("device", "ALTER TABLE videos ADD COLUMN device TEXT NOT NULL DEFAULT ''"),
+        ("progress", "ALTER TABLE videos ADD COLUMN progress TEXT NOT NULL DEFAULT ''"),
+        ("progress_at", "ALTER TABLE videos ADD COLUMN progress_at TEXT"),
+    ):
+        if name in video_cols:
+            continue
+        try:
+            conn.execute(ddl)
+        except sqlite3.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                raise
 
 
 def _reconcile_result_counts(conn: sqlite3.Connection) -> None:
@@ -196,7 +223,8 @@ def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str, devi
                 """
                 UPDATE videos
                 SET name = ?, size_bytes = ?, path = '', status = 'uploading', error = '',
-                    pid = NULL, started_at = NULL, finished_at = NULL, created_at = ?, device = ?
+                    pid = NULL, started_at = NULL, finished_at = NULL, created_at = ?, device = ?,
+                    progress = '', progress_at = NULL
                 WHERE id = ?
                 """,
                 (name, size_bytes, utcnow(), machine, existing["id"]),
@@ -262,7 +290,7 @@ def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
             """
             SELECT
               v.id, v.name, v.size_bytes, v.status, v.error, v.created_at, v.started_at, v.finished_at,
-              v.device,
+              v.device, v.progress, v.progress_at,
               COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id), 0) AS result_count,
               COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.bucket = 1), 0) AS saved_count
             FROM videos v
@@ -302,13 +330,15 @@ def claim(db_path: Path, pid: int) -> dict[str, object] | None:
         if row is None:
             conn.execute("COMMIT")
             return None
+        now = utcnow()
         cur = conn.execute(
             """
             UPDATE videos
-            SET status = 'running', pid = ?, started_at = ?, error = ''
+            SET status = 'running', pid = ?, started_at = ?, error = '',
+                progress = 'Bắt đầu đọc', progress_at = ?
             WHERE id = ? AND status = 'queued'
             """,
-            (pid, utcnow(), row["id"]),
+            (pid, now, now, row["id"]),
         )
         conn.execute("COMMIT")
         if cur.rowcount != 1:
@@ -316,10 +346,27 @@ def claim(db_path: Path, pid: int) -> dict[str, object] | None:
         return {"id": int(row["id"]), "name": row["name"], "path": row["path"]}
 
 
+def set_progress(db_path: Path, video_id: int, message: str) -> None:
+    text = " ".join((message or "").split())[:200]
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE videos
+            SET progress = ?, progress_at = ?
+            WHERE id = ? AND status = 'running'
+            """,
+            (text, utcnow(), video_id),
+        )
+
+
 def requeue(db_path: Path, video_id: int) -> None:
     with connect(db_path) as conn:
         conn.execute(
-            "UPDATE videos SET status = 'queued', pid = NULL, started_at = NULL WHERE id = ? AND status = 'running'",
+            """
+            UPDATE videos
+            SET status = 'queued', pid = NULL, started_at = NULL, progress = '', progress_at = NULL
+            WHERE id = ? AND status = 'running'
+            """,
             (video_id,),
         )
 
@@ -330,7 +377,8 @@ def requeue_running(db_path: Path, keep_pid: int) -> int:
     with connect(db_path) as conn:
         cur = conn.execute(
             """
-            UPDATE videos SET status = 'queued', pid = NULL, started_at = NULL
+            UPDATE videos
+            SET status = 'queued', pid = NULL, started_at = NULL, progress = '', progress_at = NULL
             WHERE status = 'running' AND (pid IS NULL OR pid != ?)
             """,
             (keep_pid,),
@@ -346,11 +394,54 @@ def recover_dead(db_path: Path) -> int:
             if _alive(row["pid"]):
                 continue
             conn.execute(
-                "UPDATE videos SET status = 'queued', pid = NULL, started_at = NULL WHERE id = ? AND status = 'running'",
+                """
+                UPDATE videos
+                SET status = 'queued', pid = NULL, started_at = NULL, progress = '', progress_at = NULL
+                WHERE id = ? AND status = 'running'
+                """,
                 (row["id"],),
             )
             recovered += 1
         return recovered
+
+
+def stale_running(
+    db_path: Path,
+    *,
+    quiet_sec: float | None = None,
+    max_sec: float | None = None,
+    now: float | None = None,
+) -> list[int]:
+    """Video đang đọc nhưng không còn tiến độ (hoặc chạy quá lâu) — thường do nhóm tiến trình chết im."""
+    quiet = stale_quiet_sec() if quiet_sec is None else quiet_sec
+    limit = stale_max_sec() if max_sec is None else max_sec
+    moment = time.time() if now is None else now
+    stuck: list[int] = []
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, started_at, progress_at FROM videos WHERE status = 'running'"
+        ).fetchall()
+    for row in rows:
+        started = _parse_ts(row["started_at"])
+        progressed = _parse_ts(row["progress_at"]) or started
+        if started is not None and moment - started >= limit:
+            stuck.append(int(row["id"]))
+            continue
+        if progressed is not None and moment - progressed >= quiet:
+            stuck.append(int(row["id"]))
+    return stuck
+
+
+def _parse_ts(value: object) -> float | None:
+    if not value:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
 
 
 def finish(db_path: Path, video_id: int, table: Table) -> None:
@@ -365,7 +456,12 @@ def finish(db_path: Path, video_id: int, table: Table) -> None:
             _put_review(conn, item, video_id)
         _rematch_conn(conn, video_id)
         conn.execute(
-            "UPDATE videos SET status = 'done', pid = NULL, finished_at = ?, error = '' WHERE id = ?",
+            """
+            UPDATE videos
+            SET status = 'done', pid = NULL, finished_at = ?, error = '',
+                progress = '', progress_at = NULL
+            WHERE id = ?
+            """,
             (utcnow(), video_id),
         )
         conn.execute("COMMIT")
@@ -374,7 +470,12 @@ def finish(db_path: Path, video_id: int, table: Table) -> None:
 def fail(db_path: Path, video_id: int, message: str) -> None:
     with connect(db_path) as conn:
         conn.execute(
-            "UPDATE videos SET status = 'error', pid = NULL, finished_at = ?, error = ? WHERE id = ?",
+            """
+            UPDATE videos
+            SET status = 'error', pid = NULL, finished_at = ?, error = ?,
+                progress = '', progress_at = NULL
+            WHERE id = ?
+            """,
             (utcnow(), message[:500], video_id),
         )
 
