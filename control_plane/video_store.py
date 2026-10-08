@@ -16,7 +16,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
-from control_plane.screen_table import Review, Table, joined_name, pair_close_names
+from control_plane.screen_table import (
+    Review,
+    Table,
+    joined_name,
+    pair_close_names,
+    phone_distance,
+    same_person_name,
+)
 
 BUCKET_OK = 1
 BUCKET_REVIEW = 2
@@ -390,6 +397,8 @@ def merge_same_name_results(db_path: Path) -> int:
 
 
 def _rematch_conn(conn: sqlite3.Connection, video_id: int | None = None) -> int:
+    merged = 0
+    merged += _absorb_ocr_phone_twins(conn, video_id)
     if video_id is None:
         rows = conn.execute(
             """
@@ -413,7 +422,6 @@ def _rematch_conn(conn: sqlite3.Connection, video_id: int | None = None) -> int:
             grouped[int(row["video_id"])]["phones"].append(row)
         elif row["username"] and not row["phone"]:
             grouped[int(row["video_id"])]["users"].append(row)
-    merged = 0
     for items in grouped.values():
         merged += _merge_pair_group(conn, items["phones"], items["users"])
     if video_id is None:
@@ -427,7 +435,64 @@ def _rematch_conn(conn: sqlite3.Connection, video_id: int | None = None) -> int:
         phones = [row for row in leftovers if row["phone"] and not row["username"]]
         users = [row for row in leftovers if row["username"] and not row["phone"]]
         merged += _merge_pair_group(conn, phones, users)
+    merged += _absorb_ocr_phone_twins(conn, video_id)
     return merged
+
+
+def _absorb_ocr_phone_twins(conn: sqlite3.Connection, video_id: int | None = None) -> int:
+    """Số ma OCR: cùng video, cùng tên, lệch ≤2 chữ số với một hàng đã đủ @ → xóa bản thiếu.
+
+    Không đụng hai số thật cùng tên khi cả hai đều chưa có @ (vd Tranhungchef).
+    """
+    if video_id is None:
+        complete = conn.execute(
+            """
+            SELECT id, phone, name, username, video_id
+            FROM results
+            WHERE phone != '' AND username != ''
+            """
+        ).fetchall()
+        incomplete = conn.execute(
+            """
+            SELECT id, phone, name, username, video_id
+            FROM results
+            WHERE phone != '' AND username = ''
+            """
+        ).fetchall()
+    else:
+        complete = conn.execute(
+            """
+            SELECT id, phone, name, username, video_id
+            FROM results
+            WHERE video_id = ? AND phone != '' AND username != ''
+            """,
+            (video_id,),
+        ).fetchall()
+        incomplete = conn.execute(
+            """
+            SELECT id, phone, name, username, video_id
+            FROM results
+            WHERE video_id = ? AND phone != '' AND username = ''
+            """,
+            (video_id,),
+        ).fetchall()
+    removed = 0
+    for weak in incomplete:
+        for strong in complete:
+            if int(weak["video_id"]) != int(strong["video_id"]):
+                continue
+            if phone_distance(str(weak["phone"]), str(strong["phone"])) > 2:
+                continue
+            if not same_person_name(str(weak["name"]), str(strong["name"])):
+                continue
+            cur = conn.execute(
+                "DELETE FROM results WHERE id = ? AND phone != '' AND username = ''",
+                (weak["id"],),
+            )
+            if cur.rowcount == 1:
+                removed += 1
+            break
+    return removed
 
 
 def _merge_pair_group(
@@ -479,23 +544,35 @@ _RESULT_SELECT = """
 """
 
 
+def _view_sql(view: str) -> str:
+    """complete = đủ 3 cột; incomplete = thiếu số hoặc @; all = mọi dòng."""
+    kind = (view or "complete").strip().lower()
+    if kind == "incomplete":
+        return "(r.phone = '' OR r.username = '')"
+    if kind == "all":
+        return "1=1"
+    return "(r.phone != '' AND r.username != '')"
+
+
 def search_results(
     db_path: Path,
     query: str = "",
     limit: int = 50,
     offset: int = 0,
+    view: str = "complete",
 ) -> list[dict[str, object]]:
-    """Tìm theo đầu số, đầu username hoặc tên video. Tìm theo khoảng trên chỉ mục khi có thể."""
+    """Tìm theo đầu số, đầu username hoặc tên video. Mặc định chỉ hàng đủ số + @."""
     text = "".join(query.split())
     if text.startswith("+84"):
         text = "0" + text[3:]
     start = max(0, int(offset))
+    view_clause = _view_sql(view)
     with connect(db_path) as conn:
         if text.isdigit():
             rows = conn.execute(
                 _RESULT_SELECT
-                + """
-                WHERE r.phone >= ? AND r.phone < ? AND r.phone != ''
+                + f"""
+                WHERE r.phone >= ? AND r.phone < ? AND r.phone != '' AND {view_clause}
                 ORDER BY r.phone
                 LIMIT ? OFFSET ?
                 """,
@@ -504,8 +581,8 @@ def search_results(
         elif text.startswith("@"):
             rows = conn.execute(
                 _RESULT_SELECT
-                + """
-                WHERE r.username >= ? AND r.username < ? AND r.username != ''
+                + f"""
+                WHERE r.username >= ? AND r.username < ? AND r.username != '' AND {view_clause}
                 ORDER BY r.username
                 LIMIT ? OFFSET ?
                 """,
@@ -524,7 +601,7 @@ def search_results(
                 rows = conn.execute(
                     _RESULT_SELECT
                     + f"""
-                    WHERE r.video_id IN ({marks})
+                    WHERE r.video_id IN ({marks}) AND {view_clause}
                     ORDER BY r.id ASC
                     LIMIT ? OFFSET ?
                     """,
@@ -534,8 +611,8 @@ def search_results(
                 handle = "@" + text
                 rows = conn.execute(
                     _RESULT_SELECT
-                    + """
-                    WHERE r.username >= ? AND r.username < ? AND r.username != ''
+                    + f"""
+                    WHERE r.username >= ? AND r.username < ? AND r.username != '' AND {view_clause}
                     ORDER BY r.username
                     LIMIT ? OFFSET ?
                     """,
@@ -544,7 +621,8 @@ def search_results(
         else:
             rows = conn.execute(
                 _RESULT_SELECT
-                + """
+                + f"""
+                WHERE {view_clause}
                 ORDER BY r.id ASC
                 LIMIT ? OFFSET ?
                 """,
@@ -553,20 +631,21 @@ def search_results(
     return [_public_result(row) for row in rows]
 
 
-def count_results(db_path: Path, query: str = "") -> int:
+def count_results(db_path: Path, query: str = "", view: str = "complete") -> int:
     """Đếm tổng dòng khớp bộ lọc để trang chủ biết còn phải tải tiếp không."""
     text = "".join(query.split())
     if text.startswith("+84"):
         text = "0" + text[3:]
+    view_clause = _view_sql(view).replace("r.", "")
     with connect(db_path) as conn:
         if text.isdigit():
             row = conn.execute(
-                "SELECT COUNT(*) AS n FROM results WHERE phone >= ? AND phone < ? AND phone != ''",
+                f"SELECT COUNT(*) AS n FROM results WHERE phone >= ? AND phone < ? AND phone != '' AND {view_clause}",
                 (text, text + ":"),
             ).fetchone()
         elif text.startswith("@"):
             row = conn.execute(
-                "SELECT COUNT(*) AS n FROM results WHERE username >= ? AND username < ? AND username != ''",
+                f"SELECT COUNT(*) AS n FROM results WHERE username >= ? AND username < ? AND username != '' AND {view_clause}",
                 (text, text + "\U0010ffff"),
             ).fetchone()
         elif text:
@@ -580,17 +659,17 @@ def count_results(db_path: Path, query: str = "") -> int:
             if video_ids:
                 marks = ",".join("?" for _ in video_ids)
                 row = conn.execute(
-                    f"SELECT COUNT(*) AS n FROM results WHERE video_id IN ({marks})",
+                    f"SELECT COUNT(*) AS n FROM results WHERE video_id IN ({marks}) AND {view_clause}",
                     video_ids,
                 ).fetchone()
             else:
                 handle = "@" + text
                 row = conn.execute(
-                    "SELECT COUNT(*) AS n FROM results WHERE username >= ? AND username < ? AND username != ''",
+                    f"SELECT COUNT(*) AS n FROM results WHERE username >= ? AND username < ? AND username != '' AND {view_clause}",
                     (handle, handle + "\U0010ffff"),
                 ).fetchone()
         else:
-            row = conn.execute("SELECT COUNT(*) AS n FROM results").fetchone()
+            row = conn.execute(f"SELECT COUNT(*) AS n FROM results WHERE {view_clause}").fetchone()
     return int(row["n"])
 
 

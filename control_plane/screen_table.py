@@ -495,10 +495,15 @@ def build_table(frames: list[FrameObs]) -> Table:
     return table
 
 
-def _digit_hamming(left: str, right: str) -> int:
+def phone_distance(left: str, right: str) -> int:
+    """Số chữ số khác nhau giữa hai số cùng độ dài. Khác độ dài → 99."""
     if len(left) != len(right):
         return 99
     return sum(a != b for a, b in zip(left, right))
+
+
+def _digit_hamming(left: str, right: str) -> int:
+    return phone_distance(left, right)
 
 
 def _phones_compatible(left: str, right: str, contacts: dict[str, _Tally], shown: dict[str, set[int]]) -> bool:

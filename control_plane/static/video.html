@@ -56,6 +56,10 @@
       <input id="device" type="text" maxlength="80" placeholder="VD: iPhone 13 của An" />
       <p class="note">Tên này gắn vào mọi kết quả của video bạn tải lên từ máy này.</p>
     </div>
+    <p class="note" style="margin-bottom:0.7rem">
+      Để có đủ <b>số + tên + @username</b> trên một hàng: trong video hãy <b>mở hồ sơ</b> từng người.
+      Chỉ lướt danh bạ thì chỉ có số và tên, không có @.
+    </p>
     <div class="drop" id="drop">
       <p>Kéo nhiều video vào đây</p>
       <p class="note">hoặc</p>
@@ -78,6 +82,11 @@
 
   <section>
     <h2>Kết quả đã lưu</h2>
+    <div class="row" style="margin-bottom:0.55rem">
+      <button class="ghost" type="button" data-view="complete" id="viewComplete">Đủ 3 cột</button>
+      <button class="ghost" type="button" data-view="incomplete" id="viewIncomplete">Chưa đủ</button>
+      <button class="ghost" type="button" data-view="all" id="viewAll">Tất cả</button>
+    </div>
     <input id="query" type="search" placeholder="Gõ đầu số, @username hoặc tên video (VD: IMG_0018)" />
     <p id="resultsNote" class="note"></p>
     <div id="results" class="table-wrap"></div>
@@ -219,6 +228,15 @@
 
   var resultsAsked = 0;
   var RESULT_PAGE = 1000;
+  var resultsView = "complete";
+
+  function setViewButtons() {
+    ["complete", "incomplete", "all"].forEach(function (kind) {
+      var button = document.querySelector("[data-view='" + kind + "']");
+      if (!button) return;
+      button.className = kind === resultsView ? "primary" : "ghost";
+    });
+  }
 
   function renderResultTable(items) {
     var html = "<table><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Time quét</th><th>Tên máy</th><th>Video</th></tr>";
@@ -236,11 +254,13 @@
     var items = [];
     var offset = 0;
     var total = null;
-    note.textContent = "Đang tải toàn bộ kết quả...";
+    setViewButtons();
+    note.textContent = "Đang tải kết quả...";
     note.className = "note";
     while (true) {
       var response = await api(
         "/v1/results?q=" + encodeURIComponent(q) +
+        "&view=" + encodeURIComponent(resultsView) +
         "&limit=" + RESULT_PAGE +
         "&offset=" + offset
       );
@@ -257,14 +277,19 @@
       offset = items.length;
     }
     if (asked !== resultsAsked) return;
+    var viewLabel = resultsView === "complete" ? "đủ 3 cột" : (resultsView === "incomplete" ? "chưa đủ" : "tất cả");
     if (!items.length) {
-      box.innerHTML = "<p class='note'>Chưa có dòng nào.</p>";
-      note.textContent = q ? "Không có kết quả cho từ khóa này." : "";
+      box.innerHTML = "<p class='note'>Chưa có dòng nào trong mục «" + viewLabel + "».</p>";
+      note.textContent = q
+        ? ("Không có kết quả «" + viewLabel + "» cho từ khóa này.")
+        : (resultsView === "complete"
+          ? "Chưa có hàng đủ số + tên + @. Hãy mở hồ sơ khi quay video, hoặc xem mục Chưa đủ."
+          : "");
       return;
     }
     note.textContent = q
-      ? ("Đang hiện đủ " + items.length + " dòng cho «" + q + "» trên trang này.")
-      : ("Đang hiện đủ " + items.length + " dòng kết quả trên trang này.");
+      ? ("Đang hiện " + items.length + " dòng «" + viewLabel + "» cho «" + q + "».")
+      : ("Đang hiện " + items.length + " dòng «" + viewLabel + "» trên trang này.");
     box.innerHTML = renderResultTable(items);
   }
 
@@ -339,6 +364,12 @@
     sendFiles(event.dataTransfer.files);
   });
   document.getElementById("query").addEventListener("input", loadResults);
+  document.querySelectorAll("[data-view]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      resultsView = button.getAttribute("data-view") || "complete";
+      loadResults();
+    });
+  });
   document.getElementById("backup").addEventListener("click", async function () {
     var note = document.getElementById("backupNote");
     note.textContent = "Đang tạo liên kết tải...";

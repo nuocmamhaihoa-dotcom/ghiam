@@ -179,12 +179,13 @@ def results(
     q: str = "",
     limit: int = Query(default=1000, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
+    view: str = Query(default="complete", pattern="^(complete|incomplete|all)$"),
 ) -> dict[str, object]:
     _auth(authorization)
     init_db(settings.video_db_path)
-    items = search_results(settings.video_db_path, q, limit, offset)
-    total = count_results(settings.video_db_path, q)
-    return {"count": len(items), "total": total, "offset": offset, "items": items}
+    items = search_results(settings.video_db_path, q, limit, offset, view)
+    total = count_results(settings.video_db_path, q, view)
+    return {"count": len(items), "total": total, "offset": offset, "view": view, "items": items}
 
 
 @router.post("/v1/backup/ticket")

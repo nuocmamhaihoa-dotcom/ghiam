@@ -124,7 +124,7 @@ class VideoStoreTests(unittest.TestCase):
                 ],
             ),
         )
-        found = {item["phone"]: item for item in search_results(self.db, limit=20)}
+        found = {item["phone"]: item for item in search_results(self.db, limit=20, view="all")}
         self.assertEqual(found["0982117072"]["username"], "@hanhnguyenn375")
         self.assertEqual(found["0982117072"]["bucket"], "Đã lưu")
         second = self._add("b.mp4", "b")
@@ -140,14 +140,16 @@ class VideoStoreTests(unittest.TestCase):
             ),
         )
         self.assertEqual(rematch_results(self.db), 1)
-        found = {item["phone"]: item for item in search_results(self.db, limit=20)}
+        found = {item["phone"]: item for item in search_results(self.db, limit=20, view="all")}
         self.assertEqual(found["0911111111"]["username"], "@dangtam.3")
         self.assertEqual(found["0900000003"]["username"], "@quang.le354")
         self.assertEqual(found["0900000001"]["username"], "")
         self.assertEqual(found["0900000002"]["username"], "")
-        listed = search_results(self.db, limit=20)
+        listed = search_results(self.db, limit=20, view="all")
         self.assertTrue(any(item["username"] == "@user1" and item["phone"] == "" for item in listed))
         self.assertFalse(any(item["username"] == "@quang.le354" and item["phone"] == "" for item in listed))
+        complete = search_results(self.db, limit=20, view="complete")
+        self.assertTrue(all(item["phone"] and item["username"] for item in complete))
         self.assertEqual(rematch_results(self.db), 0)
 
     def test_counts_follow_every_insert_upgrade_and_merge(self) -> None:
@@ -218,6 +220,26 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(found["username"], "@uniquehandle99")
         self.assertEqual(found["bucket"], "Đã lưu")
         self.assertEqual(stats(self.db)["results"], 1)
+        self.assertEqual(rematch_results(self.db), 0)
+
+    def test_ocr_phone_twin_is_absorbed_into_complete_row(self) -> None:
+        video_id = self._add("twins.mp4", "twins")
+        finish(
+            self.db,
+            video_id,
+            Table(
+                rows=[Row("0393525302", "kimngn2298", "@kimngn2298")],
+                unopened=[
+                    Unopened("0898525302", "kimngn2298"),  # lệch 2 chữ số → số ma
+                    Unopened("0593525202", "kimngn2298"),  # lệch 2 chữ số → số ma
+                    Unopened("0912345678", "kimngn2298"),  # lệch nhiều → giữ (có thể là số khác)
+                ],
+            ),
+        )
+        phones = sorted(item["phone"] for item in search_results(self.db, view="all", limit=20))
+        self.assertEqual(phones, ["0393525302", "0912345678"])
+        self.assertEqual(count_results(self.db, view="complete"), 1)
+        self.assertEqual(count_results(self.db, view="incomplete"), 1)
         self.assertEqual(rematch_results(self.db), 0)
 
     def test_finished_video_can_be_uploaded_again_and_reread(self) -> None:
