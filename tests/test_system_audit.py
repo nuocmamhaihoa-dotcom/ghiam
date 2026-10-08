@@ -124,6 +124,8 @@ class SystemAuditTests(unittest.TestCase):
         text = page.text
         self.assertIn("viewComplete", text)
         self.assertIn("mở hồ sơ", text)
+        self.assertIn("Cách chắc nhất", text)
+        self.assertIn("nhìn rõ dòng @username", text)
         self.assertIn("Đủ 3 cột", text)
         self.assertNotIn("100 dòng mới nhất", text)
         self.assertIn("Time quét", text)

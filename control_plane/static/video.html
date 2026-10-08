@@ -46,6 +46,14 @@
     .ok { color: #0d6b3a; }
     #file { display: none; }
     .device-box { margin-bottom: 0.7rem; }
+    .howto {
+      margin: 0 0 0.85rem; padding: 0.85rem 0.95rem; border-radius: 12px;
+      background: #eef7f1; border: 1px solid #b9dbc6; color: #143524;
+    }
+    .howto h3 { margin: 0 0 0.45rem; font-size: 1rem; }
+    .howto ol { margin: 0; padding-left: 1.2rem; }
+    .howto li { margin: 0.25rem 0; }
+    .howto .tiny { margin-top: 0.45rem; color: #3d5c48; font-size: 0.92rem; }
   </style>
 </head>
 <body>
@@ -60,11 +68,16 @@
       <input id="device" type="text" maxlength="80" placeholder="VD: iPhone 13 của An" />
       <p class="note">Tên này gắn vào mọi kết quả của video bạn tải lên từ máy này.</p>
     </div>
-    <p class="note" style="margin-bottom:0.7rem">
-      <b>Hàng đủ</b> = số + tên + @username. Máy chủ bắt hồ sơ từ khoảng <b>0,1 giây</b> đứng yên.
-      Vẫn nên mở tới khi <b>thấy rõ @</b> rồi mới thoát (tránh chữ bị nhòe khi đang animate).
-      Chỉ lướt danh bạ thì vẫn lưu số/tên ở mục <b>Chưa mở hồ sơ</b>.
-    </p>
+    <div class="howto" id="howto">
+      <h3>Cách chắc nhất để có hàng đủ (số + tên + @)</h3>
+      <ol>
+        <li>Trong Messenger/Facebook: mở danh bạ, <b>bấm vào từng người</b>.</li>
+        <li>Đợi trang hồ sơ hiện ra và <b>nhìn rõ dòng @username</b> (một nhịp rất ngắn là đủ).</li>
+        <li><b>Rồi mới thoát</b> về danh bạ — không chạm mở rồi back ngay lúc chữ còn đang nhòe.</li>
+        <li>Làm lần lượt từng người cần lấy, rồi tải video lên đây.</li>
+      </ol>
+      <p class="tiny">Máy chủ bắt được hồ sơ từ ~0,1 giây đứng yên. Chỉ lướt danh bạ (không mở hồ sơ) thì chỉ có số/tên ở mục <b>Chưa mở hồ sơ</b>.</p>
+    </div>
     <div class="drop" id="drop">
       <p>Kéo nhiều video vào đây</p>
       <p class="note">hoặc</p>
@@ -301,7 +314,7 @@
       note.textContent = q
         ? ("Không có kết quả «" + viewLabel + "» cho từ khóa này.")
         : (resultsView === "complete"
-          ? "Chưa có hàng đủ số + tên + @. Hãy mở hồ sơ khi quay video, hoặc xem mục Chưa đủ."
+          ? "Chưa có hàng đủ số + tên + @. Quay lại: mở từng người tới khi thấy rõ @ rồi mới thoát. Hoặc xem mục Chưa đủ."
           : "");
       return;
     }
