@@ -268,11 +268,21 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Tải toàn bộ", response.text)
         self.assertIn("/v1/scans/export", response.text)
         self.assertIn('id="scanPassword"', response.text)
-        self.assertIn("90% CPU và RAM", response.text)
+        self.assertIn("95% CPU và RAM", response.text)
+        self.assertIn("suốt thời gian hub chạy", response.text)
         self.assertIn("suốt thời gian nối", response.text)
         self.assertIn("PC phụ đang đọc", response.text)
         self.assertIn("Báo cáo 24 giờ", response.text)
         self.assertIn("Chưa có báo cáo trong 24 giờ.", response.text)
+        self.assertIn('id="boardPhoneTable"', response.text)
+        self.assertIn('id="boardHistoryTable"', response.text)
+        self.assertIn('id="boardActiveTable"', response.text)
+        self.assertIn('id="boardQueuedTable"', response.text)
+        self.assertIn("renderActiveTable", response.text)
+        self.assertIn("renderQueuedTable", response.text)
+        self.assertIn('send: "Gửi"', response.text)
+        self.assertIn("Có tài khoản", response.text)
+        self.assertIn("Cách đọc bảng", response.text)
         self.assertNotIn("test-token", (self.client.get("/static/dashboard.html")).text)
 
     def test_phone_emulator_page(self) -> None:
@@ -391,10 +401,22 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Lưu tên", page.text)
         self.assertIn("iPhone 8 số 1", page.text)
         self.assertIn("Báo cáo 24 giờ", page.text)
+        self.assertIn('id="boardPhoneTable"', page.text)
+        self.assertIn('id="boardHistoryTable"', page.text)
+        self.assertIn('id="boardActiveTable"', page.text)
+        self.assertIn('id="boardQueuedTable"', page.text)
+        self.assertIn("renderActiveTable", page.text)
+        self.assertIn("renderQueuedTable", page.text)
+        self.assertIn('send: "Gửi"', page.text)
+        self.assertIn("Đang chờ iPhone", page.text)
+        self.assertIn("Có tài khoản", page.text)
+        self.assertIn("Cách đọc bảng", page.text)
+        self.assertIn("renderHistoryTable", page.text)
         self.assertIn("Thứ ", page.text)
         self.assertIn("80% CPU và RAM", page.text)
         self.assertIn("suốt thời gian", page.text)
-        self.assertIn("90% CPU và RAM", page.text)
+        self.assertIn("95% CPU và RAM", page.text)
+        self.assertIn("suốt thời gian hub chạy", page.text)
         self.assertIn("Tải toàn bộ", page.text)
         self.assertIn('id="scanPassword"', page.text)
         self.assertIn("/v1/scans/export", page.text)
@@ -406,6 +428,11 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Thoát trang vẫn đọc tiếp", page.text)
         self.assertIn("/sw.js", page.text)
         self.assertIn("fb-poller-carry", page.text)
+        self.assertIn("carryPaused", page.text)
+        self.assertIn("shouldYield", page.text)
+        self.assertIn("yieldCarry()", page.text)
+        self.assertNotIn('if (document.visibilityState === "hidden") touched = Date.now()', page.text)
+        self.assertIn("60000", page.text)
         self.assertIn("fb_live_jobs", page.text)
         self.assertNotIn("Mở app khác thì iPhone dừng việc gửi", page.text)
         worker = self.client.get("/sw.js")
@@ -707,7 +734,7 @@ class ActionApiTests(unittest.TestCase):
         body = health.json()
         build = str(body["iphoneBuild"])
         self.assertEqual(body["delivery"], "/tai")
-        self.assertEqual(build, "54")
+        self.assertEqual(build, "61")
         self.assertEqual(body["videoHelper"]["connected"], False)
         self.assertEqual(body["videoHelper"]["cpus"], 0)
         self.assertEqual(body["videoHelper"]["count"], 0)
@@ -717,7 +744,7 @@ class ActionApiTests(unittest.TestCase):
         info = self.client.get("/v1/delivery")
         self.assertEqual(info.status_code, 200, info.text)
         payload = info.json()
-        self.assertEqual(payload["iphoneBuild"], 54)
+        self.assertEqual(payload["iphoneBuild"], 61)
         self.assertEqual(payload["iphonePath"], "/iphone")
         self.assertEqual(payload["installPath"], "/tai")
         package = payload["package"]
@@ -1632,7 +1659,10 @@ class ActionApiTests(unittest.TestCase):
         self.assertTrue(body.get("error"), body)
         problems = body.get("problems")
         self.assertIsInstance(problems, list)
-        self.assertTrue(any("Máy chủ đọc tiếp" in str(item) for item in problems), problems)
+        self.assertTrue(
+            any("ngừng gửi tiến trình" in str(item) for item in problems),
+            problems,
+        )
 
     def test_pc_reports_its_build_models_and_reader(self) -> None:
         beat = self.client.post(
@@ -1806,10 +1836,8 @@ class ActionApiTests(unittest.TestCase):
         os.utime(path, (old, old))
         app_module._sweep_uploads()
         board = self.client.get("/v1/recordings/board", headers=self.headers).json()
-        self.assertFalse(any(row["name"] == "im-lang.mp4" for row in board["active"]))
-        failed = [row for row in board["history"] if row["jobId"] == ledger]
-        self.assertEqual(len(failed), 1)
-        self.assertIn("Gửi bị đứt", failed[0]["error"])
+        self.assertTrue(any(row["name"] == "im-lang.mp4" for row in board["active"]))
+        self.assertFalse(any(row["jobId"] == ledger for row in board["history"]))
         self.assertTrue(path.is_file())
         put = self.client.put(
             f"/v1/recordings/uploads/{upload_id}",
@@ -1820,6 +1848,38 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(put.status_code, 200, put.text)
         self.assertEqual(put.json()["end"], 4)
         self.assertTrue(path.is_file())
+
+    def test_idle_upload_asks_the_iphone_to_keep_sending(self) -> None:
+        payload = b"0123456789abcdef"
+        started = self.client.post(
+            "/v1/recordings/uploads",
+            headers=self.headers,
+            json={"name": "dung-gui.mp4", "size": len(payload)},
+        )
+        self.assertEqual(started.status_code, 200, started.text)
+        upload_id = started.json()["uploadId"]
+        first = self.client.put(
+            f"/v1/recordings/uploads/{upload_id}",
+            headers=self.headers,
+            params={"offset": 0},
+            content=payload[:4],
+        )
+        self.assertEqual(first.status_code, 200, first.text)
+        with app_module._uploads_lock:
+            item = app_module._uploads[upload_id]
+            ledger = str(item["jobId"])
+            path = Path(item["path"])
+            item["created"] = time.time() - 120
+        old = time.time() - 120
+        os.utime(path, (old, old))
+        from control_plane import video_ledger as ledger_module
+
+        ledger_module._SEEN.clear()
+        actions = app_module._nudge_idle_uploads()
+        self.assertIn("upload_idle_wait", actions)
+        board = self.client.get("/v1/recordings/board", headers=self.headers).json()
+        row = next(item for item in board["active"] if item["jobId"] == ledger)
+        self.assertIn("Đang chờ iPhone gửi tiếp", row["task"])
 
     def test_abandon_keeps_received_bytes(self) -> None:
         payload = b"abcdef"

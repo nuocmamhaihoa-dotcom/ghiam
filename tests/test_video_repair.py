@@ -188,10 +188,18 @@ class VideoRepairTests(unittest.TestCase):
             self.assertTrue(app_module._auto_retry(job))
         self.assertTrue(job.claim("pc-dut"))
         self.assertTrue(job.fail_from_worker("pc-dut", "Mất kết nối khi đang tải video."))
+        with patch.object(app_module, "_spawn_video", side_effect=lambda *args: spawned.append(args) or True):
+            self.assertTrue(app_module._auto_retry(job))
+        self.assertEqual(len(spawned), 3)
+        self.assertFalse(job.done)
+        job.fail("Không đọc được video.")
         with patch.object(app_module, "_spawn_video", return_value=True) as blocked:
             self.assertFalse(app_module._auto_retry(job))
         blocked.assert_not_called()
-        self.assertIn("Không đọc được video.", "Không đọc được video.")
+        job.finished_at = time.time() - 180
+        with patch.object(app_module, "_spawn_video", return_value=True) as later:
+            self.assertTrue(app_module._auto_retry(job))
+        later.assert_called_once()
         self.assertFalse(video_repair.is_transient("Không đọc được video."))
 
     def test_nine_hundred_ninety_nine_different_faults_heal(self) -> None:
@@ -376,8 +384,10 @@ class VideoRepairTests(unittest.TestCase):
             self.assertEqual(retried, [job.id, job.id])
             job.owner = f"pc-{index}"
             job.fail(message)
-            self.assertEqual(video_repair.sweep(self._hooks(started, retried=retried)), [])
-            self.assertTrue(job.done)
+            actions = video_repair.sweep(self._hooks(started, retried=retried))
+            self.assertIn("transient_failure_retry", actions)
+            self.assertEqual(retried, [job.id, job.id, job.id])
+            self.assertFalse(job.done)
             return kind, index, message
         if kind == 13:
             job, path = self._fresh(name)

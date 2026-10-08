@@ -156,6 +156,33 @@
     .board-fill { height: 100%; width: 0; background: var(--accent); }
     .board-meta { margin: 0.25rem 0 0; }
     .board-problems { margin: 0.25rem 0 0; padding-left: 1.2rem; color: var(--bad); }
+    .report-wrap { overflow-x: auto; margin: 0.35rem 0 0.55rem; -webkit-overflow-scrolling: touch; }
+    .report-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    #boardHistoryTable { min-width: 36rem; }
+    #boardPhoneTable { min-width: 18rem; }
+    .report-table th {
+      position: sticky; top: 0; background: var(--card); white-space: nowrap;
+      font-size: 0.82rem; color: var(--muted); font-weight: 750; border-bottom: 1px solid var(--line);
+      padding: 0.45rem 0.35rem; text-align: left;
+    }
+    .report-table th.num, .report-table td.num {
+      text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
+    }
+    .report-table td {
+      border-bottom: 1px solid var(--line); padding: 0.5rem 0.35rem;
+      vertical-align: top; word-break: break-word;
+    }
+    .report-table td.when { white-space: nowrap; color: var(--muted); font-size: 0.82rem; }
+    .report-table td.machine { white-space: nowrap; font-weight: 650; }
+    .report-table td.num { font-weight: 750; }
+    .report-table .video-name { font-weight: 750; line-height: 1.3; }
+    .report-table .video-note { display: block; margin-top: 0.2rem; font-size: 0.82rem; font-weight: 500; color: var(--muted); }
+    .report-table .ok { color: var(--ok); font-weight: 750; white-space: nowrap; }
+    .report-table .bad { color: var(--bad); font-weight: 750; white-space: nowrap; }
+    .report-table .board-retry {
+      width: auto; display: inline-block; margin: 0.3rem 0 0; min-height: 36px;
+      padding: 0.2rem 0.7rem; font-size: 0.88rem;
+    }
     .board-retry {
       min-height: 40px; margin-top: 0.45rem; border-radius: 10px;
       border: 1px solid var(--ink); background: #fff; color: var(--ink);
@@ -194,7 +221,7 @@
   <p id="err" class="err" hidden></p>
   <main>
     <section data-view="home">
-      <p class="lead" id="helperLine">PC phụ chưa nối. Video được máy chủ đọc bằng 90% CPU và RAM của VPS.</p>
+      <p class="lead" id="helperLine">PC phụ chưa nối. Video được máy chủ đọc bằng 95% CPU và RAM của VPS suốt thời gian hub chạy.</p>
       <label id="drop" class="drop">
         <strong>Thả video vào đây</strong>
         <span>Hoặc bấm để chọn. Nhiều video một lúc. Hub tự đọc và lưu người nhìn thấy, không cần bấm phát.</span>
@@ -214,19 +241,77 @@
       <section class="panel" id="boardBox">
         <h2>Việc đang làm</h2>
         <details class="help">
-          <summary>Các bước</summary>
-          <p class="board-note">Video đang chờ hiện thứ tự. Video đang đọc hiện bước: Chờ, Tách hình, Đọc chữ, Đọc lại, Ghép tên, Ghi xong.</p>
+          <summary>Cách đọc bảng</summary>
+          <p class="board-note">Mỗi dòng một video đang gửi hoặc đang đọc. Cột Bước: Gửi, Chờ, Tách hình, Đọc chữ, Đọc lại, Ghép tên, Ghi xong. Cột % và Việc cho biết tiến độ chi tiết.</p>
         </details>
-        <div id="boardActive"></div>
+        <div class="report-wrap">
+          <table id="boardActiveTable" class="report-table" hidden>
+            <thead>
+              <tr>
+                <th>Video</th>
+                <th>Máy</th>
+                <th>Trạng thái</th>
+                <th>Bước</th>
+                <th class="num">%</th>
+                <th>Việc</th>
+              </tr>
+            </thead>
+            <tbody id="boardActive"></tbody>
+          </table>
+        </div>
+        <p id="boardActiveEmpty" class="board-note">Chưa có video nào.</p>
         <h2>Hàng chờ</h2>
-        <div id="boardQueued"></div>
+        <div class="report-wrap">
+          <table id="boardQueuedTable" class="report-table" hidden>
+            <thead>
+              <tr>
+                <th class="num">#</th>
+                <th>Video</th>
+                <th>Máy</th>
+                <th class="num">MB</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody id="boardQueued"></tbody>
+          </table>
+        </div>
+        <p id="boardQueuedEmpty" class="board-note">Chưa có video nào.</p>
         <h2>Báo cáo 24 giờ</h2>
         <details class="help">
-          <summary>Báo cáo giữ bao lâu</summary>
-          <p class="board-note">Mỗi video ghi tên máy, số người thấy trong danh bạ, số người có tài khoản, và số người ghi được. Báo cáo giữ 24 giờ rồi xóa. Người đã quét được giữ vĩnh viễn. Video lỗi còn file, bấm Đọc lại để làm tiếp.</p>
+          <summary>Cách đọc bảng</summary>
+          <p class="board-note">Bảng máy tổng hợp theo từng iPhone. Bảng video hiện thời gian, máy, tên file, số người trong danh bạ, số người có tài khoản, số người ghi được, và kết quả. Báo cáo giữ 24 giờ rồi xóa. Người đã quét được giữ vĩnh viễn. Video lỗi còn file, bấm Đọc lại để làm tiếp.</p>
         </details>
-        <div id="boardPhones"></div>
-        <div id="boardHistory"></div>
+        <div class="report-wrap">
+          <table id="boardPhoneTable" class="report-table" hidden>
+            <thead>
+              <tr>
+                <th>Máy</th>
+                <th class="num">Video</th>
+                <th class="num">Ghi được</th>
+                <th class="num">Lỗi</th>
+              </tr>
+            </thead>
+            <tbody id="boardPhones"></tbody>
+          </table>
+        </div>
+        <p id="boardPhoneEmpty" class="board-note">Chưa có báo cáo trong 24 giờ.</p>
+        <div class="report-wrap">
+          <table id="boardHistoryTable" class="report-table" hidden>
+            <thead>
+              <tr>
+                <th>Thời gian</th>
+                <th>Máy</th>
+                <th>Video</th>
+                <th class="num">Danh bạ</th>
+                <th class="num">Có tài khoản</th>
+                <th class="num">Ghi được</th>
+                <th>Kết quả</th>
+              </tr>
+            </thead>
+            <tbody id="boardHistory"></tbody>
+          </table>
+        </div>
+        <p id="boardHistoryEmpty" class="board-note" hidden>Chưa có video nào.</p>
       </section>
       <p id="videoStatus" class="lead" hidden></p>
       <section class="panel" id="freshBox" hidden>
@@ -999,8 +1084,11 @@
       return { ok: false, error: "Không gửi được video." };
     }
     async function restartLostJob(job) {
-      if (!job.uploadId || (job.restarts || 0) >= 2) return false;
+      if (!job.uploadId) return false;
+      const wait = Math.min(30000, 1000 * ((job.restarts || 0) + 1));
+      if (job.restartAt && Date.now() < job.restartAt) return false;
       job.restarts = (job.restarts || 0) + 1;
+      job.restartAt = Date.now() + wait;
       const again = await finishUpload(job.uploadId);
       if (!again.ok) return false;
       job.jobId = again.jobId;
@@ -1019,7 +1107,7 @@
         Object.keys(headerMap).forEach((key) => request.setRequestHeader(key, headerMap[key]));
         let touched = Date.now();
         const timer = window.setInterval(() => {
-          if (Date.now() - touched < 180000) return;
+          if (Date.now() - touched < 60000) return;
           window.clearInterval(timer);
           request.abort();
         }, 1000);
@@ -1101,30 +1189,16 @@
       }
       return { ok: false, bytes: null };
     }
-    async function abandonUpload(uploadId, message) {
-      if (!uploadId) return;
-      try {
-        await fetch("/v1/recordings/uploads/" + uploadId + "/abandon", {
-          method: "POST",
-          headers: Object.assign({ "Content-Type": "application/json" }, headers()),
-          body: JSON.stringify({ error: message || "Không gửi được video." }),
-        });
-      } catch (error) { /* máy chủ tự ghi gửi bị đứt nếu trang không báo được */ }
-    }
     async function postJobChunked(file, onUpload) {
       const chunkSize = 4 * 1024 * 1024;
       let lastError = "Không gửi được video.";
-      let uploadId = "";
-      for (let round = 0; round < 4; round += 1) {
+      for (let round = 0; ; round += 1) {
         const outcome = await sendVideoPieces(file, onUpload, chunkSize, 1);
-        if (outcome.uploadId) uploadId = String(outcome.uploadId);
         if (outcome.ok) return outcome;
         lastError = outcome.error || lastError;
-        if (outcome.fatal) break;
-        await sleep(Math.min(4000, 800 * (round + 1)));
+        if (outcome.fatal) return { ok: false, error: lastError };
+        await sleep(Math.min(8000, 800 * (round + 1)));
       }
-      await abandonUpload(uploadId, lastError);
-      return { ok: false, error: lastError };
     }
     async function sendVideoPieces(file, onUpload, chunkSize, lanes) {
       let uploadId = "";
@@ -1147,7 +1221,7 @@
             body: JSON.stringify({ name: file.name || "video.mp4", size: file.size, source: "Trang chủ" }),
           });
           if (response.status === 413) return { ok: false, fatal: true, error: "Video quá lớn." };
-          if (response.status === 507) return { ok: false, fatal: true, error: "Hết chỗ trống trên máy chủ." };
+          if (response.status === 507) return { ok: false, error: "Hết chỗ trống trên máy chủ." };
           if (!response.ok) throw new Error("start");
           const started = await response.json();
           if (started && started.uploadId) {
@@ -1198,8 +1272,7 @@
           }
           const read = await readPiece(file, piece.offset, piece.end);
           if (!read.ok) {
-            failure = "Không đọc được video trên máy. Hãy chọn lại video.";
-            fatal = true;
+            failure = "Không đọc được video trên máy. Sẽ đọc lại.";
             return;
           }
           const payload = read.bytes;
@@ -1225,7 +1298,7 @@
             }
             if (!landed && reply) {
               const data = reply.data || {};
-              if (reply.status === 507) { failure = "Hết chỗ trống trên máy chủ."; fatal = true; return; }
+              if (reply.status === 507) { failure = "Hết chỗ trống trên máy chủ."; return; }
               if (reply.status === 404) { markMissing(); return; }
               const mark = typeof data.end === "number" ? data.end : data.offset;
               if (reply.status >= 200 && reply.status < 300 && typeof mark === "number" && mark >= piece.end) landed = true;
@@ -1257,7 +1330,7 @@
           ok: false,
           missing: !!closed.missing,
           short: !!closed.short,
-          fatal: closed.error === "Hết chỗ trống trên máy chủ.",
+          fatal: false,
           error: closed.error,
           uploadId: uploadId,
         };
@@ -1267,12 +1340,11 @@
     async function postJob(file, onUpload) {
       if (file.size > 8 * 1024 * 1024) return postJobChunked(file, onUpload);
       let last = { ok: false, error: "Không gửi được video." };
-      for (let attempt = 0; attempt < 3; attempt += 1) {
+      for (let attempt = 0; ; attempt += 1) {
         last = await postJobOnce(file, onUpload);
-        if (last.ok || last.error === "Video quá lớn." || last.error === "Hết chỗ trống trên máy chủ.") return last;
-        await sleep(400 * (attempt + 1));
+        if (last.ok || last.error === "Video quá lớn.") return last;
+        await sleep(Math.min(8000, 400 * (attempt + 1)));
       }
-      return last;
     }
     async function pollOnce(job) {
       if (!job.jobId || job.done) return;
@@ -1281,17 +1353,17 @@
         response = await fetch("/v1/recordings/jobs/" + job.jobId, { headers: headers() });
       } catch (error) {
         job.misses += 1;
-        if (job.misses >= 8) { job.done = true; job.ok = false; job.error = "Mất kết nối khi đang xử lý."; }
+        job.task = "Mất kết nối. Vẫn đọc tiếp.";
         return;
       }
       if (response.status === 404) {
         if (await restartLostJob(job)) return;
-        job.done = true; job.ok = false; job.error = "Mất tiến trình xử lý. Chọn lại video để gửi tiếp phần còn thiếu.";
+        job.task = "Đang nối lại việc đọc.";
         return;
       }
       if (!response.ok) {
         job.misses += 1;
-        if (job.misses >= 8) { job.done = true; job.ok = false; job.error = "Mất kết nối khi đang xử lý."; }
+        job.task = "Mất kết nối. Vẫn đọc tiếp.";
         return;
       }
       job.misses = 0;
@@ -1301,9 +1373,9 @@
       job.problems = data.problems || [];
       job.canContinue = !!data.canContinue;
       copyReading(job, data);
-      if (!data.done) return;
+      if (!data.done) { job.error = ""; return; }
+      if (data.error) { job.ok = false; job.error = data.error; job.task = data.task || "Đọc lại"; return; }
       job.done = true;
-      if (data.error) { job.ok = false; job.error = data.error; return; }
       job.ok = true;
       forgetUpload(job.file);
       job.people = data.people || [];
@@ -1431,17 +1503,18 @@
         try {
           response = await fetch("/v1/recordings/jobs/" + slot.jobId + "/continue", { method: "POST", headers: headers() });
         } catch (error) {
-          slot.done = true; slot.ok = false; slot.canContinue = false; slot.error = "Mất kết nối khi đang xử lý.";
+          slot.done = false;
+          slot.task = "Mất kết nối. Vẫn đọc tiếp.";
           continue;
         }
         if (response.status === 404 && await restartLostJob(slot)) continue;
         if (!response.ok) {
-          slot.done = true; slot.ok = false;
-          slot.error = response.status === 404 ? "Mất tiến trình xử lý. Chọn lại video để gửi tiếp phần còn thiếu." : "Chưa đọc tiếp được.";
+          slot.done = false;
+          slot.task = response.status === 404 ? "Đang nối lại việc đọc." : "Đang đọc tiếp.";
           continue;
         }
         const data = await response.json();
-        slot.done = !!data.done;
+        slot.done = !!data.done && !data.error;
         slot.ok = !data.error;
         slot.percent = Math.max(slot.percent || 0, data.percent || 0);
         slot.task = data.task || "Đọc tiếp";
@@ -1537,7 +1610,7 @@
           if (Number(timing.fades) > 0) detail += " Bỏ " + timing.fades + " khung mờ lúc chuyển trang.";
           $("helperLine").textContent = "PC phụ đang nối: " + (helper.count || 1) + " máy, " + (helper.cores || helper.cpus || 0) + " lõi" + share + gpu + ". Mỗi máy đọc tối đa hai video. Máy GPU đọc tối đa bốn video." + split + state + detail;
         } else {
-          $("helperLine").textContent = "PC phụ chưa nối. Video được máy chủ đọc bằng 90% CPU và RAM của VPS. Mở phần mềm PC nếu muốn máy tính đọc giúp.";
+          $("helperLine").textContent = "PC phụ chưa nối. Video được máy chủ đọc bằng 95% CPU và RAM của VPS suốt thời gian hub chạy. Mở phần mềm PC nếu muốn máy tính đọc giúp.";
         }
       } catch (error) { /* trang vẫn nhận video khi chưa hỏi được máy phụ */ }
     }
@@ -1549,8 +1622,9 @@
       done: "Đã ghi",
       failed: "Gặp vấn đề",
     };
-    const boardStepOrder = ["wait", "extract", "read", "reread", "merge", "done"];
+    const boardStepOrder = ["send", "wait", "extract", "read", "reread", "merge", "done"];
     const boardStepLabel = {
+      send: "Gửi",
       wait: "Chờ",
       extract: "Tách hình",
       read: "Đọc chữ",
@@ -1562,12 +1636,14 @@
       const state = item.state || "";
       const task = String(item.task || "");
       if (state === "done") return "done";
+      if (state === "uploading" || /Đang gửi|Đang chờ iPhone/.test(task)) return "send";
       if (/Đọc lại/.test(task)) return "reread";
       if (/Ghép|Ghi /.test(task)) return "merge";
       if (/Đọc chữ|Đọc tiếp/.test(task)) return "read";
       if (/Tách|Chọn khung|thời lượng/.test(task)) return "extract";
-      if (/Đã nhận|Đang gửi|Đang chờ|PC phụ đang đọc/.test(task)) return "wait";
+      if (/Đã nhận|Đang chờ|PC phụ đang đọc/.test(task)) return "wait";
       if (state === "reading") return "read";
+      if (state === "queued") return "wait";
       return "wait";
     }
     function boardResult(item) {
@@ -1597,116 +1673,182 @@
       const percent = Math.max(0, Math.min(100, Number(item.percent) || 0));
       return task + " · " + percent + "%.";
     }
-    function renderBoardList(host, items, kind) {
-      host.replaceChildren();
-      if (!items.length) {
-        const empty = document.createElement("p");
-        empty.className = "empty";
-        empty.textContent = "Chưa có video nào.";
-        host.appendChild(empty);
-        return;
+    function numCell(value) {
+      const td = document.createElement("td");
+      td.className = "num";
+      td.textContent = String(Math.max(0, Number(value) || 0));
+      return td;
+    }
+    function videoTitle(item) {
+      const wrap = document.createElement("div");
+      const name = document.createElement("span");
+      name.className = "video-name";
+      name.textContent = item.name || "video";
+      wrap.appendChild(name);
+      if (item.partLabel) {
+        const note = document.createElement("span");
+        note.className = "video-note";
+        note.textContent = item.partLabel;
+        wrap.appendChild(note);
       }
-      items.forEach((item, index) => {
-        const box = document.createElement("div");
-        box.className = "board-job";
-        const title = document.createElement("strong");
-        const name = item.name || "video";
-        title.textContent = item.partLabel ? name + " · " + item.partLabel : name;
-        box.appendChild(title);
-        const steps = document.createElement("div");
-        steps.className = "board-steps";
-        const current = boardStep(item);
-        const at = boardStepOrder.indexOf(current);
-        boardStepOrder.forEach((id, stepIndex) => {
-          const chip = document.createElement("span");
-          chip.className = "board-step";
-          if (item.state === "done" || stepIndex < at) chip.className += " board-step-done";
-          else if (stepIndex === at) chip.className += " board-step-now";
-          chip.textContent = boardStepLabel[id];
-          steps.appendChild(chip);
-        });
-        box.appendChild(steps);
-        const meta = document.createElement("p");
-        meta.className = "meta board-meta";
-        const bits = [boardState[item.state] || item.state || ""];
-        if (item.source) bits.push(item.source);
-        const bytes = Number(item.size) || 0;
-        if (bytes > 0) bits.push((bytes / 1048576).toFixed(1) + " MB");
+      return wrap;
+    }
+    function attachRetry(host, item) {
+      if (item.state !== "failed" || !item.canContinue) return;
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "board-retry";
+      retry.textContent = "Đọc lại";
+      retry.addEventListener("click", async () => {
+        retry.disabled = true;
+        try {
+          const response = await fetch("/v1/recordings/jobs/" + encodeURIComponent(item.jobId) + "/continue", {
+            method: "POST",
+            headers: headers(),
+          });
+          if (!response.ok) {
+            retry.textContent = "Chưa đọc lại được";
+            retry.disabled = false;
+            return;
+          }
+          loadBoard();
+        } catch (error) {
+          retry.textContent = "Chưa đọc lại được";
+          retry.disabled = false;
+        }
+      });
+      host.appendChild(retry);
+    }
+    function boardSizeMb(item) {
+      const bytes = Number(item.size) || 0;
+      if (bytes <= 0) return "—";
+      return (bytes / 1048576).toFixed(1);
+    }
+    function renderActiveTable(items) {
+      const host = $("boardActive");
+      const table = $("boardActiveTable");
+      const empty = $("boardActiveEmpty");
+      if (!host || !table || !empty) return;
+      host.replaceChildren();
+      const rows = Array.isArray(items) ? items : [];
+      table.hidden = !rows.length;
+      empty.hidden = rows.length > 0;
+      rows.forEach((item) => {
+        const tr = document.createElement("tr");
+        const video = document.createElement("td");
+        video.appendChild(videoTitle(item));
+        tr.appendChild(video);
+        const machine = document.createElement("td");
+        machine.className = "machine";
+        machine.textContent = item.source || "—";
+        tr.appendChild(machine);
+        const state = document.createElement("td");
+        state.textContent = boardState[item.state] || item.state || "—";
+        tr.appendChild(state);
+        const step = document.createElement("td");
+        const stepId = boardStep(item);
+        step.textContent = boardStepLabel[stepId] || "Chờ";
+        tr.appendChild(step);
+        tr.appendChild(numCell(Math.max(0, Math.min(100, Number(item.percent) || 0))));
+        const task = document.createElement("td");
+        const bits = [item.task || "Đang xử lý"];
         if (item.workerName) bits.push(item.workerName);
-        meta.textContent = bits.filter(Boolean).join(" · ");
-        box.appendChild(meta);
-        const detail = document.createElement("p");
-        detail.className = "board-detail";
-        detail.textContent = boardDetail(item, kind, index);
-        box.appendChild(detail);
-        const track = document.createElement("div");
-        track.className = "board-track";
-        const fill = document.createElement("div");
-        fill.className = "board-fill";
-        fill.style.width = Math.max(0, Math.min(100, Number(item.percent) || 0)) + "%";
-        track.appendChild(fill);
-        box.appendChild(track);
         const problems = Array.isArray(item.problems) ? item.problems.slice() : [];
         if (item.error && problems.indexOf(item.error) < 0) problems.push(item.error);
-        if (problems.length) {
-          const list = document.createElement("ul");
-          list.className = "board-problems";
-          problems.forEach((text) => {
-            const line = document.createElement("li");
-            line.textContent = String(text);
-            list.appendChild(line);
-          });
-          box.appendChild(list);
-        }
-        if (kind === "history" && item.state === "failed" && item.canContinue) {
-          const retry = document.createElement("button");
-          retry.type = "button";
-          retry.className = "board-retry";
-          retry.textContent = "Đọc lại";
-          retry.addEventListener("click", async () => {
-            retry.disabled = true;
-            try {
-              const response = await fetch("/v1/recordings/jobs/" + encodeURIComponent(item.jobId) + "/continue", {
-                method: "POST",
-                headers: headers(),
-              });
-              if (!response.ok) {
-                retry.textContent = "Chưa đọc lại được";
-                retry.disabled = false;
-                return;
-              }
-              loadBoard();
-            } catch (error) {
-              retry.textContent = "Chưa đọc lại được";
-              retry.disabled = false;
-            }
-          });
-          box.appendChild(retry);
-        }
-        host.appendChild(box);
+        if (problems.length) bits.push(problems[0]);
+        task.textContent = bits.filter(Boolean).join(" · ");
+        tr.appendChild(task);
+        host.appendChild(tr);
+      });
+    }
+    function renderQueuedTable(items) {
+      const host = $("boardQueued");
+      const table = $("boardQueuedTable");
+      const empty = $("boardQueuedEmpty");
+      if (!host || !table || !empty) return;
+      host.replaceChildren();
+      const rows = Array.isArray(items) ? items : [];
+      table.hidden = !rows.length;
+      empty.hidden = rows.length > 0;
+      rows.forEach((item, index) => {
+        const tr = document.createElement("tr");
+        tr.appendChild(numCell(index + 1));
+        const video = document.createElement("td");
+        video.appendChild(videoTitle(item));
+        tr.appendChild(video);
+        const machine = document.createElement("td");
+        machine.className = "machine";
+        machine.textContent = item.source || "—";
+        tr.appendChild(machine);
+        const size = document.createElement("td");
+        size.className = "num";
+        size.textContent = boardSizeMb(item);
+        tr.appendChild(size);
+        const state = document.createElement("td");
+        state.textContent = boardState[item.state] || item.state || "Đang chờ";
+        tr.appendChild(state);
+        host.appendChild(tr);
       });
     }
     function renderPhoneSummary(phones) {
       const host = $("boardPhones");
-      if (!host) return;
+      const table = $("boardPhoneTable");
+      const empty = $("boardPhoneEmpty");
+      if (!host || !table || !empty) return;
       host.replaceChildren();
       const rows = Array.isArray(phones) ? phones : [];
-      if (!rows.length) {
-        const empty = document.createElement("p");
-        empty.className = "board-note";
-        empty.textContent = "Chưa có báo cáo trong 24 giờ.";
-        host.appendChild(empty);
-        return;
-      }
+      table.hidden = !rows.length;
+      empty.hidden = rows.length > 0;
       rows.forEach((item) => {
-        const line = document.createElement("p");
-        line.className = "board-note";
-        const source = item.source || "Máy";
-        const videos = Math.max(0, Number(item.videos) || 0);
-        const saved = Math.max(0, Number(item.saved) || 0);
-        const failed = Math.max(0, Number(item.failed) || 0);
-        line.textContent = source + ": " + videos + " video, ghi được " + saved + " người, " + failed + " video lỗi.";
-        host.appendChild(line);
+        const tr = document.createElement("tr");
+        const machine = document.createElement("td");
+        machine.className = "machine";
+        machine.textContent = item.source || "Máy";
+        tr.appendChild(machine);
+        tr.appendChild(numCell(item.videos));
+        tr.appendChild(numCell(item.saved));
+        tr.appendChild(numCell(item.failed));
+        host.appendChild(tr);
+      });
+    }
+    function renderHistoryTable(items) {
+      const host = $("boardHistory");
+      const table = $("boardHistoryTable");
+      const empty = $("boardHistoryEmpty");
+      if (!host || !table || !empty) return;
+      host.replaceChildren();
+      const rows = Array.isArray(items) ? items : [];
+      table.hidden = !rows.length;
+      empty.hidden = rows.length > 0;
+      rows.forEach((item) => {
+        const tr = document.createElement("tr");
+        const when = document.createElement("td");
+        when.className = "when";
+        when.textContent = boardWhen(item) || "—";
+        tr.appendChild(when);
+        const machine = document.createElement("td");
+        machine.className = "machine";
+        machine.textContent = item.source || "—";
+        tr.appendChild(machine);
+        const video = document.createElement("td");
+        video.appendChild(videoTitle(item));
+        tr.appendChild(video);
+        tr.appendChild(numCell(item.seenContacts));
+        tr.appendChild(numCell(item.seenAccounts));
+        tr.appendChild(numCell(item.savedPeople));
+        const result = document.createElement("td");
+        const label = document.createElement("span");
+        if (item.state === "done") {
+          label.className = "ok";
+          label.textContent = "Đã ghi";
+        } else {
+          label.className = "bad";
+          label.textContent = item.error || "Gặp vấn đề";
+        }
+        result.appendChild(label);
+        attachRetry(result, item);
+        tr.appendChild(result);
+        host.appendChild(tr);
       });
     }
     async function loadBoard() {
@@ -1715,9 +1857,9 @@
         const response = await fetch("/v1/recordings/board", { headers: headers() });
         if (!response.ok) return;
         const data = await response.json();
-        renderBoardList($("boardActive"), data.active || [], "active");
-        renderBoardList($("boardQueued"), data.queued || [], "queue");
-        renderBoardList($("boardHistory"), data.history || [], "history");
+        renderActiveTable(data.active || []);
+        renderQueuedTable(data.queued || []);
+        renderHistoryTable(data.history || []);
         renderPhoneSummary(data.phones || []);
       } catch (error) { /* giữ bảng cũ */ }
     }

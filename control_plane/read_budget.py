@@ -1,17 +1,20 @@
-"""Phần đọc video lấy một phần cố định của CPU và RAM, suốt thời gian đang đọc.
+"""Phần đọc video lấy một phần cố định của CPU và RAM.
 
-PC nối hub lấy 80%. Máy chủ trên VPS lấy 90%. Phần còn lại để máy vẫn trả lời
-trang và nhịp nối. Lấy mức nhỏ hơn giữa phần trăm lõi và phần trăm RAM.
+PC nối hub lấy 80% suốt thời gian máy đó đang nối. Máy chủ trên VPS lấy 95%
+CPU và 95% RAM suốt đời tiến trình hub, không hạ khi máy rảnh. Phần còn lại
+để trang và nhịp nối vẫn trả lời. Lấy mức nhỏ hơn giữa phần trăm lõi và phần
+trăm RAM.
 """
 
 from __future__ import annotations
 
 import ctypes
 import os
+from pathlib import Path
 
 OCR_BYTES = 256 * 1024 * 1024
 PC_SHARE_PERCENT = 80
-HUB_SHARE_PERCENT = 90
+HUB_SHARE_PERCENT = 95
 
 
 def share_budget(cpu_count: int, ram_bytes: int | None, percent: int) -> tuple[int, int]:
@@ -62,12 +65,57 @@ def machine_ram_bytes() -> int:
     return pages * size
 
 
+def _own_cgroup() -> Path | None:
+    """Cgroup của đúng tiến trình hub. Không đụng cgroup gốc của cả máy."""
+    try:
+        text = Path("/proc/self/cgroup").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        parts = line.split(":", 2)
+        if len(parts) != 3 or parts[0] != "0" or parts[1] != "":
+            continue
+        relative = parts[2].strip()
+        if not relative or relative == "/" or "fb-poller" not in relative:
+            return None
+        path = Path("/sys/fs/cgroup") / relative.lstrip("/")
+        if path.is_dir():
+            return path
+    return None
+
+
+def hold_machine_share(percent: int, cpus: int, ram_bytes: int) -> None:
+    """Giữ hub ở 95% CPU và 95% RAM của VPS cho đến khi tiến trình tắt."""
+    path = _own_cgroup()
+    if path is None:
+        return
+    part = max(1, min(100, int(percent)))
+    period = 100_000
+    quota = max(1000, period * max(1, int(cpus)) * part // 100)
+    cpu_max = path / "cpu.max"
+    try:
+        if cpu_max.is_file():
+            cpu_max.write_text(f"{quota} {period}\n", encoding="utf-8")
+    except OSError:
+        pass
+    if ram_bytes <= 0:
+        return
+    high = ram_bytes * part // 100
+    memory_high = path / "memory.high"
+    try:
+        if memory_high.is_file():
+            memory_high.write_text(f"{high}\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
 def apply_hub_share() -> tuple[int, int]:
-    """Gắn mức 90% vào tiến trình máy chủ trước khi uvicorn tách tiến trình con."""
+    """Gắn mức 95% vào tiến trình máy chủ và giữ đến khi hub tắt."""
     cpus = os.cpu_count() or 1
     ram = machine_ram_bytes()
     workers, reserve = share_budget(cpus, ram if ram > 0 else None, HUB_SHARE_PERCENT)
     os.environ["CONTROL_OCR_RESERVE"] = str(reserve)
     os.environ["CONTROL_FFMPEG_THREADS"] = str(workers)
     os.environ["CONTROL_READER_LIMIT"] = str(workers)
+    hold_machine_share(HUB_SHARE_PERCENT, cpus, ram)
     return workers, cpus

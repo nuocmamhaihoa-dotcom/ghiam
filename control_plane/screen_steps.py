@@ -59,6 +59,9 @@ _SEGMENT_MIN_FRAMES = 64
 _BOOST_FPS = 12.0
 _BOOST_WINDOW = 45.0
 _BOOST_MIN_CONTACTS = 3
+# Người thiếu cột hoặc mới thấy một lần: đọc lại quanh mốc đó để đủ hai lần / đủ ba cột.
+_INCOMPLETE_PAD = 1.25
+_INCOMPLETE_WINDOW_CAP = 48
 _PARTIAL_MARK = "extract.partial"
 _PREVIEW_WIDTH = 420
 _PREVIEW_CAP = 3
@@ -148,7 +151,7 @@ def _segment_count() -> int:
 
 
 def ocr_workers(frame_count: int, cpu_count: int, reserve: int | None = None) -> int:
-    """Số tiến trình Tesseract. Máy chủ giữ 10% lõi. PC giữ 20% suốt thời gian nối."""
+    """Số tiến trình Tesseract. Máy chủ giữ 5% lõi. PC giữ 20% suốt thời gian nối."""
     if reserve is None:
         raw = os.environ.get("CONTROL_OCR_RESERVE", "1")
         try:
@@ -161,7 +164,7 @@ def ocr_workers(frame_count: int, cpu_count: int, reserve: int | None = None) ->
 
 
 def _ffmpeg_thread_count() -> str:
-    """0 là ffmpeg tự dùng hết lõi. Máy chủ đặt 90% lõi. PC đặt 80% lõi."""
+    """0 là ffmpeg tự dùng hết lõi. Máy chủ đặt 95% lõi. PC đặt 80% lõi."""
     raw = os.environ.get("CONTROL_FFMPEG_THREADS", "0").strip()
     if raw.isdigit():
         return raw
@@ -591,6 +594,14 @@ def analyze_screen_video(
             threads=threads,
             reserve=reserve,
         )
+        readings = _reread_incomplete(
+            path,
+            work,
+            readings,
+            sink,
+            threads=threads,
+            reserve=reserve,
+        )
     sink.note_words(words.seen, words.kept)
     if not keep_open:
         learned = layout_learn.learner_for(str(work)).describe()
@@ -854,20 +865,68 @@ class _HoldPercent(ReadProgress):
         self._inner.problem(text)
 
 
-def _reread_unread(
+def _incomplete_windows(
+    readings: list[tuple[float, list[str], list[dict[str, str]]]],
+) -> list[tuple[float, float]]:
+    """Đoạn quanh người thiếu cột hoặc mới đọc được một lần.
+
+    Người đã đủ tên danh bạ và tài khoản, mỗi thứ từ hai khung trở lên, thì bỏ qua.
+    """
+    contacts: dict[str, list[float]] = {}
+    profiles: dict[str, list[float]] = {}
+    for seconds, _captions, found in readings:
+        for item in found:
+            accepted = _accepted_sighting(item)
+            if accepted is None:
+                continue
+            key, kind = accepted
+            if kind == "contact":
+                contacts.setdefault(key, []).append(seconds)
+            else:
+                profiles.setdefault(key, []).append(seconds)
+    leads: list[float] = []
+    for key in set(contacts) | set(profiles):
+        contact_times = contacts.get(key, [])
+        profile_times = profiles.get(key, [])
+        if (
+            contact_times
+            and profile_times
+            and len(contact_times) >= 2
+            and len(profile_times) >= 2
+        ):
+            continue
+        leads.extend(contact_times)
+        leads.extend(profile_times)
+    if not leads:
+        return []
+    leads.sort()
+    windows: list[tuple[float, float]] = []
+    for stamp in leads:
+        lo = max(0.0, stamp - _INCOMPLETE_PAD)
+        hi = stamp + _INCOMPLETE_PAD
+        if not windows or lo > windows[-1][1] + 0.25:
+            windows.append((lo, hi))
+        else:
+            windows[-1] = (windows[-1][0], max(windows[-1][1], hi))
+    return windows[:_INCOMPLETE_WINDOW_CAP]
+
+
+def _reread_windows(
     path: Path,
     work: Path,
     readings: list[tuple[float, list[str], list[dict[str, str]]]],
+    windows: list[tuple[float, float]],
     progress: ReadProgress,
     *,
+    folder: str,
+    task_prefix: str,
+    label: str,
+    note: str,
     threads: str | None = None,
     reserve: int | None = None,
+    percent: int = 93,
 ) -> list[tuple[float, list[str], list[dict[str, str]]]]:
-    """Đọc lại 8 hình mỗi giây ở đoạn có chữ mà chưa ra người, và một giây sát đó.
-
-    Đoạn trống dài không tách lại. Lượt 4 hình mỗi giây đã đọc những khung đó.
-    """
-    windows = _unread_windows(readings)
+    """Tách lại các cửa sổ ở 8 hình mỗi giây và gộp vào readings."""
     if not windows:
         return readings
     known = {_frame_key(seconds) for seconds, _captions, _found in readings}
@@ -875,10 +934,10 @@ def _reread_unread(
     words = _AddWords(progress)
     used = 0
     for index, (start, end) in enumerate(windows):
-        task = f"Đọc lại đoạn chưa ra chữ, 8 hình/giây, đoạn {index + 1}/{len(windows)}"
-        held_bar = _HoldPercent(progress, 93, task)
-        held_bar.report(93, task)
-        sub = work / f"reread-{index}"
+        task = f"{task_prefix}, đoạn {index + 1}/{len(windows)}"
+        held_bar = _HoldPercent(progress, percent, task)
+        held_bar.report(percent, task)
+        sub = work / f"{folder}-{index}"
         sub.mkdir(parents=True, exist_ok=True)
         for old in sub.glob("r-*.*"):
             if old.suffix.lower() in {".png", ".jpg", ".jpeg"}:
@@ -909,15 +968,70 @@ def _reread_unread(
                 chosen,
                 words,
                 reserve=reserve,
-                percent_lo=93,
-                percent_hi=93,
-                label="Đọc lại đoạn chưa ra chữ, 8 hình/giây",
+                percent_lo=percent,
+                percent_hi=percent,
+                label=label,
             )
         )
     if not extra:
         return readings
-    progress.problem(f"Đọc lại {used} đoạn chưa ra tên ở 8 khung/giây.")
+    progress.problem(note.format(used=used))
     return _merge_readings(readings, extra)
+
+
+def _reread_unread(
+    path: Path,
+    work: Path,
+    readings: list[tuple[float, list[str], list[dict[str, str]]]],
+    progress: ReadProgress,
+    *,
+    threads: str | None = None,
+    reserve: int | None = None,
+) -> list[tuple[float, list[str], list[dict[str, str]]]]:
+    """Đọc lại 8 hình mỗi giây ở đoạn có chữ mà chưa ra người, và một giây sát đó.
+
+    Đoạn trống dài không tách lại. Lượt 4 hình mỗi giây đã đọc những khung đó.
+    """
+    return _reread_windows(
+        path,
+        work,
+        readings,
+        _unread_windows(readings),
+        progress,
+        folder="reread",
+        task_prefix="Đọc lại đoạn chưa ra chữ, 8 hình/giây",
+        label="Đọc lại đoạn chưa ra chữ, 8 hình/giây",
+        note="Đọc lại {used} đoạn chưa ra tên ở 8 khung/giây.",
+        threads=threads,
+        reserve=reserve,
+        percent=93,
+    )
+
+
+def _reread_incomplete(
+    path: Path,
+    work: Path,
+    readings: list[tuple[float, list[str], list[dict[str, str]]]],
+    progress: ReadProgress,
+    *,
+    threads: str | None = None,
+    reserve: int | None = None,
+) -> list[tuple[float, list[str], list[dict[str, str]]]]:
+    """Đọc lại quanh người thiếu cột hoặc mới thấy một lần để đủ hai lần đọc."""
+    return _reread_windows(
+        path,
+        work,
+        readings,
+        _incomplete_windows(readings),
+        progress,
+        folder="incomplete",
+        task_prefix="Đọc lại người chưa đủ cột, 8 hình/giây",
+        label="Đọc lại người chưa đủ cột, 8 hình/giây",
+        note="Đọc lại {used} đoạn quanh người chưa đủ cột ở 8 khung/giây.",
+        threads=threads,
+        reserve=reserve,
+        percent=94,
+    )
 
 
 def _apply_dense_boost(
