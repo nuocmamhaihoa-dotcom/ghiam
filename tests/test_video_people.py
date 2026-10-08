@@ -15,7 +15,10 @@ from control_plane.screen_table import (
     build_table,
     clean_username,
     name_key,
+    joined_name,
+    names_close,
     normalize_phone,
+    pair_close_names,
     phone_in_text,
 )
 from control_plane.video_scan import keep_stable, write_table
@@ -71,17 +74,18 @@ class MergeTests(unittest.TestCase):
         self.assertEqual([item.phone for item in table.unopened], ["0373793079"])
         self.assertFalse(table.review)
 
-    def test_accent_loss_does_not_auto_pair(self) -> None:
+    def test_accent_loss_pairs_a_long_name(self) -> None:
         table = build_table(
             [
                 frame_list(ContactHit("0982117072", "Đặng Thị Tâm")),
                 frame_profile("Dang Thi Tam", "@dangtam.3"),
             ]
         )
-        self.assertEqual(table.rows, [])
-        self.assertEqual(table.unopened[0].phone, "0982117072")
-        self.assertEqual(table.review[0].username, "@dangtam.3")
-        self.assertEqual(table.review[0].reason, "đã mở hồ sơ nhưng chưa thấy số")
+        self.assertEqual(len(table.rows), 1)
+        self.assertEqual(table.rows[0].phone, "0982117072")
+        self.assertEqual(table.rows[0].name, "Đặng Thị Tâm")
+        self.assertEqual(table.rows[0].username, "@dangtam.3")
+        self.assertFalse(table.review)
 
     def test_duplicate_name_is_not_auto_merged(self) -> None:
         table = build_table(
@@ -113,17 +117,18 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(table.rows[0].username, "@dangtam.3")
         self.assertEqual(table.unopened[0].phone, "0332001753")
 
-    def test_tap_with_different_profile_name_stays_in_review(self) -> None:
+    def test_tap_pairs_even_when_the_profile_name_differs(self) -> None:
         table = build_table(
             [
                 frame_list(ContactHit("0982117072", "Đặng Thị Tâm", selected=True)),
                 frame_profile("khactam", "@khactam60"),
             ]
         )
-        self.assertEqual(table.rows, [])
-        self.assertEqual(table.review[0].phone, "0982117072")
-        self.assertEqual(table.review[0].username, "@khactam60")
-        self.assertEqual(table.review[0].reason, "tên danh bạ và tên hồ sơ khác nhau")
+        self.assertEqual(len(table.rows), 1)
+        self.assertEqual(table.rows[0].phone, "0982117072")
+        self.assertEqual(table.rows[0].name, "Đặng Thị Tâm")
+        self.assertEqual(table.rows[0].username, "@khactam60")
+        self.assertFalse(table.review)
         self.assertEqual(table.unopened, [])
 
     def test_second_profile_without_returning_to_list_is_not_the_same_tap(self) -> None:
@@ -166,7 +171,7 @@ class MergeTests(unittest.TestCase):
         )
         self.assertEqual(table.rows[0].username, "@dangtam.3")
 
-    def test_shared_name_tap_is_review_even_if_the_names_match(self) -> None:
+    def test_shared_name_tap_keeps_the_tapped_phone(self) -> None:
         table = build_table(
             [
                 frame_list(
@@ -176,10 +181,11 @@ class MergeTests(unittest.TestCase):
                 frame_profile("Photo", "@photo.1"),
             ]
         )
-        self.assertEqual(table.rows, [])
-        self.assertEqual(table.review[0].phone, "0900000001")
-        self.assertEqual(table.review[0].username, "@photo.1")
-        self.assertEqual(table.review[0].reason, "trùng tên, cần xem")
+        self.assertEqual(len(table.rows), 1)
+        self.assertEqual(table.rows[0].phone, "0900000001")
+        self.assertEqual(table.rows[0].username, "@photo.1")
+        self.assertEqual([item.phone for item in table.unopened], ["0900000002"])
+        self.assertFalse(table.review)
 
     def test_diacritic_vote_wins_a_tie(self) -> None:
         table = build_table(
@@ -206,13 +212,50 @@ class MergeTests(unittest.TestCase):
             written = write_table(table, output)
             text = output.read_text(encoding="utf-8-sig")
             self.assertIn("Số điện thoại,Tên,Username", text)
-            self.assertNotIn("0982117072", text)
-            review = output.with_name("bang.can-xem.csv").read_text(encoding="utf-8-sig")
-            self.assertIn("tên danh bạ và tên hồ sơ khác nhau", review)
+            self.assertIn("0982117072", text)
+            self.assertIn("@khac.1", text)
+            self.assertFalse(output.with_name("bang.can-xem.csv").exists())
             unopened = output.with_name("bang.chua-mo.csv").read_text(encoding="utf-8-sig")
             self.assertIn("0332001753", unopened)
             self.assertIn("khactam", unopened)
-            self.assertEqual(len(written), 3)
+            self.assertEqual(len(written), 2)
+
+
+class CloseNameTests(unittest.TestCase):
+    def test_close_names_skip_short_words_and_different_people(self) -> None:
+        self.assertTrue(names_close("Đặng Thị Tâm", "Dang Thi Tam"))
+        self.assertTrue(names_close("Hanhnguyen", "ÿHanhnguyen"))
+        self.assertTrue(names_close("Lò Thị Việt", "Lo Thi e Viet nt"))
+        self.assertTrue(names_close("sỹ hoa hồng trắng", "hoa hồng trắng"))
+        self.assertTrue(names_close("Phuong Le44036", "Phuong Le4405ó"))
+        self.assertFalse(names_close("tân", "Tuấn"))
+        self.assertFalse(names_close("liên", "lien"))
+        self.assertFalse(names_close("Lý Mai Trang", "hoa hồng trắng"))
+        self.assertFalse(names_close("Nhat anh", "Thái Thành"))
+        self.assertFalse(names_close("KIÊN NGUYỄN TẤN", "KIEN NGUYEN"))
+        self.assertFalse(names_close("Lo Thi Mười", "Lo Thi e Viet nt"))
+        self.assertEqual(joined_name("ÿHanhnguyen", "Hanhnguyen"), "Hanhnguyen")
+        self.assertEqual(joined_name("Phuong Le44036", "Phuong Le4405ó"), "Phuong Le44036")
+        self.assertEqual(joined_name("Dang Thi Tam", "Đặng Thị Tâm"), "Đặng Thị Tâm")
+
+    def test_two_phones_with_one_username_are_not_paired(self) -> None:
+        pairs = pair_close_names(
+            [("a", "Lý Mai Trang"), ("b", "Lý Mai Trang")],
+            [("u", "Ly Mai Trang")],
+        )
+        self.assertEqual(pairs, [])
+
+    def test_one_close_pair_is_kept(self) -> None:
+        table = build_table(
+            [
+                frame_list(ContactHit("0982117072", "ÿHanhnguyen")),
+                frame_profile("Hanhnguyen", "@hanhnguyenn375"),
+            ]
+        )
+        self.assertEqual(table.rows[0].phone, "0982117072")
+        self.assertEqual(table.rows[0].username, "@hanhnguyenn375")
+        self.assertFalse(table.review)
+        self.assertFalse(table.unopened)
 
 
 class NameChoiceTests(unittest.TestCase):

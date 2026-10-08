@@ -17,6 +17,7 @@ from control_plane.video_store import (
     finish,
     init_db,
     iter_backup,
+    merge_close_results,
     queued_bytes,
     recover_dead,
     retry,
@@ -98,6 +99,50 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(found["0332001753"]["username"], "@khactam60")
         self.assertEqual(found["0332001753"]["bucket"], "Đã lưu")
         self.assertEqual(stats(self.db)["results"], 3)
+
+    def test_close_names_in_one_video_merge_and_other_videos_stay_apart(self) -> None:
+        first = self._add("a.mp4", "a")
+        finish(
+            self.db,
+            first,
+            Table(
+                unopened=[
+                    Unopened("0982117072", "ÿHanhnguyen"),
+                    Unopened("0900000001", "Lý Mai Trang"),
+                    Unopened("0900000002", "Lý Mai Trang"),
+                    Unopened("0900000003", "Quang Le"),
+                ],
+                review=[
+                    Review("", "", "Hanhnguyen", "@hanhnguyenn375", "đã mở hồ sơ nhưng chưa thấy số"),
+                    Review("", "", "Ly Mai Trang", "@user1", "đã mở hồ sơ nhưng chưa thấy số"),
+                    Review("", "", "tân", "@tn1", "đã mở hồ sơ nhưng chưa thấy số"),
+                ],
+            ),
+        )
+        second = self._add("b.mp4", "b")
+        finish(
+            self.db,
+            second,
+            Table(
+                unopened=[Unopened("0911111111", "Dang Thi Tam")],
+                review=[
+                    Review("", "", "Đặng Thị Tâm", "@dangtam.3", "đã mở hồ sơ nhưng chưa thấy số"),
+                    Review("", "", "Quang Le", "@quang.le354", "đã mở hồ sơ nhưng chưa thấy số"),
+                ],
+            ),
+        )
+        self.assertEqual(merge_close_results(self.db), 2)
+        found = {item["phone"]: item for item in search_results(self.db, limit=20)}
+        self.assertEqual(found["0982117072"]["username"], "@hanhnguyenn375")
+        self.assertEqual(found["0982117072"]["bucket"], "Đã lưu")
+        self.assertEqual(found["0911111111"]["username"], "@dangtam.3")
+        self.assertEqual(found["0900000001"]["username"], "")
+        self.assertEqual(found["0900000002"]["username"], "")
+        self.assertEqual(found["0900000003"]["username"], "")
+        listed = search_results(self.db, limit=20)
+        self.assertTrue(any(item["username"] == "@user1" and item["phone"] == "" for item in listed))
+        self.assertTrue(any(item["username"] == "@quang.le354" and item["phone"] == "" for item in listed))
+        self.assertEqual(merge_close_results(self.db), 0)
 
     def test_backup_contains_the_saved_row(self) -> None:
         video_id = self._add("clip.mp4", "a")

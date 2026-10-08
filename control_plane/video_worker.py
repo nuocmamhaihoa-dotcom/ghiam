@@ -18,6 +18,7 @@ from control_plane.video_store import (
     fail,
     finish,
     init_db,
+    merge_close_results,
     recover_dead,
     touch_heartbeat,
     worker_count,
@@ -57,6 +58,7 @@ def worker_loop(db_path: str) -> None:
 
 def main() -> None:
     init_db(settings.video_db_path)
+    merge_close_results(settings.video_db_path)
     recover_dead(settings.video_db_path)
     count = worker_count()
     print(f"Đọc video bằng {count} tiến trình. Để trống một nhân cho trang web.", flush=True)

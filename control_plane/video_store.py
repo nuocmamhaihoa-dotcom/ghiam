@@ -10,12 +10,13 @@ from __future__ import annotations
 import os
 import sqlite3
 import time
+from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
-from control_plane.screen_table import Review, Table
+from control_plane.screen_table import Review, Table, joined_name, pair_close_names
 
 BUCKET_OK = 1
 BUCKET_REVIEW = 2
@@ -241,6 +242,56 @@ def retry(db_path: Path, video_id: int) -> bool:
             (video_id,),
         )
         return cur.rowcount == 1
+
+
+def merge_close_results(db_path: Path) -> int:
+    """Ghép số và username cùng một video khi tên gần giống và chỉ có một cặp."""
+    with connect(db_path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            rows = conn.execute(
+                """
+                SELECT id, phone, name, username, video_id
+                FROM results
+                WHERE username = '' OR phone = ''
+                """
+            ).fetchall()
+            grouped: dict[int, dict[str, list[sqlite3.Row]]] = defaultdict(lambda: {"phones": [], "users": []})
+            for row in rows:
+                if row["phone"] and not row["username"]:
+                    grouped[int(row["video_id"])]["phones"].append(row)
+                elif row["username"] and not row["phone"]:
+                    grouped[int(row["video_id"])]["users"].append(row)
+            merged = 0
+            for items in grouped.values():
+                phones = items["phones"]
+                users = items["users"]
+                pairs = pair_close_names(
+                    [(str(row["id"]), row["name"]) for row in phones],
+                    [(str(row["id"]), row["name"]) for row in users],
+                )
+                phone_by = {str(row["id"]): row for row in phones}
+                user_by = {str(row["id"]): row for row in users}
+                for phone_id, user_id in pairs:
+                    phone = phone_by[phone_id]
+                    user = user_by[user_id]
+                    updated = conn.execute(
+                        """
+                        UPDATE results
+                        SET name = ?, username = ?, bucket = ?, reason = ''
+                        WHERE id = ? AND username = ''
+                        """,
+                        (joined_name(phone["name"], user["name"]), user["username"], BUCKET_OK, phone["id"]),
+                    )
+                    if updated.rowcount != 1:
+                        continue
+                    conn.execute("DELETE FROM results WHERE id = ? AND phone = ''", (user["id"],))
+                    merged += 1
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+    return merged
 
 
 def search_results(db_path: Path, query: str = "", limit: int = 50) -> list[dict[str, object]]:

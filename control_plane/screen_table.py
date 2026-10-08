@@ -1,17 +1,18 @@
 """Ghép số, tên và username từ các khung hình danh bạ và hồ sơ.
 
-Cách 2: ghép khi tên trên danh bạ và tên trên hồ sơ trùng nhau sau khi
-chuẩn hóa (viết thường, gom khoảng trắng, giữ dấu tiếng Việt).
+Cách 2: trong cùng một video, ghép tên gần giống. Giữ ghép đúng từng chữ.
+Thêm các tên lệch dấu hoặc lệch vài chữ do đọc hình. Không ghép tên một
+từ ngắn, không ghép khi một tên có hai số.
 
-Cách 3: khi video đang ở danh bạ rồi mở hồ sơ, hồ sơ đó gắn với dòng vừa
-được chọn. Tên trùng thì nhận. Tên lệch, hoặc một tên có hai số, thì để
-vào danh sách cần xem, không đưa vào bảng chính.
+Cách 3: dòng vừa bấm rồi mở hồ sơ thì số đó đi với username vừa mở, kể
+cả khi hai tên khác nhau. Không thấy dòng bấm thì không đoán.
 """
 
 from __future__ import annotations
 
 import unicodedata
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 
 
 SKIP_FOLDED = {
@@ -218,6 +219,109 @@ def _prettier(left: str, right: str) -> str:
     return left or right
 
 
+def _viet_marks(name: str) -> int:
+    count = 0
+    for ch in name:
+        if ch in "ÿŸ":
+            continue
+        if ord(ch) < 128:
+            continue
+        if fold_marks(ch) in "aeiouyd":
+            count += 1
+    return count
+
+
+def _mark_sits_on_digits(name: str) -> bool:
+    chars = list(name)
+    for index, ch in enumerate(chars):
+        if ord(ch) < 128 or ch in "ÿŸ":
+            continue
+        neighbors = chars[max(0, index - 1) : index] + chars[index + 1 : index + 2]
+        if any(item.isdigit() for item in neighbors):
+            return True
+    return False
+
+
+def joined_name(contact: str, profile: str) -> str:
+    """Tên hiển thị khi ghép. Ưu tiên dấu tiếng Việt, bỏ ký tự đọc nhầm."""
+    contact = clean_name(contact)
+    profile = clean_name(profile)
+    if not profile:
+        return contact
+    if not contact:
+        return profile
+    contact_marks = 0 if _mark_sits_on_digits(contact) else _viet_marks(contact)
+    profile_marks = 0 if _mark_sits_on_digits(profile) else _viet_marks(profile)
+    if profile_marks > contact_marks:
+        return profile
+    if contact_marks > profile_marks:
+        return contact
+    contact_compact = _compact(contact)
+    profile_compact = _compact(profile)
+    if contact_compact and profile_compact and contact_compact != profile_compact:
+        if contact_compact in profile_compact or profile_compact in contact_compact:
+            return contact if len(contact_compact) <= len(profile_compact) else profile
+    return contact
+
+
+def _compact(name: str) -> str:
+    return "".join(ch for ch in fold_marks(name) if ch.isalnum())
+
+
+def _significant_tokens(name: str) -> list[str]:
+    tokens = []
+    for token in fold_marks(name).split():
+        compact = "".join(ch for ch in token if ch.isalnum())
+        if len(compact) >= 2:
+            tokens.append(compact)
+    return tokens
+
+
+def names_close(left: str, right: str) -> bool:
+    """Tên gần giống trong một video. Tên ngắn thì không ghép."""
+    a = _compact(left)
+    b = _compact(right)
+    if len(a) < 6 or len(b) < 6:
+        return False
+    tokens_a = _significant_tokens(left)
+    tokens_b = _significant_tokens(right)
+    if (len(tokens_a) <= 1 and len(a) < 8) or (len(tokens_b) <= 1 and len(b) < 8):
+        return False
+    if a == b:
+        return True
+    ratio = SequenceMatcher(None, a, b).ratio()
+    if ratio >= 0.84 and abs(len(a) - len(b)) <= 2:
+        return True
+    if len(tokens_a) < 2 or len(tokens_b) < 2 or ratio < 0.72:
+        return False
+    shorter, longer = (tokens_a, tokens_b) if len(tokens_a) <= len(tokens_b) else (tokens_b, tokens_a)
+    if not set(shorter) <= set(longer):
+        return False
+    extras = [token for token in longer if token not in set(shorter)]
+    return all(len(token) <= 2 for token in extras)
+
+
+def pair_close_names(phones: list[tuple[str, str]], users: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Chỉ ghép khi một số khớp đúng một username và ngược lại."""
+    phone_hits: dict[str, list[str]] = {}
+    user_hits: dict[str, list[str]] = {}
+    for phone_id, phone_name in phones:
+        for user_id, user_name in users:
+            if not names_close(phone_name, user_name):
+                continue
+            phone_hits.setdefault(phone_id, []).append(user_id)
+            user_hits.setdefault(user_id, []).append(phone_id)
+    pairs = []
+    for phone_id, user_ids in phone_hits.items():
+        if len(user_ids) != 1:
+            continue
+        user_id = user_ids[0]
+        if len(user_hits.get(user_id, [])) != 1:
+            continue
+        pairs.append((phone_id, user_id))
+    return pairs
+
+
 def build_table(frames: list[FrameObs]) -> Table:
     contacts: dict[str, _Tally] = {}
     profiles: dict[str, _Tally] = {}
@@ -322,10 +426,6 @@ def _walk(
     return visits
 
 
-def _names_for(key: str, named: dict[str, str]) -> list[str]:
-    return [item for item, name in named.items() if name_key(name) == key]
-
-
 def _apply_visits(
     visits: list[_Visit],
     phone_name: dict[str, str],
@@ -371,18 +471,16 @@ def _apply_visits(
             continue
         username = usernames[0]
         profile_name = user_name[username]
-        same = name_key(contact_name) == name_key(profile_name)
-        crowded = len(_names_for(name_key(contact_name), phone_name)) > 1 or len(
-            _names_for(name_key(profile_name), user_name)
-        ) > 1
         used_phones.add(phone)
         used_users.add(username)
         claimed_users.add(username)
-        if same and not crowded:
-            table.rows.append(Row(phone, _prettier(profile_name, contact_name), username))
-            continue
-        reason = "trùng tên, cần xem" if same else "tên danh bạ và tên hồ sơ khác nhau"
-        table.review.append(Review(phone, contact_name, profile_name, username, reason))
+        if name_key(contact_name) == name_key(profile_name):
+            display = _prettier(profile_name, contact_name)
+        elif names_close(contact_name, profile_name):
+            display = joined_name(contact_name, profile_name)
+        else:
+            display = contact_name
+        table.rows.append(Row(phone, display, username))
 
 
 def _apply_names(
@@ -410,28 +508,77 @@ def _apply_names(
     for key in users_by_name:
         users_by_name[key].sort(key=lambda username: user_seen.get(username, 0))
 
+    paired_phones: set[str] = set()
+    paired_users: set[str] = set()
     for key in set(phones_by_name) | set(users_by_name):
         phones = phones_by_name.get(key, [])
         usernames = users_by_name.get(key, [])
         if len(phones) == 1 and len(usernames) == 1:
             phone = phones[0]
             username = usernames[0]
+            paired_phones.add(phone)
+            paired_users.add(username)
             table.rows.append(Row(phone, _prettier(user_name[username], phone_name[phone]), username))
+
+    left_phones = [
+        phone
+        for phones in phones_by_name.values()
+        for phone in phones
+        if phone not in paired_phones
+    ]
+    left_users = [
+        username
+        for usernames in users_by_name.values()
+        for username in usernames
+        if username not in paired_users
+    ]
+    for phone, username in pair_close_names(
+        [(phone, phone_name[phone]) for phone in left_phones],
+        [(username, user_name[username]) for username in left_users],
+    ):
+        paired_phones.add(phone)
+        paired_users.add(username)
+        table.rows.append(Row(phone, joined_name(phone_name[phone], user_name[username]), username))
+
+    rest_phones: dict[str, list[str]] = {}
+    rest_users: dict[str, list[str]] = {}
+    for phone in left_phones:
+        if phone in paired_phones:
             continue
-        if len(phones) == 1 and not usernames:
-            table.unopened.append(Unopened(phones[0], phone_name[phones[0]]))
+        rest_phones.setdefault(name_key(phone_name[phone]), []).append(phone)
+    for username in left_users:
+        if username in paired_users:
             continue
-        if not phones and len(usernames) == 1:
-            username = usernames[0]
-            table.review.append(
-                Review("", "", user_name[username], username, "đã mở hồ sơ nhưng chưa thấy số")
-            )
-            continue
-        if usernames:
-            for phone in phones:
-                table.review.append(Review(phone, phone_name[phone], "", "", "trùng tên, không tự ghép"))
-            for username in usernames:
-                table.review.append(Review("", "", user_name[username], username, "trùng tên, không tự ghép"))
-            continue
+        rest_users.setdefault(name_key(user_name[username]), []).append(username)
+    for key in set(rest_phones) | set(rest_users):
+        _emit_unpaired(
+            rest_phones.get(key, []),
+            rest_users.get(key, []),
+            phone_name,
+            user_name,
+            table,
+        )
+
+
+def _emit_unpaired(
+    phones: list[str],
+    usernames: list[str],
+    phone_name: dict[str, str],
+    user_name: dict[str, str],
+    table: Table,
+) -> None:
+    if len(phones) == 1 and not usernames:
+        table.unopened.append(Unopened(phones[0], phone_name[phones[0]]))
+        return
+    if not phones and len(usernames) == 1:
+        username = usernames[0]
+        table.review.append(Review("", "", user_name[username], username, "đã mở hồ sơ nhưng chưa thấy số"))
+        return
+    if usernames:
         for phone in phones:
-            table.unopened.append(Unopened(phone, phone_name[phone]))
+            table.review.append(Review(phone, phone_name[phone], "", "", "trùng tên, không tự ghép"))
+        for username in usernames:
+            table.review.append(Review("", "", user_name[username], username, "trùng tên, không tự ghép"))
+        return
+    for phone in phones:
+        table.unopened.append(Unopened(phone, phone_name[phone]))
