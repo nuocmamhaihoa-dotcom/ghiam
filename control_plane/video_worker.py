@@ -40,16 +40,24 @@ def heartbeat_path() -> Path:
 def run_job(db_path: Path, job: dict[str, object], scan=scan_paths) -> None:
     video_id = int(job["id"])
     path = Path(str(job["path"]))
+    started = time.monotonic()
     try:
-        table, _frames = scan([path])
+        table, frames = scan([path])
         finish(db_path, video_id, table)
     except BrokenExecutor:
         requeue(db_path, video_id)
         raise
     except Exception as exc:
-        fail(db_path, video_id, str(exc) or "Không đọc được video.")
+        message = str(exc) or "Không đọc được video."
+        fail(db_path, video_id, message)
+        print(f"Video {video_id} lỗi sau {time.monotonic() - started:.0f} giây: {message[:300]}", flush=True)
         return
     path.unlink(missing_ok=True)
+    print(
+        f"Video {video_id} xong trong {time.monotonic() - started:.0f} giây, {len(frames)} khung: "
+        f"{len(table.rows)} hàng đủ, {len(table.review)} cần xem, {len(table.unopened)} chưa mở hồ sơ.",
+        flush=True,
+    )
 
 
 def _feed(db_path: Path, pool: ProcessPoolExecutor, work_dir: Path, stop: threading.Event, broken: threading.Event) -> None:

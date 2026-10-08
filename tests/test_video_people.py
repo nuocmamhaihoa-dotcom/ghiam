@@ -467,6 +467,58 @@ class TapSpotTests(unittest.TestCase):
         image, listed, strips, anchor_x, anchor_w = self._list_image(dot_row=1, grey_row=3)
         self.assertEqual(_tapped_rows(image, listed, strips, anchor_x, anchor_w), set())
 
+    def test_dot_hiding_the_follow_button_still_marks_the_row(self) -> None:
+        from control_plane.screen_read import _tapped_rows
+
+        image, listed, strips, anchor_x, anchor_w = self._list_image(dot_row=2, dot_x=730)
+        self.assertEqual(len(listed), 6)
+        self.assertEqual(_tapped_rows(image, listed, strips, anchor_x, anchor_w), {2})
+
+
+class VideoFailureTests(unittest.TestCase):
+    def test_broken_frame_is_skipped_not_fatal(self) -> None:
+        from control_plane.video_scan import read_frame_at, read_tap_at
+
+        with tempfile.TemporaryDirectory() as folder:
+            broken = Path(folder) / "f_000001.jpg"
+            broken.write_bytes(b"not an image")
+            self.assertEqual(read_frame_at(str(broken), 1.5).kind, "unknown")
+            self.assertEqual(read_frame_at(str(broken), 1.5).at, 1.5)
+            self.assertEqual(read_tap_at([str(broken)], 2.0).kind, "unknown")
+
+    def test_noisy_ffmpeg_does_not_hang_the_planner(self) -> None:
+        import os
+        import stat
+        import threading
+
+        from control_plane import video_scan
+
+        with tempfile.TemporaryDirectory() as folder:
+            fake = Path(folder) / "ffmpeg"
+            frame = video_scan.THUMB_W * video_scan.THUMB_H
+            fake.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "sys.stderr.write('lỗi giải mã\\n' * 40000)\n"
+                "sys.stderr.flush()\n"
+                f"sys.stdout.buffer.write(bytes({frame}) * 12)\n",
+                encoding="utf-8",
+            )
+            fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+            video = Path(folder) / "clip.mp4"
+            video.write_bytes(b"x")
+            old_path = os.environ.get("PATH", "")
+            os.environ["PATH"] = folder + os.pathsep + old_path
+            found: list[object] = []
+            try:
+                worker = threading.Thread(target=lambda: found.append(video_scan.plan_video(video)), daemon=True)
+                worker.start()
+                worker.join(timeout=30)
+            finally:
+                os.environ["PATH"] = old_path
+            self.assertFalse(worker.is_alive(), "plan_video bị treo khi ffmpeg in nhiều lỗi")
+            self.assertEqual(found[0].count, 12)
+
 
 if __name__ == "__main__":
     unittest.main()

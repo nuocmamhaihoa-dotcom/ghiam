@@ -58,12 +58,24 @@ class VideoPlan:
         return sorted(frames)
 
 
+# Một khung hỏng hoặc một lần đọc chữ quá hạn chỉ làm mất khung đó, không làm hỏng cả video.
+_FRAME_ERRORS = (OSError, ValueError, subprocess.SubprocessError)
+
+
 def read_frame_at(path: str, at: float) -> FrameObs:
-    return dataclasses.replace(read_image(path), at=at)
+    try:
+        return dataclasses.replace(read_image(path), at=at)
+    except _FRAME_ERRORS as exc:
+        print(f"Bỏ khung {Path(path).name}: {exc}", flush=True)
+        return FrameObs("unknown", at=at)
 
 
 def read_tap_at(paths: list[str], at: float) -> FrameObs:
-    return dataclasses.replace(read_tap(paths), at=at)
+    try:
+        return dataclasses.replace(read_tap(paths), at=at)
+    except _FRAME_ERRORS as exc:
+        print(f"Bỏ khung bấm {Path(paths[-1]).name}: {exc}", flush=True)
+        return FrameObs("unknown", at=at)
 
 
 def scan_paths(
@@ -120,7 +132,13 @@ def _scan_video(path: Path, folder: Path, fps: float, submit: Submit | None) -> 
         results = [fn(*args) for _, _, _, fn, args in jobs]
     else:
         futures = [submit(fn, *args) for _, _, _, fn, args in jobs]
-        results = [future.result() for future in futures]
+        try:
+            results = [future.result() for future in futures]
+        except BaseException:
+            # Video đã hỏng thì các khung còn chờ không được chiếm nhân của video khác.
+            for future in futures:
+                future.cancel()
+            raise
     return [(job[2], obs) for job, obs in zip(jobs, results)]
 
 
@@ -146,17 +164,22 @@ def plan_video(path: Path, fps: float = SCAN_FPS) -> VideoPlan:
     ]
     size = THUMB_W * THUMB_H
     planner = _Planner()
-    with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
-        assert proc.stdout is not None
-        while True:
-            chunk = proc.stdout.read(size)
-            if len(chunk) < size:
-                break
-            planner.push(np.frombuffer(chunk, dtype=np.uint8).reshape(THUMB_H, THUMB_W).astype(np.float32))
-        error = proc.stderr.read().decode("utf-8", "replace") if proc.stderr else ""
-        code = proc.wait()
+    # Lỗi của ffmpeg ghi ra file: video hỏng có thể in rất nhiều dòng lỗi, ống đầy thì ffmpeg đứng chờ mãi.
+    with tempfile.TemporaryFile() as errors:
+        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors) as proc:
+            assert proc.stdout is not None
+            while True:
+                chunk = proc.stdout.read(size)
+                if len(chunk) < size:
+                    break
+                planner.push(np.frombuffer(chunk, dtype=np.uint8).reshape(THUMB_H, THUMB_W).astype(np.float32))
+            code = proc.wait()
+        errors.seek(0)
+        error = errors.read(8192).decode("utf-8", "replace")
     if code != 0 and planner.count == 0:
-        raise RuntimeError(error.strip() or f"ffmpeg không đọc được {path.name}.")
+        detail = error.strip().splitlines()[0] if error.strip() else ""
+        message = "Không mở được video: file hỏng, chưa tải xong, hoặc không phải video."
+        raise RuntimeError(f"{message} ({detail})" if detail else message)
     plan = planner.finish()
     if plan.count == 0:
         raise RuntimeError(f"Video {path.name} không có khung hình.")
@@ -247,7 +270,9 @@ def extract_frames(path: Path, folder: Path, numbers: list[int], fps: float = SC
         ],
         capture_output=True,
         text=True,
+        errors="replace",
         check=False,
+        timeout=3 * 3600,
     )
     if done.returncode != 0:
         raise RuntimeError(done.stderr.strip() or f"ffmpeg không đọc được {path.name}.")

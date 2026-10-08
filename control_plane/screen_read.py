@@ -251,7 +251,28 @@ def _list_buttons(boxes: list[Box], width: int) -> list[Box]:
         if kept and box.y0 - kept[-1].y0 < box.h * 0.8:
             continue
         kept.append(box)
-    return kept
+    return _fill_hidden_button(kept)
+
+
+def _fill_hidden_button(buttons: list[Box]) -> list[Box]:
+    """Chấm chạm che gần hết một nút Follow thì cột bị hụt một dòng. Thêm lại dòng đó ở đúng nhịp."""
+    if len(buttons) < 3:
+        return buttons
+    gaps = sorted(b.y0 - a.y0 for a, b in zip(buttons, buttons[1:]))
+    pitch = gaps[len(gaps) // 4]
+    if pitch <= 0:
+        return buttons
+    x0 = sorted(button.x0 for button in buttons)[len(buttons) // 2]
+    width = sorted(button.w for button in buttons)[len(buttons) // 2]
+    height = sorted(button.h for button in buttons)[len(buttons) // 2]
+    filled = [buttons[0]]
+    for upper, lower in zip(buttons, buttons[1:]):
+        gap = lower.y0 - upper.y0
+        if 1.6 * pitch <= gap <= 2.4 * pitch:
+            top = upper.y0 + gap // 2
+            filled.append(Box(x0, top, x0 + width, top + height))
+        filled.append(lower)
+    return filled
 
 
 def _profile_button(boxes: list[Box], width: int, height: int) -> Box | None:
