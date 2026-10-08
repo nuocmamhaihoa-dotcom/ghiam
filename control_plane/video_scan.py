@@ -73,22 +73,33 @@ def scan_paths(
     work_dir: Path | None = None,
 ) -> tuple[Table, list[tuple[Path, FrameObs]]]:
     """Đọc ảnh và video theo thứ tự. submit là executor.submit để đọc nhiều khung cùng lúc."""
-    frames: list[tuple[Path, FrameObs]] = []
+    for path in paths:
+        suffix = path.suffix.lower()
+        if suffix not in IMAGE_SUFFIXES and suffix not in VIDEO_SUFFIXES:
+            raise RuntimeError(f"Không đọc được {path.name}. Dùng ảnh hoặc video.")
+
     temps: list[tempfile.TemporaryDirectory[str]] = []
     try:
-        for path in paths:
-            suffix = path.suffix.lower()
-            if suffix in IMAGE_SUFFIXES:
-                frames.append((path, read_image(path)))
+        image_paths = [(index, path) for index, path in enumerate(paths) if path.suffix.lower() in IMAGE_SUFFIXES]
+        image_hits: dict[int, FrameObs] = {}
+        if image_paths:
+            if submit is None:
+                for index, path in image_paths:
+                    image_hits[index] = read_image(path)
+            else:
+                futures = [(index, path, submit(read_image, str(path))) for index, path in image_paths]
+                for index, path, future in futures:
+                    image_hits[index] = future.result()
+
+        ordered: list[tuple[Path, FrameObs]] = []
+        for index, path in enumerate(paths):
+            if path.suffix.lower() in IMAGE_SUFFIXES:
+                ordered.append((path, image_hits[index]))
                 continue
-            if suffix in VIDEO_SUFFIXES:
-                folder = tempfile.TemporaryDirectory(prefix="danhba-frames-", dir=work_dir)
-                temps.append(folder)
-                frames.extend(_scan_video(path, Path(folder.name), fps, submit))
-                continue
-            raise RuntimeError(f"Không đọc được {path.name}. Dùng ảnh hoặc video.")
-        table = build_table([obs for _, obs in frames])
-        return table, frames
+            folder = tempfile.TemporaryDirectory(prefix="danhba-frames-", dir=work_dir)
+            temps.append(folder)
+            ordered.extend(_scan_video(path, Path(folder.name), fps, submit))
+        return build_table([obs for _, obs in ordered]), ordered
     finally:
         for folder in temps:
             folder.cleanup()

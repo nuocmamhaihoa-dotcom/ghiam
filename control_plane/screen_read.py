@@ -504,11 +504,11 @@ def _selected(image: Image.Image, strip: Box) -> bool:
     if top >= strip.y1:
         return False
     crop = image.crop((strip.x0, top, strip.x1, strip.y1)).convert("L")
-    background = [pixel for pixel in crop.getdata() if pixel >= 200]
-    if len(background) < 40:
+    pixels = np.asarray(crop).reshape(-1)
+    background = pixels[pixels >= 200]
+    if background.size < 40:
         return False
-    background.sort()
-    return background[len(background) // 2] <= 246
+    return int(np.median(background)) <= 246
 
 
 def _crop(image: Image.Image, box: Box, pad_x: int, pad_y: int) -> Image.Image:

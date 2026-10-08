@@ -226,7 +226,7 @@
     note.textContent = "Đang tạo liên kết tải...";
     var response = await api("/v1/backup/ticket", { method: "POST" });
     if (!response.ok) {
-      note.textContent = "Chưa tải được. Kiểm tra mã kết nối.";
+      note.textContent = "Chưa tải được. Thử lại sau vài giây.";
       note.className = "note warn";
       return;
     }

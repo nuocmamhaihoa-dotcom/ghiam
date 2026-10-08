@@ -54,17 +54,26 @@ def run_job(db_path: Path, job: dict[str, object], scan=scan_paths) -> None:
 
 def _feed(db_path: Path, pool: ProcessPoolExecutor, work_dir: Path, stop: threading.Event, broken: threading.Event) -> None:
     scan = functools.partial(scan_paths, submit=pool.submit, work_dir=work_dir)
-    while not stop.is_set():
-        touch_heartbeat(heartbeat_path())
-        job = claim(db_path, os.getpid())
-        if job is None:
-            stop.wait(1.0)
-            continue
-        try:
-            run_job(db_path, job, scan)
-        except BrokenExecutor:
-            broken.set()
-            return
+    current: dict[str, object] | None = None
+    try:
+        while not stop.is_set():
+            touch_heartbeat(heartbeat_path())
+            current = claim(db_path, os.getpid())
+            if current is None:
+                stop.wait(1.0)
+                continue
+            try:
+                run_job(db_path, current, scan)
+            except BrokenExecutor:
+                # run_job đã đưa video về hàng đợi.
+                current = None
+                broken.set()
+                return
+            current = None
+    finally:
+        # Luồng nhận video chết giữa chừng mà tiến trình vẫn sống thì recover_dead không cứu được.
+        if current is not None:
+            requeue(db_path, int(current["id"]))
 
 
 def main() -> None:
