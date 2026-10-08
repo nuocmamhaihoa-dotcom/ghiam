@@ -28,8 +28,14 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
 from control_plane.delivery import DANHBA_NAME, PACKAGE_NAME, ensure_danhba_package, ensure_package
+from control_plane.focus import (
+    FOCUS_CHAT_URL,
+    FOCUS_ENV_URL,
+    FOCUS_ENVIRONMENT_ID,
+    FOCUS_LIVE_APP,
+)
 from control_plane.people import apply_novel, complete_rows
-from control_plane.version import DANHBA_BUILD, IPHONE_BUILD
+from control_plane.version import DANHBA_BUILD, FOCUS_BUILD, IPHONE_BUILD
 from control_plane.recordings import (
     blanks_of,
     default_title,
@@ -172,6 +178,9 @@ def health() -> dict[str, Any]:
         "iphoneBuild": IPHONE_BUILD,
         "danhbaBuild": DANHBA_BUILD,
         "danhba": "/danhba/",
+        "focus": "/focus/",
+        "focusBuild": FOCUS_BUILD,
+        "focusEnvironmentId": FOCUS_ENVIRONMENT_ID,
         "delivery": "/tai",
     }
 
@@ -208,6 +217,73 @@ def delivery_page() -> HTMLResponse:
     return _html("tai.html")
 
 
+def _focus_html() -> HTMLResponse:
+    path = STATIC_DIR / "focus.html"
+    if not path.exists():
+        return HTMLResponse("<p>Missing page.</p>", status_code=404)
+    text = (
+        path.read_text(encoding="utf-8")
+        .replace("__FOCUS_BUILD__", str(FOCUS_BUILD))
+        .replace("__FOCUS_ENVIRONMENT_ID__", FOCUS_ENVIRONMENT_ID)
+        .replace("__FOCUS_LIVE_APP__", FOCUS_LIVE_APP)
+        .replace("__FOCUS_CHAT_URL__", FOCUS_CHAT_URL)
+        .replace("__FOCUS_ENV_URL__", FOCUS_ENV_URL)
+    )
+    return HTMLResponse(text, headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/focus")
+def focus_open() -> RedirectResponse:
+    """Đường cài Focus: quét lik. Dấu / cuối để iPhone cập nhật đúng thư mục."""
+    return RedirectResponse(url="/focus/", status_code=302)
+
+
+@app.get("/focus/")
+def focus_app() -> HTMLResponse:
+    """App Focus: quét lik trên iPhone. Hiện ID môi trường và mở phần mềm đang chạy."""
+    return _focus_html()
+
+
+@app.get("/focus/sw.js")
+def focus_worker() -> Response:
+    path = STATIC_DIR / "focus-sw.js"
+    if not path.exists():
+        return HTMLResponse("missing", status_code=404)
+    text = path.read_text(encoding="utf-8").replace("__FOCUS_BUILD__", str(FOCUS_BUILD))
+    return Response(
+        content=text,
+        media_type="text/javascript",
+        headers={
+            "Cache-Control": "no-cache",
+            "Service-Worker-Allowed": "/focus/",
+        },
+    )
+
+
+@app.get("/focus/manifest.webmanifest")
+def focus_manifest() -> FileResponse:
+    path = STATIC_DIR / "focus-manifest.webmanifest"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="manifest missing")
+    return FileResponse(
+        path,
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/focus/version")
+def focus_version() -> dict[str, str | int]:
+    return {
+        "build": FOCUS_BUILD,
+        "name": "Focus: quét lik",
+        "environmentId": FOCUS_ENVIRONMENT_ID,
+        "liveApp": FOCUS_LIVE_APP,
+        "chatUrl": FOCUS_CHAT_URL,
+        "environmentUrl": FOCUS_ENV_URL,
+    }
+
+
 @app.get("/v1/delivery")
 def delivery_info() -> dict[str, Any]:
     pkg = ensure_package(STATIC_DIR, settings.data_dir)
@@ -217,6 +293,9 @@ def delivery_info() -> dict[str, Any]:
         "installPath": "/tai",
         "danhbaBuild": DANHBA_BUILD,
         "danhbaPath": "/danhba/",
+        "focusBuild": FOCUS_BUILD,
+        "focusPath": "/focus/",
+        "focusEnvironmentId": FOCUS_ENVIRONMENT_ID,
         "package": {
             "name": pkg.name,
             "bytes": pkg.stat().st_size,

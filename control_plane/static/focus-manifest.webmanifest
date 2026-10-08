@@ -1,0 +1,21 @@
+{
+  "name": "Focus: quét lik",
+  "short_name": "Focus: quét lik",
+  "description": "Phần mềm quét like. Môi trường 4c8eb384-412e-45ff-910f-2fa62b8f7675.",
+  "id": "/focus/",
+  "start_url": "/focus/",
+  "scope": "/focus/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#efece6",
+  "theme_color": "#0f6e56",
+  "lang": "vi",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

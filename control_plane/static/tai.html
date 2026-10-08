@@ -34,6 +34,10 @@
 </head>
 <body>
   <h1>Tải phần mềm</h1>
+  <h2>Focus: quét lik</h2>
+  <p>Phần mềm đang viết. ID môi trường hiện trên trang cài.</p>
+  <p class="url" id="focusUrl">/focus/</p>
+  <a class="btn" id="focusApp" href="/focus/">Cài Focus: quét lik trên iPhone</a>
   <p>Đường này mở app trên iPhone và tải gói giao diện. Không cần cài từ App Store.</p>
   <p class="url" id="appUrl">/iphone</p>
   <a class="btn" id="openApp" href="/iphone">Mở app</a>
@@ -59,8 +63,10 @@
   <script>
     const appUrl = location.origin + "/iphone";
     const danhbaUrl = location.origin + "/danhba/";
+    const focusUrl = location.origin + "/focus/";
     document.getElementById("appUrl").textContent = appUrl;
     document.getElementById("danhbaUrl").textContent = danhbaUrl;
+    document.getElementById("focusUrl").textContent = focusUrl;
     document.getElementById("copyUrl").addEventListener("click", async () => {
       const button = document.getElementById("copyUrl");
       try {
