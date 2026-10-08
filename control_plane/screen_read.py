@@ -391,6 +391,7 @@ def _read_rows(image: Image.Image, strips: list[Box], tapped: set[int]) -> list[
 
 
 def _read_profile(image: Image.Image, button: Box) -> tuple[str, str]:
+    """Hồ sơ: tên nằm ngay phía trên @username."""
     header = Box(
         max(0, button.x0 - int(0.08 * button.w)),
         max(0, button.y0 - int(3.9 * button.h)),
@@ -420,9 +421,13 @@ def _read_profile(image: Image.Image, button: Box) -> tuple[str, str]:
     reread = _read_handle(image, lines[handle_at].box)
     if reread:
         username = reread
+    handle_y = lines[handle_at].box.center_y()
     draft = ""
     name_box: Box | None = None
+    # Tên gần nhất phía trên username (không lấy chữ dưới @).
     for line in reversed(lines[:handle_at]):
+        if line.box.center_y() >= handle_y:
+            continue
         text = clean_name(line.text)
         if not text or is_skipped(text) or phone_in_text(text):
             continue
@@ -449,7 +454,7 @@ def _read_handle(image: Image.Image, box: Box) -> str:
 
 
 def _phone_and_name(words: list[Word]) -> tuple[str, str, Box | None, Box | None]:
-    """Dòng số là dòng đầu có số hợp lệ hoặc có từ 9 chữ số. Số đọc ở đây chỉ là một phiếu, có thể rỗng."""
+    """Danh bạ: số điện thoại ở trên, tên kèm theo nằm ngay phía dưới số đó."""
     lines = _lines(words)
     phone = ""
     phone_at = -1
@@ -462,14 +467,15 @@ def _phone_and_name(words: list[Word]) -> tuple[str, str, Box | None, Box | None
     if phone_at < 0:
         return "", "", None, None
     phone_box = lines[phone_at].box
+    phone_y = phone_box.center_y()
+    # Chỉ lấy tên gần nhất phía dưới số — không lấy chữ phía trên hoặc cùng dòng.
     for line in lines[phone_at + 1 :]:
+        if line.box.center_y() <= phone_y:
+            continue
         text = clean_name(line.text)
         if not text or is_skipped(text) or phone_in_text(text):
             continue
         return phone, text, line.box, phone_box
-    same = clean_name(_without_phone(lines[phone_at].text, phone)) if phone else ""
-    if same and not is_skipped(same):
-        return phone, same, lines[phone_at].box, phone_box
     return phone, "", None, phone_box
 
 

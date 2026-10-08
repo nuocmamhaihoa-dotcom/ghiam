@@ -501,6 +501,42 @@ def _digit_hamming(left: str, right: str) -> int:
     return sum(a != b for a, b in zip(left, right))
 
 
+def _phones_compatible(left: str, right: str, contacts: dict[str, _Tally], shown: dict[str, set[int]]) -> bool:
+    """Hai số có thể là cùng một dòng OCR lệch: cùng tên, lệch ≤2 chữ số, không cùng khung."""
+    if left == right:
+        return False
+    if _digit_hamming(left, right) > 2:
+        return False
+    if shown.get(left, set()) & shown.get(right, set()):
+        return False
+    left_name = contacts[left].best() if left in contacts else ""
+    right_name = contacts[right].best() if right in contacts else ""
+    if left_name and right_name and not same_person_name(left_name, right_name):
+        return False
+    return True
+
+
+def _pick_canonical_phone(
+    group: list[str],
+    phone_hits: dict[str, int],
+    phone_seen: dict[str, int],
+) -> str:
+    """Giữ số được đọc nhiều nhất; hòa thì lấy số gần các biến thể khác nhất (medoid)."""
+
+    def medoid_score(candidate: str) -> int:
+        return sum(_digit_hamming(candidate, other) for other in group)
+
+    return min(
+        group,
+        key=lambda phone: (
+            -phone_hits.get(phone, 0),
+            medoid_score(phone),
+            phone_seen.get(phone, 10**9),
+            phone,
+        ),
+    )
+
+
 def _collapse_rare_digits(
     contacts: dict[str, _Tally],
     phone_hits: dict[str, int],
@@ -508,41 +544,48 @@ def _collapse_rare_digits(
     visits: list[_Visit],
     shown: dict[str, set[int]],
 ) -> None:
-    """Số đọc lệch một chữ số, cùng tên, chưa từng hiện cùng khung: gộp vào số được đọc nhiều hơn.
+    """Phương án B: số lệch 1–2 chữ số, cùng tên, chưa từng hiện cùng khung → gộp một số.
 
-    Hai dòng cùng hiện trên một khung là hai người khác nhau, nên không bao giờ gộp.
+    Hai dòng cùng hiện trên một khung là hai người khác nhau, không bao giờ gộp.
+    Biến thể chỉ thấy một lần cũng gộp vào cụm gần nhất.
     """
-    redirect: dict[str, str] = {}
-    for weak in sorted(phone_hits, key=lambda phone: (phone_hits[phone], phone)):
-        best_strong = ""
-        best_hits = 0
-        for strong, hits in phone_hits.items():
-            if strong == weak or hits < 2 or hits <= phone_hits[weak] or hits <= best_hits:
-                continue
-            if _digit_hamming(strong, weak) != 1:
-                continue
-            if shown.get(strong, set()) & shown.get(weak, set()):
-                continue
-            weak_name = contacts[weak].best() if weak in contacts else ""
-            strong_name = contacts[strong].best() if strong in contacts else ""
-            same = name_key(weak_name) == name_key(strong_name) or names_close(weak_name, strong_name)
-            if weak_name and strong_name and not same:
-                continue
-            best_strong = strong
-            best_hits = hits
-        if best_strong:
-            redirect[weak] = best_strong
+    phones = list(phone_hits)
+    parent = {phone: phone for phone in phones}
 
-    def target(phone: str) -> str:
-        seen: set[str] = set()
-        while phone in redirect and phone not in seen:
-            seen.add(phone)
-            phone = redirect[phone]
+    def find(phone: str) -> str:
+        while parent[phone] != phone:
+            parent[phone] = parent[parent[phone]]
+            phone = parent[phone]
         return phone
 
+    def unite(left: str, right: str) -> None:
+        a, b = find(left), find(right)
+        if a != b:
+            parent[b] = a
+
+    for index, left in enumerate(phones):
+        for right in phones[index + 1 :]:
+            if _phones_compatible(left, right, contacts, shown):
+                unite(left, right)
+
+    groups: dict[str, list[str]] = {}
+    for phone in phones:
+        groups.setdefault(find(phone), []).append(phone)
+
+    redirect: dict[str, str] = {}
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        keep = _pick_canonical_phone(group, phone_hits, phone_seen)
+        for phone in group:
+            if phone != keep:
+                redirect[phone] = keep
+
     for weak in sorted(redirect, key=lambda phone: phone_hits.get(phone, 0)):
-        strong = target(weak)
-        if strong == weak:
+        strong = redirect[weak]
+        while strong in redirect:
+            strong = redirect[strong]
+        if strong == weak or weak not in phone_hits:
             continue
         weak_tally = contacts.pop(weak, None)
         if weak_tally is not None and weak_tally.best():
@@ -550,10 +593,13 @@ def _collapse_rare_digits(
             for _ in range(max(1, phone_hits.get(weak, 1))):
                 strong_tally.add(weak_tally.best())
         phone_hits[strong] = phone_hits.get(strong, 0) + phone_hits.pop(weak, 0)
-        phone_seen.pop(weak, None)
+        phone_seen[strong] = min(phone_seen.get(strong, 10**9), phone_seen.pop(weak, 10**9))
+        shown.setdefault(strong, set()).update(shown.pop(weak, set()))
         for visit in visits:
             if visit.phone == weak:
                 visit.phone = strong
+            if visit.window:
+                visit.window = tuple((strong if phone == weak else phone, name) for phone, name in visit.window)
 
 
 def _pick_from_window(visits: list[_Visit]) -> None:

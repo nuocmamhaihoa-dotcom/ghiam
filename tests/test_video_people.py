@@ -439,14 +439,15 @@ class TapFrameTests(unittest.TestCase):
         self.assertEqual(table.rows, [])
 
     def test_profile_pairs_with_the_only_matching_row_on_screen(self) -> None:
+        # Hai số cùng tên nhưng cách xa (>2 chữ số): không phải OCR lệch, giữ riêng.
         table = build_table(
             [
                 frame_list(ContactHit("0900000001", "Photo"), ContactHit("0900000005", "Lan")),
-                frame_list(ContactHit("0900000002", "Photo"), ContactHit("0900000003", "Mai Anh")),
+                frame_list(ContactHit("0912345678", "Photo"), ContactHit("0900000003", "Mai Anh")),
                 frame_profile("Photo", "@photo.2"),
             ]
         )
-        self.assertIn(("0900000002", "@photo.2"), [(row.phone, row.username) for row in table.rows])
+        self.assertIn(("0912345678", "@photo.2"), [(row.phone, row.username) for row in table.rows])
         self.assertNotIn("0900000001", [row.phone for row in table.rows])
 
     def test_two_matching_rows_on_screen_stay_apart(self) -> None:
@@ -463,6 +464,46 @@ class TapFrameTests(unittest.TestCase):
         frames.append(frame_list(ContactHit("0982117075", "Đặng Thị Tâm")))
         table = build_table(frames)
         self.assertEqual([item.phone for item in table.unopened], ["0982117072"])
+
+    def test_misread_two_digits_merge_when_never_together(self) -> None:
+        frames = [
+            frame_list(ContactHit("0788101657", "Đồng Nội Hương")),
+            frame_list(ContactHit("0988161657", "Đồng Nội Hương")),
+            frame_list(ContactHit("0788161057", "Đồng Nội Hương")),
+        ]
+        table = build_table(frames)
+        self.assertEqual(len(table.unopened), 1)
+        self.assertEqual(table.unopened[0].name, "Đồng Nội Hương")
+        self.assertIn(table.unopened[0].phone, {"0788101657", "0988161657", "0788161057"})
+
+    def test_near_phones_on_same_frame_stay_separate(self) -> None:
+        table = build_table(
+            [
+                frame_list(
+                    ContactHit("0915005586", "f_ Tranhungchef"),
+                    ContactHit("0915003586", "f_ Tranhungchef"),
+                ),
+                frame_list(
+                    ContactHit("0915005586", "f_ Tranhungchef"),
+                    ContactHit("0915003586", "f_ Tranhungchef"),
+                ),
+            ]
+        )
+        phones = sorted(item.phone for item in table.unopened)
+        self.assertEqual(phones, ["0915003586", "0915005586"])
+
+    def test_far_same_name_on_same_frame_stay_separate(self) -> None:
+        table = build_table(
+            [
+                frame_list(
+                    ContactHit("0936502563", "Lâm Tường"),
+                    ContactHit("0556802562", "Lâm Tường"),
+                    ContactHit("0766502863", "Lâm Tường"),
+                )
+            ]
+        )
+        phones = sorted(item.phone for item in table.unopened)
+        self.assertEqual(phones, ["0556802562", "0766502863", "0936502563"])
 
 
 class TapSpotTests(unittest.TestCase):
