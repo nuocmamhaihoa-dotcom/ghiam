@@ -21,8 +21,7 @@ from control_plane.video_store import (
     init_db,
     iter_backup,
     list_videos,
-    merge_close_results,
-    merge_same_name_results,
+    rematch_results,
     queued_bytes,
     recover_dead,
     requeue_running,
@@ -106,7 +105,7 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(found["0332001753"]["bucket"], "Đã lưu")
         self.assertEqual(stats(self.db)["results"], 3)
 
-    def test_close_names_in_one_video_merge_and_other_videos_stay_apart(self) -> None:
+    def test_close_names_merge_inside_finish_and_global_rematch(self) -> None:
         first = self._add("a.mp4", "a")
         finish(
             self.db,
@@ -125,6 +124,9 @@ class VideoStoreTests(unittest.TestCase):
                 ],
             ),
         )
+        found = {item["phone"]: item for item in search_results(self.db, limit=20)}
+        self.assertEqual(found["0982117072"]["username"], "@hanhnguyenn375")
+        self.assertEqual(found["0982117072"]["bucket"], "Đã lưu")
         second = self._add("b.mp4", "b")
         finish(
             self.db,
@@ -137,18 +139,16 @@ class VideoStoreTests(unittest.TestCase):
                 ],
             ),
         )
-        self.assertEqual(merge_close_results(self.db), 2)
+        self.assertEqual(rematch_results(self.db), 1)
         found = {item["phone"]: item for item in search_results(self.db, limit=20)}
-        self.assertEqual(found["0982117072"]["username"], "@hanhnguyenn375")
-        self.assertEqual(found["0982117072"]["bucket"], "Đã lưu")
         self.assertEqual(found["0911111111"]["username"], "@dangtam.3")
+        self.assertEqual(found["0900000003"]["username"], "@quang.le354")
         self.assertEqual(found["0900000001"]["username"], "")
         self.assertEqual(found["0900000002"]["username"], "")
-        self.assertEqual(found["0900000003"]["username"], "")
         listed = search_results(self.db, limit=20)
         self.assertTrue(any(item["username"] == "@user1" and item["phone"] == "" for item in listed))
-        self.assertTrue(any(item["username"] == "@quang.le354" and item["phone"] == "" for item in listed))
-        self.assertEqual(merge_close_results(self.db), 0)
+        self.assertFalse(any(item["username"] == "@quang.le354" and item["phone"] == "" for item in listed))
+        self.assertEqual(rematch_results(self.db), 0)
 
     def test_counts_follow_every_insert_upgrade_and_merge(self) -> None:
         first = self._add("a.mp4", "a")
@@ -160,13 +160,14 @@ class VideoStoreTests(unittest.TestCase):
                 review=[Review("", "", "khactam", "@khactam60", "đã mở hồ sơ nhưng chưa thấy số")],
             ),
         )
-        self.assertEqual((stats(self.db)["saved"], stats(self.db)["review"], stats(self.db)["unopened"]), (0, 1, 1))
+        # finish đã ghép ngay thành một hàng ngang đủ số + username
+        self.assertEqual((stats(self.db)["saved"], stats(self.db)["review"], stats(self.db)["unopened"]), (1, 0, 0))
+        listed = search_results(self.db, limit=20)
+        self.assertEqual([(item["phone"], item["username"]) for item in listed], [("0332001753", "@khactam60")])
         second = self._add("b.mp4", "b")
         finish(self.db, second, Table(rows=[Row("0332001753", "khactam", "@khactam60")]))
         counted = stats(self.db)
         self.assertEqual((counted["saved"], counted["review"], counted["unopened"]), (1, 0, 0))
-        listed = search_results(self.db, limit=20)
-        self.assertEqual([(item["phone"], item["username"]) for item in listed], [("0332001753", "@khactam60")])
 
     def test_lone_username_is_not_added_when_it_already_has_a_phone(self) -> None:
         first = self._add("a.mp4", "a")
@@ -213,13 +214,11 @@ class VideoStoreTests(unittest.TestCase):
                 review=[Review("", "", "OCR lech", "@uniquehandle99", "đã mở hồ sơ nhưng chưa thấy số")],
             ),
         )
-        self.assertEqual(stats(self.db)["results"], 2)
-        self.assertEqual(merge_same_name_results(self.db), 1)
         found = search_results(self.db, "0985721500")[0]
         self.assertEqual(found["username"], "@uniquehandle99")
         self.assertEqual(found["bucket"], "Đã lưu")
         self.assertEqual(stats(self.db)["results"], 1)
-        self.assertEqual(merge_same_name_results(self.db), 0)
+        self.assertEqual(rematch_results(self.db), 0)
 
     def test_finished_video_can_be_uploaded_again_and_reread(self) -> None:
         video_id = self._add("a.mp4", "same")

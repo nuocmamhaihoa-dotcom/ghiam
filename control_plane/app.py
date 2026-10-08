@@ -45,7 +45,7 @@ from control_plane.recordings import (
 from control_plane.settings import ROOT, settings
 from control_plane.video_api import router as video_router
 from control_plane.video_store import init_db as init_video_db
-from control_plane.video_store import merge_close_results
+from control_plane.video_store import rematch_results
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -107,7 +107,7 @@ async def _startup() -> None:
     settings.ensure_dirs()
     db.init_db(settings.db_path)
     init_video_db(settings.video_db_path)
-    merge_close_results(settings.video_db_path)
+    rematch_results(settings.video_db_path)
     # Import proxy list into DB immediately; live/die loop runs in background
     from control_plane.proxy_check import load_proxy_lines, start_background_checker
 

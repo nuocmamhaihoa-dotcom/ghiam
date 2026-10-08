@@ -325,6 +325,7 @@ def recover_dead(db_path: Path) -> int:
 
 
 def finish(db_path: Path, video_id: int, table: Table) -> None:
+    """Lưu kết quả rồi ghép ngay số + username thành hàng ngang đủ ba cột."""
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         for row in table.rows:
@@ -333,6 +334,7 @@ def finish(db_path: Path, video_id: int, table: Table) -> None:
             _put(conn, item.phone, item.name, "", BUCKET_UNOPENED, "", video_id, upgrade=False)
         for item in table.review:
             _put_review(conn, item, video_id)
+        _rematch_conn(conn, video_id)
         conn.execute(
             "UPDATE videos SET status = 'done', pid = NULL, finished_at = ?, error = '' WHERE id = ?",
             (utcnow(), video_id),
@@ -360,71 +362,110 @@ def retry(db_path: Path, video_id: int) -> bool:
         return cur.rowcount == 1
 
 
-def merge_close_results(db_path: Path) -> int:
-    """Ghép số và username cùng một video khi tên gần giống và chỉ có một cặp.
+def rematch_results(db_path: Path, video_id: int | None = None) -> int:
+    """Ghép số điện thoại + username còn thiếu thành một hàng ngang.
 
-    Video mới đã được ghép như vậy trước khi lưu, nên việc quét cả bảng này chỉ chạy một lần cho dữ liệu cũ.
+    Chạy sau mỗi video và lúc khởi động. Không khóa meta: luôn quét lại phần còn thiếu
+    để kết quả cũ và kết quả mới mãi về sau đều được ghép.
     """
-    return _merge_open_pairs(db_path, meta_key="close_merge")
-
-
-def merge_same_name_results(db_path: Path) -> int:
-    """Ghép lại dữ liệu cũ: cùng tên / bỏ dấu / khớp @username thì gộp một hàng."""
-    return _merge_open_pairs(db_path, meta_key="name_merge_v2")
-
-
-def _merge_open_pairs(db_path: Path, meta_key: str) -> int:
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
-            done = conn.execute("SELECT value FROM meta WHERE key = ?", (meta_key,)).fetchone()
-            if done is not None:
-                conn.execute("COMMIT")
-                return 0
-            rows = conn.execute(
-                """
-                SELECT id, phone, name, username, video_id
-                FROM results
-                WHERE username = '' OR phone = ''
-                """
-            ).fetchall()
-            grouped: dict[int, dict[str, list[sqlite3.Row]]] = defaultdict(lambda: {"phones": [], "users": []})
-            for row in rows:
-                if row["phone"] and not row["username"]:
-                    grouped[int(row["video_id"])]["phones"].append(row)
-                elif row["username"] and not row["phone"]:
-                    grouped[int(row["video_id"])]["users"].append(row)
-            merged = 0
-            for items in grouped.values():
-                phones = items["phones"]
-                users = items["users"]
-                pairs = pair_close_names(
-                    [(str(row["id"]), row["name"]) for row in phones],
-                    [(str(row["id"]), row["name"]) for row in users],
-                    handles={str(row["id"]): str(row["username"]) for row in users},
-                )
-                phone_by = {str(row["id"]): row for row in phones}
-                user_by = {str(row["id"]): row for row in users}
-                for phone_id, user_id in pairs:
-                    phone = phone_by[phone_id]
-                    user = user_by[user_id]
-                    updated = conn.execute(
-                        """
-                        UPDATE results
-                        SET name = ?, username = ?, bucket = ?, reason = ''
-                        WHERE id = ? AND username = ''
-                        """,
-                        (joined_name(phone["name"], user["name"]), user["username"], BUCKET_OK, phone["id"]),
-                    )
-                    if updated.rowcount != 1:
-                        continue
-                    conn.execute("DELETE FROM results WHERE id = ? AND phone = ''", (user["id"],))
-                    merged += 1
-            conn.execute("INSERT INTO meta (key, value) VALUES (?, ?)", (meta_key, utcnow()))
+            merged = _rematch_conn(conn, video_id)
             conn.execute("COMMIT")
         except Exception:
             conn.execute("ROLLBACK")
             raise
+    return merged
+
+
+def merge_close_results(db_path: Path) -> int:
+    """Tương thích cũ: luôn gọi rematch toàn bộ."""
+    return rematch_results(db_path)
+
+
+def merge_same_name_results(db_path: Path) -> int:
+    """Tương thích cũ: luôn gọi rematch toàn bộ."""
+    return rematch_results(db_path)
+
+
+def _rematch_conn(conn: sqlite3.Connection, video_id: int | None = None) -> int:
+    if video_id is None:
+        rows = conn.execute(
+            """
+            SELECT id, phone, name, username, video_id
+            FROM results
+            WHERE username = '' OR phone = ''
+            """
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT id, phone, name, username, video_id
+            FROM results
+            WHERE video_id = ? AND (username = '' OR phone = '')
+            """,
+            (video_id,),
+        ).fetchall()
+    grouped: dict[int, dict[str, list[sqlite3.Row]]] = defaultdict(lambda: {"phones": [], "users": []})
+    for row in rows:
+        if row["phone"] and not row["username"]:
+            grouped[int(row["video_id"])]["phones"].append(row)
+        elif row["username"] and not row["phone"]:
+            grouped[int(row["video_id"])]["users"].append(row)
+    merged = 0
+    for items in grouped.values():
+        merged += _merge_pair_group(conn, items["phones"], items["users"])
+    if video_id is None:
+        leftovers = conn.execute(
+            """
+            SELECT id, phone, name, username, video_id
+            FROM results
+            WHERE username = '' OR phone = ''
+            """
+        ).fetchall()
+        phones = [row for row in leftovers if row["phone"] and not row["username"]]
+        users = [row for row in leftovers if row["username"] and not row["phone"]]
+        merged += _merge_pair_group(conn, phones, users)
+    return merged
+
+
+def _merge_pair_group(
+    conn: sqlite3.Connection,
+    phones: list[sqlite3.Row],
+    users: list[sqlite3.Row],
+) -> int:
+    if not phones or not users:
+        return 0
+    pairs = pair_close_names(
+        [(str(row["id"]), row["name"]) for row in phones],
+        [(str(row["id"]), row["name"]) for row in users],
+        handles={str(row["id"]): str(row["username"]) for row in users},
+    )
+    phone_by = {str(row["id"]): row for row in phones}
+    user_by = {str(row["id"]): row for row in users}
+    merged = 0
+    for phone_id, user_id in pairs:
+        phone = phone_by[phone_id]
+        user = user_by[user_id]
+        updated = conn.execute(
+            """
+            UPDATE results
+            SET name = ?, username = ?, bucket = ?, reason = '', video_id = ?
+            WHERE id = ? AND username = ''
+            """,
+            (
+                joined_name(phone["name"], user["name"]),
+                user["username"],
+                BUCKET_OK,
+                phone["video_id"],
+                phone["id"],
+            ),
+        )
+        if updated.rowcount != 1:
+            continue
+        conn.execute("DELETE FROM results WHERE id = ? AND phone = ''", (user["id"],))
+        merged += 1
     return merged
 
 

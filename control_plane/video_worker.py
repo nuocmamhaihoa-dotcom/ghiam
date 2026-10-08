@@ -25,8 +25,7 @@ from control_plane.video_store import (
     feeder_count,
     finish,
     init_db,
-    merge_close_results,
-    merge_same_name_results,
+    rematch_results,
     requeue,
     requeue_running,
     touch_heartbeat,
@@ -88,8 +87,9 @@ def _feed(db_path: Path, pool: ProcessPoolExecutor, work_dir: Path, stop: thread
 def main() -> None:
     db_path = settings.video_db_path
     init_db(db_path)
-    merge_close_results(db_path)
-    merge_same_name_results(db_path)
+    joined = rematch_results(db_path)
+    if joined:
+        print(f"Đã ghép thêm {joined} hàng số + username từ kết quả cũ.", flush=True)
     requeue_running(db_path, os.getpid())
     work_dir = settings.data_dir / "frames"
     shutil.rmtree(work_dir, ignore_errors=True)
