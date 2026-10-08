@@ -43,10 +43,13 @@ from control_plane.recordings import (
     steps_to_events,
 )
 from control_plane.settings import ROOT, settings
+from control_plane.video_api import router as video_router
+from control_plane.video_store import init_db as init_video_db
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 app = FastAPI(title="fb-poller high-bandwidth control plane", version="1.3.0")
+app.include_router(video_router)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CORSMiddleware,
@@ -96,6 +99,7 @@ def _remember_hub(kind: str, summary: str, detail: str | None = None, actor: str
 async def _startup() -> None:
     settings.ensure_dirs()
     db.init_db(settings.db_path)
+    init_video_db(settings.video_db_path)
     # Import proxy list into DB immediately; live/die loop runs in background
     from control_plane.proxy_check import load_proxy_lines, start_background_checker
 
@@ -182,8 +186,8 @@ def _html(name: str) -> HTMLResponse:
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard() -> HTMLResponse:
-    """Web UI — hiển thị comment đã sync từ các PC scanner."""
-    return _html("dashboard.html")
+    """Trang duy nhất: thêm video, xem thống kê, tải bản sao lưu."""
+    return _html("video.html")
 
 
 @app.get("/phone", response_class=HTMLResponse)

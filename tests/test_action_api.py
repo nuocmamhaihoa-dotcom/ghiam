@@ -114,20 +114,44 @@ class ActionApiTests(unittest.TestCase):
         )
         self.assertEqual(empty.status_code, 400)
 
-    def test_dashboard_has_journal(self) -> None:
+    def test_upload_lists_and_backup_ticket(self) -> None:
+        denied = self.client.post("/v1/videos", files={"file": ("a.mp4", b"fake-video", "video/mp4")})
+        self.assertEqual(denied.status_code, 401)
+        uploaded = self.client.post(
+            "/v1/videos",
+            headers=self.headers,
+            files={"file": ("a.mp4", b"fake-video", "video/mp4")},
+        )
+        self.assertEqual(uploaded.status_code, 200, uploaded.text)
+        body = uploaded.json()
+        self.assertEqual(body["status"], "queued")
+        self.assertFalse(body["duplicate"])
+        again = self.client.post(
+            "/v1/videos",
+            headers=self.headers,
+            files={"file": ("a-copy.mp4", b"fake-video", "video/mp4")},
+        )
+        self.assertTrue(again.json()["duplicate"])
+        stats = self.client.get("/v1/videos/stats", headers=self.headers)
+        self.assertEqual(stats.status_code, 200)
+        self.assertGreaterEqual(stats.json()["queued"], 1)
+        self.assertGreaterEqual(stats.json()["workers"], 1)
+        ticket = self.client.post("/v1/backup/ticket", headers=self.headers)
+        self.assertEqual(ticket.status_code, 200, ticket.text)
+        downloaded = self.client.get(ticket.json()["url"])
+        self.assertEqual(downloaded.status_code, 200)
+        self.assertIn("gzip", downloaded.headers["content-type"])
+        self.assertIn("sao-luu-danh-ba", downloaded.headers["content-disposition"])
+
+    def test_dashboard_is_the_video_queue(self) -> None:
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Nhật ký thao tác", response.text)
-        self.assertIn("Ghi nhớ", response.text)
-        self.assertIn("Làm theo", response.text)
-        self.assertIn("Ghi bấm phím và cảm ứng", response.text)
-        self.assertIn('id="recordDock"', response.text)
-        self.assertIn("Sau 10 giây", response.text)
-        self.assertIn("Sửa", response.text)
-        self.assertIn("Lưu thành bản mới", response.text)
-        self.assertIn("Lưu thành đoạn", response.text)
-        self.assertIn("Kịch bản ghép", response.text)
-        self.assertIn("Mở giả lập điện thoại trên PC", response.text)
+        self.assertIn("Đọc video danh bạ", response.text)
+        self.assertIn("Thêm video", response.text)
+        self.assertIn("Tải bản sao lưu về PC", response.text)
+        self.assertIn("Thống kê", response.text)
+        self.assertNotIn("Check proxy ngay", response.text)
+        self.assertNotIn("Mở giả lập điện thoại trên PC", response.text)
 
     def test_phone_emulator_page(self) -> None:
         response = self.client.get("/phone")
@@ -319,8 +343,8 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(listed.json()["count"], 1)
         page = self.client.get("/")
-        self.assertIn("Đã lưu", page.text)
-        self.assertIn("Tên trong danh bạ", page.text)
+        self.assertIn("Kết quả đã lưu", page.text)
+        self.assertIn("Tải bản sao lưu về PC", page.text)
         sample = self.client.get("/sample-people")
         self.assertEqual(sample.status_code, 200)
         self.assertIn("A Tùng Bán Gạch", sample.text)
@@ -360,12 +384,10 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(body["start_url"], "/iphone")
         self.assertEqual(body["display"], "standalone")
         home = self.client.get("/")
-        self.assertIn("Lướt trên iPhone", home.text)
-        self.assertIn("Mở giả lập điện thoại trên PC", home.text)
-        self.assertIn("Chạm trên iPhone được ghi để làm lại.", home.text)
-        self.assertIn("/static/version.js", home.text)
+        self.assertIn("Đọc video danh bạ", home.text)
+        self.assertIn("Tải bản sao lưu về PC", home.text)
+        self.assertNotIn("Lướt trên iPhone", home.text)
         self.assertIn('href="/tai"', page.text)
-        self.assertIn("Tải phần mềm", home.text)
 
     def test_public_delivery_package(self) -> None:
         page = self.client.get("/tai")

@@ -15,7 +15,10 @@ class ServerSettings:
         self.packages_dir = Path(os.environ.get("CONTROL_PACKAGES_DIR", self.data_dir / "packages"))
         self.db_path = Path(os.environ.get("CONTROL_DB", self.data_dir / "server.db"))
         # High-bandwidth defaults (LAN / multi-gigabit friendly)
-        self.max_upload_mb = int(os.environ.get("CONTROL_MAX_UPLOAD_MB", "512"))
+        self.max_upload_mb = int(os.environ.get("CONTROL_MAX_UPLOAD_MB", "4096"))
+        self.video_db_path = Path(os.environ.get("CONTROL_VIDEO_DB", self.data_dir / "video.db"))
+        self.video_dir = Path(os.environ.get("CONTROL_VIDEO_DIR", self.data_dir / "videos"))
+        self.video_disk_gb = int(os.environ.get("CONTROL_VIDEO_DISK_GB", "80"))
         self.workers = int(os.environ.get("CONTROL_UVICORN_WORKERS", "2"))
         self.limit_concurrency = int(os.environ.get("CONTROL_LIMIT_CONCURRENCY", "200"))
         self.backlog = int(os.environ.get("CONTROL_BACKLOG", "2048"))
@@ -49,6 +52,7 @@ class ServerSettings:
     def ensure_dirs(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.packages_dir.mkdir(parents=True, exist_ok=True)
+        self.video_dir.mkdir(parents=True, exist_ok=True)
         (self.data_dir / "sync").mkdir(parents=True, exist_ok=True)
 
 
