@@ -29,6 +29,24 @@ uv venv --python 3.12 .venv
 source .venv/bin/activate
 uv pip install -e ".[control]"
 
+if ! command -v tesseract >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
+  apt-get update -y
+  apt-get install -y tesseract-ocr tesseract-ocr-vie ffmpeg
+fi
+# Bộ chữ lớn đọc số và dấu tiếng Việt đúng hơn bộ chữ đi kèm Ubuntu.
+mkdir -p "$APP_DIR/tessdata_best"
+for lang in eng vie; do
+  if [[ ! -s "$APP_DIR/tessdata_best/$lang.traineddata" ]]; then
+    if curl -fsSL -m 300 -o "$APP_DIR/tessdata_best/$lang.traineddata.part" \
+      "https://github.com/tesseract-ocr/tessdata_best/raw/main/$lang.traineddata"; then
+      mv "$APP_DIR/tessdata_best/$lang.traineddata.part" "$APP_DIR/tessdata_best/$lang.traineddata"
+    else
+      rm -f "$APP_DIR/tessdata_best/$lang.traineddata.part"
+      echo "Không tải được bộ chữ lớn $lang. Bộ đọc sẽ dùng bộ chữ đi kèm Ubuntu."
+    fi
+  fi
+done
+
 mkdir -p "$APP_DIR/control_data/packages" "$APP_DIR/control_data/sync" "$APP_DIR/logs"
 
 if [[ -z "$TOKEN" ]]; then
