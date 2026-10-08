@@ -48,15 +48,6 @@
   <p class="lead">Thêm video từ nhiều máy cùng lúc. Đóng trang này thì máy chủ vẫn đọc tiếp.</p>
 
   <section>
-    <label for="token">Mã kết nối</label>
-    <div class="row">
-      <input id="token" type="password" autocomplete="off" placeholder="Dán mã một lần trên mỗi máy" />
-      <button id="saveToken" class="ghost" type="button">Lưu mã</button>
-    </div>
-    <p id="authNote" class="note"></p>
-  </section>
-
-  <section>
     <h2>Thêm video</h2>
     <div class="drop" id="drop">
       <p>Kéo nhiều video vào đây</p>
@@ -93,26 +84,18 @@
   </section>
 </main>
 <script>
-  var tokenInput = document.getElementById("token");
-  var authNote = document.getElementById("authNote");
-  tokenInput.value = localStorage.getItem("video-token") || "";
+  var serverToken = __CONTROL_TOKEN__;
 
-  function token() { return tokenInput.value.trim(); }
-
-  function saveToken() {
-    localStorage.setItem("video-token", token());
-    authNote.textContent = token() ? "Đã lưu mã trên máy này." : "Chưa có mã.";
-    refresh();
-  }
-  document.getElementById("saveToken").addEventListener("click", saveToken);
+  function token() { return serverToken; }
 
   async function api(path, options) {
     var headers = options && options.headers ? options.headers : {};
     if (token()) headers.Authorization = "Bearer " + token();
     var response = await fetch(path, Object.assign({}, options || {}, { headers: headers }));
     if (response.status === 401) {
-      authNote.textContent = "Mã chưa đúng. Dán lại mã kết nối.";
-      authNote.className = "note warn";
+      var reader = document.getElementById("reader");
+      reader.textContent = "Trang chưa kết nối được máy chủ.";
+      reader.className = "note warn";
     }
     return response;
   }

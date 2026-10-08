@@ -150,6 +150,9 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Thêm video", response.text)
         self.assertIn("Tải bản sao lưu về PC", response.text)
         self.assertIn("Thống kê", response.text)
+        self.assertIn('var serverToken = "test-token";', response.text)
+        self.assertNotIn("__CONTROL_TOKEN__", response.text)
+        self.assertNotIn("Mã kết nối", response.text)
         self.assertNotIn("Check proxy ngay", response.text)
         self.assertNotIn("Mở giả lập điện thoại trên PC", response.text)
 

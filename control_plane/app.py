@@ -181,6 +181,8 @@ def _html(name: str) -> HTMLResponse:
     if not path.exists():
         return HTMLResponse("<p>Missing page.</p>", status_code=404)
     text = path.read_text(encoding="utf-8").replace("__IPHONE_BUILD__", str(IPHONE_BUILD))
+    baked = json.dumps(settings.token or "").replace("<", "\\u003c")
+    text = text.replace("__CONTROL_TOKEN__", baked)
     return HTMLResponse(text, headers={"Cache-Control": "no-cache"})
 
 
