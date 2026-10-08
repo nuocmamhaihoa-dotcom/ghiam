@@ -35,12 +35,17 @@ class ContactHit:
 
 @dataclass(frozen=True)
 class FrameObs:
-    """Một khung hình đã đọc xong. kind là list, profile hoặc unknown."""
+    """Một khung hình đã đọc xong.
+
+    kind là list, profile, unknown, hoặc tap: khung ngay trước lúc mở hồ sơ,
+    chỉ chứa dòng vừa bấm. at là giây trong video, -1 với ảnh chụp.
+    """
 
     kind: str
     contacts: tuple[ContactHit, ...] = ()
     profile_name: str = ""
     profile_username: str = ""
+    at: float = -1.0
 
 
 @dataclass(frozen=True)
@@ -102,6 +107,7 @@ class _Visit:
     phone: str = ""
     names: _Tally = field(default_factory=_Tally)
     usernames: dict[str, int] = field(default_factory=dict)
+    window: tuple[tuple[str, str], ...] = ()
 
     def username(self) -> str:
         if not self.usernames:
@@ -203,7 +209,7 @@ def normalize_phone(raw: str) -> str:
 
 
 def choose_phone(*reads: str) -> str:
-    """Giữ số khi ít nhất hai lần đọc ra cùng một kết quả. Lệch nhau thì lấy lần đọc sau."""
+    """Lấy số được nhiều lần đọc nhất. Không có đa số thì lấy lần đọc đứng trước, là cách đọc tin nhất."""
     found: list[str] = []
     for item in reads:
         phone = normalize_phone(item)
@@ -216,9 +222,75 @@ def choose_phone(*reads: str) -> str:
         counts[phone] = counts.get(phone, 0) + 1
     best = max(counts.values())
     if best >= 2:
-        agreed = [phone for phone in found if counts[phone] == best]
-        return agreed[-1]
-    return found[-1]
+        return next(phone for phone in found if counts[phone] == best)
+    return found[0]
+
+
+_SIX_LIKE = frozenset("óòöéèÓÒÖÉÈ")
+
+
+def fix_digit_confusions(name: str) -> str:
+    """Trong một cụm có chữ số, sửa chữ cái mà bộ đọc tiếng Việt hay nhầm với số: ó7AG thành 67AG."""
+    fixed: list[str] = []
+    for token in str(name or "").split(" "):
+        if not any(ch.isascii() and ch.isdigit() for ch in token):
+            fixed.append(token)
+            continue
+        chars = list(token)
+        for index, ch in enumerate(chars):
+            prev = chars[index - 1] if index > 0 else ""
+            nxt = chars[index + 1] if index + 1 < len(chars) else ""
+            prev_digit = prev.isascii() and prev.isdigit()
+            next_digit = nxt.isascii() and nxt.isdigit()
+            if ch in _SIX_LIKE and (prev_digit or next_digit):
+                chars[index] = "6"
+            elif ch in "Oo" and prev_digit and next_digit:
+                chars[index] = "0"
+            elif ch in "lI|" and prev_digit and next_digit:
+                chars[index] = "1"
+            elif ch == "S" and prev_digit and next_digit:
+                chars[index] = "5"
+            elif ch == "T" and nxt == "1" and (prev_digit or prev.islower()):
+                chars[index] = "1"
+        fixed.append("".join(chars))
+    return " ".join(fixed)
+
+
+def mark_weight(name: str) -> int:
+    """Số dấu tiếng Việt trong tên. Bộ đọc hay làm rơi dấu, hiếm khi thêm dấu."""
+    text = unicodedata.normalize("NFD", str(name or ""))
+    return sum(1 for ch in text if unicodedata.combining(ch) or ch in "đĐ")
+
+
+def choose_name(*reads: str) -> str:
+    """Chọn tên giữa nhiều lần đọc, xếp theo độ tin từ cao xuống thấp."""
+    present: list[str] = []
+    for raw in reads:
+        text = fix_digit_confusions(clean_name(raw))
+        if text and not is_skipped(text):
+            present.append(text)
+    if not present:
+        return ""
+    groups: dict[str, list[str]] = {}
+    for text in present:
+        groups.setdefault(fold_marks(text), []).append(text)
+    largest = max(groups.values(), key=len)
+    if len(largest) >= 2:
+        for text in largest:
+            if sum(1 for other in largest if name_key(other) == name_key(text)) >= 2:
+                return text
+        return max(largest, key=lambda text: (mark_weight(text), -present.index(text)))
+    first = present[0]
+    for other in present[1:]:
+        for longer, shorter in ((first, other), (other, first)):
+            extra = longer[len(shorter) :].strip() if longer.startswith(shorter) else ""
+            if extra and extra.replace(" ", "").isdigit():
+                return longer
+            long_tokens = longer.split()
+            short_tokens = shorter.split()
+            if len(long_tokens) == len(short_tokens) + 1 and len(long_tokens[-1]) <= 1 and long_tokens[:-1] == short_tokens:
+                return shorter
+    return first
 
 
 def phone_in_text(value: str) -> str:
@@ -362,8 +434,10 @@ def build_table(frames: list[FrameObs]) -> Table:
     phone_seen: dict[str, int] = {}
     user_seen: dict[str, int] = {}
     phone_hits: dict[str, int] = {}
-    visits = _walk(frames, contacts, phone_seen, phone_hits)
-    _collapse_rare_digits(contacts, phone_hits, phone_seen, visits)
+    shown: dict[str, set[int]] = {}
+    visits = _walk(frames, contacts, phone_seen, phone_hits, shown)
+    _pick_from_window(visits)
+    _collapse_rare_digits(contacts, phone_hits, phone_seen, visits, shown)
 
     for index, visit in enumerate(visits):
         username = visit.username()
@@ -399,16 +473,22 @@ def _collapse_rare_digits(
     phone_hits: dict[str, int],
     phone_seen: dict[str, int],
     visits: list[_Visit],
+    shown: dict[str, set[int]],
 ) -> None:
-    """Một khung đọc lệch một chữ số thì gộp vào số đã thấy nhiều lần, cùng tên."""
+    """Số đọc lệch một chữ số, cùng tên, chưa từng hiện cùng khung: gộp vào số được đọc nhiều hơn.
+
+    Hai dòng cùng hiện trên một khung là hai người khác nhau, nên không bao giờ gộp.
+    """
     redirect: dict[str, str] = {}
     for weak in sorted(phone_hits, key=lambda phone: (phone_hits[phone], phone)):
         best_strong = ""
         best_hits = 0
         for strong, hits in phone_hits.items():
-            if strong == weak or hits < 3 or hits < phone_hits[weak] * 2 or hits <= best_hits:
+            if strong == weak or hits < 2 or hits <= phone_hits[weak] or hits <= best_hits:
                 continue
             if _digit_hamming(strong, weak) != 1:
+                continue
+            if shown.get(strong, set()) & shown.get(weak, set()):
                 continue
             weak_name = contacts[weak].best() if weak in contacts else ""
             strong_name = contacts[strong].best() if strong in contacts else ""
@@ -443,15 +523,41 @@ def _collapse_rare_digits(
                 visit.phone = strong
 
 
+def _pick_from_window(visits: list[_Visit]) -> None:
+    """Không thấy lần bấm: hồ sơ vừa mở thuộc một trong các dòng đang hiện ngay trước đó.
+
+    Chỉ nhận khi đúng một dòng trên màn hình có tên trùng hoặc gần giống tên hồ sơ.
+    """
+    for visit in visits:
+        if visit.phone or not visit.window:
+            continue
+        profile_name = visit.name()
+        if not profile_name:
+            continue
+        matches = {
+            phone
+            for phone, name in visit.window
+            if name_key(name) == name_key(profile_name) or names_close(name, profile_name)
+        }
+        if len(matches) == 1:
+            visit.phone = next(iter(matches))
+
+
+TAP_TO_PROFILE_SECONDS = 4.0
+
+
 def _walk(
     frames: list[FrameObs],
     contacts: dict[str, _Tally],
     phone_seen: dict[str, int],
     phone_hits: dict[str, int],
+    shown: dict[str, set[int]],
 ) -> list[_Visit]:
     phase = "none"
     armed = ""
     clear_run = 0
+    tap_at: float | None = None
+    window: tuple[tuple[str, str], ...] = ()
     visits: list[_Visit] = []
     open_visit: _Visit | None = None
 
@@ -461,30 +567,55 @@ def _walk(
             visits.append(open_visit)
         open_visit = None
 
+    def sighting(hit: ContactHit, frame_index: int) -> tuple[str, str]:
+        phone = normalize_phone(hit.phone)
+        name = clean_name(hit.name)
+        if not phone or not name or is_skipped(name):
+            return "", ""
+        tally = contacts.get(phone)
+        if tally is None:
+            tally = _Tally()
+            contacts[phone] = tally
+            phone_seen[phone] = frame_index
+        tally.add(name)
+        phone_hits[phone] = phone_hits.get(phone, 0) + 1
+        return phone, name
+
     for frame_index, frame in enumerate(frames):
+        if frame.kind == "tap" and frame.contacts:
+            close()
+            phone, name = sighting(frame.contacts[0], frame_index)
+            if phone:
+                armed = phone
+                clear_run = 0
+                tap_at = frame.at
+                if all(item[0] != phone for item in window):
+                    window = window + ((phone, name),)
+            phase = "list"
+            continue
+
         if frame.kind == "list" and frame.contacts:
             close()
             phase = "list"
+            if tap_at is not None:
+                armed = ""
+                tap_at = None
             visible: set[str] = set()
+            rows: list[tuple[str, str]] = []
             selected = ""
             multi = False
             for hit in frame.contacts:
-                phone = normalize_phone(hit.phone)
-                name = clean_name(hit.name)
-                if not phone or not name or is_skipped(name):
+                phone, name = sighting(hit, frame_index)
+                if not phone:
                     continue
                 visible.add(phone)
-                tally = contacts.get(phone)
-                if tally is None:
-                    tally = _Tally()
-                    contacts[phone] = tally
-                    phone_seen[phone] = frame_index
-                tally.add(name)
-                phone_hits[phone] = phone_hits.get(phone, 0) + 1
+                rows.append((phone, name))
+                shown.setdefault(phone, set()).add(frame_index)
                 if hit.selected:
                     if selected:
                         multi = True
                     selected = phone
+            window = tuple(rows)
             if multi:
                 armed = ""
                 clear_run = 0
@@ -504,10 +635,14 @@ def _walk(
         if open_visit is None or phase != "profile":
             close()
             phone = armed if phase == "list" else ""
-            open_visit = _Visit(phone=phone)
+            if phone and tap_at is not None and tap_at >= 0 and frame.at >= 0:
+                if frame.at - tap_at > TAP_TO_PROFILE_SECONDS:
+                    phone = ""
+            open_visit = _Visit(phone=phone, window=window if phase == "list" else ())
             if phase == "list":
                 armed = ""
                 clear_run = 0
+                tap_at = None
             phase = "profile"
         elif open_visit.username() and open_visit.username() != username:
             close()

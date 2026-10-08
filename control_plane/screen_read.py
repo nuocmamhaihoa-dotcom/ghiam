@@ -3,10 +3,16 @@
 Danh bạ nhận ra bằng cột nút Follow hồng bên phải. Mỗi nút là một dòng:
 số ở trên, tên ngay dưới. Hồ sơ nhận ra bằng nút Follow rộng bên trái;
 chỉ lấy tên lớn và dòng @ ngay dưới tên đó.
+
+Mỗi lần chạy tesseract tốn thời gian nạp bộ chữ, nên một khung chỉ gọi vài
+lần, mỗi lần đọc cả loạt ô chữ. Số và username đọc bằng bộ chữ lớn
+(tessdata_best) nếu máy có; bộ chữ nhỏ đọc nhầm 3 thành 5 nhiều hơn.
 """
 
 from __future__ import annotations
 
+import functools
+import os
 import shutil
 import subprocess
 import tempfile
@@ -19,15 +25,18 @@ from PIL import Image, ImageFilter, ImageOps
 from control_plane.screen_table import (
     ContactHit,
     FrameObs,
+    choose_name,
     choose_phone,
     clean_name,
     clean_username,
-    fold_marks,
     is_skipped,
-    mark_count,
-    name_key,
     phone_in_text,
 )
+
+DIGITS = "0123456789"
+HANDLE_CHARS = "@._0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+# Nhiều tesseract chạy song song mà mỗi cái tự mở nhiều luồng thì giành nhân và gần như đứng.
+_ONE_THREAD = {**os.environ, "OMP_THREAD_LIMIT": "1", "OMP_NUM_THREADS": "1"}
 
 
 @dataclass(frozen=True)
@@ -50,6 +59,9 @@ class Box:
 
     def center_y(self) -> float:
         return (self.y0 + self.y1) / 2
+
+    def shift(self, dx: int, dy: int) -> "Box":
+        return Box(self.x0 + dx, self.y0 + dy, self.x1 + dx, self.y1 + dy)
 
 
 @dataclass
@@ -82,6 +94,17 @@ class Line:
         return sum(word.box.center_y() for word in self.words) / len(self.words)
 
 
+@dataclass
+class _Pending:
+    strip: Box
+    phone: str
+    draft: str
+    phone_box: Box
+    name_box: Box
+    selected: bool
+
+
+@functools.lru_cache(maxsize=1)
 def tesseract_ready() -> bool:
     if shutil.which("tesseract") is None:
         return False
@@ -92,24 +115,30 @@ def tesseract_ready() -> bool:
     return "vie" in (done.stdout + done.stderr)
 
 
+@functools.lru_cache(maxsize=1)
+def best_tessdata() -> str | None:
+    raw = os.environ.get("CONTROL_TESSDATA_BEST", "").strip()
+    folder = Path(raw) if raw else Path(__file__).resolve().parents[1] / "tessdata_best"
+    if (folder / "eng.traineddata").is_file() and (folder / "vie.traineddata").is_file():
+        return str(folder)
+    return None
+
+
 def read_image(path: str | Path) -> FrameObs:
     image = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
     return read_pillow(image)
 
 
 def read_pillow(image: Image.Image) -> FrameObs:
-    if not tesseract_ready():
-        raise RuntimeError("Cần cài tesseract-ocr và gói tiếng Việt tesseract-ocr-vie.")
+    _require_tesseract()
     width, height = image.size
     buttons = _pink_boxes(image)
     listed = _list_buttons(buttons, width)
     if len(listed) >= 3:
         anchor_x, anchor_w = _column_anchor(listed)
-        contacts = tuple(
-            hit
-            for button in listed
-            if (hit := _read_row(image, button, anchor_x, anchor_w)) is not None
-        )
+        strips = [_row_strip(image, button, anchor_x, anchor_w) for button in listed]
+        tapped = _tapped_rows(image, listed, strips, anchor_x, anchor_w)
+        contacts = tuple(_read_rows(image, strips, tapped))
         if contacts:
             return FrameObs("list", contacts)
         return FrameObs("unknown")
@@ -122,19 +151,38 @@ def read_pillow(image: Image.Image) -> FrameObs:
     return FrameObs("profile", (), name, username)
 
 
-def _pink_boxes(image: Image.Image) -> list[Box]:
-    array = np.asarray(image)
-    red = array[:, :, 0].astype(np.int16)
-    green = array[:, :, 1].astype(np.int16)
-    blue = array[:, :, 2].astype(np.int16)
-    mask = (red > 190) & (green < 110) & (blue < 150) & (red > green + 80) & (red > blue + 50)
-    step = max(2, max(image.size) // 700)
-    small = mask[::step, ::step]
-    height, width = small.shape
-    seen = np.zeros_like(small, dtype=bool)
-    boxes: list[Box] = []
+def read_tap(paths: list[str | Path]) -> FrameObs:
+    """Các khung ngay trước lúc màn hình chuyển. Chỉ đọc dòng có chấm chạm hoặc nền xám."""
+    _require_tesseract()
+    for path in reversed(paths):
+        image = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+        listed = _list_buttons(_pink_boxes(image), image.width)
+        if len(listed) < 3:
+            continue
+        anchor_x, anchor_w = _column_anchor(listed)
+        strips = [_row_strip(image, button, anchor_x, anchor_w) for button in listed]
+        tapped = _tapped_rows(image, listed, strips, anchor_x, anchor_w)
+        if len(tapped) != 1:
+            continue
+        index = next(iter(tapped))
+        hits = _read_rows(image, [strips[index]], {0})
+        if hits:
+            return FrameObs("tap", (hits[0],))
+    return FrameObs("unknown")
+
+
+def _require_tesseract() -> None:
+    if not tesseract_ready():
+        raise RuntimeError("Cần cài tesseract-ocr và gói tiếng Việt tesseract-ocr-vie.")
+
+
+def _blobs(mask: np.ndarray, min_count: int) -> list[tuple[int, int, int, int, int]]:
+    """Các vùng liền nhau trong mask: (x0, y0, x1, y1, số điểm)."""
+    height, width = mask.shape
+    seen = np.zeros_like(mask, dtype=bool)
+    found: list[tuple[int, int, int, int, int]] = []
     for y in range(height):
-        hits = np.flatnonzero(small[y] & ~seen[y])
+        hits = np.flatnonzero(mask[y] & ~seen[y])
         for x in hits:
             if seen[y, x]:
                 continue
@@ -150,22 +198,34 @@ def _pink_boxes(image: Image.Image) -> list[Box]:
                 max_y = max(max_y, cy)
                 min_x = min(min_x, cx)
                 max_x = max(max_x, cx)
-                if cy > 0 and small[cy - 1, cx] and not seen[cy - 1, cx]:
+                if cy > 0 and mask[cy - 1, cx] and not seen[cy - 1, cx]:
                     seen[cy - 1, cx] = True
                     stack.append((cy - 1, cx))
-                if cy + 1 < height and small[cy + 1, cx] and not seen[cy + 1, cx]:
+                if cy + 1 < height and mask[cy + 1, cx] and not seen[cy + 1, cx]:
                     seen[cy + 1, cx] = True
                     stack.append((cy + 1, cx))
-                if cx > 0 and small[cy, cx - 1] and not seen[cy, cx - 1]:
+                if cx > 0 and mask[cy, cx - 1] and not seen[cy, cx - 1]:
                     seen[cy, cx - 1] = True
                     stack.append((cy, cx - 1))
-                if cx + 1 < width and small[cy, cx + 1] and not seen[cy, cx + 1]:
+                if cx + 1 < width and mask[cy, cx + 1] and not seen[cy, cx + 1]:
                     seen[cy, cx + 1] = True
                     stack.append((cy, cx + 1))
-            if count < 20:
-                continue
-            boxes.append(Box(min_x * step, min_y * step, (max_x + 1) * step, (max_y + 1) * step))
-    return boxes
+            if count >= min_count:
+                found.append((min_x, min_y, max_x + 1, max_y + 1, count))
+    return found
+
+
+def _pink_boxes(image: Image.Image) -> list[Box]:
+    array = np.asarray(image)
+    red = array[:, :, 0].astype(np.int16)
+    green = array[:, :, 1].astype(np.int16)
+    blue = array[:, :, 2].astype(np.int16)
+    mask = (red > 190) & (green < 110) & (blue < 150) & (red > green + 80) & (red > blue + 50)
+    step = max(2, max(image.size) // 700)
+    return [
+        Box(x0 * step, y0 * step, x1 * step, y1 * step)
+        for x0, y0, x1, y1, _count in _blobs(mask[::step, ::step], 20)
+    ]
 
 
 def _list_buttons(boxes: list[Box], width: int) -> list[Box]:
@@ -219,27 +279,94 @@ def _column_anchor(buttons: list[Box]) -> tuple[int, int]:
     return left, width
 
 
-def _read_row(image: Image.Image, button: Box, anchor_x: int, anchor_w: int) -> ContactHit | None:
-    strip = Box(
+def _row_strip(image: Image.Image, button: Box, anchor_x: int, anchor_w: int) -> Box:
+    return Box(
         max(0, int(anchor_x - 2.72 * anchor_w)),
         max(0, button.y0 - int(0.12 * button.h)),
         max(0, anchor_x - 6),
         min(image.height, button.y1 + int(0.28 * button.h)),
     )
-    if strip.w < 40 or strip.h < 20:
-        return None
-    words = _ocr_words(image, strip, "vie+eng", 6)
-    words = [word for word in words if word.conf >= 20]
-    phone, draft, name_box, phone_box = _phone_and_name(words)
-    if not phone or not draft:
-        return None
-    if phone_box:
-        phone = _ocr_phone(image, phone_box, phone) or phone
-    refined = _ocr_line(image, name_box) if name_box else ""
-    name = _choose_name(draft, refined)
-    if not name or is_skipped(name):
-        return None
-    return ContactHit(phone, name, _selected(image, strip))
+
+
+def _touch_dots(image: Image.Image, button_h: float) -> list[tuple[float, float]]:
+    """Chấm chạm: hình tròn xám đậm nửa trong suốt, đường kính khoảng 1,3 lần chiều cao nút Follow."""
+    scale = max(1, image.width // 400)
+    small = image.resize((image.width // scale, image.height // scale), Image.Resampling.BOX)
+    array = np.asarray(small).astype(np.int32)
+    red, green, blue = array[:, :, 0], array[:, :, 1], array[:, :, 2]
+    lum = (299 * red + 587 * green + 114 * blue) // 1000
+    spread = array.max(axis=2) - array.min(axis=2)
+    over_light = (lum >= 35) & (lum <= 105) & (spread <= 24)
+    over_button = (red >= 30) & (red <= 110) & (green <= 45) & (blue <= 55) & (red > green + 15)
+    want = button_h / scale
+    dots = []
+    for x0, y0, x1, y1, count in _blobs(over_light | over_button, max(12, int(0.4 * want * want))):
+        w = x1 - x0
+        h = y1 - y0
+        if not (0.95 * want <= w <= 1.6 * want and 0.95 * want <= h <= 1.6 * want):
+            continue
+        if not 0.75 <= w / h <= 1.33:
+            continue
+        if not 0.62 <= count / (w * h) <= 0.9:
+            continue
+        dots.append(((x0 + x1) / 2 * scale, (y0 + y1) / 2 * scale))
+    return dots
+
+
+def _tapped_rows(image: Image.Image, buttons: list[Box], strips: list[Box], anchor_x: int, anchor_w: int) -> set[int]:
+    """Dòng đang bấm: có chấm chạm nằm trong dòng, hoặc nền xám. Hai dấu hiệu chỉ hai dòng khác nhau thì bỏ."""
+    button_h = float(np.median([button.h for button in buttons]))
+    centers = [button.center_y() for button in buttons]
+    gaps = [b - a for a, b in zip(centers, centers[1:]) if b > a]
+    pitch = float(np.median(gaps)) if gaps else button_h * 2.5
+    dot_rows: set[int] = set()
+    for x, y in _touch_dots(image, button_h):
+        for index, (center, strip) in enumerate(zip(centers, strips)):
+            if abs(y - center) <= pitch / 2 and strip.x0 <= x <= anchor_x + anchor_w:
+                dot_rows.add(index)
+    grey_rows = {index for index, strip in enumerate(strips) if _selected(image, strip)}
+    if len(dot_rows) == 1:
+        if grey_rows and grey_rows != dot_rows:
+            return set()
+        return dot_rows
+    if dot_rows:
+        return set()
+    return grey_rows
+
+
+def _read_rows(image: Image.Image, strips: list[Box], tapped: set[int]) -> list[ContactHit]:
+    usable = [(index, strip) for index, strip in enumerate(strips) if strip.w >= 40 and strip.h >= 20]
+    layouts = _batch([image.crop((s.x0, s.y0, s.x1, s.y1)) for _, s in usable], "vie+eng", 6)
+    pending: list[_Pending] = []
+    for (index, strip), words in zip(usable, layouts):
+        placed = [Word(word.text, word.conf, word.box.shift(strip.x0, strip.y0)) for word in words if word.conf >= 20]
+        phone, draft, name_box, phone_box = _phone_and_name(placed)
+        if not draft or name_box is None or phone_box is None:
+            continue
+        pending.append(_Pending(strip, phone, draft, phone_box, name_box, index in tapped))
+    if not pending:
+        return []
+
+    best = best_tessdata()
+    digit_crops: list[Image.Image] = []
+    for row in pending:
+        crop = _crop(image, row.phone_box, 6, 4)
+        digit_crops.extend([_pad(_upscale(crop, 2)), _pad(_enhance(crop, 2))])
+    digit_reads = _texts(_batch(digit_crops, "eng", 7, DIGITS, best))
+
+    name_crops = [_pad(_upscale(_crop(image, row.name_box, 8, 6), 2)) for row in pending]
+    fast_names = _texts(_batch(name_crops, "vie", 7))
+    best_names = _texts(_batch(name_crops, "vie", 7, tessdata=best)) if best else [""] * len(pending)
+
+    hits: list[ContactHit] = []
+    for index, row in enumerate(pending):
+        reads = digit_reads[2 * index : 2 * index + 2]
+        phone = choose_phone(*reads, row.phone)
+        name = choose_name(fast_names[index], best_names[index], row.draft)
+        if not phone or not name or is_skipped(name):
+            continue
+        hits.append(ContactHit(phone, name, row.selected))
+    return hits
 
 
 def _read_profile(image: Image.Image, button: Box) -> tuple[str, str]:
@@ -249,8 +376,15 @@ def _read_profile(image: Image.Image, button: Box) -> tuple[str, str]:
         min(image.width, button.x0 + int(1.7 * button.w)),
         max(0, button.y0 - int(0.12 * button.h)),
     )
-    words = _ocr_words(image, header, "vie+eng", 6)
-    words = [word for word in words if word.conf >= 20 and word.box.center_x() < button.x1 + 0.45 * button.w]
+    if header.w < 20 or header.h < 20:
+        return "", ""
+    words = _batch([image.crop((header.x0, header.y0, header.x1, header.y1))], "vie+eng", 6)[0]
+    words = [
+        Word(word.text, word.conf, word.box.shift(header.x0, header.y0))
+        for word in words
+        if word.conf >= 20
+    ]
+    words = [word for word in words if word.box.center_x() < button.x1 + 0.45 * button.w]
     lines = _lines(words)
     handle_at = -1
     username = ""
@@ -260,12 +394,11 @@ def _read_profile(image: Image.Image, button: Box) -> tuple[str, str]:
             handle_at = index
             username = found
             break
-    if handle_at >= 0:
-        reread = _ocr_handle(image, lines[handle_at].box)
-        if reread:
-            username = reread
-    if not username:
+    if handle_at < 0:
         return "", ""
+    reread = _read_handle(image, lines[handle_at].box)
+    if reread:
+        username = reread
     draft = ""
     name_box: Box | None = None
     for line in reversed(lines[:handle_at]):
@@ -275,21 +408,37 @@ def _read_profile(image: Image.Image, button: Box) -> tuple[str, str]:
         draft = text
         name_box = line.box
         break
-    refined = _ocr_line(image, name_box) if name_box else ""
-    return _choose_name(draft, refined), username
+    if name_box is None:
+        return choose_name(draft), username
+    crop = [_pad(_upscale(_crop(image, name_box, 8, 6), 2))]
+    fast = _texts(_batch(crop, "vie", 7))[0]
+    best = best_tessdata()
+    sharp = _texts(_batch(crop, "vie", 7, tessdata=best))[0] if best else ""
+    return choose_name(fast, sharp, draft), username
+
+
+def _read_handle(image: Image.Image, box: Box) -> str:
+    """Username chỉ có chữ tiếng Anh và số. Đọc bằng tiếng Việt dễ biến 6 thành ó."""
+    crop = [_pad(_upscale(_crop(image, box, 8, 6), 2))]
+    text = _texts(_batch(crop, "eng", 7, HANDLE_CHARS, best_tessdata()))[0]
+    compact = "".join(text.split())
+    if compact and not compact.startswith("@"):
+        compact = "@" + compact
+    return clean_username(_username_token(compact) or compact)
 
 
 def _phone_and_name(words: list[Word]) -> tuple[str, str, Box | None, Box | None]:
+    """Dòng số là dòng đầu có số hợp lệ hoặc có từ 9 chữ số. Số đọc ở đây chỉ là một phiếu, có thể rỗng."""
     lines = _lines(words)
     phone = ""
     phone_at = -1
     for index, line in enumerate(lines):
         found = phone_in_text(line.text)
-        if found:
+        if found or sum(ch.isdigit() for ch in line.text) >= 9:
             phone = found
             phone_at = index
             break
-    if not phone:
+    if phone_at < 0:
         return "", "", None, None
     phone_box = lines[phone_at].box
     for line in lines[phone_at + 1 :]:
@@ -297,7 +446,7 @@ def _phone_and_name(words: list[Word]) -> tuple[str, str, Box | None, Box | None
         if not text or is_skipped(text) or phone_in_text(text):
             continue
         return phone, text, line.box, phone_box
-    same = clean_name(_without_phone(lines[phone_at].text, phone))
+    same = clean_name(_without_phone(lines[phone_at].text, phone)) if phone else ""
     if same and not is_skipped(same):
         return phone, same, lines[phone_at].box, phone_box
     return phone, "", None, phone_box
@@ -335,23 +484,7 @@ def _username_token(text: str) -> str:
 
 
 def _choose_name(draft: str, refined: str) -> str:
-    draft = clean_name(draft)
-    refined = clean_name(refined)
-    if not refined or is_skipped(refined):
-        return "" if is_skipped(draft) else draft
-    if not draft:
-        return refined
-    if name_key(draft) == name_key(refined) or fold_marks(draft) == fold_marks(refined):
-        return refined if mark_count(refined) >= mark_count(draft) else draft
-    if refined.startswith(draft):
-        extra = refined[len(draft) :].strip()
-        if extra and extra.replace(" ", "").isdigit():
-            return refined
-    draft_tokens = draft.split()
-    refined_tokens = refined.split()
-    if len(refined_tokens) == len(draft_tokens) + 1 and len(refined_tokens[-1]) <= 1:
-        return draft
-    return draft
+    return choose_name(refined, draft)
 
 
 def _lines(words: list[Word]) -> list[Line]:
@@ -378,49 +511,6 @@ def _selected(image: Image.Image, strip: Box) -> bool:
     return background[len(background) // 2] <= 246
 
 
-def _ocr_words(image: Image.Image, box: Box, lang: str, psm: int) -> list[Word]:
-    crop = image.crop((box.x0, box.y0, box.x1, box.y1))
-    text = _tesseract(crop, lang, psm, tsv=True)
-    words: list[Word] = []
-    for raw in text.splitlines()[1:]:
-        parts = raw.split("\t")
-        if len(parts) < 12:
-            continue
-        token = parts[11].strip()
-        if not token:
-            continue
-        try:
-            conf = float(parts[10])
-            left, top, width, height = (int(parts[6]), int(parts[7]), int(parts[8]), int(parts[9]))
-        except ValueError:
-            continue
-        if conf < 0 or width <= 0 or height <= 0:
-            continue
-        words.append(Word(token, conf, Box(box.x0 + left, box.y0 + top, box.x0 + left + width, box.y0 + top + height)))
-    return words
-
-
-def _enhance(crop: Image.Image, scale: int) -> Image.Image:
-    gray = ImageOps.autocontrast(crop.convert("L")).filter(ImageFilter.SHARPEN)
-    if scale > 1 and crop.width > 0 and crop.height > 0:
-        gray = gray.resize((crop.width * scale, crop.height * scale), Image.Resampling.LANCZOS)
-    return gray.convert("RGB")
-
-
-def _binarize(crop: Image.Image, scale: int) -> Image.Image:
-    gray = ImageOps.autocontrast(crop.convert("L"))
-    bw = gray.point(lambda pixel: 255 if pixel >= 160 else 0)
-    if scale > 1 and crop.width > 0 and crop.height > 0:
-        bw = bw.resize((crop.width * scale, crop.height * scale), Image.Resampling.NEAREST)
-    return bw.convert("RGB")
-
-
-def _pad(crop: Image.Image) -> Image.Image:
-    canvas = Image.new("RGB", (crop.width + 24, crop.height + 24), "white")
-    canvas.paste(crop, (12, 12))
-    return canvas
-
-
 def _crop(image: Image.Image, box: Box, pad_x: int, pad_y: int) -> Image.Image:
     return image.crop(
         (
@@ -432,46 +522,78 @@ def _crop(image: Image.Image, box: Box, pad_x: int, pad_y: int) -> Image.Image:
     )
 
 
-def _ocr_phone(image: Image.Image, box: Box, line_read: str = "") -> str:
-    """Đọc lại riêng dòng số. Chỉ giữ chữ số khi hai cách đọc trùng nhau."""
-    crop = _crop(image, box, 6, 4)
-    gray = _tesseract(_pad(_enhance(crop, 3)), "eng", 7, tsv=False, whitelist="0123456789")
-    binary = _tesseract(_pad(_binarize(crop, 3)), "eng", 7, tsv=False, whitelist="0123456789")
-    return choose_phone(line_read, gray, binary)
+def _upscale(crop: Image.Image, scale: int) -> Image.Image:
+    if scale <= 1 or crop.width == 0 or crop.height == 0:
+        return crop
+    return crop.resize((crop.width * scale, crop.height * scale), Image.Resampling.LANCZOS)
 
 
-def _ocr_handle(image: Image.Image, box: Box) -> str:
-    """Username chỉ có chữ tiếng Anh và số. Đọc bằng tiếng Việt dễ biến 6 thành ó."""
-    crop = _crop(image, box, 8, 6)
-    text = _tesseract(
-        _pad(_enhance(crop, 3)),
-        "eng",
-        7,
-        tsv=False,
-        whitelist="@._0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
-    )
-    compact = "".join(text.split())
-    if compact and not compact.startswith("@"):
-        compact = "@" + compact
-    return clean_username(_username_token(compact) or compact)
+def _enhance(crop: Image.Image, scale: int) -> Image.Image:
+    gray = ImageOps.autocontrast(crop.convert("L")).filter(ImageFilter.SHARPEN)
+    return _upscale(gray, scale).convert("RGB")
 
 
-def _ocr_line(image: Image.Image, box: Box) -> str:
-    crop = _crop(image, box, 8, 6)
-    return _tesseract(_pad(_enhance(crop, 2)), "vie", 7, tsv=False)
+def _pad(crop: Image.Image) -> Image.Image:
+    canvas = Image.new("RGB", (crop.width + 24, crop.height + 24), "white")
+    canvas.paste(crop, (12, 12))
+    return canvas
 
 
-def _tesseract(image: Image.Image, lang: str, psm: int, tsv: bool, whitelist: str = "") -> str:
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as handle:
-        path = handle.name
-    try:
-        image.save(path)
-        command = ["tesseract", path, "stdout", "-l", lang, "--psm", str(psm), "-c", "user_defined_dpi=300"]
+def _texts(pages: list[list[Word]]) -> list[str]:
+    return [" ".join(word.text for word in words) for words in pages]
+
+
+def _batch(
+    images: list[Image.Image],
+    lang: str,
+    psm: int,
+    whitelist: str = "",
+    tessdata: str | None = None,
+) -> list[list[Word]]:
+    """Một lần chạy tesseract cho cả loạt ảnh. Trả về các chữ của từng ảnh, tọa độ tính trong ảnh đó."""
+    pages: list[list[Word]] = [[] for _ in images]
+    if not images:
+        return pages
+    with tempfile.TemporaryDirectory(prefix="ocr-") as folder:
+        paths = []
+        for index, image in enumerate(images):
+            path = Path(folder) / f"{index:04d}.png"
+            image.save(path, compress_level=1, dpi=(300, 300))
+            paths.append(str(path))
+        listing = Path(folder) / "list.txt"
+        listing.write_text("\n".join(paths) + "\n", encoding="utf-8")
+        command = [
+            "tesseract",
+            str(listing),
+            "stdout",
+            "-l",
+            lang,
+            "--psm",
+            str(psm),
+            "-c",
+            "tessedit_create_tsv=1",
+            "-c",
+            "tessedit_create_txt=0",
+        ]
+        if tessdata:
+            command.extend(["--tessdata-dir", tessdata])
         if whitelist:
             command.extend(["-c", f"tessedit_char_whitelist={whitelist}"])
-        if tsv:
-            command.append("tsv")
-        done = subprocess.run(command, capture_output=True, text=True, check=False, timeout=40)
-    finally:
-        Path(path).unlink(missing_ok=True)
-    return done.stdout or ""
+        done = subprocess.run(command, capture_output=True, text=True, check=False, timeout=180, env=_ONE_THREAD)
+    for raw in done.stdout.splitlines():
+        parts = raw.split("\t")
+        if len(parts) < 12 or parts[0] != "5":
+            continue
+        token = parts[11].strip()
+        if not token:
+            continue
+        try:
+            page = int(parts[1]) - 1
+            conf = float(parts[10])
+            left, top, width, height = (int(parts[6]), int(parts[7]), int(parts[8]), int(parts[9]))
+        except ValueError:
+            continue
+        if not 0 <= page < len(pages) or conf < 0 or width <= 0 or height <= 0:
+            continue
+        pages[page].append(Word(token, conf, Box(left, top, left + width, top + height)))
+    return pages

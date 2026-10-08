@@ -22,7 +22,7 @@ from control_plane.screen_table import (
     pair_close_names,
     phone_in_text,
 )
-from control_plane.video_scan import keep_stable, voting_frames, write_table
+from control_plane.video_scan import _Planner, write_table
 
 
 def frame_list(*hits: ContactHit) -> FrameObs:
@@ -334,25 +334,138 @@ class SampleFrameTests(unittest.TestCase):
 
 
 class StableFrameTests(unittest.TestCase):
-    def test_keeps_settled_frames_and_skips_motion(self) -> None:
-        still_a = np.zeros((8, 8), dtype=np.float32)
-        still_b = np.full((8, 8), 40, dtype=np.float32)
-        motion = np.full((8, 8), 20, dtype=np.float32)
-        frames = [still_a, still_a, motion, still_b, still_b]
-        self.assertEqual(keep_stable(frames), [0, 3])
+    def test_small_screen_change_is_read_again(self) -> None:
+        planner = _Planner()
+        for thumb in [np.zeros((8, 8), dtype=np.float32)] * 8 + [np.full((8, 8), 2, dtype=np.float32)] * 8:
+            planner.push(thumb)
+        self.assertEqual(planner.finish().reads, [0, 8])
 
-    def test_small_screen_change_is_kept(self) -> None:
-        still = np.zeros((8, 8), dtype=np.float32)
-        other = np.full((8, 8), 2, dtype=np.float32)
-        frames = [still, still, other, other]
-        self.assertEqual(keep_stable(frames), [0, 2])
-
-    def test_stable_scene_keeps_a_second_frame_for_a_vote(self) -> None:
+    def test_planner_reads_each_still_scene_once_and_probes_before_each_change(self) -> None:
+        planner = _Planner()
         still_a = np.zeros((8, 8), dtype=np.float32)
-        still_b = np.full((8, 8), 40, dtype=np.float32)
-        motion = np.full((8, 8), 20, dtype=np.float32)
-        frames = [still_a, still_a, motion, still_b, still_b]
-        self.assertEqual(voting_frames(frames), [0, 1, 3, 4])
+        still_b = np.full((8, 8), 60, dtype=np.float32)
+        motion = [np.full((8, 8), 20, dtype=np.float32), np.full((8, 8), 40, dtype=np.float32)]
+        thumbs = [still_a] * 10 + motion + [still_b] * 10
+        for thumb in thumbs:
+            planner.push(thumb)
+        plan = planner.finish()
+        self.assertEqual(plan.reads, [0, 12])
+        self.assertEqual(plan.taps, [[5, 6, 7, 8, 9]])
+        self.assertEqual(plan.count, 22)
+
+    def test_planner_keeps_a_short_pause_as_a_probe_even_without_a_still_read(self) -> None:
+        planner = _Planner()
+        thumbs = [np.full((8, 8), float(10 * (index % 7)), dtype=np.float32) for index in range(14)]
+        thumbs += [np.full((8, 8), 200, dtype=np.float32)] * 3
+        thumbs += [np.full((8, 8), float(10 * (index % 7)), dtype=np.float32) for index in range(14)]
+        for thumb in thumbs:
+            planner.push(thumb)
+        plan = planner.finish()
+        self.assertTrue(any(window[-1] == 16 for window in plan.taps))
+
+
+class TapFrameTests(unittest.TestCase):
+    def test_tap_then_profile_pairs_by_the_tap(self) -> None:
+        table = build_table(
+            [
+                FrameObs("list", (ContactHit("0982117072", "Đặng Thị Tâm"), ContactHit("0332001753", "khactam")), at=1.0),
+                FrameObs("tap", (ContactHit("0332001753", "khactam", True),), at=2.0),
+                FrameObs("profile", (), "Người lạ", "@nguoila", at=3.0),
+            ]
+        )
+        self.assertEqual([(row.phone, row.username) for row in table.rows], [("0332001753", "@nguoila")])
+
+    def test_tap_followed_by_more_list_is_not_used(self) -> None:
+        table = build_table(
+            [
+                FrameObs("tap", (ContactHit("0332001753", "khactam", True),), at=2.0),
+                FrameObs("list", (ContactHit("0982117072", "Đặng Thị Tâm"),), at=2.5),
+                FrameObs("profile", (), "Người lạ", "@nguoila", at=3.0),
+            ]
+        )
+        self.assertEqual(table.rows, [])
+
+    def test_profile_long_after_the_tap_is_not_paired(self) -> None:
+        table = build_table(
+            [
+                FrameObs("tap", (ContactHit("0332001753", "khactam", True),), at=2.0),
+                FrameObs("profile", (), "Người lạ", "@nguoila", at=9.0),
+            ]
+        )
+        self.assertEqual(table.rows, [])
+
+    def test_profile_pairs_with_the_only_matching_row_on_screen(self) -> None:
+        table = build_table(
+            [
+                frame_list(ContactHit("0900000001", "Photo"), ContactHit("0900000005", "Lan")),
+                frame_list(ContactHit("0900000002", "Photo"), ContactHit("0900000003", "Mai Anh")),
+                frame_profile("Photo", "@photo.2"),
+            ]
+        )
+        self.assertIn(("0900000002", "@photo.2"), [(row.phone, row.username) for row in table.rows])
+        self.assertNotIn("0900000001", [row.phone for row in table.rows])
+
+    def test_two_matching_rows_on_screen_stay_apart(self) -> None:
+        table = build_table(
+            [
+                frame_list(ContactHit("0900000001", "Photo"), ContactHit("0900000002", "Photo")),
+                frame_profile("Photo", "@photo.2"),
+            ]
+        )
+        self.assertEqual(table.rows, [])
+
+    def test_misread_digit_merges_only_when_never_on_screen_together(self) -> None:
+        frames = [frame_list(ContactHit("0982117072", "Đặng Thị Tâm")) for _ in range(2)]
+        frames.append(frame_list(ContactHit("0982117075", "Đặng Thị Tâm")))
+        table = build_table(frames)
+        self.assertEqual([item.phone for item in table.unopened], ["0982117072"])
+
+
+class TapSpotTests(unittest.TestCase):
+    def _list_image(self, dot_row: int | None, grey_row: int | None = None, dot_x: int = 620) -> tuple:
+        from PIL import Image, ImageDraw
+
+        from control_plane.screen_read import _column_anchor, _list_buttons, _pink_boxes, _row_strip
+
+        image = Image.new("RGB", (900, 1600), "white")
+        draw = ImageDraw.Draw(image, "RGBA")
+        for index in range(6):
+            top = 200 + index * 170
+            if grey_row == index:
+                draw.rectangle((0, top - 50, 900, top + 120), fill=(240, 240, 240, 255))
+            draw.rounded_rectangle((640, top, 820, top + 64), radius=30, fill=(234, 64, 86, 255))
+        if dot_row is not None:
+            cy = 200 + dot_row * 170 + 32
+            draw.ellipse((dot_x - 42, cy - 42, dot_x + 42, cy + 42), fill=(0, 0, 0, 189))
+        listed = _list_buttons(_pink_boxes(image), image.width)
+        anchor_x, anchor_w = _column_anchor(listed)
+        strips = [_row_strip(image, button, anchor_x, anchor_w) for button in listed]
+        return image, listed, strips, anchor_x, anchor_w
+
+    def test_touch_dot_marks_the_row(self) -> None:
+        from control_plane.screen_read import _tapped_rows
+
+        image, listed, strips, anchor_x, anchor_w = self._list_image(dot_row=2)
+        self.assertEqual(len(listed), 6)
+        self.assertEqual(_tapped_rows(image, listed, strips, anchor_x, anchor_w), {2})
+
+    def test_grey_row_without_dot(self) -> None:
+        from control_plane.screen_read import _tapped_rows
+
+        image, listed, strips, anchor_x, anchor_w = self._list_image(dot_row=None, grey_row=4)
+        self.assertEqual(_tapped_rows(image, listed, strips, anchor_x, anchor_w), {4})
+
+    def test_dot_over_the_avatar_column_is_ignored(self) -> None:
+        from control_plane.screen_read import _tapped_rows
+
+        image, listed, strips, anchor_x, anchor_w = self._list_image(dot_row=1, dot_x=60)
+        self.assertEqual(_tapped_rows(image, listed, strips, anchor_x, anchor_w), set())
+
+    def test_dot_and_grey_on_different_rows_is_ignored(self) -> None:
+        from control_plane.screen_read import _tapped_rows
+
+        image, listed, strips, anchor_x, anchor_w = self._list_image(dot_row=1, grey_row=3)
+        self.assertEqual(_tapped_rows(image, listed, strips, anchor_x, anchor_w), set())
 
 
 if __name__ == "__main__":
