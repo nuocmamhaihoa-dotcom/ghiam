@@ -421,6 +421,20 @@ class StableFrameTests(unittest.TestCase):
             planner.push(thumb)
         plan = planner.finish()
         self.assertTrue(any(window[-1] == 16 for window in plan.taps))
+        # Mở hồ sơ ~0.2s rồi thoát: khung cuối trước lúc chuyển vẫn vào hàng đọc OCR.
+        self.assertIn(16, plan.reads)
+
+    def test_brief_profile_pause_is_kept_when_leaving_quickly(self) -> None:
+        """Danh bạ đứng yên → hồ sơ rất ngắn → về danh bạ: vẫn giữ khung hồ sơ."""
+        planner = _Planner()
+        list_thumb = np.zeros((8, 8), dtype=np.float32)
+        profile_thumb = np.full((8, 8), 180, dtype=np.float32)
+        for thumb in [list_thumb] * 10 + [profile_thumb] * 2 + [list_thumb] * 10:
+            planner.push(thumb)
+        plan = planner.finish()
+        self.assertIn(0, plan.reads)
+        # Khung hồ sơ ngắn (index 10 hoặc 11) phải được giữ khi bắt đầu chuyển về danh bạ.
+        self.assertTrue(any(10 <= number <= 11 for number in plan.reads))
 
 
 class TapFrameTests(unittest.TestCase):

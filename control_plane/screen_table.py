@@ -627,7 +627,8 @@ def _pick_from_window(visits: list[_Visit]) -> None:
             visit.phone = next(iter(matches))
 
 
-TAP_TO_PROFILE_SECONDS = 4.0
+# iPhone đôi khi animate mở hồ sơ chậm; nới cửa sổ ghép số đã bấm với @ vừa đọc.
+TAP_TO_PROFILE_SECONDS = 6.0
 
 
 def _walk(

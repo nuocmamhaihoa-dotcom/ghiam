@@ -36,12 +36,16 @@ VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mkv", ".avi", ".webm"}
 SCAN_FPS = 15.0
 THUMB_W = 48
 THUMB_H = 104
-SETTLE_LAG = 5
+# ~0.2s đứng yên là đủ đưa khung vào hàng đọc — mở hồ sơ rồi thoát nhanh vẫn bắt được.
+SETTLE_LAG = 3
 SETTLED = 3.5
 # Hai hồ sơ khác nhau gần như cùng một màn hình trắng, nên ngưỡng "đã đổi cảnh" phải rất thấp.
 CHANGED = 1.2
 MOVING = 2.5
 TAP_WINDOW = 5
+# Số khung cuối của mỗi lần bắt đầu chuyển cảnh cũng OCR thường (không chỉ tìm chấm bấm).
+# Khi thoát hồ sơ nhanh, các khung này chính là trang hồ sơ chưa kịp "đứng yên".
+BRIEF_EXIT_READS = 2
 
 Submit = Callable[..., Future]
 
@@ -138,12 +142,19 @@ def _scan_video(
         on_progress(f"Đang tách {len(needed)} khung từ {path.name}")
     files = extract_frames(path, folder, needed, fps, on_progress=on_progress)
     jobs: list[tuple[float, int, Path, Callable[..., FrameObs], tuple]] = []
+    read_numbers = set(plan.reads)
     for number in plan.reads:
         jobs.append((number / fps, 0, files[number], read_frame_at, (str(files[number]), number / fps)))
     for window in plan.taps:
         last = window[-1]
         paths = [str(files[number]) for number in window]
         jobs.append((last / fps, 1, files[last], read_tap_at, (paths, last / fps)))
+        # Thoát hồ sơ nhanh: cửa sổ "trước chuyển cảnh" chứa khung hồ sơ — OCR thường, không chỉ tìm chấm bấm.
+        for number in window[-BRIEF_EXIT_READS:]:
+            if number in read_numbers:
+                continue
+            read_numbers.add(number)
+            jobs.append((number / fps, 0, files[number], read_frame_at, (str(files[number]), number / fps)))
     jobs.sort(key=lambda job: (job[0], job[1]))
     total = len(jobs)
     if on_progress is not None:
@@ -222,6 +233,7 @@ class _Planner:
 
     Đứng yên: khung giống khung SETTLE_LAG bước sau. Giữ khi khác khung đã giữ.
     Bắt đầu chuyển: bước đầu tiên có độ khác lớn. Lấy TAP_WINDOW khung ngay trước đó.
+    Màn hình đứng rất ngắn (mở hồ sơ rồi thoát) cũng được giữ khi vừa bắt đầu chuyển.
     """
 
     def __init__(self) -> None:
@@ -238,6 +250,7 @@ class _Planner:
             moving = _mean_abs(self.ring[-1], thumb) >= MOVING
             if moving and not self.was_moving:
                 self._tap_window(number - 1)
+                self._keep_brief_scene(number - 1, self.ring[-1])
             self.was_moving = moving
         self.ring.append(thumb)
         if len(self.ring) == SETTLE_LAG + 1:
@@ -260,6 +273,17 @@ class _Planner:
             return
         self.plan.reads.append(number)
         self.last_kept = thumb
+
+    def _keep_brief_scene(self, number: int, thumb: np.ndarray) -> None:
+        """Hồ sơ mở dưới ngưỡng đứng yên: vẫn đọc khung cuối trước lúc chuyển cảnh."""
+        if number < 0:
+            return
+        if self.last_kept is not None and _mean_abs(thumb, self.last_kept) < CHANGED:
+            return
+        if self.plan.reads and number - self.plan.reads[-1] <= 1:
+            return
+        self.plan.reads.append(number)
+        self.last_kept = thumb.copy()
 
     def _tap_window(self, last: int) -> None:
         if last < 0:
