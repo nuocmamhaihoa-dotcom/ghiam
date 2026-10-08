@@ -12,7 +12,7 @@ import zlib
 from pathlib import Path
 from typing import Any, BinaryIO
 
-from fastapi import APIRouter, File, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
@@ -22,6 +22,7 @@ from control_plane.video_store import (
     abort_upload,
     begin_upload,
     can_accept,
+    clean_device,
     commit_upload,
     init_db,
     iter_backup,
@@ -98,6 +99,7 @@ def _write_chunk(handle: BinaryIO, hasher: Any, chunk: bytes) -> None:
 @router.post("/v1/videos")
 async def upload_video(
     file: UploadFile = File(...),
+    device: str = Form(default=""),
     authorization: str | None = Header(default=None),
 ) -> dict[str, object]:
     """Ghi đĩa và cơ sở dữ liệu chạy ngoài vòng sự kiện, để một video lớn không làm đứng trang của máy khác."""
@@ -108,6 +110,7 @@ async def upload_video(
     suffix = Path(original).suffix.lower()
     if suffix not in _ALLOWED:
         raise HTTPException(status_code=400, detail="Chỉ nhận video hoặc ảnh chụp màn hình.")
+    machine = clean_device(device)
     tmp = settings.video_dir / f"up-{secrets.token_hex(8)}{suffix}"
     hasher = hashlib.sha256()
     size = 0
@@ -129,7 +132,13 @@ async def upload_video(
         if not can_accept(used, size, _limit_bytes(), free):
             raise HTTPException(status_code=507, detail="Hàng đợi đã đầy. Đợi bớt video rồi thêm tiếp.")
         created = await run_in_threadpool(
-            lambda: begin_upload(settings.video_db_path, name=original, size_bytes=size, sha256=hasher.hexdigest())
+            lambda: begin_upload(
+                settings.video_db_path,
+                name=original,
+                size_bytes=size,
+                sha256=hasher.hexdigest(),
+                device=machine,
+            )
         )
         if created["duplicate"]:
             return created
@@ -167,7 +176,7 @@ def retry_video(video_id: int, authorization: str | None = Header(default=None))
 def results(
     authorization: str | None = Header(default=None),
     q: str = "",
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=100, ge=1, le=500),
 ) -> dict[str, object]:
     _auth(authorization)
     init_db(settings.video_db_path)

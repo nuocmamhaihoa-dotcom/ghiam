@@ -39,8 +39,8 @@ class VideoStoreTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def _add(self, name: str, sha: str, size: int = 10) -> int:
-        created = begin_upload(self.db, name=name, size_bytes=size, sha256=sha)
+    def _add(self, name: str, sha: str, size: int = 10, device: str = "") -> int:
+        created = begin_upload(self.db, name=name, size_bytes=size, sha256=sha, device=device)
         self.assertFalse(created["duplicate"])
         video_id = int(created["id"])
         path = Path(self._tmp.name) / f"{video_id}.mp4"
@@ -178,7 +178,7 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(stats(self.db)["results"], 1)
 
     def test_search_by_phone_prefix_and_username(self) -> None:
-        video_id = self._add("a.mp4", "a")
+        video_id = self._add("IMG_0018.MOV", "a", device="iPhone An")
         finish(
             self.db,
             video_id,
@@ -189,6 +189,15 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual([item["phone"] for item in search_results(self.db, "dangtam")], ["0982117072"])
         self.assertEqual([item["phone"] for item in search_results(self.db, "@khac")], ["0332001753"])
         self.assertEqual(search_results(self.db, "0999"), [])
+        by_video = search_results(self.db, "IMG_0018")
+        self.assertEqual(len(by_video), 2)
+        self.assertEqual(by_video[0]["video"], "IMG_0018.MOV")
+        self.assertEqual(by_video[0]["device"], "iPhone An")
+        self.assertTrue(by_video[0]["scanned_at"])
+        listed = list_videos(self.db)
+        self.assertEqual(listed[0]["device"], "iPhone An")
+        self.assertEqual(listed[0]["saved_count"], 2)
+        self.assertEqual(listed[0]["result_count"], 2)
 
     def test_finished_video_can_be_uploaded_again_and_reread(self) -> None:
         video_id = self._add("a.mp4", "same")
@@ -236,11 +245,13 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(stats(self.db)["queued"], 1)
 
     def test_backup_contains_the_saved_row(self) -> None:
-        video_id = self._add("clip.mp4", "a")
+        video_id = self._add("clip.mp4", "a", device="iPhone 13")
         finish(self.db, video_id, Table(rows=[Row("0332001753", "khactam", "@khactam60")]))
         text = "".join(iter_backup(self.db))
-        self.assertIn("Số điện thoại,Tên,Username", text)
-        self.assertIn("0332001753,khactam,@khactam60,Đã lưu,,clip.mp4", text)
+        self.assertIn("Số điện thoại,Tên,Username,Time quét,Tên máy,Video", text)
+        self.assertNotIn(",Loại,", text)
+        self.assertIn("0332001753,khactam,@khactam60,", text)
+        self.assertIn(",iPhone 13,clip.mp4", text)
 
     def test_error_can_be_retried_only_while_the_file_remains(self) -> None:
         video_id = self._add("a.mp4", "a")

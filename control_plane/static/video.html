@@ -8,7 +8,7 @@
     :root { color-scheme: light; --ink: #17202a; --muted: #5c6770; --line: #e4e7ec; --bg: #f4f6f8; --card: #fff; --blue: #0b6bcb; }
     * { box-sizing: border-box; }
     body { margin: 0; font: 16px/1.45 "Segoe UI", system-ui, sans-serif; color: var(--ink); background: var(--bg); }
-    main { max-width: 920px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+    main { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
     h1 { font-size: 1.7rem; margin: 0 0 0.25rem; }
     h2 { font-size: 1.15rem; margin: 0 0 0.7rem; }
     p { margin: 0; }
@@ -33,13 +33,15 @@
     .stat { background: #f7f9fb; border-radius: 10px; padding: 0.7rem 0.75rem; }
     .stat b { display: block; font-size: 1.35rem; }
     .stat span { color: var(--muted); font-size: 0.92rem; }
-    table { width: 100%; border-collapse: collapse; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 640px; }
     th, td { text-align: left; padding: 0.45rem 0.3rem; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 0.95rem; }
     th { color: var(--muted); font-weight: 650; }
     .note { color: var(--muted); margin-top: 0.55rem; }
     .warn { color: #8a2b2b; font-weight: 650; }
     .ok { color: #0d6b3a; }
     #file { display: none; }
+    .device-box { margin-bottom: 0.7rem; }
   </style>
 </head>
 <body>
@@ -49,6 +51,11 @@
 
   <section>
     <h2>Thêm video</h2>
+    <div class="device-box">
+      <label for="device">Tên máy iPhone quét</label>
+      <input id="device" type="text" maxlength="80" placeholder="VD: iPhone 13 của An" />
+      <p class="note">Tên này gắn vào mọi kết quả của video bạn tải lên từ máy này.</p>
+    </div>
     <div class="drop" id="drop">
       <p>Kéo nhiều video vào đây</p>
       <p class="note">hoặc</p>
@@ -66,13 +73,14 @@
 
   <section>
     <h2>Hàng đợi</h2>
-    <div id="queue"></div>
+    <div id="queue" class="table-wrap"></div>
   </section>
 
   <section>
     <h2>Kết quả đã lưu</h2>
-    <input id="query" type="search" placeholder="Gõ đầu số điện thoại hoặc @username" />
-    <div id="results"></div>
+    <input id="query" type="search" placeholder="Gõ đầu số, @username hoặc tên video (VD: IMG_0018)" />
+    <p id="resultsNote" class="note"></p>
+    <div id="results" class="table-wrap"></div>
   </section>
 
   <section>
@@ -85,8 +93,30 @@
 </main>
 <script>
   var serverToken = __CONTROL_TOKEN__;
+  var DEVICE_KEY = "video-device-name";
 
   function token() { return serverToken; }
+
+  function deviceName() {
+    return (document.getElementById("device").value || "").trim();
+  }
+
+  function saveDevice() {
+    try { localStorage.setItem(DEVICE_KEY, deviceName()); } catch (error) {}
+  }
+
+  function loadDevice() {
+    var input = document.getElementById("device");
+    try {
+      var saved = localStorage.getItem(DEVICE_KEY) || "";
+      if (saved) input.value = saved;
+    } catch (error) {}
+    if (!input.value) {
+      var ua = navigator.userAgent || "";
+      if (/iPhone/i.test(ua)) input.value = "iPhone";
+      else if (/iPad/i.test(ua)) input.value = "iPad";
+    }
+  }
 
   async function api(path, options) {
     var headers = options && options.headers ? options.headers : {};
@@ -111,6 +141,13 @@
     if (status === "error") return "Lỗi";
     if (status === "uploading") return "Đang tải lên";
     return status;
+  }
+
+  function formatTime(value) {
+    if (!value) return "";
+    var date = new Date(value);
+    if (isNaN(date.getTime())) return String(value);
+    return date.toLocaleString("vi-VN", { hour12: false });
   }
 
   async function refresh() {
@@ -149,17 +186,28 @@
       box.innerHTML = "<p class='note'>Chưa có video.</p>";
       return;
     }
-    var html = "<table><tr><th>Video</th><th>Trạng thái</th></tr>";
+    var html = "<table><tr><th>Video</th><th>Máy quét</th><th>Trạng thái</th><th>Kết quả</th></tr>";
     items.forEach(function (item) {
       var extra = item.error ? "<div class='warn'>" + escapeHtml(item.error) + "</div>" : "";
       var retry = item.status === "error" ? " <button class='ghost' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
-      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + statusText(item.status) + retry + "</td></tr>";
+      var resultText = "—";
+      if (item.status === "done") {
+        resultText = (item.saved_count || 0) + " đủ / " + (item.result_count || 0) + " dòng";
+        resultText += " <button class='ghost' type='button' data-filter='" + escapeHtml(item.name) + "'>Xem</button>";
+      }
+      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + escapeHtml(item.device || "") + "</td><td>" + statusText(item.status) + retry + "</td><td>" + resultText + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-retry]").forEach(function (button) {
       button.addEventListener("click", async function () {
         await api("/v1/videos/" + button.getAttribute("data-retry") + "/retry", { method: "POST" });
         refresh();
+      });
+    });
+    box.querySelectorAll("[data-filter]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        document.getElementById("query").value = button.getAttribute("data-filter") || "";
+        loadResults();
       });
     });
   }
@@ -169,18 +217,24 @@
   async function loadResults() {
     var asked = ++resultsAsked;
     var q = document.getElementById("query").value.trim();
-    var response = await api("/v1/results?q=" + encodeURIComponent(q));
+    var response = await api("/v1/results?q=" + encodeURIComponent(q) + "&limit=100");
     var box = document.getElementById("results");
+    var note = document.getElementById("resultsNote");
     if (!response.ok) return;
-    var items = (await response.json()).items || [];
+    var body = await response.json();
+    var items = body.items || [];
     if (asked !== resultsAsked) return;
     if (!items.length) {
       box.innerHTML = "<p class='note'>Chưa có dòng nào.</p>";
+      note.textContent = q ? "Không có kết quả cho từ khóa này." : "";
       return;
     }
-    var html = "<table><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Loại</th></tr>";
+    note.textContent = q
+      ? ("Đang hiện " + items.length + " dòng cho «" + q + "».")
+      : ("Đang hiện " + items.length + " dòng mới nhất. Gõ tên video để lọc, ví dụ IMG_0018.");
+    var html = "<table><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Time quét</th><th>Tên máy</th><th>Video</th></tr>";
     items.forEach(function (item) {
-      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(item.bucket) + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(formatTime(item.scanned_at)) + "</td><td>" + escapeHtml(item.device) + "</td><td>" + escapeHtml(item.video) + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
   }
@@ -208,6 +262,7 @@
       xhr.onabort = function () { resolve({ ok: false, status: 0, body: {} }); };
       var form = new FormData();
       form.append("file", file, file.name);
+      form.append("device", deviceName());
       xhr.send(form);
     });
   }
@@ -216,6 +271,7 @@
     var note = document.getElementById("uploadNote");
     var files = Array.prototype.slice.call(fileList || []);
     if (!files.length) return;
+    saveDevice();
     var added = 0;
     var already = 0;
     var failed = [];
@@ -243,6 +299,8 @@
 
   document.getElementById("pick").addEventListener("click", function () { document.getElementById("file").click(); });
   document.getElementById("file").addEventListener("change", function (event) { sendFiles(event.target.files); event.target.value = ""; });
+  document.getElementById("device").addEventListener("change", saveDevice);
+  document.getElementById("device").addEventListener("blur", saveDevice);
   var drop = document.getElementById("drop");
   drop.addEventListener("dragover", function (event) { event.preventDefault(); drop.classList.add("over"); });
   drop.addEventListener("dragleave", function () { drop.classList.remove("over"); });
@@ -267,6 +325,7 @@
     window.location.href = body.url;
   });
 
+  loadDevice();
   refresh();
   setInterval(refresh, 4000);
 </script>

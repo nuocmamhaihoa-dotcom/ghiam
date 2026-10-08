@@ -87,7 +87,8 @@ def init_db(db_path: Path) -> None:
               pid INTEGER,
               created_at TEXT NOT NULL,
               started_at TEXT,
-              finished_at TEXT
+              finished_at TEXT,
+              device TEXT NOT NULL DEFAULT ''
             );
             CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_sha ON videos(sha256);
             CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status, id);
@@ -104,6 +105,7 @@ def init_db(db_path: Path) -> None:
             CREATE UNIQUE INDEX IF NOT EXISTS idx_results_phone ON results(phone) WHERE phone != '';
             CREATE INDEX IF NOT EXISTS idx_results_bucket ON results(bucket, id);
             CREATE INDEX IF NOT EXISTS idx_results_username ON results(username) WHERE username != '';
+            CREATE INDEX IF NOT EXISTS idx_results_video ON results(video_id, id);
             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS result_counts (bucket INTEGER PRIMARY KEY, n INTEGER NOT NULL);
             INSERT INTO result_counts (bucket, n)
@@ -126,6 +128,9 @@ def init_db(db_path: Path) -> None:
             COMMIT;
             """
         )
+        video_cols = {str(row[1]) for row in conn.execute("PRAGMA table_info(videos)")}
+        if "device" not in video_cols:
+            conn.execute("ALTER TABLE videos ADD COLUMN device TEXT NOT NULL DEFAULT ''")
     _READY.add(key)
 
 
@@ -147,8 +152,13 @@ def can_accept(used_bytes: int, new_bytes: int, limit_bytes: int, free_bytes: in
     return free_bytes > new_bytes + (2 * 1024 * 1024 * 1024)
 
 
-def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str) -> dict[str, object]:
+def clean_device(device: str) -> str:
+    return " ".join((device or "").split())[:80]
+
+
+def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str, device: str = "") -> dict[str, object]:
     """Cùng một file đang chờ hoặc đang đọc thì bỏ qua. Đã đọc xong hoặc lỗi thì đọc lại bằng bộ đọc hiện tại."""
+    machine = clean_device(device)
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         existing = conn.execute("SELECT id, status, name, path FROM videos WHERE sha256 = ?", (sha256,)).fetchone()
@@ -157,16 +167,17 @@ def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str) -> d
                 """
                 UPDATE videos
                 SET name = ?, size_bytes = ?, path = '', status = 'uploading', error = '',
-                    pid = NULL, started_at = NULL, finished_at = NULL, created_at = ?
+                    pid = NULL, started_at = NULL, finished_at = NULL, created_at = ?, device = ?
                 WHERE id = ?
                 """,
-                (name, size_bytes, utcnow(), existing["id"]),
+                (name, size_bytes, utcnow(), machine, existing["id"]),
             )
             conn.execute("COMMIT")
             return {
                 "id": int(existing["id"]),
                 "status": "uploading",
                 "name": name,
+                "device": machine,
                 "duplicate": False,
                 "reopened": True,
                 "old_path": existing["path"],
@@ -177,17 +188,24 @@ def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str) -> d
                 "id": int(existing["id"]),
                 "status": existing["status"],
                 "name": existing["name"],
+                "device": machine,
                 "duplicate": True,
             }
         cur = conn.execute(
             """
-            INSERT INTO videos (name, size_bytes, sha256, path, status, created_at)
-            VALUES (?, ?, ?, '', 'uploading', ?)
+            INSERT INTO videos (name, size_bytes, sha256, path, status, created_at, device)
+            VALUES (?, ?, ?, '', 'uploading', ?, ?)
             """,
-            (name, size_bytes, sha256, utcnow()),
+            (name, size_bytes, sha256, utcnow(), machine),
         )
         conn.execute("COMMIT")
-        return {"id": int(cur.lastrowid), "status": "uploading", "name": name, "duplicate": False}
+        return {
+            "id": int(cur.lastrowid),
+            "status": "uploading",
+            "name": name,
+            "device": machine,
+            "duplicate": False,
+        }
 
 
 def commit_upload(db_path: Path, video_id: int, path: str) -> None:
@@ -213,9 +231,13 @@ def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
     with connect(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT id, name, size_bytes, status, error, created_at, started_at, finished_at
-            FROM videos
-            ORDER BY id DESC
+            SELECT
+              v.id, v.name, v.size_bytes, v.status, v.error, v.created_at, v.started_at, v.finished_at,
+              v.device,
+              COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id), 0) AS result_count,
+              COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.bucket = 1), 0) AS saved_count
+            FROM videos v
+            ORDER BY v.id DESC
             LIMIT ?
             """,
             (limit,),
@@ -396,41 +418,77 @@ def merge_close_results(db_path: Path) -> int:
     return merged
 
 
+_RESULT_SELECT = """
+    SELECT
+      r.id, r.phone, r.name, r.username, r.bucket, r.reason, r.created_at AS scanned_at,
+      COALESCE(v.device, '') AS device,
+      COALESCE(v.name, '') AS video
+    FROM results r
+    LEFT JOIN videos v ON v.id = r.video_id
+"""
+
+
 def search_results(db_path: Path, query: str = "", limit: int = 50) -> list[dict[str, object]]:
-    """Tìm theo đầu số hoặc đầu username. Tìm theo khoảng trên chỉ mục, không quét cả bảng."""
+    """Tìm theo đầu số, đầu username hoặc tên video. Tìm theo khoảng trên chỉ mục khi có thể."""
     text = "".join(query.split())
     if text.startswith("+84"):
         text = "0" + text[3:]
     with connect(db_path) as conn:
         if text.isdigit():
             rows = conn.execute(
-                """
-                SELECT id, phone, name, username, bucket, reason
-                FROM results
-                WHERE phone >= ? AND phone < ? AND phone != ''
-                ORDER BY phone
+                _RESULT_SELECT
+                + """
+                WHERE r.phone >= ? AND r.phone < ? AND r.phone != ''
+                ORDER BY r.phone
                 LIMIT ?
                 """,
                 (text, text + ":", limit),
             ).fetchall()
-        elif text:
-            handle = text if text.startswith("@") else "@" + text
+        elif text.startswith("@"):
             rows = conn.execute(
-                """
-                SELECT id, phone, name, username, bucket, reason
-                FROM results
-                WHERE username >= ? AND username < ? AND username != ''
-                ORDER BY username
+                _RESULT_SELECT
+                + """
+                WHERE r.username >= ? AND r.username < ? AND r.username != ''
+                ORDER BY r.username
                 LIMIT ?
                 """,
-                (handle, handle + "\U0010ffff", limit),
+                (text, text + "\U0010ffff", limit),
             ).fetchall()
+        elif text:
+            video_ids = [
+                int(row["id"])
+                for row in conn.execute(
+                    "SELECT id FROM videos WHERE name LIKE ? COLLATE NOCASE ORDER BY id DESC LIMIT 20",
+                    (f"%{text}%",),
+                ).fetchall()
+            ]
+            if video_ids:
+                marks = ",".join("?" for _ in video_ids)
+                rows = conn.execute(
+                    _RESULT_SELECT
+                    + f"""
+                    WHERE r.video_id IN ({marks})
+                    ORDER BY r.id DESC
+                    LIMIT ?
+                    """,
+                    (*video_ids, limit),
+                ).fetchall()
+            else:
+                handle = "@" + text
+                rows = conn.execute(
+                    _RESULT_SELECT
+                    + """
+                    WHERE r.username >= ? AND r.username < ? AND r.username != ''
+                    ORDER BY r.username
+                    LIMIT ?
+                    """,
+                    (handle, handle + "\U0010ffff", limit),
+                ).fetchall()
         else:
             rows = conn.execute(
-                """
-                SELECT id, phone, name, username, bucket, reason
-                FROM results
-                ORDER BY id DESC
+                _RESULT_SELECT
+                + """
+                ORDER BY r.id DESC
                 LIMIT ?
                 """,
                 (limit,),
@@ -445,10 +503,13 @@ def iter_backup(db_path: Path) -> Iterator[str]:
     conn.execute("PRAGMA query_only=ON;")
     conn.execute("BEGIN")
     try:
-        yield "Số điện thoại,Tên,Username,Loại,Lý do,Video\n"
+        yield "Số điện thoại,Tên,Username,Time quét,Tên máy,Video\n"
         cursor = conn.execute(
             """
-            SELECT r.phone, r.name, r.username, r.bucket, r.reason, COALESCE(v.name, '') AS video
+            SELECT
+              r.phone, r.name, r.username, r.created_at AS scanned_at,
+              COALESCE(v.device, '') AS device,
+              COALESCE(v.name, '') AS video
             FROM results r
             LEFT JOIN videos v ON v.id = r.video_id
             ORDER BY r.id
@@ -460,8 +521,8 @@ def iter_backup(db_path: Path) -> Iterator[str]:
                     row["phone"],
                     row["name"],
                     row["username"],
-                    BUCKET_LABEL.get(int(row["bucket"]), ""),
-                    row["reason"],
+                    row["scanned_at"],
+                    row["device"],
                     row["video"],
                 ]
             )
@@ -567,6 +628,7 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
 
 
 def _public_result(row: sqlite3.Row) -> dict[str, object]:
+    keys = set(row.keys())
     return {
         "id": int(row["id"]),
         "phone": row["phone"],
@@ -574,6 +636,9 @@ def _public_result(row: sqlite3.Row) -> dict[str, object]:
         "username": row["username"],
         "bucket": BUCKET_LABEL.get(int(row["bucket"]), ""),
         "reason": row["reason"],
+        "scanned_at": row["scanned_at"] if "scanned_at" in keys else row["created_at"] if "created_at" in keys else "",
+        "device": row["device"] if "device" in keys else "",
+        "video": row["video"] if "video" in keys else "",
     }
 
 
