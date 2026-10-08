@@ -150,6 +150,8 @@
     return date.toLocaleString("vi-VN", { hour12: false });
   }
 
+  var lastResultTotal = -1;
+
   async function refresh() {
     var statsResponse = await api("/v1/videos/stats");
     if (!statsResponse.ok) return;
@@ -177,7 +179,10 @@
     }
     var queueResponse = await api("/v1/videos");
     if (queueResponse.ok) renderQueue((await queueResponse.json()).items || []);
-    loadResults();
+    if (body.results !== lastResultTotal) {
+      lastResultTotal = body.results;
+      loadResults();
+    }
   }
 
   function renderQueue(items) {
@@ -213,16 +218,44 @@
   }
 
   var resultsAsked = 0;
+  var RESULT_PAGE = 1000;
+
+  function renderResultTable(items) {
+    var html = "<table><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Time quét</th><th>Tên máy</th><th>Video</th></tr>";
+    items.forEach(function (item) {
+      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(formatTime(item.scanned_at)) + "</td><td>" + escapeHtml(item.device) + "</td><td>" + escapeHtml(item.video) + "</td></tr>";
+    });
+    return html + "</table>";
+  }
 
   async function loadResults() {
     var asked = ++resultsAsked;
     var q = document.getElementById("query").value.trim();
-    var response = await api("/v1/results?q=" + encodeURIComponent(q) + "&limit=100");
     var box = document.getElementById("results");
     var note = document.getElementById("resultsNote");
-    if (!response.ok) return;
-    var body = await response.json();
-    var items = body.items || [];
+    var items = [];
+    var offset = 0;
+    var total = null;
+    note.textContent = "Đang tải toàn bộ kết quả...";
+    note.className = "note";
+    while (true) {
+      var response = await api(
+        "/v1/results?q=" + encodeURIComponent(q) +
+        "&limit=" + RESULT_PAGE +
+        "&offset=" + offset
+      );
+      if (!response.ok) return;
+      if (asked !== resultsAsked) return;
+      var body = await response.json();
+      var chunk = body.items || [];
+      total = typeof body.total === "number" ? body.total : total;
+      items = items.concat(chunk);
+      note.textContent = "Đang tải " + items.length + (total != null ? "/" + total : "") + " dòng...";
+      if (!chunk.length || items.length >= (total != null ? total : Infinity) || chunk.length < RESULT_PAGE) {
+        break;
+      }
+      offset = items.length;
+    }
     if (asked !== resultsAsked) return;
     if (!items.length) {
       box.innerHTML = "<p class='note'>Chưa có dòng nào.</p>";
@@ -230,13 +263,9 @@
       return;
     }
     note.textContent = q
-      ? ("Đang hiện " + items.length + " dòng cho «" + q + "».")
-      : ("Đang hiện " + items.length + " dòng mới nhất. Gõ tên video để lọc, ví dụ IMG_0018.");
-    var html = "<table><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Time quét</th><th>Tên máy</th><th>Video</th></tr>";
-    items.forEach(function (item) {
-      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(formatTime(item.scanned_at)) + "</td><td>" + escapeHtml(item.device) + "</td><td>" + escapeHtml(item.video) + "</td></tr>";
-    });
-    box.innerHTML = html + "</table>";
+      ? ("Đang hiện đủ " + items.length + " dòng cho «" + q + "» trên trang này.")
+      : ("Đang hiện đủ " + items.length + " dòng kết quả trên trang này.");
+    box.innerHTML = renderResultTable(items);
   }
 
   function escapeHtml(value) {

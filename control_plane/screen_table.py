@@ -384,17 +384,20 @@ def _significant_tokens(name: str) -> list[str]:
 
 
 def names_close(left: str, right: str) -> bool:
-    """Tên gần giống trong một video. Tên ngắn thì không ghép."""
+    """Tên gần giống trong một video. Trùng hết chữ thì ghép; tên ngắn lệch dấu thì không."""
     a = _compact(left)
     b = _compact(right)
+    if len(a) < 4 or len(b) < 4:
+        return False
+    if a == b:
+        # "liên"/"lien" cùng chữ bỏ dấu nhưng là tên ngắn: chỉ nhận khi còn đúng dấu.
+        return len(a) >= 6 or name_key(left) == name_key(right)
     if len(a) < 6 or len(b) < 6:
         return False
     tokens_a = _significant_tokens(left)
     tokens_b = _significant_tokens(right)
     if (len(tokens_a) <= 1 and len(a) < 8) or (len(tokens_b) <= 1 and len(b) < 8):
         return False
-    if a == b:
-        return True
     ratio = SequenceMatcher(None, a, b).ratio()
     if ratio >= 0.84 and abs(len(a) - len(b)) <= 2:
         return True
@@ -407,13 +410,43 @@ def names_close(left: str, right: str) -> bool:
     return all(len(token) <= 2 for token in extras)
 
 
-def pair_close_names(phones: list[tuple[str, str]], users: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    """Chỉ ghép khi một số khớp đúng một username và ngược lại."""
+def same_person_name(left: str, right: str) -> bool:
+    """Cùng một người theo tên đọc được: khớp chữ, khớp bỏ dấu, hoặc gần giống."""
+    if not left or not right:
+        return False
+    if name_key(left) == name_key(right):
+        return True
+    if fold_marks(left) == fold_marks(right):
+        return True
+    return names_close(left, right)
+
+
+def handle_matches_name(username: str, name: str) -> bool:
+    """Username bắt đầu bằng tên gộp (vd nvchien → @nvchien89). Tên quá ngắn thì bỏ."""
+    handle = clean_username(username).lstrip("@").casefold()
+    compact = _compact(name)
+    if len(compact) < 5 or len(handle) < 5:
+        return False
+    return handle.startswith(compact) or compact.startswith(handle)
+
+
+def pair_close_names(
+    phones: list[tuple[str, str]],
+    users: list[tuple[str, str]],
+    handles: dict[str, str] | None = None,
+) -> list[tuple[str, str]]:
+    """Chỉ ghép khi một số khớp đúng một username và ngược lại.
+
+    handles: id dòng → @username khi id không phải là chính username (ghép lại dữ liệu cũ).
+    """
     phone_hits: dict[str, list[str]] = {}
     user_hits: dict[str, list[str]] = {}
     for phone_id, phone_name in phones:
         for user_id, user_name in users:
-            if not names_close(phone_name, user_name):
+            handle = (handles or {}).get(user_id, user_id if str(user_id).startswith("@") else "")
+            if not same_person_name(phone_name, user_name) and not (
+                handle and handle_matches_name(handle, phone_name)
+            ):
                 continue
             phone_hits.setdefault(phone_id, []).append(user_id)
             user_hits.setdefault(user_id, []).append(phone_id)
@@ -524,20 +557,20 @@ def _collapse_rare_digits(
 
 
 def _pick_from_window(visits: list[_Visit]) -> None:
-    """Không thấy lần bấm: hồ sơ vừa mở thuộc một trong các dòng đang hiện ngay trước đó.
+    """Không thấy lần bấm: hồ sơ vừa mở thuộc một dòng đang hiện trong cùng khung trước đó.
 
-    Chỉ nhận khi đúng một dòng trên màn hình có tên trùng hoặc gần giống tên hồ sơ.
+    Chỉ nhận khi đúng một dòng trên màn hình khớp tên hồ sơ hoặc khớp @username.
     """
     for visit in visits:
         if visit.phone or not visit.window:
             continue
         profile_name = visit.name()
-        if not profile_name:
-            continue
+        username = visit.username()
         matches = {
             phone
             for phone, name in visit.window
-            if name_key(name) == name_key(profile_name) or names_close(name, profile_name)
+            if (profile_name and same_person_name(name, profile_name))
+            or (username and handle_matches_name(username, name))
         }
         if len(matches) == 1:
             visit.phone = next(iter(matches))
@@ -702,9 +735,7 @@ def _apply_visits(
         used_phones.add(phone)
         used_users.add(username)
         claimed_users.add(username)
-        if name_key(contact_name) == name_key(profile_name):
-            display = _prettier(profile_name, contact_name)
-        elif names_close(contact_name, profile_name):
+        if same_person_name(contact_name, profile_name):
             display = joined_name(contact_name, profile_name)
         else:
             display = contact_name
@@ -760,7 +791,37 @@ def _apply_names(
         for username in usernames
         if username not in paired_users
     ]
+
+    # Cùng tên bỏ dấu: một số ↔ một username thì ghép một hàng.
+    phones_by_fold: dict[str, list[str]] = {}
+    users_by_fold: dict[str, list[str]] = {}
+    for phone in left_phones:
+        phones_by_fold.setdefault(fold_marks(phone_name[phone]), []).append(phone)
+    for username in left_users:
+        users_by_fold.setdefault(fold_marks(user_name[username]), []).append(username)
+    for key in set(phones_by_fold) | set(users_by_fold):
+        phones = [phone for phone in phones_by_fold.get(key, []) if phone not in paired_phones]
+        usernames = [username for username in users_by_fold.get(key, []) if username not in paired_users]
+        if len(phones) == 1 and len(usernames) == 1:
+            phone = phones[0]
+            username = usernames[0]
+            paired_phones.add(phone)
+            paired_users.add(username)
+            table.rows.append(Row(phone, joined_name(phone_name[phone], user_name[username]), username))
+
+    left_phones = [phone for phone in left_phones if phone not in paired_phones]
+    left_users = [username for username in left_users if username not in paired_users]
     for phone, username in pair_close_names(
+        [(phone, phone_name[phone]) for phone in left_phones],
+        [(username, user_name[username]) for username in left_users],
+    ):
+        paired_phones.add(phone)
+        paired_users.add(username)
+        table.rows.append(Row(phone, joined_name(phone_name[phone], user_name[username]), username))
+
+    left_phones = [phone for phone in left_phones if phone not in paired_phones]
+    left_users = [username for username in left_users if username not in paired_users]
+    for phone, username in _pair_by_handle(
         [(phone, phone_name[phone]) for phone in left_phones],
         [(username, user_name[username]) for username in left_users],
     ):
@@ -786,6 +847,27 @@ def _apply_names(
             user_name,
             table,
         )
+
+
+def _pair_by_handle(phones: list[tuple[str, str]], users: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Một số khớp đúng một @username qua phần tên trong handle, và ngược lại."""
+    phone_hits: dict[str, list[str]] = {}
+    user_hits: dict[str, list[str]] = {}
+    for phone_id, phone_name in phones:
+        for user_id, _user_name in users:
+            if not handle_matches_name(user_id, phone_name):
+                continue
+            phone_hits.setdefault(phone_id, []).append(user_id)
+            user_hits.setdefault(user_id, []).append(phone_id)
+    pairs = []
+    for phone_id, user_ids in phone_hits.items():
+        if len(user_ids) != 1:
+            continue
+        user_id = user_ids[0]
+        if len(user_hits.get(user_id, [])) != 1:
+            continue
+        pairs.append((phone_id, user_id))
+    return pairs
 
 
 def _emit_unpaired(

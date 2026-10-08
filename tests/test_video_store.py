@@ -15,12 +15,14 @@ from control_plane.video_store import (
     can_accept,
     claim,
     commit_upload,
+    count_results,
     fail,
     finish,
     init_db,
     iter_backup,
     list_videos,
     merge_close_results,
+    merge_same_name_results,
     queued_bytes,
     recover_dead,
     requeue_running,
@@ -194,10 +196,30 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(by_video[0]["video"], "IMG_0018.MOV")
         self.assertEqual(by_video[0]["device"], "iPhone An")
         self.assertTrue(by_video[0]["scanned_at"])
+        self.assertEqual(count_results(self.db, "IMG_0018"), 2)
+        self.assertEqual(len(search_results(self.db, "IMG_0018", limit=1, offset=1)), 1)
         listed = list_videos(self.db)
         self.assertEqual(listed[0]["device"], "iPhone An")
         self.assertEqual(listed[0]["saved_count"], 2)
         self.assertEqual(listed[0]["result_count"], 2)
+
+    def test_same_name_merge_joins_phone_and_username_rows(self) -> None:
+        video_id = self._add("clip.mp4", "merge-handle")
+        finish(
+            self.db,
+            video_id,
+            Table(
+                unopened=[Unopened("0985721500", "uniquehandle")],
+                review=[Review("", "", "OCR lech", "@uniquehandle99", "đã mở hồ sơ nhưng chưa thấy số")],
+            ),
+        )
+        self.assertEqual(stats(self.db)["results"], 2)
+        self.assertEqual(merge_same_name_results(self.db), 1)
+        found = search_results(self.db, "0985721500")[0]
+        self.assertEqual(found["username"], "@uniquehandle99")
+        self.assertEqual(found["bucket"], "Đã lưu")
+        self.assertEqual(stats(self.db)["results"], 1)
+        self.assertEqual(merge_same_name_results(self.db), 0)
 
     def test_finished_video_can_be_uploaded_again_and_reread(self) -> None:
         video_id = self._add("a.mp4", "same")

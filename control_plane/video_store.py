@@ -365,10 +365,19 @@ def merge_close_results(db_path: Path) -> int:
 
     Video mới đã được ghép như vậy trước khi lưu, nên việc quét cả bảng này chỉ chạy một lần cho dữ liệu cũ.
     """
+    return _merge_open_pairs(db_path, meta_key="close_merge")
+
+
+def merge_same_name_results(db_path: Path) -> int:
+    """Ghép lại dữ liệu cũ: cùng tên / bỏ dấu / khớp @username thì gộp một hàng."""
+    return _merge_open_pairs(db_path, meta_key="name_merge_v2")
+
+
+def _merge_open_pairs(db_path: Path, meta_key: str) -> int:
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
-            done = conn.execute("SELECT value FROM meta WHERE key = 'close_merge'").fetchone()
+            done = conn.execute("SELECT value FROM meta WHERE key = ?", (meta_key,)).fetchone()
             if done is not None:
                 conn.execute("COMMIT")
                 return 0
@@ -392,6 +401,7 @@ def merge_close_results(db_path: Path) -> int:
                 pairs = pair_close_names(
                     [(str(row["id"]), row["name"]) for row in phones],
                     [(str(row["id"]), row["name"]) for row in users],
+                    handles={str(row["id"]): str(row["username"]) for row in users},
                 )
                 phone_by = {str(row["id"]): row for row in phones}
                 user_by = {str(row["id"]): row for row in users}
@@ -410,7 +420,7 @@ def merge_close_results(db_path: Path) -> int:
                         continue
                     conn.execute("DELETE FROM results WHERE id = ? AND phone = ''", (user["id"],))
                     merged += 1
-            conn.execute("INSERT INTO meta (key, value) VALUES ('close_merge', ?)", (utcnow(),))
+            conn.execute("INSERT INTO meta (key, value) VALUES (?, ?)", (meta_key, utcnow()))
             conn.execute("COMMIT")
         except Exception:
             conn.execute("ROLLBACK")
@@ -428,11 +438,17 @@ _RESULT_SELECT = """
 """
 
 
-def search_results(db_path: Path, query: str = "", limit: int = 50) -> list[dict[str, object]]:
+def search_results(
+    db_path: Path,
+    query: str = "",
+    limit: int = 50,
+    offset: int = 0,
+) -> list[dict[str, object]]:
     """Tìm theo đầu số, đầu username hoặc tên video. Tìm theo khoảng trên chỉ mục khi có thể."""
     text = "".join(query.split())
     if text.startswith("+84"):
         text = "0" + text[3:]
+    start = max(0, int(offset))
     with connect(db_path) as conn:
         if text.isdigit():
             rows = conn.execute(
@@ -440,9 +456,9 @@ def search_results(db_path: Path, query: str = "", limit: int = 50) -> list[dict
                 + """
                 WHERE r.phone >= ? AND r.phone < ? AND r.phone != ''
                 ORDER BY r.phone
-                LIMIT ?
+                LIMIT ? OFFSET ?
                 """,
-                (text, text + ":", limit),
+                (text, text + ":", limit, start),
             ).fetchall()
         elif text.startswith("@"):
             rows = conn.execute(
@@ -450,9 +466,9 @@ def search_results(db_path: Path, query: str = "", limit: int = 50) -> list[dict
                 + """
                 WHERE r.username >= ? AND r.username < ? AND r.username != ''
                 ORDER BY r.username
-                LIMIT ?
+                LIMIT ? OFFSET ?
                 """,
-                (text, text + "\U0010ffff", limit),
+                (text, text + "\U0010ffff", limit, start),
             ).fetchall()
         elif text:
             video_ids = [
@@ -468,10 +484,10 @@ def search_results(db_path: Path, query: str = "", limit: int = 50) -> list[dict
                     _RESULT_SELECT
                     + f"""
                     WHERE r.video_id IN ({marks})
-                    ORDER BY r.id DESC
-                    LIMIT ?
+                    ORDER BY r.id ASC
+                    LIMIT ? OFFSET ?
                     """,
-                    (*video_ids, limit),
+                    (*video_ids, limit, start),
                 ).fetchall()
             else:
                 handle = "@" + text
@@ -480,20 +496,61 @@ def search_results(db_path: Path, query: str = "", limit: int = 50) -> list[dict
                     + """
                     WHERE r.username >= ? AND r.username < ? AND r.username != ''
                     ORDER BY r.username
-                    LIMIT ?
+                    LIMIT ? OFFSET ?
                     """,
-                    (handle, handle + "\U0010ffff", limit),
+                    (handle, handle + "\U0010ffff", limit, start),
                 ).fetchall()
         else:
             rows = conn.execute(
                 _RESULT_SELECT
                 + """
-                ORDER BY r.id DESC
-                LIMIT ?
+                ORDER BY r.id ASC
+                LIMIT ? OFFSET ?
                 """,
-                (limit,),
+                (limit, start),
             ).fetchall()
     return [_public_result(row) for row in rows]
+
+
+def count_results(db_path: Path, query: str = "") -> int:
+    """Đếm tổng dòng khớp bộ lọc để trang chủ biết còn phải tải tiếp không."""
+    text = "".join(query.split())
+    if text.startswith("+84"):
+        text = "0" + text[3:]
+    with connect(db_path) as conn:
+        if text.isdigit():
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM results WHERE phone >= ? AND phone < ? AND phone != ''",
+                (text, text + ":"),
+            ).fetchone()
+        elif text.startswith("@"):
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM results WHERE username >= ? AND username < ? AND username != ''",
+                (text, text + "\U0010ffff"),
+            ).fetchone()
+        elif text:
+            video_ids = [
+                int(item["id"])
+                for item in conn.execute(
+                    "SELECT id FROM videos WHERE name LIKE ? COLLATE NOCASE ORDER BY id DESC LIMIT 20",
+                    (f"%{text}%",),
+                ).fetchall()
+            ]
+            if video_ids:
+                marks = ",".join("?" for _ in video_ids)
+                row = conn.execute(
+                    f"SELECT COUNT(*) AS n FROM results WHERE video_id IN ({marks})",
+                    video_ids,
+                ).fetchone()
+            else:
+                handle = "@" + text
+                row = conn.execute(
+                    "SELECT COUNT(*) AS n FROM results WHERE username >= ? AND username < ? AND username != ''",
+                    (handle, handle + "\U0010ffff"),
+                ).fetchone()
+        else:
+            row = conn.execute("SELECT COUNT(*) AS n FROM results").fetchone()
+    return int(row["n"])
 
 
 def iter_backup(db_path: Path) -> Iterator[str]:

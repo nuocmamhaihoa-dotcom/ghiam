@@ -15,12 +15,14 @@ from control_plane.screen_table import (
     build_table,
     choose_phone,
     clean_username,
+    handle_matches_name,
     name_key,
     joined_name,
     names_close,
     normalize_phone,
     pair_close_names,
     phone_in_text,
+    same_person_name,
 )
 from control_plane.video_scan import _Planner, write_table
 
@@ -107,6 +109,44 @@ class MergeTests(unittest.TestCase):
         reasons = {item.reason for item in table.review}
         self.assertIn("trùng tên, không tự ghép", reasons)
         self.assertFalse(any(item.username == "@photo.1" and item.phone for item in table.review if item.reason != "trùng tên, không tự ghép"))
+
+    def test_same_frame_window_pairs_by_matching_name(self) -> None:
+        table = build_table(
+            [
+                FrameObs(
+                    "list",
+                    (
+                        ContactHit("0982117072", "Đặng Thị Tâm"),
+                        ContactHit("0332001753", "khactam"),
+                    ),
+                    at=1.0,
+                ),
+                FrameObs("profile", (), "Dang Thi Tam", "@dangtam.3", at=1.4),
+            ]
+        )
+        self.assertEqual(len(table.rows), 1)
+        self.assertEqual(table.rows[0].phone, "0982117072")
+        self.assertEqual(table.rows[0].username, "@dangtam.3")
+        self.assertEqual(table.unopened[0].phone, "0332001753")
+
+    def test_same_frame_window_pairs_by_username_handle(self) -> None:
+        table = build_table(
+            [
+                FrameObs(
+                    "list",
+                    (
+                        ContactHit("0985721500", "nvchien"),
+                        ContactHit("0332001753", "khactam"),
+                    ),
+                    at=2.0,
+                ),
+                FrameObs("profile", (), "OCR lech", "@nvchien89", at=2.3),
+            ]
+        )
+        self.assertEqual(len(table.rows), 1)
+        self.assertEqual(table.rows[0].phone, "0985721500")
+        self.assertEqual(table.rows[0].username, "@nvchien89")
+        self.assertEqual(table.unopened[0].phone, "0332001753")
 
     def test_tap_then_profile_pairs_when_names_match(self) -> None:
         table = build_table(
@@ -231,11 +271,15 @@ class CloseNameTests(unittest.TestCase):
     def test_close_names_skip_short_words_and_different_people(self) -> None:
         self.assertTrue(names_close("Đặng Thị Tâm", "Dang Thi Tam"))
         self.assertTrue(names_close("Hanhnguyen", "ÿHanhnguyen"))
+        self.assertTrue(names_close("nvchien", "nvchien"))
+        self.assertTrue(same_person_name("Đặng Thị Tâm", "Dang Thi Tam"))
+        self.assertTrue(handle_matches_name("@nvchien89", "nvchien"))
         self.assertTrue(names_close("Lò Thị Việt", "Lo Thi e Viet nt"))
         self.assertTrue(names_close("sỹ hoa hồng trắng", "hoa hồng trắng"))
         self.assertTrue(names_close("Phuong Le44036", "Phuong Le4405ó"))
         self.assertFalse(names_close("tân", "Tuấn"))
         self.assertFalse(names_close("liên", "lien"))
+        self.assertFalse(handle_matches_name("@anh.1", "Anh"))
         self.assertFalse(names_close("Lý Mai Trang", "hoa hồng trắng"))
         self.assertFalse(names_close("Nhat anh", "Thái Thành"))
         self.assertFalse(names_close("KIÊN NGUYỄN TẤN", "KIEN NGUYEN"))

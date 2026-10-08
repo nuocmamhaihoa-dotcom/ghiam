@@ -26,6 +26,7 @@ from control_plane.video_store import (
     finish,
     init_db,
     merge_close_results,
+    merge_same_name_results,
     requeue,
     requeue_running,
     touch_heartbeat,
@@ -88,6 +89,7 @@ def main() -> None:
     db_path = settings.video_db_path
     init_db(db_path)
     merge_close_results(db_path)
+    merge_same_name_results(db_path)
     requeue_running(db_path, os.getpid())
     work_dir = settings.data_dir / "frames"
     shutil.rmtree(work_dir, ignore_errors=True)

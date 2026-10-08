@@ -24,6 +24,7 @@ from control_plane.video_store import (
     can_accept,
     clean_device,
     commit_upload,
+    count_results,
     init_db,
     iter_backup,
     list_videos,
@@ -176,12 +177,14 @@ def retry_video(video_id: int, authorization: str | None = Header(default=None))
 def results(
     authorization: str | None = Header(default=None),
     q: str = "",
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=1000, ge=1, le=5000),
+    offset: int = Query(default=0, ge=0),
 ) -> dict[str, object]:
     _auth(authorization)
     init_db(settings.video_db_path)
-    items = search_results(settings.video_db_path, q, limit)
-    return {"count": len(items), "items": items}
+    items = search_results(settings.video_db_path, q, limit, offset)
+    total = count_results(settings.video_db_path, q)
+    return {"count": len(items), "total": total, "offset": offset, "items": items}
 
 
 @router.post("/v1/backup/ticket")
