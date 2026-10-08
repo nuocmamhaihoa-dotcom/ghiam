@@ -13,6 +13,7 @@ from control_plane.screen_table import (
     ContactHit,
     FrameObs,
     build_table,
+    choose_phone,
     clean_username,
     name_key,
     joined_name,
@@ -21,7 +22,7 @@ from control_plane.screen_table import (
     pair_close_names,
     phone_in_text,
 )
-from control_plane.video_scan import keep_stable, write_table
+from control_plane.video_scan import keep_stable, voting_frames, write_table
 
 
 def frame_list(*hits: ContactHit) -> FrameObs:
@@ -44,6 +45,11 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(normalize_phone("0982117O72"), "0982117072")
         self.assertEqual(normalize_phone("08251500"), "")
         self.assertEqual(normalize_phone("0123456789"), "")
+        self.assertEqual(normalize_phone("0801234567"), "")
+        self.assertEqual(normalize_phone("0711234567"), "")
+        self.assertEqual(normalize_phone("0861234567"), "0861234567")
+        self.assertEqual(choose_phone("0982117072", "0982117075", "0982117072"), "0982117072")
+        self.assertEqual(choose_phone("0982117075", "0982117072", "0982117072"), "0982117072")
         self.assertEqual(phone_in_text("0982117072 Đặng"), "0982117072")
         self.assertEqual(phone_in_text("316 242 0"), "")
         self.assertEqual(clean_username("@dangtam.3"), "@dangtam.3")
@@ -258,6 +264,36 @@ class CloseNameTests(unittest.TestCase):
         self.assertFalse(table.unopened)
 
 
+class ReadGuardTests(unittest.TestCase):
+    def test_one_bad_frame_does_not_create_a_second_number(self) -> None:
+        frames = [frame_list(ContactHit("0982117072", "Đặng Thị Tâm")) for _ in range(4)]
+        frames.append(frame_list(ContactHit("0982117075", "Đặng Thị Tâm")))
+        frames.append(frame_profile("Đặng Thị Tâm", "@dangtam.3"))
+        table = build_table(frames)
+        phones = [row.phone for row in table.rows]
+        phones += [item.phone for item in table.unopened]
+        phones += [item.phone for item in table.review]
+        self.assertIn("0982117072", phones)
+        self.assertNotIn("0982117075", phones)
+
+    def test_two_real_numbers_one_digit_apart_both_stay(self) -> None:
+        frame = frame_list(
+            ContactHit("0865299758", "Lý Mai Trang"),
+            ContactHit("0865299738", "Lý Mai Trang"),
+        )
+        table = build_table([frame, frame, frame])
+        phones = [item.phone for item in table.unopened + table.review]
+        phones += [row.phone for row in table.rows]
+        self.assertIn("0865299758", phones)
+        self.assertIn("0865299738", phones)
+
+    def test_single_letter_name_is_dropped(self) -> None:
+        table = build_table([frame_list(ContactHit("0982117072", "K"))])
+        self.assertEqual(table.rows, [])
+        self.assertEqual(table.unopened, [])
+        self.assertEqual(table.review, [])
+
+
 class NameChoiceTests(unittest.TestCase):
     def test_keeps_digits_and_marks_from_the_clearer_read(self) -> None:
         self.assertEqual(_choose_name("tinh", "tinh11"), "tinh11")
@@ -310,6 +346,13 @@ class StableFrameTests(unittest.TestCase):
         other = np.full((8, 8), 2, dtype=np.float32)
         frames = [still, still, other, other]
         self.assertEqual(keep_stable(frames), [0, 2])
+
+    def test_stable_scene_keeps_a_second_frame_for_a_vote(self) -> None:
+        still_a = np.zeros((8, 8), dtype=np.float32)
+        still_b = np.full((8, 8), 40, dtype=np.float32)
+        motion = np.full((8, 8), 20, dtype=np.float32)
+        frames = [still_a, still_a, motion, still_b, still_b]
+        self.assertEqual(voting_frames(frames), [0, 1, 3, 4])
 
 
 if __name__ == "__main__":

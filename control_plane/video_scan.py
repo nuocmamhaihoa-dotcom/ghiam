@@ -77,10 +77,24 @@ def stable_video_frames(path: Path, folder: Path, fps: float = 3.0) -> list[Path
     if not extracted:
         raise RuntimeError(f"Video {path.name} không có khung hình.")
     thumbs = [_thumb(item) for item in extracted]
-    chosen = keep_stable(thumbs)
+    chosen = voting_frames(thumbs)
     if not chosen:
         chosen = [0]
     return [extracted[index] for index in chosen]
+
+
+def voting_frames(frames: list[np.ndarray]) -> list[int]:
+    """Mỗi cảnh đứng yên lấy thêm một khung liền sau để hai lần đọc phải trùng số."""
+    chosen = keep_stable(frames)
+    picked = set(chosen)
+    for index in chosen:
+        nxt = index + 1
+        if nxt >= len(frames) or nxt in picked:
+            continue
+        if _mean_abs(frames[index], frames[nxt]) >= 3.5:
+            continue
+        picked.add(nxt)
+    return sorted(picked)
 
 
 def keep_stable(frames: list[np.ndarray], settled: float = 3.5, changed: float = 1.2) -> list[int]:

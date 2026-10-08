@@ -14,18 +14,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image, ImageFilter, ImageOps
 
 from control_plane.screen_table import (
     ContactHit,
     FrameObs,
+    choose_phone,
     clean_name,
     clean_username,
     fold_marks,
     is_skipped,
     mark_count,
     name_key,
-    normalize_phone,
     phone_in_text,
 )
 
@@ -233,9 +233,8 @@ def _read_row(image: Image.Image, button: Box, anchor_x: int, anchor_w: int) -> 
     phone, draft, name_box, phone_box = _phone_and_name(words)
     if not phone or not draft:
         return None
-    reread = _ocr_phone(image, phone_box) if phone_box else ""
-    if reread:
-        phone = reread
+    if phone_box:
+        phone = _ocr_phone(image, phone_box, phone) or phone
     refined = _ocr_line(image, name_box) if name_box else ""
     name = _choose_name(draft, refined)
     if not name or is_skipped(name):
@@ -261,6 +260,10 @@ def _read_profile(image: Image.Image, button: Box) -> tuple[str, str]:
             handle_at = index
             username = found
             break
+    if handle_at >= 0:
+        reread = _ocr_handle(image, lines[handle_at].box)
+        if reread:
+            username = reread
     if not username:
         return "", ""
     draft = ""
@@ -397,31 +400,65 @@ def _ocr_words(image: Image.Image, box: Box, lang: str, psm: int) -> list[Word]:
     return words
 
 
-def _ocr_phone(image: Image.Image, box: Box) -> str:
-    """Đọc lại riêng dòng số. Đọc chung với tên dễ nhầm 3 thành 5."""
-    x0 = max(0, box.x0 - 6)
-    y0 = max(0, box.y0 - 4)
-    x1 = min(image.width, box.x1 + 6)
-    y1 = min(image.height, box.y1 + 4)
-    crop = image.crop((x0, y0, x1, y1))
-    if crop.height < 48:
-        crop = crop.resize((crop.width * 2, crop.height * 2), Image.Resampling.LANCZOS)
+def _enhance(crop: Image.Image, scale: int) -> Image.Image:
+    gray = ImageOps.autocontrast(crop.convert("L")).filter(ImageFilter.SHARPEN)
+    if scale > 1 and crop.width > 0 and crop.height > 0:
+        gray = gray.resize((crop.width * scale, crop.height * scale), Image.Resampling.LANCZOS)
+    return gray.convert("RGB")
+
+
+def _binarize(crop: Image.Image, scale: int) -> Image.Image:
+    gray = ImageOps.autocontrast(crop.convert("L"))
+    bw = gray.point(lambda pixel: 255 if pixel >= 160 else 0)
+    if scale > 1 and crop.width > 0 and crop.height > 0:
+        bw = bw.resize((crop.width * scale, crop.height * scale), Image.Resampling.NEAREST)
+    return bw.convert("RGB")
+
+
+def _pad(crop: Image.Image) -> Image.Image:
     canvas = Image.new("RGB", (crop.width + 24, crop.height + 24), "white")
     canvas.paste(crop, (12, 12))
-    return normalize_phone(_tesseract(canvas, "eng", 7, tsv=False, whitelist="0123456789"))
+    return canvas
+
+
+def _crop(image: Image.Image, box: Box, pad_x: int, pad_y: int) -> Image.Image:
+    return image.crop(
+        (
+            max(0, box.x0 - pad_x),
+            max(0, box.y0 - pad_y),
+            min(image.width, box.x1 + pad_x),
+            min(image.height, box.y1 + pad_y),
+        )
+    )
+
+
+def _ocr_phone(image: Image.Image, box: Box, line_read: str = "") -> str:
+    """Đọc lại riêng dòng số. Chỉ giữ chữ số khi hai cách đọc trùng nhau."""
+    crop = _crop(image, box, 6, 4)
+    gray = _tesseract(_pad(_enhance(crop, 3)), "eng", 7, tsv=False, whitelist="0123456789")
+    binary = _tesseract(_pad(_binarize(crop, 3)), "eng", 7, tsv=False, whitelist="0123456789")
+    return choose_phone(line_read, gray, binary)
+
+
+def _ocr_handle(image: Image.Image, box: Box) -> str:
+    """Username chỉ có chữ tiếng Anh và số. Đọc bằng tiếng Việt dễ biến 6 thành ó."""
+    crop = _crop(image, box, 8, 6)
+    text = _tesseract(
+        _pad(_enhance(crop, 3)),
+        "eng",
+        7,
+        tsv=False,
+        whitelist="@._0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    )
+    compact = "".join(text.split())
+    if compact and not compact.startswith("@"):
+        compact = "@" + compact
+    return clean_username(_username_token(compact) or compact)
 
 
 def _ocr_line(image: Image.Image, box: Box) -> str:
-    x0 = max(0, box.x0 - 8)
-    y0 = max(0, box.y0 - 6)
-    x1 = min(image.width, box.x1 + 8)
-    y1 = min(image.height, box.y1 + 6)
-    crop = image.crop((x0, y0, x1, y1))
-    if crop.height < 72:
-        crop = crop.resize((crop.width * 2, crop.height * 2), Image.Resampling.LANCZOS)
-    canvas = Image.new("RGB", (crop.width + 24, crop.height + 24), "white")
-    canvas.paste(crop, (12, 12))
-    return _tesseract(canvas, "vie", 7, tsv=False)
+    crop = _crop(image, box, 8, 6)
+    return _tesseract(_pad(_enhance(crop, 2)), "vie", 7, tsv=False)
 
 
 def _tesseract(image: Image.Image, lang: str, psm: int, tsv: bool, whitelist: str = "") -> str:
@@ -429,7 +466,7 @@ def _tesseract(image: Image.Image, lang: str, psm: int, tsv: bool, whitelist: st
         path = handle.name
     try:
         image.save(path)
-        command = ["tesseract", path, "stdout", "-l", lang, "--psm", str(psm)]
+        command = ["tesseract", path, "stdout", "-l", lang, "--psm", str(psm), "-c", "user_defined_dpi=300"]
         if whitelist:
             command.extend(["-c", f"tessedit_char_whitelist={whitelist}"])
         if tsv:

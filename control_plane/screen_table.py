@@ -130,7 +130,7 @@ def mark_count(name: str) -> int:
 
 
 def clean_name(value: str) -> str:
-    text = unicodedata.normalize("NFC", str(value or ""))
+    text = unicodedata.normalize("NFC", str(value or "")).replace("ÿ", "y").replace("Ÿ", "Y")
     kept = []
     for ch in text:
         if ch.isalnum() or ch.isspace() or ch in "._-":
@@ -145,6 +145,9 @@ def is_skipped(name: str) -> bool:
     if not folded or folded in SKIP_FOLDED:
         return True
     if folded.replace(" ", "").isdigit():
+        return True
+    letters = "".join(ch for ch in folded if ch.isalpha())
+    if len(letters) < 2:
         return True
     return False
 
@@ -161,6 +164,18 @@ def clean_username(value: str) -> str:
     if handle.startswith(".") or handle.endswith("."):
         return ""
     return "@" + handle
+
+
+# Đầu số di động Việt Nam đang cấp. Đầu số không có trong danh sách là chữ số đọc nhầm.
+MOBILE_PREFIXES = frozenset(
+    {
+        "032", "033", "034", "035", "036", "037", "038", "039",
+        "052", "055", "056", "058", "059",
+        "070", "076", "077", "078", "079",
+        "081", "082", "083", "084", "085", "086", "087", "088", "089",
+        "090", "091", "092", "093", "094", "096", "097", "098", "099",
+    }
+)
 
 
 def normalize_phone(raw: str) -> str:
@@ -182,9 +197,28 @@ def normalize_phone(raw: str) -> str:
     text = "".join(digits)
     if len(text) == 11 and text.startswith("84"):
         text = "0" + text[2:]
-    if len(text) == 10 and text[0] == "0" and text[1] in "35789":
+    if len(text) == 10 and text[:3] in MOBILE_PREFIXES:
         return text
     return ""
+
+
+def choose_phone(*reads: str) -> str:
+    """Giữ số khi ít nhất hai lần đọc ra cùng một kết quả. Lệch nhau thì lấy lần đọc sau."""
+    found: list[str] = []
+    for item in reads:
+        phone = normalize_phone(item)
+        if phone:
+            found.append(phone)
+    if not found:
+        return ""
+    counts: dict[str, int] = {}
+    for phone in found:
+        counts[phone] = counts.get(phone, 0) + 1
+    best = max(counts.values())
+    if best >= 2:
+        agreed = [phone for phone in found if counts[phone] == best]
+        return agreed[-1]
+    return found[-1]
 
 
 def phone_in_text(value: str) -> str:
@@ -327,7 +361,9 @@ def build_table(frames: list[FrameObs]) -> Table:
     profiles: dict[str, _Tally] = {}
     phone_seen: dict[str, int] = {}
     user_seen: dict[str, int] = {}
-    visits = _walk(frames, contacts, phone_seen)
+    phone_hits: dict[str, int] = {}
+    visits = _walk(frames, contacts, phone_seen, phone_hits)
+    _collapse_rare_digits(contacts, phone_hits, phone_seen, visits)
 
     for index, visit in enumerate(visits):
         username = visit.username()
@@ -352,10 +388,66 @@ def build_table(frames: list[FrameObs]) -> Table:
     return table
 
 
+def _digit_hamming(left: str, right: str) -> int:
+    if len(left) != len(right):
+        return 99
+    return sum(a != b for a, b in zip(left, right))
+
+
+def _collapse_rare_digits(
+    contacts: dict[str, _Tally],
+    phone_hits: dict[str, int],
+    phone_seen: dict[str, int],
+    visits: list[_Visit],
+) -> None:
+    """Một khung đọc lệch một chữ số thì gộp vào số đã thấy nhiều lần, cùng tên."""
+    redirect: dict[str, str] = {}
+    for weak in sorted(phone_hits, key=lambda phone: (phone_hits[phone], phone)):
+        best_strong = ""
+        best_hits = 0
+        for strong, hits in phone_hits.items():
+            if strong == weak or hits < 3 or hits < phone_hits[weak] * 2 or hits <= best_hits:
+                continue
+            if _digit_hamming(strong, weak) != 1:
+                continue
+            weak_name = contacts[weak].best() if weak in contacts else ""
+            strong_name = contacts[strong].best() if strong in contacts else ""
+            same = name_key(weak_name) == name_key(strong_name) or names_close(weak_name, strong_name)
+            if weak_name and strong_name and not same:
+                continue
+            best_strong = strong
+            best_hits = hits
+        if best_strong:
+            redirect[weak] = best_strong
+
+    def target(phone: str) -> str:
+        seen: set[str] = set()
+        while phone in redirect and phone not in seen:
+            seen.add(phone)
+            phone = redirect[phone]
+        return phone
+
+    for weak in sorted(redirect, key=lambda phone: phone_hits.get(phone, 0)):
+        strong = target(weak)
+        if strong == weak:
+            continue
+        weak_tally = contacts.pop(weak, None)
+        if weak_tally is not None and weak_tally.best():
+            strong_tally = contacts.setdefault(strong, _Tally())
+            for _ in range(max(1, phone_hits.get(weak, 1))):
+                strong_tally.add(weak_tally.best())
+        phone_hits[strong] = phone_hits.get(strong, 0) + phone_hits.pop(weak, 0)
+        phone_seen.pop(weak, None)
+        for visit in visits:
+            if visit.phone == weak:
+                visit.phone = strong
+
+
 def _walk(
     frames: list[FrameObs],
     contacts: dict[str, _Tally],
     phone_seen: dict[str, int],
+    phone_hits: dict[str, int],
 ) -> list[_Visit]:
     phase = "none"
     armed = ""
@@ -388,6 +480,7 @@ def _walk(
                     contacts[phone] = tally
                     phone_seen[phone] = frame_index
                 tally.add(name)
+                phone_hits[phone] = phone_hits.get(phone, 0) + 1
                 if hit.selected:
                     if selected:
                         multi = True
