@@ -292,7 +292,9 @@ def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
               v.id, v.name, v.size_bytes, v.status, v.error, v.created_at, v.started_at, v.finished_at,
               v.device, v.progress, v.progress_at,
               COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id), 0) AS result_count,
-              COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.bucket = 1), 0) AS saved_count
+              COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.bucket = 1), 0) AS saved_count,
+              COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.bucket = 2), 0) AS review_count,
+              COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.bucket = 3), 0) AS unopened_count
             FROM videos v
             ORDER BY v.id DESC
             LIMIT ?
@@ -521,6 +523,7 @@ def merge_same_name_results(db_path: Path) -> int:
 
 def _rematch_conn(conn: sqlite3.Connection, video_id: int | None = None) -> int:
     merged = 0
+    merged += _promote_phone_username_reviews(conn, video_id)
     merged += _absorb_ocr_phone_twins(conn, video_id)
     if video_id is None:
         rows = conn.execute(
@@ -559,7 +562,38 @@ def _rematch_conn(conn: sqlite3.Connection, video_id: int | None = None) -> int:
         users = [row for row in leftovers if row["username"] and not row["phone"]]
         merged += _merge_pair_group(conn, phones, users)
     merged += _absorb_ocr_phone_twins(conn, video_id)
+    merged += _promote_phone_username_reviews(conn, video_id)
     return merged
+
+
+def _promote_phone_username_reviews(conn: sqlite3.Connection, video_id: int | None = None) -> int:
+    """Hàng đã có số + @ nhưng từng bị xếp 'Cần xem' vì OCR không đọc tên hồ sơ → đủ 3 cột."""
+    if video_id is None:
+        cur = conn.execute(
+            """
+            UPDATE results
+            SET bucket = ?, reason = ''
+            WHERE bucket = ?
+              AND phone != ''
+              AND username != ''
+              AND reason = 'không đọc được tên hồ sơ'
+            """,
+            (BUCKET_OK, BUCKET_REVIEW),
+        )
+    else:
+        cur = conn.execute(
+            """
+            UPDATE results
+            SET bucket = ?, reason = ''
+            WHERE video_id = ?
+              AND bucket = ?
+              AND phone != ''
+              AND username != ''
+              AND reason = 'không đọc được tên hồ sơ'
+            """,
+            (BUCKET_OK, video_id, BUCKET_REVIEW),
+        )
+    return cur.rowcount
 
 
 def _absorb_ocr_phone_twins(conn: sqlite3.Connection, video_id: int | None = None) -> int:
@@ -888,13 +922,22 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
             (item.phone,),
         ).fetchone()
         if existing is not None:
-            # Số đang "chưa mở hồ sơ" mà video sau đã mở được hồ sơ: giữ username lại để người xem quyết định.
+            # Số đang "chưa mở hồ sơ" mà video sau đã mở được @ → đủ 3 cột nếu đã có username.
             if int(existing["bucket"]) == BUCKET_UNOPENED and item.username and not existing["username"]:
+                bucket = BUCKET_OK if item.username else BUCKET_REVIEW
                 conn.execute(
                     "UPDATE results SET username = ?, bucket = ?, reason = ?, video_id = ? WHERE id = ?",
-                    (item.username, BUCKET_REVIEW, item.reason, video_id, existing["id"]),
+                    (
+                        item.username,
+                        bucket,
+                        "" if bucket == BUCKET_OK else item.reason,
+                        video_id,
+                        existing["id"],
+                    ),
                 )
             return
+        # Đã có số + @ thì là hàng đủ; chỉ giữ "Cần xem" khi thiếu một trong hai hoặc mở nhiều hồ sơ.
+        complete = bool(item.phone and item.username and item.reason == "không đọc được tên hồ sơ")
         conn.execute(
             """
             INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
@@ -904,8 +947,8 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
                 item.phone,
                 item.contact_name or item.profile_name,
                 item.username,
-                BUCKET_REVIEW,
-                item.reason,
+                BUCKET_OK if complete else BUCKET_REVIEW,
+                "" if complete else item.reason,
                 video_id,
                 utcnow(),
             ),

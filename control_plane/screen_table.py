@@ -754,10 +754,11 @@ def _apply_visits(
         if not phone or not username or phone not in phone_name:
             continue
         if username not in user_name:
+            # Đã có số + tên danh bạ + @ — đủ 3 cột dù OCR không đọc được tên trên trang hồ sơ.
             if phone not in used_phones:
                 used_phones.add(phone)
                 used_users.add(username)
-                table.review.append(Review(phone, phone_name[phone], "", username, "không đọc được tên hồ sơ"))
+                table.rows.append(Row(phone, phone_name[phone], username))
             continue
         if phone in grouped and username in grouped[phone]:
             continue

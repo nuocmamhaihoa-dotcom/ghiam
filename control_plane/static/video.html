@@ -61,8 +61,9 @@
       <p class="note">Tên này gắn vào mọi kết quả của video bạn tải lên từ máy này.</p>
     </div>
     <p class="note" style="margin-bottom:0.7rem">
-      Để có đủ <b>số + tên + @username</b> trên một hàng: trong video hãy <b>mở hồ sơ</b> từng người.
-      Chỉ lướt danh bạ thì chỉ có số và tên, không có @.
+      <b>Hàng đủ</b> = số + tên + @username. Trong video phải <b>bấm mở hồ sơ</b> từng người rồi quay trang hồ sơ.
+      Chỉ lướt danh bạ thì máy chủ vẫn lưu số/tên nhưng xếp vào <b>Chưa mở hồ sơ</b> (không có @) — đó là lý do
+      “đủ” thường ít hơn tổng “dòng”.
     </p>
     <div class="drop" id="drop">
       <p>Kéo nhiều video vào đây</p>
@@ -218,7 +219,12 @@
       }
       var resultText = "—";
       if (item.status === "done") {
-        resultText = (item.saved_count || 0) + " đủ / " + (item.result_count || 0) + " dòng";
+        var saved = item.saved_count || 0;
+        var review = item.review_count || 0;
+        var unopened = item.unopened_count || 0;
+        resultText = saved + " đủ";
+        if (review) resultText += " · " + review + " cần xem";
+        if (unopened) resultText += " · " + unopened + " chưa mở";
         resultText += " <button class='ghost' type='button' data-filter='" + escapeHtml(item.name) + "'>Xem</button>";
       }
       html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + escapeHtml(item.device || "") + "</td><td>" + statusText(item.status) + progress + retry + "</td><td>" + resultText + "</td></tr>";

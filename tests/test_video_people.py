@@ -177,6 +177,21 @@ class MergeTests(unittest.TestCase):
         self.assertFalse(table.review)
         self.assertEqual(table.unopened, [])
 
+    def test_missing_profile_name_still_makes_complete_row(self) -> None:
+        """OCR không đọc tên trên trang hồ sơ nhưng đã có số + tên danh bạ + @ → hàng đủ."""
+        table = build_table(
+            [
+                frame_list(ContactHit("0982117072", "Đặng Thị Tâm", selected=True)),
+                frame_profile("", "@dangtam.3"),
+            ]
+        )
+        self.assertEqual(len(table.rows), 1)
+        self.assertEqual(table.rows[0].phone, "0982117072")
+        self.assertEqual(table.rows[0].name, "Đặng Thị Tâm")
+        self.assertEqual(table.rows[0].username, "@dangtam.3")
+        self.assertFalse(table.review)
+        self.assertFalse(table.unopened)
+
     def test_second_profile_without_returning_to_list_is_not_the_same_tap(self) -> None:
         table = build_table(
             [

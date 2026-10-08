@@ -281,8 +281,31 @@ class VideoStoreTests(unittest.TestCase):
         )
         found = search_results(self.db, "0332001753")[0]
         self.assertEqual(found["username"], "@khactam60")
-        self.assertEqual(found["bucket"], "Cần xem")
-        self.assertEqual((stats(self.db)["review"], stats(self.db)["unopened"]), (1, 0))
+        # Đã có số + tên + @ → hàng đủ, không còn nằm ở Cần xem.
+        self.assertEqual(found["bucket"], "Đã lưu")
+        self.assertEqual((stats(self.db)["saved"], stats(self.db)["unopened"]), (1, 0))
+
+    def test_rematch_promotes_old_phone_username_reviews(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        finish(
+            self.db,
+            video_id,
+            Table(review=[Review("0332001753", "khactam", "", "@khactam60", "một số mở nhiều hồ sơ")]),
+        )
+        # Giả lập dữ liệu cũ còn reason OCR tên hồ sơ.
+        from control_plane.video_store import connect, rematch_results
+
+        with connect(self.db) as conn:
+            conn.execute(
+                "UPDATE results SET reason = 'không đọc được tên hồ sơ', bucket = 2 WHERE phone = '0332001753'"
+            )
+        self.assertEqual(rematch_results(self.db), 1)
+        found = search_results(self.db, "0332001753")[0]
+        self.assertEqual(found["bucket"], "Đã lưu")
+        self.assertEqual(found["username"], "@khactam60")
+        items = list_videos(self.db)
+        self.assertEqual(items[0]["saved_count"], 1)
+        self.assertEqual(items[0]["review_count"], 0)
 
     def test_startup_returns_half_read_videos_to_the_queue(self) -> None:
         self._add("a.mp4", "a")
