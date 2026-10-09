@@ -168,12 +168,80 @@ def read_pillow(image: Image.Image) -> FrameObs:
             return FrameObs("list", contacts)
         return FrameObs("unknown")
     profile = _profile_button(buttons, width, height)
-    if profile is None:
-        return FrameObs("unknown")
-    name, username = _read_profile(image, profile)
-    if not username:
-        return FrameObs("unknown")
-    return FrameObs("profile", (), name, username)
+    if profile is not None:
+        name, username = _read_profile(image, profile)
+        if username:
+            return FrameObs("profile", (), name, username)
+    # P2: không thấy / không đọc được nút Follow — vẫn săn @ ở vùng đầu trang hồ sơ.
+    name, username = _hunt_profile_handle(image)
+    if username:
+        return FrameObs("profile", (), name, username)
+    return FrameObs("unknown")
+
+
+def _hunt_profile_handle(image: Image.Image) -> tuple[str, str]:
+    """Đọc @username khi layout hồ sơ không nhận ra nút Follow hồng.
+
+    Chỉ lấy vùng trên màn hình (header hồ sơ). Cần handle hợp lệ (≥3 ký tự sau @).
+    """
+    width, height = image.size
+    if width < 80 or height < 80:
+        return "", ""
+    header = Box(
+        max(0, int(0.04 * width)),
+        max(0, int(0.06 * height)),
+        min(width, int(0.82 * width)),
+        min(height, int(0.48 * height)),
+    )
+    if header.w < 40 or header.h < 40:
+        return "", ""
+    raw = image.crop((header.x0, header.y0, header.x1, header.y1))
+    passes: list[tuple[Image.Image, int, int]] = [
+        (raw, 6, 15),
+        (_enhance(raw, 2), 7, 10),
+    ]
+    for crop, psm, min_conf in passes:
+        words = _batch([crop], "vie+eng", psm)[0]
+        scale_x = header.w / max(1, crop.width)
+        scale_y = header.h / max(1, crop.height)
+        shifted: list[Word] = []
+        for word in words:
+            if word.conf < min_conf:
+                continue
+            box = word.box
+            mapped = Box(
+                header.x0 + int(box.x0 * scale_x),
+                header.y0 + int(box.y0 * scale_y),
+                header.x0 + int(box.x1 * scale_x),
+                header.y0 + int(box.y1 * scale_y),
+            )
+            shifted.append(Word(word.text, word.conf, mapped))
+        lines = _lines(shifted)
+        handle_at = -1
+        username = ""
+        for index, line in enumerate(lines):
+            found = clean_username(_username_token(line.text))
+            if found and len(found) >= 4:  # "@" + ≥3
+                handle_at = index
+                username = found
+                break
+        if handle_at < 0:
+            continue
+        reread = _read_handle(image, lines[handle_at].box)
+        if reread and len(reread) >= 4:
+            username = reread
+        handle_y = lines[handle_at].box.center_y()
+        draft = ""
+        for line in reversed(lines[:handle_at]):
+            if line.box.center_y() >= handle_y:
+                continue
+            text = clean_name(line.text)
+            if not text or is_skipped(text) or phone_in_text(text):
+                continue
+            draft = text
+            break
+        return choose_name(draft), username
+    return "", ""
 
 
 def read_tap(paths: list[str | Path]) -> FrameObs:

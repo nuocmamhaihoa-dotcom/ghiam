@@ -465,15 +465,32 @@ class TapFrameTests(unittest.TestCase):
         )
         self.assertEqual([(row.phone, row.username) for row in table.rows], [("0332001753", "@nguoila")])
 
-    def test_tap_followed_by_more_list_is_not_used(self) -> None:
+    def test_tap_followed_by_transition_list_still_pairs(self) -> None:
+        """P1: sau khi bấm, vài khung list chuyển cảnh vẫn giữ SĐT để ghép @."""
         table = build_table(
             [
                 FrameObs("tap", (ContactHit("0332001753", "khactam", True),), at=2.0),
-                FrameObs("list", (ContactHit("0982117072", "Đặng Thị Tâm"),), at=2.5),
+                FrameObs("list", (ContactHit("0982117072", "Đặng Thị Tâm"), ContactHit("0332001753", "khactam")), at=2.5),
                 FrameObs("profile", (), "Người lạ", "@nguoila", at=3.0),
             ]
         )
-        self.assertEqual(table.rows, [])
+        self.assertEqual([(row.phone, row.username) for row in table.rows], [("0332001753", "@nguoila")])
+
+    def test_two_taps_two_profiles_pair_in_time_order(self) -> None:
+        """P1: mở lần lượt — ghép theo thời gian, không cần khớp tên."""
+        table = build_table(
+            [
+                FrameObs("tap", (ContactHit("0900000001", "Alpha", True),), at=1.0),
+                FrameObs("profile", (), "Tên A", "@user_a", at=1.5),
+                FrameObs("tap", (ContactHit("0900000002", "Beta", True),), at=2.0),
+                FrameObs("profile", (), "Tên B", "@user_b", at=2.4),
+            ]
+        )
+        ready = {row.phone: row.username for row in table.rows}
+        self.assertEqual(ready["0900000001"], "@user_a")
+        self.assertEqual(ready["0900000002"], "@user_b")
+        self.assertFalse(table.unopened)
+        self.assertFalse(table.review)
 
     def test_profile_long_after_the_tap_is_not_paired(self) -> None:
         table = build_table(

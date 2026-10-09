@@ -108,6 +108,7 @@ class _Visit:
     names: _Tally = field(default_factory=_Tally)
     usernames: dict[str, int] = field(default_factory=dict)
     window: tuple[tuple[str, str], ...] = ()
+    at: float = -1.0
 
     def username(self) -> str:
         if not self.usernames:
@@ -116,6 +117,15 @@ class _Visit:
 
     def name(self) -> str:
         return self.names.best()
+
+
+@dataclass
+class _PhoneCue:
+    """SĐT vừa bấm / vừa chọn — chờ ghép với @ theo thời gian (P1)."""
+
+    phone: str
+    at: float
+    window: tuple[tuple[str, str], ...] = ()
 
 
 def name_key(name: str) -> str:
@@ -470,6 +480,7 @@ def build_table(frames: list[FrameObs]) -> Table:
     shown: dict[str, set[int]] = {}
     visits = _walk(frames, contacts, phone_seen, phone_hits, shown)
     _pick_from_window(visits)
+    _pair_orphan_visits_by_time(visits)
     _collapse_rare_digits(contacts, phone_hits, phone_seen, visits, shown)
 
     for index, visit in enumerate(visits):
@@ -632,6 +643,12 @@ def _pick_from_window(visits: list[_Visit]) -> None:
 TAP_TO_PROFILE_SECONDS = 8.0
 
 
+def _cue_still_fresh(cue_at: float, profile_at: float) -> bool:
+    if cue_at < 0 or profile_at < 0:
+        return True
+    return profile_at - cue_at <= TAP_TO_PROFILE_SECONDS
+
+
 def _walk(
     frames: list[FrameObs],
     contacts: dict[str, _Tally],
@@ -643,15 +660,67 @@ def _walk(
     armed = ""
     clear_run = 0
     tap_at: float | None = None
+    held_by_tap = False
     window: tuple[tuple[str, str], ...] = ()
     visits: list[_Visit] = []
     open_visit: _Visit | None = None
+    # P1: hàng đợi SĐT theo thời gian — không phụ thuộc khớp tên.
+    cues: list[_PhoneCue] = []
 
     def close() -> None:
         nonlocal open_visit
         if open_visit and open_visit.username():
             visits.append(open_visit)
         open_visit = None
+
+    def arm(phone: str, name: str, at: float, from_tap: bool) -> None:
+        nonlocal armed, clear_run, tap_at, window, held_by_tap
+        armed = phone
+        clear_run = 0
+        held_by_tap = from_tap or held_by_tap
+        if from_tap:
+            tap_at = at
+            held_by_tap = True
+        elif tap_at is None:
+            tap_at = at
+        if all(item[0] != phone for item in window):
+            window = window + ((phone, name),)
+        cue = _PhoneCue(phone=phone, at=at, window=window)
+        if from_tap or not cues or cues[-1].phone != phone:
+            cues.append(cue)
+        else:
+            cues[-1] = cue
+
+    def take_phone_for_profile(profile_at: float) -> tuple[str, tuple[tuple[str, str], ...]]:
+        """Lấy SĐT đang armed hoặc cue gần nhất còn trong cửa sổ thời gian."""
+        nonlocal armed, clear_run, tap_at, held_by_tap
+        phone = ""
+        visit_window: tuple[tuple[str, str], ...] = window if phase == "list" else ()
+        if phase == "list" and armed:
+            if tap_at is None or _cue_still_fresh(tap_at, profile_at):
+                phone = armed
+        if not phone:
+            for cue in reversed(cues):
+                if not _cue_still_fresh(cue.at, profile_at):
+                    continue
+                # Chỉ dùng lại cue chưa gắn visit nào.
+                if any(item.phone == cue.phone for item in visits):
+                    continue
+                if open_visit and open_visit.phone == cue.phone:
+                    continue
+                phone = cue.phone
+                visit_window = cue.window or visit_window
+                break
+        if phone:
+            armed = ""
+            clear_run = 0
+            tap_at = None
+            held_by_tap = False
+            # Bỏ cue đã dùng (và cue cũ hơn cùng số).
+            kept = [cue for cue in cues if cue.phone != phone]
+            cues.clear()
+            cues.extend(kept)
+        return phone, visit_window
 
     def sighting(hit: ContactHit, frame_index: int) -> tuple[str, str]:
         phone = normalize_phone(hit.phone)
@@ -672,20 +741,13 @@ def _walk(
             close()
             phone, name = sighting(frame.contacts[0], frame_index)
             if phone:
-                armed = phone
-                clear_run = 0
-                tap_at = frame.at
-                if all(item[0] != phone for item in window):
-                    window = window + ((phone, name),)
+                arm(phone, name, frame.at, from_tap=True)
             phase = "list"
             continue
 
         if frame.kind == "list" and frame.contacts:
             close()
             phase = "list"
-            if tap_at is not None:
-                armed = ""
-                tap_at = None
             visible: set[str] = set()
             rows: list[tuple[str, str]] = []
             selected = ""
@@ -705,14 +767,24 @@ def _walk(
             if multi:
                 armed = ""
                 clear_run = 0
+                tap_at = None
+                held_by_tap = False
             elif selected:
-                armed = selected
-                clear_run = 0
+                selected_name = next((name for phone, name in rows if phone == selected), "")
+                arm(selected, selected_name, frame.at, from_tap=False)
             elif armed and armed in visible:
-                clear_run += 1
-                if clear_run >= 2:
-                    armed = ""
+                # P1: sau lần bấm (held_by_tap) giữ qua khung list chuyển cảnh.
+                # Chỉ quên khi chọn bằng highlight rồi hiện lại list lạnh đủ 2 khung.
+                if held_by_tap:
                     clear_run = 0
+                else:
+                    clear_run += 1
+                    if clear_run >= 2:
+                        stale = armed
+                        armed = ""
+                        clear_run = 0
+                        tap_at = None
+                        cues[:] = [cue for cue in cues if cue.phone != stale]
             continue
 
         username = clean_username(frame.profile_username)
@@ -720,24 +792,46 @@ def _walk(
             continue
         if open_visit is None or phase != "profile":
             close()
-            phone = armed if phase == "list" else ""
-            if phone and tap_at is not None and tap_at >= 0 and frame.at >= 0:
-                if frame.at - tap_at > TAP_TO_PROFILE_SECONDS:
-                    phone = ""
-            open_visit = _Visit(phone=phone, window=window if phase == "list" else ())
-            if phase == "list":
-                armed = ""
-                clear_run = 0
-                tap_at = None
+            phone, visit_window = take_phone_for_profile(frame.at)
+            open_visit = _Visit(phone=phone, window=visit_window, at=frame.at)
             phase = "profile"
         elif open_visit.username() and open_visit.username() != username:
             close()
-            open_visit = _Visit(phone="")
+            phone, visit_window = take_phone_for_profile(frame.at)
+            open_visit = _Visit(phone=phone, window=visit_window, at=frame.at)
+        if open_visit.at < 0:
+            open_visit.at = frame.at
         open_visit.usernames[username] = open_visit.usernames.get(username, 0) + 1
         if frame.profile_name:
             open_visit.names.add(frame.profile_name)
     close()
     return visits
+
+
+def _pair_orphan_visits_by_time(visits: list[_Visit]) -> None:
+    """P1: @ mồ côi ngay sau một visit đã có SĐT — lấy đúng một số còn lại trên cùng list.
+
+    Không đoán khi chỉ còn 1 số trên màn hình (dễ gắn nhầm người đã bỏ chọn).
+    """
+    used = {visit.phone for visit in visits if visit.phone}
+    for index, visit in enumerate(visits):
+        if visit.phone or not visit.username() or index == 0:
+            continue
+        prev = visits[index - 1]
+        if not prev.phone:
+            continue
+        if visit.at >= 0 and prev.at >= 0 and visit.at - prev.at > TAP_TO_PROFILE_SECONDS:
+            continue
+        pool = list(visit.window) + list(prev.window)
+        candidates = [
+            phone
+            for phone, _name in pool
+            if phone and phone not in used and phone != prev.phone
+        ]
+        uniq = list(dict.fromkeys(candidates))
+        if len(uniq) == 1:
+            visit.phone = uniq[0]
+            used.add(uniq[0])
 
 
 def _apply_visits(
