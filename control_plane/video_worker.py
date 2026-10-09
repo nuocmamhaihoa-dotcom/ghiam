@@ -39,6 +39,26 @@ def heartbeat_path() -> Path:
     return settings.data_dir / "video-worker.heartbeat"
 
 
+def frame_work_dir() -> Path:
+    """Thư mục tách khung. Ưu tiên /dev/shm (tmpfs) khi còn đủ chỗ — cùng JPEG, I/O nhanh hơn."""
+    override = os.environ.get("CONTROL_VIDEO_FRAME_DIR", "").strip()
+    if override:
+        path = Path(override)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    shm = Path("/dev/shm")
+    try:
+        if shm.is_dir() and shutil.disk_usage(shm).free >= 2 * 1024 * 1024 * 1024:
+            path = shm / "fb-poller-frames"
+            path.mkdir(parents=True, exist_ok=True)
+            return path
+    except OSError:
+        pass
+    path = settings.data_dir / "frames"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def _restart_now(reason: str) -> None:
     """Thoát cứng để systemd Restart=always. SystemExit bị kẹt khi pool/thread còn sống."""
     print(reason, flush=True)
@@ -50,7 +70,7 @@ def run_job(
     job: dict[str, object],
     workers: int,
     work_dir: Path,
-    context: multiprocessing.context.BaseContext,
+    pool: ProcessPoolExecutor,
 ) -> None:
     video_id = int(job["id"])
     path = Path(str(job["path"]))
@@ -79,19 +99,13 @@ def run_job(
     pulse = threading.Thread(target=_pulse, daemon=True)
     pulse.start()
     try:
-        # Không dùng max_tasks_per_child: 15×400=6000 làm mọi worker recycle cùng lúc → pool treo.
-        # Pool tạo mới cho từng video nên không cần giới hạn task/con.
-        with ProcessPoolExecutor(
-            max_workers=workers,
-            mp_context=context,
-        ) as pool:
-            scan = functools.partial(
-                scan_paths,
-                submit=pool.submit,
-                work_dir=work_dir,
-                on_progress=on_progress,
-            )
-            table, frames = scan([path])
+        scan = functools.partial(
+            scan_paths,
+            submit=pool.submit,
+            work_dir=work_dir,
+            on_progress=on_progress,
+        )
+        table, frames = scan([path])
         finish(db_path, video_id, table)
     except BrokenExecutor:
         requeue(db_path, video_id)
@@ -121,6 +135,7 @@ def _feed(
     broken: threading.Event,
 ) -> None:
     current: dict[str, object] | None = None
+    pool: ProcessPoolExecutor | None = None
     try:
         while not stop.is_set():
             touch_heartbeat(heartbeat_path())
@@ -129,14 +144,28 @@ def _feed(
                 stop.wait(1.0)
                 continue
             try:
-                run_job(db_path, current, workers, work_dir, context)
+                # Giữ pool qua nhiều video — tránh spawn lại 15 tiến trình mỗi lần (cùng logic OCR).
+                if pool is None:
+                    pool = ProcessPoolExecutor(max_workers=workers, mp_context=context)
+                run_job(db_path, current, workers, work_dir, pool)
             except BrokenExecutor:
                 # run_job đã đưa video về hàng đợi.
                 current = None
+                if pool is not None:
+                    try:
+                        pool.shutdown(wait=False, cancel_futures=True)
+                    except Exception:
+                        pass
+                    pool = None
                 broken.set()
                 return
             current = None
     finally:
+        if pool is not None:
+            try:
+                pool.shutdown(wait=False, cancel_futures=True)
+            except Exception:
+                pass
         # Luồng nhận video chết giữa chừng mà tiến trình vẫn sống thì recover_dead không cứu được.
         if current is not None:
             requeue(db_path, int(current["id"]))
@@ -151,15 +180,23 @@ def main() -> None:
     returned = requeue_running(db_path, os.getpid())
     if returned:
         print(f"Đưa {returned} video đọc dở về hàng đợi.", flush=True)
-    work_dir = settings.data_dir / "frames"
-    shutil.rmtree(work_dir, ignore_errors=True)
+    work_dir = frame_work_dir()
+    # Dọn khung cũ (kể cả lần chạy trước trên /dev/shm hoặc data/frames).
+    stale_dirs = {
+        work_dir.resolve(),
+        (settings.data_dir / "frames").resolve(),
+        Path("/dev/shm/fb-poller-frames").resolve(),
+    }
+    for stale in stale_dirs:
+        shutil.rmtree(stale, ignore_errors=True)
     work_dir.mkdir(parents=True, exist_ok=True)
     total_workers = worker_count()
     feeders = feeder_count()
     per_workers = max(1, total_workers // feeders)
     print(
         f"Đọc video bằng {per_workers} tiến trình/video, xếp hàng {feeders} video một lúc "
-        f"(tối đa {per_workers * feeders} nhân). Chạy liên tục trên máy chủ — thoát app không dừng.",
+        f"(tối đa {per_workers * feeders} nhân, khung tại {work_dir}). "
+        f"Chạy liên tục trên máy chủ — thoát app không dừng.",
         flush=True,
     )
     stop = threading.Event()

@@ -46,9 +46,10 @@ CHANGED = 1.2
 MOVING = 2.5
 # Hồ sơ vs danh bạ lệch rất mạnh; ngưỡng hơi thấp hơn để bắt flash nhạt / chuyển cảnh mờ.
 FLASH_CHANGED = 9.0
-TAP_WINDOW = 7
-# OCR thường toàn bộ khung trong cửa sổ trước lúc chuyển cảnh (không chỉ tìm chấm bấm).
-BRIEF_EXIT_READS = TAP_WINDOW
+# ~0.25s trước chuyển cảnh — đủ tìm chấm bấm; không phình OCR.
+TAP_WINDOW = 5
+# Chỉ OCR vài khung sát lúc thoát (hồ sơ ngắn). Cả TAP_WINDOW từng làm đọc gần như mọi khung khi cuộn.
+BRIEF_EXIT_READS = 3
 
 Submit = Callable[..., Future]
 
@@ -213,6 +214,7 @@ def plan_video(path: Path, fps: float = SCAN_FPS, on_progress: Progress | None =
         "error",
         "-threads",
         "0",
+        "-an",
         "-i",
         str(path),
         "-vf",
@@ -236,7 +238,9 @@ def plan_video(path: Path, fps: float = SCAN_FPS, on_progress: Progress | None =
                 chunk = proc.stdout.read(size)
                 if len(chunk) < size:
                     break
-                planner.push(np.frombuffer(chunk, dtype=np.uint8).reshape(THUMB_H, THUMB_W).astype(np.float32))
+                # uint8 + copy: buffer ống bị ghi đè; so khớp ngưỡng vẫn trên thang 0–255 như cũ.
+                thumb = np.frombuffer(chunk, dtype=np.uint8).reshape(THUMB_H, THUMB_W).copy()
+                planner.push(thumb)
                 if on_progress is not None and planner.count - last_report >= report_every:
                     on_progress(f"Đang xem trước {path.name}: {planner.count / fps:.0f}s")
                     last_report = planner.count
@@ -289,7 +293,7 @@ class _Planner:
             if not moving and self.was_moving:
                 self.spike_kept = False
             self.was_moving = moving
-        self.history.append((number, thumb.copy()))
+        self.history.append((number, thumb))
         self.ring.append(thumb)
         if len(self.ring) == SETTLE_LAG + 1:
             self._consider(number - SETTLE_LAG, self.ring[0], thumb)
@@ -326,7 +330,7 @@ class _Planner:
             if self.plan.reads and frame_number < self.plan.reads[-1]:
                 continue
             self.plan.reads.append(frame_number)
-            self.last_kept = frame.copy()
+            self.last_kept = frame
 
     def _keep_spike(self, mid_number: int, mid: np.ndarray, left: np.ndarray, right: np.ndarray) -> None:
         """Hó hồ sơ 1 khung: hai bên giống nhau (về lại danh bạ), khung giữa khác hẳn."""
@@ -353,7 +357,7 @@ class _Planner:
         if number < 0 or number in self.plan.reads:
             return
         self.plan.reads.append(number)
-        self.last_kept = thumb.copy()
+        self.last_kept = thumb
 
     def _tap_window(self, last: int) -> None:
         if last < 0:
@@ -405,6 +409,7 @@ def extract_frames(
                 "error",
                 "-threads",
                 "0",
+                "-an",
                 "-i",
                 str(path),
                 "-filter_script:v",
@@ -445,7 +450,8 @@ def _require_ffmpeg(path: Path) -> None:
 def _mean_abs(left: np.ndarray, right: np.ndarray) -> float:
     if left.shape != right.shape:
         return 255.0
-    return float(np.abs(left - right).mean())
+    # int16 tránh wrap-around của uint8 khi trừ.
+    return float(np.abs(left.astype(np.int16, copy=False) - right.astype(np.int16, copy=False)).mean())
 
 
 def write_table(table: Table, output: Path) -> list[Path]:

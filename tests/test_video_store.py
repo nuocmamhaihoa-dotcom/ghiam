@@ -346,14 +346,18 @@ class VideoStoreTests(unittest.TestCase):
         # Tiến trình test thường không có con → vẫn có thể bị stale; giả lập có con.
         from control_plane import video_store as store
 
-        with unittest.mock.patch.object(store, "worker_has_live_children", return_value=True):
+        from unittest import mock
+
+        with mock.patch.object(store, "worker_has_live_children", return_value=True):
             self.assertEqual(stale_running(self.db, quiet_sec=0.0, max_sec=7200), [])
 
     def test_resource_tracker_alone_is_not_busy_work(self) -> None:
+        from unittest import mock
+
         from control_plane.video_store import worker_has_live_children
 
-        with unittest.mock.patch("control_plane.video_store._alive", return_value=True):
-            with unittest.mock.patch("control_plane.video_store.Path") as path_cls:
+        with mock.patch("control_plane.video_store._alive", return_value=True):
+            with mock.patch("control_plane.video_store.Path") as path_cls:
                 # Không giả lập /proc đầy đủ — chỉ cần hàm không nổ khi không có con thật.
                 path_cls.return_value.iterdir.side_effect = OSError("no proc")
                 self.assertFalse(worker_has_live_children(12345))

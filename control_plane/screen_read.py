@@ -124,6 +124,28 @@ def best_tessdata() -> str | None:
     return None
 
 
+@functools.lru_cache(maxsize=1)
+def _ocr_temp_root() -> str | None:
+    """Ưu tiên /dev/shm để ghi ảnh OCR tạm — cùng pixel, I/O nhanh hơn đĩa."""
+    override = os.environ.get("CONTROL_OCR_TMPDIR", "").strip()
+    if override:
+        path = Path(override)
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return None
+        return str(path)
+    shm = Path("/dev/shm")
+    try:
+        if shm.is_dir() and shutil.disk_usage(shm).free >= 512 * 1024 * 1024:
+            path = shm / "fb-poller-ocr"
+            path.mkdir(parents=True, exist_ok=True)
+            return str(path)
+    except OSError:
+        return None
+    return None
+
+
 def read_image(path: str | Path) -> FrameObs:
     image = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
     return read_pillow(image)
@@ -607,11 +629,13 @@ def _batch(
     pages: list[list[Word]] = [[] for _ in images]
     if not images:
         return pages
-    with tempfile.TemporaryDirectory(prefix="ocr-") as folder:
+    root = _ocr_temp_root()
+    with tempfile.TemporaryDirectory(prefix="ocr-", dir=root) as folder:
         paths = []
         for index, image in enumerate(images):
-            path = Path(folder) / f"{index:04d}.png"
-            image.save(path, compress_level=1, dpi=(300, 300))
+            # BMP không nén: ghi nhanh hơn PNG, Tesseract đọc được, pixel giữ nguyên.
+            path = Path(folder) / f"{index:04d}.bmp"
+            image.convert("RGB").save(path, format="BMP")
             paths.append(str(path))
         listing = Path(folder) / "list.txt"
         listing.write_text("\n".join(paths) + "\n", encoding="utf-8")
@@ -621,6 +645,8 @@ def _batch(
             "stdout",
             "-l",
             lang,
+            "--oem",
+            "1",
             "--psm",
             str(psm),
             "-c",

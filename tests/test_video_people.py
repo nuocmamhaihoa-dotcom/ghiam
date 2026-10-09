@@ -24,7 +24,7 @@ from control_plane.screen_table import (
     phone_in_text,
     same_person_name,
 )
-from control_plane.video_scan import _Planner, write_table
+from control_plane.video_scan import BRIEF_EXIT_READS, TAP_WINDOW, _Planner, write_table
 
 
 def frame_list(*hits: ContactHit) -> FrameObs:
@@ -393,6 +393,12 @@ class SampleFrameTests(unittest.TestCase):
 
 
 class StableFrameTests(unittest.TestCase):
+    def test_brief_exit_ocr_is_narrower_than_tap_window(self) -> None:
+        # Giữ đủ khung sát lúc thoát hồ sơ, không OCR cả cửa sổ tap khi cuộn liên tục.
+        self.assertEqual(TAP_WINDOW, 5)
+        self.assertEqual(BRIEF_EXIT_READS, 3)
+        self.assertLess(BRIEF_EXIT_READS, TAP_WINDOW)
+
     def test_small_screen_change_is_read_again(self) -> None:
         planner = _Planner()
         for thumb in [np.zeros((8, 8), dtype=np.float32)] * 8 + [np.full((8, 8), 2, dtype=np.float32)] * 8:
@@ -409,7 +415,7 @@ class StableFrameTests(unittest.TestCase):
             planner.push(thumb)
         plan = planner.finish()
         self.assertEqual(plan.reads, [0, 12])
-        self.assertEqual(plan.taps, [[3, 4, 5, 6, 7, 8, 9]])
+        self.assertEqual(plan.taps, [[5, 6, 7, 8, 9]])
         self.assertEqual(plan.count, 22)
 
     def test_planner_keeps_a_short_pause_as_a_probe_even_without_a_still_read(self) -> None:
