@@ -17,6 +17,7 @@ import time
 from concurrent.futures import BrokenExecutor, ProcessPoolExecutor
 from pathlib import Path
 
+from control_plane.ocr_backend import describe_ocr, gpu_available, resolve_ocr_engine
 from control_plane.settings import settings
 from control_plane.video_scan import scan_paths
 from control_plane.video_store import (
@@ -193,12 +194,22 @@ def main() -> None:
     total_workers = worker_count()
     feeders = feeder_count()
     per_workers = max(1, total_workers // feeders)
+    engine = resolve_ocr_engine()
+    if engine == "paddle" and not gpu_available():
+        engine = "tesserocr"
     print(
         f"Đọc video bằng {per_workers} tiến trình/video, xếp hàng {feeders} video một lúc "
         f"(tối đa {per_workers * feeders} nhân, khung tại {work_dir}). "
+        f"{describe_ocr()}. Chỉ đọc luồng hình (bỏ audio). "
         f"Chạy liên tục trên máy chủ — thoát app không dừng.",
         flush=True,
     )
+    if not gpu_available():
+        print(
+            "VPS không có GPU NVIDIA — bỏ qua Paddle/GPU OCR để giữ độ chính xác Tesseract; "
+            "đang dùng hết CPU với tesserocr + nhiều feeder.",
+            flush=True,
+        )
     stop = threading.Event()
     broken = threading.Event()
     context = multiprocessing.get_context("spawn")

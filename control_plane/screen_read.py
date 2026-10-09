@@ -4,9 +4,9 @@ Danh bạ nhận ra bằng cột nút Follow hồng bên phải. Mỗi nút là 
 số ở trên, tên ngay dưới. Hồ sơ nhận ra bằng nút Follow rộng bên trái;
 chỉ lấy tên lớn và dòng @ ngay dưới tên đó.
 
-Mỗi lần chạy tesseract tốn thời gian nạp bộ chữ, nên một khung chỉ gọi vài
-lần, mỗi lần đọc cả loạt ô chữ. Số và username đọc bằng bộ chữ lớn
-(tessdata_best) nếu máy có; bộ chữ nhỏ đọc nhầm 3 thành 5 nhiều hơn.
+Ưu tiên tesserocr (API Tesseract lâu dài trong mỗi worker) — cùng engine,
+không spawn process mỗi lần. Fallback CLI nếu chưa cài tesserocr.
+Số và username đọc bằng bộ chữ lớn (tessdata_best) nếu máy có.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
+from control_plane.ocr_backend import resolve_ocr_engine, system_tessdata, tesserocr_available
 from control_plane.screen_table import (
     ContactHit,
     FrameObs,
@@ -37,6 +38,8 @@ DIGITS = "0123456789"
 HANDLE_CHARS = "@._0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 # Nhiều tesseract chạy song song mà mỗi cái tự mở nhiều luồng thì giành nhân và gần như đứng.
 _ONE_THREAD = {**os.environ, "OMP_THREAD_LIMIT": "1", "OMP_NUM_THREADS": "1"}
+# API Tesseract lâu dài theo từng tiến trình worker: (lang, tessdata) -> PyTessBaseAPI
+_TESS_APIS: dict[tuple[str, str], object] = {}
 
 
 @dataclass(frozen=True)
@@ -618,14 +621,82 @@ def _texts(pages: list[list[Word]]) -> list[str]:
     return [" ".join(word.text for word in words) for words in pages]
 
 
-def _batch(
+def _tessdata_path(tessdata: str | None) -> str | None:
+    if tessdata:
+        return tessdata
+    return system_tessdata()
+
+
+def _tesserocr_api(lang: str, tessdata: str | None):
+    from tesserocr import OEM, PyTessBaseAPI
+
+    folder = _tessdata_path(tessdata) or ""
+    key = (lang, folder)
+    api = _TESS_APIS.get(key)
+    if api is not None:
+        return api
+    kwargs: dict[str, object] = {"lang": lang, "oem": OEM.LSTM_ONLY}
+    if folder:
+        kwargs["path"] = folder
+    api = PyTessBaseAPI(**kwargs)
+    _TESS_APIS[key] = api
+    return api
+
+
+def _batch_tesserocr(
     images: list[Image.Image],
     lang: str,
     psm: int,
     whitelist: str = "",
     tessdata: str | None = None,
 ) -> list[list[Word]]:
-    """Một lần chạy tesseract cho cả loạt ảnh. Trả về các chữ của từng ảnh, tọa độ tính trong ảnh đó."""
+    """OCR bằng API lâu dài — không ghi file, không spawn process."""
+    from tesserocr import RIL
+
+    pages: list[list[Word]] = [[] for _ in images]
+    if not images:
+        return pages
+    api = _tesserocr_api(lang, tessdata)
+    api.SetPageSegMode(psm)
+    # Xóa whitelist cũ khi không dùng — biến này dính trên API tái sử dụng.
+    api.SetVariable("tessedit_char_whitelist", whitelist or "")
+    level = RIL.WORD
+    for index, image in enumerate(images):
+        api.SetImage(image.convert("RGB"))
+        try:
+            api.Recognize()
+        except RuntimeError:
+            continue
+        iterator = api.GetIterator()
+        if iterator is None:
+            continue
+        while True:
+            try:
+                token = (iterator.GetUTF8Text(level) or "").strip()
+            except RuntimeError:
+                token = ""
+            if token:
+                try:
+                    conf = float(iterator.Confidence(level))
+                    left, top, right, bottom = iterator.BoundingBox(level)
+                except (RuntimeError, TypeError, ValueError):
+                    pass
+                else:
+                    if conf >= 0 and right > left and bottom > top:
+                        pages[index].append(Word(token, conf, Box(left, top, right, bottom)))
+            if not iterator.Next(level):
+                break
+    return pages
+
+
+def _batch_cli(
+    images: list[Image.Image],
+    lang: str,
+    psm: int,
+    whitelist: str = "",
+    tessdata: str | None = None,
+) -> list[list[Word]]:
+    """Fallback: gọi binary tesseract (chậm hơn vì spawn + ghi BMP)."""
     pages: list[list[Word]] = [[] for _ in images]
     if not images:
         return pages
@@ -633,7 +704,6 @@ def _batch(
     with tempfile.TemporaryDirectory(prefix="ocr-", dir=root) as folder:
         paths = []
         for index, image in enumerate(images):
-            # BMP không nén: ghi nhanh hơn PNG, Tesseract đọc được, pixel giữ nguyên.
             path = Path(folder) / f"{index:04d}.bmp"
             image.convert("RGB").save(path, format="BMP")
             paths.append(str(path))
@@ -654,8 +724,9 @@ def _batch(
             "-c",
             "tessedit_create_txt=0",
         ]
-        if tessdata:
-            command.extend(["--tessdata-dir", tessdata])
+        folder_tess = _tessdata_path(tessdata)
+        if folder_tess:
+            command.extend(["--tessdata-dir", folder_tess])
         if whitelist:
             command.extend(["-c", f"tessedit_char_whitelist={whitelist}"])
         done = subprocess.run(command, capture_output=True, text=True, check=False, timeout=180, env=_ONE_THREAD)
@@ -676,3 +747,20 @@ def _batch(
             continue
         pages[page].append(Word(token, conf, Box(left, top, left + width, top + height)))
     return pages
+
+
+def _batch(
+    images: list[Image.Image],
+    lang: str,
+    psm: int,
+    whitelist: str = "",
+    tessdata: str | None = None,
+) -> list[list[Word]]:
+    """OCR một loạt ảnh. Ưu tiên tesserocr; fallback CLI cùng oem/psm/whitelist."""
+    engine = resolve_ocr_engine()
+    if engine == "tesserocr" and tesserocr_available():
+        try:
+            return _batch_tesserocr(images, lang, psm, whitelist, tessdata)
+        except Exception as exc:
+            print(f"tesserocr lỗi, fallback CLI: {exc}", flush=True)
+    return _batch_cli(images, lang, psm, whitelist, tessdata)

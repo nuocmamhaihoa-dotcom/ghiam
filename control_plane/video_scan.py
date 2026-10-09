@@ -207,6 +207,7 @@ def _scan_video(
 def plan_video(path: Path, fps: float = SCAN_FPS, on_progress: Progress | None = None) -> VideoPlan:
     """Lượt một: ảnh xám nhỏ đi qua ống, chỉ giữ vài khung gần nhất trong bộ nhớ."""
     _require_ffmpeg(path)
+    # Chỉ lấy luồng hình — video quay màn hình không cần audio.
     command = [
         "ffmpeg",
         "-hide_banner",
@@ -214,9 +215,13 @@ def plan_video(path: Path, fps: float = SCAN_FPS, on_progress: Progress | None =
         "error",
         "-threads",
         "0",
-        "-an",
         "-i",
         str(path),
+        "-map",
+        "0:v:0",
+        "-an",
+        "-sn",
+        "-dn",
         "-vf",
         f"fps={fps},scale={THUMB_W}:{THUMB_H},format=gray",
         "-f",
@@ -409,9 +414,13 @@ def extract_frames(
                 "error",
                 "-threads",
                 "0",
-                "-an",
                 "-i",
                 str(path),
+                "-map",
+                "0:v:0",
+                "-an",
+                "-sn",
+                "-dn",
                 "-filter_script:v",
                 str(script),
                 "-vsync",

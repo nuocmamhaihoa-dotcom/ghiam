@@ -36,22 +36,35 @@ def utcnow() -> str:
 
 
 def worker_count() -> int:
+    """Số tiến trình OCR tổng. Mặc định dùng hết CPU."""
     raw = os.environ.get("CONTROL_VIDEO_WORKERS", "").strip()
     if raw:
         return max(1, int(raw))
-    cpus = os.cpu_count() or 2
-    return max(1, cpus - 1)
+    return max(1, os.cpu_count() or 2)
 
 
 def feeder_count() -> int:
-    """Số video đọc cùng lúc. Mặc định 1: nhiều máy vẫn đẩy lên song song, xếp hàng đọc lần lượt.
+    """Số video đọc cùng lúc.
 
-    Mỗi video dùng riêng một nhóm tiến trình. Tăng CONTROL_VIDEO_FEEDERS chỉ khi chắc
-    máy chủ đủ RAM; chia sẻ chung một nhóm tiến trình đã từng làm nghẽn cả hàng đợi.
+    Mỗi video một nhóm tiến trình riêng. Mặc định 2 khi máy ≥8 CPU và ≥16GB RAM
+    (tận dụng VPS); đặt CONTROL_VIDEO_FEEDERS=1 để xếp hàng tuần tự.
     """
     raw = os.environ.get("CONTROL_VIDEO_FEEDERS", "").strip()
     if raw:
         return max(1, int(raw))
+    cpus = os.cpu_count() or 2
+    try:
+        # MemAvailable (kB) trên Linux; thiếu thì coi như đủ nếu không đọc được.
+        mem_kb = 0
+        for line in Path("/proc/meminfo").read_text(encoding="utf-8").splitlines():
+            if line.startswith("MemAvailable:"):
+                mem_kb = int(line.split()[1])
+                break
+        mem_gb = mem_kb / (1024 * 1024)
+    except (OSError, ValueError, IndexError):
+        mem_gb = 32.0
+    if cpus >= 8 and mem_gb >= 16:
+        return 2
     return 1
 
 
