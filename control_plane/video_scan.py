@@ -137,7 +137,7 @@ def _scan_video(
 ) -> list[tuple[Path, FrameObs]]:
     if on_progress is not None:
         on_progress(f"Đang xem trước {path.name}")
-    plan = plan_video(path, fps)
+    plan = plan_video(path, fps, on_progress=on_progress)
     needed = plan.needed()
     if on_progress is not None:
         on_progress(f"Đang tách {len(needed)} khung từ {path.name}")
@@ -185,7 +185,7 @@ def _scan_video(
     return [(job[2], obs) for job, obs in zip(jobs, results)]
 
 
-def plan_video(path: Path, fps: float = SCAN_FPS) -> VideoPlan:
+def plan_video(path: Path, fps: float = SCAN_FPS, on_progress: Progress | None = None) -> VideoPlan:
     """Lượt một: ảnh xám nhỏ đi qua ống, chỉ giữ vài khung gần nhất trong bộ nhớ."""
     _require_ffmpeg(path)
     command = [
@@ -207,6 +207,9 @@ def plan_video(path: Path, fps: float = SCAN_FPS) -> VideoPlan:
     ]
     size = THUMB_W * THUMB_H
     planner = _Planner()
+    # Báo tiến độ mỗi ~5 giây video để watchdog không tưởng bộ đọc chết khi xem trước file dài.
+    report_every = max(1, int(fps * 5))
+    last_report = 0
     # Lỗi của ffmpeg ghi ra file: video hỏng có thể in rất nhiều dòng lỗi, ống đầy thì ffmpeg đứng chờ mãi.
     with tempfile.TemporaryFile() as errors:
         with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors) as proc:
@@ -216,6 +219,9 @@ def plan_video(path: Path, fps: float = SCAN_FPS) -> VideoPlan:
                 if len(chunk) < size:
                     break
                 planner.push(np.frombuffer(chunk, dtype=np.uint8).reshape(THUMB_H, THUMB_W).astype(np.float32))
+                if on_progress is not None and planner.count - last_report >= report_every:
+                    on_progress(f"Đang xem trước {path.name}: {planner.count / fps:.0f}s")
+                    last_report = planner.count
             code = proc.wait()
         errors.seek(0)
         error = errors.read(8192).decode("utf-8", "replace")
@@ -226,6 +232,8 @@ def plan_video(path: Path, fps: float = SCAN_FPS) -> VideoPlan:
     plan = planner.finish()
     if plan.count == 0:
         raise RuntimeError(f"Video {path.name} không có khung hình.")
+    if on_progress is not None:
+        on_progress(f"Đã xem trước {path.name}: {plan.count / fps:.0f}s, chọn {len(plan.needed())} khung")
     return plan
 
 

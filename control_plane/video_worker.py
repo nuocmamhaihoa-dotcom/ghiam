@@ -40,6 +40,12 @@ def heartbeat_path() -> Path:
     return settings.data_dir / "video-worker.heartbeat"
 
 
+def _restart_now(reason: str) -> None:
+    """Thoát cứng để systemd Restart=always. SystemExit bị kẹt khi pool/thread còn sống."""
+    print(reason, flush=True)
+    os._exit(1)
+
+
 def run_job(
     db_path: Path,
     job: dict[str, object],
@@ -159,15 +165,14 @@ def main() -> None:
         if stuck:
             for video_id in stuck:
                 requeue(db_path, video_id)
-                print(f"Video {video_id} đứng im quá lâu — xếp lại hàng và khởi động lại bộ đọc.", flush=True)
-            broken.set()
-            break
+                print(
+                    f"Video {video_id} đứng im quá lâu — xếp lại hàng và khởi động lại bộ đọc.",
+                    flush=True,
+                )
+            _restart_now("Bộ đọc thoát cứng sau khi phát hiện video nghẽn.")
         time.sleep(2)
     stop.set()
-    for thread in threads:
-        thread.join(timeout=5)
-    # Thoát để systemd khởi động lại sạch: nhóm tiến trình hỏng hoặc video nghẽn.
-    raise SystemExit(1)
+    _restart_now("Bộ đọc thoát cứng vì nhóm tiến trình hỏng — systemd sẽ chạy lại.")
 
 
 if __name__ == "__main__":
