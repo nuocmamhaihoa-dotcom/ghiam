@@ -60,7 +60,8 @@ def stale_quiet_sec() -> float:
     raw = os.environ.get("CONTROL_VIDEO_STALE_SEC", "").strip()
     if raw:
         return max(60.0, float(raw))
-    return 600.0
+    # Video lớn cập nhật tiến độ mỗi ~10s; 30 phút im mới coi là chết thật.
+    return 1800.0
 
 
 def stale_max_sec() -> float:
@@ -68,7 +69,7 @@ def stale_max_sec() -> float:
     raw = os.environ.get("CONTROL_VIDEO_MAX_SEC", "").strip()
     if raw:
         return max(stale_quiet_sec(), float(raw))
-    return 4 * 3600.0
+    return 12 * 3600.0
 
 
 @contextmanager

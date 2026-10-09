@@ -199,13 +199,12 @@
       reader.className = "note warn";
     } else if (body.running > 0 || body.queued > 0) {
       var feeders = body.feeders || 1;
-      reader.textContent = "Nhiều máy đẩy lên cùng lúc được xếp hàng. Máy chủ đọc lần lượt bằng " +
+      reader.textContent = "Đang đọc trên máy chủ (không cần mở trang này). Nhiều máy đẩy lên được xếp hàng; " +
         body.workers + " tiến trình/video" + (feeders > 1 ? (", tối đa " + feeders + " video song song") : "") +
-        ". Đóng trang không làm dừng.";
+        ". Thoát app / dùng phần mềm khác vẫn chạy liên tục.";
       reader.className = "note ok";
     } else {
-      reader.textContent = "Bộ đọc đang chạy, sẵn sàng nhận video từ nhiều máy. Dùng " + body.workers +
-        " nhân/video, xếp hàng ổn định, chừa một nhân cho trang này.";
+      reader.textContent = "Bộ đọc máy chủ sẵn sàng. Upload xong có thể tắt trang — máy chủ tự đọc hết hàng đợi.";
       reader.className = "note ok";
     }
     var queueResponse = await api("/v1/videos");

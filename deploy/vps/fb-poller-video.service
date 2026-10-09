@@ -2,6 +2,8 @@
 Description=fb-poller video readers
 After=network-online.target fb-poller-hub.service
 Wants=network-online.target
+# Không giới hạn số lần restart — hàng đợi phải đọc liên tục.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -12,7 +14,10 @@ Environment=OMP_NUM_THREADS=1
 Environment=OMP_THREAD_LIMIT=1
 ExecStart=/opt/fb-poller/.venv/bin/python -m control_plane.video_worker
 Restart=always
-RestartSec=3
+RestartSec=2
+KillMode=control-group
+TimeoutStopSec=20
+# Đọc trên máy chủ: đóng trình duyệt / đổi app không ảnh hưởng.
 
 [Install]
 WantedBy=multi-user.target

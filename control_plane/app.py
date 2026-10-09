@@ -110,6 +110,7 @@ async def _startup() -> None:
     rematch_results(settings.video_db_path)
     # Import proxy list into DB immediately; live/die loop runs in background
     from control_plane.proxy_check import load_proxy_lines, start_background_checker
+    from control_plane.video_watchdog import start_background_watchdog
 
     lines = load_proxy_lines(settings.proxies_file)
     if lines:
@@ -118,6 +119,8 @@ async def _startup() -> None:
         if not cd_copy.exists():
             cd_copy.write_text("\n".join(lines) + "\n", encoding="utf-8")
     start_background_checker()
+    # Bộ đọc video chạy riêng (systemd); hub canh heartbeat và tự bật lại nếu chết.
+    start_background_watchdog()
 
 
 def _auth(authorization: str | None) -> None:

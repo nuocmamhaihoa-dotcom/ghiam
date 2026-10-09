@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from collections import deque
 from collections.abc import Callable
 from concurrent.futures import Future, as_completed
@@ -158,25 +159,38 @@ def _scan_video(
             jobs.append((number / fps, 0, files[number], read_frame_at, (str(files[number]), number / fps)))
     jobs.sort(key=lambda job: (job[0], job[1]))
     total = len(jobs)
+    # Cập nhật ít nhất mỗi 10 giây tường — video 10k+ khung không được im 10 phút rồi bị watchdog restart.
+    progress_every_sec = 10.0
+    step = max(1, min(100, total // 50)) if total else 1
     if on_progress is not None:
         on_progress(f"Đang đọc chữ 0/{total} khung")
     if submit is None:
         results: list[FrameObs] = []
+        last_beat = time.monotonic()
         for index, (_, _, _, fn, args) in enumerate(jobs, start=1):
             results.append(fn(*args))
-            if on_progress is not None and (index == total or index % max(1, total // 20) == 0):
+            now = time.monotonic()
+            if on_progress is not None and (
+                index == total or index % step == 0 or now - last_beat >= progress_every_sec
+            ):
                 on_progress(f"Đang đọc chữ {index}/{total} khung")
+                last_beat = now
     else:
         future_map = {submit(fn, *args): index for index, (_, _, _, fn, args) in enumerate(jobs)}
         results = [FrameObs("unknown")] * total
         try:
             done = 0
+            last_beat = time.monotonic()
             for future in as_completed(future_map):
                 index = future_map[future]
                 results[index] = future.result()
                 done += 1
-                if on_progress is not None and (done == total or done % max(1, total // 20) == 0):
+                now = time.monotonic()
+                if on_progress is not None and (
+                    done == total or done % step == 0 or now - last_beat >= progress_every_sec
+                ):
                     on_progress(f"Đang đọc chữ {done}/{total} khung")
+                    last_beat = now
         except BaseException:
             # Video đã hỏng thì các khung còn chờ không được chiếm nhân của video khác.
             for future in future_map:
