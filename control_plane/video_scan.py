@@ -176,25 +176,28 @@ def _scan_video(
                 on_progress(f"Đang đọc chữ {index}/{total} khung")
                 last_beat = now
     else:
-        future_map = {submit(fn, *args): index for index, (_, _, _, fn, args) in enumerate(jobs)}
+        # Đọc theo lô — tránh nộp cả 10k+ future một lúc; dễ treo khi pool recycle worker.
+        batch_size = 500
         results = [FrameObs("unknown")] * total
+        done = 0
+        last_beat = time.monotonic()
         try:
-            done = 0
-            last_beat = time.monotonic()
-            for future in as_completed(future_map):
-                index = future_map[future]
-                results[index] = future.result()
-                done += 1
-                now = time.monotonic()
-                if on_progress is not None and (
-                    done == total or done % step == 0 or now - last_beat >= progress_every_sec
-                ):
-                    on_progress(f"Đang đọc chữ {done}/{total} khung")
-                    last_beat = now
+            for start in range(0, total, batch_size):
+                chunk = jobs[start : start + batch_size]
+                future_map = {
+                    submit(fn, *args): start + offset for offset, (_, _, _, fn, args) in enumerate(chunk)
+                }
+                for future in as_completed(future_map):
+                    index = future_map[future]
+                    results[index] = future.result()
+                    done += 1
+                    now = time.monotonic()
+                    if on_progress is not None and (
+                        done == total or done % step == 0 or now - last_beat >= progress_every_sec
+                    ):
+                        on_progress(f"Đang đọc chữ {done}/{total} khung")
+                        last_beat = now
         except BaseException:
-            # Video đã hỏng thì các khung còn chờ không được chiếm nhân của video khác.
-            for future in future_map:
-                future.cancel()
             raise
     return [(job[2], obs) for job, obs in zip(jobs, results)]
 

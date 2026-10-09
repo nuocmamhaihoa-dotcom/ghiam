@@ -60,7 +60,8 @@ def stale_quiet_sec() -> float:
     raw = os.environ.get("CONTROL_VIDEO_STALE_SEC", "").strip()
     if raw:
         return max(60.0, float(raw))
-    return 2 * 3600.0
+    # OCR chết im (vd treo ở 6000 khung) cần được phát hiện sớm hơn video đang ffmpeg dài.
+    return 900.0
 
 
 def stale_max_sec() -> float:
@@ -72,9 +73,9 @@ def stale_max_sec() -> float:
 
 
 def worker_has_live_children(pid: int | None) -> bool:
-    """Còn process con (ffmpeg / OCR spawn) → job đang chạy thật, không restart giữa chừng.
+    """Còn ffmpeg / OCR spawn → job đang chạy thật.
 
-    Chỉ tính process con (ppid), không tính thread của chính worker — tránh bỏ sót nghẽn thật.
+    Bỏ qua resource_tracker: nó vẫn sống sau khi pool OCR đã chết (treo ở 15×400 task).
     """
     if not pid or not _alive(pid):
         return False
@@ -86,8 +87,15 @@ def worker_has_live_children(pid: int | None) -> bool:
                 ppid = int((entry / "stat").read_text().split()[3])
             except (OSError, ValueError, IndexError):
                 continue
-            if ppid == int(pid):
-                return True
+            if ppid != int(pid):
+                continue
+            try:
+                cmd = (entry / "cmdline").read_text(errors="replace")
+            except OSError:
+                cmd = ""
+            if "resource_tracker" in cmd:
+                continue
+            return True
     except OSError:
         return False
     return False

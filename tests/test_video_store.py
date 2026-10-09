@@ -349,6 +349,15 @@ class VideoStoreTests(unittest.TestCase):
         with unittest.mock.patch.object(store, "worker_has_live_children", return_value=True):
             self.assertEqual(stale_running(self.db, quiet_sec=0.0, max_sec=7200), [])
 
+    def test_resource_tracker_alone_is_not_busy_work(self) -> None:
+        from control_plane.video_store import worker_has_live_children
+
+        with unittest.mock.patch("control_plane.video_store._alive", return_value=True):
+            with unittest.mock.patch("control_plane.video_store.Path") as path_cls:
+                # Không giả lập /proc đầy đủ — chỉ cần hàm không nổ khi không có con thật.
+                path_cls.return_value.iterdir.side_effect = OSError("no proc")
+                self.assertFalse(worker_has_live_children(12345))
+
     def test_backup_contains_the_saved_row(self) -> None:
         video_id = self._add("clip.mp4", "a", device="iPhone 13")
         finish(self.db, video_id, Table(rows=[Row("0332001753", "khactam", "@khactam60")]))

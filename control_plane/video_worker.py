@@ -69,17 +69,21 @@ def run_job(
             print(f"progress video {video_id}: {exc}", flush=True)
 
     def _pulse() -> None:
-        """Nhịp tim mỗi 10s suốt lúc đọc — không để watchdog tưởng job chết khi ffmpeg dài."""
+        """Chỉ giữ heartbeat; không ghi đè progress_at — để phát hiện OCR chết khi số khung đứng yên."""
         while not stop_pulse.wait(10.0):
-            on_progress(last_message)
+            try:
+                touch_heartbeat(heartbeat_path())
+            except Exception:
+                pass
 
     pulse = threading.Thread(target=_pulse, daemon=True)
     pulse.start()
     try:
+        # Không dùng max_tasks_per_child: 15×400=6000 làm mọi worker recycle cùng lúc → pool treo.
+        # Pool tạo mới cho từng video nên không cần giới hạn task/con.
         with ProcessPoolExecutor(
             max_workers=workers,
             mp_context=context,
-            max_tasks_per_child=400,
         ) as pool:
             scan = functools.partial(
                 scan_paths,
