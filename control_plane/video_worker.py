@@ -1,10 +1,9 @@
 """Đọc video trong hàng đợi. Đóng trình duyệt không dừng việc này.
 
 Nhiều máy (iPhone) đẩy video lên cùng lúc vẫn chỉ xếp hàng; mỗi video được đọc
-bằng một nhóm tiến trình riêng, xong mới sang video kế. Không dùng chung một
-nhóm tiến trình cho nhiều video — cách đó từng làm cả hàng đợi nghẽn im khi một
-tiến trình OCR chết giữa chừng. Nếu một video đứng im quá lâu, bộ đọc tự xếp
-lại hàng và khởi động lại sạch.
+bằng một nhóm tiến trình riêng, xong mới sang video kế. Đọc chạy trên máy chủ
+(systemd): thoát app / đổi phần mềm không làm dừng. Chỉ restart khi nhóm tiến
+trình chết thật — không giết job đang tách khung hoặc OCR.
 """
 
 from __future__ import annotations
@@ -56,11 +55,26 @@ def run_job(
     video_id = int(job["id"])
     path = Path(str(job["path"]))
     started = time.monotonic()
+    last_message = "Đang đọc"
+    stop_pulse = threading.Event()
 
     def on_progress(message: str) -> None:
-        set_progress(db_path, video_id, message)
-        touch_heartbeat(heartbeat_path())
+        nonlocal last_message
+        text = " ".join((message or "").split())[:200] or last_message
+        last_message = text
+        try:
+            set_progress(db_path, video_id, text)
+            touch_heartbeat(heartbeat_path())
+        except Exception as exc:
+            print(f"progress video {video_id}: {exc}", flush=True)
 
+    def _pulse() -> None:
+        """Nhịp tim mỗi 10s suốt lúc đọc — không để watchdog tưởng job chết khi ffmpeg dài."""
+        while not stop_pulse.wait(10.0):
+            on_progress(last_message)
+
+    pulse = threading.Thread(target=_pulse, daemon=True)
+    pulse.start()
     try:
         with ProcessPoolExecutor(
             max_workers=workers,
@@ -83,6 +97,9 @@ def run_job(
         fail(db_path, video_id, message)
         print(f"Video {video_id} lỗi sau {time.monotonic() - started:.0f} giây: {message[:300]}", flush=True)
         return
+    finally:
+        stop_pulse.set()
+        pulse.join(timeout=1.0)
     path.unlink(missing_ok=True)
     print(
         f"Video {video_id} xong trong {time.monotonic() - started:.0f} giây, {len(frames)} khung: "
@@ -138,7 +155,7 @@ def main() -> None:
     per_workers = max(1, total_workers // feeders)
     print(
         f"Đọc video bằng {per_workers} tiến trình/video, xếp hàng {feeders} video một lúc "
-        f"(tối đa {per_workers * feeders} nhân). Nhiều máy đẩy lên vẫn xếp hàng ổn định.",
+        f"(tối đa {per_workers * feeders} nhân). Chạy liên tục trên máy chủ — thoát app không dừng.",
         flush=True,
     )
     stop = threading.Event()
@@ -166,10 +183,10 @@ def main() -> None:
             for video_id in stuck:
                 requeue(db_path, video_id)
                 print(
-                    f"Video {video_id} đứng im quá lâu — xếp lại hàng và khởi động lại bộ đọc.",
+                    f"Video {video_id} chết im (không còn tiến trình con) — xếp lại hàng và khởi động lại.",
                     flush=True,
                 )
-            _restart_now("Bộ đọc thoát cứng sau khi phát hiện video nghẽn.")
+            _restart_now("Bộ đọc thoát cứng sau khi phát hiện video nghẽn thật.")
         time.sleep(2)
     stop.set()
     _restart_now("Bộ đọc thoát cứng vì nhóm tiến trình hỏng — systemd sẽ chạy lại.")

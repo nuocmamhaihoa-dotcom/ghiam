@@ -56,20 +56,41 @@ def feeder_count() -> int:
 
 
 def stale_quiet_sec() -> float:
-    """Không có tiến độ mới trong khoảng này thì coi video đang đọc bị nghẽn."""
+    """Không có tiến độ mới và không còn tiến trình con thì mới coi là nghẽn."""
     raw = os.environ.get("CONTROL_VIDEO_STALE_SEC", "").strip()
     if raw:
         return max(60.0, float(raw))
-    # Video lớn cập nhật tiến độ mỗi ~10s; 30 phút im mới coi là chết thật.
-    return 1800.0
+    return 2 * 3600.0
 
 
 def stale_max_sec() -> float:
-    """Thời gian đọc tối đa cho một video, kể cả khi vẫn còn tiến độ thưa."""
+    """Trần tuyệt đối; video rất dài (hàng chục nghìn khung) vẫn được đọc hết một lần."""
     raw = os.environ.get("CONTROL_VIDEO_MAX_SEC", "").strip()
     if raw:
         return max(stale_quiet_sec(), float(raw))
-    return 12 * 3600.0
+    return 24 * 3600.0
+
+
+def worker_has_live_children(pid: int | None) -> bool:
+    """Còn process con (ffmpeg / OCR spawn) → job đang chạy thật, không restart giữa chừng.
+
+    Chỉ tính process con (ppid), không tính thread của chính worker — tránh bỏ sót nghẽn thật.
+    """
+    if not pid or not _alive(pid):
+        return False
+    try:
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                ppid = int((entry / "stat").read_text().split()[3])
+            except (OSError, ValueError, IndexError):
+                continue
+            if ppid == int(pid):
+                return True
+    except OSError:
+        return False
+    return False
 
 
 @contextmanager
@@ -415,16 +436,24 @@ def stale_running(
     max_sec: float | None = None,
     now: float | None = None,
 ) -> list[int]:
-    """Video đang đọc nhưng không còn tiến độ (hoặc chạy quá lâu) — thường do nhóm tiến trình chết im."""
+    """Chỉ coi nghẽn khi im tiến độ VÀ không còn tiến trình con (ffmpeg/OCR).
+
+    Trước đây restart khi im progress_at — video lớn đang tách hàng chục nghìn khung
+    bị giết giữa chừng rồi đọc lại từ đầu mãi không xong.
+    """
     quiet = stale_quiet_sec() if quiet_sec is None else quiet_sec
     limit = stale_max_sec() if max_sec is None else max_sec
     moment = time.time() if now is None else now
     stuck: list[int] = []
     with connect(db_path) as conn:
         rows = conn.execute(
-            "SELECT id, started_at, progress_at FROM videos WHERE status = 'running'"
+            "SELECT id, pid, started_at, progress_at FROM videos WHERE status = 'running'"
         ).fetchall()
     for row in rows:
+        pid = row["pid"]
+        # Đang có ffmpeg / pool con → chắc chắn vẫn đọc, bỏ qua.
+        if worker_has_live_children(int(pid) if pid is not None else None):
+            continue
         started = _parse_ts(row["started_at"])
         progressed = _parse_ts(row["progress_at"]) or started
         if started is not None and moment - started >= limit:

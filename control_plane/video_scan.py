@@ -373,8 +373,11 @@ def extract_frames(
 
         def _watch() -> None:
             while not stop.wait(5.0):
-                written = len(list(folder.glob("f_*.jpg")))
-                on_progress(f"Đang tách khung {written}/{expected}")
+                try:
+                    written = sum(1 for _ in folder.glob("f_*.jpg"))
+                    on_progress(f"Đang tách khung {written}/{expected}")
+                except Exception as exc:
+                    print(f"Theo dõi tách khung: {exc}", flush=True)
 
         watcher = threading.Thread(target=_watch, daemon=True)
         watcher.start()

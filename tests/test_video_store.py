@@ -324,7 +324,8 @@ class VideoStoreTests(unittest.TestCase):
 
     def test_progress_and_stale_running_detect_quiet_jobs(self) -> None:
         video_id = self._add("a.mp4", "a")
-        claim(self.db, os.getpid())
+        # pid giả không có process con — mới bị coi là nghẽn khi im tiến độ.
+        claim(self.db, 2_000_000_001)
         set_progress(self.db, video_id, "Đang tách khung 10/100")
         item = next(row for row in list_videos(self.db) if row["id"] == video_id)
         self.assertEqual(item["progress"], "Đang tách khung 10/100")
@@ -337,6 +338,16 @@ class VideoStoreTests(unittest.TestCase):
         item = next(row for row in list_videos(self.db) if row["id"] == video_id)
         self.assertEqual(item["progress"], "")
         self.assertIsNone(item["progress_at"])
+
+    def test_stale_running_skips_jobs_with_live_child_processes(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        claim(self.db, os.getpid())
+        set_progress(self.db, video_id, "Đang tách khung")
+        # Tiến trình test thường không có con → vẫn có thể bị stale; giả lập có con.
+        from control_plane import video_store as store
+
+        with unittest.mock.patch.object(store, "worker_has_live_children", return_value=True):
+            self.assertEqual(stale_running(self.db, quiet_sec=0.0, max_sec=7200), [])
 
     def test_backup_contains_the_saved_row(self) -> None:
         video_id = self._add("clip.mp4", "a", device="iPhone 13")
