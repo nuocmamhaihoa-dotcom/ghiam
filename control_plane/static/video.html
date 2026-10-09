@@ -29,10 +29,13 @@
       margin-top: 0.7rem; padding: 1.1rem; border: 1.5px dashed #b7c0ca; border-radius: 12px; background: #fbfcfd; text-align: center;
     }
     .drop.over { background: #e8f2fc; border-color: var(--blue); }
+    .drop.locked { opacity: 0.55; }
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.55rem; }
     .stat { background: #f7f9fb; border-radius: 10px; padding: 0.7rem 0.75rem; }
     .stat b { display: block; font-size: 1.35rem; }
     .stat span { color: var(--muted); font-size: 0.92rem; }
+    .stat.warn-stat { background: #fdecec; border: 1px solid #f0c2c2; }
+    .stat.ok-stat { background: #eef7f1; border: 1px solid #b9dbc6; }
     .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     table { width: 100%; border-collapse: collapse; min-width: 640px; }
     th, td {
@@ -44,6 +47,12 @@
     .note { color: var(--muted); margin-top: 0.55rem; }
     .warn { color: #8a2b2b; font-weight: 650; }
     .ok { color: #0d6b3a; }
+    .banner {
+      margin: 0 0 0.8rem; padding: 0.75rem 0.9rem; border-radius: 12px; font-weight: 650;
+    }
+    .banner.warn-banner { background: #fdecec; border: 1px solid #e8b4b4; color: #7a1f1f; }
+    .banner.ok-banner { background: #eef7f1; border: 1px solid #b9dbc6; color: #143524; }
+    .banner.hide { display: none; }
     #file { display: none; }
     .device-box { margin-bottom: 0.7rem; }
     .howto {
@@ -54,12 +63,31 @@
     .howto ol { margin: 0; padding-left: 1.2rem; }
     .howto li { margin: 0.25rem 0; }
     .howto .tiny { margin-top: 0.45rem; color: #3d5c48; font-size: 0.92rem; }
+    .howto .danger { margin-top: 0.45rem; color: #7a1f1f; font-weight: 700; font-size: 0.95rem; }
+    .checklist {
+      margin: 0 0 0.7rem; padding: 0.85rem 0.95rem; border-radius: 12px;
+      background: #fff8e8; border: 1px solid #ebd59a; color: #4a3b12;
+    }
+    .checklist h3 { margin: 0 0 0.45rem; font-size: 1rem; }
+    .checklist label.check {
+      display: flex; gap: 0.55rem; align-items: flex-start; font-weight: 500; margin: 0.4rem 0;
+      cursor: pointer;
+    }
+    .checklist input { width: auto; margin-top: 0.25rem; flex: 0 0 auto; }
+    .badge {
+      display: inline-block; margin-top: 0.25rem; padding: 0.1rem 0.45rem; border-radius: 999px;
+      font-size: 0.82rem; font-weight: 700;
+    }
+    .badge.bad { background: #fdecec; color: #8a2b2b; }
+    .badge.good { background: #eef7f1; color: #0d6b3a; }
   </style>
 </head>
 <body>
 <main>
   <h1>Đọc video danh bạ</h1>
   <p class="lead">Thêm video từ nhiều máy cùng lúc. Đóng trang này thì máy chủ vẫn đọc tiếp.</p>
+
+  <div id="openWarn" class="banner hide" role="status"></div>
 
   <section>
     <h2>Thêm video</h2>
@@ -71,17 +99,25 @@
     <div class="howto" id="howto">
       <h3>Cách chắc nhất để có hàng đủ (số + tên + @)</h3>
       <ol>
-        <li>Trong Messenger/Facebook: mở danh bạ, <b>bấm vào từng người</b>.</li>
-        <li>Đợi trang hồ sơ hiện ra và <b>nhìn rõ dòng @username</b> (một nhịp rất ngắn là đủ).</li>
+        <li>Trong Messenger/Facebook: mở danh bạ, <b>bấm vào từng người cần lấy</b>.</li>
+        <li>Đợi trang hồ sơ hiện ra và <b>nhìn rõ dòng @username</b> (khoảng một nhịp thở ngắn).</li>
         <li><b>Rồi mới thoát</b> về danh bạ — không chạm mở rồi back ngay lúc chữ còn đang nhòe.</li>
-        <li>Làm lần lượt từng người cần lấy, rồi tải video lên đây.</li>
+        <li>Làm lần lượt <b>từng người</b> cần lấy, rồi tải video lên đây.</li>
       </ol>
-      <p class="tiny">Máy chủ bắt được hồ sơ từ ~0,1 giây đứng yên. Chỉ lướt danh bạ (không mở hồ sơ) thì chỉ có số/tên ở mục <b>Chưa mở hồ sơ</b>.</p>
+      <p class="tiny">Máy chủ bắt hồ sơ từ ~0,05–0,1 giây đứng yên (quét 20 khung/giây). Chỉ lướt danh bạ (không mở hồ sơ) thì chỉ có số/tên ở mục <b>Chưa mở hồ sơ</b>.</p>
+      <p class="danger">Danh bạ không hiện @. Không mở hồ sơ = máy chủ không thể tự tạo @.</p>
     </div>
-    <div class="drop" id="drop">
+    <div class="checklist" id="checklist">
+      <h3>Trước khi tải lên — xác nhận cách quay</h3>
+      <label class="check"><input type="checkbox" id="checkOpen" /> Tôi đã <b>bấm mở hồ sơ từng người</b> cần lấy (không chỉ lướt danh bạ).</label>
+      <label class="check"><input type="checkbox" id="checkAt" /> Mỗi lần mở tôi đã <b>nhìn rõ dòng @</b> rồi mới thoát.</label>
+      <label class="check"><input type="checkbox" id="checkBack" /> Tôi <b>không back ngay</b> lúc chữ còn đang nhòe / đang chuyển cảnh.</label>
+      <p id="checkNote" class="note">Tick đủ 3 ô để mở nút chọn video.</p>
+    </div>
+    <div class="drop locked" id="drop">
       <p>Kéo nhiều video vào đây</p>
       <p class="note">hoặc</p>
-      <button class="file" type="button" id="pick">Chọn video</button>
+      <button class="file" type="button" id="pick" disabled>Chọn video</button>
       <input id="file" type="file" accept="video/*,image/*" multiple />
     </div>
     <p id="uploadNote" class="note"></p>
@@ -121,6 +157,7 @@
 <script>
   var serverToken = __CONTROL_TOKEN__;
   var DEVICE_KEY = "video-device-name";
+  var CHECK_KEY = "video-upload-checklist-v1";
 
   function token() { return serverToken; }
 
@@ -145,6 +182,47 @@
     }
   }
 
+  function checklistIds() { return ["checkOpen", "checkAt", "checkBack"]; }
+
+  function checklistReady() {
+    return checklistIds().every(function (id) {
+      return document.getElementById(id).checked;
+    });
+  }
+
+  function saveChecklist() {
+    var state = {};
+    checklistIds().forEach(function (id) {
+      state[id] = document.getElementById(id).checked;
+    });
+    try { sessionStorage.setItem(CHECK_KEY, JSON.stringify(state)); } catch (error) {}
+  }
+
+  function loadChecklist() {
+    try {
+      var raw = sessionStorage.getItem(CHECK_KEY);
+      if (!raw) return;
+      var state = JSON.parse(raw) || {};
+      checklistIds().forEach(function (id) {
+        if (state[id]) document.getElementById(id).checked = true;
+      });
+    } catch (error) {}
+  }
+
+  function syncUploadGate() {
+    var ready = checklistReady();
+    var pick = document.getElementById("pick");
+    var drop = document.getElementById("drop");
+    var note = document.getElementById("checkNote");
+    pick.disabled = !ready;
+    if (ready) drop.classList.remove("locked");
+    else drop.classList.add("locked");
+    note.textContent = ready
+      ? "Đã xác nhận cách quay — có thể tải video."
+      : "Tick đủ 3 ô để mở nút chọn video.";
+    note.className = ready ? "note ok" : "note";
+  }
+
   async function api(path, options) {
     var headers = options && options.headers ? options.headers : {};
     if (token()) headers.Authorization = "Bearer " + token();
@@ -157,8 +235,16 @@
     return response;
   }
 
-  function stat(value, label) {
-    return "<div class='stat'><b>" + value + "</b><span>" + label + "</span></div>";
+  function stat(value, label, kind) {
+    var cls = "stat";
+    if (kind === "warn") cls += " warn-stat";
+    if (kind === "ok") cls += " ok-stat";
+    return "<div class='" + cls + "'><b>" + value + "</b><span>" + label + "</span></div>";
+  }
+
+  function pct(part, whole) {
+    if (!whole) return null;
+    return Math.round((part * 100) / whole);
   }
 
   function statusText(status) {
@@ -177,20 +263,52 @@
     return date.toLocaleString("vi-VN", { hour12: false });
   }
 
+  function renderOpenBanner(saved, review, unopened) {
+    var banner = document.getElementById("openWarn");
+    var total = saved + review + unopened;
+    if (!total) {
+      banner.className = "banner hide";
+      banner.textContent = "";
+      return;
+    }
+    var opened = saved + review;
+    var openedPct = pct(opened, total);
+    var unopenedPct = pct(unopened, total);
+    if (unopenedPct != null && unopenedPct > 50) {
+      banner.className = "banner warn-banner";
+      banner.textContent = "Cảnh báo: " + unopenedPct + "% dòng là «Chưa mở hồ sơ» (" +
+        unopened + "/" + total + "). Nguyên nhân thường gặp: chỉ lướt danh bạ hoặc thoát trước khi thấy rõ @. " +
+        "Quay lại: mở từng người tới khi nhìn rõ @ rồi mới thoát.";
+      return;
+    }
+    banner.className = "banner ok-banner";
+    banner.textContent = "Tỷ lệ đã gắn hồ sơ (đủ + cần xem): " + openedPct + "% (" +
+      opened + "/" + total + "). «Chưa mở»: " + unopenedPct + "%.";
+  }
+
   var lastResultTotal = -1;
 
   async function refresh() {
     var statsResponse = await api("/v1/videos/stats");
     if (!statsResponse.ok) return;
     var body = await statsResponse.json();
+    var saved = body.saved || 0;
+    var review = body.review || 0;
+    var unopened = body.unopened || 0;
+    var total = saved + review + unopened;
+    var openedPct = pct(saved + review, total);
+    var unopenedPct = pct(unopened, total);
     document.getElementById("stats").innerHTML =
-      stat(body.saved, "Đã lưu") +
-      stat(body.review, "Cần xem") +
-      stat(body.unopened, "Chưa mở hồ sơ") +
+      stat(saved, "Đã lưu") +
+      stat(review, "Cần xem") +
+      stat(unopened, "Chưa mở hồ sơ", unopenedPct != null && unopenedPct > 50 ? "warn" : "") +
+      stat(openedPct != null ? (openedPct + "%") : "—", "% đã gắn hồ sơ", openedPct != null && openedPct >= 50 ? "ok" : "warn") +
+      stat(unopenedPct != null ? (unopenedPct + "%") : "—", "% chưa mở", unopenedPct != null && unopenedPct > 50 ? "warn" : "") +
       stat(body.queued, "Video đang chờ") +
       stat(body.running, "Video đang đọc") +
       stat(body.done, "Video đã xong") +
       stat(body.error, "Video lỗi");
+    renderOpenBanner(saved, review, unopened);
     var reader = document.getElementById("reader");
     if (!body.reader_alive) {
       reader.textContent = body.queued > 0
@@ -234,9 +352,19 @@
         var saved = item.saved_count || 0;
         var review = item.review_count || 0;
         var unopened = item.unopened_count || 0;
+        var total = saved + review + unopened;
+        var openedPct = pct(saved + review, total);
+        var unopenedPct = pct(unopened, total);
         resultText = saved + " đủ";
         if (review) resultText += " · " + review + " cần xem";
         if (unopened) resultText += " · " + unopened + " chưa mở";
+        if (openedPct != null) {
+          var badgeClass = unopenedPct != null && unopenedPct > 50 ? "bad" : "good";
+          var badgeLabel = unopenedPct != null && unopenedPct > 50
+            ? (unopenedPct + "% chưa mở — nên quay lại đúng cách")
+            : (openedPct + "% đã gắn hồ sơ");
+          resultText += "<div><span class='badge " + badgeClass + "'>" + badgeLabel + "</span></div>";
+        }
         resultText += " <button class='ghost' type='button' data-filter='" + escapeHtml(item.name) + "'>Xem</button>";
       }
       html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + escapeHtml(item.device || "") + "</td><td>" + statusText(item.status) + progress + retry + "</td><td>" + resultText + "</td></tr>";
@@ -353,6 +481,12 @@
 
   async function sendFiles(fileList) {
     var note = document.getElementById("uploadNote");
+    if (!checklistReady()) {
+      note.textContent = "Hãy tick đủ 3 ô xác nhận cách quay trước khi tải video.";
+      note.className = "note warn";
+      document.getElementById("checklist").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     var files = Array.prototype.slice.call(fileList || []);
     if (!files.length) return;
     saveDevice();
@@ -381,12 +515,28 @@
     refresh();
   }
 
-  document.getElementById("pick").addEventListener("click", function () { document.getElementById("file").click(); });
+  document.getElementById("pick").addEventListener("click", function () {
+    if (!checklistReady()) {
+      document.getElementById("uploadNote").textContent = "Hãy tick đủ 3 ô xác nhận cách quay trước khi tải video.";
+      document.getElementById("uploadNote").className = "note warn";
+      return;
+    }
+    document.getElementById("file").click();
+  });
   document.getElementById("file").addEventListener("change", function (event) { sendFiles(event.target.files); event.target.value = ""; });
   document.getElementById("device").addEventListener("change", saveDevice);
   document.getElementById("device").addEventListener("blur", saveDevice);
+  checklistIds().forEach(function (id) {
+    document.getElementById(id).addEventListener("change", function () {
+      saveChecklist();
+      syncUploadGate();
+    });
+  });
   var drop = document.getElementById("drop");
-  drop.addEventListener("dragover", function (event) { event.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragover", function (event) {
+    event.preventDefault();
+    if (checklistReady()) drop.classList.add("over");
+  });
   drop.addEventListener("dragleave", function () { drop.classList.remove("over"); });
   drop.addEventListener("drop", function (event) {
     event.preventDefault();
@@ -416,6 +566,8 @@
   });
 
   loadDevice();
+  loadChecklist();
+  syncUploadGate();
   refresh();
   setInterval(refresh, 4000);
 </script>

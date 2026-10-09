@@ -409,7 +409,7 @@ class StableFrameTests(unittest.TestCase):
             planner.push(thumb)
         plan = planner.finish()
         self.assertEqual(plan.reads, [0, 12])
-        self.assertEqual(plan.taps, [[5, 6, 7, 8, 9]])
+        self.assertEqual(plan.taps, [[3, 4, 5, 6, 7, 8, 9]])
         self.assertEqual(plan.count, 22)
 
     def test_planner_keeps_a_short_pause_as_a_probe_even_without_a_still_read(self) -> None:
@@ -436,7 +436,7 @@ class StableFrameTests(unittest.TestCase):
         self.assertTrue(any(10 <= number <= 11 for number in plan.reads))
 
     def test_single_frame_profile_flash_is_still_kept(self) -> None:
-        """Chỉ ló hồ sơ 1 khung (~0.07s) rồi thoát: vẫn đưa khung đó vào hàng đọc."""
+        """Chỉ ló hồ sơ 1 khung (~0.05s @20fps) rồi thoát: vẫn đưa khung đó vào hàng đọc."""
         planner = _Planner()
         list_thumb = np.zeros((8, 8), dtype=np.float32)
         profile_thumb = np.full((8, 8), 200, dtype=np.float32)
@@ -444,6 +444,8 @@ class StableFrameTests(unittest.TestCase):
             planner.push(thumb)
         plan = planner.finish()
         self.assertIn(8, plan.reads)
+        # Khung lân cận cũng vào hàng đọc — đôi khi @ rõ hơn ở biên chuyển cảnh.
+        self.assertTrue(any(number in plan.reads for number in (7, 9)))
 
 
 class TapFrameTests(unittest.TestCase):
@@ -471,7 +473,8 @@ class TapFrameTests(unittest.TestCase):
         table = build_table(
             [
                 FrameObs("tap", (ContactHit("0332001753", "khactam", True),), at=2.0),
-                FrameObs("profile", (), "Người lạ", "@nguoila", at=9.0),
+                # Ngoài cửa sổ 8s kể từ lúc bấm.
+                FrameObs("profile", (), "Người lạ", "@nguoila", at=11.0),
             ]
         )
         self.assertEqual(table.rows, [])

@@ -1,6 +1,6 @@
 """Đọc video hoặc ảnh chụp màn hình danh bạ, xuất bảng số điện thoại, tên, username.
 
-Lượt một quét ảnh xám rất nhỏ, 15 khung mỗi giây, để biết lúc nào màn hình
+Lượt một quét ảnh xám rất nhỏ, 20 khung mỗi giây, để biết lúc nào màn hình
 đứng yên và lúc nào bắt đầu chuyển. Lượt hai chỉ giải nén đầy đủ các khung
 cần đọc: một khung cho mỗi cảnh đứng yên, và vài khung ngay trước mỗi lần
 chuyển màn hình để tìm dòng vừa bấm. Ghép bằng tên; nếu video vừa bấm một
@@ -34,18 +34,19 @@ Progress = Callable[[str], None]
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mkv", ".avi", ".webm"}
 
-SCAN_FPS = 15.0
+# 20fps: hồ sơ mở ~0.1s còn ~2 khung; spike 1 khung ~50ms vẫn bắt được.
+SCAN_FPS = 20.0
 THUMB_W = 48
 THUMB_H = 104
-# ~0.1s @15fps: hai khung liên tiếp giống nhau (~67–133ms) là đủ đưa vào hàng đọc.
+# ~0.05–0.1s @20fps: hai khung liên tiếp giống nhau là đủ đưa vào hàng đọc.
 SETTLE_LAG = 1
 SETTLED = 3.5
 # Hai hồ sơ khác nhau gần như cùng một màn hình trắng, nên ngưỡng "đã đổi cảnh" phải rất thấp.
 CHANGED = 1.2
 MOVING = 2.5
-# Hồ sơ vs danh bạ lệch rất mạnh; dùng ngưỡng cao để bắt spike 1 khung mà không lấy hết khung lúc cuộn.
-FLASH_CHANGED = 12.0
-TAP_WINDOW = 5
+# Hồ sơ vs danh bạ lệch rất mạnh; ngưỡng hơi thấp hơn để bắt flash nhạt / chuyển cảnh mờ.
+FLASH_CHANGED = 9.0
+TAP_WINDOW = 7
 # OCR thường toàn bộ khung trong cửa sổ trước lúc chuyển cảnh (không chỉ tìm chấm bấm).
 BRIEF_EXIT_READS = TAP_WINDOW
 
@@ -264,7 +265,8 @@ class _Planner:
 
     def __init__(self) -> None:
         self.ring: deque[np.ndarray] = deque(maxlen=SETTLE_LAG + 1)
-        self.history: deque[tuple[int, np.ndarray]] = deque(maxlen=TAP_WINDOW + 3)
+        # Giữ thêm vài khung để spike/hồ sơ ngắn còn lấy được khung lân cận.
+        self.history: deque[tuple[int, np.ndarray]] = deque(maxlen=TAP_WINDOW + 5)
         self.last_kept: np.ndarray | None = None
         self.was_moving = False
         self.spike_kept = False
@@ -337,11 +339,21 @@ class _Planner:
             return
         if self.last_kept is not None and _mean_abs(mid, self.last_kept) < FLASH_CHANGED:
             return
-        if mid_number in self.plan.reads:
-            return
-        self.plan.reads.append(mid_number)
-        self.last_kept = mid.copy()
+        self._force_read(mid_number, mid)
+        # Khung trước/sau flash đôi khi rõ @ hơn khung giữa (đang chuyển cảnh).
+        by_number = {number: frame for number, frame in self.history}
+        by_number[mid_number] = mid
+        for neighbor in (mid_number - 1, mid_number + 1):
+            frame = by_number.get(neighbor)
+            if frame is not None:
+                self._force_read(neighbor, frame)
         self.spike_kept = True
+
+    def _force_read(self, number: int, thumb: np.ndarray) -> None:
+        if number < 0 or number in self.plan.reads:
+            return
+        self.plan.reads.append(number)
+        self.last_kept = thumb.copy()
 
     def _tap_window(self, last: int) -> None:
         if last < 0:

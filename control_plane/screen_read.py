@@ -391,7 +391,11 @@ def _read_rows(image: Image.Image, strips: list[Box], tapped: set[int]) -> list[
 
 
 def _read_profile(image: Image.Image, button: Box) -> tuple[str, str]:
-    """Hồ sơ: tên nằm ngay phía trên @username."""
+    """Hồ sơ: tên nằm ngay phía trên @username.
+
+    Hồ sơ mở rất ngắn thường hơi nhòe — thử thêm crop phóng to/làm nét và
+    ngưỡng tin cậy thấp hơn trước khi bỏ qua khung.
+    """
     header = Box(
         max(0, button.x0 - int(0.08 * button.w)),
         max(0, button.y0 - int(3.9 * button.h)),
@@ -400,21 +404,43 @@ def _read_profile(image: Image.Image, button: Box) -> tuple[str, str]:
     )
     if header.w < 20 or header.h < 20:
         return "", ""
-    words = _batch([image.crop((header.x0, header.y0, header.x1, header.y1))], "vie+eng", 6)[0]
-    words = [
-        Word(word.text, word.conf, word.box.shift(header.x0, header.y0))
-        for word in words
-        if word.conf >= 20
+    raw = image.crop((header.x0, header.y0, header.x1, header.y1))
+    # Không dùng _pad ở đây để tỉ lệ tọa độ crop → ảnh gốc còn đúng.
+    passes: list[tuple[Image.Image, int, int]] = [
+        (raw, 6, 20),
+        (_enhance(raw, 2), 7, 12),
+        (_upscale(raw, 2), 6, 12),
     ]
-    words = [word for word in words if word.box.center_x() < button.x1 + 0.45 * button.w]
-    lines = _lines(words)
+    lines: list[Line] = []
     handle_at = -1
     username = ""
-    for index, line in enumerate(lines):
-        found = clean_username(_username_token(line.text))
-        if found:
-            handle_at = index
-            username = found
+    for crop, psm, min_conf in passes:
+        words = _batch([crop], "vie+eng", psm)[0]
+        scale_x = header.w / max(1, crop.width)
+        scale_y = header.h / max(1, crop.height)
+        shifted = []
+        for word in words:
+            if word.conf < min_conf:
+                continue
+            box = word.box
+            mapped = Box(
+                header.x0 + int(box.x0 * scale_x),
+                header.y0 + int(box.y0 * scale_y),
+                header.x0 + int(box.x1 * scale_x),
+                header.y0 + int(box.y1 * scale_y),
+            )
+            shifted.append(Word(word.text, word.conf, mapped))
+        shifted = [word for word in shifted if word.box.center_x() < button.x1 + 0.45 * button.w]
+        lines = _lines(shifted)
+        handle_at = -1
+        username = ""
+        for index, line in enumerate(lines):
+            found = clean_username(_username_token(line.text))
+            if found:
+                handle_at = index
+                username = found
+                break
+        if handle_at >= 0:
             break
     if handle_at < 0:
         return "", ""
@@ -436,10 +462,10 @@ def _read_profile(image: Image.Image, button: Box) -> tuple[str, str]:
         break
     if name_box is None:
         return choose_name(draft), username
-    crop = [_pad(_upscale(_crop(image, name_box, 8, 6), 2))]
-    fast = _texts(_batch(crop, "vie", 7))[0]
+    name_crop = [_pad(_upscale(_crop(image, name_box, 8, 6), 2))]
+    fast = _texts(_batch(name_crop, "vie", 7))[0]
     best = best_tessdata()
-    sharp = _texts(_batch(crop, "vie", 7, tessdata=best))[0] if best else ""
+    sharp = _texts(_batch(name_crop, "vie", 7, tessdata=best))[0] if best else ""
     return choose_name(fast, sharp, draft), username
 
 
