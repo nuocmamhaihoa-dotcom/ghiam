@@ -11,6 +11,7 @@ Features:
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import os
 import time
@@ -193,13 +194,57 @@ def health() -> dict[str, Any]:
     }
 
 
-def _html(name: str) -> HTMLResponse:
+_RELAY_NETS = tuple(
+    ipaddress.ip_network(item)
+    for item in (
+        "104.16.0.0/12",
+        "172.64.0.0/13",
+        "162.158.0.0/15",
+        "108.162.192.0/18",
+        "173.245.48.0/20",
+        "103.21.244.0/22",
+        "103.22.200.0/22",
+        "103.31.4.0/22",
+        "141.101.64.0/18",
+        "190.93.240.0/20",
+        "188.114.96.0/20",
+        "197.234.240.0/22",
+        "198.41.128.0/17",
+        "131.0.72.0/22",
+    )
+)
+_RELAY_WARNING = (
+    "Điện thoại đang đi qua Cloudflare (iCloud Private Relay). "
+    "Đường này hay ngắt nên video lên chậm, dù máy chủ nhận rất nhanh. "
+    "Tắt Private Relay: Cài đặt → [tên bạn] → iCloud → Private Relay. "
+    "Rồi Cài đặt → Safari → Ẩn địa chỉ IP → Tắt. Tắt cả Chế độ dữ liệu thấp, tải lại trang này rồi chọn lại video."
+)
+
+
+def _is_relay_host(host: str | None) -> bool:
+    if not host:
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return any(ip in net for net in _RELAY_NETS)
+
+
+def _html(name: str, request: Request | None = None) -> HTMLResponse:
     path = STATIC_DIR / name
     if not path.exists():
         return HTMLResponse("<p>Missing page.</p>", status_code=404)
     text = path.read_text(encoding="utf-8").replace("__IPHONE_BUILD__", str(IPHONE_BUILD))
     baked = json.dumps(settings.page_token or "").replace("<", "\\u003c")
     text = text.replace("__CONTROL_TOKEN__", baked)
+    host = request.client.host if request is not None and request.client else None
+    if _is_relay_host(host):
+        text = text.replace("__RELAY_HIDE__", "")
+        text = text.replace("__RELAY_TEXT__", _RELAY_WARNING)
+    else:
+        text = text.replace("__RELAY_HIDE__", "hide")
+        text = text.replace("__RELAY_TEXT__", "")
     return HTMLResponse(
         text,
         headers={
@@ -210,9 +255,9 @@ def _html(name: str) -> HTMLResponse:
 
 
 @app.get("/", response_class=HTMLResponse)
-def dashboard() -> HTMLResponse:
+def dashboard(request: Request) -> HTMLResponse:
     """Trang duy nhất: thêm video, xem thống kê, tải bản sao lưu."""
-    return _html("video.html")
+    return _html("video.html", request)
 
 
 @app.get("/phone", response_class=HTMLResponse)

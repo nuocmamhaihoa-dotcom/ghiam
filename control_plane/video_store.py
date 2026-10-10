@@ -439,17 +439,23 @@ def can_accept(used_bytes: int, new_bytes: int, limit_bytes: int, free_bytes: in
     return free_bytes > new_bytes + free_reserve_bytes()
 
 
+def uploads_are_flowing(db_path: Path, *, fresh_sec: int = 45) -> bool:
+    """Có phiên vừa nhận byte. Dùng để nhường CPU/đĩa cho đường tải."""
+    return sum(_receiving_count_from(path, fresh_sec=fresh_sec) for path in _uploads_db_paths(db_path)) >= 1
+
+
 def should_pause_ocr(db_path: Path, video_dir: Path) -> bool:
-    """Tạm không nhận video OCR mới khi đĩa căng hoặc đang up hàng loạt."""
+    """Tạm không nhận video OCR mới khi đĩa căng hoặc đang có upload."""
     try:
         free = shutil.disk_usage(video_dir).free
     except OSError:
         return False
     if free < ocr_pause_free_bytes():
         return True
-    # Chỉ phiên vừa nhận byte (2 phút). Phiên đã xếp nhưng chưa gửi không được dừng OCR.
+    # Chỉ phiên vừa nhận byte. Phiên đã xếp nhưng im thì không dừng OCR.
+    # Mặc định 1: một iPhone đang gửi đã đủ làm đĩa/CPU nghẽn nếu OCR chiếm hết 16 nhân.
     receiving = sum(_receiving_count_from(path, fresh_sec=120) for path in _uploads_db_paths(db_path))
-    pause_at = int(os.environ.get("CONTROL_VIDEO_OCR_PAUSE_UPLOADS", "6") or "6")
+    pause_at = int(os.environ.get("CONTROL_VIDEO_OCR_PAUSE_UPLOADS", "1") or "1")
     return receiving >= max(1, pause_at)
 
 

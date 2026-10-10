@@ -12,6 +12,7 @@ import functools
 import multiprocessing
 import os
 import shutil
+import signal
 import sqlite3
 import threading
 import time
@@ -35,6 +36,7 @@ from control_plane.video_store import (
     set_duration,
     set_progress,
     should_pause_ocr,
+    uploads_are_flowing,
     stale_running,
     touch_heartbeat,
     worker_count,
@@ -70,6 +72,79 @@ def _restart_now(reason: str) -> None:
     """Thoát cứng để systemd Restart=always. SystemExit bị kẹt khi pool/thread còn sống."""
     print(reason, flush=True)
     os._exit(1)
+
+
+def _ocr_descendant_pids(root: int) -> list[int]:
+    """Mọi tiến trình con (ffmpeg, OCR), trừ resource_tracker của multiprocessing."""
+    children: dict[int, list[int]] = {}
+    skip: set[int] = set()
+    proc = Path("/proc")
+    try:
+        entries = list(proc.iterdir())
+    except OSError:
+        return []
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        try:
+            stat = (entry / "stat").read_text(encoding="utf-8", errors="replace")
+            cmd = (entry / "cmdline").read_bytes()
+        except OSError:
+            continue
+        if b"resource_tracker" in cmd:
+            skip.add(pid)
+            continue
+        end = stat.rfind(")")
+        if end < 0:
+            continue
+        parts = stat[end + 2 :].split()
+        if len(parts) < 2:
+            continue
+        try:
+            ppid = int(parts[1])
+        except ValueError:
+            continue
+        children.setdefault(ppid, []).append(pid)
+    found: list[int] = []
+    stack = list(children.get(root, []))
+    while stack:
+        pid = stack.pop()
+        if pid in skip:
+            continue
+        found.append(pid)
+        stack.extend(children.get(pid, []))
+    return found
+
+
+def _signal_ocr_tree(sig: int) -> None:
+    for pid in _ocr_descendant_pids(os.getpid()):
+        try:
+            os.kill(pid, sig)
+        except OSError:
+            pass
+
+
+def _yield_ocr_while_uploading(db_path: Path, stop: threading.Event) -> None:
+    """OCR 16 nhân làm upload ngắt quãng (đĩa/CPU đầy, iPhone phải chờ ACK).
+
+    Đang có byte vào thì SIGSTOP cả cây OCR; nguội vài chục giây thì SIGCONT.
+    """
+    held = False
+    while not stop.wait(1.0):
+        try:
+            active = uploads_are_flowing(db_path)
+        except Exception:
+            active = False
+        if active:
+            _signal_ocr_tree(signal.SIGSTOP)
+            if not held:
+                held = True
+                print("Tạm dừng OCR để nhường CPU và đĩa cho upload.", flush=True)
+        elif held:
+            _signal_ocr_tree(signal.SIGCONT)
+            held = False
+            print("Upload nguội — OCR chạy tiếp.", flush=True)
 
 
 def _rematch_process(path: str) -> None:
@@ -276,6 +351,12 @@ def main() -> None:
         )
     stop = threading.Event()
     broken = threading.Event()
+    threading.Thread(
+        target=_yield_ocr_while_uploading,
+        args=(db_path, stop),
+        name="yield-ocr-for-upload",
+        daemon=True,
+    ).start()
     context = multiprocessing.get_context("spawn")
     threads: list[threading.Thread] = []
 

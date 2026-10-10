@@ -12,6 +12,9 @@ WorkingDirectory=/opt/fb-poller
 EnvironmentFile=/opt/fb-poller/control_data/server.env
 Environment=OMP_NUM_THREADS=1
 Environment=OMP_THREAD_LIMIT=1
+# Hub (upload) giữ ưu tiên CPU/đĩa. OCR bị dừng hẳn khi đang có byte vào.
+Nice=10
+IOSchedulingClass=idle
 ExecStart=/opt/fb-poller/.venv/bin/python -m control_plane.video_worker
 Restart=always
 RestartSec=2

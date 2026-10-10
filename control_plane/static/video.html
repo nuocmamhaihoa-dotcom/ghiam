@@ -90,7 +90,8 @@
 <main>
   <h1>Đọc video danh bạ</h1>
   <p class="lead">Thêm nhiều video / nhiều iPhone cùng lúc. Chọn xong là xếp phiên lên VPS ngay — hàng đợi hiện tên từng file. Tải theo mảnh, mất mạng chọn lại cùng file để tiếp tục. Đóng trang thì máy chủ vẫn đọc các video đã tải xong.</p>
-  <p class="note" style="margin-bottom:0.8rem"><b>Để tải nhanh:</b> tắt iCloud Private Relay (Cài đặt → [tên bạn] → iCloud → Private Relay) và tắt Chế độ dữ liệu thấp. Thoát hẳn app VideoUp (app bản đang cài chỉ khoảng 50KB/s). Rồi chọn video <b>ngay trên Safari ở trang này</b> (http://14.225.224.16:8088) — 6 đường × 16MB, một video tới 100% máy chủ đọc ngay. Giữ màn hình sáng. Trong lúc gửi, trang không tự làm mới bảng để khỏi giành kết nối.</p>
+  <div id="relayWarn" class="banner warn-banner __RELAY_HIDE__">__RELAY_TEXT__</div>
+  <p class="note" style="margin-bottom:0.8rem"><b>Để tải nhanh:</b> tắt iCloud Private Relay và Chế độ dữ liệu thấp, thoát app VideoUp, rồi chọn video <b>ngay trên Safari ở trang này</b> (http://14.225.224.16:8088). Giữ màn hình sáng. Khi đang gửi, máy chủ dừng đọc video cũ để nhường đĩa — dòng dưới hiện MB/s và số phút còn lại.</p>
 
   <div id="openWarn" class="banner hide" role="status"></div>
 
@@ -786,11 +787,25 @@
       var live = {};
       var results = await mapPool(registered, UPLOAD_PARALLEL, async function (job) {
         var name = job.file.name;
+        var chunkBytes = job.session.chunk_size || CHUNK_BYTES;
+        var already = (job.session.received || []).length;
+        job._t0 = Date.now();
+        job._base = Math.min(job.file.size, already * chunkBytes);
         live[name] = "0%";
         var result = await uploadSessionChunks(job.file, job.session, function (percent, finished, total, resumed) {
-          live[name] = percent + "%" + (resumed ? "·resume" : "");
-          var parts = Object.keys(live).map(function (k) { return k.replace(/^.*\//, "").slice(0, 18) + " " + live[k]; });
-          note.textContent = "Đang gửi tới 100%: " + parts.join(" · ") + " — đừng khóa máy";
+          var sent = Math.min(job.file.size, finished * chunkBytes);
+          var sec = Math.max(0.001, (Date.now() - job._t0) / 1000);
+          var mbps = (sent - job._base) / sec / (1024 * 1024);
+          var speed = mbps >= 1 ? (mbps.toFixed(1) + " MB/s") : (Math.max(0, Math.round(mbps * 1024)) + " KB/s");
+          var left = "";
+          if (mbps > 0.05 && sent < job.file.size) {
+            var eta = (job.file.size - sent) / (mbps * 1024 * 1024);
+            left = eta < 90 ? (" · còn " + Math.max(1, Math.round(eta)) + " giây") : (" · còn " + Math.round(eta / 60) + " phút");
+          }
+          live[name] = percent + "% · " + speed + left + (resumed ? " · resume" : "");
+          var parts = Object.keys(live).map(function (k) { return k.replace(/^.*\//, "").slice(0, 22) + " " + live[k]; });
+          var slow = sec > 8 && mbps < 0.4 ? " Đường này đang rất chậm — tắt Private Relay rồi chọn lại file." : "";
+          note.textContent = "Đang gửi: " + parts.join(" · ") + " — đừng khóa máy." + slow;
         });
         delete live[name];
         await refresh();

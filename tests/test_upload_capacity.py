@@ -106,6 +106,21 @@ class UploadCapacityTests(unittest.TestCase):
             usage.return_value = mock.Mock(free=200 * 1024**3)
             self.assertTrue(should_pause_ocr(self.db, self.videos))
 
+    def test_one_upload_pauses_ocr(self) -> None:
+        os.environ["CONTROL_VIDEO_OCR_PAUSE_UPLOADS"] = "1"
+        init_upload(
+            self.db,
+            self.videos,
+            name="only.mp4",
+            size_bytes=1024 * 1024,
+            client_key="only",
+            chunk_size=64 * 1024,
+            disk_limit_bytes=self.limit,
+        )
+        with mock.patch("control_plane.video_store.shutil.disk_usage") as usage:
+            usage.return_value = mock.Mock(free=200 * 1024**3)
+            self.assertTrue(should_pause_ocr(self.db, self.videos))
+
 
 if __name__ == "__main__":
     unittest.main()

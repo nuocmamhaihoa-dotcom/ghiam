@@ -324,10 +324,21 @@ async def upload_chunk(
     authorization: str | None = Header(default=None),
 ) -> dict[str, object]:
     _auth(authorization)
+    started = time.perf_counter()
     data = await request.body()
+    read_s = time.perf_counter() - started
     uploads_db = _uploads_db()
     try:
-        return await run_in_threadpool(put_chunk, uploads_db, upload_id, index, data)
+        worked = time.perf_counter()
+        body = await run_in_threadpool(put_chunk, uploads_db, upload_id, index, data)
+        work_s = time.perf_counter() - worked
+        # Đĩa/CPU nghẽn thì ACK chậm và iPhone ngừng gửi mảnh kế.
+        if work_s >= 0.4:
+            print(
+                f"chunk chậm index={index} bytes={len(data)} đọc={read_s:.2f}s ghi={work_s:.2f}s",
+                flush=True,
+            )
+        return body
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
