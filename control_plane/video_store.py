@@ -361,7 +361,7 @@ def _incoming_bytes_from(db_path: Path) -> int:
                 return 0
             row = conn.execute(
                 """
-                SELECT COALESCE(SUM(size_bytes), 0) AS n
+                SELECT COALESCE(SUM(received_bytes), 0) AS n
                 FROM upload_sessions WHERE status = 'receiving'
                 """
             ).fetchone()
@@ -370,8 +370,8 @@ def _incoming_bytes_from(db_path: Path) -> int:
         return 0
 
 
-def _receiving_count_from(db_path: Path) -> int:
-    """Chỉ đếm phiên receiving còn sống (< 20 phút im) — không pause OCR vì phiên chết."""
+def _receiving_count_from(db_path: Path, *, fresh_sec: int = 20 * 60) -> int:
+    """Đếm phiên receiving còn cập nhật trong fresh_sec giây."""
     try:
         with connect(db_path) as conn:
             exists = conn.execute(
@@ -382,7 +382,7 @@ def _receiving_count_from(db_path: Path) -> int:
             rows = conn.execute(
                 "SELECT updated_at FROM upload_sessions WHERE status = 'receiving'"
             ).fetchall()
-        cutoff = time.time() - 20 * 60
+        cutoff = time.time() - max(30, fresh_sec)
         n = 0
         for row in rows:
             text = str(row["updated_at"] or "").replace("Z", "+00:00")
@@ -447,7 +447,8 @@ def should_pause_ocr(db_path: Path, video_dir: Path) -> bool:
         return False
     if free < ocr_pause_free_bytes():
         return True
-    receiving = sum(_receiving_count_from(path) for path in _uploads_db_paths(db_path))
+    # Chỉ phiên vừa nhận byte (2 phút). Phiên đã xếp nhưng chưa gửi không được dừng OCR.
+    receiving = sum(_receiving_count_from(path, fresh_sec=120) for path in _uploads_db_paths(db_path))
     pause_at = int(os.environ.get("CONTROL_VIDEO_OCR_PAUSE_UPLOADS", "6") or "6")
     return receiving >= max(1, pause_at)
 

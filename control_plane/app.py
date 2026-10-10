@@ -200,7 +200,13 @@ def _html(name: str) -> HTMLResponse:
     text = path.read_text(encoding="utf-8").replace("__IPHONE_BUILD__", str(IPHONE_BUILD))
     baked = json.dumps(settings.page_token or "").replace("<", "\\u003c")
     text = text.replace("__CONTROL_TOKEN__", baked)
-    return HTMLResponse(text, headers={"Cache-Control": "no-cache"})
+    return HTMLResponse(
+        text,
+        headers={
+            "Cache-Control": "no-store, max-age=0, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 @app.get("/", response_class=HTMLResponse)

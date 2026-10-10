@@ -31,6 +31,7 @@ final class BackgroundUploader: NSObject, URLSessionTaskDelegate, URLSessionData
         _ = session
     }
 
+    /// Phiên nền (khóa máy). Mỗi task nhỏ bị iOS xếp lịch ~30–60s — chậm. Ưu tiên ForegroundUploader.
     func uploadChunk(
         fileURL: URL,
         to url: URL,
@@ -74,5 +75,34 @@ final class BackgroundUploader: NSObject, URLSessionTaskDelegate, URLSessionData
         let handler = completionHandler
         completionHandler = nil
         DispatchQueue.main.async { handler?() }
+    }
+}
+
+/// URLSession thường: nhiều mảnh cùng lúc, không chờ lịch nền của iOS.
+final class ForegroundUploader {
+    static let shared = ForegroundUploader()
+    private let session: URLSession
+
+    private init() {
+        let config = URLSessionConfiguration.default
+        config.httpMaximumConnectionsPerHost = 6
+        config.timeoutIntervalForRequest = 120
+        config.timeoutIntervalForResource = 300
+        config.allowsCellularAccess = true
+        config.waitsForConnectivity = true
+        session = URLSession(configuration: config)
+    }
+
+    func uploadChunk(data: Data, to url: URL, authHeader: String?) async throws {
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        if let authHeader {
+            request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        }
+        let (_, response) = try await session.upload(for: request, from: data)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw HubError.http(http.statusCode, "chunk HTTP \(http.statusCode)")
+        }
     }
 }

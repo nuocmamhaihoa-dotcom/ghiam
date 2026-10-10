@@ -90,7 +90,7 @@
 <main>
   <h1>Đọc video danh bạ</h1>
   <p class="lead">Thêm nhiều video / nhiều iPhone cùng lúc. Chọn xong là xếp phiên lên VPS ngay — hàng đợi hiện tên từng file. Tải theo mảnh, mất mạng chọn lại cùng file để tiếp tục. Đóng trang thì máy chủ vẫn đọc các video đã tải xong.</p>
-  <p class="note" style="margin-bottom:0.8rem">Khuyến nghị iPhone: cài app <a href="/tai/videoup.zip"><b>VideoUp</b></a> (upload nền khi khóa máy). Safari: giữ màn hình sáng tới khi thấy đủ phiên trong Hàng đợi; nếu bị ngắt, chọn lại cùng file để resume.</p>
+  <p class="note" style="margin-bottom:0.8rem">Tải bằng Safari trên trang này (nhanh, 4 mảnh cùng lúc, xong 1 video là máy chủ đọc ngay). Giữ màn hình sáng. App VideoUp bản cũ gửi nền rất chậm — dùng trang này cho tới khi cài bản mới. Nếu bảng còn cột «Máy quét», kéo xuống để tải lại trang.</p>
 
   <div id="openWarn" class="banner hide" role="status"></div>
 
@@ -642,8 +642,10 @@
     return last;
   }
 
-  // Safari: 1 video một lúc ổn định hơn — tránh nghẽn kết nối / khóa máy giữa chừng.
+  // Một video tới 100% rồi sang video kế — video xong vào OCR ngay, không chia băng thông cho cả lô.
   var UPLOAD_PARALLEL = 1;
+  // Nhiều mảnh cùng lúc trên một video: lấp đầy đường truyền (mỗi mảnh tuần tự chỉ ~vài chục KB/s).
+  var CHUNK_PARALLEL = 4;
 
   async function mapPool(items, concurrency, worker) {
     var cursor = 0;
@@ -674,46 +676,28 @@
     var finished = Object.keys(done).length;
     onProgress(Math.floor((finished * 100) / Math.max(1, total)), finished, total, !!session.resumed);
 
+    var pending = [];
     for (var index = 0; index < total; index += 1) {
-      if (done[index]) continue;
-      // Safari khóa tab: đợi hiện lại rồi gửi tiếp — không bỏ cuộc giữa chừng.
-      while (document.hidden) {
-        await sleep(1000);
-      }
+      if (!done[index]) pending.push(index);
+    }
+    var failed = null;
+    await mapPool(pending, CHUNK_PARALLEL, async function (index) {
+      if (failed) return;
+      while (document.hidden) await sleep(1000);
+      if (failed) return;
       var start = index * chunkSize;
       var end = Math.min(file.size, start + chunkSize);
       var blob = file.slice(start, end);
       var put = await putChunkBytes(session.upload_id, index, blob);
       if (!put.ok) {
-        // Thử resume session từ server rồi gửi lại mảnh này.
-        var again = await initChunkedWithRetry({
-          name: file.name,
-          size_bytes: file.size,
-          device: deviceName(),
-          client_key: key
-        });
-        if (again.ok && again.body && again.body.upload_id) {
-          session = again.body;
-          store[key] = { upload_id: session.upload_id, name: file.name, size: file.size };
-          saveChunkStore(store);
-          chunkSize = session.chunk_size || chunkSize;
-          total = session.chunks_total || total;
-          done = {};
-          (session.received || []).forEach(function (i) { done[i] = true; });
-          finished = Object.keys(done).length;
-          if (done[index]) {
-            onProgress(Math.floor((finished * 100) / Math.max(1, total)), finished, total, true);
-            continue;
-          }
-          put = await putChunkBytes(session.upload_id, index, blob);
-        }
+        failed = put;
+        return;
       }
-      if (!put.ok) {
-        return { ok: false, status: put.status, body: put.body, upload_id: session.upload_id, name: file.name };
-      }
-      done[index] = true;
       finished += 1;
-      onProgress(Math.floor((finished * 100) / total), finished, total, false);
+      onProgress(Math.floor((finished * 100) / Math.max(1, total)), finished, total, false);
+    });
+    if (failed) {
+      return { ok: false, status: failed.status, body: failed.body, upload_id: session.upload_id, name: file.name };
     }
 
     var completeBody = {};
@@ -764,7 +748,8 @@
           name: file.name,
           size_bytes: file.size,
           device: deviceName(),
-          client_key: clientKeyFor(file)
+          client_key: clientKeyFor(file),
+          chunk_size: 2 * 1024 * 1024
         };
         var init = await initChunkedWithRetry(initBody, function (sec, reason, attempt) {
           note.textContent = file.name + " — chờ chỗ trống (" + reason + "), thử lại sau " + sec + "s · lần " + attempt;

@@ -17,8 +17,10 @@ final class UploadQueue: ObservableObject {
     private var pumping = false
     private let chunkTemp: URL
     private let inbox: URL
-    /// Số video gửi chunk song song — đủ nhanh, không nghẽn Wi‑Fi iPhone.
-    private let parallelUploads = 2
+    /// Một video tới 100% rồi mới sang video kế — video xong được OCR ngay.
+    private let parallelUploads = 1
+    /// Số mảnh gửi cùng lúc trong một video (lấp đầy đường truyền).
+    private let parallelChunks = 4
 
     private init() {
         let defaults = UserDefaults.standard
@@ -220,43 +222,60 @@ final class UploadQueue: ObservableObject {
         saveJobs()
 
         let fileURL = URL(fileURLWithPath: job.localPath)
-        let handle = try FileHandle(forReadingFrom: fileURL)
-        defer { try? handle.close() }
-
         let done = Set(job.received)
-        for index in 0..<job.chunksTotal where !done.contains(index) {
-            let start = UInt64(index) * UInt64(job.chunkSize)
-            try handle.seek(toOffset: start)
-            let end = min(job.sizeBytes, Int64(start) + Int64(job.chunkSize))
-            let length = Int(end - Int64(start))
-            guard let data = try handle.read(upToCount: length), data.count == length else {
-                throw HubError.message("Không đọc được mảnh \(index)")
-            }
-            let part = chunkTemp.appendingPathComponent("\(job.id)-\(index).part")
-            try data.write(to: part, options: .atomic)
-            let url = try client.chunkURL(uploadId: uploadId, index: index)
-            var attempt = 0
-            while true {
-                do {
-                    try await BackgroundUploader.shared.uploadChunk(
-                        fileURL: part,
-                        to: url,
-                        authHeader: client.authHeader()
-                    )
-                    break
-                } catch {
-                    attempt += 1
-                    if attempt >= 6 { throw error }
-                    try await Task.sleep(nanoseconds: UInt64(min(15, attempt * 2)) * 1_000_000_000)
+        let pending = (0..<job.chunksTotal).filter { !done.contains($0) }
+        var sent = done.count
+        var next = 0
+
+        try await withThrowingTaskGroup(of: Int.self) { group in
+            func enqueue() {
+                guard next < pending.count else { return }
+                let index = pending[next]
+                next += 1
+                let chunkSize = job.chunkSize
+                let sizeBytes = job.sizeBytes
+                let auth = client.authHeader()
+                group.addTask {
+                    let start = UInt64(index) * UInt64(chunkSize)
+                    let end = min(sizeBytes, Int64(start) + Int64(chunkSize))
+                    let length = Int(end - Int64(start))
+                    let handle = try FileHandle(forReadingFrom: fileURL)
+                    defer { try? handle.close() }
+                    try handle.seek(toOffset: start)
+                    guard let data = try handle.read(upToCount: length), data.count == length else {
+                        throw HubError.message("Không đọc được mảnh \(index)")
+                    }
+                    let url = try client.chunkURL(uploadId: uploadId, index: index)
+                    var attempt = 0
+                    while true {
+                        do {
+                            try await ForegroundUploader.shared.uploadChunk(
+                                data: data,
+                                to: url,
+                                authHeader: auth
+                            )
+                            return index
+                        } catch {
+                            attempt += 1
+                            if attempt >= 8 { throw error }
+                            try await Task.sleep(nanoseconds: UInt64(min(12, attempt * 2)) * 1_000_000_000)
+                        }
+                    }
                 }
             }
-            try? FileManager.default.removeItem(at: part)
-            job.received.append(index)
-            let sent = Set(job.received).count
-            job.detail = "Đã gửi \(sent)/\(job.chunksTotal) mảnh"
-            job.updatedAt = Date()
-            jobs[jobIndex] = job
-            saveJobs()
+
+            for _ in 0..<min(self.parallelChunks, pending.count) {
+                enqueue()
+            }
+            while let index = try await group.next() {
+                sent += 1
+                job.received.append(index)
+                job.detail = "Đã gửi \(sent)/\(job.chunksTotal) mảnh"
+                job.updatedAt = Date()
+                self.jobs[jobIndex] = job
+                self.saveJobs()
+                enqueue()
+            }
         }
 
         let complete = try await client.complete(uploadId: uploadId)

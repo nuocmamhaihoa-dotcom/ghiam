@@ -46,7 +46,9 @@ def upload_slots() -> int:
     raw = os.environ.get("CONTROL_VIDEO_UPLOAD_SLOTS", "").strip()
     if raw:
         return max(1, int(raw))
-    return 16
+    # 50 video × nhiều iPhone: slot là phiên đã xếp, không phải số kết nối.
+    # Phiên im >20 phút không tính (receiving_count) nên không kẹt slot vĩnh viễn.
+    return 64
 
 
 @contextmanager
@@ -515,11 +517,12 @@ def put_chunk(
     if not path.exists():
         raise LookupError("File partial đã mất — khởi tạo lại phiên tải.")
     # Ghi đĩa trước — nếu DB bận vẫn không mất dữ liệu; resume sẽ gửi lại nếu UPDATE lỗi.
+    # Không fsync từng mảnh — fsync mỗi 2MB làm chậm hàng loạt khi nhiều PUT song song.
+    # Dữ liệu nằm trên đĩa sau flush; complete kiểm tra đủ kích thước trước khi xếp OCR.
     with path.open("r+b") as handle:
         handle.seek(index * chunk_size)
         handle.write(data)
         handle.flush()
-        os.fsync(handle.fileno())
 
     received = _map_list(str(row["received_map"] or ""), total)
     if index not in received:
