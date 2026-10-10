@@ -25,8 +25,6 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from starlette.middleware.base import BaseHTTPMiddleware
-
 from control_plane import db
 from control_plane.delivery import (
     DANHBA_NAME,
@@ -75,12 +73,28 @@ if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
-class LimitUploadSizeMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
-        cl = request.headers.get("content-length")
-        if cl and int(cl) > settings.max_upload_mb * 1024 * 1024:
-            return JSONResponse({"detail": "upload too large"}, status_code=413)
-        return await call_next(request)
+class LimitUploadSizeMiddleware:
+    """Chặn body quá lớn theo Content-Length, không nuốt body (BaseHTTPMiddleware làm chậm PUT)."""
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
+        if scope.get("type") == "http":
+            limit = settings.max_upload_mb * 1024 * 1024
+            for key, value in scope.get("headers") or []:
+                if key != b"content-length":
+                    continue
+                try:
+                    size = int(value)
+                except ValueError:
+                    break
+                if size > limit:
+                    response = JSONResponse({"detail": "upload too large"}, status_code=413)
+                    await response(scope, receive, send)
+                    return
+                break
+        await self.app(scope, receive, send)
 
 
 app.add_middleware(LimitUploadSizeMiddleware)

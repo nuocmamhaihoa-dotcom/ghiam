@@ -18,7 +18,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Callable
-from concurrent.futures import Future, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -280,32 +280,39 @@ def _scan_video(
             )
         )
     jobs.sort(key=lambda job: (job[0], job[1]))
-    total = len(jobs)
+    # Khung đơn gần như giống khung vừa đọc (cùng màn hình giữ yên) không OCR lại.
+    copy_from = _alias_single_frames(jobs)
+    ocr_total = len(jobs) - len(copy_from)
     progress_every_sec = 10.0
-    step = max(1, min(100, total // 50)) if total else 1
+    step = max(1, min(100, ocr_total // 50)) if ocr_total else 1
+    skipped_note = f" (bỏ {len(copy_from)} khung trùng)" if copy_from else ""
     if on_progress is not None:
-        on_progress(f"Đang đọc chữ 0/{total} khung")
+        on_progress(f"Đang đọc chữ 0/{ocr_total} khung{skipped_note}")
+    results: list[FrameObs] = [FrameObs("unknown")] * len(jobs)
     if submit is None:
-        results: list[FrameObs] = []
         last_beat = time.monotonic()
-        for index, (_, _, _, fn, args) in enumerate(jobs, start=1):
-            results.append(fn(*args))
+        done = 0
+        for index, (_, _, _, fn, args) in enumerate(jobs):
+            if index in copy_from:
+                continue
+            results[index] = fn(*args)
+            done += 1
             now = time.monotonic()
             if on_progress is not None and (
-                index == total or index % step == 0 or now - last_beat >= progress_every_sec
+                done == ocr_total or done % step == 0 or now - last_beat >= progress_every_sec
             ):
-                on_progress(f"Đang đọc chữ {index}/{total} khung")
+                on_progress(f"Đang đọc chữ {done}/{ocr_total} khung{skipped_note}")
                 last_beat = now
     else:
         batch_size = 500
-        results = [FrameObs("unknown")] * total
+        ocr_jobs = [(index, job) for index, job in enumerate(jobs) if index not in copy_from]
         done = 0
         last_beat = time.monotonic()
         try:
-            for start in range(0, total, batch_size):
-                chunk = jobs[start : start + batch_size]
+            for start in range(0, len(ocr_jobs), batch_size):
+                chunk = ocr_jobs[start : start + batch_size]
                 future_map = {
-                    submit(fn, *args): start + offset for offset, (_, _, _, fn, args) in enumerate(chunk)
+                    submit(fn, *args): index for index, (_at, _kind, _path, fn, args) in chunk
                 }
                 for future in as_completed(future_map):
                     index = future_map[future]
@@ -313,16 +320,118 @@ def _scan_video(
                     done += 1
                     now = time.monotonic()
                     if on_progress is not None and (
-                        done == total or done % step == 0 or now - last_beat >= progress_every_sec
+                        done == ocr_total or done % step == 0 or now - last_beat >= progress_every_sec
                     ):
-                        on_progress(f"Đang đọc chữ {done}/{total} khung")
+                        on_progress(f"Đang đọc chữ {done}/{ocr_total} khung{skipped_note}")
                         last_beat = now
         except BaseException:
             raise
+    for dest, src in copy_from.items():
+        obs = results[src]
+        at = jobs[dest][0]
+        results[dest] = FrameObs("unknown", at=at) if obs.kind == "unknown" else dataclasses.replace(obs, at=at)
     # R2: vòng 2 OCR các khung unknown (không đụng job tap — chỉ khung đơn).
     results = _round2_unknowns(jobs, results, submit=submit, on_progress=on_progress, layout_dict=layout_dict)
     learned = measured if measured is not None else None
     return [(job[2], obs) for job, obs in zip(jobs, results)], learned
+
+
+# Cùng màn hình giữ yên trong 2 giây. Phần đầu trang (tên / @) phải lệch ≤ 2 bit,
+# nếu không thì đó là hồ sơ khác dù nền giống.
+_DHASH_WINDOW_SEC = 2.0
+_DHASH_MAX_DISTANCE = 4
+_DHASH_HEADER_DISTANCE = 2
+
+
+def _dhash_bits(gray: object) -> int:
+    from PIL import Image
+
+    small = gray.resize((9, 8), Image.Resampling.BOX)  # type: ignore[attr-defined]
+    pixels = small.tobytes()
+    if len(pixels) < 72:
+        return 0
+    bits = 0
+    for y in range(8):
+        row = y * 9
+        for x in range(8):
+            bits = (bits << 1) | (1 if pixels[row + x] > pixels[row + x + 1] else 0)
+    return bits
+
+
+def _frame_dhash(path: str) -> tuple[int, int] | None:
+    """Hash toàn khung + hash vùng trên (tên/@). None nếu không mở được ảnh."""
+    try:
+        from PIL import Image
+
+        with Image.open(path) as image:
+            gray = image.convert("L")
+            full = _dhash_bits(gray)
+            header = gray.crop((0, 0, gray.width, max(1, int(gray.height * 0.42))))
+            head = _dhash_bits(header)
+    except OSError:
+        return None
+    return full, head
+
+
+def _same_screen(left: object, right: object) -> bool:
+    if isinstance(left, tuple) and isinstance(right, tuple) and len(left) == 2 and len(right) == 2:
+        full = (int(left[0]) ^ int(right[0])).bit_count() <= _DHASH_MAX_DISTANCE
+        head = (int(left[1]) ^ int(right[1])).bit_count() <= _DHASH_HEADER_DISTANCE
+        return full and head
+    if isinstance(left, int) and isinstance(right, int):
+        return (left ^ right).bit_count() <= _DHASH_MAX_DISTANCE
+    return False
+
+
+def _collapse_similar_frames(
+    targets: list[tuple[int, str, float]],
+) -> tuple[list[tuple[int, str, float]], list[tuple[int, int, float]]]:
+    """Giữ một khung cho mỗi cụm ảnh giống nhau trong 2 giây.
+
+    Phần còn lại nhận cùng kết quả OCR (cùng màn hình), không đọc lại.
+    `targets` phải tăng dần theo thời gian.
+    """
+    unique: list[tuple[int, str, float]] = []
+    copies: list[tuple[int, int, float]] = []
+    if len(targets) >= 24:
+        workers = min(8, len(targets))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            digests = list(pool.map(lambda item: _frame_dhash(item[1]), targets, chunksize=16))
+    else:
+        digests = [_frame_dhash(path) for _index, path, _at in targets]
+    recent: list[tuple[float, object, int]] = []
+    for (index, path, at), digest in zip(targets, digests):
+        matched: int | None = None
+        if digest is not None:
+            for prev_at, prev_hash, slot in reversed(recent):
+                if at - prev_at > _DHASH_WINDOW_SEC:
+                    break
+                if _same_screen(digest, prev_hash):
+                    matched = slot
+                    break
+        if matched is None:
+            slot = len(unique)
+            unique.append((index, path, at))
+            if digest is not None:
+                recent.append((at, digest, slot))
+                if len(recent) > 48:
+                    recent = [item for item in recent if at - item[0] <= _DHASH_WINDOW_SEC]
+        else:
+            copies.append((index, matched, at))
+    return unique, copies
+
+
+def _alias_single_frames(
+    jobs: list[tuple[float, int, Path, Callable[..., FrameObs], tuple]],
+) -> dict[int, int]:
+    """Chỉ số khung đơn trùng → chỉ số khung gốc đã (hoặc sẽ) được OCR."""
+    targets: list[tuple[int, str, float]] = []
+    for index, (at, kind, path, fn, _args) in enumerate(jobs):
+        if kind != 0 or fn is not read_frame_at:
+            continue
+        targets.append((index, str(path), at))
+    unique, copies = _collapse_similar_frames(targets)
+    return {index: unique[slot][0] for index, slot, at in copies}
 
 
 def _round2_unknowns(
@@ -343,35 +452,56 @@ def _round2_unknowns(
         targets.append((index, str(path), at))
     if not targets:
         return results
-    total = len(targets)
+    unique, copies = _collapse_similar_frames(targets)
+    total = len(unique)
+    skipped = len(targets) - total
     if on_progress is not None:
-        on_progress(f"Vòng 2 OCR {total} khung lỗi/unknown")
+        on_progress(
+            f"Vòng 2 OCR {total} khung khác nhau"
+            + (f" (bỏ {skipped} khung trùng)" if skipped else "")
+        )
     updated = list(results)
-    if submit is None:
-        for offset, (index, path, at) in enumerate(targets, start=1):
-            obs = read_frame_aggressive_at(path, at, layout_dict)
-            if obs.kind != "unknown":
-                updated[index] = obs
-            if on_progress is not None and (offset == total or offset % 25 == 0):
-                on_progress(f"Vòng 2 OCR {offset}/{total} khung")
-        return updated
-    future_map = {
-        submit(read_frame_aggressive_at, path, at, layout_dict): index for index, path, at in targets
-    }
-    done = 0
-    for future in as_completed(future_map):
-        index = future_map[future]
-        try:
-            obs = future.result()
-        except Exception as exc:
-            print(f"Vòng 2 OCR lỗi: {exc}", flush=True)
-            done += 1
-            continue
+    found: list[FrameObs | None] = [None] * total
+
+    def _store(slot: int, obs: FrameObs) -> None:
+        found[slot] = obs
+        index, _path, _at = unique[slot]
         if obs.kind != "unknown":
             updated[index] = obs
-        done += 1
-        if on_progress is not None and (done == total or done % 25 == 0):
-            on_progress(f"Vòng 2 OCR {done}/{total} khung")
+
+    if submit is None:
+        for offset, (_index, path, at) in enumerate(unique, start=1):
+            _store(offset - 1, read_frame_aggressive_at(path, at, layout_dict))
+            if on_progress is not None and (offset == total or offset % 25 == 0):
+                on_progress(f"Vòng 2 OCR {offset}/{total} khung khác nhau")
+    else:
+        done = 0
+        batch = 64
+        for start in range(0, total, batch):
+            chunk = unique[start : start + batch]
+            future_map = {
+                submit(read_frame_aggressive_at, path, at, layout_dict): (start + offset, index)
+                for offset, (index, path, at) in enumerate(chunk)
+            }
+            for future in as_completed(future_map):
+                slot, index = future_map[future]
+                try:
+                    obs = future.result()
+                except Exception as exc:
+                    print(f"Vòng 2 OCR lỗi: {exc}", flush=True)
+                    done += 1
+                    continue
+                found[slot] = obs
+                if obs.kind != "unknown":
+                    updated[index] = obs
+                done += 1
+                if on_progress is not None and (done == total or done % 25 == 0):
+                    on_progress(f"Vòng 2 OCR {done}/{total} khung khác nhau")
+    for index, slot, at in copies:
+        obs = found[slot] if slot < len(found) else None
+        if obs is None or obs.kind == "unknown":
+            continue
+        updated[index] = dataclasses.replace(obs, at=at)
     return updated
 
 
@@ -554,6 +684,23 @@ class _Planner:
         self.plan.taps.append(list(range(start, last + 1)))
 
 
+def _select_expr(numbers: list[int]) -> str:
+    """Biểu thức select gọn: một khoảng liên tục là between, không phải hàng nghìn eq."""
+    ordered = sorted(set(numbers))
+    if not ordered:
+        return "0"
+    parts: list[str] = []
+    start = prev = ordered[0]
+    for number in ordered[1:]:
+        if number == prev + 1:
+            prev = number
+            continue
+        parts.append(f"eq(n,{start})" if start == prev else f"between(n,{start},{prev})")
+        start = prev = number
+    parts.append(f"eq(n,{start})" if start == prev else f"between(n,{start},{prev})")
+    return "+".join(parts)
+
+
 def extract_frames(
     path: Path,
     folder: Path,
@@ -567,8 +714,12 @@ def extract_frames(
     if not numbers:
         return {}
     script = folder / f"select_{prefix}.txt"
-    picks = "+".join(f"eq(n,{number})" for number in numbers)
-    script.write_text(f"fps={fps},select='{picks}'", encoding="utf-8")
+    # Giảm xuống tối đa 1080px trước khi ghi: OCR cũng chỉ đọc tới 1080, ảnh lớn hơn chỉ làm chậm.
+    script.write_text(
+        "fps=%s,select='%s',scale=w='min(1080,iw)':h=-2:flags=bilinear"
+        % (fps, _select_expr(numbers)),
+        encoding="utf-8",
+    )
     pattern = folder / f"{prefix}_%06d.jpg"
     stop = threading.Event()
     watcher: threading.Thread | None = None
@@ -607,7 +758,7 @@ def extract_frames(
                 "-vsync",
                 "0",
                 "-q:v",
-                "2",
+                "4",
                 str(pattern),
             ],
             capture_output=True,

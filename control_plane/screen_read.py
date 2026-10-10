@@ -163,11 +163,26 @@ def read_image_aggressive(
     return read_pillow_aggressive(image, layout=layout)
 
 
+def _is_light(image: Image.Image) -> bool:
+    """Màn hình sáng (chữ tối). Tesseract đọc được, không cần đảo cả ảnh."""
+    sample = image.convert("L").resize((16, 16), Image.Resampling.BOX)
+    return (sum(sample.tobytes()) / 256) >= 110
+
+
+def _limit_width(image: Image.Image, max_width: int = 1080) -> Image.Image:
+    """Ảnh quay màn hình lớn hơn 1080px chỉ làm Tesseract chậm, không rõ chữ hơn."""
+    if image.width <= max_width or image.width < 2:
+        return image
+    ratio = max_width / image.width
+    return image.resize((max_width, max(1, int(image.height * ratio))), Image.Resampling.BILINEAR)
+
+
 def read_pillow(
     image: Image.Image,
     layout: dict[str, object] | LayoutProfile | None = None,
 ) -> FrameObs:
     _require_tesseract()
+    image = _limit_width(image)
     profile_layout = (
         layout
         if isinstance(layout, LayoutProfile)
@@ -202,6 +217,7 @@ def read_pillow_aggressive(
 ) -> FrameObs:
     """OCR vòng 2: phóng to mạnh, đảo màu, PSM rộng, ngưỡng tin cậy thấp hơn."""
     _require_tesseract()
+    image = _limit_width(image)
     profile_layout = (
         layout
         if isinstance(layout, LayoutProfile)
@@ -209,9 +225,9 @@ def read_pillow_aggressive(
     )
     # Thử ảnh gốc với hunt mở rộng trước khi đảo màu.
     obs = _aggressive_once(image, profile_layout)
-    if obs.kind != "unknown":
+    if obs.kind != "unknown" or _is_light(image):
         return obs
-    # Đảo sáng/tối — chữ trắng trên nền tối hoặc ngược lại.
+    # Nền tối (chữ sáng): đảo một lần. Nền sáng không đảo — đảo cả ảnh gần như nhân đôi thời gian.
     try:
         inverted = ImageOps.invert(image.convert("RGB"))
     except Exception:
@@ -278,14 +294,9 @@ def _hunt_profile_handle(
         (_enhance(raw, 2), 7, 10),
     ]
     if aggressive:
-        passes.extend(
-            [
-                (_enhance(raw, 3), 7, 6),
-                (_upscale(raw, 3), 6, 6),
-                (_enhance(raw, 2), 11, 5),
-                (_enhance(raw, 2), 3, 5),
-            ]
-        )
+        # PSM 11 (một dòng thưa) bắt @ mờ. Không phóng 3× và không PSM 3:
+        # ảnh 3× khiến một khung unknown mất hàng chục giây mà hiếm khi ra thêm hồ sơ.
+        passes.append((_enhance(raw, 2), 11, 5))
     for crop, psm, min_conf in passes:
         words = _batch([crop], "vie+eng", psm)[0]
         scale_x = header.w / max(1, crop.width)
@@ -572,22 +583,17 @@ def _read_rows(
 
     best = best_tessdata()
     digit_crops: list[Image.Image] = []
-    per_phone = 3 if aggressive else 2
+    per_phone = 2
     for row in pending:
         crop = _crop(image, row.phone_box, 6, 4)
+        # Phóng 2× là đủ cho số/tên. Phóng 3× cả hàng làm vòng 2 chậm mà ít khi ra thêm số đúng.
         digit_crops.extend([_pad(_upscale(crop, 2)), _pad(_enhance(crop, 2))])
-        if aggressive:
-            digit_crops.append(_pad(_enhance(crop, 3)))
     digit_reads = _texts(_batch(digit_crops, "eng", 7, DIGITS, best))
 
     name_crops = [_pad(_upscale(_crop(image, row.name_box, 8, 6), 2)) for row in pending]
     fast_names = _texts(_batch(name_crops, "vie", 7))
     best_names = _texts(_batch(name_crops, "vie", 7, tessdata=best)) if best else [""] * len(pending)
-    if aggressive:
-        sharp_crops = [_pad(_enhance(_crop(image, row.name_box, 8, 6), 3)) for row in pending]
-        sharp_names = _texts(_batch(sharp_crops, "vie", 7, tessdata=best)) if best else _texts(_batch(sharp_crops, "vie", 7))
-    else:
-        sharp_names = [""] * len(pending)
+    sharp_names = [""] * len(pending)
 
     hits: list[ContactHit] = []
     for index, row in enumerate(pending):
@@ -622,14 +628,8 @@ def _read_profile(image: Image.Image, button: Box, *, aggressive: bool = False) 
         (_upscale(raw, 2), 6, 12),
     ]
     if aggressive:
-        passes.extend(
-            [
-                (_enhance(raw, 3), 7, 6),
-                (_upscale(raw, 3), 6, 6),
-                (_enhance(raw, 2), 11, 5),
-                (_enhance(raw, 3), 3, 5),
-            ]
-        )
+        # PSM 11 bắt @ mờ. Không phóng 3× và không PSM 3: một khung unknown mất hàng chục giây.
+        passes.append((_enhance(raw, 2), 11, 5))
     lines: list[Line] = []
     handle_at = -1
     username = ""
@@ -854,9 +854,11 @@ def _batch_tesserocr(
     api.SetPageSegMode(psm)
     # Xóa whitelist cũ khi không dùng — biến này dính trên API tái sử dụng.
     api.SetVariable("tessedit_char_whitelist", whitelist or "")
+    # Học thích nghi không giúp chữ UI cố định, chỉ tốn CPU mỗi khung.
+    api.SetVariable("classify_enable_learning", "0")
     level = RIL.WORD
     for index, image in enumerate(images):
-        api.SetImage(image.convert("RGB"))
+        api.SetImage(image if image.mode == "RGB" else image.convert("RGB"))
         try:
             api.Recognize()
         except RuntimeError:
@@ -917,6 +919,8 @@ def _batch_cli(
             "tessedit_create_tsv=1",
             "-c",
             "tessedit_create_txt=0",
+            "-c",
+            "classify_enable_learning=0",
         ]
         folder_tess = _tessdata_path(tessdata)
         if folder_tess:
