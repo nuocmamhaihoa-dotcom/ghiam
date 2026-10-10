@@ -17,6 +17,8 @@ final class UploadQueue: ObservableObject {
     private var pumping = false
     private let chunkTemp: URL
     private let inbox: URL
+    /// Số video gửi chunk song song — đủ nhanh, không nghẽn Wi‑Fi iPhone.
+    private let parallelUploads = 2
 
     private init() {
         let defaults = UserDefaults.standard
@@ -80,7 +82,7 @@ final class UploadQueue: ObservableObject {
                     chunksTotal: 0,
                     received: [],
                     status: "queued",
-                    detail: "Chờ tải lên",
+                    detail: "Chờ xếp phiên lên VPS",
                     createdAt: Date(),
                     updatedAt: Date()
                 )
@@ -90,6 +92,7 @@ final class UploadQueue: ObservableObject {
             }
         }
         saveJobs()
+        banner = "Đã thêm \(urls.count) video vào hàng đợi máy — đang xếp phiên lên VPS…"
         Task { await pump() }
     }
 
@@ -119,36 +122,100 @@ final class UploadQueue: ObservableObject {
         busy = true
         defer {
             pumping = false
-            busy = jobs.contains { $0.status == "uploading" || $0.status == "queued" }
+            busy = jobs.contains {
+                ["queued", "registered", "uploading"].contains($0.status)
+            }
         }
-        while let index = jobs.firstIndex(where: { $0.status == "queued" || $0.status == "uploading" }) {
+
+        let client = HubClient(settings: settings)
+
+        // Bước 1: xếp TẤT CẢ phiên receiving lên VPS trước khi gửi chunk.
+        // Safari/app ngủ máy vẫn còn tên video trong hàng đợi VPS.
+        for index in jobs.indices where jobs[index].status == "queued" {
             do {
-                try await upload(jobIndex: index)
+                try await register(jobIndex: index, client: client)
             } catch {
                 jobs[index].status = "error"
                 jobs[index].detail = error.localizedDescription
                 jobs[index].updatedAt = Date()
                 saveJobs()
-                banner = "Lỗi: \(error.localizedDescription)"
+                banner = "Lỗi xếp phiên: \(error.localizedDescription)"
+            }
+        }
+
+        // Bước 2: gửi chunk song song (tối đa parallelUploads).
+        while true {
+            let pending = jobs.indices.filter { jobs[$0].status == "registered" }
+            guard !pending.isEmpty else { break }
+            let batch = Array(pending.prefix(parallelUploads))
+            await withTaskGroup(of: Void.self) { group in
+                for index in batch {
+                    group.addTask { @MainActor in
+                        do {
+                            try await self.uploadRegistered(jobIndex: index, client: client)
+                        } catch {
+                            self.jobs[index].status = "error"
+                            self.jobs[index].detail = error.localizedDescription
+                            self.jobs[index].updatedAt = Date()
+                            self.saveJobs()
+                            self.banner = "Lỗi tải: \(error.localizedDescription)"
+                        }
+                    }
+                }
             }
         }
     }
 
-    private func upload(jobIndex: Int) async throws {
+    private func register(jobIndex: Int, client: HubClient) async throws {
         var job = jobs[jobIndex]
         job.status = "uploading"
-        job.detail = "Đang kết nối hub…"
+        job.detail = "Đang xếp phiên lên VPS…"
         job.updatedAt = Date()
         jobs[jobIndex] = job
         saveJobs()
 
-        let client = HubClient(settings: settings)
-        let session = try await client.initUpload(name: job.fileName, size: job.sizeBytes, clientKey: job.clientKey)
-        job.uploadId = session.upload_id
-        job.chunkSize = session.chunk_size
-        job.chunksTotal = session.chunks_total
-        job.received = session.received
-        job.detail = session.resumed == true ? "Tiếp tục bản dở" : "Bắt đầu tải"
+        var attempt = 0
+        while true {
+            do {
+                let session = try await client.initUpload(
+                    name: job.fileName,
+                    size: job.sizeBytes,
+                    clientKey: job.clientKey
+                )
+                job.uploadId = session.upload_id
+                job.chunkSize = session.chunk_size
+                job.chunksTotal = session.chunks_total
+                job.received = session.received
+                job.status = "registered"
+                job.detail = session.resumed == true
+                    ? "Đã xếp phiên (resume) — chờ gửi dữ liệu"
+                    : "Đã xếp phiên trên VPS — chờ gửi dữ liệu"
+                job.updatedAt = Date()
+                jobs[jobIndex] = job
+                saveJobs()
+                return
+            } catch {
+                attempt += 1
+                let text = error.localizedDescription.lowercased()
+                let retryable = text.contains("507") || text.contains("503") || text.contains("đầy") || text.contains("chỗ")
+                if !retryable || attempt >= 40 { throw error }
+                job.detail = "Chờ chỗ trống trên VPS… lần \(attempt)"
+                job.updatedAt = Date()
+                jobs[jobIndex] = job
+                saveJobs()
+                try await Task.sleep(nanoseconds: UInt64(min(90, 15 + attempt * 2)) * 1_000_000_000)
+            }
+        }
+    }
+
+    private func uploadRegistered(jobIndex: Int, client: HubClient) async throws {
+        var job = jobs[jobIndex]
+        guard let uploadId = job.uploadId else {
+            throw HubError.message("Thiếu upload_id — xếp phiên lại")
+        }
+        job.status = "uploading"
+        job.detail = "Đang gửi dữ liệu…"
+        job.updatedAt = Date()
         jobs[jobIndex] = job
         saveJobs()
 
@@ -167,7 +234,7 @@ final class UploadQueue: ObservableObject {
             }
             let part = chunkTemp.appendingPathComponent("\(job.id)-\(index).part")
             try data.write(to: part, options: .atomic)
-            let url = try client.chunkURL(uploadId: session.upload_id, index: index)
+            let url = try client.chunkURL(uploadId: uploadId, index: index)
             var attempt = 0
             while true {
                 do {
@@ -185,13 +252,14 @@ final class UploadQueue: ObservableObject {
             }
             try? FileManager.default.removeItem(at: part)
             job.received.append(index)
-            job.detail = "Đã gửi \(Set(job.received).count)/\(job.chunksTotal) mảnh"
+            let sent = Set(job.received).count
+            job.detail = "Đã gửi \(sent)/\(job.chunksTotal) mảnh"
             job.updatedAt = Date()
             jobs[jobIndex] = job
             saveJobs()
         }
 
-        let complete = try await client.complete(uploadId: session.upload_id)
+        let complete = try await client.complete(uploadId: uploadId)
         job.status = complete.duplicate == true ? "duplicate" : "done"
         if complete.duplicate == true {
             job.detail = "Đã có trong hàng đợi VPS"
@@ -203,6 +271,5 @@ final class UploadQueue: ObservableObject {
         job.updatedAt = Date()
         jobs[jobIndex] = job
         saveJobs()
-        // Giữ file local một lúc phòng cần; xóa khi clearFinished.
     }
 }

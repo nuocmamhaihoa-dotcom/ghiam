@@ -89,8 +89,8 @@
 <body>
 <main>
   <h1>Đọc video danh bạ</h1>
-  <p class="lead">Thêm video từ nhiều máy cùng lúc. Tải theo mảnh — mất mạng vẫn tiếp tục. Đóng trang thì máy chủ vẫn đọc tiếp.</p>
-  <p class="note" style="margin-bottom:0.8rem">Khuyến nghị iPhone: cài app <a href="/tai/videoup.zip"><b>VideoUp</b></a> (upload nền khi khóa máy). Safari dùng cách cắt khúc bên dưới.</p>
+  <p class="lead">Thêm nhiều video / nhiều iPhone cùng lúc. Chọn xong là xếp phiên lên VPS ngay — hàng đợi hiện tên từng file. Tải theo mảnh, mất mạng chọn lại cùng file để tiếp tục. Đóng trang thì máy chủ vẫn đọc các video đã tải xong.</p>
+  <p class="note" style="margin-bottom:0.8rem">Khuyến nghị iPhone: cài app <a href="/tai/videoup.zip"><b>VideoUp</b></a> (upload nền khi khóa máy). Safari: giữ màn hình sáng tới khi thấy đủ phiên trong Hàng đợi; nếu bị ngắt, chọn lại cùng file để resume.</p>
 
   <div id="openWarn" class="banner hide" role="status"></div>
 
@@ -253,12 +253,20 @@
   }
 
   function statusText(status) {
-    if (status === "queued") return "Đang chờ";
+    if (status === "queued") return "Đang chờ đọc";
     if (status === "running") return "Đang đọc";
     if (status === "done") return "Xong";
     if (status === "error") return "Lỗi";
     if (status === "uploading") return "Đang tải lên";
     return status;
+  }
+
+  function formatBytes(n) {
+    var v = Number(n) || 0;
+    if (v >= 1024 * 1024 * 1024) return (v / (1024 * 1024 * 1024)).toFixed(1) + " GB";
+    if (v >= 1024 * 1024) return (v / (1024 * 1024)).toFixed(0) + " MB";
+    if (v >= 1024) return (v / 1024).toFixed(0) + " KB";
+    return v + " B";
   }
 
   function formatTime(value) {
@@ -285,8 +293,14 @@
   function issueText(item) {
     if (item.issue) return String(item.issue);
     if (item.status === "error") return item.error || "Lỗi khi đọc video";
-    if (item.status === "uploading") return "Đang tải lên";
-    if (item.status === "queued") return "Chờ đọc";
+    if (item.status === "uploading") {
+      if (item.stale) {
+        return "Tải bị ngắt ở " + (item.percent || 0) + "% — chọn lại cùng file để tiếp tục";
+      }
+      if (item.percent != null) return "Đang tải lên " + item.percent + "%";
+      return "Đang tải lên";
+    }
+    if (item.status === "queued") return "Chờ đọc — đã lên VPS, đợi máy chủ phân tích";
     if (item.status === "running") return item.progress || "Đang đọc";
     if (item.status !== "done") return item.status || "—";
     var saved = item.saved_count || 0;
@@ -385,26 +399,39 @@
       box.innerHTML = "<p class='note'>Chưa có video.</p>";
       return;
     }
-    var html = "<table class='queue-table'><tr><th>Độ dài</th><th>Vấn đề / Trạng thái</th><th>Tiến độ</th><th>Kết quả</th></tr>";
+    var html = "<table class='queue-table'><tr><th>Video / Độ dài</th><th>Vấn đề / Trạng thái</th><th>Tiến độ</th><th>Kết quả</th></tr>";
     items.forEach(function (item) {
-      var canRetry = item.file_kept && (item.status === "error" || item.status === "done");
+      var isUpload = item.kind === "upload" || (!item.id && item.upload_id);
+      var canRetry = !isUpload && item.file_kept && (item.status === "error" || item.status === "done");
       var retry = canRetry ? " <button class='ghost' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
       var keptNote = "";
-      if (item.status === "done" && item.file_kept) {
+      if (!isUpload && item.status === "done" && item.file_kept) {
         keptNote = "<div class='note'>Còn file — có thể Đọc lại</div>";
-      } else if ((item.status === "done" || item.status === "error") && !item.file_kept) {
+      } else if (!isUpload && (item.status === "done" || item.status === "error") && !item.file_kept) {
         keptNote = "<div class='note'>Hết file trên đĩa</div>";
       }
       var progress = "";
       if (item.status === "running" && item.progress) {
         progress = "<div class='note'>" + escapeHtml(item.progress) + "</div>";
+      } else if (isUpload) {
+        progress = "<div class='note'>" + escapeHtml(formatBytes(item.received_bytes || 0)) +
+          " / " + escapeHtml(formatBytes(item.size_bytes || 0)) +
+          (item.percent != null ? (" · " + item.percent + "%") : "") + "</div>";
       }
       var issue = issueText(item);
-      var issueClass = (item.status === "error" || (issue.indexOf("Cảnh báo") === 0) || issue.indexOf("Lỗi") === 0)
+      var issueClass = (item.status === "error" || item.stale || issue.indexOf("Cảnh báo") === 0 ||
+        issue.indexOf("Lỗi") === 0 || issue.indexOf("Tải bị ngắt") === 0)
         ? "warn"
-        : (issue.indexOf("Tất cả đều tốt") === 0 || issue.indexOf("Tốt —") === 0 ? "ok" : "");
+        : (issue.indexOf("Tất cả đều tốt") === 0 || issue.indexOf("Tốt —") === 0 ||
+          issue.indexOf("Chờ đọc") === 0 ? "ok" : "");
       var resultText = "—";
-      if (item.status === "done") {
+      if (isUpload) {
+        resultText = item.stale
+          ? "<span class='warn'>Chưa vào hàng đọc — tải dở</span>"
+          : "<span class='note'>Chưa xong tải — chưa phân tích</span>";
+      } else if (item.status === "queued") {
+        resultText = "<span class='ok'>Đã lên VPS — chờ phân tích</span>";
+      } else if (item.status === "done") {
         var saved = item.saved_count || 0;
         var review = item.review_count || 0;
         var unopened = item.unopened_count || 0;
@@ -423,7 +450,13 @@
         }
         resultText += " <button class='ghost' type='button' data-filter='" + escapeHtml(item.name) + "'>Xem</button>";
       }
-      html += "<tr><td title='" + escapeHtml(item.name || "") + "'>" + escapeHtml(formatDuration(item.duration_sec)) + "</td><td class='" + issueClass + "'>" + escapeHtml(issue) + "</td><td>" + statusText(item.status) + progress + keptNote + retry + "</td><td>" + resultText + "</td></tr>";
+      var leftLabel = isUpload
+        ? (escapeHtml(item.name || "video") + "<div class='note'>" + escapeHtml(formatBytes(item.size_bytes || 0)) + "</div>")
+        : escapeHtml(formatDuration(item.duration_sec));
+      var leftTitle = isUpload ? (item.name || "") : (item.name || "");
+      html += "<tr><td title='" + escapeHtml(leftTitle) + "'>" + leftLabel + "</td><td class='" + issueClass + "'>" +
+        escapeHtml(issue) + "</td><td>" + statusText(item.status) + progress + keptNote + retry +
+        "</td><td>" + resultText + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-retry]").forEach(function (button) {
@@ -576,25 +609,27 @@
     return last;
   }
 
-  async function uploadOneChunked(file, onProgress) {
+  var UPLOAD_PARALLEL = 2;
+
+  async function mapPool(items, concurrency, worker) {
+    var cursor = 0;
+    var results = new Array(items.length);
+    async function run() {
+      while (cursor < items.length) {
+        var index = cursor;
+        cursor += 1;
+        results[index] = await worker(items[index], index);
+      }
+    }
+    var runners = [];
+    for (var n = 0; n < Math.min(concurrency, items.length); n += 1) runners.push(run());
+    await Promise.all(runners);
+    return results;
+  }
+
+  async function uploadSessionChunks(file, session, onProgress) {
     var key = clientKeyFor(file);
     var store = loadChunkStore();
-    var initBody = {
-      name: file.name,
-      size_bytes: file.size,
-      device: deviceName(),
-      client_key: key
-    };
-    var init = await initChunkedWithRetry(initBody, function (sec, reason, attempt) {
-      onProgress(0, 0, 0, false);
-      var note = document.getElementById("uploadNote");
-      note.textContent = file.name + " — chờ chỗ trống (" + reason + "), thử lại sau " + sec + "s · lần " + attempt;
-      note.className = "note warn";
-    });
-    var session = init.body || {};
-    if (!init.ok) {
-      return { ok: false, status: init.status, body: session };
-    }
     store[key] = { upload_id: session.upload_id, name: file.name, size: file.size };
     saveChunkStore(store);
 
@@ -612,7 +647,7 @@
       var blob = file.slice(start, end);
       var put = await putChunkBytes(session.upload_id, index, blob);
       if (!put.ok) {
-        return { ok: false, status: put.status, body: put.body, upload_id: session.upload_id };
+        return { ok: false, status: put.status, body: put.body, upload_id: session.upload_id, name: file.name };
       }
       done[index] = true;
       finished += 1;
@@ -626,7 +661,7 @@
       delete store[key];
       saveChunkStore(store);
     }
-    return { ok: completeResponse.ok, status: completeResponse.status, body: completeBody };
+    return { ok: completeResponse.ok, status: completeResponse.status, body: completeBody, name: file.name };
   }
 
   async function sendFiles(fileList) {
@@ -643,28 +678,85 @@
     var added = 0;
     var already = 0;
     var failed = [];
+    var registered = [];
     note.className = "note";
+
+    // Bước 1: xếp TẤT CẢ phiên lên VPS trước — Safari ngủ máy vẫn còn tên trong hàng đợi.
     for (var i = 0; i < files.length; i += 1) {
       var file = files[i];
-      var label = "Đang tải (cắt khúc) " + (i + 1) + "/" + files.length + ": " + file.name;
-      note.textContent = label;
-      var result = await uploadOneChunked(file, function (percent, finished, total, resumed) {
-        note.textContent = label + " — " + percent + "%" +
-          (total ? (" (" + finished + "/" + total + " mảnh)") : "") +
-          (resumed ? " · tiếp tục bản dở" : "");
+      note.textContent = "Đang xếp phiên " + (i + 1) + "/" + files.length + " lên VPS: " + file.name;
+      var initBody = {
+        name: file.name,
+        size_bytes: file.size,
+        device: deviceName(),
+        client_key: clientKeyFor(file)
+      };
+      var init = await initChunkedWithRetry(initBody, function (sec, reason, attempt) {
+        note.textContent = file.name + " — chờ chỗ trống (" + reason + "), thử lại sau " + sec + "s · lần " + attempt;
+        note.className = "note warn";
       });
-      if (result.ok) {
-        if (result.body.duplicate) already += 1; else added += 1;
+      if (!init.ok) {
+        var why = (init.body && init.body.detail) || ("lỗi " + init.status);
+        failed.push(file.name + " (chưa xếp được: " + why + ")");
+        if (init.status === 507) {
+          for (var j = i + 1; j < files.length; j += 1) {
+            failed.push(files[j].name + " (chưa xếp — hàng nhận đầy, chọn lại sau)");
+          }
+          break;
+        }
         continue;
       }
-      var reason = result.body.detail || (result.status === 0 ? "mất kết nối — chọn lại file để tiếp tục" : "lỗi " + result.status);
-      failed.push(file.name + " (" + reason + ")");
-      if (result.status === 507) break;
+      registered.push({ file: file, session: init.body || {} });
+      refresh();
     }
-    var parts = ["Đã đưa " + added + " video vào hàng đợi."];
-    if (already) parts.push(already + " video đang có sẵn trong hàng đợi.");
-    if (failed.length) parts.push("Chưa xong (có thể chọn lại để resume): " + failed.join(", ") + ".");
-    note.textContent = parts.join(" ");
+
+    if (!registered.length) {
+      note.textContent = failed.length
+        ? ("Không xếp được phiên nào: " + failed.join(", "))
+        : "Không có file để tải.";
+      note.className = "note warn";
+      return;
+    }
+
+    note.className = "note";
+    note.textContent = "Đã xếp " + registered.length + "/" + files.length +
+      " phiên trên VPS — đang gửi dữ liệu (" + UPLOAD_PARALLEL + " video song song)...";
+    refresh();
+
+    var live = {};
+    var results = await mapPool(registered, UPLOAD_PARALLEL, async function (job) {
+      var name = job.file.name;
+      live[name] = "0%";
+      var result = await uploadSessionChunks(job.file, job.session, function (percent, finished, total, resumed) {
+        live[name] = percent + "%" + (resumed ? "·resume" : "");
+        var parts = Object.keys(live).map(function (k) { return k.replace(/^.*\//, "").slice(0, 18) + " " + live[k]; });
+        note.textContent = "Đang gửi " + parts.join(" · ");
+      });
+      delete live[name];
+      return result;
+    });
+
+    results.forEach(function (result) {
+      if (!result) return;
+      if (result.ok) {
+        if (result.body && result.body.duplicate) already += 1;
+        else added += 1;
+        return;
+      }
+      var reason = (result.body && result.body.detail) ||
+        (result.status === 0 ? "mất kết nối — chọn lại cùng file để tiếp tục" : "lỗi " + result.status);
+      failed.push((result.name || "video") + " (" + reason + ")");
+    });
+
+    var partsOut = [
+      "Đã xếp " + registered.length + " phiên trên VPS.",
+      "Đã vào hàng đọc: " + added + "."
+    ];
+    if (already) partsOut.push(already + " video đã có sẵn.");
+    if (failed.length) {
+      partsOut.push("Chưa xong / lỗi (chọn lại cùng file để resume): " + failed.join(", ") + ".");
+    }
+    note.textContent = partsOut.join(" ");
     note.className = failed.length ? "note warn" : "note ok";
     refresh();
   }

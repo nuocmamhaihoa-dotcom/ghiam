@@ -13,6 +13,7 @@ from control_plane.video_upload_sessions import (
     complete_upload,
     get_upload,
     init_upload,
+    list_receiving_uploads,
     put_chunk,
 )
 
@@ -129,6 +130,42 @@ class ChunkedUploadTests(unittest.TestCase):
             complete_upload(self.db, self.videos, str(session["upload_id"]), disk_limit_bytes=self.limit)
         body = get_upload(self.db, str(session["upload_id"]))
         self.assertEqual(body["status"], "receiving")
+
+    def test_receiving_uploads_appear_in_queue_list(self) -> None:
+        """Nhiều video chọn cùng lúc: mỗi file xếp phiên ngay → hiện trong hàng đợi."""
+        payload_a = _ffmpeg_mp4(self.root / "a.mp4", "0.5")
+        payload_b = _ffmpeg_mp4(self.root / "b.mp4", "0.5")
+        first = init_upload(
+            self.db,
+            self.videos,
+            name="one.mp4",
+            size_bytes=len(payload_a),
+            device="iPhone",
+            client_key="iphone|one.mp4|1|1",
+            chunk_size=16 * 1024,
+            disk_limit_bytes=self.limit,
+        )
+        second = init_upload(
+            self.db,
+            self.videos,
+            name="two.mp4",
+            size_bytes=len(payload_b),
+            device="iPhone",
+            client_key="iphone|two.mp4|1|1",
+            chunk_size=16 * 1024,
+            disk_limit_bytes=self.limit,
+        )
+        put_chunk(self.db, str(first["upload_id"]), 0, payload_a[: 16 * 1024])
+        listed = list_receiving_uploads(self.db)
+        names = {item["name"] for item in listed}
+        self.assertEqual(names, {"one.mp4", "two.mp4"})
+        one = next(item for item in listed if item["name"] == "one.mp4")
+        self.assertEqual(one["status"], "uploading")
+        self.assertEqual(one["kind"], "upload")
+        self.assertGreaterEqual(int(one["percent"]), 0)
+        self.assertIn("tải", str(one["issue"]).lower())
+        two = next(item for item in listed if item["name"] == "two.mp4")
+        self.assertEqual(two["upload_id"], second["upload_id"])
 
 
 if __name__ == "__main__":

@@ -47,6 +47,7 @@ from control_plane.video_upload_sessions import (
     complete_upload,
     get_upload,
     init_upload,
+    list_receiving_uploads,
     put_chunk,
     receiving_count,
     upload_slots,
@@ -117,8 +118,16 @@ def video_stats(authorization: str | None = Header(default=None)) -> dict[str, o
 def videos(authorization: str | None = Header(default=None), limit: int = Query(default=40, ge=1, le=200)) -> dict[str, object]:
     _auth(authorization)
     init_db(settings.video_db_path)
+    uploads = list_receiving_uploads(settings.video_db_path, limit=min(80, max(limit, 40)))
     items = list_videos(settings.video_db_path, limit)
-    return {"count": len(items), "items": items}
+    # Phiên đang tải lên trước — luôn thấy trong hàng đợi kể cả khi iPhone ngủ giữa chừng.
+    merged = uploads + items
+    return {
+        "count": len(merged),
+        "items": merged,
+        "uploads": uploads,
+        "uploads_receiving": len(uploads),
+    }
 
 
 def _write_chunk(handle: BinaryIO, hasher: Any, chunk: bytes) -> None:

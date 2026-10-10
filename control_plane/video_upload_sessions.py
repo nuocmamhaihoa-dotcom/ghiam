@@ -31,6 +31,8 @@ from control_plane.video_validate import probe_duration_sec, validate_media_file
 DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024  # 4 MiB — ổn định trên Wi‑Fi iPhone
 MAX_CHUNK_SIZE = 16 * 1024 * 1024
 UPLOAD_TTL_SEC = 7 * 24 * 3600
+# Không nhận chunk mới trong khoảng này → coi là tải bị ngắt (Safari khóa máy…).
+STALE_UPLOAD_SEC = 15 * 60
 
 
 def upload_slots() -> int:
@@ -245,6 +247,79 @@ def get_upload(db_path: Path, upload_id: str) -> dict[str, object] | None:
     if row is None:
         return None
     return _session_dict(row)
+
+
+def _parse_updated_ts(value: object) -> float:
+    if not value:
+        return 0.0
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def list_receiving_uploads(db_path: Path, limit: int = 80) -> list[dict[str, object]]:
+    """Phiên đang tải / tải dở — luôn hiện trên hàng đợi dù chưa vào bảng videos."""
+    ensure_upload_tables(db_path)
+    start = max(1, int(limit))
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM upload_sessions
+            WHERE status = 'receiving'
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (start,),
+        ).fetchall()
+    now = time.time()
+    items: list[dict[str, object]] = []
+    for row in rows:
+        body = _session_dict(row)
+        size = int(body["size_bytes"] or 0)
+        received = int(body["received_bytes"] or 0)
+        percent = int(100.0 * received / size) if size > 0 else 0
+        chunks_total = int(body["chunks_total"] or 0)
+        chunks_done = len(body.get("received") or [])
+        updated = _parse_updated_ts(body.get("updated_at"))
+        age = (now - updated) if updated else now
+        stale = age >= STALE_UPLOAD_SEC
+        if stale:
+            issue = (
+                f"Tải bị ngắt ở {percent}% — chọn lại cùng file trên iPhone để tiếp tục"
+                f" ({chunks_done}/{chunks_total} mảnh đã có trên VPS)"
+            )
+        elif percent <= 0 and chunks_done <= 0:
+            issue = "Đã xếp phiên tải — đang chờ iPhone gửi dữ liệu"
+        else:
+            issue = f"Đang tải lên {percent}% ({chunks_done}/{chunks_total} mảnh)"
+        items.append(
+            {
+                "upload_id": body["upload_id"],
+                "name": body["name"],
+                "size_bytes": size,
+                "device": body.get("device") or "",
+                "status": "uploading",
+                "percent": percent,
+                "received_bytes": received,
+                "chunks_total": chunks_total,
+                "chunks_done": chunks_done,
+                "stale": stale,
+                "issue": issue,
+                "created_at": body.get("created_at") or "",
+                "updated_at": body.get("updated_at") or "",
+                "duration_sec": 0,
+                "file_kept": False,
+                "saved_count": 0,
+                "review_count": 0,
+                "unopened_count": 0,
+                "result_count": 0,
+                "error": "",
+                "progress": issue,
+                "kind": "upload",
+            }
+        )
+    return items
 
 
 def put_chunk(

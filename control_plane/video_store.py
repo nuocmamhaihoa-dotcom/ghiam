@@ -172,72 +172,121 @@ def init_db(db_path: Path) -> None:
 
     result_counts giữ số dòng theo loại, do trigger cập nhật trong cùng giao
     dịch, để trang thống kê không phải đếm lại cả bảng mỗi vài giây.
+
+    DB đã có thì chỉ migrate cột — tránh BEGIN IMMEDIATE dài (dễ lock hub/worker
+    khi đang upload/OCR).
     """
     key = str(Path(db_path).resolve())
     if key in _READY and Path(db_path).exists():
         return
-    with connect(db_path) as conn:
-        conn.executescript(
-            """
-            BEGIN IMMEDIATE;
-            CREATE TABLE IF NOT EXISTS videos (
-              id INTEGER PRIMARY KEY,
-              name TEXT NOT NULL,
-              size_bytes INTEGER NOT NULL,
-              sha256 TEXT NOT NULL,
-              path TEXT NOT NULL DEFAULT '',
-              status TEXT NOT NULL,
-              error TEXT NOT NULL DEFAULT '',
-              pid INTEGER,
-              created_at TEXT NOT NULL,
-              started_at TEXT,
-              finished_at TEXT,
-              device TEXT NOT NULL DEFAULT '',
-              progress TEXT NOT NULL DEFAULT '',
-              progress_at TEXT,
-              duration_sec REAL NOT NULL DEFAULT 0
-            );
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_sha ON videos(sha256);
-            CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status, id);
-            CREATE TABLE IF NOT EXISTS results (
-              id INTEGER PRIMARY KEY,
-              phone TEXT NOT NULL DEFAULT '',
-              name TEXT NOT NULL DEFAULT '',
-              username TEXT NOT NULL DEFAULT '',
-              bucket INTEGER NOT NULL,
-              reason TEXT NOT NULL DEFAULT '',
-              video_id INTEGER NOT NULL,
-              created_at TEXT NOT NULL
-            );
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_results_phone ON results(phone) WHERE phone != '';
-            CREATE INDEX IF NOT EXISTS idx_results_bucket ON results(bucket, id);
-            CREATE INDEX IF NOT EXISTS idx_results_username ON results(username) WHERE username != '';
-            CREATE INDEX IF NOT EXISTS idx_results_video ON results(video_id, id);
-            CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS result_counts (bucket INTEGER PRIMARY KEY, n INTEGER NOT NULL);
-            INSERT INTO result_counts (bucket, n)
-              SELECT bucket, COUNT(*) FROM results
-              WHERE NOT EXISTS (SELECT 1 FROM result_counts)
-              GROUP BY bucket;
-            CREATE TRIGGER IF NOT EXISTS results_count_insert AFTER INSERT ON results BEGIN
-              INSERT INTO result_counts (bucket, n) VALUES (NEW.bucket, 1)
-                ON CONFLICT(bucket) DO UPDATE SET n = n + 1;
-            END;
-            CREATE TRIGGER IF NOT EXISTS results_count_delete AFTER DELETE ON results BEGIN
-              UPDATE result_counts SET n = n - 1 WHERE bucket = OLD.bucket;
-            END;
-            CREATE TRIGGER IF NOT EXISTS results_count_update AFTER UPDATE OF bucket ON results
-            WHEN OLD.bucket != NEW.bucket BEGIN
-              UPDATE result_counts SET n = n - 1 WHERE bucket = OLD.bucket;
-              INSERT INTO result_counts (bucket, n) VALUES (NEW.bucket, 1)
-                ON CONFLICT(bucket) DO UPDATE SET n = n + 1;
-            END;
-            COMMIT;
-            """
-        )
-        _ensure_video_columns(conn)
-        _reconcile_result_counts(conn)
-    _READY.add(key)
+    last_exc: Exception | None = None
+    for attempt in range(12):
+        try:
+            with connect(db_path) as conn:
+                has_videos = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'videos'"
+                ).fetchone()
+                if has_videos is None:
+                    conn.executescript(
+                        """
+                        BEGIN IMMEDIATE;
+                        CREATE TABLE IF NOT EXISTS videos (
+                          id INTEGER PRIMARY KEY,
+                          name TEXT NOT NULL,
+                          size_bytes INTEGER NOT NULL,
+                          sha256 TEXT NOT NULL,
+                          path TEXT NOT NULL DEFAULT '',
+                          status TEXT NOT NULL,
+                          error TEXT NOT NULL DEFAULT '',
+                          pid INTEGER,
+                          created_at TEXT NOT NULL,
+                          started_at TEXT,
+                          finished_at TEXT,
+                          device TEXT NOT NULL DEFAULT '',
+                          progress TEXT NOT NULL DEFAULT '',
+                          progress_at TEXT,
+                          duration_sec REAL NOT NULL DEFAULT 0
+                        );
+                        CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_sha ON videos(sha256);
+                        CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status, id);
+                        CREATE TABLE IF NOT EXISTS results (
+                          id INTEGER PRIMARY KEY,
+                          phone TEXT NOT NULL DEFAULT '',
+                          name TEXT NOT NULL DEFAULT '',
+                          username TEXT NOT NULL DEFAULT '',
+                          bucket INTEGER NOT NULL,
+                          reason TEXT NOT NULL DEFAULT '',
+                          video_id INTEGER NOT NULL,
+                          created_at TEXT NOT NULL
+                        );
+                        CREATE UNIQUE INDEX IF NOT EXISTS idx_results_phone ON results(phone) WHERE phone != '';
+                        CREATE INDEX IF NOT EXISTS idx_results_bucket ON results(bucket, id);
+                        CREATE INDEX IF NOT EXISTS idx_results_username ON results(username) WHERE username != '';
+                        CREATE INDEX IF NOT EXISTS idx_results_video ON results(video_id, id);
+                        CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                        CREATE TABLE IF NOT EXISTS result_counts (bucket INTEGER PRIMARY KEY, n INTEGER NOT NULL);
+                        INSERT INTO result_counts (bucket, n)
+                          SELECT bucket, COUNT(*) FROM results
+                          WHERE NOT EXISTS (SELECT 1 FROM result_counts)
+                          GROUP BY bucket;
+                        CREATE TRIGGER IF NOT EXISTS results_count_insert AFTER INSERT ON results BEGIN
+                          INSERT INTO result_counts (bucket, n) VALUES (NEW.bucket, 1)
+                            ON CONFLICT(bucket) DO UPDATE SET n = n + 1;
+                        END;
+                        CREATE TRIGGER IF NOT EXISTS results_count_delete AFTER DELETE ON results BEGIN
+                          UPDATE result_counts SET n = n - 1 WHERE bucket = OLD.bucket;
+                        END;
+                        CREATE TRIGGER IF NOT EXISTS results_count_update AFTER UPDATE OF bucket ON results
+                        WHEN OLD.bucket != NEW.bucket BEGIN
+                          UPDATE result_counts SET n = n - 1 WHERE bucket = OLD.bucket;
+                          INSERT INTO result_counts (bucket, n) VALUES (NEW.bucket, 1)
+                            ON CONFLICT(bucket) DO UPDATE SET n = n + 1;
+                        END;
+                        COMMIT;
+                        """
+                    )
+                else:
+                    _ensure_schema_objects(conn)
+                _ensure_video_columns(conn)
+                _reconcile_result_counts(conn)
+            _READY.add(key)
+            return
+        except sqlite3.OperationalError as exc:
+            last_exc = exc
+            if "locked" not in str(exc).lower() and "busy" not in str(exc).lower():
+                raise
+            time.sleep(min(8.0, 0.4 * (attempt + 1)))
+    if last_exc is not None:
+        raise last_exc
+
+
+def _ensure_schema_objects(conn: sqlite3.Connection) -> None:
+    """Bổ sung index/trigger/bảng phụ trên DB đã có — không khóa IMMEDIATE cả khối."""
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS result_counts (bucket INTEGER PRIMARY KEY, n INTEGER NOT NULL);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_sha ON videos(sha256);
+        CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status, id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_results_phone ON results(phone) WHERE phone != '';
+        CREATE INDEX IF NOT EXISTS idx_results_bucket ON results(bucket, id);
+        CREATE INDEX IF NOT EXISTS idx_results_username ON results(username) WHERE username != '';
+        CREATE INDEX IF NOT EXISTS idx_results_video ON results(video_id, id);
+        CREATE TRIGGER IF NOT EXISTS results_count_insert AFTER INSERT ON results BEGIN
+          INSERT INTO result_counts (bucket, n) VALUES (NEW.bucket, 1)
+            ON CONFLICT(bucket) DO UPDATE SET n = n + 1;
+        END;
+        CREATE TRIGGER IF NOT EXISTS results_count_delete AFTER DELETE ON results BEGIN
+          UPDATE result_counts SET n = n - 1 WHERE bucket = OLD.bucket;
+        END;
+        CREATE TRIGGER IF NOT EXISTS results_count_update AFTER UPDATE OF bucket ON results
+        WHEN OLD.bucket != NEW.bucket BEGIN
+          UPDATE result_counts SET n = n - 1 WHERE bucket = OLD.bucket;
+          INSERT INTO result_counts (bucket, n) VALUES (NEW.bucket, 1)
+            ON CONFLICT(bucket) DO UPDATE SET n = n + 1;
+        END;
+        """
+    )
 
 
 def _ensure_video_columns(conn: sqlite3.Connection) -> None:
