@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kho tổng</title>
+  <style>
+    :root { color-scheme: light; --ink: #17202a; --muted: #5c6770; --line: #e4e7ec; --bg: #f4f6f8; --card: #fff; --blue: #0b6bcb; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.45 "Segoe UI", system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+    main { max-width: 1080px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+    h1 { font-size: 1.7rem; margin: 0 0 0.25rem; }
+    h2 { font-size: 1.15rem; margin: 0 0 0.7rem; }
+    p { margin: 0; }
+    .lead { color: var(--muted); margin-bottom: 1rem; }
+    nav { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 0 0 1rem; }
+    nav a { color: var(--blue); font-weight: 650; text-decoration: none; }
+    section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem; margin: 0 0 0.8rem; }
+    label { display: block; font-weight: 650; margin: 0 0 0.35rem; }
+    input[type="text"], input[type="search"], select {
+      width: 100%; font: inherit; padding: 0.7rem 0.75rem; border: 1px solid #cfd5dc; border-radius: 10px; background: #fff;
+    }
+    .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    button, .file {
+      font: inherit; font-weight: 700; border: 0; border-radius: 10px; min-height: 46px; padding: 0 1rem; cursor: pointer;
+    }
+    button.primary, .file { background: var(--blue); color: #fff; }
+    button.ghost { background: #eef1f4; color: var(--ink); }
+    button:disabled { opacity: 0.55; cursor: default; }
+    .drop {
+      margin-top: 0.7rem; padding: 1.1rem; border: 1.5px dashed #b7c0ca; border-radius: 12px; background: #fbfcfd; text-align: center;
+    }
+    .drop.over { background: #e8f2fc; border-color: var(--blue); }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.55rem; }
+    .stat { background: #f7f9fb; border-radius: 10px; padding: 0.7rem 0.75rem; }
+    .stat b { display: block; font-size: 1.35rem; }
+    .stat span { color: var(--muted); font-size: 0.92rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 0.45rem 0.3rem; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 0.95rem; }
+    th { color: var(--muted); font-weight: 650; }
+    .note { color: var(--muted); margin-top: 0.55rem; }
+    .warn { color: #8a2b2b; font-weight: 650; }
+    .ok { color: #0d6b3a; }
+    .map { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.55rem; margin: 0.7rem 0; }
+    .map label { font-size: 0.92rem; }
+    details { margin-top: 0.4rem; }
+    details p, details li { color: var(--muted); }
+    details ul { margin: 0.3rem 0 0.6rem; padding-left: 1.15rem; }
+    #file { display: none; }
+    .scroll { overflow: auto; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Kho tổng</h1>
+  <p class="lead">Nạp Excel nhiều form. Máy tự nhận cột Tên, Số điện thoại, Địa chỉ, UID, ID rồi ghi vào một kho. Tra cứu và xuất lại bất kỳ lúc nào.</p>
+  <nav>
+    <a href="/">Đọc video</a>
+    <a href="/danhba/">Danh bạ</a>
+  </nav>
+
+  <section>
+    <h2>Thống kê</h2>
+    <div class="stats" id="stats"></div>
+  </section>
+
+  <section>
+    <h2>Nạp file</h2>
+    <p class="note">Nhận .xlsx, .csv, .tsv, .txt. Tiêu đề lệch, thiếu, hoặc nằm dưới dòng chữ lớn vẫn đọc được. Form đã nạp một lần thì lần sau nhớ map.</p>
+    <div class="drop" id="drop">
+      <p>Kéo file vào đây</p>
+      <p class="note">hoặc</p>
+      <button class="file" type="button" id="pick">Chọn Excel / CSV</button>
+      <input id="file" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" />
+    </div>
+    <p id="uploadNote" class="note"></p>
+    <div id="preview" hidden>
+      <p id="previewMeta" class="note"></p>
+      <div class="map" id="mapBox"></div>
+      <label for="source">Nguồn / ghi chú lô</label>
+      <input id="source" type="text" maxlength="80" placeholder="Ví dụ: form đại lý tháng 10" />
+      <div class="row" style="margin-top:0.7rem">
+        <button class="primary" type="button" id="commit">Nạp vào kho</button>
+        <button class="ghost" type="button" id="cancel">Bỏ file này</button>
+      </div>
+      <p id="commitNote" class="note"></p>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr><th>Tên</th><th>Số điện thoại</th><th>Địa chỉ</th><th>UID</th><th>ID</th></tr>
+          </thead>
+          <tbody id="sampleRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Tra cứu</h2>
+    <div class="row">
+      <input id="query" type="search" placeholder="Tên, số điện thoại, địa chỉ, UID hoặc ID" />
+      <button class="primary" type="button" id="search">Tìm</button>
+      <button class="ghost" type="button" id="exportBtn">Xuất CSV</button>
+    </div>
+    <p id="searchNote" class="note"></p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Tên</th><th>Số điện thoại</th><th>Địa chỉ</th><th>UID</th><th>ID</th></tr>
+        </thead>
+        <tbody id="rows">
+          <tr><td colspan="5">Chưa có dữ liệu.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:0.7rem"><button class="ghost" type="button" id="more" hidden>Tải thêm</button></p>
+  </section>
+
+  <section>
+    <h2>Cách nhận cột — để bạn quyết định</h2>
+    <p>Phần mềm đang dùng <b>hybrid xác định</b>: từ điển tiêu đề tiếng Việt/Anh + chấm điểm hình dạng ô + nhớ form đã sửa. Dưới đây là các cách đã cân nhắc.</p>
+    <details open>
+      <summary>1. Hybrid xác định — đang dùng</summary>
+      <ul>
+        <li>Chính xác: tiêu đề “Họ tên / SĐT / Địa chỉ / UID” nhận ngay; form không tiêu đề thì nhìn số điện thoại, UID, địa chỉ.</li>
+        <li>Hiệu quả: đọc stream, nạp theo lô, không gọi API ngoài.</li>
+        <li>Ổn định: cùng file luôn ra cùng map. Form đã sửa một lần thì lần sau khỏi sửa.</li>
+        <li>Hạn chế: form quá lạ (cột trộn nhiều kiểu trong một ô) vẫn cần bạn chọn lại cột trên màn xem trước.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>2. Chỉ map tay mỗi lần nạp</summary>
+      <ul>
+        <li>Chính xác nếu người nạp cẩn thận. Không ổn khi nhiều form, nhiều người, file lớn.</li>
+        <li>Không tự phát hiện. Dễ nạp nhầm khi mệt.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>3. Chỉ khớp tiêu đề</summary>
+      <ul>
+        <li>Nhanh nhưng vỡ khi dòng 1 là “DANH SÁCH KHÁCH”, cột tên là “Khách”, hoặc không có tiêu đề.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>4. Chỉ nhìn hình dạng ô</summary>
+      <ul>
+        <li>Không cần tiêu đề. Dễ lẫn UID với ID, tên với địa chỉ ngắn, STT với mã.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>5. LLM / Vision đọc form</summary>
+      <ul>
+        <li>Linh hoạt với form kỳ. Đắt, chậm, phụ thuộc mạng, cùng file có thể ra map khác. Không hợp kho lớn cần lặp lại.</li>
+      </ul>
+    </details>
+  </section>
+</main>
+<script>
+  var serverToken = __CONTROL_TOKEN__;
+  var preview = null;
+  var afterId = 0;
+
+  function token() { return serverToken; }
+
+  async function api(path, options) {
+    var headers = options && options.headers ? Object.assign({}, options.headers) : {};
+    if (token()) headers.Authorization = "Bearer " + token();
+    return fetch(path, Object.assign({}, options || {}, { headers: headers }));
+  }
+
+  function esc(value) {
+    return String(value ?? "").replace(/[&<>"']/g, function (ch) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch];
+    });
+  }
+
+  function stat(value, label) {
+    return "<div class='stat'><b>" + value + "</b><span>" + label + "</span></div>";
+  }
+
+  function fieldOptions(selected) {
+    var fields = [
+      ["", "Bỏ qua"],
+      ["name", "Tên"],
+      ["phone", "Số điện thoại"],
+      ["address", "Địa chỉ"],
+      ["uid", "UID"],
+      ["id", "ID"]
+    ];
+    return fields.map(function (item) {
+      return "<option value='" + item[0] + "'" + (item[0] === selected ? " selected" : "") + ">" + item[1] + "</option>";
+    }).join("");
+  }
+
+  async function refreshStats() {
+    var response = await api("/v1/kho/stats");
+    if (!response.ok) return;
+    var body = await response.json();
+    document.getElementById("stats").innerHTML =
+      stat(body.contacts, "Dòng trong kho") +
+      stat(body.phones, "Có số điện thoại") +
+      stat(body.uids, "Có UID") +
+      stat(body.batches, "Lô đã nạp");
+  }
+
+  function currentMapping() {
+    var mapping = {};
+    document.querySelectorAll("#mapBox select").forEach(function (select) {
+      if (select.value) mapping[select.value] = Number(select.getAttribute("data-index"));
+    });
+    return mapping;
+  }
+
+  function renderPreview(body) {
+    preview = body;
+    var sheet = body.sheet;
+    document.getElementById("preview").hidden = false;
+    var method = sheet.reusedTemplate ? " nhớ form cũ" : (sheet.method === "header" ? " theo tiêu đề" : " theo dữ liệu");
+    document.getElementById("previewMeta").textContent =
+      body.filename + " · " + sheet.rowCount + " dòng · độ chắc " +
+      Math.round((sheet.confidence || 0) * 100) + "%" + method +
+      (sheet.warnings && sheet.warnings.length ? " · " + sheet.warnings.join(" ") : "");
+    var box = document.getElementById("mapBox");
+    box.innerHTML = (sheet.columns || []).map(function (col) {
+      if (!col.header && !col.field && (col.shapeScores && Math.max.apply(null, Object.values(col.shapeScores)) < 0.15)) {
+        return "";
+      }
+      return "<div><label>Cột " + esc(col.letter) + (col.header ? " · " + esc(col.header) : "") +
+        (col.confidence ? " (" + Math.round(col.confidence * 100) + "%)" : "") +
+        "</label><select data-index='" + col.index + "'>" + fieldOptions(col.field || "") + "</select></div>";
+    }).join("");
+    var sample = document.getElementById("sampleRows");
+    if (!sheet.sample || !sheet.sample.length) {
+      sample.innerHTML = "<tr><td colspan='5'>Không đọc được dòng dữ liệu.</td></tr>";
+      return;
+    }
+    sample.innerHTML = sheet.sample.map(function (row) {
+      return "<tr><td>" + esc(row.name) + "</td><td>" + esc(row.phone) + "</td><td>" + esc(row.address) +
+        "</td><td>" + esc(row.uid) + "</td><td>" + esc(row.id) + "</td></tr>";
+    }).join("");
+  }
+
+  async function uploadFile(file) {
+    var note = document.getElementById("uploadNote");
+    note.textContent = "Đang đọc " + file.name + "…";
+    note.className = "note";
+    var data = new FormData();
+    data.append("file", file, file.name);
+    var response = await api("/v1/kho/preview", { method: "POST", body: data });
+    if (!response.ok) {
+      var err = await response.json().catch(function () { return { detail: "Không đọc được file" }; });
+      note.textContent = err.detail || "Không đọc được file";
+      note.className = "note warn";
+      return;
+    }
+    note.textContent = "Đã nhận file. Kiểm tra cột rồi bấm Nạp vào kho.";
+    note.className = "note ok";
+    renderPreview(await response.json());
+  }
+
+  function renderRows(items, append) {
+    var tbody = document.getElementById("rows");
+    if (!append) tbody.innerHTML = "";
+    if (!items.length && !append) {
+      tbody.innerHTML = "<tr><td colspan='5'>Không có dòng khớp.</td></tr>";
+      return;
+    }
+    items.forEach(function (row) {
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + esc(row.name) + "</td><td>" + esc(row.phone) + "</td><td>" + esc(row.address) +
+        "</td><td>" + esc(row.uid) + "</td><td>" + esc(row.externalId) + "</td>";
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function search(reset) {
+    if (reset) afterId = 0;
+    var q = document.getElementById("query").value.trim();
+    var response = await api("/v1/kho?limit=50&after=" + afterId + "&q=" + encodeURIComponent(q));
+    if (!response.ok) return;
+    var body = await response.json();
+    renderRows(body.items || [], afterId > 0);
+    afterId = body.next || 0;
+    document.getElementById("more").hidden = !afterId;
+    document.getElementById("searchNote").textContent = body.count + " dòng trong kho.";
+  }
+
+  document.getElementById("pick").onclick = function () { document.getElementById("file").click(); };
+  document.getElementById("file").onchange = function (event) {
+    var file = event.target.files && event.target.files[0];
+    if (file) uploadFile(file);
+  };
+  var drop = document.getElementById("drop");
+  drop.addEventListener("dragover", function (event) { event.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", function () { drop.classList.remove("over"); });
+  drop.addEventListener("drop", function (event) {
+    event.preventDefault();
+    drop.classList.remove("over");
+    var file = event.dataTransfer.files && event.dataTransfer.files[0];
+    if (file) uploadFile(file);
+  });
+  document.getElementById("cancel").onclick = function () {
+    preview = null;
+    document.getElementById("preview").hidden = true;
+    document.getElementById("uploadNote").textContent = "";
+  };
+  document.getElementById("commit").onclick = async function () {
+    if (!preview) return;
+    var note = document.getElementById("commitNote");
+    note.textContent = "Đang nạp…";
+    note.className = "note";
+    var mapping = currentMapping();
+    var headers = (preview.sheet.columns || []).map(function (col) { return col.header || ""; });
+    var response = await api("/v1/kho/commit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: preview.token,
+        sheet: preview.chosen,
+        mapping: mapping,
+        source: document.getElementById("source").value.trim(),
+        fingerprint: preview.sheet.fingerprint || "",
+        headers: headers,
+        headerRow: preview.sheet.headerRow || 0,
+        hasHeader: preview.sheet.method !== "shape" && preview.sheet.method !== "empty"
+      })
+    });
+    var body = await response.json().catch(function () { return {}; });
+    if (!response.ok) {
+      note.textContent = body.detail || "Nạp thất bại";
+      note.className = "note warn";
+      return;
+    }
+    note.textContent = "Đã đọc " + body.read + " dòng: +" + body.inserted + " mới, " + body.updated + " ghép, " + body.skipped + " bỏ qua.";
+    note.className = "note ok";
+    await refreshStats();
+    await search(true);
+  };
+  document.getElementById("search").onclick = function () { search(true); };
+  document.getElementById("query").addEventListener("keydown", function (event) {
+    if (event.key === "Enter") search(true);
+  });
+  document.getElementById("more").onclick = function () { search(false); };
+  document.getElementById("exportBtn").onclick = async function () {
+    var q = document.getElementById("query").value.trim();
+    var response = await api("/v1/kho/export?q=" + encodeURIComponent(q));
+    if (!response.ok) return;
+    var blob = await response.blob();
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = "kho-tong.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  refreshStats();
+  search(true);
+</script>
+</body>
+</html>
