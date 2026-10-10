@@ -38,6 +38,7 @@ struct HubClient {
             "size_bytes": size,
             "device": settings.deviceName,
             "client_key": clientKey,
+            "chunk_size": 16 * 1024 * 1024,
         ]
         let payload = try JSONSerialization.data(withJSONObject: body)
         // 507/503 = đĩa đầy hoặc đủ slot — chờ rồi resume, không bỏ video.

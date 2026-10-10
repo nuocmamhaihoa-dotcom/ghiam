@@ -86,8 +86,9 @@ final class ForegroundUploader {
     private init() {
         let config = URLSessionConfiguration.default
         config.httpMaximumConnectionsPerHost = 8
-        config.timeoutIntervalForRequest = 600
-        config.timeoutIntervalForResource = 3600
+        // 16MB trên đường chậm (~30KB/s) mất khoảng 9 phút — đừng cắt giữa mảnh.
+        config.timeoutIntervalForRequest = 900
+        config.timeoutIntervalForResource = 7200
         config.allowsCellularAccess = true
         config.waitsForConnectivity = true
         session = URLSession(configuration: config)
@@ -96,6 +97,7 @@ final class ForegroundUploader {
     func uploadChunk(data: Data, to url: URL, authHeader: String?) async throws {
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
+        request.timeoutInterval = 900
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         if let authHeader {
             request.setValue(authHeader, forHTTPHeaderField: "Authorization")

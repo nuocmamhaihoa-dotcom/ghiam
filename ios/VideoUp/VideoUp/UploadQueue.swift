@@ -20,7 +20,7 @@ final class UploadQueue: ObservableObject {
     /// Một video tới 100% rồi mới sang video kế — video xong được OCR ngay.
     private let parallelUploads = 1
     /// Số mảnh gửi cùng lúc trong một video (lấp đầy Wi‑Fi, không đi URLSession nền).
-    private let parallelChunks = 6
+    private let parallelChunks = 8
 
     private init() {
         let defaults = UserDefaults.standard
@@ -80,7 +80,7 @@ final class UploadQueue: ObservableObject {
                     lastModifiedMs: mtime,
                     clientKey: key,
                     uploadId: nil,
-                    chunkSize: 4 * 1024 * 1024,
+                    chunkSize: 16 * 1024 * 1024,
                     chunksTotal: 0,
                     received: [],
                     status: "queued",

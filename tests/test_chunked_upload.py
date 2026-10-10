@@ -216,5 +216,59 @@ class ChunkedUploadTests(unittest.TestCase):
         self.assertEqual(body["name"], "m.mp4")
 
 
+class ParallelChunkMapTests(unittest.TestCase):
+    """Nhiều PUT cùng lúc không được ghi đè received_map của nhau."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.db = self.root / "video.db"
+        self.videos = self.root / "videos"
+        self.videos.mkdir()
+        init_db(self.db)
+        self.limit = 80 * 1024 * 1024 * 1024
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_parallel_puts_keep_every_chunk(self) -> None:
+        import threading
+
+        chunk = 16 * 1024
+        total = 8
+        session = init_upload(
+            self.db,
+            self.videos,
+            name="parallel.mp4",
+            size_bytes=chunk * total,
+            device="bench",
+            client_key="bench|parallel",
+            chunk_size=chunk,
+            disk_limit_bytes=self.limit,
+        )
+        upload_id = str(session["upload_id"])
+        payload = b"x" * chunk
+        errors: list[BaseException] = []
+
+        def one(index: int) -> None:
+            try:
+                body = put_chunk(self.db, upload_id, index, payload)
+                if body.get("index") != index:
+                    raise AssertionError(body)
+            except BaseException as exc:  # noqa: BLE001 — gom lỗi từ thread
+                errors.append(exc)
+
+        threads = [threading.Thread(target=one, args=(index,)) for index in range(total)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(errors, [])
+        body = get_upload(self.db, upload_id)
+        assert body is not None
+        self.assertEqual(sorted(body["received"]), list(range(total)))
+        self.assertEqual(body["received_bytes"], chunk * total)
+
+
 if __name__ == "__main__":
     unittest.main()

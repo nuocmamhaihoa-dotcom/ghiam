@@ -31,9 +31,9 @@ from control_plane.video_store import (
 )
 from control_plane.video_validate import probe_duration_sec, validate_media_file
 
-# 8 MiB: ít vòng HTTP hơn 2 MiB. Trên Wi‑Fi thẳng tới VPS một mảnh chỉ vài giây.
-# Mạng rất chậm vẫn xong (Safari không cắt ở 60s); app nền cũ giữ timeout dài.
-DEFAULT_CHUNK_SIZE = 8 * 1024 * 1024
+# 16 MiB × vài kết nối: một vòng HTTP không còn đáng kể so với Wi‑Fi iPhone.
+# Cửa sổ TCP 16MB trên VPS nuốt cả mảnh vào RAM rồi mới đổ đĩa.
+DEFAULT_CHUNK_SIZE = 16 * 1024 * 1024
 MAX_CHUNK_SIZE = 16 * 1024 * 1024
 UPLOAD_TTL_SEC = 7 * 24 * 3600
 # Không nhận chunk mới trong khoảng này → coi là tải bị ngắt (Safari khóa máy…).
@@ -63,6 +63,10 @@ def uploads_connect(db_path: Path) -> Iterator[sqlite3.Connection]:
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute("PRAGMA busy_timeout=120000;")
     conn.execute("PRAGMA temp_store=MEMORY;")
+    # Map phiên nhỏ — giữ trong RAM, checkpoint thưa để PUT không chờ đĩa.
+    conn.execute("PRAGMA cache_size=-65536;")
+    conn.execute("PRAGMA mmap_size=268435456;")
+    conn.execute("PRAGMA wal_autocheckpoint=10000;")
     try:
         yield conn
     finally:
@@ -335,7 +339,7 @@ def init_upload(
     original = Path(name or "video.mp4").name
     key = " ".join((client_key or "").split())[:200]
     size = int(chunk_size or DEFAULT_CHUNK_SIZE)
-    # Tối thiểu 16KiB (test / mạng yếu); mặc định 2MiB cho iPhone/Cloudflare.
+    # Tối thiểu 16KiB (test); mặc định 16MiB — một vòng HTTP không còn đáng kể trên Wi‑Fi.
     size = max(16 * 1024, min(MAX_CHUNK_SIZE, size))
     video_db = video_db_path or db_path
 
@@ -532,51 +536,60 @@ def put_chunk(
     path = Path(str(row["path"]))
     if not path.exists():
         raise LookupError("File partial đã mất — khởi tạo lại phiên tải.")
-    # Ghi đĩa trước — nếu DB bận vẫn không mất dữ liệu; resume sẽ gửi lại nếu UPDATE lỗi.
-    # Không fsync từng mảnh — fsync mỗi 2MB làm chậm hàng loạt khi nhiều PUT song song.
-    # Dữ liệu nằm trên đĩa sau flush; complete kiểm tra đủ kích thước trước khi xếp OCR.
-    with path.open("r+b") as handle:
-        handle.seek(index * chunk_size)
-        handle.write(data)
-        handle.flush()
+    # pwrite: nhiều mảnh song song không tranh con trỏ file. Không fsync —
+    # kernel giữ trong RAM (dirty cache) rồi trả 200 ngay, đĩa bắt kịp sau.
+    fd = os.open(path, os.O_RDWR)
+    try:
+        view = memoryview(data)
+        offset = index * chunk_size
+        written = 0
+        while written < len(view):
+            n = os.pwrite(fd, view[written:], offset + written)
+            if n <= 0:
+                raise OSError("pwrite không ghi được")
+            written += n
+    finally:
+        os.close(fd)
 
-    received = _map_list(str(row["received_map"] or ""), total)
-    if index not in received:
-        received.append(index)
-    received_bytes = 0
-    for i in received:
-        received_bytes += chunk_size if i < total - 1 else size_bytes - i * chunk_size
-    dump = _map_dump(received)
     now = utcnow()
 
-    def _update() -> None:
+    def _update() -> int:
         with uploads_connect(db_path) as conn:
-            # Đọc lại map mới nhất phòng hai PUT song song cùng phiên.
-            fresh = conn.execute(
-                "SELECT received_map, status FROM upload_sessions WHERE id = ?",
-                (upload_id,),
-            ).fetchone()
-            if fresh is None or fresh["status"] != "receiving":
-                raise LookupError("Không thấy phiên tải hoặc đã xong.")
-            merged = _map_list(str(fresh["received_map"] or ""), total)
-            if index not in merged:
-                merged.append(index)
-            bytes_now = 0
-            for i in merged:
-                bytes_now += chunk_size if i < total - 1 else size_bytes - i * chunk_size
-            conn.execute(
-                """
-                UPDATE upload_sessions
-                SET received_map = ?, received_bytes = ?, updated_at = ?
-                WHERE id = ? AND status = 'receiving'
-                """,
-                (_map_dump(merged), bytes_now, now, upload_id),
-            )
+            # BEGIN IMMEDIATE: nhiều PUT cùng phiên không được ghi đè received_map của nhau.
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                fresh = conn.execute(
+                    "SELECT received_map, status FROM upload_sessions WHERE id = ?",
+                    (upload_id,),
+                ).fetchone()
+                if fresh is None or fresh["status"] != "receiving":
+                    raise LookupError("Không thấy phiên tải hoặc đã xong.")
+                merged = _map_list(str(fresh["received_map"] or ""), total)
+                if index not in merged:
+                    merged.append(index)
+                bytes_now = 0
+                for i in merged:
+                    bytes_now += chunk_size if i < total - 1 else size_bytes - i * chunk_size
+                conn.execute(
+                    """
+                    UPDATE upload_sessions
+                    SET received_map = ?, received_bytes = ?, updated_at = ?
+                    WHERE id = ? AND status = 'receiving'
+                    """,
+                    (_map_dump(merged), bytes_now, now, upload_id),
+                )
+                conn.execute("COMMIT")
+                return bytes_now
+            except Exception:
+                try:
+                    conn.execute("ROLLBACK")
+                except sqlite3.Error:
+                    pass
+                raise
 
-    _retry_locked(_update, label="put_chunk_update")
-    body = get_upload(db_path, upload_id)
-    assert body is not None
-    return body
+    received_bytes = int(_retry_locked(_update, label="put_chunk_update"))
+    # Không đọc lại cả phiên — client chỉ cần 200 để gửi mảnh kế.
+    return {"ok": True, "upload_id": upload_id, "index": index, "received_bytes": received_bytes}
 
 
 def complete_upload(
