@@ -45,6 +45,7 @@ from control_plane.video_store import (
 from control_plane.video_upload_sessions import (
     DEFAULT_CHUNK_SIZE,
     abort_session,
+    cleanup_stale_uploads,
     complete_upload,
     ensure_upload_tables,
     get_upload,
@@ -65,6 +66,15 @@ def _uploads_db() -> Path:
     path = settings.video_uploads_db_path
     ensure_upload_tables(path, legacy_db=settings.video_db_path)
     return path
+
+
+def _cleanup_uploads() -> int:
+    """Dọn phiên tải chết / file mồ côi — gọi nhẹ mỗi lần xem hàng đợi."""
+    try:
+        return cleanup_stale_uploads(_uploads_db(), settings.video_dir)
+    except Exception as exc:
+        print(f"cleanup uploads: {exc}", flush=True)
+        return 0
 
 
 def _locked_http(_exc: sqlite3.OperationalError) -> HTTPException:
@@ -110,6 +120,7 @@ def ticket_ok(ticket: str, now: float) -> bool:
 def video_stats(authorization: str | None = Header(default=None)) -> dict[str, object]:
     _auth(authorization)
     init_db(settings.video_db_path)
+    cleaned = _cleanup_uploads()
     body = stats(settings.video_db_path)
     body["workers"] = worker_count()
     body["feeders"] = feeder_count()
@@ -126,6 +137,8 @@ def video_stats(authorization: str | None = Header(default=None)) -> dict[str, o
     body["disk_reserve_bytes"] = free_reserve_bytes()
     body["upload_slots"] = upload_slots()
     body["uploads_receiving"] = receiving_count(_uploads_db())
+    body["uploads_stale"] = receiving_count(_uploads_db(), include_stale=True) - int(body["uploads_receiving"])
+    body["uploads_cleaned"] = cleaned
     body["ocr_paused"] = should_pause_ocr(settings.video_db_path, settings.video_dir)
     return body
 
@@ -134,6 +147,7 @@ def video_stats(authorization: str | None = Header(default=None)) -> dict[str, o
 def videos(authorization: str | None = Header(default=None), limit: int = Query(default=40, ge=1, le=200)) -> dict[str, object]:
     _auth(authorization)
     init_db(settings.video_db_path)
+    _cleanup_uploads()
     uploads = list_receiving_uploads(_uploads_db(), limit=min(80, max(limit, 40)))
     items = list_videos(settings.video_db_path, limit)
     # Phiên đang tải lên trước — luôn thấy trong hàng đợi kể cả khi iPhone ngủ giữa chừng.
@@ -142,7 +156,7 @@ def videos(authorization: str | None = Header(default=None), limit: int = Query(
         "count": len(merged),
         "items": merged,
         "uploads": uploads,
-        "uploads_receiving": len(uploads),
+        "uploads_receiving": receiving_count(_uploads_db()),
     }
 
 

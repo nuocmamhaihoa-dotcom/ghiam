@@ -10,13 +10,16 @@ from pathlib import Path
 
 from control_plane.video_store import init_db, list_videos, stats
 from control_plane.video_upload_sessions import (
+    cleanup_stale_uploads,
     complete_upload,
+    ensure_upload_tables,
     get_upload,
     init_upload,
     list_receiving_uploads,
     migrate_upload_sessions,
     put_chunk,
-    ensure_upload_tables,
+    receiving_count,
+    uploads_connect,
 )
 
 
@@ -168,6 +171,30 @@ class ChunkedUploadTests(unittest.TestCase):
         self.assertIn("tải", str(one["issue"]).lower())
         two = next(item for item in listed if item["name"] == "two.mp4")
         self.assertEqual(two["upload_id"], second["upload_id"])
+
+    def test_stale_sessions_do_not_consume_slots_and_are_cleaned(self) -> None:
+        payload = _ffmpeg_mp4(self.root / "stale.mp4", "0.4")
+        session = init_upload(
+            self.db,
+            self.videos,
+            name="stale.mp4",
+            size_bytes=len(payload),
+            client_key="stale|1",
+            chunk_size=16 * 1024,
+            disk_limit_bytes=self.limit,
+        )
+        self.assertEqual(receiving_count(self.db), 1)
+        # Giả lập phiên chết im từ lâu.
+        with uploads_connect(self.db) as conn:
+            conn.execute(
+                "UPDATE upload_sessions SET updated_at = ? WHERE id = ?",
+                ("2020-01-01T00:00:00+00:00", session["upload_id"]),
+            )
+        self.assertEqual(receiving_count(self.db), 0)
+        self.assertEqual(receiving_count(self.db, include_stale=True), 1)
+        removed = cleanup_stale_uploads(self.db, self.videos, abandon_sec=60)
+        self.assertGreaterEqual(removed, 1)
+        self.assertIsNone(get_upload(self.db, str(session["upload_id"])))
 
     def test_migrate_sessions_to_separate_uploads_db(self) -> None:
         payload = _ffmpeg_mp4(self.root / "m.mp4", "0.4")

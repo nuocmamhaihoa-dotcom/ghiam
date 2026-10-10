@@ -442,10 +442,15 @@
         : (issue.indexOf("Tất cả đều tốt") === 0 || issue.indexOf("Tốt —") === 0 ||
           issue.indexOf("Chờ đọc") === 0 ? "ok" : "");
       var resultText = "—";
+      var cancelUpload = "";
+      if (isUpload && item.upload_id) {
+        cancelUpload = " <button class='ghost' type='button' data-cancel-upload='" +
+          escapeHtml(item.upload_id) + "'>Hủy phiên dở</button>";
+      }
       if (isUpload) {
         resultText = item.stale
-          ? "<span class='warn'>Chưa vào hàng đọc — tải dở</span>"
-          : "<span class='note'>Chưa xong tải — chưa phân tích</span>";
+          ? "<span class='warn'>Chưa vào hàng đọc — tải dở</span>" + cancelUpload
+          : "<span class='note'>Chưa xong tải — chưa phân tích</span>" + cancelUpload;
       } else if (item.status === "queued") {
         resultText = "<span class='ok'>Đã lên VPS — chờ phân tích</span>";
       } else if (item.status === "done") {
@@ -479,6 +484,15 @@
     box.querySelectorAll("[data-retry]").forEach(function (button) {
       button.addEventListener("click", async function () {
         await api("/v1/videos/" + button.getAttribute("data-retry") + "/retry", { method: "POST" });
+        refresh();
+      });
+    });
+    box.querySelectorAll("[data-cancel-upload]").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        var id = button.getAttribute("data-cancel-upload");
+        if (!id) return;
+        if (!confirm("Hủy phiên tải dở này để nhường chỗ? Có thể chọn lại cùng file để tải lại.")) return;
+        await api("/v1/videos/uploads/" + id, { method: "DELETE" });
         refresh();
       });
     });

@@ -206,16 +206,34 @@ def _feed(
 
 def main() -> None:
     db_path = settings.video_db_path
-    init_db(db_path)
-    pruned = prune_old_videos(db_path)
-    if pruned:
-        print(f"Giữ tối đa {keep_video_count()} video trên đĩa — đã dọn {pruned} file/path cũ.", flush=True)
-    joined = rematch_results(db_path)
-    if joined:
-        print(f"Đã ghép thêm {joined} hàng số + username từ kết quả cũ.", flush=True)
-    returned = requeue_running(db_path, os.getpid())
-    if returned:
-        print(f"Đưa {returned} video đọc dở về hàng đợi.", flush=True)
+    for attempt in range(12):
+        try:
+            init_db(db_path)
+            break
+        except Exception as exc:
+            if "locked" not in str(exc).lower() and attempt < 11:
+                time.sleep(min(8.0, 0.5 * (attempt + 1)))
+                continue
+            raise
+    try:
+        pruned = prune_old_videos(db_path)
+        if pruned:
+            print(f"Giữ tối đa {keep_video_count()} video trên đĩa — đã dọn {pruned} file/path cũ.", flush=True)
+    except Exception as exc:
+        print(f"Dọn video cũ lúc khởi động lỗi (bỏ qua): {exc}", flush=True)
+    try:
+        joined = rematch_results(db_path)
+        if joined:
+            print(f"Đã ghép thêm {joined} hàng số + username từ kết quả cũ.", flush=True)
+    except Exception as exc:
+        # Không được crash vòng systemd vì DB bận — hub/upload đang ghi.
+        print(f"Rematch lúc khởi động lỗi (bỏ qua, sẽ ghép sau mỗi video): {exc}", flush=True)
+    try:
+        returned = requeue_running(db_path, os.getpid())
+        if returned:
+            print(f"Đưa {returned} video đọc dở về hàng đợi.", flush=True)
+    except Exception as exc:
+        print(f"requeue_running lỗi (bỏ qua): {exc}", flush=True)
     work_dir = frame_work_dir()
     # Dọn khung cũ (kể cả lần chạy trước trên /dev/shm hoặc data/frames).
     stale_dirs = {

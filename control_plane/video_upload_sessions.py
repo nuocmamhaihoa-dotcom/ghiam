@@ -36,6 +36,8 @@ MAX_CHUNK_SIZE = 16 * 1024 * 1024
 UPLOAD_TTL_SEC = 7 * 24 * 3600
 # Không nhận chunk mới trong khoảng này → coi là tải bị ngắt (Safari khóa máy…).
 STALE_UPLOAD_SEC = 20 * 60
+# Phiên stale quá lâu: xóa để nhường slot/đĩa; user chọn lại file sẽ tạo phiên mới.
+ABANDON_UPLOAD_SEC = 2 * 3600
 _MIGRATED: set[str] = set()
 
 
@@ -77,15 +79,34 @@ def _retry_locked(action, *, tries: int = 12, label: str = "upload-db"):
     raise sqlite3.OperationalError(f"{label}: database is locked sau {tries} lần thử") from last
 
 
-def receiving_count(db_path: Path) -> int:
+def _parse_updated_ts(value: object) -> float:
+    if not value:
+        return 0.0
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def receiving_count(db_path: Path, *, include_stale: bool = False) -> int:
+    """Số phiên đang nhận thật (còn sống). Mặc định bỏ phiên stale để không nghẽn slot."""
     ensure_upload_tables(db_path)
+    cutoff = time.time() - STALE_UPLOAD_SEC
 
     def _count() -> int:
         with uploads_connect(db_path) as conn:
-            row = conn.execute(
-                "SELECT COUNT(*) AS n FROM upload_sessions WHERE status = 'receiving'"
-            ).fetchone()
-        return int(row["n"])
+            rows = conn.execute(
+                "SELECT updated_at FROM upload_sessions WHERE status = 'receiving'"
+            ).fetchall()
+        n = 0
+        for row in rows:
+            if include_stale:
+                n += 1
+                continue
+            updated = _parse_updated_ts(row["updated_at"])
+            if updated and updated >= cutoff:
+                n += 1
+        return n
 
     return int(_retry_locked(_count, label="receiving_count"))
 
@@ -232,10 +253,21 @@ def _session_dict(row: sqlite3.Row) -> dict[str, object]:
     }
 
 
-def cleanup_stale_uploads(db_path: Path, video_dir: Path, ttl_sec: int = UPLOAD_TTL_SEC) -> int:
-    """Xóa phiên receiving quá hạn và file partial."""
+def cleanup_stale_uploads(
+    db_path: Path,
+    video_dir: Path,
+    ttl_sec: int = UPLOAD_TTL_SEC,
+    abandon_sec: int = ABANDON_UPLOAD_SEC,
+) -> int:
+    """Xóa phiên receiving quá hạn / bỏ cuộc và file partial mồ côi.
+
+    - ttl_sec: TTL tuyệt đối (mặc định 7 ngày)
+    - abandon_sec: không nhận chunk mới trong khoảng này → xóa để hết nghẽn slot
+    """
     ensure_upload_tables(db_path)
-    cutoff = time.time() - max(3600, ttl_sec)
+    now = time.time()
+    # abandon_sec (mặc định 2h) hoặc TTL dài hơn — cái nào sớm hơn thì dọn.
+    soft_cutoff = now - min(max(3600, ttl_sec), max(STALE_UPLOAD_SEC, abandon_sec))
     removed = 0
 
     def _rows():
@@ -246,12 +278,9 @@ def cleanup_stale_uploads(db_path: Path, video_dir: Path, ttl_sec: int = UPLOAD_
 
     rows = _retry_locked(_rows, label="cleanup_list")
     for row in rows:
-        try:
-            text = str(row["updated_at"]).replace("Z", "+00:00")
-            updated = datetime.fromisoformat(text).timestamp()
-        except (ValueError, TypeError):
-            updated = 0.0
-        if updated and updated > cutoff:
+        updated = _parse_updated_ts(row["updated_at"])
+        # Còn sống (vừa có chunk trong abandon_sec) → giữ để resume.
+        if updated and updated >= soft_cutoff:
             continue
         path = Path(str(row["path"]))
         path.unlink(missing_ok=True)
@@ -262,6 +291,8 @@ def cleanup_stale_uploads(db_path: Path, video_dir: Path, ttl_sec: int = UPLOAD_
 
         _retry_locked(_delete, label="cleanup_delete")
         removed += 1
+        age_min = int((now - updated) / 60) if updated else -1
+        print(f"Đã dọn phiên tải dở {row['id']} (im {age_min} phút)", flush=True)
     # Dọn file mồ côi trong incoming/
     folder = uploads_dir(video_dir)
 
@@ -274,6 +305,7 @@ def cleanup_stale_uploads(db_path: Path, video_dir: Path, ttl_sec: int = UPLOAD_
         if str(orphan) not in known:
             orphan.unlink(missing_ok=True)
             removed += 1
+            print(f"Đã xóa file partial mồ côi {orphan.name}", flush=True)
     return removed
 
 
@@ -383,15 +415,6 @@ def get_upload(db_path: Path, upload_id: str) -> dict[str, object] | None:
     if row is None:
         return None
     return _session_dict(row)
-
-
-def _parse_updated_ts(value: object) -> float:
-    if not value:
-        return 0.0
-    try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
-    except (ValueError, TypeError):
-        return 0.0
 
 
 def list_receiving_uploads(db_path: Path, limit: int = 80) -> list[dict[str, object]]:

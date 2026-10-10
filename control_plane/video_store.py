@@ -338,6 +338,7 @@ def _incoming_bytes_from(db_path: Path) -> int:
 
 
 def _receiving_count_from(db_path: Path) -> int:
+    """Chỉ đếm phiên receiving còn sống (< 20 phút im) — không pause OCR vì phiên chết."""
     try:
         with connect(db_path) as conn:
             exists = conn.execute(
@@ -345,10 +346,20 @@ def _receiving_count_from(db_path: Path) -> int:
             ).fetchone()
             if exists is None:
                 return 0
-            row = conn.execute(
-                "SELECT COUNT(*) AS n FROM upload_sessions WHERE status = 'receiving'"
-            ).fetchone()
-        return int(row["n"])
+            rows = conn.execute(
+                "SELECT updated_at FROM upload_sessions WHERE status = 'receiving'"
+            ).fetchall()
+        cutoff = time.time() - 20 * 60
+        n = 0
+        for row in rows:
+            text = str(row["updated_at"] or "").replace("Z", "+00:00")
+            try:
+                updated = datetime.fromisoformat(text).timestamp()
+            except ValueError:
+                updated = 0.0
+            if updated and updated >= cutoff:
+                n += 1
+        return n
     except sqlite3.Error:
         return 0
 
@@ -525,7 +536,17 @@ def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
     for row in rows:
         item = dict(row)
         path = str(item.pop("path", "") or "")
-        item["file_kept"] = bool(path) and Path(path).exists()
+        kept = False
+        if path:
+            try:
+                st = Path(path).stat()
+                # st_blocks==0 + size nhỏ = stub/sparse rỗng sau prune — không coi còn file.
+                kept = Path(path).is_file() and st.st_size > 0 and (
+                    st.st_size >= 64 * 1024 or st.st_blocks > 0
+                )
+            except OSError:
+                kept = False
+        item["file_kept"] = kept
         try:
             item["duration_sec"] = float(item.get("duration_sec") or 0)
         except (TypeError, ValueError):
@@ -820,15 +841,26 @@ def rematch_results(db_path: Path, video_id: int | None = None) -> int:
     Chạy sau mỗi video và lúc khởi động. Không khóa meta: luôn quét lại phần còn thiếu
     để kết quả cũ và kết quả mới mãi về sau đều được ghép.
     """
-    with connect(db_path) as conn:
-        conn.execute("BEGIN IMMEDIATE")
+    last: Exception | None = None
+    for attempt in range(12):
         try:
-            merged = _rematch_conn(conn, video_id)
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            raise
-    return merged
+            with connect(db_path) as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    merged = _rematch_conn(conn, video_id)
+                    conn.execute("COMMIT")
+                except Exception:
+                    conn.execute("ROLLBACK")
+                    raise
+            return merged
+        except sqlite3.OperationalError as exc:
+            last = exc
+            if "locked" not in str(exc).lower() and "busy" not in str(exc).lower():
+                raise
+            time.sleep(min(8.0, 0.5 * (attempt + 1)))
+    if last is not None:
+        raise last
+    return 0
 
 
 def merge_close_results(db_path: Path) -> int:
