@@ -164,7 +164,40 @@ def connect(db_path: Path) -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+def _is_lock_error(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return "locked" in text or "busy" in text
+
+
+def _with_immediate(db_path: Path, action, *, tries: int = 20):
+    """Chạy action trong BEGIN IMMEDIATE ngắn; retry khi DB bận."""
+    last: Exception | None = None
+    for attempt in range(tries):
+        try:
+            with connect(db_path) as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    result = action(conn)
+                    conn.execute("COMMIT")
+                except Exception:
+                    try:
+                        conn.execute("ROLLBACK")
+                    except sqlite3.Error:
+                        pass
+                    raise
+            return result
+        except sqlite3.OperationalError as exc:
+            last = exc
+            if not _is_lock_error(exc):
+                raise
+            time.sleep(min(4.0, 0.05 * (2 ** min(attempt, 6))))
+    if last is not None:
+        raise last
+    raise sqlite3.OperationalError("database is locked")
+
+
 _READY: set[str] = set()
+_MERGE_BATCH = 40
 
 
 def init_db(db_path: Path) -> None:
@@ -426,9 +459,11 @@ def clean_device(device: str) -> str:
 def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str, device: str = "") -> dict[str, object]:
     """Cùng một file đang chờ hoặc đang đọc thì bỏ qua. Đã đọc xong hoặc lỗi thì đọc lại bằng bộ đọc hiện tại."""
     machine = clean_device(device)
-    with connect(db_path) as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        existing = conn.execute("SELECT id, status, name, path FROM videos WHERE sha256 = ?", (sha256,)).fetchone()
+
+    def _begin(conn: sqlite3.Connection) -> dict[str, object]:
+        existing = conn.execute(
+            "SELECT id, status, name, path FROM videos WHERE sha256 = ?", (sha256,)
+        ).fetchone()
         if existing and existing["status"] in ("done", "error"):
             conn.execute(
                 """
@@ -440,7 +475,6 @@ def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str, devi
                 """,
                 (name, size_bytes, utcnow(), machine, existing["id"]),
             )
-            conn.execute("COMMIT")
             return {
                 "id": int(existing["id"]),
                 "status": "uploading",
@@ -451,7 +485,6 @@ def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str, devi
                 "old_path": existing["path"],
             }
         if existing:
-            conn.execute("COMMIT")
             return {
                 "id": int(existing["id"]),
                 "status": existing["status"],
@@ -466,7 +499,6 @@ def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str, devi
             """,
             (name, size_bytes, sha256, utcnow(), machine),
         )
-        conn.execute("COMMIT")
         return {
             "id": int(cur.lastrowid),
             "status": "uploading",
@@ -474,6 +506,8 @@ def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str, devi
             "device": machine,
             "duplicate": False,
         }
+
+    return _with_immediate(db_path, _begin)
 
 
 def commit_upload(db_path: Path, video_id: int, path: str, duration_sec: float = 0.0) -> None:
@@ -576,14 +610,14 @@ def stats(db_path: Path) -> dict[str, int]:
 
 
 def claim(db_path: Path, pid: int) -> dict[str, object] | None:
-    with connect(db_path) as conn:
-        conn.execute("BEGIN IMMEDIATE")
+    """Nhận video tiếp theo. Retry khi DB bận — không để feeder chết vì locked."""
+
+    def _claim(conn: sqlite3.Connection) -> dict[str, object] | None:
         row = conn.execute(
             "SELECT id, name, path, COALESCE(device, '') AS device "
             "FROM videos WHERE status = 'queued' AND path != '' ORDER BY id LIMIT 1"
         ).fetchone()
         if row is None:
-            conn.execute("COMMIT")
             return None
         now = utcnow()
         cur = conn.execute(
@@ -595,7 +629,6 @@ def claim(db_path: Path, pid: int) -> dict[str, object] | None:
             """,
             (pid, now, now, row["id"]),
         )
-        conn.execute("COMMIT")
         if cur.rowcount != 1:
             return None
         return {
@@ -604,6 +637,8 @@ def claim(db_path: Path, pid: int) -> dict[str, object] | None:
             "path": row["path"],
             "device": row["device"] or "",
         }
+
+    return _with_immediate(db_path, _claim)
 
 
 def set_progress(db_path: Path, video_id: int, message: str) -> None:
@@ -713,16 +748,18 @@ def _parse_ts(value: object) -> float | None:
 
 
 def finish(db_path: Path, video_id: int, table: Table) -> None:
-    """Lưu kết quả rồi ghép ngay số + username thành hàng ngang đủ ba cột."""
-    with connect(db_path) as conn:
-        conn.execute("BEGIN IMMEDIATE")
+    """Lưu kết quả rồi ghép ngay số + username thành hàng ngang đủ ba cột.
+
+    Ghi kết quả trong một giao dịch ngắn; rematch chạy sau (tính cặp ngoài khóa)
+    để không giữ BEGIN IMMEDIATE suốt lúc pair_close_names.
+    """
+    def _write(conn: sqlite3.Connection) -> None:
         for row in table.rows:
             _put(conn, row.phone, row.name, row.username, BUCKET_OK, "", video_id, upgrade=True)
         for item in table.unopened:
             _put(conn, item.phone, item.name, "", BUCKET_UNOPENED, "", video_id, upgrade=False)
         for item in table.review:
             _put_review(conn, item, video_id)
-        _rematch_conn(conn, video_id)
         conn.execute(
             """
             UPDATE videos
@@ -732,7 +769,9 @@ def finish(db_path: Path, video_id: int, table: Table) -> None:
             """,
             (utcnow(), video_id),
         )
-        conn.execute("COMMIT")
+
+    _with_immediate(db_path, _write)
+    rematch_results(db_path, video_id)
 
 
 def fail(db_path: Path, video_id: int, message: str) -> None:
@@ -838,29 +877,48 @@ def prune_old_videos(db_path: Path, keep: int | None = None, keep_gb: float | No
 def rematch_results(db_path: Path, video_id: int | None = None) -> int:
     """Ghép số điện thoại + username còn thiếu thành một hàng ngang.
 
-    Chạy sau mỗi video và lúc khởi động. Không khóa meta: luôn quét lại phần còn thiếu
-    để kết quả cũ và kết quả mới mãi về sau đều được ghép.
+    Chạy sau mỗi video và (tuỳ chọn) nền lúc worker khởi động.
+    Tính cặp tên ngoài khóa; chỉ giữ BEGIN IMMEDIATE khi ghi từng lô ngắn —
+    tránh nghẽn upload/claim khi còn hàng nghìn dòng thiếu.
     """
-    last: Exception | None = None
-    for attempt in range(12):
-        try:
-            with connect(db_path) as conn:
-                conn.execute("BEGIN IMMEDIATE")
-                try:
-                    merged = _rematch_conn(conn, video_id)
-                    conn.execute("COMMIT")
-                except Exception:
-                    conn.execute("ROLLBACK")
-                    raise
-            return merged
-        except sqlite3.OperationalError as exc:
-            last = exc
-            if "locked" not in str(exc).lower() and "busy" not in str(exc).lower():
-                raise
-            time.sleep(min(8.0, 0.5 * (attempt + 1)))
-    if last is not None:
-        raise last
-    return 0
+    merged = 0
+    merged += int(_with_immediate(db_path, lambda c: _promote_phone_username_reviews(c, video_id)))
+
+    target_videos = _rematch_video_ids(db_path, video_id)
+    for vid in target_videos:
+        merged += int(_with_immediate(db_path, lambda c, v=vid: _absorb_ocr_phone_twins(c, v)))
+        rows = _load_incomplete_results(db_path, vid)
+        phones = [row for row in rows if row["phone"] and not row["username"]]
+        users = [row for row in rows if row["username"] and not row["phone"]]
+        pairs = _compute_merge_pairs(phones, users)
+        merged += _apply_merge_pairs(db_path, pairs)
+
+    if video_id is None:
+        leftovers = _load_incomplete_results(db_path, None)
+        phones = [row for row in leftovers if row["phone"] and not row["username"]]
+        users = [row for row in leftovers if row["username"] and not row["phone"]]
+        # Tính O(n×m) ngoài khóa — không được bọc IMMEDIATE.
+        pairs = _compute_merge_pairs(phones, users)
+        merged += _apply_merge_pairs(db_path, pairs)
+        for vid in _rematch_video_ids(db_path, None):
+            merged += int(_with_immediate(db_path, lambda c, v=vid: _absorb_ocr_phone_twins(c, v)))
+
+    merged += int(_with_immediate(db_path, lambda c: _promote_phone_username_reviews(c, video_id)))
+    return merged
+
+
+def _rematch_video_ids(db_path: Path, video_id: int | None) -> list[int]:
+    if video_id is not None:
+        return [int(video_id)]
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT video_id FROM results
+            WHERE username = '' OR phone = ''
+            ORDER BY video_id
+            """
+        ).fetchall()
+    return [int(row["video_id"]) for row in rows]
 
 
 def merge_close_results(db_path: Path) -> int:
@@ -873,7 +931,90 @@ def merge_same_name_results(db_path: Path) -> int:
     return rematch_results(db_path)
 
 
+def _load_incomplete_results(db_path: Path, video_id: int | None) -> list[dict[str, object]]:
+    """Đọc dòng thiếu — không khóa exclusive (chỉ đọc WAL)."""
+    with connect(db_path) as conn:
+        if video_id is None:
+            rows = conn.execute(
+                """
+                SELECT id, phone, name, username, video_id
+                FROM results
+                WHERE username = '' OR phone = ''
+                """
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT id, phone, name, username, video_id
+                FROM results
+                WHERE video_id = ? AND (username = '' OR phone = '')
+                """,
+                (video_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+
+def _compute_merge_pairs(
+    phones: list[dict[str, object]],
+    users: list[dict[str, object]],
+) -> list[tuple[dict[str, object], dict[str, object]]]:
+    if not phones or not users:
+        return []
+    pairs = pair_close_names(
+        [(str(row["id"]), str(row["name"])) for row in phones],
+        [(str(row["id"]), str(row["name"])) for row in users],
+        handles={str(row["id"]): str(row["username"]) for row in users},
+    )
+    phone_by = {str(row["id"]): row for row in phones}
+    user_by = {str(row["id"]): row for row in users}
+    out: list[tuple[dict[str, object], dict[str, object]]] = []
+    for phone_id, user_id in pairs:
+        phone = phone_by.get(phone_id)
+        user = user_by.get(user_id)
+        if phone is not None and user is not None:
+            out.append((phone, user))
+    return out
+
+
+def _apply_merge_pairs(
+    db_path: Path,
+    pairs: list[tuple[dict[str, object], dict[str, object]]],
+) -> int:
+    if not pairs:
+        return 0
+    applied = 0
+    for offset in range(0, len(pairs), _MERGE_BATCH):
+        chunk = pairs[offset : offset + _MERGE_BATCH]
+
+        def _write(conn: sqlite3.Connection, batch=chunk) -> int:
+            n = 0
+            for phone, user in batch:
+                updated = conn.execute(
+                    """
+                    UPDATE results
+                    SET name = ?, username = ?, bucket = ?, reason = '', video_id = ?
+                    WHERE id = ? AND username = ''
+                    """,
+                    (
+                        joined_name(str(phone["name"]), str(user["name"])),
+                        user["username"],
+                        BUCKET_OK,
+                        phone["video_id"],
+                        phone["id"],
+                    ),
+                )
+                if updated.rowcount != 1:
+                    continue
+                conn.execute("DELETE FROM results WHERE id = ? AND phone = ''", (user["id"],))
+                n += 1
+            return n
+
+        applied += int(_with_immediate(db_path, _write))
+    return applied
+
+
 def _rematch_conn(conn: sqlite3.Connection, video_id: int | None = None) -> int:
+    """Ghép trong kết nối đã mở — chỉ dùng khi caller đã nắm transaction ngắn (test/nội bộ)."""
     merged = 0
     merged += _promote_phone_username_reviews(conn, video_id)
     merged += _absorb_ocr_phone_twins(conn, video_id)

@@ -52,7 +52,6 @@ from control_plane.recordings import (
 from control_plane.settings import ROOT, settings
 from control_plane.video_api import router as video_router
 from control_plane.video_store import init_db as init_video_db
-from control_plane.video_store import rematch_results
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -114,19 +113,8 @@ async def _startup() -> None:
     settings.ensure_dirs()
     db.init_db(settings.db_path)
     init_video_db(settings.video_db_path)
-    # Rematch chạy nền — không chặn upload khi hub mới restart (video lớn nhiều máy).
-    import threading
-
-    def _rematch_bg() -> None:
-        try:
-            joined = rematch_results(settings.video_db_path)
-            if joined:
-                print(f"Hub rematch nền: ghép thêm {joined} hàng.", flush=True)
-        except Exception as exc:
-            print(f"Hub rematch nền lỗi: {exc}", flush=True)
-
-    threading.Thread(target=_rematch_bg, name="video-rematch", daemon=True).start()
-    # Import proxy list into DB immediately; live/die loop runs in background
+    # Không rematch trên hub: ghép kết quả (pair_close_names) từng giữ BEGIN IMMEDIATE
+    # quá lâu → nghẽn claim/upload/OCR. Worker ghép sau mỗi video + nền lô ngắn.
     from control_plane.proxy_check import load_proxy_lines, start_background_checker
     from control_plane.video_watchdog import start_background_watchdog
 

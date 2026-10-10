@@ -12,6 +12,7 @@ import functools
 import multiprocessing
 import os
 import shutil
+import sqlite3
 import threading
 import time
 from concurrent.futures import BrokenExecutor, ProcessPoolExecutor
@@ -69,6 +70,16 @@ def _restart_now(reason: str) -> None:
     """Thoát cứng để systemd Restart=always. SystemExit bị kẹt khi pool/thread còn sống."""
     print(reason, flush=True)
     os._exit(1)
+
+
+def _rematch_process(path: str) -> None:
+    """Tiến trình riêng: pair_close_names nặng không giữ GIL của feeder/OCR."""
+    try:
+        joined = rematch_results(Path(path))
+        if joined:
+            print(f"Đã ghép thêm {joined} hàng số + username từ kết quả cũ.", flush=True)
+    except Exception as exc:
+        print(f"Rematch nền lỗi (bỏ qua, sẽ ghép sau mỗi video): {exc}", flush=True)
 
 
 def run_job(
@@ -172,7 +183,13 @@ def _feed(
             if should_pause_ocr(db_path, settings.video_dir):
                 stop.wait(5.0)
                 continue
-            current = claim(db_path, os.getpid())
+            try:
+                current = claim(db_path, os.getpid())
+            except sqlite3.OperationalError as exc:
+                # DB bận tạm thời — chờ rồi thử lại, không để feeder chết.
+                print(f"claim tạm lỗi (thử lại): {exc}", flush=True)
+                stop.wait(1.0)
+                continue
             if current is None:
                 stop.wait(1.0)
                 continue
@@ -222,13 +239,6 @@ def main() -> None:
     except Exception as exc:
         print(f"Dọn video cũ lúc khởi động lỗi (bỏ qua): {exc}", flush=True)
     try:
-        joined = rematch_results(db_path)
-        if joined:
-            print(f"Đã ghép thêm {joined} hàng số + username từ kết quả cũ.", flush=True)
-    except Exception as exc:
-        # Không được crash vòng systemd vì DB bận — hub/upload đang ghi.
-        print(f"Rematch lúc khởi động lỗi (bỏ qua, sẽ ghép sau mỗi video): {exc}", flush=True)
-    try:
         returned = requeue_running(db_path, os.getpid())
         if returned:
             print(f"Đưa {returned} video đọc dở về hàng đợi.", flush=True)
@@ -277,7 +287,16 @@ def main() -> None:
         thread.start()
         return thread
 
+    # Feeders trước — rematch nền (tiến trình riêng) sau để không chặn OCR/upload.
     threads = [start_feeder() for _ in range(feeders)]
+    rematch_proc = context.Process(
+        target=_rematch_process,
+        args=(str(db_path),),
+        name="video-rematch-deferred",
+        daemon=True,
+    )
+    rematch_proc.start()
+
     while not broken.is_set():
         touch_heartbeat(heartbeat_path())
         for index, thread in enumerate(threads):

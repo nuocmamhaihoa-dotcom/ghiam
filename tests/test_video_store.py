@@ -335,6 +335,69 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(items[0]["saved_count"], 1)
         self.assertEqual(items[0]["review_count"], 0)
 
+    def test_claim_and_upload_stay_responsive_during_global_rematch(self) -> None:
+        """Rematch hàng loạt không được giữ khóa exclusive làm nghẽn claim/upload."""
+        import threading
+        import time
+
+        from control_plane.video_store import connect
+
+        seed = self._add("seed.mp4", "seed")
+        finish(self.db, seed, Table(unopened=[Unopened("0900000000", "Seed Name")]))
+        with connect(self.db) as conn:
+            now = "2026-10-10T00:00:00+00:00"
+            for i in range(120):
+                conn.execute(
+                    """
+                    INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
+                    VALUES (?, ?, '', 3, '', ?, ?)
+                    """,
+                    (f"08{i:08d}", f"Phone Name {i % 17}", seed, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
+                    VALUES ('', ?, ?, 2, 'đã mở hồ sơ nhưng chưa thấy số', ?, ?)
+                    """,
+                    (f"User Name {i % 19}", f"@loaduser{i}", seed, now),
+                )
+
+        waiting = self._add("wait.mp4", "wait")
+        errors: list[BaseException] = []
+        claimed_ids: list[int] = []
+
+        def _rematch() -> None:
+            try:
+                rematch_results(self.db)
+            except BaseException as exc:  # noqa: BLE001 — thu về thread chính
+                errors.append(exc)
+
+        thread = threading.Thread(target=_rematch, daemon=True)
+        thread.start()
+        deadline = time.monotonic() + 8.0
+        while thread.is_alive() and time.monotonic() < deadline:
+            try:
+                created = begin_upload(
+                    self.db, name="live.mp4", size_bytes=12, sha256=f"live-{time.time()}", device="iPhone"
+                )
+                abort_upload(self.db, int(created["id"]))
+                job = claim(self.db, os.getpid())
+                if job is not None:
+                    claimed_ids.append(int(job["id"]))
+                    requeue(self.db, int(job["id"]))
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+                break
+            time.sleep(0.01)
+        thread.join(timeout=30)
+        self.assertFalse(errors, f"DB bị nghẽn trong rematch: {errors}")
+        self.assertFalse(thread.is_alive(), "rematch treo quá lâu")
+        # claim vẫn lấy được video đang chờ trong lúc rematch chạy.
+        self.assertTrue(
+            waiting in claimed_ids or stats(self.db)["queued"] >= 1,
+            "claim/upload không vào được trong lúc rematch",
+        )
+
     def test_startup_returns_half_read_videos_to_the_queue(self) -> None:
         self._add("a.mp4", "a")
         claim(self.db, 4242)

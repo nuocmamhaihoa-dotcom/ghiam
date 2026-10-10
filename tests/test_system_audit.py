@@ -100,7 +100,7 @@ class SystemAuditTests(unittest.TestCase):
         raw = self.client.get(ticket)
         self.assertEqual(raw.status_code, 200)
         text = gzip.decompress(raw.content).decode("utf-8-sig")
-        self.assertIn("Số điện thoại,Tên,Username,Time quét,Tên máy,Video", text)
+        self.assertIn("Số điện thoại,Tên,Username,Thời gian quét,Tên máy,Video", text)
         self.assertIn("0982117072", text)
         self.assertNotIn(",Loại,", text)
 
@@ -206,7 +206,7 @@ class SystemAuditTests(unittest.TestCase):
         self.assertIn("% đã gắn hồ sơ", text)
         self.assertIn("Đủ 3 cột", text)
         self.assertNotIn("100 dòng mới nhất", text)
-        self.assertIn("Time quét", text)
+        self.assertIn("Thời gian quét", text)
 
     def test_rematch_is_idempotent_and_counts_match(self) -> None:
         self._seed()
