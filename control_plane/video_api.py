@@ -12,8 +12,9 @@ import zlib
 from pathlib import Path
 from typing import Any, BinaryIO
 
-from fastapi import APIRouter, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from control_plane.settings import derive_secret, settings
@@ -36,6 +37,14 @@ from control_plane.video_store import (
     search_results,
     stats,
     worker_count,
+)
+from control_plane.video_upload_sessions import (
+    DEFAULT_CHUNK_SIZE,
+    abort_session,
+    complete_upload,
+    get_upload,
+    init_upload,
+    put_chunk,
 )
 
 router = APIRouter()
@@ -180,6 +189,112 @@ def retry_video(video_id: int, authorization: str | None = Header(default=None))
                 f"(tối đa {keep_video_count()} video gần nhất)."
             ),
         )
+    return {"ok": True}
+
+
+class ChunkInitBody(BaseModel):
+    name: str = Field(min_length=1, max_length=240)
+    size_bytes: int = Field(gt=0, le=16 * 1024 * 1024 * 1024)
+    device: str = ""
+    client_key: str = ""
+    chunk_size: int | None = None
+    sha256: str = ""
+
+
+@router.post("/v1/videos/uploads")
+async def start_chunked_upload(
+    body: ChunkInitBody,
+    authorization: str | None = Header(default=None),
+) -> dict[str, object]:
+    """Bắt đầu / resume phiên tải cắt khúc (B)."""
+    _auth(authorization)
+    await run_in_threadpool(init_db, settings.video_db_path)
+    settings.ensure_dirs()
+    suffix = Path(body.name).suffix.lower()
+    if suffix not in _ALLOWED:
+        raise HTTPException(status_code=400, detail="Chỉ nhận video hoặc ảnh chụp màn hình.")
+    try:
+        return await run_in_threadpool(
+            lambda: init_upload(
+                settings.video_db_path,
+                settings.video_dir,
+                name=body.name,
+                size_bytes=body.size_bytes,
+                device=body.device,
+                client_key=body.client_key,
+                chunk_size=body.chunk_size or DEFAULT_CHUNK_SIZE,
+                sha256=body.sha256,
+                disk_limit_bytes=_limit_bytes(),
+            )
+        )
+    except MemoryError as exc:
+        raise HTTPException(status_code=507, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/v1/videos/uploads/{upload_id}")
+def chunked_upload_status(
+    upload_id: str,
+    authorization: str | None = Header(default=None),
+) -> dict[str, object]:
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    body = get_upload(settings.video_db_path, upload_id)
+    if body is None:
+        raise HTTPException(status_code=404, detail="Không thấy phiên tải.")
+    return body
+
+
+@router.put("/v1/videos/uploads/{upload_id}/chunks/{index}")
+async def upload_chunk(
+    upload_id: str,
+    index: int,
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, object]:
+    _auth(authorization)
+    data = await request.body()
+    try:
+        return await run_in_threadpool(put_chunk, settings.video_db_path, upload_id, index, data)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/v1/videos/uploads/{upload_id}/complete")
+async def finish_chunked_upload(
+    upload_id: str,
+    authorization: str | None = Header(default=None),
+) -> dict[str, object]:
+    _auth(authorization)
+    await run_in_threadpool(init_db, settings.video_db_path)
+    try:
+        return await run_in_threadpool(
+            complete_upload,
+            settings.video_db_path,
+            settings.video_dir,
+            upload_id,
+            disk_limit_bytes=_limit_bytes(),
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except MemoryError as exc:
+        raise HTTPException(status_code=507, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/v1/videos/uploads/{upload_id}")
+def cancel_chunked_upload(
+    upload_id: str,
+    authorization: str | None = Header(default=None),
+) -> dict[str, bool]:
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    if not abort_session(settings.video_db_path, upload_id):
+        raise HTTPException(status_code=404, detail="Không thấy phiên tải.")
     return {"ok": True}
 
 

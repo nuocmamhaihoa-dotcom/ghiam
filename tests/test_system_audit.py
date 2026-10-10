@@ -104,6 +104,59 @@ class SystemAuditTests(unittest.TestCase):
         self.assertIn("0982117072", text)
         self.assertNotIn(",Loại,", text)
 
+    def test_chunked_upload_resume_and_queue(self) -> None:
+        payload = b"video-bytes-" * 3000
+        chunk = 16 * 1024
+        init = self.client.post(
+            "/v1/videos/uploads",
+            headers=self._auth(),
+            json={
+                "name": "many.mp4",
+                "size_bytes": len(payload),
+                "device": "iPhone B",
+                "client_key": "B|many.mp4|1",
+                "chunk_size": chunk,
+            },
+        )
+        self.assertEqual(init.status_code, 200, init.text)
+        session = init.json()
+        upload_id = session["upload_id"]
+        # Bỏ chunk 0, gửi các chunk còn lại rồi resume.
+        for index in range(1, session["chunks_total"]):
+            start = index * chunk
+            end = min(len(payload), start + chunk)
+            put = self.client.put(
+                f"/v1/videos/uploads/{upload_id}/chunks/{index}",
+                headers={**self._auth(), "Content-Type": "application/octet-stream"},
+                content=payload[start:end],
+            )
+            self.assertEqual(put.status_code, 200, put.text)
+        again = self.client.post(
+            "/v1/videos/uploads",
+            headers=self._auth(),
+            json={
+                "name": "many.mp4",
+                "size_bytes": len(payload),
+                "device": "iPhone B",
+                "client_key": "B|many.mp4|1",
+                "chunk_size": chunk,
+            },
+        )
+        self.assertTrue(again.json()["resumed"])
+        put0 = self.client.put(
+            f"/v1/videos/uploads/{upload_id}/chunks/0",
+            headers={**self._auth(), "Content-Type": "application/octet-stream"},
+            content=payload[:chunk],
+        )
+        self.assertEqual(put0.status_code, 200, put0.text)
+        done = self.client.post(f"/v1/videos/uploads/{upload_id}/complete", headers=self._auth())
+        self.assertEqual(done.status_code, 200, done.text)
+        body = done.json()
+        self.assertEqual(body["status"], "queued")
+        self.assertEqual(stats(self.db)["queued"], 1)
+        video_path = self.video_dir / f"{body['id']}.mp4"
+        self.assertEqual(video_path.read_bytes(), payload)
+
     def test_claim_fail_retry_and_duplicate_upload(self) -> None:
         created = begin_upload(self.db, name="b.mp4", size_bytes=8, sha256="seed-b")
         video_id = int(created["id"])

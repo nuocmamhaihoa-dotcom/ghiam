@@ -27,7 +27,14 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
-from control_plane.delivery import DANHBA_NAME, PACKAGE_NAME, ensure_danhba_package, ensure_package
+from control_plane.delivery import (
+    DANHBA_NAME,
+    PACKAGE_NAME,
+    VIDEOUP_NAME,
+    ensure_danhba_package,
+    ensure_package,
+    ensure_videoup_package,
+)
 from control_plane.people import apply_novel, complete_rows
 from control_plane.version import DANHBA_BUILD, IPHONE_BUILD
 from control_plane.recordings import (
@@ -245,6 +252,14 @@ def delivery_info() -> dict[str, Any]:
             "sha256": _sha256(danhba),
             "path": "/tai/danhba.zip",
         }
+    videoup = ensure_videoup_package(ROOT / "ios" / "VideoUp", settings.data_dir)
+    if videoup is not None and videoup.is_file():
+        body["videoup"] = {
+            "name": videoup.name,
+            "bytes": videoup.stat().st_size,
+            "sha256": _sha256(videoup),
+            "path": "/tai/videoup.zip",
+        }
     return body
 
 
@@ -265,6 +280,19 @@ def delivery_package() -> FileResponse:
 def danhba_package() -> FileResponse:
     pkg = ensure_danhba_package(ROOT / "ios" / "DanhBa", settings.data_dir)
     if pkg is None or not pkg.is_file() or pkg.name != DANHBA_NAME:
+        raise HTTPException(status_code=404, detail="package missing")
+    return FileResponse(
+        pkg,
+        media_type="application/zip",
+        filename=pkg.name,
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/tai/videoup.zip")
+def videoup_package() -> FileResponse:
+    pkg = ensure_videoup_package(ROOT / "ios" / "VideoUp", settings.data_dir)
+    if pkg is None or not pkg.is_file() or pkg.name != VIDEOUP_NAME:
         raise HTTPException(status_code=404, detail="package missing")
     return FileResponse(
         pkg,
