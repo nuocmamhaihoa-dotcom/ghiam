@@ -31,7 +31,9 @@ from control_plane.video_store import (
 )
 from control_plane.video_validate import probe_duration_sec, validate_media_file
 
-DEFAULT_CHUNK_SIZE = 2 * 1024 * 1024  # 2 MiB — ổn định hơn 4MiB qua Cloudflare/Safari
+# 8 MiB: ít vòng HTTP hơn 2 MiB. Trên Wi‑Fi thẳng tới VPS một mảnh chỉ vài giây.
+# Mạng rất chậm vẫn xong (Safari không cắt ở 60s); app nền cũ giữ timeout dài.
+DEFAULT_CHUNK_SIZE = 8 * 1024 * 1024
 MAX_CHUNK_SIZE = 16 * 1024 * 1024
 UPLOAD_TTL_SEC = 7 * 24 * 3600
 # Không nhận chunk mới trong khoảng này → coi là tải bị ngắt (Safari khóa máy…).
@@ -449,15 +451,29 @@ def list_receiving_uploads(db_path: Path, limit: int = 80) -> list[dict[str, obj
         updated = _parse_updated_ts(body.get("updated_at"))
         age = (now - updated) if updated else now
         stale = age >= STALE_UPLOAD_SEC
+        speed = ""
+        created = _parse_updated_ts(body.get("created_at"))
+        if created and received > 0:
+            elapsed = max(1.0, now - created)
+            kb = received / elapsed / 1024.0
+            if kb >= 1024:
+                speed = f" · {kb / 1024:.1f} MB/s"
+            else:
+                speed = f" · {kb:.0f} KB/s"
         if stale:
             issue = (
-                f"Tải bị ngắt ở {percent}% — chọn lại cùng file trên iPhone để tiếp tục"
-                f" ({chunks_done}/{chunks_total} mảnh đã có trên VPS)"
+                f"Tải bị ngắt ở {percent}% — chọn lại cùng file trên Safari để tiếp tục"
+                f" ({chunks_done}/{chunks_total} mảnh đã có trên VPS){speed}"
             )
         elif percent <= 0 and chunks_done <= 0:
-            issue = "Đã xếp phiên tải — đang chờ iPhone gửi dữ liệu"
+            issue = "Đã xếp phiên — đang chờ iPhone gửi. Chọn file trên Safari (không dùng app nền)"
+        elif speed and received / max(1.0, now - (created or now)) < 200 * 1024:
+            issue = (
+                f"Đang tải lên {percent}% ({chunks_done}/{chunks_total} mảnh){speed}"
+                " — chậm: tắt iCloud Private Relay + Chế độ dữ liệu thấp, chọn lại file trên Safari"
+            )
         else:
-            issue = f"Đang tải lên {percent}% ({chunks_done}/{chunks_total} mảnh)"
+            issue = f"Đang tải lên {percent}% ({chunks_done}/{chunks_total} mảnh){speed}"
         items.append(
             {
                 "upload_id": body["upload_id"],

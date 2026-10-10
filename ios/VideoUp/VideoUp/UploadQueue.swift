@@ -19,8 +19,8 @@ final class UploadQueue: ObservableObject {
     private let inbox: URL
     /// Một video tới 100% rồi mới sang video kế — video xong được OCR ngay.
     private let parallelUploads = 1
-    /// Số mảnh gửi cùng lúc trong một video (lấp đầy đường truyền).
-    private let parallelChunks = 4
+    /// Số mảnh gửi cùng lúc trong một video (lấp đầy Wi‑Fi, không đi URLSession nền).
+    private let parallelChunks = 6
 
     private init() {
         let defaults = UserDefaults.standard

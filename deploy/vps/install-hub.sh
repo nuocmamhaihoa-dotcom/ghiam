@@ -96,6 +96,17 @@ CONTROL_PROXY_CHECK_TIMEOUT=8
 EOF
 chmod 600 "$APP_DIR/control_data/server.env"
 
+# Cửa sổ TCP lớn — đường iPhone↔VPS trễ cao vẫn đẩy được nhiều MB/s.
+cat > /etc/sysctl.d/99-fb-poller-upload.conf <<'SYS'
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.core.netdev_max_backlog = 5000
+net.ipv4.tcp_rmem = 4096 262144 16777216
+net.ipv4.tcp_wmem = 4096 262144 16777216
+net.ipv4.tcp_slow_start_after_idle = 0
+SYS
+sysctl --system >/dev/null 2>&1 || sysctl -p /etc/sysctl.d/99-fb-poller-upload.conf || true
+
 cp -f "$APP_DIR/deploy/vps/fb-poller-hub.service" /etc/systemd/system/fb-poller-hub.service
 cp -f "$APP_DIR/deploy/vps/fb-poller-video.service" /etc/systemd/system/fb-poller-video.service
 systemctl daemon-reload

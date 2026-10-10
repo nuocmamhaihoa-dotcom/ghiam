@@ -85,9 +85,9 @@ final class ForegroundUploader {
 
     private init() {
         let config = URLSessionConfiguration.default
-        config.httpMaximumConnectionsPerHost = 6
-        config.timeoutIntervalForRequest = 120
-        config.timeoutIntervalForResource = 300
+        config.httpMaximumConnectionsPerHost = 8
+        config.timeoutIntervalForRequest = 600
+        config.timeoutIntervalForResource = 3600
         config.allowsCellularAccess = true
         config.waitsForConnectivity = true
         session = URLSession(configuration: config)

@@ -90,7 +90,7 @@
 <main>
   <h1>Đọc video danh bạ</h1>
   <p class="lead">Thêm nhiều video / nhiều iPhone cùng lúc. Chọn xong là xếp phiên lên VPS ngay — hàng đợi hiện tên từng file. Tải theo mảnh, mất mạng chọn lại cùng file để tiếp tục. Đóng trang thì máy chủ vẫn đọc các video đã tải xong.</p>
-  <p class="note" style="margin-bottom:0.8rem">Tải bằng Safari trên trang này (nhanh, 4 mảnh cùng lúc, xong 1 video là máy chủ đọc ngay). Giữ màn hình sáng. App VideoUp bản cũ gửi nền rất chậm — dùng trang này cho tới khi cài bản mới. Nếu bảng còn cột «Máy quét», kéo xuống để tải lại trang.</p>
+  <p class="note" style="margin-bottom:0.8rem"><b>Để tải nhanh:</b> tắt iCloud Private Relay (Cài đặt → [tên bạn] → iCloud → Private Relay) và tắt Chế độ dữ liệu thấp. Rồi chọn video <b>ngay trên Safari ở trang này</b> (http://14.225.224.16) — 6 đường × 8MB, xong một video máy chủ đọc ngay. App VideoUp bản đang cài gửi nền khoảng 50KB/s (mỗi 2MB mất hơn một phút).</p>
 
   <div id="openWarn" class="banner hide" role="status"></div>
 
@@ -642,10 +642,10 @@
     return last;
   }
 
-  // Một video tới 100% rồi sang video kế — video xong vào OCR ngay, không chia băng thông cho cả lô.
+  // Một video tới 100% rồi sang video kế — video xong vào OCR ngay.
   var UPLOAD_PARALLEL = 1;
-  // Nhiều mảnh cùng lúc trên một video: lấp đầy đường truyền (mỗi mảnh tuần tự chỉ ~vài chục KB/s).
-  var CHUNK_PARALLEL = 4;
+  // 6 kết nối × 8MB: lấp cửa sổ TCP. 2 kết nối × 2MB trên app nền chỉ ~50KB/s.
+  var CHUNK_PARALLEL = 6;
 
   async function mapPool(items, concurrency, worker) {
     var cursor = 0;
@@ -669,7 +669,7 @@
     store[key] = { upload_id: session.upload_id, name: file.name, size: file.size };
     saveChunkStore(store);
 
-    var chunkSize = session.chunk_size || (2 * 1024 * 1024);
+    var chunkSize = session.chunk_size || (8 * 1024 * 1024);
     var total = session.chunks_total || Math.ceil(file.size / chunkSize);
     var done = {};
     (session.received || []).forEach(function (i) { done[i] = true; });
@@ -749,7 +749,7 @@
           size_bytes: file.size,
           device: deviceName(),
           client_key: clientKeyFor(file),
-          chunk_size: 2 * 1024 * 1024
+          chunk_size: 8 * 1024 * 1024
         };
         var init = await initChunkedWithRetry(initBody, function (sec, reason, attempt) {
           note.textContent = file.name + " — chờ chỗ trống (" + reason + "), thử lại sau " + sec + "s · lần " + attempt;
