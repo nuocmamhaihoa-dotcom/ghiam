@@ -114,7 +114,18 @@ async def _startup() -> None:
     settings.ensure_dirs()
     db.init_db(settings.db_path)
     init_video_db(settings.video_db_path)
-    rematch_results(settings.video_db_path)
+    # Rematch chạy nền — không chặn upload khi hub mới restart (video lớn nhiều máy).
+    import threading
+
+    def _rematch_bg() -> None:
+        try:
+            joined = rematch_results(settings.video_db_path)
+            if joined:
+                print(f"Hub rematch nền: ghép thêm {joined} hàng.", flush=True)
+        except Exception as exc:
+            print(f"Hub rematch nền lỗi: {exc}", flush=True)
+
+    threading.Thread(target=_rematch_bg, name="video-rematch", daemon=True).start()
     # Import proxy list into DB immediately; live/die loop runs in background
     from control_plane.proxy_check import load_proxy_lines, start_background_checker
     from control_plane.video_watchdog import start_background_watchdog

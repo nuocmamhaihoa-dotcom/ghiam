@@ -32,6 +32,23 @@ MAX_CHUNK_SIZE = 16 * 1024 * 1024
 UPLOAD_TTL_SEC = 7 * 24 * 3600
 
 
+def upload_slots() -> int:
+    """Số phiên tải đang nhận tối đa cùng lúc (nhiều iPhone × video lớn)."""
+    raw = os.environ.get("CONTROL_VIDEO_UPLOAD_SLOTS", "").strip()
+    if raw:
+        return max(1, int(raw))
+    return 16
+
+
+def receiving_count(db_path: Path) -> int:
+    ensure_upload_tables(db_path)
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM upload_sessions WHERE status = 'receiving'"
+        ).fetchone()
+    return int(row["n"])
+
+
 def uploads_dir(video_dir: Path) -> Path:
     path = video_dir / "incoming"
     path.mkdir(parents=True, exist_ok=True)
@@ -176,16 +193,27 @@ def init_upload(
         if existing is not None and int(existing["size_bytes"]) == size_bytes and Path(str(existing["path"])).exists():
             body = _session_dict(existing)
             body["resumed"] = True
+            body["upload_slots"] = upload_slots()
+            body["receiving"] = receiving_count(db_path)
             return body
+
+    slots = upload_slots()
+    active = receiving_count(db_path)
+    if active >= slots:
+        raise MemoryError(
+            f"Đang nhận tối đa {slots} video cùng lúc. Đợi máy khác gửi xong rồi thử lại (tự resume)."
+        )
 
     free = shutil.disk_usage(video_dir).free
     used = queued_bytes(db_path)
     if not can_accept(used, size_bytes, disk_limit_bytes, free):
-        raise MemoryError("Hàng đợi đã đầy. Đợi bớt video rồi thêm tiếp.")
+        raise MemoryError(
+            "Đĩa/hàng đợi gần đầy. Đợi máy chủ đọc xong bớt video rồi tải tiếp — app sẽ tự thử lại."
+        )
 
     upload_id = secrets.token_hex(16)
     part = uploads_dir(video_dir) / f"up-{upload_id}.part"
-    # Preallocate để seek/chunk ổn định.
+    # Sparse truncate trên ext4 — không chiếm đủ GB ngay, vẫn seek/chunk ổn định.
     with part.open("wb") as handle:
         handle.truncate(size_bytes)
 
@@ -204,6 +232,8 @@ def init_upload(
         row = conn.execute("SELECT * FROM upload_sessions WHERE id = ?", (upload_id,)).fetchone()
     body = _session_dict(row)
     body["resumed"] = False
+    body["upload_slots"] = slots
+    body["receiving"] = active + 1
     return body
 
 

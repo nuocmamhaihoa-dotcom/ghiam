@@ -33,24 +33,35 @@ struct HubClient {
     }
 
     func initUpload(name: String, size: Int64, clientKey: String) async throws -> UploadSessionDTO {
-        var request = URLRequest(url: try url("/v1/videos/uploads"))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        authorized(&request)
         let body: [String: Any] = [
             "name": name,
             "size_bytes": size,
             "device": settings.deviceName,
             "client_key": clientKey,
         ]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await URLSession.shared.data(for: request)
-        try throwIfNeeded(response, data: data)
-        do {
-            return try JSONDecoder().decode(UploadSessionDTO.self, from: data)
-        } catch {
-            throw HubError.decode
+        let payload = try JSONSerialization.data(withJSONObject: body)
+        // 507/503 = đĩa đầy hoặc đủ slot — chờ rồi resume, không bỏ video.
+        for attempt in 0..<40 {
+            var request = URLRequest(url: try url("/v1/videos/uploads"))
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            authorized(&request)
+            request.httpBody = payload
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse, http.statusCode == 507 || http.statusCode == 503 {
+                let retry = Int(http.value(forHTTPHeaderField: "Retry-After") ?? "") ?? 90
+                try await Task.sleep(nanoseconds: UInt64(max(15, retry)) * 1_000_000_000)
+                _ = attempt
+                continue
+            }
+            try throwIfNeeded(response, data: data)
+            do {
+                return try JSONDecoder().decode(UploadSessionDTO.self, from: data)
+            } catch {
+                throw HubError.decode
+            }
         }
+        throw HubError.message("Hàng đợi vẫn đầy sau nhiều lần chờ. Giữ video trên máy — mở lại app sẽ gửi tiếp.")
     }
 
     func status(uploadId: String) async throws -> UploadSessionDTO {

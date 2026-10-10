@@ -22,7 +22,7 @@ struct RootView: View {
                 }
 
                 Section("Thêm video vào hàng chờ máy") {
-                    Text("Chọn nhiều video — app xếp hàng local, cắt khúc gửi lên VPS. Khóa máy vẫn gửi tiếp (URLSession nền).")
+                    Text("Chọn tới ~50 video (800MB–1.5GB/file). App xếp hàng trên máy, gửi từng file cắt khúc; đĩa đầy thì tự chờ rồi resume. Khóa máy vẫn gửi (URLSession nền). Nhiều iPhone cùng lúc được.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     PhotosPicker(

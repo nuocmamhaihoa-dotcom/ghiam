@@ -27,14 +27,17 @@ from control_plane.video_store import (
     commit_upload,
     count_results,
     feeder_count,
+    free_reserve_bytes,
     init_db,
     iter_backup,
     keep_video_count,
+    keep_video_gb,
     list_videos,
     queued_bytes,
     reader_alive,
     retry,
     search_results,
+    should_pause_ocr,
     stats,
     worker_count,
 )
@@ -45,6 +48,8 @@ from control_plane.video_upload_sessions import (
     get_upload,
     init_upload,
     put_chunk,
+    receiving_count,
+    upload_slots,
 )
 
 router = APIRouter()
@@ -91,9 +96,19 @@ def video_stats(authorization: str | None = Header(default=None)) -> dict[str, o
     body["workers"] = worker_count()
     body["feeders"] = feeder_count()
     body["keep_videos"] = keep_video_count()
+    body["keep_gb"] = keep_video_gb()
     body["reader_alive"] = reader_alive(settings.data_dir / "video-worker.heartbeat")
     body["disk_used_bytes"] = queued_bytes(settings.video_db_path)
     body["disk_limit_bytes"] = _limit_bytes()
+    try:
+        free = shutil.disk_usage(settings.video_dir).free
+    except OSError:
+        free = 0
+    body["disk_free_bytes"] = free
+    body["disk_reserve_bytes"] = free_reserve_bytes()
+    body["upload_slots"] = upload_slots()
+    body["uploads_receiving"] = receiving_count(settings.video_db_path)
+    body["ocr_paused"] = should_pause_ocr(settings.video_db_path, settings.video_dir)
     return body
 
 
@@ -228,7 +243,12 @@ async def start_chunked_upload(
             )
         )
     except MemoryError as exc:
-        raise HTTPException(status_code=507, detail=str(exc)) from exc
+        # Client (web/iOS) đọc Retry-After rồi tự thử lại / resume — không mất video.
+        raise HTTPException(
+            status_code=507,
+            detail=str(exc),
+            headers={"Retry-After": "90"},
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

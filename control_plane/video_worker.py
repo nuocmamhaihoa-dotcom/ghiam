@@ -32,6 +32,7 @@ from control_plane.video_store import (
     requeue,
     requeue_running,
     set_progress,
+    should_pause_ocr,
     stale_running,
     touch_heartbeat,
     worker_count,
@@ -159,6 +160,10 @@ def _feed(
     try:
         while not stop.is_set():
             touch_heartbeat(heartbeat_path())
+            # Nhiều iPhone đang up / đĩa căng → nhường băng thông + chỗ trống, chưa nhận OCR mới.
+            if should_pause_ocr(db_path, settings.video_dir):
+                stop.wait(5.0)
+                continue
             current = claim(db_path, os.getpid())
             if current is None:
                 stop.wait(1.0)

@@ -25,15 +25,17 @@ class ServerSettings:
         self.packages_dir = Path(os.environ.get("CONTROL_PACKAGES_DIR", self.data_dir / "packages"))
         self.db_path = Path(os.environ.get("CONTROL_DB", self.data_dir / "server.db"))
         # High-bandwidth defaults (LAN / multi-gigabit friendly)
-        self.max_upload_mb = int(os.environ.get("CONTROL_MAX_UPLOAD_MB", "4096"))
+        # Video iPhone thường 800MB–1.5GB; cho phép tới 2GB/file.
+        self.max_upload_mb = int(os.environ.get("CONTROL_MAX_UPLOAD_MB", "2048"))
         self.video_db_path = Path(os.environ.get("CONTROL_VIDEO_DB", self.data_dir / "video.db"))
         self.video_dir = Path(os.environ.get("CONTROL_VIDEO_DIR", self.data_dir / "videos"))
-        self.video_disk_gb = int(os.environ.get("CONTROL_VIDEO_DISK_GB", "80"))
+        # Trần hàng đợi trên VPS ~148GB: mặc định 120GB, chừa ~20GB trống.
+        self.video_disk_gb = int(os.environ.get("CONTROL_VIDEO_DISK_GB", "120"))
         self.workers = int(os.environ.get("CONTROL_UVICORN_WORKERS", "2"))
-        self.limit_concurrency = int(os.environ.get("CONTROL_LIMIT_CONCURRENCY", "200"))
-        self.backlog = int(os.environ.get("CONTROL_BACKLOG", "2048"))
-        self.keep_alive = int(os.environ.get("CONTROL_KEEPALIVE", "75"))
-        self.timeout_keep_alive = int(os.environ.get("CONTROL_TIMEOUT_KEEPALIVE", "75"))
+        self.limit_concurrency = int(os.environ.get("CONTROL_LIMIT_CONCURRENCY", "400"))
+        self.backlog = int(os.environ.get("CONTROL_BACKLOG", "4096"))
+        self.keep_alive = int(os.environ.get("CONTROL_KEEPALIVE", "120"))
+        self.timeout_keep_alive = int(os.environ.get("CONTROL_TIMEOUT_KEEPALIVE", "120"))
         self.h11_max_incomplete_size = int(
             os.environ.get("CONTROL_H11_MAX_INCOMPLETE", str(16 * 1024 * 1024))
         )

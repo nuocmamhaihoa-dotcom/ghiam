@@ -8,6 +8,7 @@ Một dòng khoảng vài trăm byte. Một trăm triệu dòng nằm trong vài
 from __future__ import annotations
 
 import os
+import shutil
 import sqlite3
 import time
 from collections import defaultdict
@@ -69,11 +70,36 @@ def feeder_count() -> int:
 
 
 def keep_video_count() -> int:
-    """Số video mới nhất giữ lại trên đĩa để bấm Đọc lại. Mặc định 50."""
+    """Số video mới nhất giữ lại trên đĩa để bấm Đọc lại.
+
+    Video 800MB–1.5GB: mặc định 8 (không giữ 50×1.5GB = 75GB).
+    """
     raw = os.environ.get("CONTROL_VIDEO_KEEP", "").strip()
     if raw:
         return max(0, int(raw))
-    return 50
+    return 8
+
+
+def keep_video_gb() -> float:
+    """Trần dung lượng file đã đọc xong còn giữ (GB). Mặc định 12GB."""
+    raw = os.environ.get("CONTROL_VIDEO_KEEP_GB", "").strip()
+    if raw:
+        return max(0.0, float(raw))
+    return 12.0
+
+
+def free_reserve_bytes() -> int:
+    """Luôn chừa chỗ trống tối thiểu trên đĩa (để nhiều máy up song song)."""
+    raw = os.environ.get("CONTROL_VIDEO_FREE_RESERVE_GB", "").strip()
+    gb = float(raw) if raw else 20.0
+    return int(max(4.0, gb) * 1024 * 1024 * 1024)
+
+
+def ocr_pause_free_bytes() -> int:
+    """Còn ít trống hơn mức này thì tạm dừng nhận job OCR mới (nhường upload)."""
+    raw = os.environ.get("CONTROL_VIDEO_OCR_PAUSE_FREE_GB", "").strip()
+    gb = float(raw) if raw else 25.0
+    return int(max(8.0, gb) * 1024 * 1024 * 1024)
 
 
 def stale_quiet_sec() -> float:
@@ -241,8 +267,29 @@ def _reconcile_result_counts(conn: sqlite3.Connection) -> None:
         conn.execute("INSERT INTO result_counts (bucket, n) VALUES (?, ?)", (bucket, n))
 
 
+def incoming_bytes(db_path: Path) -> int:
+    """Dung lượng phiên cắt khúc đang nhận (incoming/*.part)."""
+    try:
+        with connect(db_path) as conn:
+            # Bảng có thể chưa tạo ở DB cũ trước lần upload đầu.
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='upload_sessions'"
+            ).fetchone()
+            if exists is None:
+                return 0
+            row = conn.execute(
+                """
+                SELECT COALESCE(SUM(size_bytes), 0) AS n
+                FROM upload_sessions WHERE status = 'receiving'
+                """
+            ).fetchone()
+        return int(row["n"])
+    except sqlite3.Error:
+        return 0
+
+
 def queued_bytes(db_path: Path) -> int:
-    """Dung lượng video còn nằm trên đĩa (hàng đợi + giữ để Đọc lại)."""
+    """Dung lượng video còn nằm trên đĩa (hàng đợi + giữ + đang tải cắt khúc)."""
     with connect(db_path) as conn:
         row = conn.execute(
             """
@@ -251,13 +298,42 @@ def queued_bytes(db_path: Path) -> int:
                OR (status IN ('done', 'error') AND path != '')
             """
         ).fetchone()
-    return int(row["n"])
+    return int(row["n"]) + incoming_bytes(db_path)
 
 
 def can_accept(used_bytes: int, new_bytes: int, limit_bytes: int, free_bytes: int) -> bool:
+    """Chấp nhận video mới khi còn hạn mức và còn chừa chỗ trống an toàn."""
+    if new_bytes <= 0:
+        return False
     if new_bytes > limit_bytes or used_bytes + new_bytes > limit_bytes:
         return False
-    return free_bytes > new_bytes + (2 * 1024 * 1024 * 1024)
+    # Chừa reserve + chính file mới (nhiều iPhone up song song không đụng trần đĩa).
+    return free_bytes > new_bytes + free_reserve_bytes()
+
+
+def should_pause_ocr(db_path: Path, video_dir: Path) -> bool:
+    """Tạm không nhận video OCR mới khi đĩa căng hoặc đang up hàng loạt."""
+    try:
+        free = shutil.disk_usage(video_dir).free
+    except OSError:
+        return False
+    if free < ocr_pause_free_bytes():
+        return True
+    try:
+        with connect(db_path) as conn:
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='upload_sessions'"
+            ).fetchone()
+            if exists is None:
+                return False
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM upload_sessions WHERE status = 'receiving'"
+            ).fetchone()
+        receiving = int(row["n"])
+    except sqlite3.Error:
+        return False
+    pause_at = int(os.environ.get("CONTROL_VIDEO_OCR_PAUSE_UPLOADS", "6") or "6")
+    return receiving >= max(1, pause_at)
 
 
 def clean_device(device: str) -> str:
@@ -594,23 +670,33 @@ def clear_missing_video_paths(db_path: Path) -> int:
     return cleared
 
 
-def prune_old_videos(db_path: Path, keep: int | None = None) -> int:
-    """Giữ N video mới nhất trên đĩa; xóa file cũ hơn. Kết quả DB giữ nguyên.
+def prune_old_videos(db_path: Path, keep: int | None = None, keep_gb: float | None = None) -> int:
+    """Giữ N video mới nhất và/hoặc tối đa keep_gb GB file đã xong.
 
-    Không đụng video đang tải / chờ / đang đọc. Chỉ xóa file của done/error
-    nằm ngoài cửa sổ giữ; path trong DB được xóa trống để UI biết hết file.
+    Không đụng video đang tải / chờ / đang đọc. Kết quả DB giữ nguyên.
     """
     cleared = clear_missing_video_paths(db_path)
     limit = keep_video_count() if keep is None else max(0, keep)
+    budget = int((keep_video_gb() if keep_gb is None else max(0.0, keep_gb)) * 1024 * 1024 * 1024)
     with connect(db_path) as conn:
         rows = conn.execute(
-            "SELECT id, path, status FROM videos WHERE path != '' ORDER BY id DESC"
+            """
+            SELECT id, path, status, size_bytes FROM videos
+            WHERE path != '' ORDER BY id DESC
+            """
         ).fetchall()
     removed = 0
+    kept_bytes = 0
     for index, row in enumerate(rows):
-        if index < limit:
+        status = row["status"]
+        if status in ("uploading", "queued", "running"):
+            # Vẫn tính vào budget? Không — đang xử lý thì không xóa.
             continue
-        if row["status"] in ("uploading", "queued", "running"):
+        size = int(row["size_bytes"] or 0)
+        over_count = index >= limit
+        over_budget = kept_bytes + size > budget if budget >= 0 else False
+        if not over_count and not over_budget:
+            kept_bytes += size
             continue
         path = Path(str(row["path"]))
         try:

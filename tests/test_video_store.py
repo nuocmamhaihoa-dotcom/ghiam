@@ -439,10 +439,35 @@ class VideoStoreTests(unittest.TestCase):
 
     def test_disk_limit(self) -> None:
         gb = 1024 * 1024 * 1024
-        self.assertTrue(can_accept(0, 100, 80 * gb, 10 * gb))
-        self.assertFalse(can_accept(79 * gb, 2 * gb, 80 * gb, 10 * gb))
-        self.assertFalse(can_accept(0, 100, 80 * gb, 1 * gb))
+        old = os.environ.get("CONTROL_VIDEO_FREE_RESERVE_GB")
+        try:
+            os.environ["CONTROL_VIDEO_FREE_RESERVE_GB"] = "2"
+            # Còn 10GB trống, reserve 2GB → nhận file nhỏ OK.
+            self.assertTrue(can_accept(0, 100, 80 * gb, 10 * gb))
+            self.assertFalse(can_accept(79 * gb, 2 * gb, 80 * gb, 10 * gb))
+            self.assertFalse(can_accept(0, 100, 80 * gb, 1 * gb))
+            # reserve tối thiểu code = 4GB; 1.5GB file cần free > 5.5GB.
+            self.assertFalse(can_accept(0, int(1.5 * gb), 120 * gb, int(5 * gb)))
+            self.assertTrue(can_accept(0, int(1.5 * gb), 120 * gb, int(6 * gb)))
+        finally:
+            if old is None:
+                os.environ.pop("CONTROL_VIDEO_FREE_RESERVE_GB", None)
+            else:
+                os.environ["CONTROL_VIDEO_FREE_RESERVE_GB"] = old
         self.assertEqual(queued_bytes(self.db), 0)
+
+    def test_prune_respects_keep_gb_budget(self) -> None:
+        ids = []
+        for i in range(4):
+            video_id = self._add(f"{i}.mp4", f"gb-{i}", size=600 * 1024 * 1024)
+            ids.append(video_id)
+            claim(self.db, 1)
+            finish(self.db, video_id, Table())
+        # Giữ tối đa ~1.1GB → chỉ còn khoảng 1 file lớn nhất (mới nhất).
+        removed = prune_old_videos(self.db, keep=50, keep_gb=1.1)
+        self.assertGreaterEqual(removed, 2)
+        kept = [item for item in list_videos(self.db, limit=20) if item["file_kept"]]
+        self.assertLessEqual(len(kept), 2)
 
 
 class BackupGzipTests(unittest.TestCase):

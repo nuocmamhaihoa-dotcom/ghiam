@@ -316,12 +316,18 @@
         ? "Hàng đợi còn video nhưng bộ đọc trên máy chủ chưa chạy."
         : "Bộ đọc trên máy chủ chưa chạy.";
       reader.className = "note warn";
-    } else if (body.running > 0 || body.queued > 0) {
+    } else if (body.running > 0 || body.queued > 0 || body.uploads_receiving > 0) {
       var feeders = body.feeders || 1;
-      reader.textContent = "Đang đọc trên máy chủ (không cần mở trang này). Nhiều máy đẩy lên được xếp hàng; " +
+      var freeGb = body.disk_free_bytes != null ? (body.disk_free_bytes / (1024*1024*1024)).toFixed(1) : "?";
+      var usedGb = body.disk_used_bytes != null ? (body.disk_used_bytes / (1024*1024*1024)).toFixed(1) : "?";
+      var limitGb = body.disk_limit_bytes != null ? (body.disk_limit_bytes / (1024*1024*1024)).toFixed(0) : "?";
+      reader.textContent = "Máy chủ: đang tải " + (body.uploads_receiving || 0) + "/" + (body.upload_slots || "?") +
+        " · chờ đọc " + (body.queued || 0) + " · đang đọc " + (body.running || 0) +
+        (body.ocr_paused ? " · tạm dừng OCR để nhường upload" : "") +
+        " · đĩa " + usedGb + "/" + limitGb + "GB (còn " + freeGb + "GB). " +
         body.workers + " tiến trình/video" + (feeders > 1 ? (", tối đa " + feeders + " video song song") : "") +
-        ". Thoát app / dùng phần mềm khác vẫn chạy liên tục.";
-      reader.className = "note ok";
+        ". Đóng trang vẫn chạy.";
+      reader.className = body.ocr_paused ? "note warn" : "note ok";
     } else {
       reader.textContent = "Bộ đọc máy chủ sẵn sàng. Upload xong có thể tắt trang — máy chủ tự đọc hết hàng đợi.";
       reader.className = "note ok";
@@ -506,6 +512,28 @@
     return last;
   }
 
+  async function initChunkedWithRetry(initBody, onWait) {
+    var last = { ok: false, status: 0, body: {} };
+    for (var attempt = 0; attempt < 40; attempt += 1) {
+      var initResponse = await api("/v1/videos/uploads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(initBody)
+      });
+      var session = {};
+      try { session = await initResponse.json(); } catch (error) { session = {}; }
+      last = { ok: initResponse.ok, status: initResponse.status, body: session, response: initResponse };
+      if (initResponse.ok) return last;
+      if (initResponse.status !== 507 && initResponse.status !== 503) return last;
+      var waitSec = 90;
+      var ra = initResponse.headers.get("Retry-After");
+      if (ra && !isNaN(Number(ra))) waitSec = Math.max(15, Number(ra));
+      if (onWait) onWait(waitSec, session.detail || "hàng đợi đầy / đang nhận tối đa", attempt + 1);
+      await sleep(waitSec * 1000);
+    }
+    return last;
+  }
+
   async function uploadOneChunked(file, onProgress) {
     var key = clientKeyFor(file);
     var store = loadChunkStore();
@@ -515,15 +543,15 @@
       device: deviceName(),
       client_key: key
     };
-    var initResponse = await api("/v1/videos/uploads", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(initBody)
+    var init = await initChunkedWithRetry(initBody, function (sec, reason, attempt) {
+      onProgress(0, 0, 0, false);
+      var note = document.getElementById("uploadNote");
+      note.textContent = file.name + " — chờ chỗ trống (" + reason + "), thử lại sau " + sec + "s · lần " + attempt;
+      note.className = "note warn";
     });
-    var session = {};
-    try { session = await initResponse.json(); } catch (error) { session = {}; }
-    if (!initResponse.ok) {
-      return { ok: false, status: initResponse.status, body: session };
+    var session = init.body || {};
+    if (!init.ok) {
+      return { ok: false, status: init.status, body: session };
     }
     store[key] = { upload_id: session.upload_id, name: file.name, size: file.size };
     saveChunkStore(store);
