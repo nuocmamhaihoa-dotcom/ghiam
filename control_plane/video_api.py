@@ -7,6 +7,7 @@ import hmac
 import os
 import secrets
 import shutil
+import sqlite3
 import time
 import zlib
 from pathlib import Path
@@ -45,6 +46,7 @@ from control_plane.video_upload_sessions import (
     DEFAULT_CHUNK_SIZE,
     abort_session,
     complete_upload,
+    ensure_upload_tables,
     get_upload,
     init_upload,
     list_receiving_uploads,
@@ -57,6 +59,20 @@ from control_plane.video_validate import probe_duration_sec, validate_media_file
 router = APIRouter()
 _ALLOWED = VIDEO_SUFFIXES | IMAGE_SUFFIXES
 TICKET_SECONDS = 600
+
+
+def _uploads_db() -> Path:
+    path = settings.video_uploads_db_path
+    ensure_upload_tables(path, legacy_db=settings.video_db_path)
+    return path
+
+
+def _locked_http(_exc: sqlite3.OperationalError) -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail="Máy chủ đang bận ghi DB — thử lại mảnh này (tự resume).",
+        headers={"Retry-After": "3"},
+    )
 
 
 def _auth(authorization: str | None) -> None:
@@ -109,7 +125,7 @@ def video_stats(authorization: str | None = Header(default=None)) -> dict[str, o
     body["disk_free_bytes"] = free
     body["disk_reserve_bytes"] = free_reserve_bytes()
     body["upload_slots"] = upload_slots()
-    body["uploads_receiving"] = receiving_count(settings.video_db_path)
+    body["uploads_receiving"] = receiving_count(_uploads_db())
     body["ocr_paused"] = should_pause_ocr(settings.video_db_path, settings.video_dir)
     return body
 
@@ -118,7 +134,7 @@ def video_stats(authorization: str | None = Header(default=None)) -> dict[str, o
 def videos(authorization: str | None = Header(default=None), limit: int = Query(default=40, ge=1, le=200)) -> dict[str, object]:
     _auth(authorization)
     init_db(settings.video_db_path)
-    uploads = list_receiving_uploads(settings.video_db_path, limit=min(80, max(limit, 40)))
+    uploads = list_receiving_uploads(_uploads_db(), limit=min(80, max(limit, 40)))
     items = list_videos(settings.video_db_path, limit)
     # Phiên đang tải lên trước — luôn thấy trong hàng đợi kể cả khi iPhone ngủ giữa chừng.
     merged = uploads + items
@@ -244,10 +260,11 @@ async def start_chunked_upload(
     suffix = Path(body.name).suffix.lower()
     if suffix not in _ALLOWED:
         raise HTTPException(status_code=400, detail="Chỉ nhận video hoặc ảnh chụp màn hình.")
+    uploads_db = _uploads_db()
     try:
         return await run_in_threadpool(
             lambda: init_upload(
-                settings.video_db_path,
+                uploads_db,
                 settings.video_dir,
                 name=body.name,
                 size_bytes=body.size_bytes,
@@ -256,6 +273,8 @@ async def start_chunked_upload(
                 chunk_size=body.chunk_size or DEFAULT_CHUNK_SIZE,
                 sha256=body.sha256,
                 disk_limit_bytes=_limit_bytes(),
+                video_db_path=settings.video_db_path,
+                legacy_db=settings.video_db_path,
             )
         )
     except MemoryError as exc:
@@ -265,6 +284,8 @@ async def start_chunked_upload(
             detail=str(exc),
             headers={"Retry-After": "90"},
         ) from exc
+    except sqlite3.OperationalError as exc:
+        raise _locked_http(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -275,8 +296,7 @@ def chunked_upload_status(
     authorization: str | None = Header(default=None),
 ) -> dict[str, object]:
     _auth(authorization)
-    init_db(settings.video_db_path)
-    body = get_upload(settings.video_db_path, upload_id)
+    body = get_upload(_uploads_db(), upload_id)
     if body is None:
         raise HTTPException(status_code=404, detail="Không thấy phiên tải.")
     return body
@@ -291,12 +311,15 @@ async def upload_chunk(
 ) -> dict[str, object]:
     _auth(authorization)
     data = await request.body()
+    uploads_db = _uploads_db()
     try:
-        return await run_in_threadpool(put_chunk, settings.video_db_path, upload_id, index, data)
+        return await run_in_threadpool(put_chunk, uploads_db, upload_id, index, data)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except sqlite3.OperationalError as exc:
+        raise _locked_http(exc) from exc
 
 
 @router.post("/v1/videos/uploads/{upload_id}/complete")
@@ -306,16 +329,21 @@ async def finish_chunked_upload(
 ) -> dict[str, object]:
     _auth(authorization)
     await run_in_threadpool(init_db, settings.video_db_path)
+    uploads_db = _uploads_db()
     try:
         return await run_in_threadpool(
-            complete_upload,
-            settings.video_db_path,
-            settings.video_dir,
-            upload_id,
-            disk_limit_bytes=_limit_bytes(),
+            lambda: complete_upload(
+                uploads_db,
+                settings.video_dir,
+                upload_id,
+                disk_limit_bytes=_limit_bytes(),
+                video_db_path=settings.video_db_path,
+            )
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except sqlite3.OperationalError as exc:
+        raise _locked_http(exc) from exc
     except MemoryError as exc:
         raise HTTPException(status_code=507, detail=str(exc)) from exc
     except ValueError as exc:
@@ -328,8 +356,7 @@ def cancel_chunked_upload(
     authorization: str | None = Header(default=None),
 ) -> dict[str, bool]:
     _auth(authorization)
-    init_db(settings.video_db_path)
-    if not abort_session(settings.video_db_path, upload_id):
+    if not abort_session(_uploads_db(), upload_id):
         raise HTTPException(status_code=404, detail="Không thấy phiên tải.")
     return {"ok": True}
 

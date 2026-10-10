@@ -318,11 +318,9 @@ def _reconcile_result_counts(conn: sqlite3.Connection) -> None:
         conn.execute("INSERT INTO result_counts (bucket, n) VALUES (?, ?)", (bucket, n))
 
 
-def incoming_bytes(db_path: Path) -> int:
-    """Dung lượng phiên cắt khúc đang nhận (incoming/*.part)."""
+def _incoming_bytes_from(db_path: Path) -> int:
     try:
         with connect(db_path) as conn:
-            # Bảng có thể chưa tạo ở DB cũ trước lần upload đầu.
             exists = conn.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='upload_sessions'"
             ).fetchone()
@@ -337,6 +335,41 @@ def incoming_bytes(db_path: Path) -> int:
         return int(row["n"])
     except sqlite3.Error:
         return 0
+
+
+def _receiving_count_from(db_path: Path) -> int:
+    try:
+        with connect(db_path) as conn:
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='upload_sessions'"
+            ).fetchone()
+            if exists is None:
+                return 0
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM upload_sessions WHERE status = 'receiving'"
+            ).fetchone()
+        return int(row["n"])
+    except sqlite3.Error:
+        return 0
+
+
+def _uploads_db_paths(video_db: Path) -> list[Path]:
+    """video.db cũ + video_uploads.db mới (nếu tách)."""
+    paths = [Path(video_db)]
+    try:
+        from control_plane.settings import settings
+
+        uploads = Path(settings.video_uploads_db_path)
+        if uploads.resolve() != Path(video_db).resolve():
+            paths.append(uploads)
+    except Exception:
+        pass
+    return paths
+
+
+def incoming_bytes(db_path: Path) -> int:
+    """Dung lượng phiên cắt khúc đang nhận (incoming/*.part)."""
+    return sum(_incoming_bytes_from(path) for path in _uploads_db_paths(db_path))
 
 
 def queued_bytes(db_path: Path) -> int:
@@ -370,19 +403,7 @@ def should_pause_ocr(db_path: Path, video_dir: Path) -> bool:
         return False
     if free < ocr_pause_free_bytes():
         return True
-    try:
-        with connect(db_path) as conn:
-            exists = conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='upload_sessions'"
-            ).fetchone()
-            if exists is None:
-                return False
-            row = conn.execute(
-                "SELECT COUNT(*) AS n FROM upload_sessions WHERE status = 'receiving'"
-            ).fetchone()
-        receiving = int(row["n"])
-    except sqlite3.Error:
-        return False
+    receiving = sum(_receiving_count_from(path) for path in _uploads_db_paths(db_path))
     pause_at = int(os.environ.get("CONTROL_VIDEO_OCR_PAUSE_UPLOADS", "6") or "6")
     return receiving >= max(1, pause_at)
 

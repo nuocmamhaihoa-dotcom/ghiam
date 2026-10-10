@@ -14,7 +14,9 @@ from control_plane.video_upload_sessions import (
     get_upload,
     init_upload,
     list_receiving_uploads,
+    migrate_upload_sessions,
     put_chunk,
+    ensure_upload_tables,
 )
 
 
@@ -166,6 +168,25 @@ class ChunkedUploadTests(unittest.TestCase):
         self.assertIn("tải", str(one["issue"]).lower())
         two = next(item for item in listed if item["name"] == "two.mp4")
         self.assertEqual(two["upload_id"], second["upload_id"])
+
+    def test_migrate_sessions_to_separate_uploads_db(self) -> None:
+        payload = _ffmpeg_mp4(self.root / "m.mp4", "0.4")
+        session = init_upload(
+            self.db,
+            self.videos,
+            name="m.mp4",
+            size_bytes=len(payload),
+            client_key="mig|m",
+            chunk_size=16 * 1024,
+            disk_limit_bytes=self.limit,
+        )
+        uploads = self.root / "video_uploads.db"
+        ensure_upload_tables(uploads)
+        moved = migrate_upload_sessions(self.db, uploads)
+        self.assertGreaterEqual(moved, 1)
+        body = get_upload(uploads, str(session["upload_id"]))
+        self.assertIsNotNone(body)
+        self.assertEqual(body["name"], "m.mp4")
 
 
 if __name__ == "__main__":

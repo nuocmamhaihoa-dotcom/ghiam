@@ -16,6 +16,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from contextlib import contextmanager
+from typing import Iterator
+
 from control_plane.video_store import (
     abort_upload,
     begin_upload,
@@ -28,11 +31,12 @@ from control_plane.video_store import (
 )
 from control_plane.video_validate import probe_duration_sec, validate_media_file
 
-DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024  # 4 MiB — ổn định trên Wi‑Fi iPhone
+DEFAULT_CHUNK_SIZE = 2 * 1024 * 1024  # 2 MiB — ổn định hơn 4MiB qua Cloudflare/Safari
 MAX_CHUNK_SIZE = 16 * 1024 * 1024
 UPLOAD_TTL_SEC = 7 * 24 * 3600
 # Không nhận chunk mới trong khoảng này → coi là tải bị ngắt (Safari khóa máy…).
-STALE_UPLOAD_SEC = 15 * 60
+STALE_UPLOAD_SEC = 20 * 60
+_MIGRATED: set[str] = set()
 
 
 def upload_slots() -> int:
@@ -43,13 +47,47 @@ def upload_slots() -> int:
     return 16
 
 
+@contextmanager
+def uploads_connect(db_path: Path) -> Iterator[sqlite3.Connection]:
+    """Kết nối DB phiên tải — timeout dài, WAL, không tranh OCR nếu DB tách riêng."""
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_path), timeout=120, isolation_level=None)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.execute("PRAGMA busy_timeout=120000;")
+    conn.execute("PRAGMA temp_store=MEMORY;")
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def _retry_locked(action, *, tries: int = 12, label: str = "upload-db"):
+    last: Exception | None = None
+    for attempt in range(tries):
+        try:
+            return action()
+        except sqlite3.OperationalError as exc:
+            last = exc
+            text = str(exc).lower()
+            if "locked" not in text and "busy" not in text:
+                raise
+            time.sleep(min(6.0, 0.25 * (2**attempt)))
+    raise sqlite3.OperationalError(f"{label}: database is locked sau {tries} lần thử") from last
+
+
 def receiving_count(db_path: Path) -> int:
     ensure_upload_tables(db_path)
-    with connect(db_path) as conn:
-        row = conn.execute(
-            "SELECT COUNT(*) AS n FROM upload_sessions WHERE status = 'receiving'"
-        ).fetchone()
-    return int(row["n"])
+
+    def _count() -> int:
+        with uploads_connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM upload_sessions WHERE status = 'receiving'"
+            ).fetchone()
+        return int(row["n"])
+
+    return int(_retry_locked(_count, label="receiving_count"))
 
 
 def uploads_dir(video_dir: Path) -> Path:
@@ -58,31 +96,98 @@ def uploads_dir(video_dir: Path) -> Path:
     return path
 
 
-def ensure_upload_tables(db_path: Path) -> None:
-    with connect(db_path) as conn:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS upload_sessions (
-              id TEXT PRIMARY KEY,
-              name TEXT NOT NULL,
-              size_bytes INTEGER NOT NULL,
-              device TEXT NOT NULL DEFAULT '',
-              client_key TEXT NOT NULL DEFAULT '',
-              chunk_size INTEGER NOT NULL,
-              received_map TEXT NOT NULL DEFAULT '',
-              received_bytes INTEGER NOT NULL DEFAULT 0,
-              path TEXT NOT NULL,
-              sha256 TEXT NOT NULL DEFAULT '',
-              status TEXT NOT NULL DEFAULT 'receiving',
-              created_at TEXT NOT NULL,
-              updated_at TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_upload_sessions_client
-              ON upload_sessions(client_key, status);
-            CREATE INDEX IF NOT EXISTS idx_upload_sessions_status
-              ON upload_sessions(status, updated_at);
-            """
-        )
+def ensure_upload_tables(db_path: Path, *, legacy_db: Path | None = None) -> None:
+    def _create() -> None:
+        with uploads_connect(db_path) as conn:
+            conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS upload_sessions (
+                  id TEXT PRIMARY KEY,
+                  name TEXT NOT NULL,
+                  size_bytes INTEGER NOT NULL,
+                  device TEXT NOT NULL DEFAULT '',
+                  client_key TEXT NOT NULL DEFAULT '',
+                  chunk_size INTEGER NOT NULL,
+                  received_map TEXT NOT NULL DEFAULT '',
+                  received_bytes INTEGER NOT NULL DEFAULT 0,
+                  path TEXT NOT NULL,
+                  sha256 TEXT NOT NULL DEFAULT '',
+                  status TEXT NOT NULL DEFAULT 'receiving',
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_upload_sessions_client
+                  ON upload_sessions(client_key, status);
+                CREATE INDEX IF NOT EXISTS idx_upload_sessions_status
+                  ON upload_sessions(status, updated_at);
+                """
+            )
+
+    _retry_locked(_create, label="ensure_upload_tables")
+    if legacy_db is not None:
+        migrate_upload_sessions(legacy_db, db_path)
+
+
+def migrate_upload_sessions(legacy_db: Path, uploads_db: Path) -> int:
+    """Chuyển phiên từ video.db cũ sang video_uploads.db (một lần)."""
+    key = f"{legacy_db.resolve()}->{uploads_db.resolve()}"
+    if key in _MIGRATED:
+        return 0
+    if not legacy_db.exists() or legacy_db.resolve() == uploads_db.resolve():
+        _MIGRATED.add(key)
+        return 0
+
+    def _migrate() -> int:
+        with uploads_connect(uploads_db) as dest:
+            existing = int(dest.execute("SELECT COUNT(*) AS n FROM upload_sessions").fetchone()["n"])
+            if existing > 0:
+                return 0
+        try:
+            with connect(legacy_db) as src:
+                has = src.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='upload_sessions'"
+                ).fetchone()
+                if has is None:
+                    return 0
+                rows = src.execute("SELECT * FROM upload_sessions").fetchall()
+        except sqlite3.OperationalError:
+            return 0
+        if not rows:
+            return 0
+        moved = 0
+        with uploads_connect(uploads_db) as dest:
+            for row in rows:
+                dest.execute(
+                    """
+                    INSERT OR IGNORE INTO upload_sessions (
+                      id, name, size_bytes, device, client_key, chunk_size,
+                      received_map, received_bytes, path, sha256, status, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        row["id"],
+                        row["name"],
+                        row["size_bytes"],
+                        row["device"] or "",
+                        row["client_key"] or "",
+                        row["chunk_size"],
+                        row["received_map"] or "",
+                        row["received_bytes"] or 0,
+                        row["path"],
+                        row["sha256"] or "",
+                        row["status"],
+                        row["created_at"],
+                        row["updated_at"],
+                    ),
+                )
+                moved += 1
+        return moved
+
+    moved = int(_retry_locked(_migrate, label="migrate_upload_sessions"))
+    _MIGRATED.add(key)
+    if moved:
+        print(f"Đã chuyển {moved} phiên upload sang {uploads_db.name}", flush=True)
+    return moved
 
 
 def _chunks_needed(size_bytes: int, chunk_size: int) -> int:
@@ -132,10 +237,14 @@ def cleanup_stale_uploads(db_path: Path, video_dir: Path, ttl_sec: int = UPLOAD_
     ensure_upload_tables(db_path)
     cutoff = time.time() - max(3600, ttl_sec)
     removed = 0
-    with connect(db_path) as conn:
-        rows = conn.execute(
-            "SELECT id, path, updated_at, status FROM upload_sessions WHERE status = 'receiving'"
-        ).fetchall()
+
+    def _rows():
+        with uploads_connect(db_path) as conn:
+            return conn.execute(
+                "SELECT id, path, updated_at, status FROM upload_sessions WHERE status = 'receiving'"
+            ).fetchall()
+
+    rows = _retry_locked(_rows, label="cleanup_list")
     for row in rows:
         try:
             text = str(row["updated_at"]).replace("Z", "+00:00")
@@ -146,13 +255,21 @@ def cleanup_stale_uploads(db_path: Path, video_dir: Path, ttl_sec: int = UPLOAD_
             continue
         path = Path(str(row["path"]))
         path.unlink(missing_ok=True)
-        with connect(db_path) as conn:
-            conn.execute("DELETE FROM upload_sessions WHERE id = ?", (row["id"],))
+
+        def _delete(rid=row["id"]) -> None:
+            with uploads_connect(db_path) as conn:
+                conn.execute("DELETE FROM upload_sessions WHERE id = ?", (rid,))
+
+        _retry_locked(_delete, label="cleanup_delete")
         removed += 1
     # Dọn file mồ côi trong incoming/
     folder = uploads_dir(video_dir)
-    with connect(db_path) as conn:
-        known = {str(r["path"]) for r in conn.execute("SELECT path FROM upload_sessions")}
+
+    def _known():
+        with uploads_connect(db_path) as conn:
+            return {str(r["path"]) for r in conn.execute("SELECT path FROM upload_sessions")}
+
+    known = _retry_locked(_known, label="cleanup_known")
     for orphan in folder.glob("up-*.part"):
         if str(orphan) not in known:
             orphan.unlink(missing_ok=True)
@@ -171,8 +288,10 @@ def init_upload(
     chunk_size: int | None = None,
     sha256: str = "",
     disk_limit_bytes: int,
+    video_db_path: Path | None = None,
+    legacy_db: Path | None = None,
 ) -> dict[str, object]:
-    ensure_upload_tables(db_path)
+    ensure_upload_tables(db_path, legacy_db=legacy_db)
     cleanup_stale_uploads(db_path, video_dir)
     if size_bytes <= 0:
         raise ValueError("size_bytes phải > 0")
@@ -180,19 +299,23 @@ def init_upload(
     original = Path(name or "video.mp4").name
     key = " ".join((client_key or "").split())[:200]
     size = int(chunk_size or DEFAULT_CHUNK_SIZE)
-    # Tối thiểu 16KiB (test / mạng yếu); mặc định 4MiB cho iPhone.
+    # Tối thiểu 16KiB (test / mạng yếu); mặc định 2MiB cho iPhone/Cloudflare.
     size = max(16 * 1024, min(MAX_CHUNK_SIZE, size))
+    video_db = video_db_path or db_path
 
     if key:
-        with connect(db_path) as conn:
-            existing = conn.execute(
-                """
-                SELECT * FROM upload_sessions
-                WHERE client_key = ? AND status = 'receiving'
-                ORDER BY updated_at DESC LIMIT 1
-                """,
-                (key,),
-            ).fetchone()
+        def _find():
+            with uploads_connect(db_path) as conn:
+                return conn.execute(
+                    """
+                    SELECT * FROM upload_sessions
+                    WHERE client_key = ? AND status = 'receiving'
+                    ORDER BY updated_at DESC LIMIT 1
+                    """,
+                    (key,),
+                ).fetchone()
+
+        existing = _retry_locked(_find, label="init_find")
         if existing is not None and int(existing["size_bytes"]) == size_bytes and Path(str(existing["path"])).exists():
             body = _session_dict(existing)
             body["resumed"] = True
@@ -208,7 +331,7 @@ def init_upload(
         )
 
     free = shutil.disk_usage(video_dir).free
-    used = queued_bytes(db_path)
+    used = queued_bytes(video_db)
     if not can_accept(used, size_bytes, disk_limit_bytes, free):
         raise MemoryError(
             "Đĩa/hàng đợi gần đầy. Đợi máy chủ đọc xong bớt video rồi tải tiếp — app sẽ tự thử lại."
@@ -221,18 +344,27 @@ def init_upload(
         handle.truncate(size_bytes)
 
     now = utcnow()
-    with connect(db_path) as conn:
-        conn.execute(
-            """
-            INSERT INTO upload_sessions (
-              id, name, size_bytes, device, client_key, chunk_size,
-              received_map, received_bytes, path, sha256, status, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, '', 0, ?, ?, 'receiving', ?, ?)
-            """,
-            (upload_id, original, size_bytes, machine, key, size, str(part), sha256 or "", now, now),
-        )
-    with connect(db_path) as conn:
-        row = conn.execute("SELECT * FROM upload_sessions WHERE id = ?", (upload_id,)).fetchone()
+
+    def _insert() -> sqlite3.Row:
+        with uploads_connect(db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO upload_sessions (
+                  id, name, size_bytes, device, client_key, chunk_size,
+                  received_map, received_bytes, path, sha256, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, '', 0, ?, ?, 'receiving', ?, ?)
+                """,
+                (upload_id, original, size_bytes, machine, key, size, str(part), sha256 or "", now, now),
+            )
+            row = conn.execute("SELECT * FROM upload_sessions WHERE id = ?", (upload_id,)).fetchone()
+            assert row is not None
+            return row
+
+    try:
+        row = _retry_locked(_insert, label="init_insert")
+    except Exception:
+        part.unlink(missing_ok=True)
+        raise
     body = _session_dict(row)
     body["resumed"] = False
     body["upload_slots"] = slots
@@ -242,8 +374,12 @@ def init_upload(
 
 def get_upload(db_path: Path, upload_id: str) -> dict[str, object] | None:
     ensure_upload_tables(db_path)
-    with connect(db_path) as conn:
-        row = conn.execute("SELECT * FROM upload_sessions WHERE id = ?", (upload_id,)).fetchone()
+
+    def _get():
+        with uploads_connect(db_path) as conn:
+            return conn.execute("SELECT * FROM upload_sessions WHERE id = ?", (upload_id,)).fetchone()
+
+    row = _retry_locked(_get, label="get_upload")
     if row is None:
         return None
     return _session_dict(row)
@@ -262,16 +398,20 @@ def list_receiving_uploads(db_path: Path, limit: int = 80) -> list[dict[str, obj
     """Phiên đang tải / tải dở — luôn hiện trên hàng đợi dù chưa vào bảng videos."""
     ensure_upload_tables(db_path)
     start = max(1, int(limit))
-    with connect(db_path) as conn:
-        rows = conn.execute(
-            """
-            SELECT * FROM upload_sessions
-            WHERE status = 'receiving'
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
-            (start,),
-        ).fetchall()
+
+    def _list():
+        with uploads_connect(db_path) as conn:
+            return conn.execute(
+                """
+                SELECT * FROM upload_sessions
+                WHERE status = 'receiving'
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (start,),
+            ).fetchall()
+
+    rows = _retry_locked(_list, label="list_receiving")
     now = time.time()
     items: list[dict[str, object]] = []
     for row in rows:
@@ -331,8 +471,12 @@ def put_chunk(
     ensure_upload_tables(db_path)
     if index < 0:
         raise ValueError("chunk index không hợp lệ")
-    with connect(db_path) as conn:
-        row = conn.execute("SELECT * FROM upload_sessions WHERE id = ?", (upload_id,)).fetchone()
+
+    def _load():
+        with uploads_connect(db_path) as conn:
+            return conn.execute("SELECT * FROM upload_sessions WHERE id = ?", (upload_id,)).fetchone()
+
+    row = _retry_locked(_load, label="put_chunk_load")
     if row is None or row["status"] != "receiving":
         raise LookupError("Không thấy phiên tải hoặc đã xong.")
     chunk_size = int(row["chunk_size"])
@@ -347,6 +491,7 @@ def put_chunk(
     path = Path(str(row["path"]))
     if not path.exists():
         raise LookupError("File partial đã mất — khởi tạo lại phiên tải.")
+    # Ghi đĩa trước — nếu DB bận vẫn không mất dữ liệu; resume sẽ gửi lại nếu UPDATE lỗi.
     with path.open("r+b") as handle:
         handle.seek(index * chunk_size)
         handle.write(data)
@@ -359,16 +504,34 @@ def put_chunk(
     received_bytes = 0
     for i in received:
         received_bytes += chunk_size if i < total - 1 else size_bytes - i * chunk_size
+    dump = _map_dump(received)
+    now = utcnow()
 
-    with connect(db_path) as conn:
-        conn.execute(
-            """
-            UPDATE upload_sessions
-            SET received_map = ?, received_bytes = ?, updated_at = ?
-            WHERE id = ? AND status = 'receiving'
-            """,
-            (_map_dump(received), received_bytes, utcnow(), upload_id),
-        )
+    def _update() -> None:
+        with uploads_connect(db_path) as conn:
+            # Đọc lại map mới nhất phòng hai PUT song song cùng phiên.
+            fresh = conn.execute(
+                "SELECT received_map, status FROM upload_sessions WHERE id = ?",
+                (upload_id,),
+            ).fetchone()
+            if fresh is None or fresh["status"] != "receiving":
+                raise LookupError("Không thấy phiên tải hoặc đã xong.")
+            merged = _map_list(str(fresh["received_map"] or ""), total)
+            if index not in merged:
+                merged.append(index)
+            bytes_now = 0
+            for i in merged:
+                bytes_now += chunk_size if i < total - 1 else size_bytes - i * chunk_size
+            conn.execute(
+                """
+                UPDATE upload_sessions
+                SET received_map = ?, received_bytes = ?, updated_at = ?
+                WHERE id = ? AND status = 'receiving'
+                """,
+                (_map_dump(merged), bytes_now, now, upload_id),
+            )
+
+    _retry_locked(_update, label="put_chunk_update")
     body = get_upload(db_path, upload_id)
     assert body is not None
     return body
@@ -380,10 +543,16 @@ def complete_upload(
     upload_id: str,
     *,
     disk_limit_bytes: int,
+    video_db_path: Path | None = None,
 ) -> dict[str, object]:
     ensure_upload_tables(db_path)
-    with connect(db_path) as conn:
-        row = conn.execute("SELECT * FROM upload_sessions WHERE id = ?", (upload_id,)).fetchone()
+    video_db = video_db_path or db_path
+
+    def _load():
+        with uploads_connect(db_path) as conn:
+            return conn.execute("SELECT * FROM upload_sessions WHERE id = ?", (upload_id,)).fetchone()
+
+    row = _retry_locked(_load, label="complete_load")
     if row is None:
         raise LookupError("Không thấy phiên tải.")
     if row["status"] == "completed":
@@ -414,8 +583,12 @@ def complete_upload(
         validate_media_file(path, original_name=str(row["name"]))
     except ValueError:
         path.unlink(missing_ok=True)
-        with connect(db_path) as conn:
-            conn.execute("DELETE FROM upload_sessions WHERE id = ?", (upload_id,))
+
+        def _delete() -> None:
+            with uploads_connect(db_path) as conn:
+                conn.execute("DELETE FROM upload_sessions WHERE id = ?", (upload_id,))
+
+        _retry_locked(_delete, label="complete_reject_delete")
         raise
 
     hasher = hashlib.sha256()
@@ -431,12 +604,12 @@ def complete_upload(
         raise ValueError("SHA-256 không khớp.")
 
     free = shutil.disk_usage(video_dir).free
-    used = queued_bytes(db_path)
+    used = queued_bytes(video_db)
     if not can_accept(used, size_bytes, disk_limit_bytes, free):
         raise MemoryError("Hàng đợi đã đầy. Đợi bớt video rồi thêm tiếp.")
 
     created = begin_upload(
-        db_path,
+        video_db,
         name=str(row["name"]),
         size_bytes=size_bytes,
         sha256=digest,
@@ -444,15 +617,19 @@ def complete_upload(
     )
     if created.get("duplicate"):
         path.unlink(missing_ok=True)
-        with connect(db_path) as conn:
-            conn.execute(
-                """
-                UPDATE upload_sessions
-                SET status = 'completed', sha256 = ?, received_bytes = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (digest, size_bytes, utcnow(), upload_id),
-            )
+
+        def _mark_dup() -> None:
+            with uploads_connect(db_path) as conn:
+                conn.execute(
+                    """
+                    UPDATE upload_sessions
+                    SET status = 'completed', sha256 = ?, received_bytes = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (digest, size_bytes, utcnow(), upload_id),
+                )
+
+        _retry_locked(_mark_dup, label="complete_dup")
         return {
             "ok": True,
             "duplicate": True,
@@ -473,21 +650,24 @@ def complete_upload(
         Path(old_path).unlink(missing_ok=True)
     duration = probe_duration_sec(final)
     try:
-        commit_upload(db_path, video_id, str(final), duration)
+        commit_upload(video_db, video_id, str(final), duration)
     except Exception:
-        abort_upload(db_path, video_id, bool(created.get("reopened")))
+        abort_upload(video_db, video_id, bool(created.get("reopened")))
         final.unlink(missing_ok=True)
         raise
 
-    with connect(db_path) as conn:
-        conn.execute(
-            """
-            UPDATE upload_sessions
-            SET status = 'completed', sha256 = ?, path = ?, received_bytes = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            (digest, str(final), size_bytes, utcnow(), upload_id),
-        )
+    def _mark_done() -> None:
+        with uploads_connect(db_path) as conn:
+            conn.execute(
+                """
+                UPDATE upload_sessions
+                SET status = 'completed', sha256 = ?, path = ?, received_bytes = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (digest, str(final), size_bytes, utcnow(), upload_id),
+            )
+
+    _retry_locked(_mark_done, label="complete_done")
     return {
         "ok": True,
         "duplicate": False,
@@ -504,10 +684,19 @@ def complete_upload(
 
 def abort_session(db_path: Path, upload_id: str) -> bool:
     ensure_upload_tables(db_path)
-    with connect(db_path) as conn:
-        row = conn.execute("SELECT path, status FROM upload_sessions WHERE id = ?", (upload_id,)).fetchone()
-        if row is None:
-            return False
-        conn.execute("DELETE FROM upload_sessions WHERE id = ?", (upload_id,))
+
+    def _abort():
+        with uploads_connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT path, status FROM upload_sessions WHERE id = ?", (upload_id,)
+            ).fetchone()
+            if row is None:
+                return None
+            conn.execute("DELETE FROM upload_sessions WHERE id = ?", (upload_id,))
+            return row
+
+    row = _retry_locked(_abort, label="abort_session")
+    if row is None:
+        return False
     Path(str(row["path"])).unlink(missing_ok=True)
     return True

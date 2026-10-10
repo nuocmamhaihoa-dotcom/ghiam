@@ -341,6 +341,22 @@
   }
 
   var lastResultTotal = -1;
+  var uploadingActive = false;
+  var wakeLock = null;
+
+  async function requestWakeLock() {
+    try {
+      if (navigator.wakeLock && navigator.wakeLock.request) {
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", function () { wakeLock = null; });
+      }
+    } catch (error) { wakeLock = null; }
+  }
+
+  async function releaseWakeLock() {
+    try { if (wakeLock) await wakeLock.release(); } catch (error) {}
+    wakeLock = null;
+  }
 
   async function refresh() {
     var statsResponse = await api("/v1/videos/stats");
@@ -387,7 +403,8 @@
     }
     var queueResponse = await api("/v1/videos");
     if (queueResponse.ok) renderQueue((await queueResponse.json()).items || []);
-    if (body.results !== lastResultTotal) {
+    // Khi đang tải video: không tải bảng kết quả (rất nặng) — tránh Safari nghẽn / ngắt upload.
+    if (!uploadingActive && body.results !== lastResultTotal) {
       lastResultTotal = body.results;
       loadResults();
     }
@@ -547,7 +564,7 @@
   }
 
   var CHUNK_STORE = "video-chunk-uploads-v1";
-  var CHUNK_RETRIES = 6;
+  var CHUNK_RETRIES = 40;
 
   function clientKeyFor(file) {
     return [deviceName() || "iphone", file.name, String(file.size), String(file.lastModified || 0)].join("|");
@@ -578,18 +595,20 @@
         try { body = await response.json(); } catch (error) { body = {}; }
         last = { ok: response.ok, status: response.status, body: body };
         if (response.ok) return last;
+        // 400/404 = lỗi thật; còn lại (503/500/502/0) → thử lại đến khi xong.
         if (response.status === 404 || response.status === 400) return last;
       } catch (error) {
         last = { ok: false, status: 0, body: { detail: "mất kết nối" } };
       }
-      await sleep(Math.min(15000, 500 * Math.pow(2, attempt)));
+      var wait = Math.min(20000, 800 * Math.pow(1.6, attempt));
+      await sleep(wait);
     }
     return last;
   }
 
   async function initChunkedWithRetry(initBody, onWait) {
     var last = { ok: false, status: 0, body: {} };
-    for (var attempt = 0; attempt < 40; attempt += 1) {
+    for (var attempt = 0; attempt < 60; attempt += 1) {
       var initResponse = await api("/v1/videos/uploads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -599,17 +618,18 @@
       try { session = await initResponse.json(); } catch (error) { session = {}; }
       last = { ok: initResponse.ok, status: initResponse.status, body: session, response: initResponse };
       if (initResponse.ok) return last;
-      if (initResponse.status !== 507 && initResponse.status !== 503) return last;
-      var waitSec = 90;
+      if (initResponse.status !== 507 && initResponse.status !== 503 && initResponse.status !== 500) return last;
+      var waitSec = initResponse.status === 503 ? 5 : 60;
       var ra = initResponse.headers.get("Retry-After");
-      if (ra && !isNaN(Number(ra))) waitSec = Math.max(15, Number(ra));
+      if (ra && !isNaN(Number(ra))) waitSec = Math.max(3, Number(ra));
       if (onWait) onWait(waitSec, session.detail || "hàng đợi đầy / đang nhận tối đa", attempt + 1);
       await sleep(waitSec * 1000);
     }
     return last;
   }
 
-  var UPLOAD_PARALLEL = 2;
+  // Safari: 1 video một lúc ổn định hơn — tránh nghẽn kết nối / khóa máy giữa chừng.
+  var UPLOAD_PARALLEL = 1;
 
   async function mapPool(items, concurrency, worker) {
     var cursor = 0;
@@ -633,7 +653,7 @@
     store[key] = { upload_id: session.upload_id, name: file.name, size: file.size };
     saveChunkStore(store);
 
-    var chunkSize = session.chunk_size || (4 * 1024 * 1024);
+    var chunkSize = session.chunk_size || (2 * 1024 * 1024);
     var total = session.chunks_total || Math.ceil(file.size / chunkSize);
     var done = {};
     (session.received || []).forEach(function (i) { done[i] = true; });
@@ -642,10 +662,38 @@
 
     for (var index = 0; index < total; index += 1) {
       if (done[index]) continue;
+      // Safari khóa tab: đợi hiện lại rồi gửi tiếp — không bỏ cuộc giữa chừng.
+      while (document.hidden) {
+        await sleep(1000);
+      }
       var start = index * chunkSize;
       var end = Math.min(file.size, start + chunkSize);
       var blob = file.slice(start, end);
       var put = await putChunkBytes(session.upload_id, index, blob);
+      if (!put.ok) {
+        // Thử resume session từ server rồi gửi lại mảnh này.
+        var again = await initChunkedWithRetry({
+          name: file.name,
+          size_bytes: file.size,
+          device: deviceName(),
+          client_key: key
+        });
+        if (again.ok && again.body && again.body.upload_id) {
+          session = again.body;
+          store[key] = { upload_id: session.upload_id, name: file.name, size: file.size };
+          saveChunkStore(store);
+          chunkSize = session.chunk_size || chunkSize;
+          total = session.chunks_total || total;
+          done = {};
+          (session.received || []).forEach(function (i) { done[i] = true; });
+          finished = Object.keys(done).length;
+          if (done[index]) {
+            onProgress(Math.floor((finished * 100) / Math.max(1, total)), finished, total, true);
+            continue;
+          }
+          put = await putChunkBytes(session.upload_id, index, blob);
+        }
+      }
       if (!put.ok) {
         return { ok: false, status: put.status, body: put.body, upload_id: session.upload_id, name: file.name };
       }
@@ -654,14 +702,24 @@
       onProgress(Math.floor((finished * 100) / total), finished, total, false);
     }
 
-    var completeResponse = await api("/v1/videos/uploads/" + session.upload_id + "/complete", { method: "POST" });
     var completeBody = {};
-    try { completeBody = await completeResponse.json(); } catch (error) { completeBody = {}; }
-    if (completeResponse.ok) {
+    var completeOk = false;
+    var completeStatus = 0;
+    for (var c = 0; c < 20; c += 1) {
+      while (document.hidden) await sleep(1000);
+      var completeResponse = await api("/v1/videos/uploads/" + session.upload_id + "/complete", { method: "POST" });
+      try { completeBody = await completeResponse.json(); } catch (error) { completeBody = {}; }
+      completeOk = completeResponse.ok;
+      completeStatus = completeResponse.status;
+      if (completeOk) break;
+      if (completeStatus === 400 || completeStatus === 404) break;
+      await sleep(Math.min(15000, 1000 * (c + 1)));
+    }
+    if (completeOk) {
       delete store[key];
       saveChunkStore(store);
     }
-    return { ok: completeResponse.ok, status: completeResponse.status, body: completeBody, name: file.name };
+    return { ok: completeOk, status: completeStatus, body: completeBody, name: file.name };
   }
 
   async function sendFiles(fileList) {
@@ -680,85 +738,94 @@
     var failed = [];
     var registered = [];
     note.className = "note";
+    uploadingActive = true;
+    await requestWakeLock();
 
-    // Bước 1: xếp TẤT CẢ phiên lên VPS trước — Safari ngủ máy vẫn còn tên trong hàng đợi.
-    for (var i = 0; i < files.length; i += 1) {
-      var file = files[i];
-      note.textContent = "Đang xếp phiên " + (i + 1) + "/" + files.length + " lên VPS: " + file.name;
-      var initBody = {
-        name: file.name,
-        size_bytes: file.size,
-        device: deviceName(),
-        client_key: clientKeyFor(file)
-      };
-      var init = await initChunkedWithRetry(initBody, function (sec, reason, attempt) {
-        note.textContent = file.name + " — chờ chỗ trống (" + reason + "), thử lại sau " + sec + "s · lần " + attempt;
-        note.className = "note warn";
-      });
-      if (!init.ok) {
-        var why = (init.body && init.body.detail) || ("lỗi " + init.status);
-        failed.push(file.name + " (chưa xếp được: " + why + ")");
-        if (init.status === 507) {
-          for (var j = i + 1; j < files.length; j += 1) {
-            failed.push(files[j].name + " (chưa xếp — hàng nhận đầy, chọn lại sau)");
+    try {
+      // Bước 1: xếp TẤT CẢ phiên lên VPS trước — Safari ngủ máy vẫn còn tên trong hàng đợi.
+      for (var i = 0; i < files.length; i += 1) {
+        var file = files[i];
+        note.textContent = "Đang xếp phiên " + (i + 1) + "/" + files.length + " lên VPS: " + file.name;
+        var initBody = {
+          name: file.name,
+          size_bytes: file.size,
+          device: deviceName(),
+          client_key: clientKeyFor(file)
+        };
+        var init = await initChunkedWithRetry(initBody, function (sec, reason, attempt) {
+          note.textContent = file.name + " — chờ chỗ trống (" + reason + "), thử lại sau " + sec + "s · lần " + attempt;
+          note.className = "note warn";
+        });
+        if (!init.ok) {
+          var why = (init.body && init.body.detail) || ("lỗi " + init.status);
+          failed.push(file.name + " (chưa xếp được: " + why + ")");
+          if (init.status === 507) {
+            for (var j = i + 1; j < files.length; j += 1) {
+              failed.push(files[j].name + " (chưa xếp — hàng nhận đầy, chọn lại sau)");
+            }
+            break;
           }
-          break;
+          continue;
         }
-        continue;
+        registered.push({ file: file, session: init.body || {} });
+        await refresh();
       }
-      registered.push({ file: file, session: init.body || {} });
-      refresh();
-    }
 
-    if (!registered.length) {
-      note.textContent = failed.length
-        ? ("Không xếp được phiên nào: " + failed.join(", "))
-        : "Không có file để tải.";
-      note.className = "note warn";
-      return;
-    }
-
-    note.className = "note";
-    note.textContent = "Đã xếp " + registered.length + "/" + files.length +
-      " phiên trên VPS — đang gửi dữ liệu (" + UPLOAD_PARALLEL + " video song song)...";
-    refresh();
-
-    var live = {};
-    var results = await mapPool(registered, UPLOAD_PARALLEL, async function (job) {
-      var name = job.file.name;
-      live[name] = "0%";
-      var result = await uploadSessionChunks(job.file, job.session, function (percent, finished, total, resumed) {
-        live[name] = percent + "%" + (resumed ? "·resume" : "");
-        var parts = Object.keys(live).map(function (k) { return k.replace(/^.*\//, "").slice(0, 18) + " " + live[k]; });
-        note.textContent = "Đang gửi " + parts.join(" · ");
-      });
-      delete live[name];
-      return result;
-    });
-
-    results.forEach(function (result) {
-      if (!result) return;
-      if (result.ok) {
-        if (result.body && result.body.duplicate) already += 1;
-        else added += 1;
+      if (!registered.length) {
+        note.textContent = failed.length
+          ? ("Không xếp được phiên nào: " + failed.join(", "))
+          : "Không có file để tải.";
+        note.className = "note warn";
         return;
       }
-      var reason = (result.body && result.body.detail) ||
-        (result.status === 0 ? "mất kết nối — chọn lại cùng file để tiếp tục" : "lỗi " + result.status);
-      failed.push((result.name || "video") + " (" + reason + ")");
-    });
 
-    var partsOut = [
-      "Đã xếp " + registered.length + " phiên trên VPS.",
-      "Đã vào hàng đọc: " + added + "."
-    ];
-    if (already) partsOut.push(already + " video đã có sẵn.");
-    if (failed.length) {
-      partsOut.push("Chưa xong / lỗi (chọn lại cùng file để resume): " + failed.join(", ") + ".");
+      note.className = "note";
+      note.textContent = "Đã xếp " + registered.length + "/" + files.length +
+        " phiên trên VPS — đang gửi dữ liệu tới 100% (giữ màn hình sáng)...";
+      await refresh();
+
+      var live = {};
+      var results = await mapPool(registered, UPLOAD_PARALLEL, async function (job) {
+        var name = job.file.name;
+        live[name] = "0%";
+        var result = await uploadSessionChunks(job.file, job.session, function (percent, finished, total, resumed) {
+          live[name] = percent + "%" + (resumed ? "·resume" : "");
+          var parts = Object.keys(live).map(function (k) { return k.replace(/^.*\//, "").slice(0, 18) + " " + live[k]; });
+          note.textContent = "Đang gửi tới 100%: " + parts.join(" · ") + " — đừng khóa máy";
+        });
+        delete live[name];
+        await refresh();
+        return result;
+      });
+
+      results.forEach(function (result) {
+        if (!result) return;
+        if (result.ok) {
+          if (result.body && result.body.duplicate) already += 1;
+          else added += 1;
+          return;
+        }
+        var reason = (result.body && result.body.detail) ||
+          (result.status === 0 ? "mất kết nối — chọn lại cùng file để tiếp tục" : "lỗi " + result.status);
+        failed.push((result.name || "video") + " (" + reason + ")");
+      });
+
+      var partsOut = [
+        "Đã xếp " + registered.length + " phiên trên VPS.",
+        "Đã vào hàng đọc đủ 100%: " + added + "."
+      ];
+      if (already) partsOut.push(already + " video đã có sẵn.");
+      if (failed.length) {
+        partsOut.push("Chưa xong (chọn lại cùng file để resume tới 100%): " + failed.join(", ") + ".");
+      }
+      note.textContent = partsOut.join(" ");
+      note.className = failed.length ? "note warn" : "note ok";
+    } finally {
+      uploadingActive = false;
+      await releaseWakeLock();
+      await refresh();
+      loadResults();
     }
-    note.textContent = partsOut.join(" ");
-    note.className = failed.length ? "note warn" : "note ok";
-    refresh();
   }
 
   document.getElementById("pick").addEventListener("click", function () {
@@ -815,7 +882,16 @@
   loadChecklist();
   syncUploadGate();
   refresh();
-  setInterval(refresh, 4000);
+  var refreshTick = 0;
+  setInterval(function () {
+    refreshTick += 1;
+    // Khi đang upload: 12s/lần; bình thường 4s/lần.
+    if (uploadingActive && (refreshTick % 3) !== 0) return;
+    refresh();
+  }, 4000);
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden && uploadingActive) requestWakeLock();
+  });
 </script>
 </body>
 </html>

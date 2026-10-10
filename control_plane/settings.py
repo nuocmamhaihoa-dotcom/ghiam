@@ -28,6 +28,10 @@ class ServerSettings:
         # Video iPhone thường 800MB–1.5GB; cho phép tới 2GB/file.
         self.max_upload_mb = int(os.environ.get("CONTROL_MAX_UPLOAD_MB", "2048"))
         self.video_db_path = Path(os.environ.get("CONTROL_VIDEO_DB", self.data_dir / "video.db"))
+        # DB riêng cho phiên tải cắt khúc — tránh nghẽn/locked với OCR ghi kết quả.
+        self.video_uploads_db_path = Path(
+            os.environ.get("CONTROL_VIDEO_UPLOADS_DB", self.data_dir / "video_uploads.db")
+        )
         self.video_dir = Path(os.environ.get("CONTROL_VIDEO_DIR", self.data_dir / "videos"))
         # Trần hàng đợi trên VPS ~148GB: mặc định 120GB, chừa ~20GB trống.
         self.video_disk_gb = int(os.environ.get("CONTROL_VIDEO_DISK_GB", "120"))
