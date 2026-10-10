@@ -290,7 +290,7 @@ def main() -> None:
 
     # Feeders trước — rematch nền (tiến trình riêng) sau để không chặn OCR/upload.
     threads = [start_feeder() for _ in range(feeders)]
-    rematch_proc = context.Process(
+    rematch_proc: multiprocessing.Process | None = context.Process(
         target=_rematch_process,
         args=(str(db_path),),
         name="video-rematch-deferred",
@@ -300,6 +300,9 @@ def main() -> None:
 
     while not broken.is_set():
         touch_heartbeat(heartbeat_path())
+        if rematch_proc is not None and not rematch_proc.is_alive():
+            rematch_proc.join(timeout=0.1)
+            rematch_proc = None
         for index, thread in enumerate(threads):
             if not thread.is_alive() and not broken.is_set():
                 threads[index] = start_feeder()
