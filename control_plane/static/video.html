@@ -91,7 +91,7 @@
   <h1>Đọc video danh bạ</h1>
   <p class="lead">Thêm nhiều video / nhiều iPhone cùng lúc. Chọn xong là xếp phiên lên VPS ngay — hàng đợi hiện tên từng file. Tải theo mảnh, mất mạng chọn lại cùng file để tiếp tục. Đóng trang thì máy chủ vẫn đọc các video đã tải xong.</p>
   <div id="relayWarn" class="banner warn-banner __RELAY_HIDE__">__RELAY_TEXT__</div>
-  <p class="note" style="margin-bottom:0.8rem"><b>Để tải nhanh:</b> tắt iCloud Private Relay và Chế độ dữ liệu thấp, thoát app VideoUp, rồi chọn video <b>ngay trên Safari ở trang này</b> (http://14.225.224.16:8088). Giữ màn hình sáng. Khi đang gửi, máy chủ dừng đọc video cũ để nhường đĩa — dòng dưới hiện MB/s và số phút còn lại.</p>
+  <p class="note" style="margin-bottom:0.8rem"><b>Để tải nhanh:</b> tắt iCloud Private Relay và Chế độ dữ liệu thấp, thoát app VideoUp, kéo tải lại trang này rồi chọn video trên Safari. Giữ màn hình sáng. Mỗi cổng Safari chỉ mở 6 đường — trang tự mở thêm cổng 8090 và 8091 để gửi nhiều đường cùng lúc. Dòng dưới hiện MB/s.</p>
 
   <div id="openWarn" class="banner hide" role="status"></div>
 
@@ -227,6 +227,43 @@
       ? "Đã xác nhận cách quay — có thể tải video."
       : "Tick đủ 3 ô để mở nút chọn video.";
     note.className = ready ? "note ok" : "note";
+  }
+
+  var LANE_PORTS = [];
+
+  function pagePort() {
+    return location.port || (location.protocol === "https:" ? "443" : "80");
+  }
+
+  function probePort(port) {
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); }, 2500);
+    return fetch(location.protocol + "//" + location.hostname + ":" + port + "/health", {
+      signal: ctrl.signal,
+      cache: "no-store"
+    }).then(function (res) {
+      clearTimeout(timer);
+      return res.ok ? port : null;
+    }).catch(function () {
+      clearTimeout(timer);
+      return null;
+    });
+  }
+
+  async function detectLanePorts() {
+    var found = await Promise.all(["8090", "8091"].map(probePort));
+    var extras = found.filter(function (port) { return port && String(port) !== String(pagePort()); });
+    LANE_PORTS = [pagePort()].concat(extras);
+    CHUNK_PARALLEL = 6 * LANE_PORTS.length;
+    return LANE_PORTS;
+  }
+
+  function chunkPutUrl(uploadId, index) {
+    var ports = LANE_PORTS.length ? LANE_PORTS : [pagePort()];
+    var use = ports[index % ports.length];
+    var path = "/v1/videos/uploads/" + uploadId + "/chunks/" + index;
+    if (String(use) === String(pagePort())) return path;
+    return location.protocol + "//" + location.hostname + ":" + use + path;
   }
 
   async function api(path, options) {
@@ -601,7 +638,7 @@
     var last = { ok: false, status: 0, body: {} };
     for (var attempt = 0; attempt < CHUNK_RETRIES; attempt += 1) {
       try {
-        var response = await api("/v1/videos/uploads/" + uploadId + "/chunks/" + index, {
+        var response = await api(chunkPutUrl(uploadId, index), {
           method: "PUT",
           headers: { "Content-Type": "application/octet-stream" },
           body: blob
@@ -645,7 +682,7 @@
 
   // Một video tới 100% rồi sang video kế — video xong vào OCR ngay.
   var UPLOAD_PARALLEL = 1;
-  // Safari chỉ cho khoảng 6 kết nối/host. 6 × 16MB lấp đường lên; không mở thêm request lúc đang gửi.
+  // Safari chỉ cho 6 kết nối mỗi cổng. detectLanePorts nhân thêm 8090/8091 nếu mở được.
   var CHUNK_PARALLEL = 6;
   var CHUNK_BYTES = 16 * 1024 * 1024;
 
@@ -780,8 +817,10 @@
       }
 
       note.className = "note";
+      note.textContent = "Đang kiểm tra thêm đường tải...";
+      await detectLanePorts();
       note.textContent = "Đã xếp " + registered.length + "/" + files.length +
-        " phiên trên VPS — đang gửi dữ liệu tới 100% (giữ màn hình sáng)...";
+        " phiên — gửi " + CHUNK_PARALLEL + " đường cùng lúc (giữ màn hình sáng)...";
       await refresh();
 
       var live = {};

@@ -133,6 +133,10 @@ fi
 if command -v iptables >/dev/null 2>&1; then
   iptables -t nat -C PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports "${PORT}" 2>/dev/null || \
     iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports "${PORT}"
+  for extra in 8090 8091; do
+    iptables -t nat -C PREROUTING -p tcp --dport "${extra}" -j REDIRECT --to-ports "${PORT}" 2>/dev/null || \
+      iptables -t nat -A PREROUTING -p tcp --dport "${extra}" -j REDIRECT --to-ports "${PORT}"
+  done
 fi
 chmod 755 "$APP_DIR/deploy/vps/tune-upload-net.sh"
 cp -f "$APP_DIR/deploy/vps/fb-poller-net.service" /etc/systemd/system/fb-poller-net.service

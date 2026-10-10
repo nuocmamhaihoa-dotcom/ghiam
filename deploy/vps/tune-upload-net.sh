@@ -14,4 +14,9 @@ PORT="${CONTROL_PORT:-8088}"
 if command -v iptables >/dev/null 2>&1; then
   iptables -t nat -C PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports "${PORT}" 2>/dev/null || \
     iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports "${PORT}"
+  # 8090/8091 cùng hub: Safari được thêm 6 kết nối mỗi cổng (trần 6 kết nối/cổng).
+  for extra in 8090 8091; do
+    iptables -t nat -C PREROUTING -p tcp --dport "${extra}" -j REDIRECT --to-ports "${PORT}" 2>/dev/null || \
+      iptables -t nat -A PREROUTING -p tcp --dport "${extra}" -j REDIRECT --to-ports "${PORT}"
+  done
 fi
