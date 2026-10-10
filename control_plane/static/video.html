@@ -342,7 +342,14 @@
     var html = "<table><tr><th>Video</th><th>Máy quét</th><th>Trạng thái</th><th>Kết quả</th></tr>";
     items.forEach(function (item) {
       var extra = item.error ? "<div class='warn'>" + escapeHtml(item.error) + "</div>" : "";
-      var retry = item.status === "error" ? " <button class='ghost' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
+      var canRetry = item.file_kept && (item.status === "error" || item.status === "done");
+      var retry = canRetry ? " <button class='ghost' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
+      var keptNote = "";
+      if (item.status === "done" && item.file_kept) {
+        keptNote = "<div class='note'>Còn file — có thể Đọc lại</div>";
+      } else if ((item.status === "done" || item.status === "error") && !item.file_kept) {
+        keptNote = "<div class='note'>Hết file trên đĩa</div>";
+      }
       var progress = "";
       if (item.status === "running" && item.progress) {
         progress = "<div class='note'>" + escapeHtml(item.progress) + "</div>";
@@ -367,7 +374,7 @@
         }
         resultText += " <button class='ghost' type='button' data-filter='" + escapeHtml(item.name) + "'>Xem</button>";
       }
-      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + escapeHtml(item.device || "") + "</td><td>" + statusText(item.status) + progress + retry + "</td><td>" + resultText + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + escapeHtml(item.device || "") + "</td><td>" + statusText(item.status) + progress + keptNote + retry + "</td><td>" + resultText + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-retry]").forEach(function (button) {

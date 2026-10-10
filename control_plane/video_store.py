@@ -68,6 +68,14 @@ def feeder_count() -> int:
     return 1
 
 
+def keep_video_count() -> int:
+    """Số video mới nhất giữ lại trên đĩa để bấm Đọc lại. Mặc định 50."""
+    raw = os.environ.get("CONTROL_VIDEO_KEEP", "").strip()
+    if raw:
+        return max(0, int(raw))
+    return 50
+
+
 def stale_quiet_sec() -> float:
     """Không có tiến độ mới và không còn tiến trình con thì mới coi là nghẽn."""
     raw = os.environ.get("CONTROL_VIDEO_STALE_SEC", "").strip()
@@ -234,12 +242,13 @@ def _reconcile_result_counts(conn: sqlite3.Connection) -> None:
 
 
 def queued_bytes(db_path: Path) -> int:
-    """Dung lượng video còn nằm trên đĩa, kể cả video lỗi được giữ lại để bấm Đọc lại."""
+    """Dung lượng video còn nằm trên đĩa (hàng đợi + giữ để Đọc lại)."""
     with connect(db_path) as conn:
         row = conn.execute(
             """
             SELECT COALESCE(SUM(size_bytes), 0) AS n FROM videos
-            WHERE status IN ('uploading', 'queued', 'running') OR (status = 'error' AND path != '')
+            WHERE status IN ('uploading', 'queued', 'running')
+               OR (status IN ('done', 'error') AND path != '')
             """
         ).fetchone()
     return int(row["n"])
@@ -333,7 +342,7 @@ def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
             """
             SELECT
               v.id, v.name, v.size_bytes, v.status, v.error, v.created_at, v.started_at, v.finished_at,
-              v.device, v.progress, v.progress_at,
+              v.device, v.progress, v.progress_at, v.path,
               COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id), 0) AS result_count,
               COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.bucket = 1), 0) AS saved_count,
               COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.bucket = 2), 0) AS review_count,
@@ -344,7 +353,13 @@ def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
             """,
             (limit,),
         ).fetchall()
-    return [dict(row) for row in rows]
+    items: list[dict[str, object]] = []
+    for row in rows:
+        item = dict(row)
+        path = str(item.pop("path", "") or "")
+        item["file_kept"] = bool(path) and Path(path).exists()
+        items.append(item)
+    return items
 
 
 def stats(db_path: Path) -> dict[str, int]:
@@ -540,15 +555,80 @@ def fail(db_path: Path, video_id: int, message: str) -> None:
 
 
 def retry(db_path: Path, video_id: int) -> bool:
+    """Xếp lại hàng khi file còn trên đĩa — lỗi hoặc đã xong (Đọc lại)."""
     with connect(db_path) as conn:
         row = conn.execute("SELECT path, status FROM videos WHERE id = ?", (video_id,)).fetchone()
-        if row is None or row["status"] != "error" or not row["path"] or not Path(row["path"]).exists():
+        if row is None or row["status"] not in ("error", "done"):
+            return False
+        if not row["path"] or not Path(row["path"]).exists():
             return False
         cur = conn.execute(
-            "UPDATE videos SET status = 'queued', error = '', finished_at = NULL, pid = NULL WHERE id = ? AND status = 'error'",
+            """
+            UPDATE videos
+            SET status = 'queued', error = '', finished_at = NULL, pid = NULL,
+                progress = '', progress_at = NULL, started_at = NULL
+            WHERE id = ? AND status IN ('error', 'done')
+            """,
             (video_id,),
         )
         return cur.rowcount == 1
+
+
+def clear_missing_video_paths(db_path: Path) -> int:
+    """Xóa path trong DB khi file đã mất (lượt trước unlink sau khi đọc xong)."""
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, path, status FROM videos WHERE path != '' AND status IN ('done', 'error')"
+        ).fetchall()
+    cleared = 0
+    for row in rows:
+        if Path(str(row["path"])).exists():
+            continue
+        with connect(db_path) as conn:
+            cur = conn.execute(
+                "UPDATE videos SET path = '' WHERE id = ? AND status IN ('done', 'error') AND path != ''",
+                (int(row["id"]),),
+            )
+            if cur.rowcount == 1:
+                cleared += 1
+    return cleared
+
+
+def prune_old_videos(db_path: Path, keep: int | None = None) -> int:
+    """Giữ N video mới nhất trên đĩa; xóa file cũ hơn. Kết quả DB giữ nguyên.
+
+    Không đụng video đang tải / chờ / đang đọc. Chỉ xóa file của done/error
+    nằm ngoài cửa sổ giữ; path trong DB được xóa trống để UI biết hết file.
+    """
+    cleared = clear_missing_video_paths(db_path)
+    limit = keep_video_count() if keep is None else max(0, keep)
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, path, status FROM videos WHERE path != '' ORDER BY id DESC"
+        ).fetchall()
+    removed = 0
+    for index, row in enumerate(rows):
+        if index < limit:
+            continue
+        if row["status"] in ("uploading", "queued", "running"):
+            continue
+        path = Path(str(row["path"]))
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            print(f"Không xóa được video cũ {row['id']}: {exc}", flush=True)
+            continue
+        with connect(db_path) as conn:
+            cur = conn.execute(
+                """
+                UPDATE videos SET path = ''
+                WHERE id = ? AND status IN ('done', 'error') AND path != ''
+                """,
+                (int(row["id"]),),
+            )
+            if cur.rowcount == 1:
+                removed += 1
+    return removed + cleared
 
 
 def rematch_results(db_path: Path, video_id: int | None = None) -> int:

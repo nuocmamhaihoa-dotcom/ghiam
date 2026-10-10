@@ -14,6 +14,7 @@ from control_plane.video_store import (
     begin_upload,
     can_accept,
     claim,
+    clear_missing_video_paths,
     commit_upload,
     count_results,
     fail,
@@ -21,7 +22,9 @@ from control_plane.video_store import (
     finish,
     init_db,
     iter_backup,
+    keep_video_count,
     list_videos,
+    prune_old_videos,
     rematch_results,
     queued_bytes,
     recover_dead,
@@ -379,6 +382,59 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(stats(self.db)["queued"], 1)
         Path(str(claim(self.db, 4)["path"])).unlink()
         fail(self.db, video_id, "hỏng lần nữa")
+        self.assertFalse(retry(self.db, video_id))
+
+    def test_done_video_can_be_reread_while_file_kept(self) -> None:
+        video_id = self._add("a.mp4", "a", size=40)
+        claim(self.db, 4)
+        finish(self.db, video_id, Table(rows=[Row("0332001753", "khactam", "@khactam60")]))
+        items = list_videos(self.db)
+        self.assertTrue(items[0]["file_kept"])
+        self.assertEqual(queued_bytes(self.db), 40)
+        self.assertTrue(retry(self.db, video_id))
+        self.assertEqual(stats(self.db)["queued"], 1)
+
+    def test_prune_keeps_newest_videos_and_preserves_results(self) -> None:
+        ids = [self._add(f"{i}.mp4", f"sha-{i}", size=10) for i in range(5)]
+        for video_id in ids:
+            claim(self.db, 9)
+            finish(self.db, video_id, Table(rows=[Row(f"03{video_id:08d}", "n", f"@u{video_id}")]))
+        removed = prune_old_videos(self.db, keep=2)
+        self.assertEqual(removed, 3)
+        items = {item["id"]: item for item in list_videos(self.db, limit=20)}
+        self.assertFalse(items[ids[0]]["file_kept"])
+        self.assertFalse(items[ids[1]]["file_kept"])
+        self.assertFalse(items[ids[2]]["file_kept"])
+        self.assertTrue(items[ids[3]]["file_kept"])
+        self.assertTrue(items[ids[4]]["file_kept"])
+        # Kết quả DB vẫn còn dù file đã xóa.
+        self.assertEqual(count_results(self.db, view="all"), 5)
+        self.assertFalse(retry(self.db, ids[0]))
+        self.assertTrue(retry(self.db, ids[4]))
+
+    def test_keep_video_count_env(self) -> None:
+        old = os.environ.get("CONTROL_VIDEO_KEEP")
+        try:
+            os.environ["CONTROL_VIDEO_KEEP"] = "7"
+            self.assertEqual(keep_video_count(), 7)
+            os.environ["CONTROL_VIDEO_KEEP"] = "0"
+            self.assertEqual(keep_video_count(), 0)
+        finally:
+            if old is None:
+                os.environ.pop("CONTROL_VIDEO_KEEP", None)
+            else:
+                os.environ["CONTROL_VIDEO_KEEP"] = old
+
+    def test_clear_missing_video_paths(self) -> None:
+        video_id = self._add("a.mp4", "gone", size=33)
+        job = claim(self.db, 3)
+        path = Path(str(job["path"]))
+        finish(self.db, video_id, Table())
+        path.unlink()
+        self.assertFalse(list_videos(self.db)[0]["file_kept"])
+        self.assertEqual(clear_missing_video_paths(self.db), 1)
+        self.assertEqual(queued_bytes(self.db), 0)
+        self.assertFalse(list_videos(self.db)[0]["file_kept"])
         self.assertFalse(retry(self.db, video_id))
 
     def test_disk_limit(self) -> None:

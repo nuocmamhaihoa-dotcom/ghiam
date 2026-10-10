@@ -31,7 +31,7 @@ from control_plane.screen_layout import (
     merge_layout,
     save_layout,
 )
-from control_plane.screen_read import read_image, read_tap
+from control_plane.screen_read import read_image, read_image_aggressive, read_tap
 from control_plane.screen_table import FrameObs, Table, build_table
 
 Progress = Callable[[str], None]
@@ -94,6 +94,15 @@ def read_frame_at(path: str, at: float, layout: dict[str, object] | None = None)
         return dataclasses.replace(read_image(path, layout=layout), at=at)
     except _FRAME_ERRORS as exc:
         print(f"Bỏ khung {Path(path).name}: {exc}", flush=True)
+        return FrameObs("unknown", at=at)
+
+
+def read_frame_aggressive_at(path: str, at: float, layout: dict[str, object] | None = None) -> FrameObs:
+    """Vòng 2 OCR — khung lượt một unknown/lỗi."""
+    try:
+        return dataclasses.replace(read_image_aggressive(path, layout=layout), at=at)
+    except _FRAME_ERRORS as exc:
+        print(f"Bỏ khung vòng 2 {Path(path).name}: {exc}", flush=True)
         return FrameObs("unknown", at=at)
 
 
@@ -310,8 +319,60 @@ def _scan_video(
                         last_beat = now
         except BaseException:
             raise
+    # R2: vòng 2 OCR các khung unknown (không đụng job tap — chỉ khung đơn).
+    results = _round2_unknowns(jobs, results, submit=submit, on_progress=on_progress, layout_dict=layout_dict)
     learned = measured if measured is not None else None
     return [(job[2], obs) for job, obs in zip(jobs, results)], learned
+
+
+def _round2_unknowns(
+    jobs: list[tuple[float, int, Path, Callable[..., FrameObs], tuple]],
+    results: list[FrameObs],
+    *,
+    submit: Submit | None,
+    on_progress: Progress | None,
+    layout_dict: dict[str, object],
+) -> list[FrameObs]:
+    """Đọc lại khung unknown bằng OCR mạnh hơn; giữ nguyên nếu vẫn không ra."""
+    targets: list[tuple[int, str, float]] = []
+    for index, (at, kind, path, fn, _args) in enumerate(jobs):
+        if kind != 0 or fn is not read_frame_at:
+            continue
+        if index >= len(results) or results[index].kind != "unknown":
+            continue
+        targets.append((index, str(path), at))
+    if not targets:
+        return results
+    total = len(targets)
+    if on_progress is not None:
+        on_progress(f"Vòng 2 OCR {total} khung lỗi/unknown")
+    updated = list(results)
+    if submit is None:
+        for offset, (index, path, at) in enumerate(targets, start=1):
+            obs = read_frame_aggressive_at(path, at, layout_dict)
+            if obs.kind != "unknown":
+                updated[index] = obs
+            if on_progress is not None and (offset == total or offset % 25 == 0):
+                on_progress(f"Vòng 2 OCR {offset}/{total} khung")
+        return updated
+    future_map = {
+        submit(read_frame_aggressive_at, path, at, layout_dict): index for index, path, at in targets
+    }
+    done = 0
+    for future in as_completed(future_map):
+        index = future_map[future]
+        try:
+            obs = future.result()
+        except Exception as exc:
+            print(f"Vòng 2 OCR lỗi: {exc}", flush=True)
+            done += 1
+            continue
+        if obs.kind != "unknown":
+            updated[index] = obs
+        done += 1
+        if on_progress is not None and (done == total or done % 25 == 0):
+            on_progress(f"Vòng 2 OCR {done}/{total} khung")
+    return updated
 
 
 def plan_video(path: Path, fps: float = SCAN_FPS, on_progress: Progress | None = None) -> VideoPlan:

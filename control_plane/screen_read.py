@@ -155,6 +155,14 @@ def read_image(path: str | Path, layout: dict[str, object] | LayoutProfile | Non
     return read_pillow(image, layout=layout)
 
 
+def read_image_aggressive(
+    path: str | Path, layout: dict[str, object] | LayoutProfile | None = None
+) -> FrameObs:
+    """Vòng 2: OCR mạnh hơn cho khung lượt một trả unknown."""
+    image = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+    return read_pillow_aggressive(image, layout=layout)
+
+
 def read_pillow(
     image: Image.Image,
     layout: dict[str, object] | LayoutProfile | None = None,
@@ -188,9 +196,56 @@ def read_pillow(
     return FrameObs("unknown")
 
 
+def read_pillow_aggressive(
+    image: Image.Image,
+    layout: dict[str, object] | LayoutProfile | None = None,
+) -> FrameObs:
+    """OCR vòng 2: phóng to mạnh, đảo màu, PSM rộng, ngưỡng tin cậy thấp hơn."""
+    _require_tesseract()
+    profile_layout = (
+        layout
+        if isinstance(layout, LayoutProfile)
+        else LayoutProfile.from_dict(layout if isinstance(layout, dict) else None)
+    )
+    # Thử ảnh gốc với hunt mở rộng trước khi đảo màu.
+    obs = _aggressive_once(image, profile_layout)
+    if obs.kind != "unknown":
+        return obs
+    # Đảo sáng/tối — chữ trắng trên nền tối hoặc ngược lại.
+    try:
+        inverted = ImageOps.invert(image.convert("RGB"))
+    except Exception:
+        return obs
+    return _aggressive_once(inverted, profile_layout)
+
+
+def _aggressive_once(image: Image.Image, profile_layout: LayoutProfile) -> FrameObs:
+    width, height = image.size
+    buttons = _pink_boxes(image)
+    listed = _list_buttons(buttons, width, layout=profile_layout)
+    if len(listed) >= 3:
+        anchor_x, anchor_w = _column_anchor(listed)
+        strips = [_row_strip(image, button, anchor_x, anchor_w) for button in listed]
+        tapped = _tapped_rows(image, listed, strips, anchor_x, anchor_w)
+        contacts = tuple(_read_rows(image, strips, tapped, aggressive=True))
+        if contacts:
+            return FrameObs("list", contacts)
+    profile = _profile_button(buttons, width, height)
+    if profile is not None:
+        name, username = _read_profile(image, profile, aggressive=True)
+        if username:
+            return FrameObs("profile", (), name, username)
+    name, username = _hunt_profile_handle(image, layout=profile_layout, aggressive=True)
+    if username:
+        return FrameObs("profile", (), name, username)
+    return FrameObs("unknown")
+
+
 def _hunt_profile_handle(
     image: Image.Image,
     layout: LayoutProfile | None = None,
+    *,
+    aggressive: bool = False,
 ) -> tuple[str, str]:
     """Đọc @username khi layout hồ sơ không nhận ra nút Follow hồng.
 
@@ -208,6 +263,12 @@ def _hunt_profile_handle(
             min(width, int(0.82 * width)),
             min(height, int(0.48 * height)),
         )
+    if aggressive:
+        # Mở rộng vùng săn @ khi lượt một thất bại.
+        x0 = max(0, int(0.02 * width))
+        y0 = max(0, int(0.03 * height))
+        x1 = min(width, int(0.92 * width))
+        y1 = min(height, int(0.58 * height))
     header = Box(x0, y0, x1, y1)
     if header.w < 40 or header.h < 40:
         return "", ""
@@ -216,6 +277,15 @@ def _hunt_profile_handle(
         (raw, 6, 15),
         (_enhance(raw, 2), 7, 10),
     ]
+    if aggressive:
+        passes.extend(
+            [
+                (_enhance(raw, 3), 7, 6),
+                (_upscale(raw, 3), 6, 6),
+                (_enhance(raw, 2), 11, 5),
+                (_enhance(raw, 2), 3, 5),
+            ]
+        )
     for crop, psm, min_conf in passes:
         words = _batch([crop], "vie+eng", psm)[0]
         scale_x = header.w / max(1, crop.width)
@@ -476,12 +546,23 @@ def _tapped_rows(image: Image.Image, buttons: list[Box], strips: list[Box], anch
     return grey_rows
 
 
-def _read_rows(image: Image.Image, strips: list[Box], tapped: set[int]) -> list[ContactHit]:
+def _read_rows(
+    image: Image.Image,
+    strips: list[Box],
+    tapped: set[int],
+    *,
+    aggressive: bool = False,
+) -> list[ContactHit]:
     usable = [(index, strip) for index, strip in enumerate(strips) if strip.w >= 40 and strip.h >= 20]
     layouts = _batch([image.crop((s.x0, s.y0, s.x1, s.y1)) for _, s in usable], "vie+eng", 6)
+    min_layout_conf = 12 if aggressive else 20
     pending: list[_Pending] = []
     for (index, strip), words in zip(usable, layouts):
-        placed = [Word(word.text, word.conf, word.box.shift(strip.x0, strip.y0)) for word in words if word.conf >= 20]
+        placed = [
+            Word(word.text, word.conf, word.box.shift(strip.x0, strip.y0))
+            for word in words
+            if word.conf >= min_layout_conf
+        ]
         phone, draft, name_box, phone_box = _phone_and_name(placed)
         if not draft or name_box is None or phone_box is None:
             continue
@@ -491,27 +572,35 @@ def _read_rows(image: Image.Image, strips: list[Box], tapped: set[int]) -> list[
 
     best = best_tessdata()
     digit_crops: list[Image.Image] = []
+    per_phone = 3 if aggressive else 2
     for row in pending:
         crop = _crop(image, row.phone_box, 6, 4)
         digit_crops.extend([_pad(_upscale(crop, 2)), _pad(_enhance(crop, 2))])
+        if aggressive:
+            digit_crops.append(_pad(_enhance(crop, 3)))
     digit_reads = _texts(_batch(digit_crops, "eng", 7, DIGITS, best))
 
     name_crops = [_pad(_upscale(_crop(image, row.name_box, 8, 6), 2)) for row in pending]
     fast_names = _texts(_batch(name_crops, "vie", 7))
     best_names = _texts(_batch(name_crops, "vie", 7, tessdata=best)) if best else [""] * len(pending)
+    if aggressive:
+        sharp_crops = [_pad(_enhance(_crop(image, row.name_box, 8, 6), 3)) for row in pending]
+        sharp_names = _texts(_batch(sharp_crops, "vie", 7, tessdata=best)) if best else _texts(_batch(sharp_crops, "vie", 7))
+    else:
+        sharp_names = [""] * len(pending)
 
     hits: list[ContactHit] = []
     for index, row in enumerate(pending):
-        reads = digit_reads[2 * index : 2 * index + 2]
+        reads = digit_reads[per_phone * index : per_phone * index + per_phone]
         phone = choose_phone(*reads, row.phone)
-        name = choose_name(fast_names[index], best_names[index], row.draft)
+        name = choose_name(fast_names[index], best_names[index], sharp_names[index], row.draft)
         if not phone or not name or is_skipped(name):
             continue
         hits.append(ContactHit(phone, name, row.selected))
     return hits
 
 
-def _read_profile(image: Image.Image, button: Box) -> tuple[str, str]:
+def _read_profile(image: Image.Image, button: Box, *, aggressive: bool = False) -> tuple[str, str]:
     """Hồ sơ: tên nằm ngay phía trên @username.
 
     Hồ sơ mở rất ngắn thường hơi nhòe — thử thêm crop phóng to/làm nét và
@@ -532,6 +621,15 @@ def _read_profile(image: Image.Image, button: Box) -> tuple[str, str]:
         (_enhance(raw, 2), 7, 12),
         (_upscale(raw, 2), 6, 12),
     ]
+    if aggressive:
+        passes.extend(
+            [
+                (_enhance(raw, 3), 7, 6),
+                (_upscale(raw, 3), 6, 6),
+                (_enhance(raw, 2), 11, 5),
+                (_enhance(raw, 3), 3, 5),
+            ]
+        )
     lines: list[Line] = []
     handle_at = -1
     username = ""

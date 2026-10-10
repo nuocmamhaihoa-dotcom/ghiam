@@ -26,6 +26,8 @@ from control_plane.video_store import (
     feeder_count,
     finish,
     init_db,
+    keep_video_count,
+    prune_old_videos,
     rematch_results,
     requeue,
     requeue_running,
@@ -118,14 +120,28 @@ def run_job(
         message = str(exc) or "Không đọc được video."
         fail(db_path, video_id, message)
         print(f"Video {video_id} lỗi sau {time.monotonic() - started:.0f} giây: {message[:300]}", flush=True)
+        try:
+            pruned = prune_old_videos(db_path)
+            if pruned:
+                print(f"Đã xóa {pruned} file video cũ hơn {keep_video_count()} video gần nhất.", flush=True)
+        except Exception as prune_exc:
+            print(f"Dọn video cũ lỗi: {prune_exc}", flush=True)
         return
     finally:
         stop_pulse.set()
         pulse.join(timeout=1.0)
-    path.unlink(missing_ok=True)
+    # Gói S: giữ file để Đọc lại; chỉ xóa khi vượt cửa sổ KEEP.
+    try:
+        pruned = prune_old_videos(db_path)
+        if pruned:
+            print(f"Đã xóa {pruned} file video cũ hơn {keep_video_count()} video gần nhất.", flush=True)
+    except Exception as prune_exc:
+        print(f"Dọn video cũ lỗi: {prune_exc}", flush=True)
+    kept = path.exists()
     print(
         f"Video {video_id} xong trong {time.monotonic() - started:.0f} giây, {len(frames)} khung: "
-        f"{len(table.rows)} hàng đủ, {len(table.review)} cần xem, {len(table.unopened)} chưa mở hồ sơ.",
+        f"{len(table.rows)} hàng đủ, {len(table.review)} cần xem, {len(table.unopened)} chưa mở hồ sơ"
+        f"{'; giữ file để Đọc lại' if kept else ''}.",
         flush=True,
     )
 
@@ -178,6 +194,9 @@ def _feed(
 def main() -> None:
     db_path = settings.video_db_path
     init_db(db_path)
+    pruned = prune_old_videos(db_path)
+    if pruned:
+        print(f"Giữ tối đa {keep_video_count()} video trên đĩa — đã dọn {pruned} file/path cũ.", flush=True)
     joined = rematch_results(db_path)
     if joined:
         print(f"Đã ghép thêm {joined} hàng số + username từ kết quả cũ.", flush=True)

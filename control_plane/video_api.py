@@ -28,6 +28,7 @@ from control_plane.video_store import (
     feeder_count,
     init_db,
     iter_backup,
+    keep_video_count,
     list_videos,
     queued_bytes,
     reader_alive,
@@ -80,6 +81,7 @@ def video_stats(authorization: str | None = Header(default=None)) -> dict[str, o
     body = stats(settings.video_db_path)
     body["workers"] = worker_count()
     body["feeders"] = feeder_count()
+    body["keep_videos"] = keep_video_count()
     body["reader_alive"] = reader_alive(settings.data_dir / "video-worker.heartbeat")
     body["disk_used_bytes"] = queued_bytes(settings.video_db_path)
     body["disk_limit_bytes"] = _limit_bytes()
@@ -171,7 +173,13 @@ async def upload_video(
 def retry_video(video_id: int, authorization: str | None = Header(default=None)) -> dict[str, bool]:
     _auth(authorization)
     if not retry(settings.video_db_path, video_id):
-        raise HTTPException(status_code=404, detail="Không đọc lại được video này.")
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Không đọc lại được — cần file còn giữ trên đĩa "
+                f"(tối đa {keep_video_count()} video gần nhất)."
+            ),
+        )
     return {"ok": True}
 
 
