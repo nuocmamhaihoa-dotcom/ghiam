@@ -874,12 +874,20 @@ def prune_old_videos(db_path: Path, keep: int | None = None, keep_gb: float | No
     return removed + cleared
 
 
-def rematch_results(db_path: Path, video_id: int | None = None) -> int:
+def rematch_results(
+    db_path: Path,
+    video_id: int | None = None,
+    *,
+    cross_video: bool = True,
+) -> int:
     """Ghép số điện thoại + username còn thiếu thành một hàng ngang.
 
     Chạy sau mỗi video và (tuỳ chọn) nền lúc worker khởi động.
     Tính cặp tên ngoài khóa; chỉ giữ BEGIN IMMEDIATE khi ghi từng lô ngắn —
     tránh nghẽn upload/claim khi còn hàng nghìn dòng thiếu.
+
+    cross_video=False: chỉ ghép trong từng video (an toàn cho rematch nền —
+    tránh O(phones×users) toàn DB chiếm CPU hàng giờ).
     """
     merged = 0
     merged += int(_with_immediate(db_path, lambda c: _promote_phone_username_reviews(c, video_id)))
@@ -893,13 +901,15 @@ def rematch_results(db_path: Path, video_id: int | None = None) -> int:
         pairs = _compute_merge_pairs(phones, users)
         merged += _apply_merge_pairs(db_path, pairs)
 
-    if video_id is None:
+    if video_id is None and cross_video:
         leftovers = _load_incomplete_results(db_path, None)
         phones = [row for row in leftovers if row["phone"] and not row["username"]]
         users = [row for row in leftovers if row["username"] and not row["phone"]]
         # Tính O(n×m) ngoài khóa — không được bọc IMMEDIATE.
-        pairs = _compute_merge_pairs(phones, users)
-        merged += _apply_merge_pairs(db_path, pairs)
+        # Chỉ chạy khi gọi tường minh (test / bảo trì); worker nền tắt cờ này.
+        if phones and users and len(phones) * len(users) <= 250_000:
+            pairs = _compute_merge_pairs(phones, users)
+            merged += _apply_merge_pairs(db_path, pairs)
         for vid in _rematch_video_ids(db_path, None):
             merged += int(_with_immediate(db_path, lambda c, v=vid: _absorb_ocr_phone_twins(c, v)))
 

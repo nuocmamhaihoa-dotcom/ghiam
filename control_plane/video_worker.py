@@ -75,7 +75,8 @@ def _restart_now(reason: str) -> None:
 def _rematch_process(path: str) -> None:
     """Tiến trình riêng: pair_close_names nặng không giữ GIL của feeder/OCR."""
     try:
-        joined = rematch_results(Path(path))
+        # Chỉ ghép trong từng video — không O(n×m) toàn DB (tránh chiếm 1 CPU hàng giờ).
+        joined = rematch_results(Path(path), cross_video=False)
         if joined:
             print(f"Đã ghép thêm {joined} hàng số + username từ kết quả cũ.", flush=True)
     except Exception as exc:
