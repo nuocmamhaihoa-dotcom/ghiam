@@ -26,6 +26,9 @@ control = [
   "python-multipart>=0.0.12",
   "httptools>=0.6.0",
 ]
+ocr = [
+  "tesserocr>=2.6.0",
+]
 
 [project.scripts]
 fb-poller = "fb_poller.cli.main:app"
