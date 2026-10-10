@@ -31,12 +31,14 @@ from control_plane.video_store import (
     rematch_results,
     requeue,
     requeue_running,
+    set_duration,
     set_progress,
     should_pause_ocr,
     stale_running,
     touch_heartbeat,
     worker_count,
 )
+from control_plane.video_validate import probe_duration_sec
 
 
 def heartbeat_path() -> Path:
@@ -103,6 +105,12 @@ def run_job(
     pulse = threading.Thread(target=_pulse, daemon=True)
     pulse.start()
     try:
+        try:
+            seconds = probe_duration_sec(path)
+            if seconds > 0:
+                set_duration(db_path, video_id, seconds)
+        except Exception as dur_exc:
+            print(f"duration video {video_id}: {dur_exc}", flush=True)
         device = str(job.get("device") or "")
         scan = functools.partial(
             scan_paths,

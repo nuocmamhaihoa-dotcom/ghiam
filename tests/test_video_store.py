@@ -32,6 +32,7 @@ from control_plane.video_store import (
     requeue_running,
     retry,
     search_results,
+    set_duration,
     set_progress,
     stale_running,
     stats,
@@ -213,6 +214,30 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(listed[0]["saved_count"], 2)
         self.assertEqual(listed[0]["result_count"], 2)
 
+    def test_results_newest_first_and_queue_issue_duration(self) -> None:
+        older = self._add("old.mp4", "old")
+        finish(self.db, older, Table(rows=[Row("0900000001", "A", "@aaa")]))
+        newer = self._add("new.mp4", "new")
+        finish(
+            self.db,
+            newer,
+            Table(
+                rows=[Row("0900000002", "B", "@bbb")],
+                review=[Review("0900000003", "C", "C", "", "thiếu @")],
+                unopened=[Unopened("0900000004", "D")],
+            ),
+        )
+        phones = [item["phone"] for item in search_results(self.db, limit=20, view="all")]
+        # finish chèn rows → unopened → review; id mới nhất lên đầu.
+        self.assertEqual(phones[0], "0900000003")
+        self.assertLess(phones.index("0900000002"), phones.index("0900000001"))
+        set_duration(self.db, newer, 125.4)
+        item = next(row for row in list_videos(self.db) if row["id"] == newer)
+        self.assertAlmostEqual(float(item["duration_sec"]), 125.4, places=1)
+        self.assertIn("chưa mở", str(item["issue"]))
+        good = next(row for row in list_videos(self.db) if row["id"] == older)
+        self.assertEqual(good["issue"], "Tất cả đều tốt — 1 đủ")
+
     def test_same_name_merge_joins_phone_and_username_rows(self) -> None:
         video_id = self._add("clip.mp4", "merge-handle")
         finish(
@@ -369,7 +394,7 @@ class VideoStoreTests(unittest.TestCase):
         video_id = self._add("clip.mp4", "a", device="iPhone 13")
         finish(self.db, video_id, Table(rows=[Row("0332001753", "khactam", "@khactam60")]))
         text = "".join(iter_backup(self.db))
-        self.assertIn("Số điện thoại,Tên,Username,Time quét,Tên máy,Video", text)
+        self.assertIn("Số điện thoại,Tên,Username,Thời gian quét,Tên máy,Video", text)
         self.assertNotIn(",Loại,", text)
         self.assertIn("0332001753,khactam,@khactam60,", text)
         self.assertIn(",iPhone 13,clip.mp4", text)

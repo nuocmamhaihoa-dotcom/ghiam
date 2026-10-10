@@ -51,7 +51,7 @@ from control_plane.video_upload_sessions import (
     receiving_count,
     upload_slots,
 )
-from control_plane.video_validate import validate_media_file
+from control_plane.video_validate import probe_duration_sec, validate_media_file
 
 router = APIRouter()
 _ALLOWED = VIDEO_SUFFIXES | IMAGE_SUFFIXES
@@ -182,8 +182,10 @@ async def upload_video(
         old_path = str(created.pop("old_path", "") or "")
         if old_path and old_path != str(final):
             Path(old_path).unlink(missing_ok=True)
-        await run_in_threadpool(commit_upload, settings.video_db_path, video_id, str(final))
+        duration = await run_in_threadpool(probe_duration_sec, final)
+        await run_in_threadpool(commit_upload, settings.video_db_path, video_id, str(final), duration)
         created["status"] = "queued"
+        created["duration_sec"] = duration
         return created
     except Exception:
         if created is not None and not created.get("duplicate"):

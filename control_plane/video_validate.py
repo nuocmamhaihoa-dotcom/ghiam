@@ -38,6 +38,46 @@ def validate_media_file(path: Path, *, original_name: str = "") -> None:
     _validate_video(path)
 
 
+def probe_duration_sec(path: Path) -> float:
+    """Độ dài video (giây) qua ffprobe. Ảnh hoặc lỗi → 0."""
+    path = Path(path)
+    if not path.is_file() or shutil.which("ffprobe") is None:
+        return 0.0
+    hint = path.suffix.lower()
+    if hint in IMAGE_SUFFIXES:
+        return 0.0
+    try:
+        done = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=180,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return 0.0
+    text = (done.stdout or "").strip().splitlines()
+    if done.returncode != 0 or not text:
+        return 0.0
+    try:
+        value = float(text[0])
+    except ValueError:
+        return 0.0
+    if value < 0 or value != value:  # NaN
+        return 0.0
+    return value
+
+
 def _validate_image(path: Path) -> None:
     try:
         from PIL import Image, ImageOps

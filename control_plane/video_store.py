@@ -194,7 +194,8 @@ def init_db(db_path: Path) -> None:
               finished_at TEXT,
               device TEXT NOT NULL DEFAULT '',
               progress TEXT NOT NULL DEFAULT '',
-              progress_at TEXT
+              progress_at TEXT,
+              duration_sec REAL NOT NULL DEFAULT 0
             );
             CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_sha ON videos(sha256);
             CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status, id);
@@ -246,6 +247,7 @@ def _ensure_video_columns(conn: sqlite3.Connection) -> None:
         ("device", "ALTER TABLE videos ADD COLUMN device TEXT NOT NULL DEFAULT ''"),
         ("progress", "ALTER TABLE videos ADD COLUMN progress TEXT NOT NULL DEFAULT ''"),
         ("progress_at", "ALTER TABLE videos ADD COLUMN progress_at TEXT"),
+        ("duration_sec", "ALTER TABLE videos ADD COLUMN duration_sec REAL NOT NULL DEFAULT 0"),
     ):
         if name in video_cols:
             continue
@@ -352,7 +354,7 @@ def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str, devi
                 UPDATE videos
                 SET name = ?, size_bytes = ?, path = '', status = 'uploading', error = '',
                     pid = NULL, started_at = NULL, finished_at = NULL, created_at = ?, device = ?,
-                    progress = '', progress_at = NULL
+                    progress = '', progress_at = NULL, duration_sec = 0
                 WHERE id = ?
                 """,
                 (name, size_bytes, utcnow(), machine, existing["id"]),
@@ -393,11 +395,30 @@ def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str, devi
         }
 
 
-def commit_upload(db_path: Path, video_id: int, path: str) -> None:
+def commit_upload(db_path: Path, video_id: int, path: str, duration_sec: float = 0.0) -> None:
+    seconds = float(duration_sec or 0.0)
+    if seconds < 0 or seconds != seconds:
+        seconds = 0.0
     with connect(db_path) as conn:
         conn.execute(
-            "UPDATE videos SET path = ?, status = 'queued' WHERE id = ? AND status = 'uploading'",
-            (path, video_id),
+            """
+            UPDATE videos
+            SET path = ?, status = 'queued', duration_sec = ?
+            WHERE id = ? AND status = 'uploading'
+            """,
+            (path, seconds, video_id),
+        )
+
+
+def set_duration(db_path: Path, video_id: int, duration_sec: float) -> None:
+    """Ghi độ dài video (giây) — dùng khi upload hoặc worker đo lại."""
+    seconds = float(duration_sec or 0.0)
+    if seconds <= 0 or seconds != seconds:
+        return
+    with connect(db_path) as conn:
+        conn.execute(
+            "UPDATE videos SET duration_sec = ? WHERE id = ? AND (duration_sec IS NULL OR duration_sec <= 0)",
+            (seconds, video_id),
         )
 
 
@@ -419,6 +440,7 @@ def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
             SELECT
               v.id, v.name, v.size_bytes, v.status, v.error, v.created_at, v.started_at, v.finished_at,
               v.device, v.progress, v.progress_at, v.path,
+              COALESCE(v.duration_sec, 0) AS duration_sec,
               COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id), 0) AS result_count,
               COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.bucket = 1), 0) AS saved_count,
               COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.bucket = 2), 0) AS review_count,
@@ -434,6 +456,11 @@ def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
         item = dict(row)
         path = str(item.pop("path", "") or "")
         item["file_kept"] = bool(path) and Path(path).exists()
+        try:
+            item["duration_sec"] = float(item.get("duration_sec") or 0)
+        except (TypeError, ValueError):
+            item["duration_sec"] = 0.0
+        item["issue"] = _video_issue(item)
         items.append(item)
     return items
 
@@ -983,7 +1010,7 @@ def search_results(
                     _RESULT_SELECT
                     + f"""
                     WHERE r.video_id IN ({marks}) AND {view_clause}
-                    ORDER BY r.id ASC
+                    ORDER BY r.id DESC
                     LIMIT ? OFFSET ?
                     """,
                     (*video_ids, limit, start),
@@ -1004,7 +1031,7 @@ def search_results(
                 _RESULT_SELECT
                 + f"""
                 WHERE {view_clause}
-                ORDER BY r.id ASC
+                ORDER BY r.id DESC
                 LIMIT ? OFFSET ?
                 """,
                 (limit, start),
@@ -1061,7 +1088,7 @@ def iter_backup(db_path: Path) -> Iterator[str]:
     conn.execute("PRAGMA query_only=ON;")
     conn.execute("BEGIN")
     try:
-        yield "Số điện thoại,Tên,Username,Time quét,Tên máy,Video\n"
+        yield "Số điện thoại,Tên,Username,Thời gian quét,Tên máy,Video\n"
         cursor = conn.execute(
             """
             SELECT
@@ -1070,7 +1097,7 @@ def iter_backup(db_path: Path) -> Iterator[str]:
               COALESCE(v.name, '') AS video
             FROM results r
             LEFT JOIN videos v ON v.id = r.video_id
-            ORDER BY r.id
+            ORDER BY r.id DESC
             """
         )
         for row in cursor:
@@ -1192,6 +1219,42 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
         """,
         (item.profile_name, item.username, BUCKET_REVIEW, item.reason, video_id, utcnow()),
     )
+
+
+def _video_issue(item: dict[str, object]) -> str:
+    """Mô tả vấn đề / trạng thái cụ thể cho cột hàng đợi (thay tên máy)."""
+    status = str(item.get("status") or "")
+    error = " ".join(str(item.get("error") or "").split())
+    if status == "error":
+        return error[:160] if error else "Lỗi khi đọc video"
+    if status == "uploading":
+        return "Đang tải lên"
+    if status == "queued":
+        return "Chờ đọc"
+    if status == "running":
+        progress = " ".join(str(item.get("progress") or "").split())
+        return progress[:160] if progress else "Đang đọc"
+    if status != "done":
+        return status or "—"
+
+    saved = int(item.get("saved_count") or 0)
+    review = int(item.get("review_count") or 0)
+    unopened = int(item.get("unopened_count") or 0)
+    total = saved + review + unopened
+    if total <= 0:
+        return "Không có dòng kết quả"
+    unopened_pct = round(100.0 * unopened / total)
+    if unopened_pct > 50:
+        return f"Cảnh báo: {unopened_pct}% chưa mở hồ sơ"
+    if unopened > 0 and review > 0:
+        return f"Còn {unopened} chưa mở · {review} cần xem"
+    if unopened > 0:
+        return f"Còn {unopened} chưa mở hồ sơ"
+    if review > 0 and saved > 0:
+        return f"Tốt — {saved} đủ, còn {review} cần xem"
+    if review > 0:
+        return f"Chỉ có hàng cần xem ({review})"
+    return f"Tất cả đều tốt — {saved} đủ"
 
 
 def _public_result(row: sqlite3.Row) -> dict[str, object]:

@@ -26,7 +26,7 @@ from control_plane.video_store import (
     queued_bytes,
     utcnow,
 )
-from control_plane.video_validate import validate_media_file
+from control_plane.video_validate import probe_duration_sec, validate_media_file
 
 DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024  # 4 MiB — ổn định trên Wi‑Fi iPhone
 MAX_CHUNK_SIZE = 16 * 1024 * 1024
@@ -396,8 +396,9 @@ def complete_upload(
     old_path = str(created.pop("old_path", "") or "")
     if old_path and old_path != str(final):
         Path(old_path).unlink(missing_ok=True)
+    duration = probe_duration_sec(final)
     try:
-        commit_upload(db_path, video_id, str(final))
+        commit_upload(db_path, video_id, str(final), duration)
     except Exception:
         abort_upload(db_path, video_id, bool(created.get("reopened")))
         final.unlink(missing_ok=True)
@@ -421,6 +422,7 @@ def complete_upload(
         "name": created["name"],
         "device": created.get("device") or "",
         "sha256": digest,
+        "duration_sec": duration,
         "reopened": bool(created.get("reopened")),
     }
 

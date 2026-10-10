@@ -37,13 +37,17 @@
     .stat.warn-stat { background: #fdecec; border: 1px solid #f0c2c2; }
     .stat.ok-stat { background: #eef7f1; border: 1px solid #b9dbc6; }
     .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    table { width: 100%; border-collapse: collapse; min-width: 640px; }
+    table { width: 100%; border-collapse: collapse; min-width: 560px; }
+    table.results-table { min-width: 420px; }
+    table.queue-table { min-width: 520px; }
     th, td {
       text-align: left; padding: 0.45rem 0.3rem; border-bottom: 1px solid var(--line);
       vertical-align: top; font-size: 0.95rem; word-break: break-word; overflow-wrap: anywhere;
     }
     th { color: var(--muted); font-weight: 650; }
-    td:nth-child(3) { white-space: nowrap; }
+    .results-table td:nth-child(3),
+    .results-table td:nth-child(4) { white-space: nowrap; }
+    .queue-table td:nth-child(1) { white-space: nowrap; font-variant-numeric: tabular-nums; }
     .note { color: var(--muted); margin-top: 0.55rem; }
     .warn { color: #8a2b2b; font-weight: 650; }
     .ok { color: #0d6b3a; }
@@ -261,7 +265,42 @@
     if (!value) return "";
     var date = new Date(value);
     if (isNaN(date.getTime())) return String(value);
-    return date.toLocaleString("vi-VN", { hour12: false });
+    var d = date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "2-digit" });
+    var t = date.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false });
+    return d + " " + t;
+  }
+
+  function formatDuration(seconds) {
+    var n = Number(seconds);
+    if (!isFinite(n) || n <= 0) return "—";
+    var total = Math.round(n);
+    var h = Math.floor(total / 3600);
+    var m = Math.floor((total % 3600) / 60);
+    var s = total % 60;
+    function pad(v) { return (v < 10 ? "0" : "") + v; }
+    if (h > 0) return h + ":" + pad(m) + ":" + pad(s);
+    return pad(m) + ":" + pad(s);
+  }
+
+  function issueText(item) {
+    if (item.issue) return String(item.issue);
+    if (item.status === "error") return item.error || "Lỗi khi đọc video";
+    if (item.status === "uploading") return "Đang tải lên";
+    if (item.status === "queued") return "Chờ đọc";
+    if (item.status === "running") return item.progress || "Đang đọc";
+    if (item.status !== "done") return item.status || "—";
+    var saved = item.saved_count || 0;
+    var review = item.review_count || 0;
+    var unopened = item.unopened_count || 0;
+    var total = saved + review + unopened;
+    if (!total) return "Không có dòng kết quả";
+    var unopenedPct = pct(unopened, total);
+    if (unopenedPct != null && unopenedPct > 50) return "Cảnh báo: " + unopenedPct + "% chưa mở hồ sơ";
+    if (unopened && review) return "Còn " + unopened + " chưa mở · " + review + " cần xem";
+    if (unopened) return "Còn " + unopened + " chưa mở hồ sơ";
+    if (review && saved) return "Tốt — " + saved + " đủ, còn " + review + " cần xem";
+    if (review) return "Chỉ có hàng cần xem (" + review + ")";
+    return "Tất cả đều tốt — " + saved + " đủ";
   }
 
   function renderOpenBanner(saved, review, unopened) {
@@ -346,9 +385,8 @@
       box.innerHTML = "<p class='note'>Chưa có video.</p>";
       return;
     }
-    var html = "<table><tr><th>Video</th><th>Máy quét</th><th>Trạng thái</th><th>Kết quả</th></tr>";
+    var html = "<table class='queue-table'><tr><th>Độ dài</th><th>Vấn đề / Trạng thái</th><th>Tiến độ</th><th>Kết quả</th></tr>";
     items.forEach(function (item) {
-      var extra = item.error ? "<div class='warn'>" + escapeHtml(item.error) + "</div>" : "";
       var canRetry = item.file_kept && (item.status === "error" || item.status === "done");
       var retry = canRetry ? " <button class='ghost' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
       var keptNote = "";
@@ -361,6 +399,10 @@
       if (item.status === "running" && item.progress) {
         progress = "<div class='note'>" + escapeHtml(item.progress) + "</div>";
       }
+      var issue = issueText(item);
+      var issueClass = (item.status === "error" || (issue.indexOf("Cảnh báo") === 0) || issue.indexOf("Lỗi") === 0)
+        ? "warn"
+        : (issue.indexOf("Tất cả đều tốt") === 0 || issue.indexOf("Tốt —") === 0 ? "ok" : "");
       var resultText = "—";
       if (item.status === "done") {
         var saved = item.saved_count || 0;
@@ -381,7 +423,7 @@
         }
         resultText += " <button class='ghost' type='button' data-filter='" + escapeHtml(item.name) + "'>Xem</button>";
       }
-      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + escapeHtml(item.device || "") + "</td><td>" + statusText(item.status) + progress + keptNote + retry + "</td><td>" + resultText + "</td></tr>";
+      html += "<tr><td title='" + escapeHtml(item.name || "") + "'>" + escapeHtml(formatDuration(item.duration_sec)) + "</td><td class='" + issueClass + "'>" + escapeHtml(issue) + "</td><td>" + statusText(item.status) + progress + keptNote + retry + "</td><td>" + resultText + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-retry]").forEach(function (button) {
@@ -411,9 +453,9 @@
   }
 
   function renderResultTable(items) {
-    var html = "<table><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Time quét</th><th>Tên máy</th><th>Video</th></tr>";
+    var html = "<table class='results-table'><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Thời gian quét</th></tr>";
     items.forEach(function (item) {
-      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(formatTime(item.scanned_at)) + "</td><td>" + escapeHtml(item.device) + "</td><td>" + escapeHtml(item.video) + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(formatTime(item.scanned_at)) + "</td></tr>";
     });
     return html + "</table>";
   }

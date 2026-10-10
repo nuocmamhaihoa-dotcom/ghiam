@@ -8,9 +8,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from control_plane.video_store import init_db, stats
+from control_plane.video_store import init_db, list_videos, stats
 from control_plane.video_upload_sessions import complete_upload, init_upload, put_chunk
-from control_plane.video_validate import validate_media_file
+from control_plane.video_validate import probe_duration_sec, validate_media_file
 
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "cần ffmpeg+ffprobe")
@@ -103,6 +103,12 @@ class VideoValidateTests(unittest.TestCase):
         done = complete_upload(self.db, self.videos, upload_id, disk_limit_bytes=self.limit)
         self.assertEqual(done["status"], "queued")
         self.assertEqual(stats(self.db)["queued"], 1)
+        duration = probe_duration_sec(path)
+        self.assertGreater(duration, 0.2)
+        self.assertGreater(float(done.get("duration_sec") or 0), 0.2)
+        listed = list_videos(self.db)
+        self.assertAlmostEqual(float(listed[0]["duration_sec"]), duration, places=1)
+        self.assertEqual(listed[0]["issue"], "Chờ đọc")
 
 
 if __name__ == "__main__":
