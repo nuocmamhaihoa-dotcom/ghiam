@@ -425,7 +425,13 @@ def plan_video(path: Path, fps: float = SCAN_FPS, on_progress: Progress | None =
         error = errors.read(8192).decode("utf-8", "replace")
     if code != 0 and planner.count == 0:
         detail = error.strip().splitlines()[0] if error.strip() else ""
-        message = "Không mở được video: file hỏng, chưa tải xong, hoặc không phải video."
+        if "moov atom not found" in error.lower():
+            message = (
+                "File MP4/MOV thiếu moov (thường tải dở hoặc không phải video). "
+                "Không đọc được — hãy tải lại bằng cắt khúc/VideoUp đến khi xong."
+            )
+        else:
+            message = "Không mở được video: file hỏng, chưa tải xong, hoặc không phải video."
         raise RuntimeError(f"{message} ({detail})" if detail else message)
     plan = planner.finish()
     if plan.count == 0:

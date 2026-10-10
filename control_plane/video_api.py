@@ -51,6 +51,7 @@ from control_plane.video_upload_sessions import (
     receiving_count,
     upload_slots,
 )
+from control_plane.video_validate import validate_media_file
 
 router = APIRouter()
 _ALLOWED = VIDEO_SUFFIXES | IMAGE_SUFFIXES
@@ -156,6 +157,10 @@ async def upload_video(
                 if size > limit:
                     raise HTTPException(status_code=413, detail="Video quá lớn.")
                 await run_in_threadpool(_write_chunk, handle, hasher, chunk)
+        try:
+            await run_in_threadpool(validate_media_file, tmp)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         free = shutil.disk_usage(settings.video_dir).free
         used = await run_in_threadpool(queued_bytes, settings.video_db_path)
         if not can_accept(used, size, _limit_bytes(), free):

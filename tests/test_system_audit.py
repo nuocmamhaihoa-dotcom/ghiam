@@ -105,7 +105,30 @@ class SystemAuditTests(unittest.TestCase):
         self.assertNotIn(",Loại,", text)
 
     def test_chunked_upload_resume_and_queue(self) -> None:
-        payload = b"video-bytes-" * 3000
+        import shutil
+        import subprocess
+
+        if not (shutil.which("ffmpeg") and shutil.which("ffprobe")):
+            self.skipTest("cần ffmpeg+ffprobe")
+        raw = Path(self._tmp.name) / "many.mp4"
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=green:s=80x80:d=0.4",
+                "-an",
+                "-y",
+                str(raw),
+            ],
+            check=True,
+            timeout=30,
+        )
+        payload = raw.read_bytes()
         chunk = 16 * 1024
         init = self.client.post(
             "/v1/videos/uploads",
@@ -146,7 +169,7 @@ class SystemAuditTests(unittest.TestCase):
         put0 = self.client.put(
             f"/v1/videos/uploads/{upload_id}/chunks/0",
             headers={**self._auth(), "Content-Type": "application/octet-stream"},
-            content=payload[:chunk],
+            content=payload[: min(chunk, len(payload))],
         )
         self.assertEqual(put0.status_code, 200, put0.text)
         done = self.client.post(f"/v1/videos/uploads/{upload_id}/complete", headers=self._auth())

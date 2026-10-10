@@ -26,6 +26,7 @@ from control_plane.video_store import (
     queued_bytes,
     utcnow,
 )
+from control_plane.video_validate import validate_media_file
 
 DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024  # 4 MiB — ổn định trên Wi‑Fi iPhone
 MAX_CHUNK_SIZE = 16 * 1024 * 1024
@@ -332,6 +333,15 @@ def complete_upload(
     path = Path(str(row["path"]))
     if not path.exists() or path.stat().st_size != size_bytes:
         raise ValueError("File partial không đủ kích thước.")
+
+    # Chặn file giả / tải dở (moov atom not found) trước khi vào hàng OCR.
+    try:
+        validate_media_file(path, original_name=str(row["name"]))
+    except ValueError:
+        path.unlink(missing_ok=True)
+        with connect(db_path) as conn:
+            conn.execute("DELETE FROM upload_sessions WHERE id = ?", (upload_id,))
+        raise
 
     hasher = hashlib.sha256()
     with path.open("rb") as handle:
