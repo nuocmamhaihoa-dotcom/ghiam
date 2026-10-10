@@ -23,6 +23,7 @@ import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
 from control_plane.ocr_backend import resolve_ocr_engine, system_tessdata, tesserocr_available
+from control_plane.screen_layout import LayoutProfile
 from control_plane.screen_table import (
     ContactHit,
     FrameObs,
@@ -149,16 +150,24 @@ def _ocr_temp_root() -> str | None:
     return None
 
 
-def read_image(path: str | Path) -> FrameObs:
+def read_image(path: str | Path, layout: dict[str, object] | LayoutProfile | None = None) -> FrameObs:
     image = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
-    return read_pillow(image)
+    return read_pillow(image, layout=layout)
 
 
-def read_pillow(image: Image.Image) -> FrameObs:
+def read_pillow(
+    image: Image.Image,
+    layout: dict[str, object] | LayoutProfile | None = None,
+) -> FrameObs:
     _require_tesseract()
+    profile_layout = (
+        layout
+        if isinstance(layout, LayoutProfile)
+        else LayoutProfile.from_dict(layout if isinstance(layout, dict) else None)
+    )
     width, height = image.size
     buttons = _pink_boxes(image)
-    listed = _list_buttons(buttons, width)
+    listed = _list_buttons(buttons, width, layout=profile_layout)
     if len(listed) >= 3:
         anchor_x, anchor_w = _column_anchor(listed)
         strips = [_row_strip(image, button, anchor_x, anchor_w) for button in listed]
@@ -173,13 +182,16 @@ def read_pillow(image: Image.Image) -> FrameObs:
         if username:
             return FrameObs("profile", (), name, username)
     # P2: không thấy / không đọc được nút Follow — vẫn săn @ ở vùng đầu trang hồ sơ.
-    name, username = _hunt_profile_handle(image)
+    name, username = _hunt_profile_handle(image, layout=profile_layout)
     if username:
         return FrameObs("profile", (), name, username)
     return FrameObs("unknown")
 
 
-def _hunt_profile_handle(image: Image.Image) -> tuple[str, str]:
+def _hunt_profile_handle(
+    image: Image.Image,
+    layout: LayoutProfile | None = None,
+) -> tuple[str, str]:
     """Đọc @username khi layout hồ sơ không nhận ra nút Follow hồng.
 
     Chỉ lấy vùng trên màn hình (header hồ sơ). Cần handle hợp lệ (≥3 ký tự sau @).
@@ -187,12 +199,16 @@ def _hunt_profile_handle(image: Image.Image) -> tuple[str, str]:
     width, height = image.size
     if width < 80 or height < 80:
         return "", ""
-    header = Box(
-        max(0, int(0.04 * width)),
-        max(0, int(0.06 * height)),
-        min(width, int(0.82 * width)),
-        min(height, int(0.48 * height)),
-    )
+    if layout is not None and layout.samples >= 0:
+        x0, y0, x1, y1 = layout.header_box(width, height)
+    else:
+        x0, y0, x1, y1 = (
+            max(0, int(0.04 * width)),
+            max(0, int(0.06 * height)),
+            min(width, int(0.82 * width)),
+            min(height, int(0.48 * height)),
+        )
+    header = Box(x0, y0, x1, y1)
     if header.w < 40 or header.h < 40:
         return "", ""
     raw = image.crop((header.x0, header.y0, header.x1, header.y1))
@@ -321,8 +337,16 @@ def _pink_boxes(image: Image.Image) -> list[Box]:
     ]
 
 
-def _list_buttons(boxes: list[Box], width: int) -> list[Box]:
+def _list_buttons(
+    boxes: list[Box],
+    width: int,
+    layout: LayoutProfile | None = None,
+) -> list[Box]:
     candidates = []
+    # B2/B3: nếu đã biết cột Follow của máy, nới mép trái chọn ứng viên quanh đó.
+    min_x = 0.58 * width
+    if layout is not None and layout.samples > 0:
+        min_x = max(0.50 * width, (layout.follow_x0 - 0.08) * width)
     for box in boxes:
         if box.w <= 0 or box.h <= 0:
             continue
@@ -331,12 +355,16 @@ def _list_buttons(boxes: list[Box], width: int) -> list[Box]:
             continue
         if not 0.08 * width <= box.w <= 0.25 * width:
             continue
-        if box.x0 <= 0.58 * width:
+        if box.x0 <= min_x:
             continue
         candidates.append(box)
     if len(candidates) < 3:
         return []
-    anchor = sorted(box.x0 for box in candidates)[len(candidates) // 2]
+    if layout is not None and layout.samples > 0:
+        expect = layout.follow_x0 * width
+        anchor = min(candidates, key=lambda box: abs(box.x0 - expect)).x0
+    else:
+        anchor = sorted(box.x0 for box in candidates)[len(candidates) // 2]
     column = [box for box in candidates if abs(box.x0 - anchor) <= max(24, int(0.04 * width))]
     column.sort(key=lambda box: box.y0)
     kept: list[Box] = []

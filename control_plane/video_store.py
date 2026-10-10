@@ -370,7 +370,8 @@ def claim(db_path: Path, pid: int) -> dict[str, object] | None:
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
-            "SELECT id, name, path FROM videos WHERE status = 'queued' AND path != '' ORDER BY id LIMIT 1"
+            "SELECT id, name, path, COALESCE(device, '') AS device "
+            "FROM videos WHERE status = 'queued' AND path != '' ORDER BY id LIMIT 1"
         ).fetchone()
         if row is None:
             conn.execute("COMMIT")
@@ -388,7 +389,12 @@ def claim(db_path: Path, pid: int) -> dict[str, object] | None:
         conn.execute("COMMIT")
         if cur.rowcount != 1:
             return None
-        return {"id": int(row["id"]), "name": row["name"], "path": row["path"]}
+        return {
+            "id": int(row["id"]),
+            "name": row["name"],
+            "path": row["path"],
+            "device": row["device"] or "",
+        }
 
 
 def set_progress(db_path: Path, video_id: int, message: str) -> None:

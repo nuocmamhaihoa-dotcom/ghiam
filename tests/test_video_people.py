@@ -395,7 +395,7 @@ class SampleFrameTests(unittest.TestCase):
 class StableFrameTests(unittest.TestCase):
     def test_brief_exit_ocr_is_narrower_than_tap_window(self) -> None:
         # Giữ đủ khung sát lúc thoát hồ sơ, không OCR cả cửa sổ tap khi cuộn liên tục.
-        self.assertEqual(TAP_WINDOW, 5)
+        self.assertEqual(TAP_WINDOW, 7)
         self.assertEqual(BRIEF_EXIT_READS, 3)
         self.assertLess(BRIEF_EXIT_READS, TAP_WINDOW)
 
@@ -415,8 +415,9 @@ class StableFrameTests(unittest.TestCase):
             planner.push(thumb)
         plan = planner.finish()
         self.assertEqual(plan.reads, [0, 12])
-        self.assertEqual(plan.taps, [[5, 6, 7, 8, 9]])
+        self.assertEqual(plan.taps, [[3, 4, 5, 6, 7, 8, 9]])
         self.assertEqual(plan.count, 22)
+        self.assertTrue(plan.transitions)
 
     def test_planner_keeps_a_short_pause_as_a_probe_even_without_a_still_read(self) -> None:
         planner = _Planner()

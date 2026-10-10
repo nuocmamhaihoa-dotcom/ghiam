@@ -1,10 +1,8 @@
 """Đọc video hoặc ảnh chụp màn hình danh bạ, xuất bảng số điện thoại, tên, username.
 
-Lượt một quét ảnh xám rất nhỏ, 20 khung mỗi giây, để biết lúc nào màn hình
-đứng yên và lúc nào bắt đầu chuyển. Lượt hai chỉ giải nén đầy đủ các khung
-cần đọc: một khung cho mỗi cảnh đứng yên, và vài khung ngay trước mỗi lần
-chuyển màn hình để tìm dòng vừa bấm. Ghép bằng tên; nếu video vừa bấm một
-dòng rồi mở hồ sơ thì ghép theo lần bấm đó.
+Lượt một quét ảnh xám nhỏ @30fps (A1), biết lúc đứng yên / chuyển cảnh.
+Quanh chuyển cảnh tách thêm burst @60fps (A3) để không bỏ hồ sơ mở rất ngắn.
+Chỉ lấy luồng hình — không phân tích audio. ROI theo máy (B2) + calibrate đầu video (B3).
 """
 
 from __future__ import annotations
@@ -26,6 +24,13 @@ from pathlib import Path
 
 import numpy as np
 
+from control_plane.screen_layout import (
+    LayoutProfile,
+    calibrate_from_paths,
+    load_layout,
+    merge_layout,
+    save_layout,
+)
 from control_plane.screen_read import read_image, read_tap
 from control_plane.screen_table import FrameObs, Table, build_table
 
@@ -34,11 +39,13 @@ Progress = Callable[[str], None]
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mkv", ".avi", ".webm"}
 
-# 20fps: hồ sơ mở ~0.1s còn ~2 khung; spike 1 khung ~50ms vẫn bắt được.
-SCAN_FPS = 20.0
+# A1: 30fps xem trước. A3: burst 60fps ±0.12s quanh chuyển cảnh.
+SCAN_FPS = 30.0
+BURST_FPS = 60.0
+BURST_RADIUS_SEC = 0.12
 THUMB_W = 48
 THUMB_H = 104
-# ~0.05–0.1s @20fps: hai khung liên tiếp giống nhau là đủ đưa vào hàng đọc.
+# ~0.03–0.07s @30fps: hai khung liên tiếp giống nhau là đủ đưa vào hàng đọc.
 SETTLE_LAG = 1
 SETTLED = 3.5
 # Hai hồ sơ khác nhau gần như cùng một màn hình trắng, nên ngưỡng "đã đổi cảnh" phải rất thấp.
@@ -46,9 +53,9 @@ CHANGED = 1.2
 MOVING = 2.5
 # Hồ sơ vs danh bạ lệch rất mạnh; ngưỡng hơi thấp hơn để bắt flash nhạt / chuyển cảnh mờ.
 FLASH_CHANGED = 9.0
-# ~0.25s trước chuyển cảnh — đủ tìm chấm bấm; không phình OCR.
-TAP_WINDOW = 5
-# Chỉ OCR vài khung sát lúc thoát (hồ sơ ngắn). Cả TAP_WINDOW từng làm đọc gần như mọi khung khi cuộn.
+# ~0.23s trước chuyển cảnh @30fps.
+TAP_WINDOW = 7
+# Chỉ OCR vài khung sát lúc thoát (hồ sơ ngắn).
 BRIEF_EXIT_READS = 3
 
 Submit = Callable[..., Future]
@@ -60,6 +67,8 @@ class VideoPlan:
 
     reads: list[int] = field(default_factory=list)
     taps: list[list[int]] = field(default_factory=list)
+    # Thời điểm chuyển cảnh (số khung @SCAN_FPS) — dùng cho burst 60fps.
+    transitions: list[int] = field(default_factory=list)
     count: int = 0
 
     def needed(self) -> list[int]:
@@ -68,14 +77,21 @@ class VideoPlan:
             frames.update(window)
         return sorted(frames)
 
+    def transition_times(self, fps: float = SCAN_FPS) -> list[float]:
+        times = {number / fps for number in self.transitions}
+        for window in self.taps:
+            if window:
+                times.add(window[-1] / fps)
+        return sorted(times)
+
 
 # Một khung hỏng hoặc một lần đọc chữ quá hạn chỉ làm mất khung đó, không làm hỏng cả video.
 _FRAME_ERRORS = (OSError, ValueError, subprocess.SubprocessError)
 
 
-def read_frame_at(path: str, at: float) -> FrameObs:
+def read_frame_at(path: str, at: float, layout: dict[str, object] | None = None) -> FrameObs:
     try:
-        return dataclasses.replace(read_image(path), at=at)
+        return dataclasses.replace(read_image(path, layout=layout), at=at)
     except _FRAME_ERRORS as exc:
         print(f"Bỏ khung {Path(path).name}: {exc}", flush=True)
         return FrameObs("unknown", at=at)
@@ -89,12 +105,24 @@ def read_tap_at(paths: list[str], at: float) -> FrameObs:
         return FrameObs("unknown", at=at)
 
 
+def burst_frame_numbers(times: list[float], burst_fps: float = BURST_FPS, radius: float = BURST_RADIUS_SEC) -> list[int]:
+    """A3: các số khung @burst_fps quanh mỗi thời điểm chuyển cảnh."""
+    picks: set[int] = set()
+    for moment in times:
+        start = max(0, int((moment - radius) * burst_fps))
+        end = int((moment + radius) * burst_fps)
+        picks.update(range(start, end + 1))
+    return sorted(picks)
+
+
 def scan_paths(
     paths: list[Path],
     fps: float = SCAN_FPS,
     submit: Submit | None = None,
     work_dir: Path | None = None,
     on_progress: Progress | None = None,
+    device: str = "",
+    data_dir: Path | None = None,
 ) -> tuple[Table, list[tuple[Path, FrameObs]]]:
     """Đọc ảnh và video theo thứ tự. submit là executor.submit để đọc nhiều khung cùng lúc."""
     for path in paths:
@@ -103,6 +131,8 @@ def scan_paths(
             raise RuntimeError(f"Không đọc được {path.name}. Dùng ảnh hoặc video.")
 
     temps: list[tempfile.TemporaryDirectory[str]] = []
+    layout = load_layout(data_dir, device) if data_dir is not None else LayoutProfile(device=device or "default")
+    layout_dict = layout.to_dict()
     try:
         image_paths = [(index, path) for index, path in enumerate(paths) if path.suffix.lower() in IMAGE_SUFFIXES]
         image_hits: dict[int, FrameObs] = {}
@@ -111,20 +141,39 @@ def scan_paths(
                 on_progress(f"Đang đọc {len(image_paths)} ảnh")
             if submit is None:
                 for index, path in image_paths:
-                    image_hits[index] = read_image(path)
+                    image_hits[index] = read_image(path, layout=layout_dict)
             else:
-                futures = [(index, path, submit(read_image, str(path))) for index, path in image_paths]
+                futures = [
+                    (index, path, submit(read_image, str(path), layout_dict)) for index, path in image_paths
+                ]
                 for index, path, future in futures:
                     image_hits[index] = future.result()
 
         ordered: list[tuple[Path, FrameObs]] = []
+        learned: LayoutProfile | None = None
         for index, path in enumerate(paths):
             if path.suffix.lower() in IMAGE_SUFFIXES:
                 ordered.append((path, image_hits[index]))
                 continue
             folder = tempfile.TemporaryDirectory(prefix="danhba-frames-", dir=work_dir)
             temps.append(folder)
-            ordered.extend(_scan_video(path, Path(folder.name), fps, submit, on_progress))
+            chunk, learned = _scan_video(
+                path,
+                Path(folder.name),
+                fps,
+                submit,
+                on_progress,
+                device=device,
+                data_dir=data_dir,
+                layout=layout,
+            )
+            ordered.extend(chunk)
+        if data_dir is not None and learned is not None and learned.samples > 0:
+            merged = merge_layout(layout, learned, weight=0.45)
+            merged.device = device or layout.device or "default"
+            save_layout(data_dir, merged)
+            if on_progress is not None:
+                on_progress(f"Đã lưu bố cục máy «{merged.device}» ({merged.samples} mẫu)")
         return build_table([obs for _, obs in ordered]), ordered
     finally:
         for folder in temps:
@@ -137,31 +186,92 @@ def _scan_video(
     fps: float,
     submit: Submit | None,
     on_progress: Progress | None = None,
-) -> list[tuple[Path, FrameObs]]:
+    device: str = "",
+    data_dir: Path | None = None,
+    layout: LayoutProfile | None = None,
+) -> tuple[list[tuple[Path, FrameObs]], LayoutProfile | None]:
     if on_progress is not None:
-        on_progress(f"Đang xem trước {path.name}")
+        on_progress(f"Đang xem trước {path.name} @ {fps:.0f}fps")
     plan = plan_video(path, fps, on_progress=on_progress)
     needed = plan.needed()
     if on_progress is not None:
         on_progress(f"Đang tách {len(needed)} khung từ {path.name}")
     files = extract_frames(path, folder, needed, fps, on_progress=on_progress)
+
+    # B3: calibrate ROI từ vài khung đầu (đo nút hồng, không OCR chữ).
+    base = layout or LayoutProfile(device=device or "default")
+    cal_paths = [files[number] for number in plan.reads[:24] if number in files]
+    measured = calibrate_from_paths(cal_paths)
+    locked = merge_layout(base, measured, weight=0.75) if measured is not None else base
+    locked.device = device or base.device or "default"
+    if measured is not None and on_progress is not None:
+        on_progress(f"Đã khóa bố cục đầu video («{locked.device}»)")
+    layout_dict = locked.to_dict()
+
+    # A3: burst 60fps quanh chuyển cảnh — bỏ khung trùng thời điểm đã có @30fps.
+    burst_files: dict[int, Path] = {}
+    times = plan.transition_times(fps)
+    burst_numbers = burst_frame_numbers(times)
+    if burst_numbers:
+        existing_times = {number / fps for number in needed}
+        filtered = [
+            number
+            for number in burst_numbers
+            if not any(abs(number / BURST_FPS - moment) < (0.5 / fps) for moment in existing_times)
+        ]
+        if filtered:
+            if on_progress is not None:
+                on_progress(f"Đang tách burst {len(filtered)} khung @ {BURST_FPS:.0f}fps")
+            burst_files = extract_frames(
+                path,
+                folder,
+                filtered,
+                BURST_FPS,
+                on_progress=on_progress,
+                prefix="b",
+            )
+
     jobs: list[tuple[float, int, Path, Callable[..., FrameObs], tuple]] = []
     read_numbers = set(plan.reads)
     for number in plan.reads:
-        jobs.append((number / fps, 0, files[number], read_frame_at, (str(files[number]), number / fps)))
+        jobs.append(
+            (
+                number / fps,
+                0,
+                files[number],
+                read_frame_at,
+                (str(files[number]), number / fps, layout_dict),
+            )
+        )
     for window in plan.taps:
         last = window[-1]
         paths = [str(files[number]) for number in window]
         jobs.append((last / fps, 1, files[last], read_tap_at, (paths, last / fps)))
-        # Thoát hồ sơ nhanh: cửa sổ "trước chuyển cảnh" chứa khung hồ sơ — OCR thường, không chỉ tìm chấm bấm.
         for number in window[-BRIEF_EXIT_READS:]:
             if number in read_numbers:
                 continue
             read_numbers.add(number)
-            jobs.append((number / fps, 0, files[number], read_frame_at, (str(files[number]), number / fps)))
+            jobs.append(
+                (
+                    number / fps,
+                    0,
+                    files[number],
+                    read_frame_at,
+                    (str(files[number]), number / fps, layout_dict),
+                )
+            )
+    for number, burst_path in burst_files.items():
+        jobs.append(
+            (
+                number / BURST_FPS,
+                0,
+                burst_path,
+                read_frame_at,
+                (str(burst_path), number / BURST_FPS, layout_dict),
+            )
+        )
     jobs.sort(key=lambda job: (job[0], job[1]))
     total = len(jobs)
-    # Cập nhật ít nhất mỗi 10 giây tường — video 10k+ khung không được im 10 phút rồi bị watchdog restart.
     progress_every_sec = 10.0
     step = max(1, min(100, total // 50)) if total else 1
     if on_progress is not None:
@@ -178,7 +288,6 @@ def _scan_video(
                 on_progress(f"Đang đọc chữ {index}/{total} khung")
                 last_beat = now
     else:
-        # Đọc theo lô — tránh nộp cả 10k+ future một lúc; dễ treo khi pool recycle worker.
         batch_size = 500
         results = [FrameObs("unknown")] * total
         done = 0
@@ -201,7 +310,8 @@ def _scan_video(
                         last_beat = now
         except BaseException:
             raise
-    return [(job[2], obs) for job, obs in zip(jobs, results)]
+    learned = measured if measured is not None else None
+    return [(job[2], obs) for job, obs in zip(jobs, results)], learned
 
 
 def plan_video(path: Path, fps: float = SCAN_FPS, on_progress: Progress | None = None) -> VideoPlan:
@@ -294,6 +404,7 @@ class _Planner:
             if moving and not self.was_moving:
                 self._tap_window(prev_number)
                 self._keep_brief_scene(prev_number)
+                self.plan.transitions.append(prev_number)
                 self.spike_kept = False
             if not moving and self.was_moving:
                 self.spike_kept = False
@@ -349,6 +460,7 @@ class _Planner:
         if self.last_kept is not None and _mean_abs(mid, self.last_kept) < FLASH_CHANGED:
             return
         self._force_read(mid_number, mid)
+        self.plan.transitions.append(mid_number)
         # Khung trước/sau flash đôi khi rõ @ hơn khung giữa (đang chuyển cảnh).
         by_number = {number: frame for number, frame in self.history}
         by_number[mid_number] = mid
@@ -381,24 +493,26 @@ def extract_frames(
     numbers: list[int],
     fps: float = SCAN_FPS,
     on_progress: Progress | None = None,
+    prefix: str = "f",
 ) -> dict[int, Path]:
-    """Lượt hai: chỉ ghi ra đĩa các khung đã chọn, đủ độ phân giải."""
+    """Lượt hai: chỉ ghi ra đĩa các khung đã chọn, đủ độ phân giải. Chỉ luồng hình."""
     _require_ffmpeg(path)
     if not numbers:
         return {}
-    script = folder / "select.txt"
+    script = folder / f"select_{prefix}.txt"
     picks = "+".join(f"eq(n,{number})" for number in numbers)
     script.write_text(f"fps={fps},select='{picks}'", encoding="utf-8")
-    pattern = folder / "f_%06d.jpg"
+    pattern = folder / f"{prefix}_%06d.jpg"
     stop = threading.Event()
     watcher: threading.Thread | None = None
     if on_progress is not None:
         expected = len(numbers)
+        glob_pat = f"{prefix}_*.jpg"
 
         def _watch() -> None:
             while not stop.wait(5.0):
                 try:
-                    written = sum(1 for _ in folder.glob("f_*.jpg"))
+                    written = sum(1 for _ in folder.glob(glob_pat))
                     on_progress(f"Đang tách khung {written}/{expected}")
                 except Exception as exc:
                     print(f"Theo dõi tách khung: {exc}", flush=True)
@@ -441,7 +555,7 @@ def extract_frames(
             watcher.join(timeout=1.0)
     if done.returncode != 0:
         raise RuntimeError(done.stderr.strip() or f"ffmpeg không đọc được {path.name}.")
-    written = sorted(folder.glob("f_*.jpg"))
+    written = sorted(folder.glob(f"{prefix}_*.jpg"))
     if len(written) < len(numbers):
         raise RuntimeError(f"Video {path.name} chỉ ra {len(written)}/{len(numbers)} khung cần đọc.")
     if on_progress is not None:

@@ -100,11 +100,14 @@ def run_job(
     pulse = threading.Thread(target=_pulse, daemon=True)
     pulse.start()
     try:
+        device = str(job.get("device") or "")
         scan = functools.partial(
             scan_paths,
             submit=pool.submit,
             work_dir=work_dir,
             on_progress=on_progress,
+            device=device,
+            data_dir=settings.data_dir,
         )
         table, frames = scan([path])
         finish(db_path, video_id, table)
