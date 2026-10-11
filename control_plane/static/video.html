@@ -110,7 +110,7 @@
         <li><b>Rồi mới thoát</b> về danh bạ — không chạm mở rồi back ngay lúc chữ còn đang nhòe.</li>
         <li>Làm lần lượt <b>từng người</b> cần lấy, rồi tải video lên đây.</li>
       </ol>
-      <p class="tiny">Máy chủ quét 30 khung/giây và tăng dày 60 khung/giây quanh lúc mở/đóng hồ sơ; học bố cục theo từng máy. Chỉ lướt danh bạ (không mở hồ sơ) thì chỉ có số/tên ở mục <b>Chưa mở hồ sơ</b>.</p>
+      <p class="tiny">Máy chủ quét 30 khung/giây và tăng dày 60 khung/giây quanh lúc mở/đóng hồ sơ; học bố cục theo từng máy. Chỉ lướt danh bạ (không mở hồ sơ) thì số nằm ở <b>Cần xem</b>: có số và tên, chưa có @.</p>
       <p class="danger">Danh bạ không hiện @. Không mở hồ sơ = máy chủ không thể tự tạo @.</p>
     </div>
     <div class="checklist" id="checklist">
@@ -137,6 +137,7 @@
 
   <section>
     <h2>Hàng đợi</h2>
+    <p class="note"><b>Đủ</b> = một hàng đã có đủ Số + Tên + @. <b>Cần xem</b> = số có trong danh bạ nhưng hàng đó thiếu Tên hoặc @. <b>Lỗi quét</b> = không thành một hàng: mở hồ sơ mà không thấy số, trùng tên không ghép được, hoặc một số mở nhiều hồ sơ.</p>
     <div id="queue" class="table-wrap"></div>
   </section>
 
@@ -343,16 +344,14 @@
     if (item.status !== "done") return item.status || "—";
     var saved = item.saved_count || 0;
     var review = item.review_count || 0;
-    var unopened = item.unopened_count || 0;
-    var total = saved + review + unopened;
+    var scanErrors = item.unopened_count || 0;
+    var total = saved + review + scanErrors;
     if (!total) return "Không có dòng kết quả";
-    var unopenedPct = pct(unopened, total);
-    if (unopenedPct != null && unopenedPct > 50) return "Cảnh báo: " + unopenedPct + "% chưa mở hồ sơ";
-    if (unopened && review) return "Còn " + unopened + " chưa mở · " + review + " cần xem";
-    if (unopened) return "Còn " + unopened + " chưa mở hồ sơ";
-    if (review && saved) return "Tốt — " + saved + " đủ, còn " + review + " cần xem";
-    if (review) return "Chỉ có hàng cần xem (" + review + ")";
-    return "Tất cả đều tốt — " + saved + " đủ";
+    if (saved === total) return "Tất cả đều tốt — " + saved + " đủ";
+    var parts = [saved + " đủ"];
+    if (review) parts.push(review + " cần xem (có số, thiếu tên hoặc @)");
+    if (scanErrors) parts.push(scanErrors + " lỗi quét");
+    return parts.join(" · ");
   }
 
   function renderOpenBanner(saved, review, unopened) {
@@ -363,19 +362,11 @@
       banner.textContent = "";
       return;
     }
-    var opened = saved + review;
-    var openedPct = pct(opened, total);
-    var unopenedPct = pct(unopened, total);
-    if (unopenedPct != null && unopenedPct > 50) {
-      banner.className = "banner warn-banner";
-      banner.textContent = "Cảnh báo: " + unopenedPct + "% dòng là «Chưa mở hồ sơ» (" +
-        unopened + "/" + total + "). Nguyên nhân thường gặp: chỉ lướt danh bạ hoặc thoát trước khi thấy rõ @. " +
-        "Quay lại: mở từng người tới khi nhìn rõ @ rồi mới thoát.";
-      return;
-    }
-    banner.className = "banner ok-banner";
-    banner.textContent = "Tỷ lệ đã gắn hồ sơ (đủ + cần xem): " + openedPct + "% (" +
-      opened + "/" + total + "). «Chưa mở»: " + unopenedPct + "%.";
+    var duPct = pct(saved, total);
+    banner.className = duPct != null && duPct >= 50 ? "banner ok-banner" : "banner warn-banner";
+    banner.textContent = "Đủ 3 cột (Số + Tên + @): " + (duPct != null ? duPct : 0) + "% (" +
+      saved + "/" + total + "). Cần xem (có số, thiếu cột): " + review +
+      ". Lỗi quét: " + unopened + ".";
   }
 
   var lastResultTotal = -1;
@@ -404,14 +395,12 @@
     var review = body.review || 0;
     var unopened = body.unopened || 0;
     var total = saved + review + unopened;
-    var openedPct = pct(saved + review, total);
-    var unopenedPct = pct(unopened, total);
+    var duPct = pct(saved, total);
     document.getElementById("stats").innerHTML =
-      stat(saved, "Đã lưu") +
+      stat(saved, "Đủ 3 cột") +
       stat(review, "Cần xem") +
-      stat(unopened, "Chưa mở hồ sơ", unopenedPct != null && unopenedPct > 50 ? "warn" : "") +
-      stat(openedPct != null ? (openedPct + "%") : "—", "% đã gắn hồ sơ", openedPct != null && openedPct >= 50 ? "ok" : "warn") +
-      stat(unopenedPct != null ? (unopenedPct + "%") : "—", "% chưa mở", unopenedPct != null && unopenedPct > 50 ? "warn" : "") +
+      stat(unopened, "Lỗi quét", unopened ? "warn" : "") +
+      stat(duPct != null ? (duPct + "%") : "—", "% đủ 3 cột", duPct != null && duPct >= 50 ? "ok" : "warn") +
       stat(body.queued, "Video đang chờ") +
       stat(body.running, "Video đang đọc") +
       stat(body.done, "Video đã xong") +
@@ -494,19 +483,18 @@
       } else if (item.status === "done") {
         var saved = item.saved_count || 0;
         var review = item.review_count || 0;
-        var unopened = item.unopened_count || 0;
-        var total = saved + review + unopened;
-        var openedPct = pct(saved + review, total);
-        var unopenedPct = pct(unopened, total);
+        var scanErrors = item.unopened_count || 0;
+        var total = saved + review + scanErrors;
+        var duPct = pct(saved, total);
         resultText = saved + " đủ";
         if (review) resultText += " · " + review + " cần xem";
-        if (unopened) resultText += " · " + unopened + " chưa mở";
-        if (openedPct != null) {
-          var badgeClass = unopenedPct != null && unopenedPct > 50 ? "bad" : "good";
-          var badgeLabel = unopenedPct != null && unopenedPct > 50
-            ? (unopenedPct + "% chưa mở — nên quay lại đúng cách")
-            : (openedPct + "% đã gắn hồ sơ");
-          resultText += "<div><span class='badge " + badgeClass + "'>" + badgeLabel + "</span></div>";
+        if (scanErrors) resultText += " · " + scanErrors + " lỗi quét";
+        if (duPct != null) {
+          var badgeClass = duPct >= 50 ? "good" : "bad";
+          resultText += "<div><span class='badge " + badgeClass + "'>" + duPct + "% đủ 3 cột</span></div>";
+        }
+        if (item.error_summary) {
+          resultText += "<div class='note'>" + escapeHtml(item.error_summary) + "</div>";
         }
         resultText += " <button class='ghost' type='button' data-filter='" + escapeHtml(item.name) + "'>Xem</button>";
       }
@@ -537,6 +525,7 @@
     box.querySelectorAll("[data-filter]").forEach(function (button) {
       button.addEventListener("click", function () {
         document.getElementById("query").value = button.getAttribute("data-filter") || "";
+        resultsView = "all";
         loadResults();
       });
     });
@@ -555,9 +544,11 @@
   }
 
   function renderResultTable(items) {
-    var html = "<table class='results-table'><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Thời gian quét</th></tr>";
+    var html = "<table class='results-table'><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Loại</th><th>Lỗi khi quét</th><th>Thời gian quét</th></tr>";
     items.forEach(function (item) {
-      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(formatTime(item.scanned_at)) + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) +
+        "</td><td>" + escapeHtml(item.bucket) + "</td><td>" + escapeHtml(item.reason) +
+        "</td><td>" + escapeHtml(formatTime(item.scanned_at)) + "</td></tr>";
     });
     return html + "</table>";
   }

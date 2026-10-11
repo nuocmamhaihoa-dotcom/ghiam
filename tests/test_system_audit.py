@@ -86,7 +86,7 @@ class SystemAuditTests(unittest.TestCase):
         self.assertEqual(bad.status_code, 422)
         incomplete = self.client.get("/v1/results?view=incomplete", headers=self._auth()).json()
         self.assertTrue(incomplete["total"] >= 1)
-        self.assertTrue(all((not i["phone"]) or (not i["username"]) for i in incomplete["items"]))
+        self.assertTrue(all(i["bucket"] != "Đủ" for i in incomplete["items"]))
 
     def test_stats_queue_and_backup_roundtrip(self) -> None:
         self._seed()
@@ -203,7 +203,8 @@ class SystemAuditTests(unittest.TestCase):
         self.assertIn("Cách chắc nhất", text)
         self.assertIn("nhìn rõ dòng @username", text)
         self.assertIn("checkOpen", text)
-        self.assertIn("% đã gắn hồ sơ", text)
+        self.assertIn("% đủ 3 cột", text)
+        self.assertIn("Lỗi quét", text)
         self.assertIn("Đủ 3 cột", text)
         self.assertNotIn("100 dòng mới nhất", text)
         self.assertIn("Thời gian quét", text)

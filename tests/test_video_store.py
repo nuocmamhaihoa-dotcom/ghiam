@@ -93,9 +93,10 @@ class VideoStoreTests(unittest.TestCase):
                 review=[Review("0900000001", "Một", "Khác", "@khac", "tên danh bạ và tên hồ sơ khác nhau")],
             ),
         )
-        self.assertEqual(stats(self.db)["saved"], 1)
-        self.assertEqual(stats(self.db)["unopened"], 1)
+        # Hàng đủ 3 cột (kể cả review đã có số+tên+@). Số chỉ có tên, chưa có @ → cần xem.
+        self.assertEqual(stats(self.db)["saved"], 2)
         self.assertEqual(stats(self.db)["review"], 1)
+        self.assertEqual(stats(self.db)["unopened"], 0)
         second = self._add("b.mp4", "b")
         finish(
             self.db,
@@ -110,7 +111,7 @@ class VideoStoreTests(unittest.TestCase):
         found = {item["phone"]: item for item in search_results(self.db, limit=20)}
         self.assertEqual(found["0982117072"]["username"], "@dangtam.3")
         self.assertEqual(found["0332001753"]["username"], "@khactam60")
-        self.assertEqual(found["0332001753"]["bucket"], "Đã lưu")
+        self.assertEqual(found["0332001753"]["bucket"], "Đủ")
         self.assertEqual(stats(self.db)["results"], 3)
 
     def test_close_names_merge_inside_finish_and_global_rematch(self) -> None:
@@ -134,7 +135,7 @@ class VideoStoreTests(unittest.TestCase):
         )
         found = {item["phone"]: item for item in search_results(self.db, limit=20, view="all")}
         self.assertEqual(found["0982117072"]["username"], "@hanhnguyenn375")
-        self.assertEqual(found["0982117072"]["bucket"], "Đã lưu")
+        self.assertEqual(found["0982117072"]["bucket"], "Đủ")
         second = self._add("b.mp4", "b")
         finish(
             self.db,
@@ -234,7 +235,7 @@ class VideoStoreTests(unittest.TestCase):
         set_duration(self.db, newer, 125.4)
         item = next(row for row in list_videos(self.db) if row["id"] == newer)
         self.assertAlmostEqual(float(item["duration_sec"]), 125.4, places=1)
-        self.assertIn("chưa mở", str(item["issue"]))
+        self.assertIn("cần xem", str(item["issue"]))
         good = next(row for row in list_videos(self.db) if row["id"] == older)
         self.assertEqual(good["issue"], "Tất cả đều tốt — 1 đủ")
 
@@ -250,7 +251,7 @@ class VideoStoreTests(unittest.TestCase):
         )
         found = search_results(self.db, "0985721500")[0]
         self.assertEqual(found["username"], "@uniquehandle99")
-        self.assertEqual(found["bucket"], "Đã lưu")
+        self.assertEqual(found["bucket"], "Đủ")
         self.assertEqual(stats(self.db)["results"], 1)
         self.assertEqual(rematch_results(self.db), 0)
 
@@ -298,6 +299,61 @@ class VideoStoreTests(unittest.TestCase):
         fail(self.db, video_id, "hỏng")
         self.assertEqual(queued_bytes(self.db), 500)
 
+    def test_three_fields_split_complete_review_and_scan_errors(self) -> None:
+        video_id = self._add("rules.mp4", "rules")
+        finish(
+            self.db,
+            video_id,
+            Table(
+                rows=[Row("0900000001", "Một", "@mot")],
+                unopened=[Unopened("0900000002", "Hai")],
+                review=[
+                    Review("0900000003", "Ba", "Ba", "", "trùng tên, không tự ghép"),
+                    Review("0900000004", "Bốn", "Bốn", "@bon", "một số mở nhiều hồ sơ"),
+                    Review("", "", "Năm", "@nam", "đã mở hồ sơ nhưng chưa thấy số"),
+                ],
+            ),
+        )
+        found = {item["phone"] or item["username"]: item for item in search_results(self.db, view="all", limit=20)}
+        self.assertEqual(found["0900000001"]["bucket"], "Đủ")
+        self.assertEqual(found["0900000001"]["reason"], "")
+        self.assertEqual(found["0900000002"]["bucket"], "Cần xem")
+        self.assertIn("@", found["0900000002"]["reason"])
+        self.assertEqual(found["0900000003"]["bucket"], "Cần xem")
+        self.assertEqual(found["0900000004"]["bucket"], "Lỗi quét")
+        self.assertEqual(found["@nam"]["bucket"], "Lỗi quét")
+        counted = stats(self.db)
+        self.assertEqual((counted["saved"], counted["review"], counted["unopened"]), (1, 2, 2))
+        item = next(row for row in list_videos(self.db) if row["id"] == video_id)
+        self.assertIn("đã mở hồ sơ nhưng chưa thấy số", str(item["error_summary"]))
+        self.assertIn("một số mở nhiều hồ sơ", str(item["error_summary"]))
+
+    def test_old_unopened_bucket_is_reclassified_as_needs_review(self) -> None:
+        from control_plane.video_store import _reclassify_results, connect
+
+        video_id = self._add("old.mp4", "old")
+        finish(self.db, video_id, Table(rows=[Row("0900000009", "Chín", "@chin")]))
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
+                VALUES ('0900000008', 'Tám', '', 3, '', ?, '2026-10-10T00:00:00+00:00')
+                """,
+                (video_id,),
+            )
+            conn.execute(
+                """
+                INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
+                VALUES ('', 'Rời', '@roi', 2, 'đã mở hồ sơ nhưng chưa thấy số', ?, '2026-10-10T00:00:00+00:00')
+                """,
+                (video_id,),
+            )
+            _reclassify_results(conn)
+        found = {item["phone"] or item["username"]: item for item in search_results(self.db, view="all", limit=20)}
+        self.assertEqual(found["0900000008"]["bucket"], "Cần xem")
+        self.assertEqual(found["@roi"]["bucket"], "Lỗi quét")
+        self.assertEqual(found["0900000009"]["bucket"], "Đủ")
+
     def test_unopened_phone_keeps_the_username_seen_later(self) -> None:
         first = self._add("a.mp4", "a")
         finish(self.db, first, Table(unopened=[Unopened("0332001753", "khactam")]))
@@ -310,7 +366,7 @@ class VideoStoreTests(unittest.TestCase):
         found = search_results(self.db, "0332001753")[0]
         self.assertEqual(found["username"], "@khactam60")
         # Đã có số + tên + @ → hàng đủ, không còn nằm ở Cần xem.
-        self.assertEqual(found["bucket"], "Đã lưu")
+        self.assertEqual(found["bucket"], "Đủ")
         self.assertEqual((stats(self.db)["saved"], stats(self.db)["unopened"]), (1, 0))
 
     def test_rematch_promotes_old_phone_username_reviews(self) -> None:
@@ -329,7 +385,7 @@ class VideoStoreTests(unittest.TestCase):
             )
         self.assertEqual(rematch_results(self.db), 1)
         found = search_results(self.db, "0332001753")[0]
-        self.assertEqual(found["bucket"], "Đã lưu")
+        self.assertEqual(found["bucket"], "Đủ")
         self.assertEqual(found["username"], "@khactam60")
         items = list_videos(self.db)
         self.assertEqual(items[0]["saved_count"], 1)

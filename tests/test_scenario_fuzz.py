@@ -304,7 +304,7 @@ class ScenarioFuzzTests(unittest.TestCase):
             incomplete = search_results(db, view="incomplete", limit=50)
             all_rows = search_results(db, view="all", limit=50)
             self.assertTrue(all(item["phone"] and item["username"] for item in complete))
-            self.assertTrue(all((not item["phone"]) or (not item["username"]) for item in incomplete))
+            self.assertTrue(all(item["bucket"] != "Đủ" for item in incomplete))
             self.assertEqual(count_results(db, view="all"), len(all_rows))
             phones = [item["phone"] for item in all_rows if item["phone"]]
             self.assertEqual(len(phones), len(set(phones)))

@@ -26,10 +26,17 @@ from control_plane.screen_table import (
     same_person_name,
 )
 
+# Đủ = một hàng có đủ số + tên + @. Cần xem = số có trong danh bạ nhưng thiếu tên hoặc @.
+# Lỗi quét = không thành một hàng (mở hồ sơ mà không thấy số, trùng tên, một số mở nhiều hồ sơ).
 BUCKET_OK = 1
 BUCKET_REVIEW = 2
-BUCKET_UNOPENED = 3
-BUCKET_LABEL = {BUCKET_OK: "Đã lưu", BUCKET_REVIEW: "Cần xem", BUCKET_UNOPENED: "Chưa mở hồ sơ"}
+BUCKET_SCAN = 3
+BUCKET_UNOPENED = BUCKET_SCAN
+BUCKET_LABEL = {BUCKET_OK: "Đủ", BUCKET_REVIEW: "Cần xem", BUCKET_SCAN: "Lỗi quét"}
+REASON_MULTI = "một số mở nhiều hồ sơ"
+REASON_NO_HANDLE = "có số trong danh bạ nhưng chưa đọc được @"
+REASON_NO_NAME = "có số trong danh bạ nhưng chưa đọc được tên"
+REASON_NO_PHONE = "đã mở hồ sơ nhưng chưa thấy số"
 
 
 def utcnow() -> str:
@@ -281,6 +288,7 @@ def init_db(db_path: Path) -> None:
                 else:
                     _ensure_schema_objects(conn)
                 _ensure_video_columns(conn)
+                _reclassify_results(conn)
                 _reconcile_result_counts(conn)
             _READY.add(key)
             return
@@ -338,6 +346,71 @@ def _ensure_video_columns(conn: sqlite3.Connection) -> None:
         except sqlite3.OperationalError as exc:
             if "duplicate column" not in str(exc).lower():
                 raise
+
+
+def classify_result(phone: str, name: str, username: str, reason: str = "") -> tuple[int, str]:
+    """Xếp một hàng theo đúng 3 cột. Không đoán thêm.
+
+    Đủ: số, tên và @ đều có, và không phải một số mở nhiều hồ sơ.
+    Cần xem: có số trong danh bạ nhưng thiếu tên hoặc @.
+    Lỗi quét: không có số, hoặc một số gắn với nhiều hồ sơ.
+    """
+    phone = (phone or "").strip()
+    name = (name or "").strip()
+    username = (username or "").strip()
+    reason = (reason or "").strip()
+    if reason == REASON_MULTI:
+        return BUCKET_SCAN, REASON_MULTI
+    if phone and name and username:
+        return BUCKET_OK, ""
+    if phone:
+        if not reason:
+            reason = REASON_NO_HANDLE if not username else REASON_NO_NAME
+        return BUCKET_REVIEW, reason
+    if not reason:
+        reason = REASON_NO_PHONE
+    return BUCKET_SCAN, reason
+
+
+def _reclassify_results(conn: sqlite3.Connection) -> None:
+    """Sửa hàng cũ cho khớp định nghĩa đủ / cần xem / lỗi quét. Chạy lại thì không đổi hàng đã đúng."""
+    conn.execute(
+        "UPDATE results SET bucket = ? WHERE reason = ? AND bucket != ?",
+        (BUCKET_SCAN, REASON_MULTI, BUCKET_SCAN),
+    )
+    conn.execute(
+        """
+        UPDATE results
+        SET bucket = ?, reason = ''
+        WHERE phone != '' AND name != '' AND username != ''
+          AND reason != ?
+          AND (bucket != ? OR reason != '')
+        """,
+        (BUCKET_OK, REASON_MULTI, BUCKET_OK),
+    )
+    conn.execute(
+        """
+        UPDATE results
+        SET bucket = ?,
+            reason = CASE
+              WHEN reason != '' THEN reason
+              WHEN username = '' THEN ?
+              ELSE ?
+            END
+        WHERE phone != '' AND (name = '' OR username = '')
+          AND (bucket != ? OR reason = '')
+        """,
+        (BUCKET_REVIEW, REASON_NO_HANDLE, REASON_NO_NAME, BUCKET_REVIEW),
+    )
+    conn.execute(
+        """
+        UPDATE results
+        SET bucket = ?,
+            reason = CASE WHEN reason != '' THEN reason ELSE ? END
+        WHERE phone = '' AND (bucket != ? OR reason = '')
+        """,
+        (BUCKET_SCAN, REASON_NO_PHONE, BUCKET_SCAN),
+    )
 
 
 def _reconcile_result_counts(conn: sqlite3.Connection) -> None:
@@ -593,8 +666,35 @@ def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
         except (TypeError, ValueError):
             item["duration_sec"] = 0.0
         item["issue"] = _video_issue(item)
+        item["error_summary"] = ""
         items.append(item)
+    _attach_scan_errors(db_path, items)
     return items
+
+
+def _attach_scan_errors(db_path: Path, items: list[dict[str, object]]) -> None:
+    """Gắn tối đa 3 lý do lỗi quét của từng video để cột Kết quả nói rõ lỗi gì."""
+    ids = [int(item["id"]) for item in items if item.get("id")]
+    if not ids:
+        return
+    marks = ",".join("?" for _ in ids)
+    grouped: dict[int, list[tuple[int, str]]] = {}
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT video_id, reason, COUNT(*) AS n
+            FROM results
+            WHERE video_id IN ({marks}) AND bucket = ? AND reason != ''
+            GROUP BY video_id, reason
+            """,
+            (*ids, BUCKET_SCAN),
+        ).fetchall()
+    for row in rows:
+        grouped.setdefault(int(row["video_id"]), []).append((int(row["n"]), str(row["reason"])))
+    for item in items:
+        reasons = grouped.get(int(item.get("id") or 0), [])
+        reasons.sort(key=lambda pair: pair[0], reverse=True)
+        item["error_summary"] = " · ".join(f"{reason} ×{count}" for count, reason in reasons[:3])
 
 
 def stats(db_path: Path) -> dict[str, int]:
@@ -762,9 +862,12 @@ def finish(db_path: Path, video_id: int, table: Table) -> None:
     """
     def _write(conn: sqlite3.Connection) -> None:
         for row in table.rows:
-            _put(conn, row.phone, row.name, row.username, BUCKET_OK, "", video_id, upgrade=True)
+            bucket, reason = classify_result(row.phone, row.name, row.username, "")
+            _put(conn, row.phone, row.name, row.username, bucket, reason, video_id, upgrade=True)
         for item in table.unopened:
-            _put(conn, item.phone, item.name, "", BUCKET_UNOPENED, "", video_id, upgrade=False)
+            # Có số trong danh bạ, chưa có @ — cần xem, không phải lỗi "chưa mở".
+            bucket, reason = classify_result(item.phone, item.name, "", "")
+            _put(conn, item.phone, item.name, "", bucket, reason, video_id, upgrade=False)
         for item in table.review:
             _put_review(conn, item, video_id)
         conn.execute(
@@ -1213,13 +1316,13 @@ _RESULT_SELECT = """
 
 
 def _view_sql(view: str) -> str:
-    """complete = đủ 3 cột; incomplete = thiếu số hoặc @; all = mọi dòng."""
+    """complete = đủ 3 cột; incomplete = cần xem hoặc lỗi quét; all = mọi dòng."""
     kind = (view or "complete").strip().lower()
     if kind == "incomplete":
-        return "(r.phone = '' OR r.username = '')"
+        return f"r.bucket != {BUCKET_OK}"
     if kind == "all":
         return "1=1"
-    return "(r.phone != '' AND r.username != '')"
+    return f"r.bucket = {BUCKET_OK}"
 
 
 def search_results(
@@ -1426,43 +1529,37 @@ def _drop_lone_username(conn: sqlite3.Connection, username: str, bucket: int) ->
 
 
 def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
+    name = item.contact_name or item.profile_name
     if item.phone:
         existing = conn.execute(
-            "SELECT id, bucket, username FROM results WHERE phone = ? AND phone != ''",
+            "SELECT id, bucket, name, username FROM results WHERE phone = ? AND phone != ''",
             (item.phone,),
         ).fetchone()
         if existing is not None:
-            # Số đang "chưa mở hồ sơ" mà video sau đã mở được @ → đủ 3 cột nếu đã có username.
-            if int(existing["bucket"]) == BUCKET_UNOPENED and item.username and not existing["username"]:
-                bucket = BUCKET_OK if item.username else BUCKET_REVIEW
-                conn.execute(
-                    "UPDATE results SET username = ?, bucket = ?, reason = ?, video_id = ? WHERE id = ?",
-                    (
-                        item.username,
-                        bucket,
-                        "" if bucket == BUCKET_OK else item.reason,
-                        video_id,
-                        existing["id"],
-                    ),
-                )
+            # Hàng đã đủ 3 cột thì không hạ xuống. Hàng thiếu @ được nâng khi video sau đọc được.
+            if int(existing["bucket"]) == BUCKET_OK and existing["username"]:
+                return
+            merged_name = name or str(existing["name"] or "")
+            merged_user = item.username or str(existing["username"] or "")
+            bucket, reason = classify_result(item.phone, merged_name, merged_user, item.reason)
+            if bucket != BUCKET_OK:
+                return
+            conn.execute(
+                "UPDATE results SET name = ?, username = ?, bucket = ?, reason = '', video_id = ? WHERE id = ?",
+                (merged_name, merged_user, BUCKET_OK, video_id, existing["id"]),
+            )
+            _drop_lone_username(conn, merged_user, BUCKET_OK)
             return
-        # Đã có số + @ thì là hàng đủ; chỉ giữ "Cần xem" khi thiếu một trong hai hoặc mở nhiều hồ sơ.
-        complete = bool(item.phone and item.username and item.reason == "không đọc được tên hồ sơ")
+        bucket, reason = classify_result(item.phone, name, item.username, item.reason)
         conn.execute(
             """
             INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (
-                item.phone,
-                item.contact_name or item.profile_name,
-                item.username,
-                BUCKET_OK if complete else BUCKET_REVIEW,
-                "" if complete else item.reason,
-                video_id,
-                utcnow(),
-            ),
+            (item.phone, name, item.username, bucket, reason, video_id, utcnow()),
         )
+        if bucket == BUCKET_OK:
+            _drop_lone_username(conn, item.username, bucket)
         return
     if not item.username:
         return
@@ -1472,12 +1569,13 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
     ).fetchone()
     if existing is not None:
         return
+    bucket, reason = classify_result("", item.profile_name, item.username, item.reason)
     conn.execute(
         """
         INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
         VALUES ('', ?, ?, ?, ?, ?, ?)
         """,
-        (item.profile_name, item.username, BUCKET_REVIEW, item.reason, video_id, utcnow()),
+        (item.profile_name, item.username, bucket, reason, video_id, utcnow()),
     )
 
 
@@ -1499,22 +1597,18 @@ def _video_issue(item: dict[str, object]) -> str:
 
     saved = int(item.get("saved_count") or 0)
     review = int(item.get("review_count") or 0)
-    unopened = int(item.get("unopened_count") or 0)
-    total = saved + review + unopened
+    scan_errors = int(item.get("unopened_count") or 0)
+    total = saved + review + scan_errors
     if total <= 0:
         return "Không có dòng kết quả"
-    unopened_pct = round(100.0 * unopened / total)
-    if unopened_pct > 50:
-        return f"Cảnh báo: {unopened_pct}% chưa mở hồ sơ"
-    if unopened > 0 and review > 0:
-        return f"Còn {unopened} chưa mở · {review} cần xem"
-    if unopened > 0:
-        return f"Còn {unopened} chưa mở hồ sơ"
-    if review > 0 and saved > 0:
-        return f"Tốt — {saved} đủ, còn {review} cần xem"
-    if review > 0:
-        return f"Chỉ có hàng cần xem ({review})"
-    return f"Tất cả đều tốt — {saved} đủ"
+    parts = [f"{saved} đủ"]
+    if review:
+        parts.append(f"{review} cần xem (có số, thiếu tên hoặc @)")
+    if scan_errors:
+        parts.append(f"{scan_errors} lỗi quét")
+    if saved == total:
+        return f"Tất cả đều tốt — {saved} đủ"
+    return " · ".join(parts)
 
 
 def _public_result(row: sqlite3.Row) -> dict[str, object]:

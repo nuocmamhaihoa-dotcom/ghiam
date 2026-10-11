@@ -236,7 +236,7 @@ def run_job(
     kept = path.exists()
     print(
         f"Video {video_id} xong trong {time.monotonic() - started:.0f} giây, {len(frames)} khung: "
-        f"{len(table.rows)} hàng đủ, {len(table.review)} cần xem, {len(table.unopened)} chưa mở hồ sơ"
+        f"{len(table.rows)} hàng đủ 3 cột, {len(table.unopened)} số thiếu @, {len(table.review)} dòng đối chiếu"
         f"{'; giữ file để Đọc lại' if kept else ''}.",
         flush=True,
     )
