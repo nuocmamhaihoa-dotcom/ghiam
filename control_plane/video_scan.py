@@ -57,6 +57,9 @@ FLASH_CHANGED = 9.0
 TAP_WINDOW = 7
 # Chỉ OCR vài khung sát lúc thoát (hồ sơ ngắn).
 BRIEF_EXIT_READS = 3
+# Ba ô Số + Tên + @ của một hàng nằm trong 4 giây. Chỗ thiếu ô thì đọc lại ±4 giây.
+REFILL_RADIUS_SEC = 4.0
+REFILL_FPS = 10.0
 
 Submit = Callable[..., Future]
 
@@ -333,7 +336,225 @@ def _scan_video(
     # R2: vòng 2 OCR các khung unknown (không đụng job tap — chỉ khung đơn).
     results = _round2_unknowns(jobs, results, submit=submit, on_progress=on_progress, layout_dict=layout_dict)
     learned = measured if measured is not None else None
-    return [(job[2], obs) for job, obs in zip(jobs, results)], learned
+    observations = [(job[2], obs) for job, obs in zip(jobs, results)]
+    observations = _refill_missing_fields(
+        path,
+        folder,
+        observations,
+        submit=submit,
+        on_progress=on_progress,
+        layout_dict=layout_dict,
+    )
+    return observations, learned
+
+
+
+def incomplete_anchors(frames: list[FrameObs], table: Table) -> list[float]:
+    """Thời điểm của hàng chưa đủ Số + Tên + @ — mốc để đọc lại ±4 giây."""
+    from control_plane.screen_table import clean_username, normalize_phone
+
+    phone_seen: dict[str, float] = {}
+    phone_open: dict[str, float] = {}
+    user_at: dict[str, float] = {}
+    for frame in frames:
+        if frame.at < 0:
+            continue
+        if frame.kind == "profile":
+            user = clean_username(frame.profile_username)
+            if user and user not in user_at:
+                user_at[user] = frame.at
+        for hit in frame.contacts:
+            phone = normalize_phone(hit.phone)
+            if not phone:
+                continue
+            if hit.selected or frame.kind == "tap":
+                phone_open[phone] = frame.at
+            elif phone not in phone_seen:
+                phone_seen[phone] = frame.at
+
+    def phone_time(phone: str) -> float:
+        if phone in phone_open:
+            return phone_open[phone]
+        return phone_seen.get(phone, -1.0)
+
+    times: list[float] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add_phone(phone: str) -> None:
+        if not phone or ("p", phone) in seen:
+            return
+        at = phone_time(phone)
+        if at < 0:
+            return
+        seen.add(("p", phone))
+        times.append(at)
+
+    def add_user(username: str) -> None:
+        user = clean_username(username)
+        if not user or ("u", user) in seen:
+            return
+        at = user_at.get(user, -1.0)
+        if at < 0:
+            return
+        seen.add(("u", user))
+        times.append(at)
+
+    for row in table.rows:
+        if row.phone and row.name and row.username:
+            continue
+        add_phone(row.phone)
+        add_user(row.username)
+    for item in table.unopened:
+        add_phone(item.phone)
+    for item in table.review:
+        name = item.contact_name or item.profile_name
+        if item.phone and name and item.username:
+            continue
+        add_phone(item.phone)
+        add_user(item.username)
+    return times
+
+
+def merge_time_windows(times: list[float], radius: float = REFILL_RADIUS_SEC) -> list[tuple[float, float]]:
+    """Gộp các khoảng ±radius chồng nhau thành một đoạn đọc lại."""
+    if not times:
+        return []
+    spans = sorted((max(0.0, moment - radius), moment + radius) for moment in times)
+    merged: list[tuple[float, float]] = [spans[0]]
+    for start, end in spans[1:]:
+        prev_start, prev_end = merged[-1]
+        if start <= prev_end + 1e-6:
+            merged[-1] = (prev_start, max(prev_end, end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def _time_covered(sorted_times: list[float], at: float, tol: float) -> bool:
+    import bisect
+
+    index = bisect.bisect_left(sorted_times, at)
+    if index < len(sorted_times) and abs(sorted_times[index] - at) <= tol:
+        return True
+    if index > 0 and abs(sorted_times[index - 1] - at) <= tol:
+        return True
+    return False
+
+
+def refill_frame_numbers(
+    windows: list[tuple[float, float]],
+    already: list[float],
+    *,
+    fps: float = REFILL_FPS,
+    duration: float = 0.0,
+) -> list[int]:
+    """Số khung @fps trong các khoảng, bỏ thời điểm đã OCR và không vượt quá cuối video."""
+    if not windows or fps <= 0:
+        return []
+    limit = duration if duration > 0 else 1e12
+    covered = sorted(moment for moment in already if moment >= 0)
+    tol = 0.45 / fps
+    picks: list[int] = []
+    seen: set[int] = set()
+    for start, end in windows:
+        start = max(0.0, start)
+        last = min(end, limit - 0.5 / fps) if duration > 0 else end
+        if last < start:
+            continue
+        n0 = int(start * fps + 1e-6)
+        n1 = int(last * fps + 1e-6)
+        for number in range(max(0, n0), n1 + 1):
+            if number in seen:
+                continue
+            at = number / fps
+            if _time_covered(covered, at, tol):
+                continue
+            seen.add(number)
+            picks.append(number)
+    return picks
+
+
+def _refill_missing_fields(
+    path: Path,
+    folder: Path,
+    observations: list[tuple[Path, FrameObs]],
+    *,
+    submit: Submit | None,
+    on_progress: Progress | None,
+    layout_dict: dict[str, object],
+) -> list[tuple[Path, FrameObs]]:
+    """Hàng thiếu ô: đọc lại thật kỹ 4 giây trước và 4 giây sau khung đó."""
+    from control_plane.video_validate import probe_duration_sec
+
+    frames = [obs for _file, obs in observations]
+    if not any(obs.at >= 0 for obs in frames):
+        return observations
+    table = build_table(frames)
+    anchors = incomplete_anchors(frames, table)
+    if not anchors:
+        return observations
+    windows = merge_time_windows(anchors)
+    duration = probe_duration_sec(Path(path))
+    numbers = refill_frame_numbers(windows, [obs.at for obs in frames], duration=duration)
+    if not numbers:
+        return observations
+    if on_progress is not None:
+        on_progress(f"Đọc lại ±4 giây quanh {len(anchors)} chỗ thiếu ({len(numbers)} khung)")
+    try:
+        files = extract_frames(path, folder, numbers, REFILL_FPS, on_progress=on_progress, prefix="g")
+    except RuntimeError as exc:
+        print(f"Đọc lại ±4 giây bỏ qua: {exc}", flush=True)
+        return observations
+    if not files:
+        return observations
+    targets = [(index, str(file_path), number / REFILL_FPS) for index, (number, file_path) in enumerate(sorted(files.items()))]
+    unique, _copies = _collapse_similar_frames(targets)
+    total = len(unique)
+    if on_progress is not None:
+        on_progress(f"Đọc lại ±4 giây: OCR {total} khung khác nhau")
+    found: list[FrameObs | None] = [None] * total
+
+    def _take(slot: int, obs: FrameObs) -> None:
+        found[slot] = obs
+
+    if submit is None:
+        for slot, (_index, file_path, at) in enumerate(unique):
+            _take(slot, read_frame_aggressive_at(file_path, at, layout_dict))
+            if on_progress is not None and (slot + 1 == total or (slot + 1) % 25 == 0):
+                on_progress(f"Đọc lại ±4 giây {slot + 1}/{total}")
+    else:
+        done = 0
+        batch = 64
+        for start in range(0, total, batch):
+            chunk = unique[start : start + batch]
+            future_map = {
+                submit(read_frame_aggressive_at, file_path, at, layout_dict): start + offset
+                for offset, (_index, file_path, at) in enumerate(chunk)
+            }
+            for future in as_completed(future_map):
+                slot = future_map[future]
+                try:
+                    obs = future.result()
+                except Exception as exc:
+                    print(f"Đọc lại ±4 giây lỗi: {exc}", flush=True)
+                    done += 1
+                    continue
+                found[slot] = obs
+                done += 1
+                if on_progress is not None and (done == total or done % 25 == 0):
+                    on_progress(f"Đọc lại ±4 giây {done}/{total}")
+    extra: list[tuple[Path, FrameObs]] = []
+    for slot, (_index, file_path, at) in enumerate(unique):
+        obs = found[slot]
+        if obs is None or obs.kind not in ("list", "profile", "tap"):
+            continue
+        extra.append((Path(file_path), dataclasses.replace(obs, at=at)))
+    if not extra:
+        return observations
+    # Thứ tự thời gian: số ở danh bạ và @ ở hồ sơ phải đi đúng trước/sau trong 4 giây.
+    merged = list(observations) + extra
+    merged.sort(key=lambda item: item[1].at if item[1].at >= 0 else -1.0)
+    return merged
 
 
 # Cùng màn hình giữ yên trong 2 giây. Phần đầu trang (tên / @) phải lệch ≤ 2 bit,
