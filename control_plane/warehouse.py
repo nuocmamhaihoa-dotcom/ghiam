@@ -1,8 +1,9 @@
 """Nhận cột từ nhiều form Excel rồi chuẩn hoá vào kho tổng.
 
 Mỗi dòng file là một dòng kho. Ô chỉ vào một trường khi khớp dấu hiệu khóa:
-số điện thoại Việt, UID Facebook (chỉ chữ số hoặc link profile), ID TikTok
-(bắt đầu bằng @ hoặc link tiktok.com/@). Ô không khớp thì để trống.
+số điện thoại Việt, UID Facebook (dãy số không phải đầu số di động Việt,
+dài hơn số nhà/số đường), ID TikTok (bắt đầu bằng @ hoặc link tiktok.com/@).
+Ô không khớp thì để trống.
 """
 
 from __future__ import annotations
@@ -33,14 +34,19 @@ ASSIGN_MIN = 0.22
 _PUNCT = re.compile(r"[^\w\s]+", re.UNICODE)
 _SPACES = re.compile(r"\s+")
 _PHONE_KEEP = re.compile(r"[^\d+]")
-_UID_OK = re.compile(r"^\d{8,20}$")
+_UID_DIGITS = re.compile(r"^\d{5,20}$")
+_DIGIT_RUN = re.compile(r"\d+")
 _TIKTOK_HANDLE = re.compile(r"^[A-Za-z0-9._]{2,24}$")
 _TIKTOK_URL = re.compile(r"tiktok\.com/@([A-Za-z0-9._]{2,24})\b", re.IGNORECASE)
 _FB_PROFILE_ID = re.compile(
-    r"(?:facebook\.com|fb\.com)/profile\.php\?[^#]*\bid=(\d{8,20})\b",
+    r"(?:facebook\.com|fb\.com)/profile\.php\?[^#]*\bid=(\d{5,20})\b",
     re.IGNORECASE,
 )
-_FB_BARE_ID = re.compile(r"(?:facebook\.com|fb\.com)/(\d{8,20})(?:[/?#]|$)", re.IGNORECASE)
+_FB_BARE_ID = re.compile(r"(?:facebook\.com|fb\.com)/(\d{5,20})(?:[/?#]|$)", re.IGNORECASE)
+# Số nhà / số đường trong một dòng địa chỉ không có quá 4 chữ số liền nhau.
+_MAX_HOUSE_STREET_DIGITS = 4
+_VN_MOBILE_HEAD = frozenset({"03", "05", "07", "08", "09"})
+_VN_MOBILE_NSN = frozenset("35789")
 _HAS_LETTER = re.compile(r"[A-Za-zÀ-ỹ]")
 _ADDRESS_MARK = re.compile(
     r"\b(duong|pho|quan|huyen|tinh|phuong|xa|thon|ap|ngo|hem|tp|tphcm|hn|"
@@ -237,13 +243,36 @@ def header_score(text: str) -> dict[str, float]:
 def _vn_mobile(digits: str) -> str:
     if digits.startswith("84") and len(digits) == 11:
         return "0" + digits[2:]
-    if len(digits) == 9 and digits[0] in "35789":
+    if len(digits) == 9 and digits[0] in _VN_MOBILE_NSN:
         return "0" + digits
     if len(digits) == 10 and digits.startswith(("02", "03", "05", "07", "08", "09")):
         return digits
     if len(digits) == 11 and digits.startswith("02"):
         return digits
     return ""
+
+
+def _starts_like_vn_mobile(digits: str) -> bool:
+    """UID Facebook không được bắt đầu như số di động Việt Nam."""
+    if not digits:
+        return False
+    if digits.startswith("84"):
+        rest = digits[2:]
+        if rest.startswith("0"):
+            return len(rest) >= 2 and rest[:2] in _VN_MOBILE_HEAD
+        return bool(rest) and rest[0] in _VN_MOBILE_NSN
+    if len(digits) >= 2 and digits[:2] in _VN_MOBILE_HEAD:
+        return True
+    return len(digits) == 9 and digits[0] in _VN_MOBILE_NSN
+
+
+def _digits_are_facebook_uid(digits: str) -> bool:
+    """Dãy số UID: dài hơn số nhà/số đường, không phải đầu số di động Việt."""
+    if not _UID_DIGITS.match(digits):
+        return False
+    if _vn_mobile(digits) or _starts_like_vn_mobile(digits):
+        return False
+    return True
 
 
 def normalize_phone(raw: str) -> str:
@@ -301,13 +330,16 @@ def _facebook_uid(text: str) -> str:
     compact = text.replace(" ", "")
     for pattern in (_FB_PROFILE_ID, _FB_BARE_ID):
         match = pattern.search(compact)
-        if match and not normalize_phone(match.group(1)):
+        if match and _digits_are_facebook_uid(match.group(1)):
             return match.group(1)
     return ""
 
 
 def normalize_uid(raw: str) -> str:
-    """UID Facebook: cả ô là chữ số 8–20, hoặc link profile. Không lấy số điện thoại."""
+    """UID Facebook: dãy số 5–20 chữ số liền, không bắt đầu như SĐT di động Việt.
+
+    Số nhà và số đường trong địa chỉ tối đa 4 chữ số liền nhau nên không lẫn UID.
+    """
     text = cell_text(raw).replace(" ", "")
     if not text or normalize_tiktok(text):
         return ""
@@ -316,8 +348,9 @@ def normalize_uid(raw: str) -> str:
         return from_url
     if text.endswith(".0") and text[:-2].isdigit():
         text = text[:-2]
-    if _UID_OK.match(text) and not normalize_phone(text):
-        return text
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if digits == text and _digits_are_facebook_uid(digits):
+        return digits
     return ""
 
 
@@ -386,6 +419,10 @@ def _looks_address(text: str) -> bool:
     value = cell_text(text)
     if len(value) < 10:
         return False
+    # Dãy 5+ chữ số liền là UID, không phải số nhà / số đường.
+    if any(len(run.group(0)) > _MAX_HOUSE_STREET_DIGITS for run in _DIGIT_RUN.finditer(value)):
+        if not _HAS_LETTER.search(value):
+            return False
     folded = fold(value)
     if _ADDRESS_MARK.search(folded):
         return True

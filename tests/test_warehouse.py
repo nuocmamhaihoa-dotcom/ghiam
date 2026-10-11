@@ -57,6 +57,20 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(normalize_uid("0901234567"), "")
         self.assertEqual(normalize_phone("3000111222333"), "")
 
+    def test_uid_not_mobile_prefix_or_house_number(self) -> None:
+        self.assertEqual(normalize_uid("1234"), "")
+        self.assertEqual(normalize_uid("12"), "")
+        self.assertEqual(normalize_uid("10001"), "10001")
+        self.assertEqual(normalize_uid("090123456789012"), "")
+        self.assertEqual(normalize_uid("037123456789"), "")
+        self.assertEqual(normalize_uid("84901234567"), "")
+        self.assertEqual(normalize_uid("901234567"), "")
+        self.assertEqual(normalize_phone("901234567"), "0901234567")
+        self.assertEqual(classify_cell("12 Đường Láng, Đống Đa, Hà Nội")[0][0], "address")
+        self.assertNotIn("uid", {kind for kind, _score in classify_cell("12 Đường Láng, Đống Đa, Hà Nội")})
+        self.assertEqual(classify_cell("10001")[0][0], "uid")
+        self.assertEqual(classify_cell("0901234567")[0][0], "phone")
+
     def test_facebook_uid_and_tiktok_handle(self) -> None:
         self.assertEqual(
             normalize_uid("https://www.facebook.com/profile.php?id=100012345678901"),
