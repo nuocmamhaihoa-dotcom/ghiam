@@ -19,6 +19,8 @@ from control_plane.warehouse import (
     preview_bytes,
     record_from_row,
     records_from_bytes,
+    _looks_address,
+    _looks_name,
 )
 from control_plane.warehouse_store import (
     export_csv,
@@ -70,6 +72,28 @@ class NormalizeTests(unittest.TestCase):
         self.assertNotIn("uid", {kind for kind, _score in classify_cell("12 Đường Láng, Đống Đa, Hà Nội")})
         self.assertEqual(classify_cell("10001")[0][0], "uid")
         self.assertEqual(classify_cell("0901234567")[0][0], "phone")
+
+    def test_address_locality_vs_person_name(self) -> None:
+        self.assertTrue(_looks_address("Hà Nội"))
+        self.assertTrue(_looks_address("Ha Noi"))
+        self.assertTrue(_looks_address("Vinh"))
+        self.assertTrue(_looks_address("Huyện Đông Anh"))
+        self.assertTrue(_looks_address("Xa Tan Phong"))
+        self.assertTrue(_looks_address("Quận 1"))
+        self.assertTrue(
+            _looks_address("12 Đường Láng, Phường Thành Công, Quận Đống Đa, Hà Nội")
+        )
+        long_place = "so mot nha sau hem ba nha sau hem bon ngo nam pho sau phuong bay"
+        self.assertGreater(len(long_place.split()), 8)
+        self.assertGreater(len(long_place), 28)
+        self.assertTrue(_looks_address(long_place))
+        self.assertTrue(_looks_name("An Giang Uyen Lan"))
+        self.assertFalse(_looks_address("An Giang Uyen Lan"))
+        self.assertTrue(_looks_name("Le Van Quan"))
+        self.assertFalse(_looks_address("Le Van Quan"))
+        self.assertEqual(classify_cell("Hà Nội")[0][0], "address")
+        self.assertEqual(classify_cell("An Tam Quan Em")[0][0], "name")
+        self.assertFalse(_looks_name("Hà Nội"))
 
     def test_facebook_uid_and_tiktok_handle(self) -> None:
         self.assertEqual(

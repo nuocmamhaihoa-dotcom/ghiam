@@ -2,7 +2,8 @@
 
 Mỗi dòng file là một dòng kho. Ô chỉ vào một trường khi khớp dấu hiệu khóa:
 số điện thoại Việt, UID Facebook (dãy số không phải đầu số di động Việt,
-dài hơn số nhà/số đường), ID TikTok (bắt đầu bằng @ hoặc link tiktok.com/@).
+dài hơn số nhà/số đường), ID TikTok (bắt đầu bằng @ hoặc link tiktok.com/@),
+địa chỉ (tỉnh/huyện/xã cũ và mới, hoặc trên 8 chữ và 28 ký tự).
 Ô không khớp thì để trống.
 """
 
@@ -16,6 +17,14 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
+
+from control_plane.vn_places import (
+    ADDRESS_MIN_CHARS,
+    ADDRESS_MIN_WORDS,
+    NAME_MAX_WORDS,
+    has_place_name,
+    is_place_cell,
+)
 
 FIELDS = ("name", "phone", "address", "uid", "id")
 FIELD_LABELS = {
@@ -48,27 +57,18 @@ _MAX_HOUSE_STREET_DIGITS = 4
 _VN_MOBILE_HEAD = frozenset({"03", "05", "07", "08", "09"})
 _VN_MOBILE_NSN = frozenset("35789")
 _HAS_LETTER = re.compile(r"[A-Za-zÀ-ỹ]")
-_ADDRESS_MARK = re.compile(
-    r"\b(duong|pho|quan|huyen|tinh|phuong|xa|thon|ap|ngo|hem|tp|tphcm|hn|"
-    r"thanh pho|so nha|dia chi|q\d+|p\d+)\b"
+_STREET_MARK = re.compile(
+    r"\b(duong|pho|ngo|hem|thon|ap|so nha|dia chi)\b"
     r"|[/]|(\d+\s*(duong|pho|ngo|hem))",
     re.IGNORECASE,
 )
 _STREET_WORDS = (
     "đường",
     "phố",
-    "quận",
-    "huyện",
-    "tỉnh",
-    "phường",
-    "xã",
-    "thôn",
-    "ấp",
     "ngõ",
     "hẻm",
-    "tp.",
-    "tphcm",
-    "thành phố",
+    "thôn",
+    "ấp",
     "số nhà",
     "địa chỉ",
 )
@@ -402,10 +402,13 @@ def _looks_name(text: str) -> bool:
     value = normalize_name(text)
     if len(value) < 2:
         return False
+    folded = fold(value)
+    if is_place_cell(folded):
+        return False
     if any(mark in value.casefold() for mark in _STREET_WORDS):
         return False
-    words = value.split()
-    if not (1 <= len(words) <= 6):
+    words = folded.split()
+    if not (1 <= len(words) <= NAME_MAX_WORDS):
         return False
     digits = sum(ch.isdigit() for ch in value)
     return digits <= 1 and bool(_HAS_LETTER.search(value))
@@ -417,16 +420,23 @@ def _looks_address(text: str) -> bool:
     if cell_text(text).lstrip().startswith("@"):
         return False
     value = cell_text(text)
-    if len(value) < 10:
+    if not value:
         return False
     # Dãy 5+ chữ số liền là UID, không phải số nhà / số đường.
     if any(len(run.group(0)) > _MAX_HOUSE_STREET_DIGITS for run in _DIGIT_RUN.finditer(value)):
         if not _HAS_LETTER.search(value):
             return False
     folded = fold(value)
-    if _ADDRESS_MARK.search(folded):
+    words = folded.split()
+    if is_place_cell(folded) or has_place_name(folded):
+        if len(words) <= NAME_MAX_WORDS and not is_place_cell(folded) and _looks_name(value):
+            return False
         return True
-    return len(value) >= 18 and bool(_HAS_LETTER.search(value)) and not normalize_phone(value)
+    if len(words) >= ADDRESS_MIN_WORDS and len(value) >= ADDRESS_MIN_CHARS:
+        return True
+    if _STREET_MARK.search(folded) and bool(_HAS_LETTER.search(value)):
+        return True
+    return False
 
 
 def is_index_column(values: list[str]) -> bool:
@@ -716,7 +726,9 @@ def classify_cell(text: str) -> list[tuple[str, float]]:
         scored.append(("uid", 0.98))
     else:
         if _looks_address(raw):
-            scored.append(("address", 0.9 if _ADDRESS_MARK.search(fold(raw)) else 0.7))
+            folded = fold(raw)
+            strong = is_place_cell(folded) or bool(_STREET_MARK.search(folded)) or has_place_name(folded)
+            scored.append(("address", 0.9 if strong else 0.72))
         if _looks_name(raw):
             scored.append(("name", 0.84 if len(raw.split()) >= 2 else 0.62))
     scored.sort(key=lambda item: (-item[1], item[0]))
