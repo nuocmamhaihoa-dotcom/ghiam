@@ -186,7 +186,12 @@ def scan_paths(
             save_layout(data_dir, merged)
             if on_progress is not None:
                 on_progress(f"Đã lưu bố cục máy «{merged.device}» ({merged.samples} mẫu)")
-        return build_table([obs for _, obs in ordered]), ordered
+        table = build_table([obs for _, obs in ordered])
+        # Hướng 2 và 3 chỉ chạy khi hướng 1 còn hồ sơ chưa ghép. Hàng đã đủ 3 ô không đổi.
+        from control_plane.read_fallback import apply_read_fallbacks
+
+        table = apply_read_fallbacks(table, ordered, on_progress=on_progress)
+        return table, ordered
     finally:
         for folder in temps:
             folder.cleanup()

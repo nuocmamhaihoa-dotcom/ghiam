@@ -110,7 +110,7 @@
         <li><b>Rồi mới thoát</b> về danh bạ — không chạm mở rồi back ngay lúc chữ còn đang nhòe.</li>
         <li>Làm lần lượt <b>từng người</b> cần lấy, rồi tải video lên đây.</li>
       </ol>
-      <p class="tiny">Máy chủ quét 30 khung/giây và tăng dày 60 khung/giây quanh lúc mở/đóng hồ sơ; học bố cục theo từng máy. Hàng chưa đủ 3 ô được đọc lại thật kỹ 4 giây trước và 4 giây sau khung thiếu. Chỉ lướt danh bạ (không mở hồ sơ) thì số nằm ở <b>Cần xem</b>: có số và tên, chưa có @.</p>
+      <p class="tiny">Máy chủ quét 30 khung/giây và tăng dày 60 khung/giây quanh lúc mở/đóng hồ sơ; học bố cục theo từng máy. Hàng chưa đủ 3 ô được đọc lại 4 giây trước và sau khung thiếu. Nếu vẫn còn hồ sơ chưa ghép, máy thử tiếp ghép theo thời gian rồi đọc riêng vùng tên và @. Tải lên lỗi thì tự chuyển sang mảnh nhỏ một đường, rồi gửi cả file một lần. Chỉ lướt danh bạ (không mở hồ sơ) thì số nằm ở <b>Cần xem</b>: có số và tên, chưa có @.</p>
       <p class="danger">Danh bạ không hiện @. Không mở hồ sơ = máy chủ không thể tự tạo @.</p>
     </div>
     <div class="checklist" id="checklist">
@@ -695,7 +695,7 @@
     return results;
   }
 
-  async function uploadSessionChunks(file, session, onProgress) {
+  async function uploadSessionChunks(file, session, onProgress, parallel) {
     var key = clientKeyFor(file);
     var store = loadChunkStore();
     store[key] = { upload_id: session.upload_id, name: file.name, size: file.size };
@@ -713,7 +713,7 @@
       if (!done[index]) pending.push(index);
     }
     var failed = null;
-    await mapPool(pending, CHUNK_PARALLEL, async function (index) {
+    await mapPool(pending, parallel || CHUNK_PARALLEL, async function (index) {
       if (failed) return;
       while (document.hidden) await sleep(1000);
       if (failed) return;
@@ -752,6 +752,64 @@
     return { ok: completeOk, status: completeStatus, body: completeBody, name: file.name };
   }
 
+  var LANE2_CHUNK_BYTES = 1024 * 1024;
+
+  async function uploadSmallChunks(file, onProgress) {
+    var init = await initChunkedWithRetry({
+      name: file.name,
+      size_bytes: file.size,
+      device: deviceName(),
+      client_key: clientKeyFor(file) + "|lane2",
+      chunk_size: LANE2_CHUNK_BYTES
+    }, function (sec, reason, attempt) {
+      if (onProgress) onProgress("hướng 2 chờ chỗ trống, thử lại sau " + sec + "s · lần " + attempt + " (" + reason + ")");
+    });
+    if (!init.ok) return { ok: false, status: init.status, body: init.body, name: file.name };
+    return uploadSessionChunks(file, init.body, function (percent, finished, total) {
+      if (onProgress) onProgress("hướng 2 · mảnh 1MB một đường · " + percent + "% (" + finished + "/" + total + ")");
+    }, 1);
+  }
+
+  function uploadWholeFile(file, onProgress) {
+    return new Promise(function (resolve) {
+      var xhr = new XMLHttpRequest();
+      xhr.open("POST", "/v1/videos");
+      if (token()) xhr.setRequestHeader("Authorization", "Bearer " + token());
+      xhr.upload.onprogress = function (event) {
+        if (!event.lengthComputable || !onProgress) return;
+        onProgress("hướng 3 · gửi cả file · " + Math.floor((event.loaded * 100) / event.total) + "%");
+      };
+      xhr.onload = function () {
+        var body = {};
+        try { body = JSON.parse(xhr.responseText || "{}"); } catch (error) { body = {}; }
+        resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body: body, name: file.name });
+      };
+      xhr.onerror = function () {
+        resolve({ ok: false, status: 0, body: { detail: "mất kết nối" }, name: file.name });
+      };
+      var form = new FormData();
+      form.append("file", file, file.name);
+      form.append("device", deviceName());
+      xhr.send(form);
+    });
+  }
+
+  async function uploadWithFallbacks(file, primary, onProgress) {
+    var result = primary;
+    if (!result || result.ok || result.status === 507 || result.status === 413) return result;
+    if (result.upload_id) {
+      try { await api("/v1/videos/uploads/" + result.upload_id, { method: "DELETE" }); } catch (error) {}
+    }
+    if (onProgress) onProgress("hướng 1 lỗi, chuyển hướng 2 (mảnh nhỏ, một đường)");
+    result = await uploadSmallChunks(file, onProgress);
+    if (result.ok || result.status === 507 || result.status === 413) return result;
+    if (result.upload_id) {
+      try { await api("/v1/videos/uploads/" + result.upload_id, { method: "DELETE" }); } catch (error) {}
+    }
+    if (onProgress) onProgress("hướng 2 lỗi, chuyển hướng 3 (gửi cả file một lần)");
+    return uploadWholeFile(file, onProgress);
+  }
+
   async function sendFiles(fileList) {
     var note = document.getElementById("uploadNote");
     if (!checklistReady()) {
@@ -788,6 +846,20 @@
           note.className = "note warn";
         });
         if (!init.ok) {
+          var rescued = null;
+          if (init.status !== 507) {
+            rescued = await uploadWithFallbacks(file, {
+              ok: false, status: init.status, body: init.body, name: file.name
+            }, function (msg) {
+              note.textContent = file.name + " — " + msg;
+              note.className = "note warn";
+            });
+          }
+          if (rescued && rescued.ok) {
+            if (rescued.body && rescued.body.duplicate) already += 1;
+            else added += 1;
+            continue;
+          }
           var why = (init.body && init.body.detail) || ("lỗi " + init.status);
           failed.push(file.name + " (chưa xếp được: " + why + ")");
           if (init.status === 507) {
@@ -840,6 +912,12 @@
           note.textContent = "Đang gửi: " + parts.join(" · ") + " — đừng khóa máy." + slow;
         });
         delete live[name];
+        if (!result.ok) {
+          result = await uploadWithFallbacks(job.file, result, function (msg) {
+            note.textContent = name + " — " + msg;
+            note.className = "note warn";
+          });
+        }
         await refresh();
         return result;
       });
