@@ -12,6 +12,7 @@ from control_plane.screen_read import _choose_name
 from control_plane.screen_table import (
     ContactHit,
     FrameObs,
+    _handles_are_same,
     build_table,
     choose_phone,
     clean_username,
@@ -207,6 +208,23 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(ready["0982117072"], "@dangtam.3")
         self.assertEqual(ready["0332001753"], "@khactam60")
         self.assertFalse(table.review)
+
+    def test_noisy_handles_of_one_open_collapse_to_the_name_match(self) -> None:
+        self.assertTrue(_handles_are_same("@nggialinh.2014", "@nggialinh.2014C3"))
+        self.assertFalse(_handles_are_same("@dangtam.3", "@khactam60"))
+        self.assertTrue(handle_matches_name("@nggialinh.2014", "gialinh"))
+        table = build_table(
+            [
+                FrameObs("tap", (ContactHit("0976456667", "gialinh", True),), at=1.0),
+                FrameObs("profile", (), "gialinh", "@eaaa26q", at=1.2),
+                FrameObs("profile", (), "gialinh .", "@nggialinh.2014", at=1.4),
+                FrameObs("profile", (), "gialinh", "@nggialinh.2014C3", at=1.6),
+                FrameObs("profile", (), "gialinh", "@coyaii5", at=1.8),
+            ]
+        )
+        self.assertEqual([(row.phone, row.username) for row in table.rows], [("0976456667", "@nggialinh.2014")])
+        self.assertFalse(table.review)
+        self.assertFalse(table.unopened)
 
     def test_selection_clears_after_two_lists_where_the_row_is_visible_but_not_selected(self) -> None:
         plain = frame_list(ContactHit("0982117072", "Đặng Thị Tâm"))

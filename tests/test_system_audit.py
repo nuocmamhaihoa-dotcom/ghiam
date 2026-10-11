@@ -203,7 +203,7 @@ class SystemAuditTests(unittest.TestCase):
         self.assertIn("Cách chắc nhất", text)
         self.assertIn("nhìn rõ dòng @username", text)
         self.assertIn("checkOpen", text)
-        self.assertIn("% đủ 3 cột", text)
+        self.assertIn("% số trong danh bạ đã đủ", text)
         self.assertIn("Lỗi quét", text)
         self.assertIn("Đủ 3 cột", text)
         self.assertNotIn("100 dòng mới nhất", text)

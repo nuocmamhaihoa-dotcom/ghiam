@@ -137,7 +137,7 @@
 
   <section>
     <h2>Hàng đợi</h2>
-    <p class="note"><b>Đủ</b> = một hàng đã có đủ Số + Tên + @. <b>Cần xem</b> = số có trong danh bạ nhưng hàng đó thiếu Tên hoặc @. <b>Lỗi quét</b> = không thành một hàng: mở hồ sơ mà không thấy số, trùng tên không ghép được, hoặc một số mở nhiều hồ sơ.</p>
+    <p class="note"><b>Đủ</b> = một hàng đã có đủ Số + Tên + @. <b>Cần xem</b> = số có trong danh bạ nhưng hàng đó thiếu Tên hoặc @. <b>Lỗi quét</b> = không thành một hàng: mở hồ sơ mà không thấy số, trùng tên không ghép được, hoặc một số mở nhiều hồ sơ. Phần trăm là số điện thoại trong danh bạ đã đủ 3 cột, không tính dòng lỗi quét.</p>
     <div id="queue" class="table-wrap"></div>
   </section>
 
@@ -356,16 +356,18 @@
 
   function renderOpenBanner(saved, review, unopened) {
     var banner = document.getElementById("openWarn");
-    var total = saved + review + unopened;
-    if (!total) {
+    var listTotal = saved + review;
+    var scanned = listTotal + unopened;
+    if (!scanned) {
       banner.className = "banner hide";
       banner.textContent = "";
       return;
     }
-    var duPct = pct(saved, total);
+    var duPct = pct(saved, listTotal);
     banner.className = duPct != null && duPct >= 50 ? "banner ok-banner" : "banner warn-banner";
-    banner.textContent = "Đủ 3 cột (Số + Tên + @): " + (duPct != null ? duPct : 0) + "% (" +
-      saved + "/" + total + "). Cần xem (có số, thiếu cột): " + review +
+    var pctText = duPct != null ? (duPct + "% (" + saved + "/" + listTotal + ")") : "—";
+    banner.textContent = "Số trong danh bạ đã đủ 3 cột: " + pctText +
+      ". Cần xem (có số, thiếu tên hoặc @): " + review +
       ". Lỗi quét: " + unopened + ".";
   }
 
@@ -394,13 +396,13 @@
     var saved = body.saved || 0;
     var review = body.review || 0;
     var unopened = body.unopened || 0;
-    var total = saved + review + unopened;
-    var duPct = pct(saved, total);
+    var listTotal = saved + review;
+    var duPct = pct(saved, listTotal);
     document.getElementById("stats").innerHTML =
       stat(saved, "Đủ 3 cột") +
       stat(review, "Cần xem") +
       stat(unopened, "Lỗi quét", unopened ? "warn" : "") +
-      stat(duPct != null ? (duPct + "%") : "—", "% đủ 3 cột", duPct != null && duPct >= 50 ? "ok" : "warn") +
+      stat(duPct != null ? (duPct + "%") : "—", "% số trong danh bạ đã đủ", duPct != null && duPct >= 50 ? "ok" : "warn") +
       stat(body.queued, "Video đang chờ") +
       stat(body.running, "Video đang đọc") +
       stat(body.done, "Video đã xong") +
@@ -484,14 +486,14 @@
         var saved = item.saved_count || 0;
         var review = item.review_count || 0;
         var scanErrors = item.unopened_count || 0;
-        var total = saved + review + scanErrors;
-        var duPct = pct(saved, total);
+        var listTotal = saved + review;
+        var duPct = pct(saved, listTotal);
         resultText = saved + " đủ";
         if (review) resultText += " · " + review + " cần xem";
         if (scanErrors) resultText += " · " + scanErrors + " lỗi quét";
         if (duPct != null) {
           var badgeClass = duPct >= 50 ? "good" : "bad";
-          resultText += "<div><span class='badge " + badgeClass + "'>" + duPct + "% đủ 3 cột</span></div>";
+          resultText += "<div><span class='badge " + badgeClass + "'>" + duPct + "% số trong danh bạ đã đủ</span></div>";
         }
         if (item.error_summary) {
           resultText += "<div class='note'>" + escapeHtml(item.error_summary) + "</div>";

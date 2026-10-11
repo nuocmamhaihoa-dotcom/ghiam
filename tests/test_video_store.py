@@ -354,6 +354,58 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(found["@roi"]["bucket"], "Lỗi quét")
         self.assertEqual(found["0900000009"]["bucket"], "Đủ")
 
+    def test_ocr_fragments_of_one_profile_collapse_in_the_database(self) -> None:
+        from control_plane.video_store import REASON_MULTI, _collapse_ocr_fragments, connect
+
+        video_id = self._add("frag.mp4", "frag")
+        other = self._add("other.mp4", "other")
+        now = "2026-10-11T00:00:00+00:00"
+        with connect(self.db) as conn:
+            conn.execute("DELETE FROM meta WHERE key = 'ocr_collapse_v1'")
+            rows = [
+                ("0976456667", "gialinh", "@eaaa26q", 1, "", video_id),
+                ("", "gialinh", "@nggialinh.2014", 3, "đã mở hồ sơ nhưng chưa thấy số", video_id),
+                ("", "gialinh .", "@nggialinh.2014C3", 3, "trùng tên, không tự ghép", video_id),
+                ("", "gialinh", "@coyaii5", 3, "đã mở hồ sơ nhưng chưa thấy số", video_id),
+                ("0981111111", "Mot", "@mot.user", 3, REASON_MULTI, video_id),
+                ("0982222222", "Hiền Tê", "", 2, "có số trong danh bạ nhưng chưa đọc được @", video_id),
+                ("", "Hien Te", "@O0095hien", 3, "đã mở hồ sơ nhưng chưa thấy số", video_id),
+                ("", "Hiền Tê", "@0095hienoD", 3, "trùng tên, không tự ghép", video_id),
+                ("0983333331", "Photo", "", 2, "trùng tên, không tự ghép", video_id),
+                ("0983333332", "Photo", "", 2, "trùng tên, không tự ghép", video_id),
+                ("", "Photo", "@photo.1", 3, "trùng tên, không tự ghép", video_id),
+                ("", "Khác hẳn", "@khachan99", 3, "đã mở hồ sơ nhưng chưa thấy số", video_id),
+                ("0910000001", "Giữ nguyên", "@giunguyen", 1, "", other),
+            ]
+            for phone, name, username, bucket, reason, vid in rows:
+                conn.execute(
+                    """
+                    INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (phone, name, username, bucket, reason, vid, now),
+                )
+            _collapse_ocr_fragments(conn)
+            _collapse_ocr_fragments(conn)
+        found = {item["phone"] or item["username"]: item for item in search_results(self.db, view="all", limit=30)}
+        self.assertEqual(found["0976456667"]["username"], "@nggialinh.2014")
+        self.assertEqual(found["0976456667"]["bucket"], "Đủ")
+        self.assertNotIn("@eaaa26q", found)
+        self.assertNotIn("@nggialinh.2014C3", found)
+        self.assertNotIn("@coyaii5", found)
+        self.assertEqual(found["0981111111"]["bucket"], "Đủ")
+        self.assertEqual(found["0981111111"]["reason"], "")
+        self.assertEqual(found["0982222222"]["bucket"], "Đủ")
+        self.assertIn(found["0982222222"]["username"], {"@O0095hien", "@0095hienoD"})
+        self.assertNotIn("@O0095hien", found)
+        self.assertNotIn("@0095hienoD", found)
+        self.assertEqual(found["0983333331"]["bucket"], "Cần xem")
+        self.assertEqual(found["0983333332"]["bucket"], "Cần xem")
+        self.assertEqual(found["@photo.1"]["bucket"], "Lỗi quét")
+        self.assertEqual(found["@khachan99"]["bucket"], "Lỗi quét")
+        self.assertEqual(found["0910000001"]["username"], "@giunguyen")
+        self.assertEqual(found["0910000001"]["bucket"], "Đủ")
+
     def test_unopened_phone_keeps_the_username_seen_later(self) -> None:
         first = self._add("a.mp4", "a")
         finish(self.db, first, Table(unopened=[Unopened("0332001753", "khactam")]))

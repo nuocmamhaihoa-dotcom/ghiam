@@ -20,6 +20,10 @@ from typing import Iterator
 from control_plane.screen_table import (
     Review,
     Table,
+    _compact,
+    _handles_are_same,
+    _prefer_handle,
+    handle_matches_name,
     joined_name,
     pair_close_names,
     phone_distance,
@@ -37,6 +41,7 @@ REASON_MULTI = "một số mở nhiều hồ sơ"
 REASON_NO_HANDLE = "có số trong danh bạ nhưng chưa đọc được @"
 REASON_NO_NAME = "có số trong danh bạ nhưng chưa đọc được tên"
 REASON_NO_PHONE = "đã mở hồ sơ nhưng chưa thấy số"
+_COLLAPSE_KEY = "ocr_collapse_v1"
 
 
 def utcnow() -> str:
@@ -289,6 +294,7 @@ def init_db(db_path: Path) -> None:
                     _ensure_schema_objects(conn)
                 _ensure_video_columns(conn)
                 _reclassify_results(conn)
+                _collapse_ocr_fragments(conn)
                 _reconcile_result_counts(conn)
             _READY.add(key)
             return
@@ -411,6 +417,192 @@ def _reclassify_results(conn: sqlite3.Connection) -> None:
         """,
         (BUCKET_SCAN, REASON_NO_PHONE, BUCKET_SCAN),
     )
+
+
+
+def _person_key(name: str) -> str:
+    """Khóa gom OCR lệch của một người. Tên quá ngắn thì không gom."""
+    compact = _compact(name)
+    if len(compact) >= 4:
+        return compact
+    return ""
+
+
+def _best_orphan(group: list[sqlite3.Row]) -> sqlite3.Row:
+    name = max((str(row["name"] or "") for row in group), key=len)
+    handles = [str(row["username"]) for row in group if row["username"]]
+    counts: dict[str, int] = {}
+    for handle in handles:
+        counts[handle] = counts.get(handle, 0) + 1
+    best_handle = _prefer_handle(handles, name, counts)
+    candidates = [row for row in group if str(row["username"] or "") == best_handle] or list(group)
+    return min(candidates, key=lambda row: int(row["id"]))
+
+
+def _collapse_video_fragments(conn: sqlite3.Connection, video_id: int) -> None:
+    """Trong một video: gom @ lệch cùng tên, gắn vào đúng một số, xóa bản đọc trùng."""
+    rows = list(
+        conn.execute(
+            "SELECT id, phone, name, username, bucket, reason FROM results WHERE video_id = ?",
+            (video_id,),
+        )
+    )
+    if not rows:
+        return
+    phones = [row for row in rows if str(row["phone"] or "").strip()]
+    orphans = [
+        row
+        for row in rows
+        if not str(row["phone"] or "").strip() and str(row["username"] or "").strip()
+    ]
+    groups: dict[str, list[sqlite3.Row]] = {}
+    solo: list[sqlite3.Row] = []
+    for row in orphans:
+        key = _person_key(str(row["name"] or ""))
+        if not key:
+            solo.append(row)
+            continue
+        groups.setdefault(key, []).append(row)
+
+    delete_ids: set[int] = set()
+    kept: list[sqlite3.Row] = []
+    for group in groups.values():
+        if len(group) == 1:
+            kept.append(group[0])
+            continue
+        best = _best_orphan(group)
+        kept.append(best)
+        for row in group:
+            if int(row["id"]) != int(best["id"]):
+                delete_ids.add(int(row["id"]))
+    kept.extend(solo)
+
+    phones_by_key: dict[str, list[sqlite3.Row]] = {}
+    for row in phones:
+        key = _person_key(str(row["name"] or ""))
+        if key:
+            phones_by_key.setdefault(key, []).append(row)
+    orphans_by_key: dict[str, list[sqlite3.Row]] = {}
+    for row in kept:
+        key = _person_key(str(row["name"] or ""))
+        if key:
+            orphans_by_key.setdefault(key, []).append(row)
+
+    updates: list[tuple[str, str, int, str, int]] = []
+    updated_phones: set[int] = set()
+
+    def attach(phone: sqlite3.Row, orphan: sqlite3.Row, username: str) -> None:
+        display = joined_name(str(phone["name"] or ""), str(orphan["name"] or ""))
+        display = display or str(phone["name"] or "") or str(orphan["name"] or "")
+        bucket, reason = classify_result(str(phone["phone"] or ""), display, username, "")
+        updates.append((display, username, bucket, reason, int(phone["id"])))
+        updated_phones.add(int(phone["id"]))
+        delete_ids.add(int(orphan["id"]))
+
+    for key, orphan_rows in orphans_by_key.items():
+        phone_rows = phones_by_key.get(key, [])
+        if len(phone_rows) != 1 or len(orphan_rows) != 1:
+            continue
+        phone = phone_rows[0]
+        orphan = orphan_rows[0]
+        if int(orphan["id"]) in delete_ids:
+            continue
+        phone_user = str(phone["username"] or "").strip()
+        orphan_user = str(orphan["username"] or "").strip()
+        if not orphan_user:
+            continue
+        if not phone_user:
+            attach(phone, orphan, orphan_user)
+            continue
+        if _handles_are_same(phone_user, orphan_user):
+            delete_ids.add(int(orphan["id"]))
+            continue
+        phone_name = str(phone["name"] or "")
+        if handle_matches_name(orphan_user, phone_name) and not handle_matches_name(phone_user, phone_name):
+            attach(phone, orphan, orphan_user)
+
+    remaining_phones = [
+        row
+        for row in phones
+        if not str(row["username"] or "").strip() and int(row["id"]) not in updated_phones
+    ]
+    remaining_orphans = [row for row in kept if int(row["id"]) not in delete_ids]
+    phone_hits: dict[int, list[sqlite3.Row]] = {}
+    orphan_hits: dict[int, list[sqlite3.Row]] = {}
+    for phone in remaining_phones:
+        for orphan in remaining_orphans:
+            if handle_matches_name(str(orphan["username"] or ""), str(phone["name"] or "")):
+                phone_hits.setdefault(int(phone["id"]), []).append(orphan)
+                orphan_hits.setdefault(int(orphan["id"]), []).append(phone)
+    for phone in remaining_phones:
+        hits = phone_hits.get(int(phone["id"]), [])
+        if len(hits) != 1:
+            continue
+        orphan = hits[0]
+        if len(orphan_hits.get(int(orphan["id"]), [])) != 1:
+            continue
+        if int(orphan["id"]) in delete_ids:
+            continue
+        attach(phone, orphan, str(orphan["username"] or ""))
+
+    phoned_users: list[str] = []
+    for row in phones:
+        user = str(row["username"] or "").strip()
+        if user and int(row["id"]) not in updated_phones:
+            phoned_users.append(user)
+    for _name, username, _bucket, _reason, _rid in updates:
+        if username:
+            phoned_users.append(username)
+    for orphan in kept:
+        oid = int(orphan["id"])
+        if oid in delete_ids:
+            continue
+        user = str(orphan["username"] or "").strip()
+        if user and any(_handles_are_same(user, other) for other in phoned_users):
+            delete_ids.add(oid)
+
+    for name, username, bucket, reason, rid in updates:
+        conn.execute(
+            "UPDATE results SET name = ?, username = ?, bucket = ?, reason = ? WHERE id = ?",
+            (name, username, bucket, reason, rid),
+        )
+    if delete_ids:
+        conn.executemany(
+            "DELETE FROM results WHERE id = ? AND phone = ''",
+            [(item,) for item in delete_ids],
+        )
+
+
+def _collapse_ocr_fragments(conn: sqlite3.Connection) -> None:
+    """Gom dòng lỗi do OCR đọc lệch một hồ sơ. Chạy một lần; gọi lại thì không đổi."""
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        done = conn.execute("SELECT 1 FROM meta WHERE key = ?", (_COLLAPSE_KEY,)).fetchone()
+        if done:
+            conn.execute("COMMIT")
+            return
+        conn.execute(
+            """
+            UPDATE results
+            SET bucket = ?, reason = ''
+            WHERE reason = ? AND phone != '' AND name != '' AND username != ''
+            """,
+            (BUCKET_OK, REASON_MULTI),
+        )
+        video_ids = [int(row[0]) for row in conn.execute("SELECT DISTINCT video_id FROM results")]
+        for video_id in video_ids:
+            _collapse_video_fragments(conn, video_id)
+        conn.execute(
+            "INSERT INTO meta (key, value) VALUES (?, ?)",
+            (_COLLAPSE_KEY, utcnow()),
+        )
+        conn.execute("COMMIT")
+    except Exception:
+        try:
+            conn.execute("ROLLBACK")
+        except sqlite3.Error:
+            pass
+        raise
 
 
 def _reconcile_result_counts(conn: sqlite3.Connection) -> None:
