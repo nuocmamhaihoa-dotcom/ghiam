@@ -1049,8 +1049,8 @@ def _parse_ts(value: object) -> float | None:
 def finish(db_path: Path, video_id: int, table: Table) -> None:
     """Lưu kết quả rồi ghép ngay số + username thành hàng ngang đủ ba cột.
 
-    Ghi kết quả trong một giao dịch ngắn; rematch chạy sau (tính cặp ngoài khóa)
-    để không giữ BEGIN IMMEDIATE suốt lúc pair_close_names.
+    Ghi kết quả trong một giao dịch ngắn. Sau đó chỉ gộp số đọc lệch,
+    không ghép số với @ theo tên khi hai bên không đứng liền lúc đọc.
     """
     def _write(conn: sqlite3.Connection) -> None:
         for row in table.rows:
@@ -1194,24 +1194,13 @@ def rematch_results(
     merged = 0
     merged += int(_with_immediate(db_path, lambda c: _promote_phone_username_reviews(c, video_id)))
 
+    # Không ghép số với @ theo tên ở chỗ khác trong video. Ghép chỉ xảy ra lúc đọc,
+    # khi danh bạ và hồ sơ cùng tên đứng liền nhau.
     target_videos = _rematch_video_ids(db_path, video_id)
     for vid in target_videos:
         merged += int(_with_immediate(db_path, lambda c, v=vid: _absorb_ocr_phone_twins(c, v)))
-        rows = _load_incomplete_results(db_path, vid)
-        phones = [row for row in rows if row["phone"] and not row["username"]]
-        users = [row for row in rows if row["username"] and not row["phone"]]
-        pairs = _compute_merge_pairs(phones, users)
-        merged += _apply_merge_pairs(db_path, pairs)
 
     if video_id is None and cross_video:
-        leftovers = _load_incomplete_results(db_path, None)
-        phones = [row for row in leftovers if row["phone"] and not row["username"]]
-        users = [row for row in leftovers if row["username"] and not row["phone"]]
-        # Tính O(n×m) ngoài khóa — không được bọc IMMEDIATE.
-        # Chỉ chạy khi gọi tường minh (test / bảo trì); worker nền tắt cờ này.
-        if phones and users and len(phones) * len(users) <= 250_000:
-            pairs = _compute_merge_pairs(phones, users)
-            merged += _apply_merge_pairs(db_path, pairs)
         for vid in _rematch_video_ids(db_path, None):
             merged += int(_with_immediate(db_path, lambda c, v=vid: _absorb_ocr_phone_twins(c, v)))
 
@@ -1326,46 +1315,9 @@ def _apply_merge_pairs(
 
 
 def _rematch_conn(conn: sqlite3.Connection, video_id: int | None = None) -> int:
-    """Ghép trong kết nối đã mở — chỉ dùng khi caller đã nắm transaction ngắn (test/nội bộ)."""
+    """Dọn số OCR lệch và nâng hàng đã có đủ số + @. Không ghép theo tên khi đã mất thứ tự khung."""
     merged = 0
     merged += _promote_phone_username_reviews(conn, video_id)
-    merged += _absorb_ocr_phone_twins(conn, video_id)
-    if video_id is None:
-        rows = conn.execute(
-            """
-            SELECT id, phone, name, username, video_id
-            FROM results
-            WHERE username = '' OR phone = ''
-            """
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            """
-            SELECT id, phone, name, username, video_id
-            FROM results
-            WHERE video_id = ? AND (username = '' OR phone = '')
-            """,
-            (video_id,),
-        ).fetchall()
-    grouped: dict[int, dict[str, list[sqlite3.Row]]] = defaultdict(lambda: {"phones": [], "users": []})
-    for row in rows:
-        if row["phone"] and not row["username"]:
-            grouped[int(row["video_id"])]["phones"].append(row)
-        elif row["username"] and not row["phone"]:
-            grouped[int(row["video_id"])]["users"].append(row)
-    for items in grouped.values():
-        merged += _merge_pair_group(conn, items["phones"], items["users"])
-    if video_id is None:
-        leftovers = conn.execute(
-            """
-            SELECT id, phone, name, username, video_id
-            FROM results
-            WHERE username = '' OR phone = ''
-            """
-        ).fetchall()
-        phones = [row for row in leftovers if row["phone"] and not row["username"]]
-        users = [row for row in leftovers if row["username"] and not row["phone"]]
-        merged += _merge_pair_group(conn, phones, users)
     merged += _absorb_ocr_phone_twins(conn, video_id)
     merged += _promote_phone_username_reviews(conn, video_id)
     return merged

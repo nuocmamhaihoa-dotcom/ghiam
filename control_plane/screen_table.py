@@ -567,15 +567,24 @@ def build_table(frames: list[FrameObs]) -> Table:
     _pick_from_window(visits)
     _collapse_rare_digits(contacts, phone_hits, phone_seen, visits, shown)
 
-    for index, visit in enumerate(visits):
-        username = visit.username()
-        if not username:
-            continue
-        profiles.setdefault(username, _Tally()).add(visit.name())
-        user_seen.setdefault(username, index)
-
     phone_name = {phone: tally.best() for phone, tally in contacts.items()}
     phone_name = {phone: name for phone, name in phone_name.items() if name and not is_skipped(name)}
+    for index, visit in enumerate(visits):
+        visit_name = visit.name()
+        handles = collapse_handles(list(visit.usernames), visit_name)
+        if not handles:
+            continue
+        contact = phone_name.get(visit.phone, "") if visit.phone else ""
+        will_pair = bool(contact and visit_name and same_person_name(contact, visit_name))
+        # Ghép được thì chỉ giữ @ chọn (OCR lệch của một hồ sơ). Không ghép thì giữ mọi @.
+        if will_pair:
+            chosen = visit.username()
+            handles = [chosen] if chosen else []
+        for username in handles:
+            if not username:
+                continue
+            profiles.setdefault(username, _Tally()).add(visit_name)
+            user_seen.setdefault(username, index)
     user_name: dict[str, str] = {}
     for user, tally in profiles.items():
         name = tally.best()
@@ -752,9 +761,8 @@ def _same_open(visit: _Visit, username: str, profile_name: str) -> bool:
     if current and username and _handles_are_same(current, username):
         return True
     known = visit.name()
-    if not _name_is_usable(profile_name):
-        return True
-    if not _name_is_usable(known):
+    # Không đọc được tên thì không biết có phải cùng khách. Không gộp @ khác vào hồ sơ trước.
+    if not _name_is_usable(profile_name) or not _name_is_usable(known):
         return False
     return same_person_name(known, profile_name)
 
@@ -805,10 +813,11 @@ def _walk(
         """Lấy SĐT đang armed hoặc cue gần nhất còn trong cửa sổ thời gian."""
         nonlocal armed, clear_run, tap_at, held_by_tap
         phone = ""
-        visit_window: tuple[tuple[str, str], ...] = window if phase == "list" else ()
-        if phase == "list" and armed:
-            if tap_at is None or _cue_still_fresh(tap_at, profile_at):
-                phone = armed
+        # Danh bạ quá lâu trước hồ sơ thì không còn là cặp liền — không giữ cửa sổ tên.
+        list_fresh = phase == "list" and (tap_at is None or _cue_still_fresh(tap_at, profile_at))
+        visit_window: tuple[tuple[str, str], ...] = window if list_fresh else ()
+        if list_fresh and armed:
+            phone = armed
         if not phone:
             for cue in reversed(cues):
                 if not _cue_still_fresh(cue.at, profile_at):
@@ -1079,21 +1088,11 @@ def _emit_unpaired(
 ) -> None:
     if len(phones) == 1 and usernames:
         contact_name = phone_name[phones[0]]
-        collapsed = collapse_handles(usernames, contact_name)
-        if len(collapsed) > 1:
-            matched = [item for item in collapsed if handle_matches_name(item, contact_name)]
-            if len(matched) == 1:
-                collapsed = matched
-            else:
-                # Cùng một tên: các @ lệch của một hồ sơ, giữ @ khớp tên nhất.
-                collapsed = [_prefer_handle(collapsed, contact_name)]
-        usernames = collapsed
+        # Gom @ đọc lệch của một username. Hai @ khác nhau thì giữ cả hai, không bỏ.
+        usernames = collapse_handles(usernames, contact_name)
     elif usernames:
-        collapsed = collapse_handles(usernames, "")
-        if not phones and len(collapsed) > 1:
-            sample = user_name.get(collapsed[0], "")
-            collapsed = [_prefer_handle(collapsed, sample)]
-        usernames = collapsed
+        sample = user_name.get(usernames[0], "") if usernames else ""
+        usernames = collapse_handles(usernames, sample)
     if len(phones) == 1 and len(usernames) == 1:
         # Cùng tên nhưng không phải cặp liền nhau: không ghép.
         phone = phones[0]

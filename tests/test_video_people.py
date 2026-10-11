@@ -172,6 +172,35 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(table.review[0].username, "@khactam60")
         self.assertFalse(table.review[0].phone)
 
+    def test_unread_profile_after_a_match_stays_a_scan_error(self) -> None:
+        table = build_table(
+            [
+                frame_list(ContactHit("0982117072", "Đặng Thị Tâm", selected=True)),
+                frame_profile("Đặng Thị Tâm", "@dangtam.3"),
+                frame_profile("", "@khactam60"),
+            ]
+        )
+        self.assertEqual([(row.phone, row.username) for row in table.rows], [("0982117072", "@dangtam.3")])
+        self.assertEqual([item.username for item in table.review], ["@khactam60"])
+        self.assertFalse(table.review[0].phone)
+
+    def test_two_orphan_handles_of_one_name_both_stay(self) -> None:
+        table = build_table(
+            [
+                frame_list(ContactHit("0332001753", "khactam")),
+                frame_profile("Người khác", "@khac.1"),
+                frame_profile("khactam", "@khactam60"),
+                frame_profile("khactam", "@khac.khac"),
+            ]
+        )
+        self.assertEqual(table.rows, [])
+        phones = [item.phone for item in table.unopened] + [item.phone for item in table.review if item.phone]
+        self.assertEqual(phones, ["0332001753"])
+        self.assertEqual(
+            {item.username for item in table.review if item.username},
+            {"@khac.1", "@khactam60", "@khac.khac"},
+        )
+
     def test_missing_profile_name_is_not_paired(self) -> None:
         """Không đọc được tên hồ sơ thì không biết có cùng khách hay không, nên không ghép."""
         table = build_table(

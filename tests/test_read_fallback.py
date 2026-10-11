@@ -61,6 +61,24 @@ class TimePairTests(unittest.TestCase):
         self.assertEqual(len(result.unopened), 1)
         self.assertEqual(len(result.review), 2)
 
+    def test_another_profile_between_blocks_the_time_pair(self) -> None:
+        frames = [
+            _list("0982117072", "Đặng Thị Tâm", 1.0),
+            _profile("khactam", "@khactam60", 1.3),
+            _profile("Đặng Thị Tâm", "@dangtam.3", 1.6),
+        ]
+        table = Table(
+            unopened=[Unopened("0982117072", "Đặng Thị Tâm")],
+            review=[
+                Review("", "", "khactam", "@khactam60", "đã mở hồ sơ nhưng chưa thấy số"),
+                Review("", "", "Đặng Thị Tâm", "@dangtam.3", "đã mở hồ sơ nhưng chưa thấy số"),
+            ],
+        )
+        result = pair_leftovers_by_time(table, frames)
+        self.assertEqual(result.rows, [])
+        self.assertEqual(result.unopened[0].phone, "0982117072")
+        self.assertEqual({item.username for item in result.review}, {"@khactam60", "@dangtam.3"})
+
     def test_pair_farther_than_four_seconds_is_left_alone(self) -> None:
         frames = [
             _list("0332001753", "khactam", 1.0),

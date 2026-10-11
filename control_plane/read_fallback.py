@@ -74,12 +74,36 @@ def _user_times(frames: list[FrameObs]) -> dict[str, float]:
     return found
 
 
+def _other_customer_between(
+    frames: list[FrameObs],
+    start: float,
+    end: float,
+    person_name: str,
+    username: str,
+) -> bool:
+    """Có hồ sơ của khách khác nằm giữa số và @ thì không phải cặp liền."""
+    if start > end:
+        start, end = end, start
+    for frame in frames:
+        if frame.kind != "profile" or frame.at < 0 or not (start < frame.at < end):
+            continue
+        handle = clean_username(frame.profile_username)
+        if handle and handle == username:
+            continue
+        name = clean_name(frame.profile_name)
+        if name and same_person_name(name, person_name):
+            continue
+        return True
+    return False
+
+
 def _unique_time_pairs(
     phones: list[tuple[str, str, float]],
     users: list[tuple[str, str, float]],
+    frames: list[FrameObs] | None = None,
     window: float = PAIR_WINDOW_SEC,
 ) -> list[tuple[str, str]]:
-    """Chỉ ghép khi cùng tên, đúng một @ trong cửa sổ, và @ đó chỉ thấy một số."""
+    """Chỉ ghép khi cùng tên, đúng một @ trong cửa sổ, không có khách khác chen giữa."""
     phone_hits: dict[str, list[str]] = {}
     user_hits: dict[str, list[str]] = {}
     for phone, phone_name, phone_at in phones:
@@ -87,6 +111,8 @@ def _unique_time_pairs(
             if abs(phone_at - user_at) > window:
                 continue
             if not same_person_name(phone_name, user_name):
+                continue
+            if frames and _other_customer_between(frames, phone_at, user_at, phone_name, username):
                 continue
             phone_hits.setdefault(phone, []).append(username)
             user_hits.setdefault(username, []).append(phone)
@@ -149,7 +175,7 @@ def pair_leftovers_by_time(table: Table, frames: list[FrameObs]) -> Table:
             continue
         kept_review.append(item)
 
-    pairs = _unique_time_pairs(phones, users)
+    pairs = _unique_time_pairs(phones, users, frames)
     if not pairs:
         return table
     paired_phones = {phone for phone, _user in pairs}

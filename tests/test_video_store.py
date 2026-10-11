@@ -134,8 +134,9 @@ class VideoStoreTests(unittest.TestCase):
             ),
         )
         found = {item["phone"]: item for item in search_results(self.db, limit=20, view="all")}
-        self.assertEqual(found["0982117072"]["username"], "@hanhnguyenn375")
-        self.assertEqual(found["0982117072"]["bucket"], "Đủ")
+        # Cùng tên nhưng không đứng liền trong video: không ghép thành hàng đủ.
+        self.assertEqual(found["0982117072"]["username"], "")
+        self.assertEqual(found["0982117072"]["bucket"], "Cần xem")
         second = self._add("b.mp4", "b")
         finish(
             self.db,
@@ -148,15 +149,16 @@ class VideoStoreTests(unittest.TestCase):
                 ],
             ),
         )
-        self.assertEqual(rematch_results(self.db), 1)
+        self.assertEqual(rematch_results(self.db), 0)
         found = {item["phone"]: item for item in search_results(self.db, limit=20, view="all")}
-        self.assertEqual(found["0911111111"]["username"], "@dangtam.3")
-        self.assertEqual(found["0900000003"]["username"], "@quang.le354")
+        self.assertEqual(found["0911111111"]["username"], "")
+        self.assertEqual(found["0900000003"]["username"], "")
         self.assertEqual(found["0900000001"]["username"], "")
         self.assertEqual(found["0900000002"]["username"], "")
         listed = search_results(self.db, limit=20, view="all")
         self.assertTrue(any(item["username"] == "@user1" and item["phone"] == "" for item in listed))
-        self.assertFalse(any(item["username"] == "@quang.le354" and item["phone"] == "" for item in listed))
+        self.assertTrue(any(item["username"] == "@quang.le354" and item["phone"] == "" for item in listed))
+        self.assertTrue(any(item["username"] == "@dangtam.3" and item["phone"] == "" for item in listed))
         complete = search_results(self.db, limit=20, view="complete")
         self.assertTrue(all(item["phone"] and item["username"] for item in complete))
         self.assertEqual(rematch_results(self.db), 0)
@@ -171,10 +173,13 @@ class VideoStoreTests(unittest.TestCase):
                 review=[Review("", "", "khactam", "@khactam60", "đã mở hồ sơ nhưng chưa thấy số")],
             ),
         )
-        # finish đã ghép ngay thành một hàng ngang đủ số + username
-        self.assertEqual((stats(self.db)["saved"], stats(self.db)["review"], stats(self.db)["unopened"]), (1, 0, 0))
-        listed = search_results(self.db, limit=20)
-        self.assertEqual([(item["phone"], item["username"]) for item in listed], [("0332001753", "@khactam60")])
+        # Không đứng liền nên không ghép: số là Cần xem, @ là Lỗi quét.
+        self.assertEqual((stats(self.db)["saved"], stats(self.db)["review"], stats(self.db)["unopened"]), (0, 1, 1))
+        listed = search_results(self.db, limit=20, view="all")
+        by_phone = {item["phone"]: item for item in listed if item["phone"]}
+        self.assertEqual(by_phone["0332001753"]["username"], "")
+        self.assertEqual(by_phone["0332001753"]["bucket"], "Cần xem")
+        self.assertTrue(any(item["username"] == "@khactam60" and item["phone"] == "" for item in listed))
         second = self._add("b.mp4", "b")
         finish(self.db, second, Table(rows=[Row("0332001753", "khactam", "@khactam60")]))
         counted = stats(self.db)
@@ -249,10 +254,11 @@ class VideoStoreTests(unittest.TestCase):
                 review=[Review("", "", "OCR lech", "@uniquehandle99", "đã mở hồ sơ nhưng chưa thấy số")],
             ),
         )
-        found = search_results(self.db, "0985721500")[0]
-        self.assertEqual(found["username"], "@uniquehandle99")
-        self.assertEqual(found["bucket"], "Đủ")
-        self.assertEqual(stats(self.db)["results"], 1)
+        found = search_results(self.db, "0985721500", view="all")[0]
+        # Tên hồ sơ khác tên danh bạ: không ghép theo @ một mình.
+        self.assertEqual(found["username"], "")
+        self.assertEqual(found["bucket"], "Cần xem")
+        self.assertEqual(stats(self.db)["results"], 2)
         self.assertEqual(rematch_results(self.db), 0)
 
     def test_ocr_phone_twin_is_absorbed_into_complete_row(self) -> None:

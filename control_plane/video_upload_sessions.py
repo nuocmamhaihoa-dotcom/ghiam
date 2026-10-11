@@ -753,5 +753,7 @@ def abort_session(db_path: Path, upload_id: str) -> bool:
     row = _retry_locked(_abort, label="abort_session")
     if row is None:
         return False
-    Path(str(row["path"])).unlink(missing_ok=True)
+    # Phiên đã xong: path là file trong hàng đọc. Hủy phiên không được xóa video đó.
+    if row["status"] == "receiving":
+        Path(str(row["path"])).unlink(missing_ok=True)
     return True
