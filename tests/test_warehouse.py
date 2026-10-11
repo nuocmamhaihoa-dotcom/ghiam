@@ -13,6 +13,7 @@ from control_plane.warehouse import (
     apply_mapping,
     classify_cell,
     detect_table,
+    normalize_id,
     normalize_phone,
     normalize_uid,
     preview_bytes,
@@ -56,13 +57,27 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(normalize_uid("0901234567"), "")
         self.assertEqual(normalize_phone("3000111222333"), "")
 
+    def test_facebook_uid_and_tiktok_handle(self) -> None:
+        self.assertEqual(
+            normalize_uid("https://www.facebook.com/profile.php?id=100012345678901"),
+            "100012345678901",
+        )
+        self.assertEqual(normalize_uid("https://facebook.com/100012345678901"), "100012345678901")
+        self.assertEqual(normalize_id("@HoangLan"), "@hoanglan")
+        self.assertEqual(normalize_id("https://www.tiktok.com/@TranThiB?lang=vi"), "@tranthib")
+        self.assertEqual(normalize_id("KH001"), "")
+        self.assertEqual(normalize_id("0901234567"), "")
+        self.assertEqual(classify_cell("@hoanglan")[0][0], "id")
+        self.assertEqual(classify_cell("0901234567")[0][0], "phone")
+        self.assertEqual(classify_cell("100012345678901")[0][0], "uid")
+
 
 class DetectTests(unittest.TestCase):
     def test_vietnamese_headers(self) -> None:
         rows = [
-            ["Họ và tên", "SĐT", "Địa chỉ", "UID", "Mã khách"],
-            ["Nguyễn Văn A", "0901234567", "12 Đường Láng, Đống Đa, Hà Nội", "100012345678901", "KH001"],
-            ["Trần Thị B", "0912345678", "34 Nguyễn Huệ, Q.1, TP.HCM", "100012345678902", "KH002"],
+            ["Họ và tên", "SĐT", "Địa chỉ", "UID", "TikTok"],
+            ["Nguyễn Văn A", "0901234567", "12 Đường Láng, Đống Đa, Hà Nội", "100012345678901", "@khach001"],
+            ["Trần Thị B", "0912345678", "34 Nguyễn Huệ, Q.1, TP.HCM", "100012345678902", "@khach002"],
         ]
         sheet = detect_table(rows, "DS")
         self.assertEqual(sheet.mapping["name"], 0)
@@ -71,82 +86,89 @@ class DetectTests(unittest.TestCase):
         self.assertEqual(sheet.mapping["uid"], 3)
         self.assertEqual(sheet.mapping["id"], 4)
         self.assertEqual(sheet.sample[0]["phone"], "0901234567")
-        self.assertEqual(sheet.sample[0]["id"], "KH001")
+        self.assertEqual(sheet.sample[0]["id"], "@khach001")
         self.assertEqual(sheet.method, "header")
 
     def test_english_headers_and_extra_stt(self) -> None:
         rows = [
-            ["No", "Full Name", "Phone Number", "Address", "Facebook UID", "Customer ID"],
-            [1, "Le Van C", "0934567890", "5 Pho Hue, Hoan Kiem, Ha Noi", "1000999888777", "C-9"],
-            [2, "Pham D", "0945678901", "8 Tran Phu, Ba Dinh, Ha Noi", "1000999888778", "C-10"],
-            [3, "Vo E", "0956789012", "2 Le Loi, Q.1, TP.HCM", "1000999888779", "C-11"],
-            [4, "Do F", "0967890123", "9 Hang Bac, Hoan Kiem", "1000999888780", "C-12"],
+            ["No", "Full Name", "Phone Number", "Address", "Facebook UID", "TikTok"],
+            [1, "Le Van C", "0934567890", "5 Pho Hue, Hoan Kiem, Ha Noi", "1000999888777", "@levanc"],
+            [2, "Pham D", "0945678901", "8 Tran Phu, Ba Dinh, Ha Noi", "1000999888778", "@phamd"],
+            [3, "Vo E", "0956789012", "2 Le Loi, Q.1, TP.HCM", "1000999888779", "@voe"],
+            [4, "Do F", "0967890123", "9 Hang Bac, Hoan Kiem", "1000999888780", "@dof"],
         ]
         sheet = detect_table(rows, "EN")
         self.assertNotIn(0, sheet.mapping.values())
         self.assertEqual(sheet.mapping["name"], 1)
         self.assertEqual(sheet.mapping["phone"], 2)
         self.assertEqual(sheet.mapping["uid"], 4)
+        self.assertEqual(sheet.mapping["id"], 5)
+        self.assertEqual(sheet.sample[0]["id"], "@levanc")
 
     def test_title_row_then_headers(self) -> None:
         rows = [
             ["DANH SÁCH KHÁCH HÀNG THÁNG 10"],
             [],
-            ["Tên khách", "Số điện thoại", "Địa chỉ nhà", "UID FB", "Mã"],
-            ["Hoàng Lan", "0888123456", "15 Nguyễn Trãi, Thanh Xuân", "2000111222333", "A1"],
+            ["Tên khách", "Số điện thoại", "Địa chỉ nhà", "UID FB", "ID TikTok"],
+            ["Hoàng Lan", "0888123456", "15 Nguyễn Trãi, Thanh Xuân", "2000111222333", "@HoangLan"],
         ]
         sheet = detect_table(rows, "T10")
         self.assertEqual(sheet.header_row, 2)
         self.assertEqual(sheet.sample[0]["name"], "Hoàng Lan")
         self.assertEqual(sheet.sample[0]["phone"], "0888123456")
+        self.assertEqual(sheet.sample[0]["id"], "@hoanglan")
 
     def test_no_header_uses_cell_shape(self) -> None:
         rows = [
-            ["Ngô Văn G", "0977000111", "22 Cầu Giấy, Hà Nội", "3000111222333", "Z99"],
-            ["Mai H", "0977000222", "7 Lê Duẩn, Q.1, TP.HCM", "3000111222334", "Z100"],
-            ["Bùi I", "0977000333", "3 Phan Đình Phùng, Ba Đình", "3000111222335", "Z101"],
+            ["Ngô Văn G", "0977000111", "22 Cầu Giấy, Hà Nội", "3000111222333", "@ngovang"],
+            ["Mai H", "0977000222", "7 Lê Duẩn, Q.1, TP.HCM", "3000111222334", "@maih"],
+            ["Bùi I", "0977000333", "3 Phan Đình Phùng, Ba Đình", "3000111222335", "@buii"],
         ]
         sheet = detect_table(rows, "raw")
         self.assertEqual(sheet.method, "shape")
         self.assertEqual(sheet.mapping["phone"], 1)
         self.assertEqual(sheet.mapping["uid"], 3)
         self.assertTrue(sheet.sample[0]["phone"].startswith("0977"))
+        self.assertEqual(sheet.mapping["id"], 4)
+        self.assertEqual(sheet.sample[0]["id"], "@ngovang")
 
     def test_shuffled_no_header_keeps_horizontal_row(self) -> None:
         rows = [
-            ["KH-1", "12 Đường Láng, Đống Đa, Hà Nội", "0901234567", "Nguyễn Văn Nam", "100012345678901"],
-            ["KH-2", "7 Lê Duẩn, Quận 1, TP.HCM", "0912345678", "Trần Thị Hoa", "100012345678902"],
+            ["@nguyenvannam", "12 Đường Láng, Đống Đa, Hà Nội", "0901234567", "Nguyễn Văn Nam", "100012345678901"],
+            ["@tranthihoa", "7 Lê Duẩn, Quận 1, TP.HCM", "0912345678", "Trần Thị Hoa", "100012345678902"],
         ]
         sheet = detect_table(rows, "lech")
         self.assertEqual(sheet.sample[0]["name"], "Nguyễn Văn Nam")
         self.assertEqual(sheet.sample[0]["phone"], "0901234567")
         self.assertEqual(sheet.sample[0]["address"], "12 Đường Láng, Đống Đa, Hà Nội")
         self.assertEqual(sheet.sample[0]["uid"], "100012345678901")
-        self.assertEqual(sheet.sample[0]["id"], "KH-1")
+        self.assertEqual(sheet.sample[0]["id"], "@nguyenvannam")
         self.assertEqual(sheet.sample[1]["name"], "Trần Thị Hoa")
         self.assertEqual(sheet.sample[1]["phone"], "0912345678")
 
     def test_semicolon_csv(self) -> None:
         payload = (
-            "Ten;SDT;Dia chi;UID;Ma\n"
-            "An;0901111222;10 Pho Hue, Ha Noi;4000111222333;M1\n"
+            "Ten;SDT;Dia chi;UID;TikTok\n"
+            "An;0901111222;10 Pho Hue, Ha Noi;4000111222333;@an\n"
         ).encode("utf-8")
         preview = preview_bytes(payload, "khach.csv")
         sheet = preview.sheets[0]
         self.assertEqual(sheet.mapping["name"], 0)
         self.assertEqual(sheet.mapping["phone"], 1)
         self.assertEqual(sheet.sample[0]["name"], "An")
+        self.assertEqual(sheet.sample[0]["id"], "@an")
 
     def test_xlsx_roundtrip_and_template_reuse(self) -> None:
         payload = xlsx_bytes(
             [
                 ["Họ tên", "Điện thoại", "Địa chỉ", "UID", "ID"],
-                ["Kim J", 981234567, "11 Lý Thường Kiệt, Hoàn Kiếm", "5000111222333", "ID-1"],
+                ["Kim J", 981234567, "11 Lý Thường Kiệt, Hoàn Kiếm", "5000111222333", "@kimj"],
             ]
         )
         first = preview_bytes(payload, "a.xlsx")
         self.assertEqual(first.sheets[0].mapping["phone"], 1)
         self.assertEqual(first.sheets[0].sample[0]["phone"], "0981234567")
+        self.assertEqual(first.sheets[0].sample[0]["id"], "@kimj")
         fingerprint = first.sheets[0].fingerprint
         templates = {fingerprint: {"name": 0, "phone": 1, "address": 2, "uid": 3, "id": 4}}
         again = preview_bytes(payload, "a.xlsx", templates)
@@ -355,7 +377,7 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(apply_mapping([["", ""]], {}), [])
 
     def test_shuffled_cells_stay_one_row(self) -> None:
-        row = ["KH-88", "0901234567", "100012345678901", "Nguyễn Văn Nam", "12 Đường Láng, Đống Đa, Hà Nội"]
+        row = ["@NguyenVanNam", "0901234567", "100012345678901", "Nguyễn Văn Nam", "12 Đường Láng, Đống Đa, Hà Nội"]
         kinds = {kind for kind, _score in classify_cell(row[1])}
         self.assertIn("phone", kinds)
         record = record_from_row(row)
@@ -363,10 +385,33 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(record["phone"], "0901234567")
         self.assertEqual(record["address"], "12 Đường Láng, Đống Đa, Hà Nội")
         self.assertEqual(record["uid"], "100012345678901")
-        self.assertEqual(record["id"], "KH-88")
+        self.assertEqual(record["id"], "@nguyenvannam")
         mapped_wrong = record_from_row(row, {"name": 0, "phone": 1, "uid": 2})
-        self.assertEqual(mapped_wrong["id"], "KH-88")
+        self.assertEqual(mapped_wrong["id"], "@nguyenvannam")
         self.assertEqual(mapped_wrong["phone"], "0901234567")
         self.assertEqual(mapped_wrong["name"], "Nguyễn Văn Nam")
         self.assertEqual(mapped_wrong["uid"], "100012345678901")
         self.assertEqual(mapped_wrong["address"], "12 Đường Láng, Đống Đa, Hà Nội")
+
+    def test_rows_do_not_borrow_cells(self) -> None:
+        records = apply_mapping(
+            [
+                ["@an", "0901111222", "Nguyễn Văn An", "1000111222333", "12 Đường Láng, Đống Đa, Hà Nội"],
+                ["Trần Thị Bình", "34 Nguyễn Huệ, Q.1, TP.HCM", "0912222333", "@binh", "1000111222444"],
+            ],
+            {},
+        )
+        self.assertEqual(len(records), 2)
+        self.assertEqual(records[0]["name"], "Nguyễn Văn An")
+        self.assertEqual(records[0]["phone"], "0901111222")
+        self.assertEqual(records[0]["id"], "@an")
+        self.assertEqual(records[0]["uid"], "1000111222333")
+        self.assertEqual(records[1]["name"], "Trần Thị Bình")
+        self.assertEqual(records[1]["phone"], "0912222333")
+        self.assertEqual(records[1]["id"], "@binh")
+        self.assertEqual(records[1]["uid"], "1000111222444")
+        self.assertNotEqual(records[0]["phone"], records[1]["phone"])
+        self.assertEqual(
+            record_from_row(["KH001"]),
+            {"name": "", "phone": "", "address": "", "uid": "", "id": ""},
+        )

@@ -1,8 +1,8 @@
 """Nhận cột từ nhiều form Excel rồi chuẩn hoá vào kho tổng.
 
-Cách đã chọn: hybrid xác định — từ điển tiêu đề + hình dạng ô + nhớ form.
-Không dùng LLM: cùng một file luôn ra cùng một map, chạy được khi mất mạng,
-và chịu được file lớn.
+Mỗi dòng file là một dòng kho. Ô chỉ vào một trường khi khớp dấu hiệu khóa:
+số điện thoại Việt, UID Facebook (chỉ chữ số hoặc link profile), ID TikTok
+(bắt đầu bằng @ hoặc link tiktok.com/@). Ô không khớp thì để trống.
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ FIELD_LABELS = {
     "name": "Tên",
     "phone": "Số điện thoại",
     "address": "Địa chỉ",
-    "uid": "UID",
-    "id": "ID",
+    "uid": "UID Facebook",
+    "id": "ID TikTok",
 }
 MAX_SCAN_ROWS = 40
 MAX_HEADER_SCAN = 25
@@ -34,7 +34,13 @@ _PUNCT = re.compile(r"[^\w\s]+", re.UNICODE)
 _SPACES = re.compile(r"\s+")
 _PHONE_KEEP = re.compile(r"[^\d+]")
 _UID_OK = re.compile(r"^\d{8,20}$")
-_ID_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,39}$")
+_TIKTOK_HANDLE = re.compile(r"^[A-Za-z0-9._]{2,24}$")
+_TIKTOK_URL = re.compile(r"tiktok\.com/@([A-Za-z0-9._]{2,24})\b", re.IGNORECASE)
+_FB_PROFILE_ID = re.compile(
+    r"(?:facebook\.com|fb\.com)/profile\.php\?[^#]*\bid=(\d{8,20})\b",
+    re.IGNORECASE,
+)
+_FB_BARE_ID = re.compile(r"(?:facebook\.com|fb\.com)/(\d{8,20})(?:[/?#]|$)", re.IGNORECASE)
 _HAS_LETTER = re.compile(r"[A-Za-zÀ-ỹ]")
 _ADDRESS_MARK = re.compile(
     r"\b(duong|pho|quan|huyen|tinh|phuong|xa|thon|ap|ngo|hem|tp|tphcm|hn|"
@@ -146,29 +152,32 @@ _HEADER_ALIASES: dict[str, frozenset[str]] = {
     "uid": frozenset(
         {
             "uid",
+            "uid facebook",
             "facebook uid",
             "fb uid",
             "fbid",
             "fb id",
             "facebook id",
+            "id facebook",
             "uid fb",
+            "link facebook",
+            "link fb",
             "user uid",
             "psid",
         }
     ),
     "id": frozenset(
         {
-            "id",
-            "ma",
-            "ma khach",
-            "ma khach hang",
-            "customer id",
-            "ma so",
-            "code",
-            "id khach",
-            "external id",
-            "ref",
-            "ma gd",
+            "tiktok",
+            "tik tok",
+            "tiktok id",
+            "id tiktok",
+            "tiktok username",
+            "username tiktok",
+            "tai khoan tiktok",
+            "tk tiktok",
+            "link tiktok",
+            "tiktok link",
         }
     ),
 }
@@ -257,29 +266,59 @@ def phone_key(phone: str) -> str:
     return "".join(ch for ch in phone if ch.isdigit())
 
 
-def normalize_uid(raw: str) -> str:
-    text = cell_text(raw).replace(" ", "")
-    if text.endswith(".0") and text[:-2].isdigit():
-        text = text[:-2]
-    if _UID_OK.match(text):
-        if normalize_phone(text) and text.startswith(("03", "05", "07", "08", "09", "84")):
-            return ""
-        return text
+def normalize_tiktok(raw: str) -> str:
+    """ID TikTok chỉ khi ô là @tên hoặc link tiktok.com/@tên."""
+    text = cell_text(raw).strip()
+    if not text:
+        return ""
+    compact = re.sub(r"\s+", "", text)
+    url = _TIKTOK_URL.search(compact)
+    if url:
+        return "@" + url.group(1).casefold()
+    if "tiktok" in compact.casefold():
+        found = re.findall(r"@([A-Za-z0-9._]{2,24})", compact)
+        if len(found) == 1 and _TIKTOK_HANDLE.match(found[0]):
+            return "@" + found[0].casefold()
+    if compact.startswith("@"):
+        handle = compact[1:].split("?")[0].split("/")[0].split("#")[0]
+        if _TIKTOK_HANDLE.match(handle):
+            return "@" + handle.casefold()
     return ""
 
 
 def normalize_id(raw: str) -> str:
-    text = cell_text(raw)
-    if not text:
+    return normalize_tiktok(raw)
+
+
+def id_key(value: str) -> str:
+    text = cell_text(value).strip()
+    if text.startswith("@"):
+        return text.casefold()
+    return text
+
+
+def _facebook_uid(text: str) -> str:
+    compact = text.replace(" ", "")
+    for pattern in (_FB_PROFILE_ID, _FB_BARE_ID):
+        match = pattern.search(compact)
+        if match and not normalize_phone(match.group(1)):
+            return match.group(1)
+    return ""
+
+
+def normalize_uid(raw: str) -> str:
+    """UID Facebook: cả ô là chữ số 8–20, hoặc link profile. Không lấy số điện thoại."""
+    text = cell_text(raw).replace(" ", "")
+    if not text or normalize_tiktok(text):
         return ""
-    if normalize_phone(text):
-        return ""
-    folded = text.replace(" ", "")
-    if _ID_OK.match(folded) and not folded.isdigit():
-        return folded[:40]
-    if folded.isdigit() and 3 <= len(folded) <= 20 and not normalize_uid(folded):
-        return folded
-    return folded[:40] if _HAS_LETTER.search(folded) and len(folded) <= 40 else ""
+    from_url = _facebook_uid(text)
+    if from_url:
+        return from_url
+    if text.endswith(".0") and text[:-2].isdigit():
+        text = text[:-2]
+    if _UID_OK.match(text) and not normalize_phone(text):
+        return text
+    return ""
 
 
 def normalize_name(raw: str) -> str:
@@ -313,14 +352,20 @@ def normalize_field(field_name: str, raw: str) -> str:
         return normalize_uid(raw)
     if field_name == "id":
         return normalize_id(raw)
+    if normalize_tiktok(raw) or normalize_uid(raw) or normalize_phone(raw):
+        return ""
     if field_name == "name":
-        return normalize_name(raw) if _looks_name(raw) or (normalize_name(raw) and not _looks_address(raw) and not normalize_uid(raw)) else ""
+        return normalize_name(raw) if _looks_name(raw) else ""
     if field_name == "address":
-        return normalize_address(raw) if _looks_address(raw) or (len(cell_text(raw)) >= 10 and not normalize_phone(raw)) else ""
+        return normalize_address(raw) if _looks_address(raw) else ""
     return ""
 
 
 def _looks_name(text: str) -> bool:
+    if normalize_tiktok(text) or normalize_uid(text) or normalize_phone(text):
+        return False
+    if cell_text(text).lstrip().startswith("@"):
+        return False
     value = normalize_name(text)
     if len(value) < 2:
         return False
@@ -334,6 +379,10 @@ def _looks_name(text: str) -> bool:
 
 
 def _looks_address(text: str) -> bool:
+    if normalize_tiktok(text) or normalize_uid(text) or normalize_phone(text):
+        return False
+    if cell_text(text).lstrip().startswith("@"):
+        return False
     value = cell_text(text)
     if len(value) < 10:
         return False
@@ -596,7 +645,7 @@ def detect_table(
         warnings.append("Chưa chắc cột tên và số điện thoại. Hãy sửa map trước khi nạp.")
     if any(col.shape_scores.get("uid", 0) > 0 and col.field == "uid" for col in columns):
         if any(len(cell_text(row[mapping["uid"]])) >= 16 for row in nonempty[:MAX_SCAN_ROWS] if "uid" in mapping):
-            warnings.append("UID dài: nếu Excel lưu dạng số có thể mất chính xác. Nên để cột UID là chữ.")
+            warnings.append("UID Facebook dài: nếu Excel lưu dạng số có thể mất chính xác. Nên để cột UID là chữ.")
     mapped_conf = [col.confidence for col in columns if col.field]
     confidence = round(sum(mapped_conf) / len(mapped_conf), 3) if mapped_conf else 0.0
     if reused:
@@ -617,22 +666,22 @@ def detect_table(
 
 
 def classify_cell(text: str) -> list[tuple[str, float]]:
-    """Điểm từng kiểu dữ liệu của một ô. Điểm cao hơn = chắc hơn."""
+    """Một ô chỉ nhận một kiểu khóa. Không khớp thì mới xét tên hoặc địa chỉ."""
     raw = cell_text(text)
     if not raw:
         return []
     scored: list[tuple[str, float]] = []
-    if normalize_phone(raw):
+    if normalize_tiktok(raw):
+        scored.append(("id", 1.0))
+    elif normalize_phone(raw):
         scored.append(("phone", 1.0))
-    if normalize_uid(raw):
+    elif normalize_uid(raw):
         scored.append(("uid", 0.98))
-    if normalize_id(raw) and not normalize_phone(raw) and not normalize_uid(raw):
-        score = 0.86 if not raw.isdigit() else 0.55
-        scored.append(("id", score))
-    if _looks_address(raw):
-        scored.append(("address", 0.9 if _ADDRESS_MARK.search(fold(raw)) else 0.7))
-    if _looks_name(raw):
-        scored.append(("name", 0.84 if len(raw.split()) >= 2 else 0.62))
+    else:
+        if _looks_address(raw):
+            scored.append(("address", 0.9 if _ADDRESS_MARK.search(fold(raw)) else 0.7))
+        if _looks_name(raw):
+            scored.append(("name", 0.84 if len(raw.split()) >= 2 else 0.62))
     scored.sort(key=lambda item: (-item[1], item[0]))
     return scored
 
@@ -661,12 +710,12 @@ def record_from_row(row: list[object], mapping: dict[str, int] | None = None) ->
                 continue
         if kinds:
             continue
-        if field_name == "name":
+        if field_name == "name" and _looks_name(text):
             value = normalize_name(text)
             if value:
                 record["name"] = value
                 used.add(index)
-        elif field_name == "address":
+        elif field_name == "address" and _looks_address(text):
             value = normalize_address(text)
             if value:
                 record["address"] = value

@@ -35,9 +35,9 @@ def _xlsx() -> bytes:
     book = Workbook()
     sheet = book.active
     sheet.title = "KH"
-    sheet.append(["Họ và tên", "SĐT", "Địa chỉ", "UID", "ID"])
-    sheet.append(["Vũ K", "0933000111", "4 Đường Láng, Đống Đa", "8000111222333", "K-1"])
-    sheet.append(["Lý L", "0933000222", "6 Nguyễn Huệ, Q.1", "8000111222334", "K-2"])
+    sheet.append(["Họ và tên", "SĐT", "Địa chỉ", "UID", "TikTok"])
+    sheet.append(["Vũ K", "0933000111", "4 Đường Láng, Đống Đa", "8000111222333", "@vuk"])
+    sheet.append(["Lý L", "0933000222", "6 Nguyễn Huệ, Q.1", "8000111222334", "@lyl"])
     buf = io.BytesIO()
     book.save(buf)
     return buf.getvalue()
@@ -86,7 +86,7 @@ class WarehouseApiTests(unittest.TestCase):
 
         found = self.client.get("/v1/kho", headers=self.headers, params={"q": "0933000111"})
         self.assertEqual(found.status_code, 200)
-        self.assertEqual(found.json()["items"][0]["externalId"], "K-1")
+        self.assertEqual(found.json()["items"][0]["externalId"], "@vuk")
 
         exported = self.client.get("/v1/kho/export", headers=self.headers, params={"q": "Vũ"})
         self.assertEqual(exported.status_code, 200)

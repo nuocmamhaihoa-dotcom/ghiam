@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from control_plane.db import session
-from control_plane.warehouse import FIELDS, address_key, name_key, phone_key
+from control_plane.warehouse import FIELDS, address_key, id_key, name_key, phone_key
 
 
 def init_warehouse(db_path: Path) -> None:
@@ -148,7 +148,7 @@ def _index_row(lookups: _Lookups, payload: dict[str, str]) -> None:
     if payload["phone_key"]:
         lookups.phone[payload["phone_key"]] = row_id
     if payload["external_id"]:
-        lookups.ext[payload["external_id"]] = row_id
+        lookups.ext[id_key(payload["external_id"])] = row_id
     if payload["name_key"]:
         lookups.name.setdefault(payload["name_key"], [])
         if row_id not in lookups.name[payload["name_key"]]:
@@ -173,12 +173,12 @@ def load_lookups(conn: sqlite3.Connection) -> _Lookups:
 def _strong_keys_agree(existing: dict[str, str], record: dict[str, str]) -> bool:
     incoming_uid = record.get("uid") or ""
     incoming_phone = record.get("phone_key") or phone_key(record.get("phone") or "")
-    incoming_id = record.get("id") or record.get("external_id") or ""
+    incoming_id = id_key(record.get("id") or record.get("external_id") or "")
     if incoming_uid and existing["uid"] and incoming_uid != existing["uid"]:
         return False
     if incoming_phone and existing["phone_key"] and incoming_phone != existing["phone_key"]:
         return False
-    if incoming_id and existing["external_id"] and incoming_id != existing["external_id"]:
+    if incoming_id and id_key(existing["external_id"]) and incoming_id != id_key(existing["external_id"]):
         return False
     return True
 
@@ -187,7 +187,7 @@ def find_match(lookups: _Lookups, record: dict[str, str]) -> tuple[int | None, s
     """Trùng ô độc nhất thì lấy hàng đó. Nhiều ô trỏ hai người khác nhau thì bỏ qua."""
     uid = record.get("uid") or ""
     key = record.get("phone_key") or phone_key(record.get("phone") or "")
-    external = record.get("id") or record.get("external_id") or ""
+    external = id_key(record.get("id") or record.get("external_id") or "")
     person = name_key(record.get("name") or "")
     place = address_key(record.get("address") or "")
     hits: list[tuple[int, str]] = []
@@ -275,7 +275,7 @@ def upsert_records(
             key = phone_key(phone)
             address = record.get("address") or ""
             uid = record.get("uid") or ""
-            external = record.get("id") or ""
+            external = id_key(record.get("id") or "")
             person = name_key(name)
             place = address_key(address)
             identity = (uid, key, external)
@@ -443,7 +443,7 @@ def export_csv(db_path: Path, query: str) -> bytes:
     buf = io.StringIO()
     buf.write("\ufeff")
     writer = csv.writer(buf)
-    writer.writerow(["Tên", "Số điện thoại", "Địa chỉ", "UID", "ID"])
+    writer.writerow(["Tên", "Số điện thoại", "Địa chỉ", "UID Facebook", "ID TikTok"])
     for item in result["items"]:
         writer.writerow([item["name"], item["phone"], item["address"], item["uid"], item["externalId"]])
     return buf.getvalue().encode("utf-8")

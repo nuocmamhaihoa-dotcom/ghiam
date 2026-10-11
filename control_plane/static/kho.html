@@ -53,7 +53,7 @@
 <body>
 <main>
   <h1>Kho tổng</h1>
-  <p class="lead">Nạp Excel nhiều form. Trùng một ô với kho thì bổ sung các ô còn trống cùng hàng. Không trùng thì nhận dạng từng ô và giữ nguyên một hàng ngang.</p>
+  <p class="lead">Mỗi dòng Excel là một dòng kho: tên, số điện thoại, địa chỉ, UID Facebook, ID TikTok. Cột lệch vẫn chia theo dấu hiệu của từng ô.</p>
   <nav>
     <a href="/">Đọc video</a>
     <a href="/danhba/">Danh bạ</a>
@@ -66,7 +66,7 @@
 
   <section>
     <h2>Nạp file</h2>
-    <p class="note">Nhận .xlsx, .csv, .tsv, .txt. Ô SĐT / UID / ID / tên đủ hai chữ / địa chỉ dài trùng đúng một người thì ghép vào hàng đó. Form lệch cột vẫn giữ các ô cùng hàng.</p>
+    <p class="note">Nhận .xlsx, .csv, .tsv, .txt. ID TikTok phải có @ ở đầu. UID Facebook là dãy số hoặc link profile. Ô không đủ dấu hiệu thì để trống, không đoán.</p>
     <div class="drop" id="drop">
       <p>Kéo file vào đây</p>
       <p class="note">hoặc</p>
@@ -87,7 +87,7 @@
       <div class="scroll">
         <table>
           <thead>
-            <tr><th>Tên</th><th>Số điện thoại</th><th>Địa chỉ</th><th>UID</th><th>ID</th><th>Xử lý</th></tr>
+            <tr><th>Tên</th><th>Số điện thoại</th><th>Địa chỉ</th><th>UID Facebook</th><th>ID TikTok</th><th>Xử lý</th></tr>
           </thead>
           <tbody id="sampleRows"></tbody>
         </table>
@@ -98,7 +98,7 @@
   <section>
     <h2>Tra cứu</h2>
     <div class="row">
-      <input id="query" type="search" placeholder="Tên, số điện thoại, địa chỉ, UID hoặc ID" />
+      <input id="query" type="search" placeholder="Tên, số điện thoại, địa chỉ, UID Facebook hoặc @TikTok" />
       <button class="primary" type="button" id="search">Tìm</button>
       <button class="ghost" type="button" id="exportBtn">Xuất CSV</button>
     </div>
@@ -106,7 +106,7 @@
     <div class="scroll">
       <table>
         <thead>
-          <tr><th>Tên</th><th>Số điện thoại</th><th>Địa chỉ</th><th>UID</th><th>ID</th></tr>
+          <tr><th>Tên</th><th>Số điện thoại</th><th>Địa chỉ</th><th>UID Facebook</th><th>ID TikTok</th></tr>
         </thead>
         <tbody id="rows">
           <tr><td colspan="5">Chưa có dữ liệu.</td></tr>
@@ -117,15 +117,26 @@
   </section>
 
   <section>
-    <h2>Cách ghép và nhận ô — đề xuất để bạn chọn</h2>
-    <p>Đang dùng <b>trùng ô độc nhất + nhận dạng từng ô trong hàng</b>. Ô đã có trong kho không bị ghi đè.</p>
+    <h2>Nguyên tắc nhận ô — đề xuất để bạn chọn</h2>
+    <p>Đang dùng <b>dấu hiệu khóa trên từng ô, giữ nguyên hàng ngang</b>. Ô đã có trong kho không bị ghi đè.</p>
+    <details open>
+      <summary>Dấu hiệu khóa — đang dùng</summary>
+      <ul>
+        <li>Số điện thoại: số di động Việt 03, 05, 07, 08, 09 hoặc +84. Số dài hơn không phải điện thoại.</li>
+        <li>UID Facebook: cả ô là chữ số dài 8–20, hoặc link facebook.com / fb.com có id số. Không nhận tên hiển thị.</li>
+        <li>ID TikTok: ô bắt đầu bằng @, hoặc link tiktok.com/@tên. Mã khách không có @ thì bỏ qua.</li>
+        <li>Địa chỉ: có từ đường, phố, quận, phường, số nhà, hoặc chuỗi địa chỉ dài.</li>
+        <li>Tên: chữ, một đến sáu từ, không phải các kiểu trên.</li>
+        <li>Một dòng file tạo đúng một dòng kho. Cột đổi chỗ thì các ô của dòng đó vẫn nằm cùng hàng.</li>
+      </ul>
+    </details>
     <details open>
       <summary>1. Trùng ô độc nhất rồi bổ sung hàng — đang dùng</summary>
       <ul>
-        <li>Gom mọi ô độc nhất: UID, SĐT, ID, tên đủ hai chữ, địa chỉ dài.</li>
+        <li>Gom mọi ô độc nhất: UID Facebook, số điện thoại, @TikTok, tên đủ hai chữ, địa chỉ dài.</li>
         <li>Cùng một người thì điền các ô trống của hàng đó. Ô đã có không bị ghi đè.</li>
         <li>Hai ô trỏ hai người, hoặc tên/địa chỉ trùng nhiều người, thì bỏ qua cả hàng.</li>
-        <li>Cùng tên nhưng khác SĐT / UID / ID thì giữ hai người, không gộp.</li>
+        <li>Cùng tên nhưng khác số điện thoại, UID hoặc @TikTok thì giữ hai người, không gộp.</li>
       </ul>
     </details>
     <details>
@@ -135,7 +146,7 @@
       </ul>
     </details>
     <details>
-      <summary>3. Chỉ SĐT / UID / ID</summary>
+      <summary>3. Chỉ số điện thoại / UID Facebook / @TikTok</summary>
       <ul>
         <li>An toàn nhưng bỏ sót file chỉ có tên + địa chỉ của người đã có trong kho.</li>
       </ul>
@@ -143,8 +154,8 @@
     <details open>
       <summary>4. Nhận dạng từng ô, giữ nguyên hàng ngang — đang dùng</summary>
       <ul>
-        <li>Mỗi dòng file là một dòng kho. Ô SĐT / UID / địa chỉ / tên được nhận dù cột lệch.</li>
-        <li>Tiêu đề vẫn dùng khi có. Ô không khớp tiêu đề thì nhìn dấu hiệu của chính ô đó.</li>
+        <li>Mỗi dòng file là một dòng kho. Ô số điện thoại, UID Facebook, @TikTok, địa chỉ, tên được nhận dù cột lệch.</li>
+        <li>Tiêu đề vẫn dùng khi có. Ô không khớp tiêu đề thì chỉ nhận khi đúng dấu hiệu khóa.</li>
       </ul>
     </details>
     <details>
@@ -179,9 +190,9 @@
   }
 
   function matchLabel(kind) {
-    if (kind === "uid") return "Ghép theo UID";
+    if (kind === "uid") return "Ghép theo UID Facebook";
     if (kind === "phone") return "Ghép theo SĐT";
-    if (kind === "id") return "Ghép theo ID";
+    if (kind === "id") return "Ghép theo @TikTok";
     if (kind === "name") return "Ghép theo tên";
     if (kind === "address") return "Ghép theo địa chỉ";
     if (kind === "ambiguous" || kind === "conflict") return "Trùng nhiều người — bỏ qua";
@@ -194,8 +205,8 @@
       ["name", "Tên"],
       ["phone", "Số điện thoại"],
       ["address", "Địa chỉ"],
-      ["uid", "UID"],
-      ["id", "ID"]
+      ["uid", "UID Facebook"],
+      ["id", "ID TikTok"]
     ];
     return fields.map(function (item) {
       return "<option value='" + item[0] + "'" + (item[0] === selected ? " selected" : "") + ">" + item[1] + "</option>";
@@ -209,7 +220,7 @@
     document.getElementById("stats").innerHTML =
       stat(body.contacts, "Dòng trong kho") +
       stat(body.phones, "Có số điện thoại") +
-      stat(body.uids, "Có UID") +
+      stat(body.uids, "Có UID Facebook") +
       stat(body.batches, "Lô đã nạp");
   }
 
