@@ -1,11 +1,8 @@
 """Ghép số, tên và username từ các khung hình danh bạ và hồ sơ.
 
-Cách 2: trong cùng một video, ghép tên gần giống. Giữ ghép đúng từng chữ.
-Thêm các tên lệch dấu hoặc lệch vài chữ do đọc hình. Không ghép tên một
-từ ngắn, không ghép khi một tên có hai số.
-
-Cách 3: dòng vừa bấm rồi mở hồ sơ thì số đó đi với username vừa mở, kể
-cả khi hai tên khác nhau. Không thấy dòng bấm thì không đoán.
+Quét danh bạ lấy số + tên. Đọc hồ sơ lấy tên + @. Chỉ ghép thành một hàng
+khi danh bạ đứng ngay trước hồ sơ, hai tên là cùng một khách, và không có
+khách khác chen giữa. Tên khác nhau thì không ghép, kể cả vừa bấm dòng đó.
 """
 
 from __future__ import annotations
@@ -568,7 +565,6 @@ def build_table(frames: list[FrameObs]) -> Table:
     shown: dict[str, set[int]] = {}
     visits = _walk(frames, contacts, phone_seen, phone_hits, shown)
     _pick_from_window(visits)
-    _pair_orphan_visits_by_time(visits)
     _collapse_rare_digits(contacts, phone_hits, phone_seen, visits, shown)
 
     for index, visit in enumerate(visits):
@@ -580,8 +576,13 @@ def build_table(frames: list[FrameObs]) -> Table:
 
     phone_name = {phone: tally.best() for phone, tally in contacts.items()}
     phone_name = {phone: name for phone, name in phone_name.items() if name and not is_skipped(name)}
-    user_name = {user: tally.best() for user, tally in profiles.items()}
-    user_name = {user: name for user, name in user_name.items() if name and not is_skipped(name)}
+    user_name: dict[str, str] = {}
+    for user, tally in profiles.items():
+        name = tally.best()
+        if name and is_skipped(name):
+            continue
+        # Tên hồ sơ trống vẫn giữ @ để xếp lỗi quét, không ghép vào số.
+        user_name[user] = name
 
     used_phones: set[str] = set()
     used_users: set[str] = set()
@@ -719,8 +720,7 @@ def _pick_from_window(visits: list[_Visit]) -> None:
         matches = {
             phone
             for phone, name in visit.window
-            if (profile_name and same_person_name(name, profile_name))
-            or (username and handle_matches_name(username, name))
+            if profile_name and same_person_name(name, profile_name)
         }
         if len(matches) == 1:
             visit.phone = next(iter(matches))
@@ -960,6 +960,11 @@ def _apply_visits(
         username = visit.username()
         if not phone or not username or phone not in phone_name:
             continue
+        contact_name = phone_name[phone]
+        profile_name = visit.name()
+        # Chỉ ghép khi hồ sơ ngay sau mang cùng tên. Tên khác hoặc không đọc được tên thì bỏ.
+        if not profile_name or not same_person_name(contact_name, profile_name):
+            continue
         if phone not in grouped:
             grouped[phone] = []
             order.append(phone)
@@ -1020,6 +1025,12 @@ def _apply_names(
     for username, name in user_name.items():
         if username in used_users:
             continue
+        if not str(name or "").strip():
+            # Không đọc được tên thì không biết cùng khách nào. Mỗi @ là một lỗi quét.
+            table.review.append(
+                Review("", "", "", username, "đã mở hồ sơ nhưng chưa thấy số")
+            )
+            continue
         users_by_name.setdefault(name_key(name), []).append(username)
 
     for key in phones_by_name:
@@ -1027,82 +1038,11 @@ def _apply_names(
     for key in users_by_name:
         users_by_name[key].sort(key=lambda username: user_seen.get(username, 0))
 
-    paired_phones: set[str] = set()
-    paired_users: set[str] = set()
+    # Số và @ còn lại không đứng liền nhau. Không ghép thêm theo tên ở chỗ khác trong video.
     for key in set(phones_by_name) | set(users_by_name):
-        phones = phones_by_name.get(key, [])
-        usernames = users_by_name.get(key, [])
-        if len(phones) == 1 and len(usernames) == 1:
-            phone = phones[0]
-            username = usernames[0]
-            paired_phones.add(phone)
-            paired_users.add(username)
-            table.rows.append(Row(phone, _prettier(user_name[username], phone_name[phone]), username))
-
-    left_phones = [
-        phone
-        for phones in phones_by_name.values()
-        for phone in phones
-        if phone not in paired_phones
-    ]
-    left_users = [
-        username
-        for usernames in users_by_name.values()
-        for username in usernames
-        if username not in paired_users
-    ]
-
-    # Cùng tên bỏ dấu: một số ↔ một username thì ghép một hàng.
-    phones_by_fold: dict[str, list[str]] = {}
-    users_by_fold: dict[str, list[str]] = {}
-    for phone in left_phones:
-        phones_by_fold.setdefault(fold_marks(phone_name[phone]), []).append(phone)
-    for username in left_users:
-        users_by_fold.setdefault(fold_marks(user_name[username]), []).append(username)
-    for key in set(phones_by_fold) | set(users_by_fold):
-        phones = [phone for phone in phones_by_fold.get(key, []) if phone not in paired_phones]
-        usernames = [username for username in users_by_fold.get(key, []) if username not in paired_users]
-        if len(phones) == 1 and len(usernames) == 1:
-            phone = phones[0]
-            username = usernames[0]
-            paired_phones.add(phone)
-            paired_users.add(username)
-            table.rows.append(Row(phone, joined_name(phone_name[phone], user_name[username]), username))
-
-    left_phones = [phone for phone in left_phones if phone not in paired_phones]
-    left_users = [username for username in left_users if username not in paired_users]
-    for phone, username in pair_close_names(
-        [(phone, phone_name[phone]) for phone in left_phones],
-        [(username, user_name[username]) for username in left_users],
-    ):
-        paired_phones.add(phone)
-        paired_users.add(username)
-        table.rows.append(Row(phone, joined_name(phone_name[phone], user_name[username]), username))
-
-    left_phones = [phone for phone in left_phones if phone not in paired_phones]
-    left_users = [username for username in left_users if username not in paired_users]
-    for phone, username in _pair_by_handle(
-        [(phone, phone_name[phone]) for phone in left_phones],
-        [(username, user_name[username]) for username in left_users],
-    ):
-        paired_phones.add(phone)
-        paired_users.add(username)
-        table.rows.append(Row(phone, joined_name(phone_name[phone], user_name[username]), username))
-
-    rest_phones: dict[str, list[str]] = {}
-    rest_users: dict[str, list[str]] = {}
-    for phone in left_phones:
-        if phone in paired_phones:
-            continue
-        rest_phones.setdefault(name_key(phone_name[phone]), []).append(phone)
-    for username in left_users:
-        if username in paired_users:
-            continue
-        rest_users.setdefault(name_key(user_name[username]), []).append(username)
-    for key in set(rest_phones) | set(rest_users):
         _emit_unpaired(
-            rest_phones.get(key, []),
-            rest_users.get(key, []),
+            phones_by_name.get(key, []),
+            users_by_name.get(key, []),
             phone_name,
             user_name,
             table,
@@ -1155,15 +1095,13 @@ def _emit_unpaired(
             collapsed = [_prefer_handle(collapsed, sample)]
         usernames = collapsed
     if len(phones) == 1 and len(usernames) == 1:
+        # Cùng tên nhưng không phải cặp liền nhau: không ghép.
         phone = phones[0]
         username = usernames[0]
-        contact_name = phone_name[phone]
-        profile_name = user_name.get(username, "")
-        if profile_name and same_person_name(contact_name, profile_name):
-            display = joined_name(contact_name, profile_name)
-        else:
-            display = contact_name
-        table.rows.append(Row(phone, display, username))
+        table.unopened.append(Unopened(phone, phone_name[phone]))
+        table.review.append(
+            Review("", "", user_name.get(username, ""), username, "đã mở hồ sơ nhưng chưa thấy số")
+        )
         return
     if len(phones) == 1 and not usernames:
         table.unopened.append(Unopened(phones[0], phone_name[phones[0]]))

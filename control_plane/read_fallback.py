@@ -25,6 +25,7 @@ from control_plane.screen_table import (
     joined_name,
     normalize_phone,
     phone_in_text,
+    same_person_name,
 )
 
 PAIR_WINDOW_SEC = 4.0
@@ -78,12 +79,14 @@ def _unique_time_pairs(
     users: list[tuple[str, str, float]],
     window: float = PAIR_WINDOW_SEC,
 ) -> list[tuple[str, str]]:
-    """Chỉ ghép khi một số thấy đúng một @ trong cửa sổ, và @ đó chỉ thấy một số."""
+    """Chỉ ghép khi cùng tên, đúng một @ trong cửa sổ, và @ đó chỉ thấy một số."""
     phone_hits: dict[str, list[str]] = {}
     user_hits: dict[str, list[str]] = {}
-    for phone, _name, phone_at in phones:
-        for username, _user_name, user_at in users:
+    for phone, phone_name, phone_at in phones:
+        for username, user_name, user_at in users:
             if abs(phone_at - user_at) > window:
+                continue
+            if not same_person_name(phone_name, user_name):
                 continue
             phone_hits.setdefault(phone, []).append(username)
             user_hits.setdefault(username, []).append(phone)
@@ -175,15 +178,20 @@ def pair_leftovers_by_time(table: Table, frames: list[FrameObs]) -> Table:
 
 
 def maybe_handle(line: str) -> str:
-    """@ đọc được, hoặc một token có số/dấu chấm giống username."""
+    """@ đọc được, hoặc một token có số/dấu chấm giống username.
+
+    Số điện thoại không phải username. Không biến 0900000099 thành @0900000099.
+    """
     found = clean_username(line)
     if found:
         return found
+    if phone_in_text(line):
+        return ""
     parts = line.split()
     if not parts or "@" in line:
         return ""
     token = parts[-1]
-    if not any(ch.isdigit() or ch in "._" for ch in token):
+    if phone_in_text(token) or not any(ch.isdigit() or ch in "._" for ch in token):
         return ""
     return clean_username("@" + token)
 
@@ -338,9 +346,13 @@ def read_headers_for_gaps(
     if not added_phones and not added_users:
         return table
     result = pair_leftovers_by_time(Table(rows=list(table.rows), review=temp_review, unopened=temp_unopened), extra_frames)
-    # Số/@ chỉ đọc thêm để ghép. Không ghép được thì không thêm dòng mới.
+    # Số/@ chỉ đọc thêm để ghép phần đã có. Cặp do chính lượt này bịa ra thì bỏ.
     return Table(
-        rows=result.rows,
+        rows=[
+            row
+            for row in result.rows
+            if not (row.phone in added_phones and clean_username(row.username) in added_users)
+        ],
         unopened=[item for item in result.unopened if item.phone not in added_phones],
         review=[
             item
