@@ -298,9 +298,31 @@ def normalize_address(raw: str) -> str:
     return text[:200]
 
 
+def name_key(name: str) -> str:
+    return " ".join(normalize_name(name).casefold().split())
+
+
+def address_key(address: str) -> str:
+    return fold(normalize_address(address))
+
+
+def normalize_field(field_name: str, raw: str) -> str:
+    if field_name == "phone":
+        return normalize_phone(raw)
+    if field_name == "uid":
+        return normalize_uid(raw)
+    if field_name == "id":
+        return normalize_id(raw)
+    if field_name == "name":
+        return normalize_name(raw) if _looks_name(raw) or (normalize_name(raw) and not _looks_address(raw) and not normalize_uid(raw)) else ""
+    if field_name == "address":
+        return normalize_address(raw) if _looks_address(raw) or (len(cell_text(raw)) >= 10 and not normalize_phone(raw)) else ""
+    return ""
+
+
 def _looks_name(text: str) -> bool:
     value = normalize_name(text)
-    if not value:
+    if len(value) < 2:
         return False
     if any(mark in value.casefold() for mark in _STREET_WORDS):
         return False
@@ -594,20 +616,91 @@ def detect_table(
     )
 
 
-def apply_mapping(rows: list[list[object]], mapping: dict[str, int]) -> list[dict[str, str]]:
+def classify_cell(text: str) -> list[tuple[str, float]]:
+    """Điểm từng kiểu dữ liệu của một ô. Điểm cao hơn = chắc hơn."""
+    raw = cell_text(text)
+    if not raw:
+        return []
+    scored: list[tuple[str, float]] = []
+    if normalize_phone(raw):
+        scored.append(("phone", 1.0))
+    if normalize_uid(raw):
+        scored.append(("uid", 0.98))
+    if normalize_id(raw) and not normalize_phone(raw) and not normalize_uid(raw):
+        score = 0.86 if not raw.isdigit() else 0.55
+        scored.append(("id", score))
+    if _looks_address(raw):
+        scored.append(("address", 0.9 if _ADDRESS_MARK.search(fold(raw)) else 0.7))
+    if _looks_name(raw):
+        scored.append(("name", 0.84 if len(raw.split()) >= 2 else 0.62))
+    scored.sort(key=lambda item: (-item[1], item[0]))
+    return scored
+
+
+def record_from_row(row: list[object], mapping: dict[str, int] | None = None) -> dict[str, str]:
+    """Một hàng nhập → một hàng kho. Map cột nếu khớp; ô còn lại nhận dạng theo dấu hiệu."""
+    mapping = mapping or {}
+    record = {name: "" for name in FIELDS}
+    used: set[int] = set()
+    for field_name, index in mapping.items():
+        if field_name not in FIELDS or index < 0 or index >= len(row) or index in used:
+            continue
+        text = cell_text(row[index])
+        kinds = classify_cell(text)
+        if any(kind == field_name for kind, _score in kinds):
+            value = normalize_field(field_name, text) or (
+                normalize_name(text) if field_name == "name" else ""
+            )
+            if field_name == "name" and not value:
+                value = normalize_name(text)
+            if field_name == "address" and not value:
+                value = normalize_address(text)
+            if value:
+                record[field_name] = value
+                used.add(index)
+                continue
+        if kinds:
+            continue
+        if field_name == "name":
+            value = normalize_name(text)
+            if value:
+                record["name"] = value
+                used.add(index)
+        elif field_name == "address":
+            value = normalize_address(text)
+            if value:
+                record["address"] = value
+                used.add(index)
+    leftovers: list[tuple[int, str, list[tuple[str, float]]]] = []
+    for index, raw in enumerate(row):
+        if index in used:
+            continue
+        text = cell_text(raw)
+        if not text:
+            continue
+        leftovers.append((index, text, classify_cell(text)))
+    leftovers.sort(key=lambda item: (-(item[2][0][1] if item[2] else 0.0), item[0]))
+    for index, text, kinds in leftovers:
+        for field_name, score in kinds:
+            if record[field_name] or score < 0.55:
+                continue
+            value = normalize_field(field_name, text)
+            if field_name == "name" and not value:
+                value = normalize_name(text)
+            if field_name == "address" and not value:
+                value = normalize_address(text)
+            if not value:
+                continue
+            record[field_name] = value
+            used.add(index)
+            break
+    return record
+
+
+def apply_mapping(rows: list[list[object]], mapping: dict[str, int] | None = None) -> list[dict[str, str]]:
     records: list[dict[str, str]] = []
     for row in rows:
-        record = {name: "" for name in FIELDS}
-        if "name" in mapping and mapping["name"] < len(row):
-            record["name"] = normalize_name(cell_text(row[mapping["name"]]))
-        if "phone" in mapping and mapping["phone"] < len(row):
-            record["phone"] = normalize_phone(cell_text(row[mapping["phone"]]))
-        if "address" in mapping and mapping["address"] < len(row):
-            record["address"] = normalize_address(cell_text(row[mapping["address"]]))
-        if "uid" in mapping and mapping["uid"] < len(row):
-            record["uid"] = normalize_uid(cell_text(row[mapping["uid"]]))
-        if "id" in mapping and mapping["id"] < len(row):
-            record["id"] = normalize_id(cell_text(row[mapping["id"]]))
+        record = record_from_row(row, mapping)
         if not any(record.values()):
             continue
         if not record["name"] and not record["phone"] and not record["uid"] and not record["id"]:

@@ -28,6 +28,7 @@ from control_plane.warehouse_store import (
     export_csv,
     init_warehouse,
     list_templates,
+    preview_matches,
     save_template,
     search_contacts,
     upsert_records,
@@ -179,11 +180,13 @@ async def kho_preview(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     token = _save_upload(filename, payload)
     chosen = next((item for item in preview.sheets if item.name == preview.chosen), preview.sheets[0])
+    body = sheet_to_dict(chosen)
+    body["sample"] = preview_matches(settings.db_path, chosen.sample)
     return {
         "token": token,
         "filename": filename,
         "chosen": preview.chosen,
-        "sheet": sheet_to_dict(chosen),
+        "sheet": body,
         "sheets": [sheet_to_dict(item) for item in preview.sheets],
     }
 
@@ -197,8 +200,6 @@ def kho_commit(
     init_warehouse(settings.db_path)
     filename, payload = _load_upload(body.token)
     mapping = _safe_mapping(body.mapping)
-    if not mapping:
-        raise HTTPException(status_code=400, detail="Chưa chọn cột để nạp")
     records = records_from_bytes(
         payload,
         filename,

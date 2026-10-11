@@ -53,7 +53,7 @@
 <body>
 <main>
   <h1>Kho tổng</h1>
-  <p class="lead">Nạp Excel nhiều form. Máy tự nhận cột Tên, Số điện thoại, Địa chỉ, UID, ID rồi ghi vào một kho. Tra cứu và xuất lại bất kỳ lúc nào.</p>
+  <p class="lead">Nạp Excel nhiều form. Trùng một ô với kho thì bổ sung các ô còn trống cùng hàng. Không trùng thì nhận dạng từng ô và giữ nguyên một hàng ngang.</p>
   <nav>
     <a href="/">Đọc video</a>
     <a href="/danhba/">Danh bạ</a>
@@ -66,7 +66,7 @@
 
   <section>
     <h2>Nạp file</h2>
-    <p class="note">Nhận .xlsx, .csv, .tsv, .txt. Tiêu đề lệch, thiếu, hoặc nằm dưới dòng chữ lớn vẫn đọc được. Form đã nạp một lần thì lần sau nhớ map.</p>
+    <p class="note">Nhận .xlsx, .csv, .tsv, .txt. Ô SĐT / UID / ID / tên đủ hai chữ / địa chỉ dài trùng đúng một người thì ghép vào hàng đó. Form lệch cột vẫn giữ các ô cùng hàng.</p>
     <div class="drop" id="drop">
       <p>Kéo file vào đây</p>
       <p class="note">hoặc</p>
@@ -87,7 +87,7 @@
       <div class="scroll">
         <table>
           <thead>
-            <tr><th>Tên</th><th>Số điện thoại</th><th>Địa chỉ</th><th>UID</th><th>ID</th></tr>
+            <tr><th>Tên</th><th>Số điện thoại</th><th>Địa chỉ</th><th>UID</th><th>ID</th><th>Xử lý</th></tr>
           </thead>
           <tbody id="sampleRows"></tbody>
         </table>
@@ -117,40 +117,40 @@
   </section>
 
   <section>
-    <h2>Cách nhận cột — để bạn quyết định</h2>
-    <p>Phần mềm đang dùng <b>hybrid xác định</b>: từ điển tiêu đề tiếng Việt/Anh + chấm điểm hình dạng ô + nhớ form đã sửa. Dưới đây là các cách đã cân nhắc.</p>
+    <h2>Cách ghép và nhận ô — đề xuất để bạn chọn</h2>
+    <p>Đang dùng <b>trùng ô độc nhất + nhận dạng từng ô trong hàng</b>. Ô đã có trong kho không bị ghi đè.</p>
     <details open>
-      <summary>1. Hybrid xác định — đang dùng</summary>
+      <summary>1. Trùng ô độc nhất rồi bổ sung hàng — đang dùng</summary>
       <ul>
-        <li>Chính xác: tiêu đề “Họ tên / SĐT / Địa chỉ / UID” nhận ngay; form không tiêu đề thì nhìn số điện thoại, UID, địa chỉ.</li>
-        <li>Hiệu quả: đọc stream, nạp theo lô, không gọi API ngoài.</li>
-        <li>Ổn định: cùng file luôn ra cùng map. Form đã sửa một lần thì lần sau khỏi sửa.</li>
-        <li>Hạn chế: form quá lạ (cột trộn nhiều kiểu trong một ô) vẫn cần bạn chọn lại cột trên màn xem trước.</li>
+        <li>Gom mọi ô độc nhất: UID, SĐT, ID, tên đủ hai chữ, địa chỉ dài.</li>
+        <li>Cùng một người thì điền các ô trống của hàng đó. Ô đã có không bị ghi đè.</li>
+        <li>Hai ô trỏ hai người, hoặc tên/địa chỉ trùng nhiều người, thì bỏ qua cả hàng.</li>
+        <li>Cùng tên nhưng khác SĐT / UID / ID thì giữ hai người, không gộp.</li>
       </ul>
     </details>
     <details>
-      <summary>2. Chỉ map tay mỗi lần nạp</summary>
+      <summary>2. Ghép mờ tên / một phần địa chỉ</summary>
       <ul>
-        <li>Chính xác nếu người nạp cẩn thận. Không ổn khi nhiều form, nhiều người, file lớn.</li>
-        <li>Không tự phát hiện. Dễ nạp nhầm khi mệt.</li>
+        <li>Bắt được nhiều hơn. Dễ dính “Nguyễn Văn A” hoặc “Hà Nội” vào người sai. Không dùng để tự nạp.</li>
       </ul>
     </details>
     <details>
-      <summary>3. Chỉ khớp tiêu đề</summary>
+      <summary>3. Chỉ SĐT / UID / ID</summary>
       <ul>
-        <li>Nhanh nhưng vỡ khi dòng 1 là “DANH SÁCH KHÁCH”, cột tên là “Khách”, hoặc không có tiêu đề.</li>
+        <li>An toàn nhưng bỏ sót file chỉ có tên + địa chỉ của người đã có trong kho.</li>
+      </ul>
+    </details>
+    <details open>
+      <summary>4. Nhận dạng từng ô, giữ nguyên hàng ngang — đang dùng</summary>
+      <ul>
+        <li>Mỗi dòng file là một dòng kho. Ô SĐT / UID / địa chỉ / tên được nhận dù cột lệch.</li>
+        <li>Tiêu đề vẫn dùng khi có. Ô không khớp tiêu đề thì nhìn dấu hiệu của chính ô đó.</li>
       </ul>
     </details>
     <details>
-      <summary>4. Chỉ nhìn hình dạng ô</summary>
+      <summary>5. LLM đọc từng dòng</summary>
       <ul>
-        <li>Không cần tiêu đề. Dễ lẫn UID với ID, tên với địa chỉ ngắn, STT với mã.</li>
-      </ul>
-    </details>
-    <details>
-      <summary>5. LLM / Vision đọc form</summary>
-      <ul>
-        <li>Linh hoạt với form kỳ. Đắt, chậm, phụ thuộc mạng, cùng file có thể ra map khác. Không hợp kho lớn cần lặp lại.</li>
+        <li>Linh hoạt form scan. Chậm, tốn tiền, cùng file có thể ra kết quả khác. Không hợp lô lớn.</li>
       </ul>
     </details>
   </section>
@@ -176,6 +176,16 @@
 
   function stat(value, label) {
     return "<div class='stat'><b>" + value + "</b><span>" + label + "</span></div>";
+  }
+
+  function matchLabel(kind) {
+    if (kind === "uid") return "Ghép theo UID";
+    if (kind === "phone") return "Ghép theo SĐT";
+    if (kind === "id") return "Ghép theo ID";
+    if (kind === "name") return "Ghép theo tên";
+    if (kind === "address") return "Ghép theo địa chỉ";
+    if (kind === "ambiguous" || kind === "conflict") return "Trùng nhiều người — bỏ qua";
+    return "Thêm mới";
   }
 
   function fieldOptions(selected) {
@@ -231,12 +241,13 @@
     }).join("");
     var sample = document.getElementById("sampleRows");
     if (!sheet.sample || !sheet.sample.length) {
-      sample.innerHTML = "<tr><td colspan='5'>Không đọc được dòng dữ liệu.</td></tr>";
+      sample.innerHTML = "<tr><td colspan='6'>Không đọc được dòng dữ liệu.</td></tr>";
       return;
     }
     sample.innerHTML = sheet.sample.map(function (row) {
       return "<tr><td>" + esc(row.name) + "</td><td>" + esc(row.phone) + "</td><td>" + esc(row.address) +
-        "</td><td>" + esc(row.uid) + "</td><td>" + esc(row.id) + "</td></tr>";
+        "</td><td>" + esc(row.uid) + "</td><td>" + esc(row.id) + "</td><td>" +
+        esc(matchLabel(row.match)) + "</td></tr>";
     }).join("");
   }
 
@@ -331,7 +342,8 @@
       note.className = "note warn";
       return;
     }
-    note.textContent = "Đã đọc " + body.read + " dòng: +" + body.inserted + " mới, " + body.updated + " ghép, " + body.skipped + " bỏ qua.";
+    note.textContent = "Đã đọc " + body.read + " dòng: +" + body.inserted + " mới, " +
+      body.updated + " bổ sung ô trống, " + body.skipped + " bỏ qua.";
     note.className = "note ok";
     await refreshStats();
     await search(true);

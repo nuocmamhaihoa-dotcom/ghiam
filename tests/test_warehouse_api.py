@@ -67,6 +67,7 @@ class WarehouseApiTests(unittest.TestCase):
         body = preview.json()
         self.assertEqual(body["sheet"]["mapping"]["phone"], 1)
         self.assertEqual(body["sheet"]["sample"][0]["name"], "Vũ K")
+        self.assertEqual(body["sheet"]["sample"][0]["match"], "new")
 
         committed = self.client.post(
             "/v1/kho/commit",
@@ -90,6 +91,41 @@ class WarehouseApiTests(unittest.TestCase):
         exported = self.client.get("/v1/kho/export", headers=self.headers, params={"q": "Vũ"})
         self.assertEqual(exported.status_code, 200)
         self.assertIn("0933000111", exported.text)
+
+    def test_preview_marks_unique_phone_match(self) -> None:
+        first = self.client.post(
+            "/v1/kho/preview",
+            headers=self.headers,
+            files={"file": ("khach.xlsx", _xlsx(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        self.assertEqual(first.status_code, 200)
+        body = first.json()
+        committed = self.client.post(
+            "/v1/kho/commit",
+            headers=self.headers,
+            json={
+                "token": body["token"],
+                "sheet": body["chosen"],
+                "mapping": body["sheet"]["mapping"],
+                "headerRow": body["sheet"]["headerRow"],
+                "hasHeader": True,
+            },
+        )
+        self.assertEqual(committed.status_code, 200)
+        extra = (
+            "Ten,SDT,Dia chi\n"
+            'Vũ K mới,0933000111,"99 Cầu Giấy, Hà Nội"\n'
+        ).encode("utf-8")
+        again = self.client.post(
+            "/v1/kho/preview",
+            headers=self.headers,
+            files={"file": ("them.csv", extra, "text/csv")},
+        )
+        self.assertEqual(again.status_code, 200, again.text)
+        sample = again.json()["sheet"]["sample"][0]
+        self.assertEqual(sample["match"], "phone")
+        self.assertEqual(sample["phone"], "0933000111")
+        self.assertEqual(sample["address"], "99 Cầu Giấy, Hà Nội")
 
     def test_preview_requires_token(self) -> None:
         response = self.client.post(

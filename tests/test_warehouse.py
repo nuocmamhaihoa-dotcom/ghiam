@@ -11,20 +11,26 @@ from openpyxl import Workbook
 
 from control_plane.warehouse import (
     apply_mapping,
+    classify_cell,
     detect_table,
     normalize_phone,
     normalize_uid,
     preview_bytes,
+    record_from_row,
     records_from_bytes,
 )
 from control_plane.warehouse_store import (
     export_csv,
+    find_match,
     init_warehouse,
     list_templates,
+    load_lookups,
+    preview_matches,
     save_template,
     search_contacts,
     upsert_records,
 )
+from control_plane.db import session
 
 
 def xlsx_bytes(rows: list[list[object]], title: str = "DS") -> bytes:
@@ -106,6 +112,20 @@ class DetectTests(unittest.TestCase):
         self.assertEqual(sheet.mapping["uid"], 3)
         self.assertTrue(sheet.sample[0]["phone"].startswith("0977"))
 
+    def test_shuffled_no_header_keeps_horizontal_row(self) -> None:
+        rows = [
+            ["KH-1", "12 Đường Láng, Đống Đa, Hà Nội", "0901234567", "Nguyễn Văn Nam", "100012345678901"],
+            ["KH-2", "7 Lê Duẩn, Quận 1, TP.HCM", "0912345678", "Trần Thị Hoa", "100012345678902"],
+        ]
+        sheet = detect_table(rows, "lech")
+        self.assertEqual(sheet.sample[0]["name"], "Nguyễn Văn Nam")
+        self.assertEqual(sheet.sample[0]["phone"], "0901234567")
+        self.assertEqual(sheet.sample[0]["address"], "12 Đường Láng, Đống Đa, Hà Nội")
+        self.assertEqual(sheet.sample[0]["uid"], "100012345678901")
+        self.assertEqual(sheet.sample[0]["id"], "KH-1")
+        self.assertEqual(sheet.sample[1]["name"], "Trần Thị Hoa")
+        self.assertEqual(sheet.sample[1]["phone"], "0912345678")
+
     def test_semicolon_csv(self) -> None:
         payload = (
             "Ten;SDT;Dia chi;UID;Ma\n"
@@ -173,6 +193,125 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(row["address"], "1 Đường Láng, Hà Nội")
         self.assertEqual(row["uid"], "6000111222333")
 
+    def test_unique_name_and_address_fill_empty(self) -> None:
+        upsert_records(
+            self.db,
+            [
+                {
+                    "name": "Hoàng Thị Lan",
+                    "phone": "0908888111",
+                    "address": "",
+                    "uid": "",
+                    "id": "",
+                },
+                {
+                    "name": "Phạm Quốc Bảo",
+                    "phone": "",
+                    "address": "88 Nguyễn Trãi, Thanh Xuân, Hà Nội",
+                    "uid": "",
+                    "id": "",
+                },
+            ],
+            filename="goc.xlsx",
+            source="goc",
+            mapping={"name": 0},
+            at="2026-02-01T00:00:00+00:00",
+        )
+        result = upsert_records(
+            self.db,
+            [
+                {
+                    "name": "Hoàng Thị Lan",
+                    "phone": "",
+                    "address": "19 Lý Thường Kiệt, Hoàn Kiếm",
+                    "uid": "9000111222333",
+                    "id": "HL-1",
+                },
+                {
+                    "name": "",
+                    "phone": "0912222333",
+                    "address": "88 Nguyễn Trãi, Thanh Xuân, Hà Nội",
+                    "uid": "",
+                    "id": "PQB",
+                },
+            ],
+            filename="bo-sung.xlsx",
+            source="bs",
+            mapping={"name": 0},
+            at="2026-02-02T00:00:00+00:00",
+        )
+        self.assertEqual(result["updated"], 2)
+        self.assertEqual(result["inserted"], 0)
+        lan = search_contacts(self.db, "Hoàng Thị Lan", limit=10, after=0)["items"][0]
+        self.assertEqual(lan["phone"], "0908888111")
+        self.assertEqual(lan["address"], "19 Lý Thường Kiệt, Hoàn Kiếm")
+        self.assertEqual(lan["uid"], "9000111222333")
+        bao = search_contacts(self.db, "0912222333", limit=10, after=0)["items"][0]
+        self.assertEqual(bao["name"], "Phạm Quốc Bảo")
+        self.assertEqual(bao["externalId"], "PQB")
+
+    def test_ambiguous_name_skips_and_conflict_skips(self) -> None:
+        seeded = upsert_records(
+            self.db,
+            [
+                {"name": "Nguyễn Văn A", "phone": "0901111001", "address": "", "uid": "", "id": "A1"},
+                {"name": "Nguyễn Văn A", "phone": "0901111002", "address": "", "uid": "", "id": "A2"},
+                {"name": "Trần B", "phone": "", "address": "", "uid": "111122223333444", "id": ""},
+                {"name": "Lê C", "phone": "0903333001", "address": "", "uid": "", "id": ""},
+            ],
+            filename="hai-nguoi.xlsx",
+            source="goc",
+            mapping={"name": 0},
+            at="2026-03-01T00:00:00+00:00",
+        )
+        self.assertEqual(seeded["inserted"], 4)
+        result = upsert_records(
+            self.db,
+            [
+                {
+                    "name": "Nguyễn Văn A",
+                    "phone": "0909999000",
+                    "address": "1 Phố Huế, Hà Nội",
+                    "uid": "",
+                    "id": "",
+                },
+                {
+                    "name": "",
+                    "phone": "0903333001",
+                    "address": "",
+                    "uid": "111122223333444",
+                    "id": "",
+                },
+            ],
+            filename="trung.xlsx",
+            source="trung",
+            mapping={"name": 0},
+            at="2026-03-02T00:00:00+00:00",
+        )
+        self.assertEqual(result["updated"], 0)
+        self.assertEqual(result["inserted"], 0)
+        self.assertEqual(result["skipped"], 2)
+        with session(self.db) as conn:
+            lookups = load_lookups(conn)
+        self.assertEqual(find_match(lookups, {"name": "Nguyễn Văn A", "phone": "", "uid": "", "id": "", "address": ""})[1], "ambiguous")
+        conflict = find_match(
+            lookups,
+            {
+                "name": "",
+                "phone": "0903333001",
+                "phone_key": "0903333001",
+                "uid": "111122223333444",
+                "id": "",
+                "address": "",
+            },
+        )
+        self.assertEqual(conflict, (None, "conflict"))
+        previewed = preview_matches(
+            self.db,
+            [{"name": "Nguyễn Văn A", "phone": "", "address": "", "uid": "", "id": ""}],
+        )
+        self.assertEqual(previewed[0]["match"], "ambiguous")
+
     def test_search_and_export(self) -> None:
         upsert_records(
             self.db,
@@ -213,4 +352,21 @@ class ApplyTests(unittest.TestCase):
         )
         self.assertEqual(rows[0]["name"], "Pha")
         self.assertEqual(rows[0]["phone"], "0922222333")
-        self.assertEqual(apply_mapping([["x", "y"]], {}), [])
+        self.assertEqual(apply_mapping([["", ""]], {}), [])
+
+    def test_shuffled_cells_stay_one_row(self) -> None:
+        row = ["KH-88", "0901234567", "100012345678901", "Nguyễn Văn Nam", "12 Đường Láng, Đống Đa, Hà Nội"]
+        kinds = {kind for kind, _score in classify_cell(row[1])}
+        self.assertIn("phone", kinds)
+        record = record_from_row(row)
+        self.assertEqual(record["name"], "Nguyễn Văn Nam")
+        self.assertEqual(record["phone"], "0901234567")
+        self.assertEqual(record["address"], "12 Đường Láng, Đống Đa, Hà Nội")
+        self.assertEqual(record["uid"], "100012345678901")
+        self.assertEqual(record["id"], "KH-88")
+        mapped_wrong = record_from_row(row, {"name": 0, "phone": 1, "uid": 2})
+        self.assertEqual(mapped_wrong["id"], "KH-88")
+        self.assertEqual(mapped_wrong["phone"], "0901234567")
+        self.assertEqual(mapped_wrong["name"], "Nguyễn Văn Nam")
+        self.assertEqual(mapped_wrong["uid"], "100012345678901")
+        self.assertEqual(mapped_wrong["address"], "12 Đường Láng, Đống Đa, Hà Nội")
