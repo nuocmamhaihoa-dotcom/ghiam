@@ -3,6 +3,7 @@
 Lượt một quét ảnh xám nhỏ @30fps (A1), biết lúc đứng yên / chuyển cảnh.
 Quanh chuyển cảnh tách thêm burst @60fps (A3) để không bỏ hồ sơ mở rất ngắn.
 Chỉ lấy luồng hình — không phân tích audio. ROI theo máy (B2) + calibrate đầu video (B3).
+Khi có nhiều nhân: giải mã khung chính và burst cùng lúc, OCR ngay khi từng ảnh đã ghi xong.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import argparse
 import csv
 import dataclasses
+import os
 import shutil
 import subprocess
 import sys
@@ -224,6 +226,39 @@ def _scan_video(
     if on_progress is not None:
         on_progress(f"Đang xem trước {path.name} @ {fps:.0f}fps")
     plan = plan_video(path, fps, on_progress=on_progress)
+    # submit is None giữ đường cũ (tách xong rồi mới đọc) để test giả lập extract không bị thêm tham số.
+    if submit is None:
+        jobs, results, layout_dict, measured = _scan_sequential(
+            path, folder, plan, fps, on_progress, device, layout,
+        )
+    else:
+        jobs, results, layout_dict, measured = _scan_overlapped(
+            path, folder, plan, fps, submit, on_progress, device, layout,
+        )
+    results = _round2_unknowns(jobs, results, submit=submit, on_progress=on_progress, layout_dict=layout_dict)
+    learned = measured if measured is not None else None
+    observations = [(job[2], obs) for job, obs in zip(jobs, results)]
+    observations = _refill_missing_fields(
+        path,
+        folder,
+        observations,
+        submit=submit,
+        on_progress=on_progress,
+        layout_dict=layout_dict,
+    )
+    return observations, learned
+
+
+def _scan_sequential(
+    path: Path,
+    folder: Path,
+    plan: VideoPlan,
+    fps: float,
+    on_progress: Progress | None,
+    device: str,
+    layout: LayoutProfile | None,
+) -> tuple[list[tuple[float, int, Path, Callable[..., FrameObs], tuple]], list[FrameObs], dict[str, object], LayoutProfile | None]:
+    """Tách hết khung rồi mới OCR. Dùng khi không có pool (và các test giả lập extract)."""
     needed = plan.needed()
     if on_progress is not None:
         on_progress(f"Đang tách {len(needed)} khung từ {path.name}")
@@ -311,61 +346,554 @@ def _scan_video(
     if on_progress is not None:
         on_progress(f"Đang đọc chữ 0/{ocr_total} khung{skipped_note}")
     results: list[FrameObs] = [FrameObs("unknown")] * len(jobs)
-    if submit is None:
-        last_beat = time.monotonic()
-        done = 0
-        for index, (_, _, _, fn, args) in enumerate(jobs):
-            if index in copy_from:
-                continue
-            results[index] = fn(*args)
-            done += 1
-            now = time.monotonic()
-            if on_progress is not None and (
-                done == ocr_total or done % step == 0 or now - last_beat >= progress_every_sec
-            ):
-                on_progress(f"Đang đọc chữ {done}/{ocr_total} khung{skipped_note}")
-                last_beat = now
-    else:
-        batch_size = 500
-        ocr_jobs = [(index, job) for index, job in enumerate(jobs) if index not in copy_from]
-        done = 0
-        last_beat = time.monotonic()
-        try:
-            for start in range(0, len(ocr_jobs), batch_size):
-                chunk = ocr_jobs[start : start + batch_size]
-                future_map = {
-                    submit(fn, *args): index for index, (_at, _kind, _path, fn, args) in chunk
-                }
-                for future in as_completed(future_map):
-                    index = future_map[future]
-                    results[index] = future.result()
-                    done += 1
-                    now = time.monotonic()
-                    if on_progress is not None and (
-                        done == ocr_total or done % step == 0 or now - last_beat >= progress_every_sec
-                    ):
-                        on_progress(f"Đang đọc chữ {done}/{ocr_total} khung{skipped_note}")
-                        last_beat = now
-        except BaseException:
-            raise
+    last_beat = time.monotonic()
+    done = 0
+    for index, (_, _, _, fn, args) in enumerate(jobs):
+        if index in copy_from:
+            continue
+        results[index] = fn(*args)
+        done += 1
+        now = time.monotonic()
+        if on_progress is not None and (
+            done == ocr_total or done % step == 0 or now - last_beat >= progress_every_sec
+        ):
+            on_progress(f"Đang đọc chữ {done}/{ocr_total} khung{skipped_note}")
+            last_beat = now
     for dest, src in copy_from.items():
         obs = results[src]
         at = jobs[dest][0]
         results[dest] = FrameObs("unknown", at=at) if obs.kind == "unknown" else dataclasses.replace(obs, at=at)
-    # R2: vòng 2 OCR các khung unknown (không đụng job tap — chỉ khung đơn).
-    results = _round2_unknowns(jobs, results, submit=submit, on_progress=on_progress, layout_dict=layout_dict)
-    learned = measured if measured is not None else None
-    observations = [(job[2], obs) for job, obs in zip(jobs, results)]
-    observations = _refill_missing_fields(
-        path,
-        folder,
-        observations,
-        submit=submit,
-        on_progress=on_progress,
-        layout_dict=layout_dict,
-    )
-    return observations, learned
+    return jobs, results, layout_dict, measured
 
+
+
+def _ffmpeg_budget() -> int:
+    """Số luồng ffmpeg của video đang đọc. 0 nghĩa là ffmpeg tự lấy hết nhân."""
+    count = int(getattr(_FFMPEG_THREADS, "n", 0) or 0)
+    if count <= 0:
+        return max(1, os.cpu_count() or 2)
+    return count
+
+
+def _decode_ocr_budget(budget: int, decodes: int, cpus: int) -> tuple[int, int]:
+    """Luồng ffmpeg mỗi lần giải mã, và số OCR chạy song song khi ffmpeg chưa xong.
+
+    Một luồng H.264 chỉ ăn khoảng 4–5 nhân. Phần còn lại đọc chữ ngay, không chờ
+    giải mã hết video. `decodes` là 2 khi có burst, 1 khi chỉ có lượt khung chính.
+    """
+    decodes = max(1, int(decodes))
+    budget = max(1, int(budget))
+    cpus = max(1, int(cpus))
+    each = budget if decodes == 1 else max(2, budget // 2)
+    # Không xếp nhiều việc OCR hơn số nhân trong lúc ffmpeg còn chạy.
+    slots = min(cpus, max(2, budget - decodes * 4))
+    return each, slots
+
+
+@dataclass(frozen=True)
+class _FrameJob:
+    at: float
+    kind: int
+    source: str
+    number: int
+    window: tuple[int, ...] = ()
+
+
+def _plan_ocr_jobs(plan: VideoPlan, burst_numbers: list[int], fps: float) -> list[_FrameJob]:
+    """Cùng thứ tự job với đường tách-xong-rồi-đọc: khung đọc, cửa sổ bấm, burst, rồi sort theo thời gian."""
+    jobs: list[_FrameJob] = []
+    read_numbers = set(plan.reads)
+    for number in plan.reads:
+        jobs.append(_FrameJob(number / fps, 0, "main", number))
+    for window in plan.taps:
+        last = window[-1]
+        jobs.append(_FrameJob(last / fps, 1, "tap", last, tuple(window)))
+        for number in window[-BRIEF_EXIT_READS:]:
+            if number in read_numbers:
+                continue
+            read_numbers.add(number)
+            jobs.append(_FrameJob(number / fps, 0, "main", number))
+    for number in burst_numbers:
+        jobs.append(_FrameJob(number / BURST_FPS, 0, "burst", number))
+    jobs.sort(key=lambda job: (job.at, job.kind))
+    return jobs
+
+
+class _EarlierScreens:
+    """Chỉ lấy kết quả của một khung ĐÃ có, thời điểm sớm hơn, trong 2 giây.
+
+    Khung đến sau nhưng có mốc thời gian sớm hơn không được dùng làm nguồn —
+    đọc thừa thì được, gán nhầm kết quả của khung sau cho khung trước thì không.
+    """
+
+    def __init__(self) -> None:
+        self.recent: list[tuple[float, tuple[int, int], int]] = []
+
+    def match(self, at: float, digest: tuple[int, int] | None) -> int | None:
+        if digest is None or not self.recent:
+            return None
+        lo, hi = 0, len(self.recent)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if self.recent[mid][0] <= at:
+                lo = mid + 1
+            else:
+                hi = mid
+        index = lo - 1
+        while index >= 0:
+            prev_at, prev_hash, slot = self.recent[index]
+            if at - prev_at > _DHASH_WINDOW_SEC:
+                break
+            if _same_screen(digest, prev_hash):
+                return slot
+            index -= 1
+        return None
+
+    def remember(self, at: float, digest: tuple[int, int] | None, slot: int) -> None:
+        if digest is None:
+            return
+        lo, hi = 0, len(self.recent)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if self.recent[mid][0] <= at:
+                lo = mid + 1
+            else:
+                hi = mid
+        self.recent.insert(lo, (at, digest, slot))
+
+
+class _LiveOcr:
+    """OCR ngay khi JPEG đã đóng, trong lúc ffmpeg còn đang giải mã."""
+
+    def __init__(
+        self,
+        plan: VideoPlan,
+        burst_numbers: list[int],
+        fps: float,
+        submit: Submit,
+        on_progress: Progress | None,
+        device: str,
+        layout: LayoutProfile | None,
+        *,
+        ocr_slots: int,
+        cpus: int,
+        decode_count: int,
+    ) -> None:
+        self.jobs = _plan_ocr_jobs(plan, burst_numbers, fps)
+        self.submit = submit
+        self.on_progress = on_progress
+        self.device = device
+        self.base = layout or LayoutProfile(device=device or "default")
+        self.cal_numbers = list(plan.reads[:24])
+        self.ocr_slots = max(1, int(ocr_slots))
+        self.cpus = max(1, int(cpus))
+        self.decode_count = max(1, int(decode_count))
+        self.slots = threading.Semaphore(self.ocr_slots)
+        self.slot_lock = threading.Lock()
+        self.exits = 0
+        self.opened = False
+        self.cv = threading.Condition()
+        self.progress_lock = threading.Lock()
+        self.main_files: dict[int, Path] = {}
+        self.burst_files: dict[int, Path] = {}
+        self.bound: dict[int, Path] = {}
+        self.main_wait: dict[int, list[int]] = {}
+        self.burst_wait: dict[int, list[int]] = {}
+        self.tap_by_frame: dict[int, list[int]] = {}
+        for index, job in enumerate(self.jobs):
+            if job.source == "main":
+                self.main_wait.setdefault(job.number, []).append(index)
+            elif job.source == "burst":
+                self.burst_wait.setdefault(job.number, []).append(index)
+            else:
+                for number in job.window:
+                    self.tap_by_frame.setdefault(number, []).append(index)
+        self.alias = _EarlierScreens()
+        self.copy_from: dict[int, int] = {}
+        self.dispatched: set[int] = set()
+        self.claiming: set[int] = set()
+        self.futures: dict[int, Future] = {}
+        self.results: list[FrameObs | None] = [None] * len(self.jobs)
+        self.got: set[int] = set()
+        self.errors: list[BaseException] = []
+        self.reported_error = False
+        self.flushed = False
+        self.calibrated = False
+        self.calibrating = False
+        self.measured: LayoutProfile | None = None
+        self.layout_dict: dict[str, object] = self.base.to_dict()
+        self.announced = False
+        self.done = 0
+        self.alias_count = 0
+        self.goal = len(self.jobs)
+        self.step = max(1, min(100, len(self.jobs) // 50)) if self.jobs else 1
+        self.last_beat = time.monotonic()
+        if not self.cal_numbers:
+            self._apply_calibration([])
+
+    def on_main(self, number: int, path: Path) -> None:
+        self._arrive("main", number, path)
+
+    def on_burst(self, number: int, path: Path) -> None:
+        self._arrive("burst", number, path)
+
+    def on_decoded(self) -> None:
+        """Một lần giải mã đã thoát. Cả hai xong thì nhả hết chỗ OCR để dùng đầy CPU."""
+        announce = False
+        with self.slot_lock:
+            self.exits += 1
+            if self.exits >= self.decode_count and not self.opened:
+                self.opened = True
+                extra = max(0, self.cpus - self.ocr_slots)
+                for _ in range(extra):
+                    self.slots.release()
+                announce = extra > 0
+        if announce and self.on_progress is not None:
+            self.on_progress("Đã giải mã xong, đọc chữ dùng hết nhân")
+
+    def open_slots(self) -> None:
+        with self.slot_lock:
+            if self.opened:
+                return
+            self.opened = True
+            extra = max(0, self.cpus - self.ocr_slots)
+            for _ in range(extra):
+                self.slots.release()
+
+    def assemble(
+        self,
+    ) -> tuple[list[tuple[float, int, Path, Callable[..., FrameObs], tuple]], list[FrameObs], dict[str, object], LayoutProfile | None]:
+        self._ensure_calibrated()
+        with self.cv:
+            claimed = self._claim_all()
+            self.flushed = True
+        self._dispatch_claimed(claimed)
+        self.open_slots()
+        self.wait_all(raise_error=True)
+        results: list[FrameObs] = []
+        for index, job in enumerate(self.jobs):
+            if index in self.copy_from:
+                src = self.copy_from[index]
+                obs = self.results[src]
+                if obs is None or obs.kind == "unknown":
+                    results.append(FrameObs("unknown", at=job.at))
+                else:
+                    results.append(dataclasses.replace(obs, at=job.at))
+                continue
+            obs = self.results[index]
+            results.append(obs if obs is not None else FrameObs("unknown", at=job.at))
+        return self._materialize(), results, self.layout_dict, self.measured
+
+    def wait_all(self, *, raise_error: bool) -> None:
+        with self.cv:
+            items = list(self.futures.items())
+        for index, future in items:
+            if index in self.got:
+                continue
+            try:
+                self.results[index] = future.result()
+            except BaseException as exc:
+                self.errors.append(exc)
+            self.got.add(index)
+        if not self.errors:
+            return
+        if raise_error:
+            raise self.errors[0]
+        if not self.reported_error:
+            self.reported_error = True
+            print(f"OCR nền lỗi: {self.errors[0]}", flush=True)
+
+    def _arrive(self, source: str, number: int, path: Path) -> None:
+        claim_calibration = False
+        cal_paths: list[Path] = []
+        with self.cv:
+            store = self.main_files if source == "main" else self.burst_files
+            store[number] = path
+            if not self.calibrated and not self.calibrating and self._cal_ready():
+                self.calibrating = True
+                claim_calibration = True
+                cal_paths = [self.main_files[n] for n in self.cal_numbers]
+        if claim_calibration:
+            try:
+                self._apply_calibration(cal_paths)
+            except BaseException:
+                with self.cv:
+                    self.calibrating = False
+                    self.cv.notify_all()
+                raise
+            with self.cv:
+                claimed = self._claim_all()
+                self.flushed = True
+                self.cv.notify_all()
+            self._dispatch_claimed(claimed)
+            return
+        with self.cv:
+            while self.calibrating:
+                if not self.cv.wait(timeout=3600):
+                    raise RuntimeError("Hết hạn chờ khóa bố cục video.")
+            if not self.calibrated:
+                return
+            if not self.flushed:
+                claimed = self._claim_all()
+                self.flushed = True
+            else:
+                claimed = self._claim_one(source, number)
+        self._dispatch_claimed(claimed)
+
+    def _ensure_calibrated(self) -> None:
+        with self.cv:
+            while self.calibrating:
+                if not self.cv.wait(timeout=3600):
+                    raise RuntimeError("Hết hạn chờ khóa bố cục video.")
+            if self.calibrated:
+                return
+            paths = [self.main_files[n] for n in self.cal_numbers if n in self.main_files]
+            self.calibrating = True
+        try:
+            self._apply_calibration(paths)
+        except BaseException:
+            with self.cv:
+                self.calibrating = False
+                self.cv.notify_all()
+            raise
+        with self.cv:
+            self.cv.notify_all()
+
+    def _apply_calibration(self, paths: list[Path]) -> None:
+        measured = calibrate_from_paths(paths)
+        locked = merge_layout(self.base, measured, weight=0.75) if measured is not None else self.base
+        locked.device = self.device or self.base.device or "default"
+        if measured is not None and self.on_progress is not None:
+            self.on_progress(f"Đã khóa bố cục đầu video («{locked.device}»)")
+        with self.cv:
+            self.measured = measured
+            self.layout_dict = locked.to_dict()
+            self.calibrated = True
+            self.calibrating = False
+
+    def _cal_ready(self) -> bool:
+        return all(number in self.main_files for number in self.cal_numbers)
+
+    def _ready(self, job: _FrameJob) -> bool:
+        if job.source == "burst":
+            return job.number in self.burst_files
+        if job.source == "tap":
+            return all(number in self.main_files for number in job.window)
+        return job.number in self.main_files
+
+    def _claim_all(self) -> list[int]:
+        picked: list[int] = []
+        for index, job in enumerate(self.jobs):
+            if index in self.dispatched or index in self.claiming or not self._ready(job):
+                continue
+            self.claiming.add(index)
+            self.bound[index] = self._bind_path(job)
+            picked.append(index)
+        picked.sort(key=lambda index: (self.jobs[index].at, self.jobs[index].kind))
+        return picked
+
+    def _claim_one(self, source: str, number: int) -> list[int]:
+        if source == "main":
+            indexes = list(self.main_wait.get(number, []))
+            indexes.extend(self.tap_by_frame.get(number, []))
+        else:
+            indexes = list(self.burst_wait.get(number, []))
+        picked: list[int] = []
+        seen: set[int] = set()
+        for index in indexes:
+            if index in seen or index in self.dispatched or index in self.claiming:
+                continue
+            seen.add(index)
+            job = self.jobs[index]
+            if not self._ready(job):
+                continue
+            self.claiming.add(index)
+            self.bound[index] = self._bind_path(job)
+            picked.append(index)
+        picked.sort(key=lambda index: (self.jobs[index].at, self.jobs[index].kind))
+        return picked
+
+    def _bind_path(self, job: _FrameJob) -> Path:
+        if job.source == "burst":
+            return self.burst_files[job.number]
+        return self.main_files[job.number]
+
+    def _dispatch_claimed(self, claimed: list[int]) -> None:
+        if not claimed:
+            return
+        digests: dict[int, tuple[int, int] | None] = {}
+        for index in claimed:
+            if self.jobs[index].kind != 0:
+                continue
+            digests[index] = _frame_dhash(str(self.bound[index]))
+        planned: list[tuple[int, Callable[..., FrameObs], tuple]] = []
+        announce: str | None = None
+        with self.cv:
+            for index in claimed:
+                if index in self.dispatched:
+                    self.claiming.discard(index)
+                    continue
+                job = self.jobs[index]
+                digest = digests.get(index)
+                if job.kind == 0:
+                    src = self.alias.match(job.at, digest)
+                    if src is not None:
+                        self.copy_from[index] = src
+                        self.dispatched.add(index)
+                        self.claiming.discard(index)
+                        with self.progress_lock:
+                            self.alias_count += 1
+                            self.goal = max(0, len(self.jobs) - self.alias_count)
+                        continue
+                    self.alias.remember(job.at, digest, index)
+                planned.append((index, *self._call(index)))
+                self.dispatched.add(index)
+                self.claiming.discard(index)
+            if not self.announced and self.on_progress is not None and (planned or self.alias_count):
+                self.announced = True
+                note = f" (bỏ {self.alias_count} khung trùng)" if self.alias_count else ""
+                announce = f"Đang đọc chữ 0/{self.goal} khung{note}"
+        if announce is not None and self.on_progress is not None:
+            self.on_progress(announce)
+        for index, fn, args in planned:
+            # Chờ chỗ OCR ngoài khóa, để luồng giải mã kia vẫn ghi nhận khung mới.
+            self.slots.acquire()
+            try:
+                future = self.submit(fn, *args)
+            except BaseException:
+                self.slots.release()
+                raise
+            with self.cv:
+                self.futures[index] = future
+            future.add_done_callback(self._ocr_done)
+
+    def _call(self, index: int) -> tuple[Callable[..., FrameObs], tuple]:
+        job = self.jobs[index]
+        if job.source == "tap":
+            paths = [str(self.main_files[number]) for number in job.window]
+            return read_tap_at, (paths, job.at)
+        return read_frame_at, (str(self.bound[index]), job.at, self.layout_dict)
+
+    def _ocr_done(self, _future: Future) -> None:
+        self.slots.release()
+        if self.on_progress is None:
+            return
+        with self.progress_lock:
+            self.done += 1
+            done = self.done
+            goal = self.goal
+            aliases = self.alias_count
+            now = time.monotonic()
+            report = done == goal or done % self.step == 0 or now - self.last_beat >= 10.0
+            if report:
+                self.last_beat = now
+        if not report or self.on_progress is None:
+            return
+        note = f" (bỏ {aliases} khung trùng)" if aliases else ""
+        self.on_progress(f"Đang đọc chữ {done}/{goal} khung{note}")
+
+    def _materialize(self) -> list[tuple[float, int, Path, Callable[..., FrameObs], tuple]]:
+        jobs: list[tuple[float, int, Path, Callable[..., FrameObs], tuple]] = []
+        for index, job in enumerate(self.jobs):
+            if job.source == "tap":
+                paths = [str(self.main_files[number]) for number in job.window]
+                last = self.main_files[job.number]
+                jobs.append((job.at, 1, last, read_tap_at, (paths, job.at)))
+                continue
+            path = self.bound.get(index)
+            if path is None:
+                path = self._bind_path(job)
+            jobs.append((job.at, 0, path, read_frame_at, (str(path), job.at, self.layout_dict)))
+        return jobs
+
+
+def _scan_overlapped(
+    path: Path,
+    folder: Path,
+    plan: VideoPlan,
+    fps: float,
+    submit: Submit,
+    on_progress: Progress | None,
+    device: str,
+    layout: LayoutProfile | None,
+) -> tuple[list[tuple[float, int, Path, Callable[..., FrameObs], tuple]], list[FrameObs], dict[str, object], LayoutProfile | None]:
+    """Giải mã lượt chính và burst cùng lúc. OCR bắt đầu khi từng JPEG đã đóng."""
+    needed = plan.needed()
+    times = plan.transition_times(fps)
+    burst_numbers = burst_frame_numbers(times)
+    existing_times = {number / fps for number in needed}
+    filtered = [
+        number
+        for number in burst_numbers
+        if not any(abs(number / BURST_FPS - moment) < (0.5 / fps) for moment in existing_times)
+    ]
+    if on_progress is not None:
+        on_progress(f"Đang tách {len(needed)} khung từ {path.name}")
+        if filtered:
+            on_progress(f"Đang tách burst {len(filtered)} khung @ {BURST_FPS:.0f}fps")
+    cpus = max(1, os.cpu_count() or 1)
+    each, slots = _decode_ocr_budget(_ffmpeg_budget(), 2 if filtered else 1, cpus)
+    live = _LiveOcr(
+        plan,
+        filtered,
+        fps,
+        submit,
+        on_progress,
+        device,
+        layout,
+        ocr_slots=slots,
+        cpus=cpus,
+        decode_count=2 if filtered else 1,
+    )
+    errors: list[BaseException] = []
+
+    def _run(
+        numbers: list[int],
+        fps_value: float,
+        prefix: str,
+        ready: Callable[[int, Path], None],
+    ) -> None:
+        try:
+            extract_frames(
+                path,
+                folder,
+                numbers,
+                fps_value,
+                on_progress=on_progress,
+                prefix=prefix,
+                threads=each,
+                on_ready=ready,
+                on_decoded=live.on_decoded,
+            )
+        except BaseException as exc:
+            errors.append(exc)
+
+    workers = [
+        threading.Thread(
+            target=_run,
+            args=(needed, fps, "f", live.on_main),
+            name="extract-main",
+        )
+    ]
+    if filtered:
+        workers.append(
+            threading.Thread(
+                target=_run,
+                args=(filtered, BURST_FPS, "b", live.on_burst),
+                name="extract-burst",
+            )
+        )
+    try:
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join()
+        if errors:
+            raise errors[0]
+        return live.assemble()
+    finally:
+        live.open_slots()
+        live.wait_all(raise_error=False)
 
 
 def incomplete_anchors(frames: list[FrameObs], table: Table) -> list[float]:
@@ -948,8 +1476,27 @@ def extract_frames(
     fps: float = SCAN_FPS,
     on_progress: Progress | None = None,
     prefix: str = "f",
+    threads: int | None = None,
+    on_ready: Callable[[int, Path], None] | None = None,
+    on_decoded: Callable[[], None] | None = None,
 ) -> dict[int, Path]:
-    """Lượt hai: chỉ ghi ra đĩa các khung đã chọn, đủ độ phân giải. Chỉ luồng hình."""
+    """Lượt hai: chỉ ghi ra đĩa các khung đã chọn, đủ độ phân giải. Chỉ luồng hình.
+
+    `on_ready` nhận từng JPEG sau khi ffmpeg đã đóng file (file sau đã mở, hoặc tiến trình đã thoát).
+    Không truyền `threads` / `on_ready` / `on_decoded` thì đường cũ giữ nguyên.
+    """
+    if threads is not None or on_ready is not None or on_decoded is not None:
+        return _extract_frames_stream(
+            path,
+            folder,
+            numbers,
+            fps,
+            on_progress=on_progress,
+            prefix=prefix,
+            threads=threads,
+            on_ready=on_ready,
+            on_decoded=on_decoded,
+        )
     _require_ffmpeg(path)
     if not numbers:
         return {}
@@ -1016,6 +1563,158 @@ def extract_frames(
     written = sorted(folder.glob(f"{prefix}_*.jpg"))
     if len(written) < len(numbers):
         raise RuntimeError(f"Video {path.name} chỉ ra {len(written)}/{len(numbers)} khung cần đọc.")
+    if on_progress is not None:
+        on_progress(f"Đã tách {len(written)} khung")
+    return dict(zip(numbers, written))
+
+
+def _extract_frames_stream(
+    path: Path,
+    folder: Path,
+    numbers: list[int],
+    fps: float,
+    *,
+    on_progress: Progress | None,
+    prefix: str,
+    threads: int | None,
+    on_ready: Callable[[int, Path], None] | None,
+    on_decoded: Callable[[], None] | None,
+) -> dict[int, Path]:
+    """Giải mã và báo từng khung đã ghi xong. Vẫn select theo số khung `n`, không tua theo thời gian."""
+    _require_ffmpeg(path)
+    notified = False
+
+    def _notify() -> None:
+        nonlocal notified
+        if notified or on_decoded is None:
+            return
+        notified = True
+        on_decoded()
+
+    if not numbers:
+        _notify()
+        return {}
+    ordered = sorted(set(numbers))
+    script = folder / f"select_{prefix}.txt"
+    script.write_text(
+        "fps=%s,select='%s',scale=w='min(1080,iw)':h=-2:flags=bilinear"
+        % (fps, _select_expr(numbers)),
+        encoding="utf-8",
+    )
+    pattern = folder / f"{prefix}_%06d.jpg"
+    thread_arg = _ffmpeg_threads_arg() if threads is None else str(max(0, int(threads)))
+    stop = threading.Event()
+    emit_lock = threading.Lock()
+    emitted = 0
+    ready_error: list[BaseException] = []
+    proc_holder: list[subprocess.Popen[bytes]] = []
+
+    def _emit(process_done: bool) -> None:
+        nonlocal emitted
+        while True:
+            with emit_lock:
+                index = emitted
+                if index >= len(ordered):
+                    return
+                current = folder / f"{prefix}_{index + 1:06d}.jpg"
+                following = folder / f"{prefix}_{index + 2:06d}.jpg"
+                if not current.exists():
+                    return
+                # File đang mở chưa xong. File kế đã xuất hiện, hoặc ffmpeg đã thoát, thì file này đã đóng.
+                if not process_done and not following.exists():
+                    return
+                emitted = index + 1
+                number = ordered[index]
+                ready = current
+            if on_ready is not None:
+                on_ready(number, ready)
+
+    def _watch() -> None:
+        last_report = time.monotonic()
+        while not stop.wait(0.05):
+            try:
+                before = emitted
+                _emit(False)
+                now = time.monotonic()
+                if on_progress is not None and emitted != before and now - last_report >= 5.0:
+                    on_progress(f"Đang tách khung {emitted}/{len(ordered)}")
+                    last_report = now
+            except BaseException as exc:
+                ready_error.append(exc)
+                proc = proc_holder[0] if proc_holder else None
+                if proc is not None and proc.poll() is None:
+                    try:
+                        proc.kill()
+                    except OSError:
+                        pass
+                return
+        try:
+            _emit(True)
+        except BaseException as exc:
+            ready_error.append(exc)
+
+    command = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-threads",
+        thread_arg,
+        "-i",
+        str(path),
+        "-map",
+        "0:v:0",
+        "-an",
+        "-sn",
+        "-dn",
+        "-filter_script:v",
+        str(script),
+        "-vsync",
+        "0",
+        "-q:v",
+        "4",
+        str(pattern),
+    ]
+    timed_out = False
+    code = 1
+    error_text = ""
+    watcher = threading.Thread(target=_watch, daemon=True)
+    started = False
+    try:
+        with tempfile.TemporaryFile() as errors:
+            proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=errors)
+            proc_holder.append(proc)
+            watcher.start()
+            started = True
+            try:
+                code = proc.wait(timeout=3 * 3600)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                proc.kill()
+                proc.wait(timeout=30)
+                code = proc.returncode if proc.returncode is not None else 1
+            errors.seek(0)
+            error_text = errors.read(8192).decode("utf-8", "replace")
+    finally:
+        try:
+            _notify()
+        except BaseException as exc:
+            ready_error.append(exc)
+        stop.set()
+        if started:
+            watcher.join()
+    if ready_error:
+        raise ready_error[0]
+    if timed_out:
+        raise RuntimeError(f"ffmpeg quá hạn khi tách khung {path.name}.")
+    if code != 0:
+        detail = error_text.strip().splitlines()[0] if error_text.strip() else ""
+        raise RuntimeError(detail or f"ffmpeg không đọc được {path.name}.")
+    written = sorted(folder.glob(f"{prefix}_*.jpg"))
+    if len(written) < len(numbers):
+        raise RuntimeError(f"Video {path.name} chỉ ra {len(written)}/{len(numbers)} khung cần đọc.")
+    if emitted < len(ordered):
+        _emit(True)
     if on_progress is not None:
         on_progress(f"Đã tách {len(written)} khung")
     return dict(zip(numbers, written))
