@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gzip
 import io
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -208,6 +209,32 @@ class SystemAuditTests(unittest.TestCase):
         self.assertIn("Đủ 3 cột", text)
         self.assertNotIn("100 dòng mới nhất", text)
         self.assertIn("Thời gian quét", text)
+        self.assertIn("resultsMore", text)
+        self.assertIn("Xem thêm", text)
+        self.assertIn("RESULT_PAGE = 80", text)
+        self.assertNotIn("RESULT_PAGE = 1000", text)
+        self.assertIn("mất kết nối, giữ trong hàng", text)
+
+    def test_results_page_is_capped_so_upload_is_not_starved(self) -> None:
+        video_id = self._seed()
+        with sqlite3.connect(self.db) as conn:
+            conn.executemany(
+                """
+                INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
+                VALUES (?, ?, ?, 1, '', ?, '2026-10-12T00:00:00Z')
+                """,
+                [(f"09{i:08d}", "Ten", f"@u{i}", video_id) for i in range(250)],
+            )
+        big = self.client.get("/v1/results?view=complete&limit=5000&offset=0", headers=self._auth())
+        self.assertEqual(big.status_code, 200)
+        body = big.json()
+        self.assertEqual(len(body["items"]), 80)
+        self.assertEqual(body["count"], 80)
+        self.assertGreaterEqual(body["total"], 250)
+        nxt = self.client.get("/v1/results?view=complete&limit=1000&offset=80", headers=self._auth())
+        self.assertEqual(nxt.status_code, 200)
+        self.assertEqual(len(nxt.json()["items"]), 80)
+        self.assertLess(len(nxt.json()["items"]), body["total"])
 
     def test_rematch_is_idempotent_and_counts_match(self) -> None:
         self._seed()

@@ -151,6 +151,9 @@
     <input id="query" type="search" placeholder="Gõ đầu số, @username hoặc tên video (VD: IMG_0018)" />
     <p id="resultsNote" class="note"></p>
     <div id="results" class="table-wrap"></div>
+    <p id="resultsMoreWrap" hidden style="margin-top:0.55rem">
+      <button class="ghost" type="button" id="resultsMore">Xem thêm</button>
+    </p>
   </section>
 
   <section>
@@ -217,14 +220,27 @@
   }
 
   var LANE_PORTS = [];
+  var laneDetectGen = 0;
+  var portFails = {};
 
   function pagePort() {
     return location.port || (location.protocol === "https:" ? "443" : "80");
   }
 
+  function relayActive() {
+    var banner = document.getElementById("relayWarn");
+    return !!(banner && !banner.classList.contains("hide"));
+  }
+
+  function usePageOriginOnly(parallel) {
+    LANE_PORTS = [pagePort()];
+    CHUNK_PARALLEL = parallel;
+    return LANE_PORTS;
+  }
+
   function probePort(port) {
     var ctrl = new AbortController();
-    var timer = setTimeout(function () { ctrl.abort(); }, 2500);
+    var timer = setTimeout(function () { ctrl.abort(); }, 2000);
     return fetch(location.protocol + "//" + location.hostname + ":" + port + "/health", {
       signal: ctrl.signal,
       cache: "no-store"
@@ -238,7 +254,22 @@
   }
 
   async function detectLanePorts() {
-    var found = await Promise.all(["8090", "8091"].map(probePort));
+    var gen = ++laneDetectGen;
+    // https hoặc Private Relay: 8090/8091 hay đứt. Chỉ gửi trên đúng địa chỉ trang đang mở.
+    if (location.protocol === "https:" || relayActive()) {
+      return usePageOriginOnly(relayActive() ? 4 : 6);
+    }
+    var found = null;
+    try {
+      found = await Promise.race([
+        Promise.all(["8090", "8091"].map(probePort)),
+        sleep(2200).then(function () { return null; })
+      ]);
+    } catch (error) {
+      found = null;
+    }
+    if (gen !== laneDetectGen) return LANE_PORTS.length ? LANE_PORTS : usePageOriginOnly(6);
+    if (!found) return usePageOriginOnly(6);
     var extras = found.filter(function (port) { return port && String(port) !== String(pagePort()); });
     LANE_PORTS = [pagePort()].concat(extras);
     CHUNK_PARALLEL = 6 * LANE_PORTS.length;
@@ -251,6 +282,26 @@
     var path = "/v1/videos/uploads/" + uploadId + "/chunks/" + index;
     if (String(use) === String(pagePort())) return path;
     return location.protocol + "//" + location.hostname + ":" + use + path;
+  }
+
+  function portOfUrl(url) {
+    if (!url || url.charAt(0) === "/") return String(pagePort());
+    try {
+      var parsed = new URL(url, location.href);
+      return String(parsed.port || (parsed.protocol === "https:" ? "443" : "80"));
+    } catch (error) {
+      return String(pagePort());
+    }
+  }
+
+  function noteChunkPortFailure(url) {
+    var port = portOfUrl(url);
+    if (port === String(pagePort())) return;
+    portFails[port] = (portFails[port] || 0) + 1;
+    if (portFails[port] < 2) return;
+    LANE_PORTS = LANE_PORTS.filter(function (item) { return String(item) !== port; });
+    if (!LANE_PORTS.length) LANE_PORTS = [pagePort()];
+    CHUNK_PARALLEL = 6 * LANE_PORTS.length;
   }
 
   async function api(path, options) {
@@ -376,7 +427,13 @@
   }
 
   async function refresh() {
-    var statsResponse = await api("/v1/videos/stats");
+    if (refreshAbort) {
+      try { refreshAbort.abort(); } catch (error) {}
+    }
+    var ctrl = new AbortController();
+    refreshAbort = ctrl;
+    try {
+    var statsResponse = await api("/v1/videos/stats", { signal: ctrl.signal });
     if (!statsResponse.ok) return;
     var body = await statsResponse.json();
     var saved = body.saved || 0;
@@ -417,12 +474,21 @@
       reader.textContent = "Bộ đọc máy chủ sẵn sàng. Upload xong có thể tắt trang — máy chủ tự đọc hết hàng đợi.";
       reader.className = "note ok";
     }
-    var queueResponse = await api("/v1/videos");
+    var queueResponse = await api("/v1/videos", { signal: ctrl.signal });
+    if (ctrl.signal.aborted) return;
     if (queueResponse.ok) renderQueue((await queueResponse.json()).items || []);
-    // Khi đang tải video: không tải bảng kết quả (rất nặng) — tránh Safari nghẽn / ngắt upload.
-    if (!uploadingActive && body.results !== lastResultTotal) {
-      lastResultTotal = body.results;
-      loadResults();
+    // Không tải hết bảng kết quả khi đang gửi video — Safari chỉ có 6 kết nối.
+    if (!uploadingActive && !resultsLoading && body.results !== lastResultTotal) {
+      var stamp = body.results;
+      setTimeout(function () {
+        if (uploadingActive || resultsLoading) return;
+        loadResults().then(function (ok) {
+          if (ok) lastResultTotal = stamp;
+        });
+      }, 0);
+    }
+    } catch (error) {
+      if (error && error.name === "AbortError") return;
     }
   }
 
@@ -529,8 +595,42 @@
   }
 
   var resultsAsked = 0;
-  var RESULT_PAGE = 1000;
+  var RESULT_PAGE = 80;
   var resultsView = "complete";
+  var resultsAbort = null;
+  var refreshAbort = null;
+  var loadedResults = [];
+  var resultsTotal = 0;
+  var resultsLoading = false;
+  var resultsQueryTimer = null;
+
+  function stopBackgroundReads() {
+    resultsAsked += 1;
+    resultsLoading = false;
+    if (resultsAbort) {
+      try { resultsAbort.abort(); } catch (error) {}
+      resultsAbort = null;
+    }
+    if (refreshAbort) {
+      try { refreshAbort.abort(); } catch (error) {}
+      refreshAbort = null;
+    }
+  }
+
+  function syncMoreButton() {
+    var wrap = document.getElementById("resultsMoreWrap");
+    var more = document.getElementById("resultsMore");
+    if (!wrap) return;
+    wrap.hidden = !(loadedResults.length > 0 && loadedResults.length < resultsTotal);
+    if (more) more.disabled = !!resultsLoading;
+  }
+
+  function scheduleResults() {
+    clearTimeout(resultsQueryTimer);
+    resultsQueryTimer = setTimeout(function () {
+      if (!uploadingActive) loadResults();
+    }, 400);
+  }
 
   function setViewButtons() {
     ["complete", "incomplete", "all"].forEach(function (kind) {
@@ -550,51 +650,77 @@
     return html + "</table>";
   }
 
-  async function loadResults() {
+  async function loadResults(options) {
+    if (uploadingActive) return false;
+    var append = !!(options && options.append);
+    if (resultsAbort) {
+      try { resultsAbort.abort(); } catch (error) {}
+    }
+    var ctrl = new AbortController();
+    resultsAbort = ctrl;
     var asked = ++resultsAsked;
     var q = document.getElementById("query").value.trim();
     var box = document.getElementById("results");
     var note = document.getElementById("resultsNote");
-    var items = [];
-    var offset = 0;
-    var total = null;
+    var offset = append ? loadedResults.length : 0;
+    var moreBtn = document.getElementById("resultsMore");
+    resultsLoading = true;
     setViewButtons();
-    note.textContent = "Đang tải kết quả...";
+    note.textContent = append ? "Đang tải thêm..." : "Đang tải kết quả...";
     note.className = "note";
-    while (true) {
+    if (moreBtn) moreBtn.disabled = true;
+    var ok = false;
+    try {
       var response = await api(
         "/v1/results?q=" + encodeURIComponent(q) +
         "&view=" + encodeURIComponent(resultsView) +
         "&limit=" + RESULT_PAGE +
-        "&offset=" + offset
+        "&offset=" + offset,
+        { signal: ctrl.signal }
       );
-      if (!response.ok) return;
-      if (asked !== resultsAsked) return;
-      var body = await response.json();
-      var chunk = body.items || [];
-      total = typeof body.total === "number" ? body.total : total;
-      items = items.concat(chunk);
-      note.textContent = "Đang tải " + items.length + (total != null ? "/" + total : "") + " dòng...";
-      if (!chunk.length || items.length >= (total != null ? total : Infinity) || chunk.length < RESULT_PAGE) {
-        break;
+      if (asked !== resultsAsked) return false;
+      if (!response.ok) {
+        note.textContent = "Chưa tải được bảng kết quả. Tải video vẫn làm được — bấm lại mục đang xem để thử.";
+        note.className = "note warn";
+        return false;
       }
-      offset = items.length;
+      var body = await response.json();
+      if (asked !== resultsAsked) return false;
+      var chunk = body.items || [];
+      resultsTotal = typeof body.total === "number" ? body.total : (offset + chunk.length);
+      loadedResults = append ? loadedResults.concat(chunk) : chunk.slice();
+      ok = true;
+    } catch (error) {
+      if (asked !== resultsAsked || (error && error.name === "AbortError")) return false;
+      note.textContent = "Mất kết nối khi tải bảng kết quả. Tải video không phụ thuộc bảng này.";
+      note.className = "note warn";
+      return false;
+    } finally {
+      if (asked === resultsAsked) {
+        resultsLoading = false;
+        if (moreBtn) moreBtn.disabled = false;
+        syncMoreButton();
+      }
     }
-    if (asked !== resultsAsked) return;
+    if (!ok || asked !== resultsAsked) return false;
     var viewLabel = resultsView === "complete" ? "đủ 3 cột" : (resultsView === "incomplete" ? "chưa đủ" : "tất cả");
-    if (!items.length) {
+    if (!loadedResults.length) {
       box.innerHTML = "<p class='note'>Chưa có dòng nào trong mục «" + viewLabel + "».</p>";
       note.textContent = q
         ? ("Không có kết quả «" + viewLabel + "» cho từ khóa này.")
         : (resultsView === "complete"
           ? "Chưa có hàng đủ số + tên + @. Quay lại: mở từng người tới khi thấy rõ @ rồi mới thoát. Hoặc xem mục Chưa đủ."
           : "");
-      return;
+      syncMoreButton();
+      return true;
     }
+    var shown = "Đang hiện " + loadedResults.length + "/" + resultsTotal + " dòng «" + viewLabel + "»";
     note.textContent = q
-      ? ("Đang hiện " + items.length + " dòng «" + viewLabel + "» cho «" + q + "».")
-      : ("Đang hiện " + items.length + " dòng «" + viewLabel + "» trên trang này.");
-    box.innerHTML = renderResultTable(items);
+      ? (shown + " cho «" + q + "».")
+      : (shown + ". Mỗi lần chỉ lấy một trang nhỏ để đường tải video không bị nghẽn.");
+    box.innerHTML = renderResultTable(loadedResults);
+    syncMoreButton();
+    return true;
   }
 
   function escapeHtml(value) {
@@ -625,8 +751,9 @@
   async function putChunkBytes(uploadId, index, blob) {
     var last = { ok: false, status: 0, body: {} };
     for (var attempt = 0; attempt < CHUNK_RETRIES; attempt += 1) {
+      var url = chunkPutUrl(uploadId, index);
       try {
-        var response = await api(chunkPutUrl(uploadId, index), {
+        var response = await api(url, {
           method: "PUT",
           headers: { "Content-Type": "application/octet-stream" },
           body: blob
@@ -637,7 +764,9 @@
         if (response.ok) return last;
         // 400/404 = lỗi thật; còn lại (503/500/502/0) → thử lại đến khi xong.
         if (response.status === 404 || response.status === 400) return last;
+        noteChunkPortFailure(url);
       } catch (error) {
+        noteChunkPortFailure(url);
         last = { ok: false, status: 0, body: { detail: "mất kết nối" } };
       }
       var wait = Math.min(20000, 800 * Math.pow(1.6, attempt));
@@ -648,23 +777,28 @@
 
   async function initChunkedWithRetry(initBody, onWait, attempts) {
     var limit = attempts || 60;
-    var last = { ok: false, status: 0, body: {} };
+    var last = { ok: false, status: 0, body: { detail: "mất kết nối" } };
     for (var attempt = 0; attempt < limit; attempt += 1) {
-      var initResponse = await api("/v1/videos/uploads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(initBody)
-      });
-      var session = {};
-      try { session = await initResponse.json(); } catch (error) { session = {}; }
-      last = { ok: initResponse.ok, status: initResponse.status, body: session, response: initResponse };
-      if (initResponse.ok) return last;
-      if (initResponse.status !== 507 && initResponse.status !== 503 && initResponse.status !== 500) return last;
+      try {
+        var initResponse = await api("/v1/videos/uploads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(initBody)
+        });
+        var session = {};
+        try { session = await initResponse.json(); } catch (error) { session = {}; }
+        last = { ok: initResponse.ok, status: initResponse.status, body: session, response: initResponse };
+        if (initResponse.ok) return last;
+        var retryable = initResponse.status === 507 || initResponse.status === 503 || initResponse.status === 500;
+        if (!retryable) return last;
+      } catch (error) {
+        last = { ok: false, status: 0, body: { detail: "mất kết nối" } };
+      }
       if (attempt + 1 >= limit) return last;
-      var waitSec = initResponse.status === 503 ? 5 : 15;
-      var ra = initResponse.headers.get("Retry-After");
+      var waitSec = last.status === 503 ? 5 : (last.status === 0 ? 3 : 15);
+      var ra = last.response && last.response.headers ? last.response.headers.get("Retry-After") : null;
       if (ra && !isNaN(Number(ra))) waitSec = Math.max(3, Math.min(30, Number(ra)));
-      if (onWait) onWait(waitSec, session.detail || "hàng nhận đang đầy", attempt + 1);
+      if (onWait) onWait(waitSec, (last.body && last.body.detail) || "mất kết nối", attempt + 1);
       await sleep(waitSec * 1000);
     }
     return last;
@@ -734,12 +868,18 @@
     var completeStatus = 0;
     for (var c = 0; c < 20; c += 1) {
       while (document.hidden) await sleep(1000);
-      var completeResponse = await api("/v1/videos/uploads/" + session.upload_id + "/complete", { method: "POST" });
-      try { completeBody = await completeResponse.json(); } catch (error) { completeBody = {}; }
-      completeOk = completeResponse.ok;
-      completeStatus = completeResponse.status;
-      if (completeOk) break;
-      if (completeStatus === 400 || completeStatus === 404) break;
+      try {
+        var completeResponse = await api("/v1/videos/uploads/" + session.upload_id + "/complete", { method: "POST" });
+        try { completeBody = await completeResponse.json(); } catch (error) { completeBody = {}; }
+        completeOk = completeResponse.ok;
+        completeStatus = completeResponse.status;
+        if (completeOk) break;
+        if (completeStatus === 400 || completeStatus === 404) break;
+      } catch (error) {
+        completeOk = false;
+        completeStatus = 0;
+        completeBody = { detail: "mất kết nối" };
+      }
       await sleep(Math.min(15000, 1000 * (c + 1)));
     }
     if (completeOk) {
@@ -791,15 +931,20 @@
     });
   }
 
+  function resumeLater(status) {
+    return status === 0 || status === 502 || status === 503 || status === 504 || status === 507;
+  }
+
   async function uploadWithFallbacks(file, primary, onProgress) {
     var result = primary;
-    if (!result || result.ok || result.status === 507 || result.status === 413) return result;
+    // Mất mạng hoặc hết chỗ: giữ phiên đã lên, không xóa rồi gửi lại từ đầu.
+    if (!result || result.ok || result.status === 413 || resumeLater(result.status)) return result;
     if (result.upload_id) {
       try { await api("/v1/videos/uploads/" + result.upload_id, { method: "DELETE" }); } catch (error) {}
     }
     if (onProgress) onProgress("hướng 1 lỗi, chuyển hướng 2 (mảnh nhỏ, một đường)");
     result = await uploadSmallChunks(file, onProgress);
-    if (result.ok || result.status === 507 || result.status === 413) return result;
+    if (result.ok || result.status === 413 || resumeLater(result.status)) return result;
     if (result.upload_id) {
       try { await api("/v1/videos/uploads/" + result.upload_id, { method: "DELETE" }); } catch (error) {}
     }
@@ -824,9 +969,10 @@
     var registered = [];
     note.className = "note";
     uploadingActive = true;
-    await requestWakeLock();
+    stopBackgroundReads();
 
     try {
+      await requestWakeLock();
       // Xếp được bao nhiêu thì xếp, không bỏ video phía sau khi hàng nhận đầy.
       // Gửi từng video một để đường tải đầy băng thông; video xong vào hàng đọc ngay.
       var pending = files.slice();
@@ -848,21 +994,35 @@
         }, function (sec, reason, attempt) {
           note.textContent = file.name + " — chờ chỗ trống (" + reason + "), thử lại sau " + sec + "s · lần " + attempt;
           note.className = "note warn";
-        }, 1);
+        }, 3);
         if (init.ok) {
           pending.shift();
           registered.push({ file: file, session: init.body || {} });
           note.className = "note";
           return true;
         }
-        if (init.status === 507 || init.status === 503 || init.status === 500) return false;
-        pending.shift();
-        var rescued = await uploadWithFallbacks(file, {
-          ok: false, status: init.status, body: init.body, name: file.name
-        }, function (msg) {
-          note.textContent = file.name + " — " + msg;
+        if (init.status === 507 || init.status === 503 || init.status === 500 || init.status === 0) {
+          note.textContent = init.status === 0
+            ? (file.name + " — mất kết nối, giữ trong hàng và thử lại...")
+            : (file.name + " — chờ chỗ trống, giữ trong hàng và thử lại...");
           note.className = "note warn";
-        });
+          return false;
+        }
+        pending.shift();
+        var rescued = null;
+        try {
+          rescued = await uploadWithFallbacks(file, {
+            ok: false, status: init.status, body: init.body, name: file.name
+          }, function (msg) {
+            note.textContent = file.name + " — " + msg;
+            note.className = "note warn";
+          });
+        } catch (error) {
+          pending.unshift(file);
+          note.textContent = file.name + " — mất kết nối, giữ trong hàng và thử lại...";
+          note.className = "note warn";
+          return false;
+        }
         if (rescued && rescued.ok) {
           if (rescued.body && rescued.body.duplicate) already += 1;
           else added += 1;
@@ -903,7 +1063,7 @@
           note.className = "note";
         }, CHUNK_PARALLEL);
         delete live[name];
-        if (!result.ok) {
+        if (!result.ok && !resumeLater(result.status)) {
           result = await uploadWithFallbacks(job.file, result, function (msg) {
             note.textContent = name + " — " + msg;
             note.className = "note warn";
@@ -917,23 +1077,40 @@
           var opened = await registerNext();
           if (!opened) {
             if (!pending.length) break;
-            note.textContent = "Hàng nhận đang đầy. Giữ " + pending.length + " video, thử lại đến khi có chỗ — không bỏ.";
+            note.textContent = "Chưa gửi được " + pending.length + " video. Giữ trong hàng, thử lại đến khi lên — không bỏ.";
             note.className = "note warn";
             await sleep(8000);
             continue;
           }
         }
         var job = registered.shift();
-        var result = await uploadOne(job);
+        var result = null;
+        try {
+          result = await uploadOne(job);
+        } catch (error) {
+          result = {
+            ok: false,
+            status: 0,
+            body: { detail: "mất kết nối — chọn lại cùng file để tiếp tục" },
+            name: job.file.name
+          };
+        }
         if (result && result.ok) {
           if (result.body && result.body.duplicate) already += 1;
           else added += 1;
+        } else if (result && resumeLater(result.status)) {
+          pending.unshift(job.file);
+          var why = (result.body && result.body.detail) || "mất kết nối";
+          note.textContent = job.file.name + " — " + why + ". Giữ trong hàng và gửi tiếp, không bỏ.";
+          note.className = "note warn";
+          try { await refresh(); } catch (error) {}
+          await sleep(8000);
+          continue;
         } else if (result) {
-          var reason = (result.body && result.body.detail) ||
-            (result.status === 0 ? "mất kết nối — chọn lại cùng file để tiếp tục" : "lỗi " + result.status);
+          var reason = (result.body && result.body.detail) || ("lỗi " + result.status);
           failed.push((result.name || job.file.name) + " (" + reason + ")");
         }
-        await refresh();
+        try { await refresh(); } catch (error) {}
         while (await registerNext()) {}
       }
 
@@ -947,11 +1124,15 @@
       }
       note.textContent = partsOut.join(" ");
       note.className = failed.length ? "note warn" : "note ok";
+    } catch (error) {
+      failed.push("mất kết nối giữa chừng");
+      note.textContent = "Mất kết nối khi gửi. Đã vào hàng đọc: " + added +
+        ". Chọn lại đúng file chưa xong — phần đã lên được gửi tiếp, không bỏ video.";
+      note.className = "note warn";
     } finally {
       uploadingActive = false;
       await releaseWakeLock();
-      await refresh();
-      loadResults();
+      try { await refresh(); } catch (error) {}
     }
   }
 
@@ -963,7 +1144,11 @@
     }
     document.getElementById("file").click();
   });
-  document.getElementById("file").addEventListener("change", function (event) { sendFiles(event.target.files); event.target.value = ""; });
+  document.getElementById("file").addEventListener("change", function (event) {
+    var picked = Array.prototype.slice.call(event.target.files || []);
+    event.target.value = "";
+    sendFiles(picked);
+  });
   document.getElementById("device").addEventListener("change", saveDevice);
   document.getElementById("device").addEventListener("blur", saveDevice);
   checklistIds().forEach(function (id) {
@@ -983,7 +1168,11 @@
     drop.classList.remove("over");
     sendFiles(event.dataTransfer.files);
   });
-  document.getElementById("query").addEventListener("input", loadResults);
+  document.getElementById("query").addEventListener("input", scheduleResults);
+  document.getElementById("resultsMore").addEventListener("click", function () {
+    if (uploadingActive || resultsLoading) return;
+    loadResults({ append: true });
+  });
   document.querySelectorAll("[data-view]").forEach(function (button) {
     button.addEventListener("click", function () {
       resultsView = button.getAttribute("data-view") || "complete";

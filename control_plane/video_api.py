@@ -392,16 +392,22 @@ def cancel_chunked_upload(
     return {"ok": True}
 
 
+# Trang cũ xin 1000 dòng rồi lặp đến hết (hơn một vạn dòng). Safari chỉ có 6 kết nối,
+# bảng đó chiếm hết nên video không gửi lên được. Kẹp mọi request về một trang nhỏ.
+_RESULTS_PAGE_CAP = 80
+
+
 @router.get("/v1/results")
 def results(
     authorization: str | None = Header(default=None),
     q: str = "",
-    limit: int = Query(default=1000, ge=1, le=5000),
+    limit: int = Query(default=80, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
     view: str = Query(default="complete", pattern="^(complete|incomplete|all)$"),
 ) -> dict[str, object]:
     _auth(authorization)
     init_db(settings.video_db_path)
+    limit = min(int(limit), _RESULTS_PAGE_CAP)
     items = search_results(settings.video_db_path, q, limit, offset, view)
     total = count_results(settings.video_db_path, q, view)
     return {"count": len(items), "total": total, "offset": offset, "view": view, "items": items}
