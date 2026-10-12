@@ -739,7 +739,53 @@ def can_accept(used_bytes: int, new_bytes: int, limit_bytes: int, free_bytes: in
 
 def uploads_are_flowing(db_path: Path, *, fresh_sec: int = 45) -> bool:
     """Có phiên vừa nhận byte. Dùng để nhường CPU/đĩa cho đường tải."""
-    return sum(_receiving_count_from(path, fresh_sec=fresh_sec) for path in _uploads_db_paths(db_path)) >= 1
+    return upload_io_mode(db_path, flow_sec=fresh_sec) == "flow"
+
+
+def upload_session_mode(db_path: Path, *, flow_sec: int = 45, arm_sec: int = 25) -> str:
+    """Một DB phiên: off | arm (mới mở, chưa có byte) | flow (đang có byte)."""
+    try:
+        with connect(db_path) as conn:
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='upload_sessions'"
+            ).fetchone()
+            if exists is None:
+                return "off"
+            rows = conn.execute(
+                """
+                SELECT received_bytes, created_at, updated_at
+                FROM upload_sessions WHERE status = 'receiving'
+                """
+            ).fetchall()
+    except sqlite3.Error:
+        return "off"
+    now = time.time()
+    mode = "off"
+    for row in rows:
+        received = int(row["received_bytes"] or 0)
+        updated = _parse_ts(row["updated_at"]) or 0.0
+        created = _parse_ts(row["created_at"]) or updated
+        if received > 0 and updated >= now - max(5, flow_sec):
+            return "flow"
+        if received <= 0 and created >= now - max(5, arm_sec):
+            mode = "arm"
+    return mode
+
+
+def upload_io_mode(db_path: Path, *, flow_sec: int = 45, arm_sec: int = 25) -> str:
+    """off khi không tải. arm khi phiên vừa tạo mà chưa có byte. flow khi đang nhận byte.
+
+    arm chỉ kéo dài vài chục giây để mảnh đầu không kẹt sau OCR. Hết giờ mà vẫn
+    0 byte thì đọc lấy lại hết máy — không nhường mãi cho phiên ma.
+    """
+    mode = "off"
+    for path in _uploads_db_paths(db_path):
+        kind = upload_session_mode(path, flow_sec=flow_sec, arm_sec=arm_sec)
+        if kind == "flow":
+            return "flow"
+        if kind == "arm":
+            mode = "arm"
+    return mode
 
 
 def should_pause_ocr(db_path: Path, video_dir: Path) -> bool:

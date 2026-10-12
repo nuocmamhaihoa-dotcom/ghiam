@@ -20,6 +20,13 @@ from pathlib import Path
 
 from control_plane.ocr_backend import describe_ocr, gpu_available, resolve_ocr_engine
 from control_plane.settings import settings
+from control_plane.upload_priority import (
+    apply_upload_priority,
+    pause_ffmpeg,
+    reader_descendant_pids,
+    release_stopped,
+    reserved_cores,
+)
 from control_plane.video_scan import scan_paths, use_ffmpeg_threads
 from control_plane.video_store import (
     claim,
@@ -36,9 +43,9 @@ from control_plane.video_store import (
     set_duration,
     set_progress,
     should_pause_ocr,
-    uploads_are_flowing,
     stale_running,
     touch_heartbeat,
+    upload_io_mode,
     worker_count,
 )
 from control_plane.video_validate import probe_duration_sec
@@ -75,102 +82,70 @@ def frame_work_dir() -> Path:
 def _restart_now(reason: str) -> None:
     """Thoát cứng để systemd Restart=always. SystemExit bị kẹt khi pool/thread còn sống."""
     print(reason, flush=True)
+    try:
+        release_stopped()
+    except Exception:
+        pass
     os._exit(1)
 
 
-def _ocr_descendant_pids(root: int) -> list[int]:
-    """Mọi tiến trình con (ffmpeg, OCR), trừ resource_tracker của multiprocessing."""
-    children: dict[int, list[int]] = {}
-    skip: set[int] = set()
-    proc = Path("/proc")
-    try:
-        entries = list(proc.iterdir())
-    except OSError:
-        return []
-    for entry in entries:
-        if not entry.name.isdigit():
-            continue
-        pid = int(entry.name)
-        try:
-            stat = (entry / "stat").read_text(encoding="utf-8", errors="replace")
-            cmd = (entry / "cmdline").read_bytes()
-        except OSError:
-            continue
-        if b"resource_tracker" in cmd:
-            skip.add(pid)
-            continue
-        end = stat.rfind(")")
-        if end < 0:
-            continue
-        parts = stat[end + 2 :].split()
-        if len(parts) < 2:
-            continue
-        try:
-            ppid = int(parts[1])
-        except ValueError:
-            continue
-        children.setdefault(ppid, []).append(pid)
-    found: list[int] = []
-    stack = list(children.get(root, []))
-    while stack:
-        pid = stack.pop()
-        if pid in skip:
-            continue
-        found.append(pid)
-        stack.extend(children.get(pid, []))
-    return found
-
-
-def _upload_reserved_cores() -> int:
-    """Số nhân để trống cho đường tải khi đang có byte vào. Phần còn lại vẫn đọc."""
-    cpus = os.cpu_count() or 2
-    raw = os.environ.get("CONTROL_VIDEO_UPLOAD_CORES", "").strip()
-    if raw:
-        return max(1, min(cpus - 1, int(raw)))
-    if cpus >= 8:
-        return 4
-    if cpus >= 4:
-        return 2
-    return 1
-
-
-def _pin_ocr_tree(uploading: bool) -> None:
-    """Đang tải thì ghim OCR/ffmpeg ra khỏi vài nhân. Không dừng hẳn — hàng đọc vẫn chạy."""
-    if not hasattr(os, "sched_setaffinity"):
-        return
-    cpus = os.cpu_count() or 1
-    reserved = _upload_reserved_cores()
-    if uploading and reserved < cpus:
-        allowed = set(range(reserved, cpus))
-    else:
-        allowed = set(range(cpus))
-    if not allowed:
-        allowed = {0}
-    for pid in _ocr_descendant_pids(os.getpid()):
-        try:
-            os.sched_setaffinity(pid, allowed)
-        except OSError:
-            pass
-
-
 def _yield_ocr_while_uploading(db_path: Path, stop: threading.Event) -> None:
-    """Có byte đang vào thì nhường vài nhân cho upload. Hết byte thì đọc dùng lại hết nhân."""
-    held = False
-    while not stop.wait(0.5):
+    """Phiên vừa mở thì nhường đĩa ngay. Có byte thì đọc tiếp, chỉ nhường vài nhân.
+
+    ffmpeg bị dừng từng nhịp 1.2s khi vẫn chưa có byte, để mảnh đầu không kẹt
+    sau hàng đọc. Có byte thì chạy lại ngay. Hết tải thì trả hết nhân cho OCR.
+    """
+    held = "off"
+    ffmpeg_held = False
+    held_since = 0.0
+    resume_at = 0.0
+    try:
+        while not stop.wait(0.25):
+            try:
+                mode = upload_io_mode(db_path)
+            except Exception:
+                mode = "off"
+            try:
+                apply_upload_priority(mode)
+            except Exception:
+                pass
+            now = time.monotonic()
+            if mode != "arm":
+                if ffmpeg_held:
+                    release_stopped()
+                    ffmpeg_held = False
+                resume_at = 0.0
+            elif not ffmpeg_held:
+                if now >= resume_at:
+                    pause_ffmpeg(reader_descendant_pids())
+                    ffmpeg_held = True
+                    held_since = now
+            elif now - held_since < 1.2:
+                pause_ffmpeg(reader_descendant_pids())
+            else:
+                release_stopped()
+                ffmpeg_held = False
+                resume_at = now + 2.0
+            if mode != held:
+                if mode == "arm":
+                    print(
+                        "Phiên tải vừa mở, chưa có byte — nhường đĩa ngay, đọc vẫn giữ khung đã tách.",
+                        flush=True,
+                    )
+                elif mode == "flow":
+                    print(
+                        f"Đang có byte — dành {reserved_cores()} nhân cho upload, phần còn lại vẫn đọc.",
+                        flush=True,
+                    )
+                elif held != "off":
+                    print("Upload nguội — đọc dùng lại hết nhân.", flush=True)
+                held = mode
+    finally:
+        release_stopped()
         try:
-            active = uploads_are_flowing(db_path)
+            apply_upload_priority("off")
         except Exception:
-            active = False
-        _pin_ocr_tree(active)
-        if active and not held:
-            held = True
-            print(
-                f"Đang tải — dành {_upload_reserved_cores()} nhân cho upload, phần còn lại vẫn đọc.",
-                flush=True,
-            )
-        elif held and not active:
-            held = False
-            print("Upload nguội — đọc dùng lại hết nhân.", flush=True)
+            pass
 
 
 def _rematch_process(path: str) -> None:
@@ -403,8 +378,18 @@ def main() -> None:
     )
     rematch_proc.start()
 
+    last_upload_clean = 0.0
     while not broken.is_set():
         touch_heartbeat(heartbeat_path())
+        now_clean = time.time()
+        if now_clean - last_upload_clean >= 10:
+            last_upload_clean = now_clean
+            try:
+                from control_plane.video_upload_sessions import cleanup_stale_uploads
+
+                cleanup_stale_uploads(settings.video_uploads_db_path, settings.video_dir)
+            except Exception as exc:
+                print(f"Dọn phiên tải kẹt lỗi (bỏ qua): {exc}", flush=True)
         if rematch_proc is not None and not rematch_proc.is_alive():
             rematch_proc.join(timeout=0.1)
             rematch_proc = None

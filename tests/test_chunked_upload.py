@@ -6,9 +6,11 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from control_plane.video_store import init_db, list_videos, stats
+from control_plane.upload_priority import is_ffmpeg_cmdline
+from control_plane.video_store import init_db, list_videos, stats, upload_session_mode
 from control_plane.video_upload_sessions import (
     cleanup_stale_uploads,
     complete_upload,
@@ -195,6 +197,71 @@ class ChunkedUploadTests(unittest.TestCase):
         removed = cleanup_stale_uploads(self.db, self.videos, abandon_sec=60)
         self.assertGreaterEqual(removed, 1)
         self.assertIsNone(get_upload(self.db, str(session["upload_id"])))
+
+    def test_zero_byte_session_drops_quickly_partial_stays(self) -> None:
+        empty = init_upload(
+            self.db,
+            self.videos,
+            name="empty.mp4",
+            size_bytes=32 * 1024,
+            client_key="empty|1",
+            chunk_size=16 * 1024,
+            disk_limit_bytes=self.limit,
+        )
+        old = (datetime.now(timezone.utc) - timedelta(seconds=180)).isoformat()
+        with uploads_connect(self.db) as conn:
+            conn.execute(
+                "UPDATE upload_sessions SET created_at = ?, updated_at = ? WHERE id = ?",
+                (old, old, empty["upload_id"]),
+            )
+        self.assertGreaterEqual(cleanup_stale_uploads(self.db, self.videos), 1)
+        self.assertIsNone(get_upload(self.db, str(empty["upload_id"])))
+
+        kept = init_upload(
+            self.db,
+            self.videos,
+            name="kept.mp4",
+            size_bytes=32 * 1024,
+            client_key="kept|1",
+            chunk_size=16 * 1024,
+            disk_limit_bytes=self.limit,
+        )
+        put_chunk(self.db, str(kept["upload_id"]), 0, b"a" * (16 * 1024))
+        with uploads_connect(self.db) as conn:
+            conn.execute(
+                "UPDATE upload_sessions SET updated_at = ? WHERE id = ?",
+                (old, kept["upload_id"]),
+            )
+        self.assertEqual(cleanup_stale_uploads(self.db, self.videos), 0)
+        self.assertIsNotNone(get_upload(self.db, str(kept["upload_id"])))
+
+    def test_upload_mode_arms_before_bytes_and_flows_after(self) -> None:
+        session = init_upload(
+            self.db,
+            self.videos,
+            name="mode.mp4",
+            size_bytes=32 * 1024,
+            client_key="mode|1",
+            chunk_size=16 * 1024,
+            disk_limit_bytes=self.limit,
+        )
+        self.assertEqual(upload_session_mode(self.db), "arm")
+        fresh = list_receiving_uploads(self.db)
+        self.assertIn("tự gửi", str(fresh[0]["issue"]))
+        put_chunk(self.db, str(session["upload_id"]), 0, b"b" * (16 * 1024))
+        self.assertEqual(upload_session_mode(self.db), "flow")
+        old = "2020-01-01T00:00:00+00:00"
+        with uploads_connect(self.db) as conn:
+            conn.execute(
+                "UPDATE upload_sessions SET created_at = ?, updated_at = ? WHERE id = ?",
+                (old, old, session["upload_id"]),
+            )
+        self.assertEqual(upload_session_mode(self.db), "off")
+
+    def test_ffmpeg_pause_only_matches_ffmpeg(self) -> None:
+        self.assertTrue(is_ffmpeg_cmdline(b"/usr/bin/ffmpeg\0-i\0a.mp4"))
+        self.assertFalse(is_ffmpeg_cmdline(b"python\0-m\0control_plane.video_worker"))
+        self.assertFalse(is_ffmpeg_cmdline(b"/usr/bin/tesseract\0stdin\0stdout"))
 
     def test_migrate_sessions_to_separate_uploads_db(self) -> None:
         payload = _ffmpeg_mp4(self.root / "m.mp4", "0.4")

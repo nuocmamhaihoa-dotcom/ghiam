@@ -281,22 +281,32 @@ async def start_chunked_upload(
     if suffix not in _ALLOWED:
         raise HTTPException(status_code=400, detail="Chỉ nhận video hoặc ảnh chụp màn hình.")
     uploads_db = _uploads_db()
-    try:
-        return await run_in_threadpool(
-            lambda: init_upload(
-                uploads_db,
-                settings.video_dir,
-                name=body.name,
-                size_bytes=body.size_bytes,
-                device=body.device,
-                client_key=body.client_key,
-                chunk_size=body.chunk_size or DEFAULT_CHUNK_SIZE,
-                sha256=body.sha256,
-                disk_limit_bytes=_limit_bytes(),
-                video_db_path=settings.video_db_path,
-                legacy_db=settings.video_db_path,
-            )
+
+    def _open() -> dict[str, object]:
+        opened = init_upload(
+            uploads_db,
+            settings.video_dir,
+            name=body.name,
+            size_bytes=body.size_bytes,
+            device=body.device,
+            client_key=body.client_key,
+            chunk_size=body.chunk_size or DEFAULT_CHUNK_SIZE,
+            sha256=body.sha256,
+            disk_limit_bytes=_limit_bytes(),
+            video_db_path=settings.video_db_path,
+            legacy_db=settings.video_db_path,
         )
+        # Nhường đĩa trước khi iPhone gửi mảnh đầu — không đợi vòng thăm của bộ đọc.
+        try:
+            from control_plane.upload_priority import apply_upload_priority
+
+            apply_upload_priority("arm" if int(opened.get("received_bytes") or 0) <= 0 else "flow")
+        except Exception as exc:
+            print(f"ưu tiên upload: {exc}", flush=True)
+        return opened
+
+    try:
+        return await run_in_threadpool(_open)
     except MemoryError as exc:
         # Client (web/iOS) đọc Retry-After rồi tự thử lại / resume — không mất video.
         raise HTTPException(

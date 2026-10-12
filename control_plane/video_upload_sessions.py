@@ -40,6 +40,8 @@ UPLOAD_TTL_SEC = 7 * 24 * 3600
 STALE_UPLOAD_SEC = 20 * 60
 # Phiên stale quá lâu: xóa để nhường slot/đĩa; user chọn lại file sẽ tạo phiên mới.
 ABANDON_UPLOAD_SEC = 2 * 3600
+# Phiên 0 byte không chờ 2 giờ. iPhone không gửi được thì xóa ngay để hết kẹt hàng.
+ZERO_BYTE_ABANDON_SEC = 90
 _MIGRATED: set[str] = set()
 
 
@@ -281,14 +283,21 @@ def cleanup_stale_uploads(
     def _rows():
         with uploads_connect(db_path) as conn:
             return conn.execute(
-                "SELECT id, path, updated_at, status FROM upload_sessions WHERE status = 'receiving'"
+                """
+                SELECT id, path, updated_at, status, received_bytes
+                FROM upload_sessions WHERE status = 'receiving'
+                """
             ).fetchall()
 
     rows = _retry_locked(_rows, label="cleanup_list")
     for row in rows:
         updated = _parse_updated_ts(row["updated_at"])
-        # Còn sống (vừa có chunk trong abandon_sec) → giữ để resume.
-        if updated and updated >= soft_cutoff:
+        received = int(row["received_bytes"] or 0)
+        # 0 byte quá 90 giây: iPhone không gửi được. Xóa ngay, trang đang mở sẽ tạo phiên mới.
+        if received <= 0 and (not updated or updated < now - ZERO_BYTE_ABANDON_SEC):
+            pass
+        elif updated and updated >= soft_cutoff:
+            # Còn sống (vừa có chunk trong abandon_sec) → giữ để resume.
             continue
         path = Path(str(row["path"]))
         path.unlink(missing_ok=True)
@@ -470,7 +479,13 @@ def list_receiving_uploads(db_path: Path, limit: int = 80) -> list[dict[str, obj
                 f" ({chunks_done}/{chunks_total} mảnh đã có trên VPS){speed}"
             )
         elif percent <= 0 and chunks_done <= 0:
-            issue = "Đã xếp phiên — đang chờ iPhone gửi. Chọn file trên Safari (không dùng app nền)"
+            if age >= 12:
+                issue = (
+                    "Đường tải kẹt ở 0 byte — trang Safari đang mở sẽ tự gửi lại một đường. "
+                    "Giữ Safari mở, đừng khóa máy."
+                )
+            else:
+                issue = "Đang mở đường tải — máy tự gửi, không cần chọn lại file."
         elif speed and received / max(1.0, now - (created or now)) < 200 * 1024:
             issue = (
                 f"Đang tải lên {percent}% ({chunks_done}/{chunks_total} mảnh){speed}"

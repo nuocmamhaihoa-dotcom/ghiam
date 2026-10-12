@@ -665,6 +665,47 @@
     }
   }
 
+  function ensureUploadRow(uploadId, name, size) {
+    var box = document.getElementById("queue");
+    if (!box || !uploadId) return null;
+    var found = box.querySelector("[data-upload='" + uploadId + "']");
+    if (found) return found;
+    var table = box.querySelector("table");
+    if (!table) {
+      box.innerHTML = "<table class='queue-table'><tr><th>Video / Độ dài</th><th>Vấn đề / Trạng thái</th><th>Tiến độ</th><th>Kết quả</th></tr></table>";
+      table = box.querySelector("table");
+    }
+    var tr = document.createElement("tr");
+    tr.setAttribute("data-upload", uploadId);
+    tr.innerHTML = "<td data-label='Video'>" + escapeHtml(name) +
+      "<div class='note'>" + escapeHtml(formatBytes(size)) + "</div></td>" +
+      "<td data-label='Trạng thái'>Đang mở đường tải</td>" +
+      "<td data-label='Tiến độ'>Đang tải lên<div class='note'>0 B / " + escapeHtml(formatBytes(size)) + " · 0%</div></td>" +
+      "<td data-label='Kết quả'><span class='note'>Chưa xong tải — chưa phân tích</span></td>";
+    var head = table.querySelector("tr");
+    if (head && head.nextSibling) table.insertBefore(tr, head.nextSibling);
+    else table.appendChild(tr);
+    return tr;
+  }
+
+  function paintUploadRow(uploadId, name, received, size, detail) {
+    var row = ensureUploadRow(uploadId, name, size);
+    if (!row) return;
+    var cells = row.querySelectorAll("td");
+    if (cells.length < 3) return;
+    var pct = size ? Math.floor((Math.max(0, received) * 100) / size) : 0;
+    cells[1].textContent = detail || "Đang tải lên";
+    cells[1].className = "";
+    cells[2].innerHTML = "Đang tải lên<div class='note'>" + escapeHtml(formatBytes(received)) + " / " +
+      escapeHtml(formatBytes(size)) + " · " + pct + "%</div>";
+  }
+
+  function dropUploadRow(uploadId) {
+    if (!uploadId) return;
+    var row = document.querySelector("[data-upload='" + uploadId + "']");
+    if (row && row.parentNode) row.parentNode.removeChild(row);
+  }
+
   function renderQueue(items) {
     var box = document.getElementById("queue");
     if (!items.length) {
@@ -740,7 +781,8 @@
         (isUpload ? escapeHtml(formatBytes(item.size_bytes || 0)) : escapeHtml(formatDuration(item.duration_sec))) +
         "</div>";
       var leftTitle = item.name || "";
-      html += "<tr><td data-label='Video' title='" + escapeHtml(leftTitle) + "'>" + leftLabel +
+      html += "<tr" + (isUpload && item.upload_id ? (" data-upload='" + escapeHtml(item.upload_id) + "'") : "") +
+        "><td data-label='Video' title='" + escapeHtml(leftTitle) + "'>" + leftLabel +
         "</td><td data-label='Trạng thái' class='" + issueClass + "'>" + escapeHtml(issue) +
         "</td><td data-label='Tiến độ'>" + statusText(item.status) + progress + keptNote + retry +
         "</td><td data-label='Kết quả'>" + resultText + "</td></tr>";
@@ -920,7 +962,7 @@
   }
 
   var CHUNK_STORE = "video-chunk-uploads-v1";
-  var CHUNK_RETRIES = 40;
+  var CHUNK_RETRIES = 3;
 
   function clientKeyFor(file) {
     return [deviceName() || "iphone", file.name, String(file.size), String(file.lastModified || 0)].join("|");
@@ -938,30 +980,51 @@
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
   }
 
-  async function putChunkBytes(uploadId, index, blob) {
-    var last = { ok: false, status: 0, body: {} };
-    for (var attempt = 0; attempt < CHUNK_RETRIES; attempt += 1) {
+  function chunkTimeoutMs() {
+    // iPhone: 4MB mà quá 5 giây chưa ACK là đường đang kẹt, không chờ Safari treo.
+    return phoneBrowser() ? 5000 : 12000;
+  }
+
+  async function putChunkBytes(uploadId, index, blob, attempts) {
+    var limit = attempts || CHUNK_RETRIES;
+    var last = { ok: false, status: 0, body: {}, stalled: false };
+    for (var attempt = 0; attempt < limit; attempt += 1) {
       var url = chunkPutUrl(uploadId, index);
+      var ctrl = new AbortController();
+      var timer = setTimeout(function () { ctrl.abort(); }, chunkTimeoutMs());
       try {
         var response = await api(url, {
           method: "PUT",
           headers: { "Content-Type": "application/octet-stream" },
-          body: blob
+          body: blob,
+          signal: ctrl.signal
         });
         var body = {};
         try { body = await response.json(); } catch (error) { body = {}; }
-        last = { ok: response.ok, status: response.status, body: body };
+        last = { ok: response.ok, status: response.status, body: body, stalled: false };
         if (response.ok) return last;
-        // 400/404 = lỗi thật; còn lại (503/500/502/0) → thử lại đến khi xong.
+        // 400/404 = lỗi thật; còn lại (503/500/502) → thử lại ngay, không chờ hàng chục giây.
         if (response.status === 404 || response.status === 400) return last;
         noteChunkPortFailure(url);
       } catch (error) {
         noteChunkPortFailure(url);
-        last = { ok: false, status: 0, body: { detail: "mất kết nối" } };
+        var aborted = !!(error && error.name === "AbortError");
+        last = {
+          ok: false,
+          status: 0,
+          stalled: aborted,
+          body: { detail: aborted ? "mảnh quá hạn — tự gửi lại" : "mất kết nối" }
+        };
+      } finally {
+        clearTimeout(timer);
       }
-      var wait = Math.min(20000, 800 * Math.pow(1.6, attempt));
-      await sleep(wait);
+      if (attempt + 1 >= limit) {
+        last.stalled = true;
+        return last;
+      }
+      await sleep(Math.min(800, 200 * Math.pow(2, attempt)));
     }
+    last.stalled = true;
     return last;
   }
 
@@ -1037,15 +1100,38 @@
     for (var index = 0; index < total; index += 1) {
       if (!done[index]) pending.push(index);
     }
+
+    async function sendIndex(index, attempts) {
+      while (document.hidden) await sleep(400);
+      var start = index * chunkSize;
+      var end = Math.min(file.size, start + chunkSize);
+      return putChunkBytes(session.upload_id, index, file.slice(start, end), attempts);
+    }
+
+    // Mảnh đầu một mình. Kẹt thì trả ngay để đổi sang một đường mảnh nhỏ, không mở thêm kết nối.
+    if (pending.length && finished === 0) {
+      var probe = pending[0];
+      var first = await sendIndex(probe, 2);
+      if (!first.ok) {
+        return {
+          ok: false,
+          status: first.status,
+          stalled: !!(first.stalled || first.status === 0 || first.status === 404),
+          body: first.body,
+          upload_id: session.upload_id,
+          name: file.name,
+          finished: 0
+        };
+      }
+      pending.shift();
+      finished += 1;
+      onProgress(Math.floor((finished * 100) / Math.max(1, total)), finished, total, false);
+    }
+
     var failed = null;
     await mapPool(pending, parallel || CHUNK_PARALLEL, async function (index) {
       if (failed) return;
-      while (document.hidden) await sleep(1000);
-      if (failed) return;
-      var start = index * chunkSize;
-      var end = Math.min(file.size, start + chunkSize);
-      var blob = file.slice(start, end);
-      var put = await putChunkBytes(session.upload_id, index, blob);
+      var put = await sendIndex(index, CHUNK_RETRIES);
       if (!put.ok) {
         failed = put;
         return;
@@ -1054,7 +1140,15 @@
       onProgress(Math.floor((finished * 100) / Math.max(1, total)), finished, total, false);
     });
     if (failed) {
-      return { ok: false, status: failed.status, body: failed.body, upload_id: session.upload_id, name: file.name };
+      return {
+        ok: false,
+        status: failed.status,
+        stalled: !!(failed.stalled || failed.status === 0),
+        body: failed.body,
+        upload_id: session.upload_id,
+        name: file.name,
+        finished: finished
+      };
     }
 
     var completeBody = {};
@@ -1080,7 +1174,14 @@
       delete store[key];
       saveChunkStore(store);
     }
-    return { ok: completeOk, status: completeStatus, body: completeBody, name: file.name };
+    return {
+      ok: completeOk,
+      status: completeStatus,
+      body: completeBody,
+      name: file.name,
+      upload_id: session.upload_id,
+      finished: finished
+    };
   }
 
   var LANE2_CHUNK_BYTES = 1024 * 1024;
@@ -1096,7 +1197,11 @@
       if (onProgress) onProgress("hướng 2 chờ chỗ trống, thử lại sau " + sec + "s · lần " + attempt + " (" + reason + ")");
     });
     if (!init.ok) return { ok: false, status: init.status, body: init.body, name: file.name };
-    return uploadSessionChunks(file, init.body, function (percent, finished, total) {
+    var session = init.body || {};
+    return uploadSessionChunks(file, session, function (percent, finished, total) {
+      var chunk = session.chunk_size || LANE2_CHUNK_BYTES;
+      var sent = Math.min(file.size, finished * chunk);
+      paintUploadRow(session.upload_id, file.name, sent, file.size, "Đường dự phòng · " + percent + "% · một đường");
       if (onProgress) onProgress("hướng 2 · mảnh 1MB một đường · " + percent + "% (" + finished + "/" + total + ")");
     }, 1);
   }
@@ -1191,7 +1296,15 @@
         }, 3);
         if (init.ok) {
           pending.shift();
-          registered.push({ file: file, session: init.body || {} });
+          var session = init.body || {};
+          registered.push({ file: file, session: session });
+          paintUploadRow(
+            session.upload_id,
+            file.name,
+            session.received_bytes || 0,
+            file.size,
+            "Đang gửi — máy tự đổi đường nếu kẹt"
+          );
           note.className = "note";
           return true;
         }
@@ -1227,8 +1340,6 @@
         return true;
       }
 
-      while (await registerNext()) {}
-      await refresh();
       var live = {};
 
       async function uploadOne(job) {
@@ -1238,6 +1349,7 @@
         job._t0 = Date.now();
         job._base = Math.min(job.file.size, have * chunkBytes);
         live[name] = "0%";
+        paintUploadRow(job.session.upload_id, name, job._base, job.file.size, "Đang gửi mảnh đầu");
         var result = await uploadSessionChunks(job.file, job.session, function (percent, finished, total, resumed) {
           var sent = Math.min(job.file.size, finished * chunkBytes);
           var sec = Math.max(0.001, (Date.now() - job._t0) / 1000);
@@ -1252,12 +1364,31 @@
           live[name] = percent + "% · " + speed + left + (resumed ? " · resume" : "") +
             (behind ? (" · còn " + behind + " video trong hàng") : "");
           var parts = Object.keys(live).map(function (k) { return k.replace(/^.*\//, "").slice(0, 22) + " " + live[k]; });
-          var slow = sec > 8 && mbps < 0.4 ? " Đường này đang rất chậm — tắt Private Relay rồi chọn lại file." : "";
+          var slow = sec > 6 && mbps < 0.4 ? " Đang chậm — máy tự siết đường, không cần chọn lại." : "";
           note.textContent = "Đang gửi " + activeParallel() + " đường: " + parts.join(" · ") + " — đừng khóa máy." + slow;
           note.className = "note";
+          paintUploadRow(job.session.upload_id, name, sent, job.file.size, "Đang tải lên " + percent + "% · " + speed);
         }, activeParallel());
         delete live[name];
-        if (!result.ok && !resumeLater(result.status)) {
+        var noBytes = !!(result && result.finished === 0 && have === 0);
+        if (result && !result.ok && noBytes && (result.stalled || result.status === 0 || result.status === 404)) {
+          if (result.upload_id) {
+            try { await api("/v1/videos/uploads/" + result.upload_id, { method: "DELETE" }); } catch (error) {}
+            dropUploadRow(result.upload_id);
+          }
+          note.textContent = name + " — đường kẹt ở 0 byte, tự chuyển một đường mảnh nhỏ...";
+          note.className = "note warn";
+          result = await uploadSmallChunks(job.file, function (msg) {
+            note.textContent = name + " — " + msg;
+            note.className = "note warn";
+          });
+          result.lane2 = true;
+          if (result && !result.ok && !(result.finished > 0) && result.upload_id) {
+            try { await api("/v1/videos/uploads/" + result.upload_id, { method: "DELETE" }); } catch (error) {}
+            dropUploadRow(result.upload_id);
+          }
+        }
+        if (result && !result.ok && !result.lane2 && !resumeLater(result.status)) {
           result = await uploadWithFallbacks(job.file, result, function (msg) {
             note.textContent = name + " — " + msg;
             note.className = "note warn";
@@ -1269,11 +1400,13 @@
       while (registered.length || pending.length) {
         if (!registered.length) {
           var opened = await registerNext();
-          if (!opened) {
+          if (!registered.length) {
             if (!pending.length) break;
-            note.textContent = "Chưa gửi được " + pending.length + " video. Giữ trong hàng, thử lại đến khi lên — không bỏ.";
-            note.className = "note warn";
-            await sleep(8000);
+            if (!opened) {
+              note.textContent = "Chưa gửi được " + pending.length + " video. Giữ trong hàng, thử lại đến khi lên — không bỏ.";
+              note.className = "note warn";
+              await sleep(600);
+            }
             continue;
           }
         }
@@ -1298,14 +1431,13 @@
           note.textContent = job.file.name + " — " + why + ". Giữ trong hàng và gửi tiếp, không bỏ.";
           note.className = "note warn";
           try { await refresh(); } catch (error) {}
-          await sleep(8000);
+          await sleep(600);
           continue;
         } else if (result) {
           var reason = (result.body && result.body.detail) || ("lỗi " + result.status);
           failed.push((result.name || job.file.name) + " (" + reason + ")");
         }
         try { await refresh(); } catch (error) {}
-        while (await registerNext()) {}
       }
 
       var partsOut = [
