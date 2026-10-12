@@ -854,7 +854,7 @@ def _scan_overlapped(
         ready: Callable[[int, Path], None],
     ) -> None:
         try:
-            extract_frames(
+            written = extract_frames(
                 path,
                 folder,
                 numbers,
@@ -865,6 +865,9 @@ def _scan_overlapped(
                 on_ready=ready,
                 on_decoded=live.on_decoded,
             )
+            # on_ready đã nhận hầu hết khung. Gọi lại lần nữa để không mất khung nếu watcher sót file cuối.
+            for number, frame_path in written.items():
+                ready(number, frame_path)
         except BaseException as exc:
             errors.append(exc)
 

@@ -132,11 +132,33 @@ def stale_max_sec() -> float:
     return 24 * 3600.0
 
 
-def worker_has_live_children(pid: int | None) -> bool:
-    """Còn ffmpeg / OCR spawn → job đang chạy thật.
+def _stat_after_comm(stat_text: str) -> list[str] | None:
+    """Phần sau tên trong /proc/pid/stat. Tên có thể chứa dấu cách."""
+    end = stat_text.rfind(")")
+    if end < 0:
+        return None
+    parts = stat_text[end + 2 :].split()
+    return parts or None
 
-    Bỏ qua resource_tracker: nó vẫn sống sau khi pool OCR đã chết (treo ở 15×400 task).
+
+def _child_is_working(stat_text: str, cmdline: str) -> bool:
+    """ffmpeg, hoặc tiến trình đang chạy/chờ đĩa.
+
+    Pool OCR nằm ngủ không tính. Pool luôn sống dù video đã kẹt — nếu tính cả tiến trình ngủ
+    thì video im tiến độ không bao giờ được xếp lại.
     """
+    if "resource_tracker" in cmdline:
+        return False
+    parts = _stat_after_comm(stat_text)
+    if not parts:
+        return False
+    if "ffmpeg" in cmdline:
+        return True
+    return parts[0] in {"R", "D"}
+
+
+def worker_has_live_children(pid: int | None) -> bool:
+    """Còn ffmpeg hoặc OCR đang chạy thật — không phải pool nằm chờ việc."""
     if not pid or not _alive(pid):
         return False
     try:
@@ -144,18 +166,21 @@ def worker_has_live_children(pid: int | None) -> bool:
             if not entry.name.isdigit():
                 continue
             try:
-                ppid = int((entry / "stat").read_text().split()[3])
-            except (OSError, ValueError, IndexError):
+                stat = (entry / "stat").read_text(encoding="utf-8", errors="replace")
+                cmd = (entry / "cmdline").read_text(errors="replace")
+            except OSError:
+                continue
+            parts = _stat_after_comm(stat)
+            if parts is None or len(parts) < 2:
+                continue
+            try:
+                ppid = int(parts[1])
+            except ValueError:
                 continue
             if ppid != int(pid):
                 continue
-            try:
-                cmd = (entry / "cmdline").read_text(errors="replace")
-            except OSError:
-                cmd = ""
-            if "resource_tracker" in cmd:
-                continue
-            return True
+            if _child_is_working(stat, cmd):
+                return True
     except OSError:
         return False
     return False

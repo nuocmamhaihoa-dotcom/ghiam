@@ -554,6 +554,19 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(item["progress"], "")
         self.assertIsNone(item["progress_at"])
 
+    def test_only_ffmpeg_or_running_children_count_as_live_work(self) -> None:
+        from control_plane.video_store import _child_is_working, _stat_after_comm
+
+        parts = _stat_after_comm("10 (my worker) S 42 7")
+        self.assertIsNotNone(parts)
+        assert parts is not None
+        self.assertEqual(parts[0], "S")
+        self.assertEqual(parts[1], "42")
+        self.assertFalse(_child_is_working("10 (python) S 1 1", "python\x00"))
+        self.assertTrue(_child_is_working("10 (python) R 1 1", "python\x00"))
+        self.assertTrue(_child_is_working("10 (ffmpeg) S 1 1", "ffmpeg\x00-i\x00clip.mp4"))
+        self.assertFalse(_child_is_working("10 (resource_tracker) R 1 1", "resource_tracker\x00"))
+
     def test_stale_running_skips_jobs_with_live_child_processes(self) -> None:
         video_id = self._add("a.mp4", "a")
         claim(self.db, os.getpid())

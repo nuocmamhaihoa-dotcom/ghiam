@@ -97,6 +97,43 @@ class SequentialSignatureTests(unittest.TestCase):
 
 
 class OverlapTests(unittest.TestCase):
+    def test_frames_returned_after_extract_are_still_read_if_the_callback_missed_them(self) -> None:
+        plan = VideoPlan(reads=[0, 1], count=5)
+        blob = _jpeg(4)
+        reads: list[float] = []
+
+        def fake_extract(path, folder, numbers, fps, on_progress=None, prefix="f", threads=None, on_ready=None, on_decoded=None):
+            files = {}
+            for number in numbers:
+                file = Path(folder) / f"{prefix}_{number}.jpg"
+                file.write_bytes(blob)
+                files[number] = file
+            if on_decoded is not None:
+                on_decoded()
+            return files
+
+        def fake_read(path, at, layout=None):
+            reads.append(at)
+            return FrameObs("list", at=at)
+
+        use_ffmpeg_threads(8)
+        with tempfile.TemporaryDirectory() as folder:
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                with (
+                    patch("control_plane.video_scan.plan_video", return_value=plan),
+                    patch("control_plane.video_scan.extract_frames", fake_extract),
+                    patch("control_plane.video_scan.read_frame_at", fake_read),
+                    patch("control_plane.video_scan.read_frame_aggressive_at", side_effect=AssertionError("vòng 2")),
+                ):
+                    observations, _learned = _scan_video(
+                        Path("clip.mp4"),
+                        Path(folder),
+                        SCAN_FPS,
+                        pool.submit,
+                    )
+        self.assertEqual(reads, [0.0])
+        self.assertEqual([obs.at for _path, obs in observations], [0.0, 1 / SCAN_FPS])
+
     def test_later_duplicate_reuses_the_earlier_read(self) -> None:
         plan = VideoPlan(reads=[0, 1], count=5)
         blob = _jpeg(3)

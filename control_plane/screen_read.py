@@ -682,8 +682,12 @@ def _read_pieces(
     kinds: list[str] = []
     crops: list[Image.Image] = []
     for kind, piece in _slice_boxes(box, gaps):
+        raw = _crop(image, piece, 3, 2)
+        # Mảnh dưới 3px không còn nét chữ. Đưa vào Tesseract chỉ tạo ảnh trắng và lỗi pixd too small.
+        if raw.width < 3 or raw.height < 3:
+            continue
         kinds.append(kind)
-        crops.append(_pad(_upscale(_crop(image, piece, 3, 2), 2)))
+        crops.append(_pad(_upscale(raw, 2)))
     if not crops:
         return texts
     reads = _texts(_batch(crops, lang, 7, whitelist, best_tessdata() if whitelist else None))
@@ -1059,9 +1063,37 @@ def _tessdata_path(tessdata: str | None) -> str | None:
     return system_tessdata()
 
 
+def _quiet_leptonica() -> None:
+    """Tắt dòng pixScaleAreaMap trên stderr. OCR vẫn chạy; chỉ hết bão log làm chậm journal."""
+    if getattr(_quiet_leptonica, "done", False):
+        return
+    setattr(_quiet_leptonica, "done", True)
+    try:
+        import ctypes
+        import ctypes.util
+
+        found = ctypes.util.find_library("lept")
+        names = [found] if found else []
+        names.extend(["liblept.so.5", "liblept.so"])
+        for name in names:
+            if not name:
+                continue
+            try:
+                lib = ctypes.CDLL(name)
+            except OSError:
+                continue
+            lib.setMsgSeverity.argtypes = [ctypes.c_int]
+            lib.setMsgSeverity.restype = ctypes.c_int
+            lib.setMsgSeverity(6)  # L_SEVERITY_NONE
+            return
+    except Exception:
+        return
+
+
 def _tesserocr_api(lang: str, tessdata: str | None):
     from tesserocr import OEM, PyTessBaseAPI
 
+    _quiet_leptonica()
     folder = _tessdata_path(tessdata) or ""
     key = (lang, folder)
     api = _TESS_APIS.get(key)
