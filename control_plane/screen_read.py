@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
+from control_plane.cover_read import fill_hole, mask_digits, narrow_join, partial_digits, phone_from_slots
 from control_plane.ocr_backend import resolve_ocr_engine, system_tessdata, tesserocr_available
 from control_plane.screen_layout import LayoutProfile
 from control_plane.screen_table import (
@@ -100,6 +101,30 @@ class Line:
         return sum(word.box.center_y() for word in self.words) / len(self.words)
 
 
+@dataclass(frozen=True)
+class _ProfileBits:
+    name: str = ""
+    username: str = ""
+    handle_left: str = ""
+    handle_right: str = ""
+    name_left: str = ""
+    name_right: str = ""
+
+    def as_obs(self) -> FrameObs | None:
+        if not (self.username or self.handle_left or self.handle_right):
+            return None
+        return FrameObs(
+            "profile",
+            (),
+            self.name if is_profile_name(self.name) else "",
+            self.username if is_profile_handle(self.username) else "",
+            handle_left=self.handle_left,
+            handle_right=self.handle_right,
+            name_left=self.name_left,
+            name_right=self.name_right,
+        )
+
+
 @dataclass
 class _Pending:
     strip: Box
@@ -108,6 +133,8 @@ class _Pending:
     phone_box: Box
     name_box: Box
     selected: bool
+    phone_gaps: tuple[tuple[int, int], ...] = ()
+    name_gaps: tuple[tuple[int, int], ...] = ()
 
 
 @functools.lru_cache(maxsize=1)
@@ -203,13 +230,13 @@ def read_pillow(
         return FrameObs("unknown")
     profile = _profile_button(buttons, width, height)
     if profile is not None:
-        name, username = _read_profile(image, profile)
-        if username:
-            return FrameObs("profile", (), name, username)
+        obs = _read_profile(image, profile).as_obs()
+        if obs is not None:
+            return obs
     # P2: không thấy / không đọc được nút Follow — vẫn săn @ ở vùng đầu trang hồ sơ.
-    name, username = _hunt_profile_handle(image, layout=profile_layout)
-    if username:
-        return FrameObs("profile", (), name, username)
+    obs = _hunt_profile_handle(image, layout=profile_layout).as_obs()
+    if obs is not None:
+        return obs
     return FrameObs("unknown")
 
 
@@ -250,12 +277,12 @@ def _aggressive_once(image: Image.Image, profile_layout: LayoutProfile) -> Frame
             return FrameObs("list", contacts)
     profile = _profile_button(buttons, width, height)
     if profile is not None:
-        name, username = _read_profile(image, profile, aggressive=True)
-        if username:
-            return FrameObs("profile", (), name, username)
-    name, username = _hunt_profile_handle(image, layout=profile_layout, aggressive=True)
-    if username:
-        return FrameObs("profile", (), name, username)
+        obs = _read_profile(image, profile, aggressive=True).as_obs()
+        if obs is not None:
+            return obs
+    obs = _hunt_profile_handle(image, layout=profile_layout, aggressive=True).as_obs()
+    if obs is not None:
+        return obs
     return FrameObs("unknown")
 
 
@@ -287,14 +314,14 @@ def _hunt_profile_handle(
     layout: LayoutProfile | None = None,
     *,
     aggressive: bool = False,
-) -> tuple[str, str]:
+) -> _ProfileBits:
     """Đọc @username khi layout hồ sơ không nhận ra nút Follow hồng.
 
     Chỉ lấy vùng trên màn hình (header hồ sơ). Cần handle hợp lệ (≥3 ký tự sau @).
     """
     width, height = image.size
     if width < 80 or height < 80:
-        return "", ""
+        return _ProfileBits()
     if layout is not None and layout.samples >= 0:
         x0, y0, x1, y1 = layout.header_box(width, height)
     else:
@@ -312,7 +339,7 @@ def _hunt_profile_handle(
         y1 = min(height, int(0.58 * height))
     header = Box(x0, y0, x1, y1)
     if header.w < 40 or header.h < 40:
-        return "", ""
+        return _ProfileBits()
     raw = image.crop((header.x0, header.y0, header.x1, header.y1))
     passes: list[tuple[Image.Image, int, int]] = [
         (raw, 6, 15),
@@ -341,13 +368,11 @@ def _hunt_profile_handle(
         found = _name_then_handle(_lines(shifted))
         if found is None:
             continue
-        _name_line, handle_line, draft, username = found
-        reread = _read_handle(image, handle_line.box)
-        if reread and is_profile_handle(reread):
-            username = reread
-        if is_profile_name(draft) and is_profile_handle(username):
-            return draft, username
-    return "", ""
+        name_line, handle_line, draft, username = found
+        bits = _finish_profile(image, name_line, handle_line, draft, username)
+        if bits.as_obs() is not None:
+            return bits
+    return _ProfileBits()
 
 
 def read_tap(paths: list[str | Path]) -> FrameObs:
@@ -545,6 +570,128 @@ def _touch_dots(image: Image.Image, button_h: float) -> list[tuple[float, float]
     return dots
 
 
+def _cover_boxes(image: Image.Image) -> list[Box]:
+    """Vòng xám che chữ: một chấm hoặc hai chấm dính nhau. Không lấy avatar và nút hồng."""
+    scale = max(1, image.width // 360)
+    small = image.resize((max(1, image.width // scale), max(1, image.height // scale)), Image.Resampling.BOX)
+    array = np.asarray(small).astype(np.int32)
+    red, green, blue = array[:, :, 0], array[:, :, 1], array[:, :, 2]
+    lum = (299 * red + 587 * green + 114 * blue) // 1000
+    spread = array.max(axis=2) - array.min(axis=2)
+    height, width = lum.shape
+    mask = (lum >= 95) & (lum <= 140) & (spread <= 18)
+    mask[: max(1, int(0.12 * height)), :] = False
+    mask[:, : max(1, int(0.08 * width))] = False
+    found: list[Box] = []
+    min_h = 0.035 * height
+    max_h = 0.14 * height
+    for x0, y0, x1, y1, count in _blobs(mask, 40):
+        wide = x1 - x0
+        high = y1 - y0
+        if high < min_h or high > max_h:
+            continue
+        if not (0.65 * high <= wide <= 2.8 * high):
+            continue
+        if count / float(wide * high) < 0.55:
+            continue
+        found.append(Box(x0 * scale, y0 * scale, min(image.width, x1 * scale), min(image.height, y1 * scale)))
+    return found
+
+
+def _cover_gaps(box: Box, covers: list[Box]) -> tuple[tuple[int, int], ...]:
+    """Khoảng ngang mà chấm đè lên dòng chữ. Chấm sát nhau tính một khoảng."""
+    if box.w < 8 or box.h < 8 or not covers:
+        return ()
+    raw: list[tuple[int, int]] = []
+    for cover in covers:
+        ix0 = max(box.x0, cover.x0)
+        iy0 = max(box.y0, cover.y0)
+        ix1 = min(box.x1, cover.x1)
+        iy1 = min(box.y1, cover.y1)
+        if ix1 - ix0 < 4 or iy1 - iy0 < 0.45 * box.h:
+            continue
+        raw.append((ix0, ix1))
+    if not raw:
+        return ()
+    raw.sort()
+    merged: list[list[int]] = [[raw[0][0], raw[0][1]]]
+    join = max(4, int(0.3 * box.h))
+    for start, end in raw[1:]:
+        if start <= merged[-1][1] + join:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    gaps = tuple((start, end) for start, end in merged if end - start >= max(6, int(0.35 * box.h)))
+    return gaps
+
+
+def _slice_boxes(band: Box, gaps: tuple[tuple[int, int], ...]) -> list[tuple[str, Box]]:
+    """Mảnh chữ nằm ngoài chấm: trái, giữa, phải."""
+    pieces: list[tuple[str, Box]] = []
+    cursor = band.x0
+    for index, (start, end) in enumerate(gaps):
+        if start - cursor >= 8:
+            kind = "left" if index == 0 else "mid"
+            pieces.append((kind, Box(cursor, band.y0, start, band.y1)))
+        cursor = max(cursor, end)
+    if band.x1 - cursor >= 8:
+        kind = "right" if gaps else "left"
+        pieces.append((kind, Box(cursor, band.y0, band.x1, band.y1)))
+    return pieces
+
+
+def _line_band(text_box: Box, strip: Box) -> Box:
+    """Vùng dòng chữ, nới sang hai bên để bắt số bị chấm che khuất khỏi ô OCR, không lấy cả avatar."""
+    reach = max(8, int(6.5 * max(text_box.h, 8)))
+    return Box(
+        max(strip.x0, text_box.x0 - reach),
+        max(strip.y0, text_box.y0),
+        min(strip.x1, max(text_box.x1 + reach, text_box.x1)),
+        min(strip.y1, text_box.y1),
+    )
+
+
+def _text_gaps(text_box: Box, strip: Box, covers: list[Box]) -> tuple[tuple[int, int], ...]:
+    band = _line_band(text_box, strip)
+    margin = max(6, int(0.35 * max(text_box.h, 8)))
+    kept = []
+    for start, end in _cover_gaps(band, covers):
+        if end < text_box.x0 - margin or start > text_box.x1 + margin:
+            continue
+        kept.append((start, end))
+    return tuple(kept)
+
+
+def _gaps_are_narrow(box: Box, gaps: tuple[tuple[int, int], ...]) -> bool:
+    """Khe nhỏ hơn một nét chữ thì chấm không nuốt ký tự, chỉ nằm giữa hai mảnh."""
+    if len(gaps) != 1:
+        return False
+    return gaps[0][1] - gaps[0][0] <= max(3, int(0.22 * box.h))
+
+
+def _read_pieces(
+    image: Image.Image,
+    box: Box,
+    gaps: tuple[tuple[int, int], ...],
+    lang: str,
+    whitelist: str = "",
+) -> dict[str, str]:
+    texts = {"left": "", "mid": "", "right": ""}
+    if not gaps:
+        return texts
+    kinds: list[str] = []
+    crops: list[Image.Image] = []
+    for kind, piece in _slice_boxes(box, gaps):
+        kinds.append(kind)
+        crops.append(_pad(_upscale(_crop(image, piece, 3, 2), 2)))
+    if not crops:
+        return texts
+    reads = _texts(_batch(crops, lang, 7, whitelist, best_tessdata() if whitelist else None))
+    for kind, text in zip(kinds, reads):
+        texts[kind] = f"{texts[kind]} {text}".strip()
+    return texts
+
+
 def _tapped_rows(image: Image.Image, buttons: list[Box], strips: list[Box], anchor_x: int, anchor_w: int) -> set[int]:
     """Dòng đang bấm: có chấm chạm nằm trong dòng, hoặc nền xám. Hai dấu hiệu chỉ hai dòng khác nhau thì bỏ."""
     button_h = float(np.median([button.h for button in buttons]))
@@ -576,6 +723,7 @@ def _read_rows(
     usable = [(index, strip) for index, strip in enumerate(strips) if strip.w >= 40 and strip.h >= 20]
     layouts = _batch([image.crop((s.x0, s.y0, s.x1, s.y1)) for _, s in usable], "vie+eng", 6)
     min_layout_conf = 12 if aggressive else 20
+    covers = _cover_boxes(image)
     pending: list[_Pending] = []
     for (index, strip), words in zip(usable, layouts):
         placed = [
@@ -584,9 +732,31 @@ def _read_rows(
             if word.conf >= min_layout_conf
         ]
         phone, draft, name_box, phone_box = _phone_and_name(placed)
-        if not draft or name_box is None or phone_box is None:
+        if phone_box is None:
             continue
-        pending.append(_Pending(strip, phone, draft, phone_box, name_box, index in tapped))
+        if name_box is None:
+            name_box = Box(
+                phone_box.x0,
+                min(strip.y1 - 4, phone_box.y1),
+                phone_box.x1,
+                min(strip.y1, phone_box.y1 + max(8, phone_box.h)),
+            )
+        phone_gaps = _text_gaps(phone_box, strip, covers)
+        name_gaps = _text_gaps(name_box, strip, covers)
+        if not draft and not phone_gaps:
+            continue
+        pending.append(
+            _Pending(
+                strip,
+                phone,
+                draft,
+                phone_box,
+                name_box,
+                index in tapped,
+                phone_gaps,
+                name_gaps,
+            )
+        )
     if not pending:
         return []
 
@@ -606,16 +776,47 @@ def _read_rows(
 
     hits: list[ContactHit] = []
     for index, row in enumerate(pending):
-        reads = digit_reads[per_phone * index : per_phone * index + per_phone]
-        phone = choose_phone(*reads, row.phone)
-        name = choose_name(fast_names[index], best_names[index], sharp_names[index], row.draft)
-        if not phone or not name or is_skipped(name):
+        seen_left = ""
+        seen_right = ""
+        if row.phone_gaps:
+            band = _line_band(row.phone_box, row.strip)
+            parts = _read_pieces(image, band, row.phone_gaps, "eng", DIGITS)
+            slots = mask_digits(parts["left"], parts["right"])
+            if slots is not None:
+                slots = fill_hole(slots, parts["mid"])
+            phone = phone_from_slots(slots)
+            seen_left = partial_digits(parts["left"])
+            seen_right = partial_digits(parts["right"])
+        else:
+            reads = digit_reads[per_phone * index : per_phone * index + per_phone]
+            phone = choose_phone(*reads, row.phone)
+        if row.name_gaps:
+            band = _line_band(row.name_box, row.strip)
+            parts = _read_pieces(image, band, row.name_gaps, "vie")
+            recovered = narrow_join(
+                clean_name(parts["left"]),
+                clean_name(parts["right"]),
+                narrow=_gaps_are_narrow(row.name_box, row.name_gaps),
+                sep=" ",
+            )
+            name = recovered if recovered and not is_skipped(recovered) else ""
+        else:
+            name = choose_name(fast_names[index], best_names[index], sharp_names[index], row.draft)
+            if is_skipped(name):
+                name = ""
+        if phone and name:
+            hits.append(ContactHit(phone, name, row.selected))
             continue
-        hits.append(ContactHit(phone, name, row.selected))
+        if phone:
+            # Số nằm ngoài chấm, tên thì không. Giữ số để xếp cần xem, không đoán tên.
+            hits.append(ContactHit(phone, "", row.selected, from_cover=True))
+            continue
+        if seen_left or seen_right:
+            hits.append(ContactHit("", name, row.selected, seen_left=seen_left, seen_right=seen_right))
     return hits
 
 
-def _read_profile(image: Image.Image, button: Box, *, aggressive: bool = False) -> tuple[str, str]:
+def _read_profile(image: Image.Image, button: Box, *, aggressive: bool = False) -> _ProfileBits:
     """Hồ sơ: chỉ lấy tên lớn và dòng @ ngay dưới tên đó.
 
     Hồ sơ mở rất ngắn thường hơi nhòe — thử thêm crop phóng to/làm nét và
@@ -628,7 +829,7 @@ def _read_profile(image: Image.Image, button: Box, *, aggressive: bool = False) 
         max(0, button.y0 - int(0.12 * button.h)),
     )
     if header.w < 20 or header.h < 20:
-        return "", ""
+        return _ProfileBits()
     raw = image.crop((header.x0, header.y0, header.x1, header.y1))
     # Không dùng _pad ở đây để tỉ lệ tọa độ crop → ảnh gốc còn đúng.
     passes: list[tuple[Image.Image, int, int]] = [
@@ -663,23 +864,66 @@ def _read_profile(image: Image.Image, button: Box, *, aggressive: bool = False) 
         found_pair = found
         break
     else:
-        return "", ""
+        return _ProfileBits()
     name_line, handle_line, draft, username = found_pair
-    reread = _read_handle(image, handle_line.box)
-    if reread and is_profile_handle(reread):
-        username = reread
-    if not is_profile_handle(username) or not is_profile_name(draft):
-        return "", ""
-    name_crop = [_pad(_upscale(_crop(image, name_line.box, 8, 6), 2))]
-    fast = _texts(_batch(name_crop, "vie", 7))[0]
-    best = best_tessdata()
-    sharp = _texts(_batch(name_crop, "vie", 7, tessdata=best))[0] if best else ""
-    name = choose_name(fast, sharp, draft)
-    if not is_profile_name(name):
-        name = draft
-    if not is_profile_name(name):
-        return "", ""
-    return name, username
+    return _finish_profile(image, name_line, handle_line, draft, username)
+
+
+def _finish_profile(
+    image: Image.Image,
+    name_line: Line,
+    handle_line: Line,
+    draft: str,
+    username: str,
+) -> _ProfileBits:
+    """Bỏ chữ OCR nằm dưới chấm. Chỉ giữ mảnh nhìn thấy, hoặc cả dòng khi chấm không đè."""
+    covers = _cover_boxes(image)
+    name_gaps = _cover_gaps(name_line.box, covers)
+    handle_gaps = _cover_gaps(handle_line.box, covers)
+    handle_left = ""
+    handle_right = ""
+    name_left = ""
+    name_right = ""
+    if handle_gaps:
+        parts = _read_pieces(image, handle_line.box, handle_gaps, "eng", HANDLE_CHARS)
+        left = _username_token(parts["left"]) or parts["left"].strip()
+        right = parts["right"].strip().lstrip("@")
+        joined = narrow_join(left, right, narrow=_gaps_are_narrow(handle_line.box, handle_gaps))
+        if joined and not joined.startswith("@"):
+            joined = "@" + joined
+        cleaned = clean_username(joined)
+        if is_profile_handle(cleaned):
+            username = cleaned
+        else:
+            username = ""
+            handle_left = left if left.startswith("@") else f"@{left}" if left else ""
+            handle_right = right
+    else:
+        reread = _read_handle(image, handle_line.box)
+        if reread and is_profile_handle(reread):
+            username = reread
+    if name_gaps:
+        parts = _read_pieces(image, name_line.box, name_gaps, "vie")
+        left = clean_name(parts["left"])
+        right = clean_name(parts["right"])
+        joined = narrow_join(left, right, narrow=_gaps_are_narrow(name_line.box, name_gaps), sep=" ")
+        name = joined if is_profile_name(joined) else ""
+        if not name:
+            name_left = left
+            name_right = right
+    else:
+        name_crop = [_pad(_upscale(_crop(image, name_line.box, 8, 6), 2))]
+        fast = _texts(_batch(name_crop, "vie", 7))[0]
+        best = best_tessdata()
+        sharp = _texts(_batch(name_crop, "vie", 7, tessdata=best))[0] if best else ""
+        name = choose_name(fast, sharp, draft)
+        if not is_profile_name(name):
+            name = draft if is_profile_name(draft) else ""
+    if not is_profile_handle(username):
+        username = ""
+    if not username and not handle_left and not handle_right:
+        return _ProfileBits()
+    return _ProfileBits(name, username, handle_left, handle_right, name_left, name_right)
 
 
 def _read_handle(image: Image.Image, box: Box) -> str:

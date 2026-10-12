@@ -28,6 +28,11 @@ class ContactHit:
     phone: str
     name: str
     selected: bool = False
+    # Chữ số còn thấy bên trái / bên phải chấm xám. Rỗng khi dòng không bị che.
+    seen_left: str = ""
+    seen_right: str = ""
+    # Số đọc được dù tên bị chấm che. Không bỏ số này chỉ vì chưa có tên.
+    from_cover: bool = False
 
 
 @dataclass(frozen=True)
@@ -43,6 +48,15 @@ class FrameObs:
     profile_name: str = ""
     profile_username: str = ""
     at: float = -1.0
+    # Mảnh @ hoặc tên hồ sơ nằm ngoài chấm xám, khi khung này chưa đọc đủ.
+    handle_left: str = ""
+    handle_right: str = ""
+    name_left: str = ""
+    name_right: str = ""
+
+
+# Số bị chấm che suốt video, ghép không đủ 10 số. Không ghi thành một số điện thoại.
+COVER_REASON = "chấm che, chưa đọc đủ số"
 
 
 @dataclass(frozen=True)
@@ -594,6 +608,9 @@ def pair_close_names(
 
 
 def build_table(frames: list[FrameObs]) -> Table:
+    from control_plane.cover_read import apply_cover_stitch
+
+    frames, cover_notes = apply_cover_stitch(frames)
     contacts: dict[str, _Tally] = {}
     profiles: dict[str, _Tally] = {}
     phone_seen: dict[str, int] = {}
@@ -627,6 +644,12 @@ def build_table(frames: list[FrameObs]) -> Table:
     table = Table()
     _apply_visits(visits, phone_name, user_name, used_phones, used_users, table)
     _apply_names(phone_name, user_name, phone_seen, user_seen, used_phones, used_users, table)
+    for phone, tally in contacts.items():
+        if phone in phone_name or tally.best():
+            continue
+        # Ghép đủ số từ phần không bị che, nhưng tên luôn nằm dưới chấm.
+        table.review.append(Review(phone, "", "", "", "có số trong danh bạ nhưng chưa đọc được tên"))
+    table.review.extend(cover_notes)
     table.rows.sort(key=lambda row: phone_seen.get(row.phone, 0))
     table.unopened.sort(key=lambda row: phone_seen.get(row.phone, 0))
     table.review.sort(key=lambda row: (phone_seen.get(row.phone, 10**9), user_seen.get(row.username, 10**9)))
@@ -873,14 +896,17 @@ def _walk(
     def sighting(hit: ContactHit, frame_index: int) -> tuple[str, str]:
         phone = normalize_phone(hit.phone)
         name = clean_name(hit.name)
-        if not phone or not name or is_skipped(name):
+        if name and is_skipped(name):
+            name = ""
+        if not phone or (not name and not hit.from_cover):
             return "", ""
         tally = contacts.get(phone)
         if tally is None:
             tally = _Tally()
             contacts[phone] = tally
             phone_seen[phone] = frame_index
-        tally.add(name)
+        if name:
+            tally.add(name)
         phone_hits[phone] = phone_hits.get(phone, 0) + 1
         return phone, name
 

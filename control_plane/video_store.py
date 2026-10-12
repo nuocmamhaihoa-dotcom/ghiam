@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Iterator
 
 from control_plane.screen_table import (
+    COVER_REASON,
     Review,
     Table,
     _compact,
@@ -369,6 +370,8 @@ def classify_result(phone: str, name: str, username: str, reason: str = "") -> t
         return BUCKET_SCAN, REASON_MULTI
     if phone and name and username:
         return BUCKET_OK, ""
+    if not phone and reason == COVER_REASON:
+        return BUCKET_REVIEW, COVER_REASON
     if phone:
         if not reason:
             reason = REASON_NO_HANDLE if not username else REASON_NO_NAME
@@ -413,9 +416,9 @@ def _reclassify_results(conn: sqlite3.Connection) -> None:
         UPDATE results
         SET bucket = ?,
             reason = CASE WHEN reason != '' THEN reason ELSE ? END
-        WHERE phone = '' AND (bucket != ? OR reason = '')
+        WHERE phone = '' AND reason != ? AND (bucket != ? OR reason = '')
         """,
-        (BUCKET_SCAN, REASON_NO_PHONE, BUCKET_SCAN),
+        (BUCKET_SCAN, REASON_NO_PHONE, COVER_REASON, BUCKET_SCAN),
     )
     # @ mồ côi không còn là một hàng. Số trong danh bạ và dòng trùng tên giữ nguyên.
     conn.execute(
@@ -1788,6 +1791,19 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
             _drop_lone_username(conn, item.username, bucket)
         return
     if not item.username:
+        if (item.reason or "").strip() == COVER_REASON:
+            existing = conn.execute(
+                "SELECT id FROM results WHERE phone = '' AND reason = ? AND name = ? LIMIT 1",
+                (COVER_REASON, item.contact_name),
+            ).fetchone()
+            if existing is None:
+                conn.execute(
+                    """
+                    INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
+                    VALUES ('', ?, '', ?, ?, ?, ?)
+                    """,
+                    (item.contact_name, BUCKET_REVIEW, COVER_REASON, video_id, utcnow()),
+                )
         return
     # @ không có số danh bạ đi kèm thì không ghi thành hàng. Ghép cặp liền không đổi.
     # Trùng tên và một số mở nhiều hồ sơ vẫn giữ — đó là khách thật, không phải @ mồ côi.
