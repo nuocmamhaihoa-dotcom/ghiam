@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import gzip
 import os
+import sqlite3
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from control_plane.screen_table import Review, Row, Table, Unopened
@@ -28,6 +30,7 @@ from control_plane.video_store import (
     rematch_results,
     queued_bytes,
     recover_dead,
+    rescue_stuck_uploads,
     requeue,
     requeue_running,
     retry,
@@ -626,6 +629,33 @@ class VideoStoreTests(unittest.TestCase):
                 os.environ.pop("CONTROL_VIDEO_KEEP", None)
             else:
                 os.environ["CONTROL_VIDEO_KEEP"] = old
+
+    def test_old_queued_video_stays_ahead_of_newer_finished_ones(self) -> None:
+        waiting = self._add("wait.mp4", "wait")
+        for index in range(3):
+            done = self._add(f"done-{index}.mp4", f"done-{index}")
+            finish(self.db, done, Table())
+        listed = list_videos(self.db, limit=2)
+        self.assertEqual(listed[0]["id"], waiting)
+        self.assertEqual(listed[0]["status"], "queued")
+        self.assertLess(len([item for item in listed if item["status"] == "done"]), 3)
+
+    def test_stuck_upload_without_a_file_is_dropped_and_a_file_is_queued(self) -> None:
+        empty = begin_upload(self.db, name="empty.mp4", size_bytes=10, sha256="empty-sha")
+        kept = begin_upload(self.db, name="kept.mp4", size_bytes=80, sha256="kept-sha")
+        fresh = begin_upload(self.db, name="fresh.mp4", size_bytes=10, sha256="fresh-sha")
+        old = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE videos SET created_at = ? WHERE id IN (?, ?)", (old, empty["id"], kept["id"]))
+        video_dir = Path(self._tmp.name) / "videos"
+        video_dir.mkdir()
+        (video_dir / f"{kept['id']}.mp4").write_bytes(b"x" * 80)
+        self.assertEqual(rescue_stuck_uploads(self.db, video_dir, min_age_sec=600), 2)
+        counts = stats(self.db)
+        self.assertEqual(counts["uploading"], 1)
+        self.assertEqual(counts["queued"], 1)
+        self.assertEqual(int(fresh["id"]), next(item["id"] for item in list_videos(self.db) if item["status"] == "uploading"))
+        self.assertEqual(int(kept["id"]), next(item["id"] for item in list_videos(self.db) if item["status"] == "queued"))
 
     def test_clear_missing_video_paths(self) -> None:
         video_id = self._add("a.mp4", "gone", size=33)

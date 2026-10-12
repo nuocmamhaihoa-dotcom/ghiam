@@ -717,11 +717,14 @@ def should_pause_ocr(db_path: Path, video_dir: Path) -> bool:
         return False
     if free < ocr_pause_free_bytes():
         return True
-    # Chỉ phiên vừa nhận byte. Phiên đã xếp nhưng im thì không dừng OCR.
-    # Mặc định 1: một iPhone đang gửi đã đủ làm đĩa/CPU nghẽn nếu OCR chiếm hết 16 nhân.
+    # Mặc định 0: không dừng hàng đọc chỉ vì đang tải. Upload được dành vài nhân
+    # (xem video_worker). Đặt CONTROL_VIDEO_OCR_PAUSE_UPLOADS=N để dừng nhận job mới
+    # khi có từ N phiên đang nhận byte.
+    pause_at = int(os.environ.get("CONTROL_VIDEO_OCR_PAUSE_UPLOADS", "0") or "0")
+    if pause_at <= 0:
+        return False
     receiving = sum(_receiving_count_from(path, fresh_sec=120) for path in _uploads_db_paths(db_path))
-    pause_at = int(os.environ.get("CONTROL_VIDEO_OCR_PAUSE_UPLOADS", "1") or "1")
-    return receiving >= max(1, pause_at)
+    return receiving >= pause_at
 
 
 def clean_device(device: str) -> str:
@@ -809,6 +812,42 @@ def set_duration(db_path: Path, video_id: int, duration_sec: float) -> None:
         )
 
 
+def rescue_stuck_uploads(db_path: Path, video_dir: Path, *, min_age_sec: float = 600) -> int:
+    """Video kẹt ở trạng thái đang tải: có file thì đưa vào hàng đọc, không file thì bỏ để nhường chỗ.
+
+    Lúc complete bình thường chỉ kẹt vài giây. Quá min_age_sec mà vẫn uploading là lần trước chết
+    giữa chừng — không để dòng đó chiếm hạn mức đĩa mãi.
+    """
+    video_dir.mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, name, created_at, path FROM videos WHERE status = 'uploading'"
+        ).fetchall()
+    fixed = 0
+    for row in rows:
+        created = _parse_ts(row["created_at"])
+        if created is None or now - created < min_age_sec:
+            continue
+        video_id = int(row["id"])
+        candidate = Path(str(row["path"] or ""))
+        if not candidate.is_file():
+            suffix = Path(str(row["name"] or "")).suffix.lower() or ".mp4"
+            guess = video_dir / f"{video_id}{suffix}"
+            candidate = guess if guess.is_file() else Path()
+        if candidate.is_file() and candidate.stat().st_size > 0:
+            commit_upload(db_path, video_id, str(candidate))
+            fixed += 1
+            continue
+        with connect(db_path) as conn:
+            conn.execute(
+                "DELETE FROM videos WHERE id = ? AND status = 'uploading' AND (path = '' OR path IS NULL)",
+                (video_id,),
+            )
+        fixed += 1
+    return fixed
+
+
 def abort_upload(db_path: Path, video_id: int, reopened: bool = False) -> None:
     with connect(db_path) as conn:
         if reopened:
@@ -820,10 +859,7 @@ def abort_upload(db_path: Path, video_id: int, reopened: bool = False) -> None:
         conn.execute("DELETE FROM videos WHERE id = ? AND status = 'uploading'", (video_id,))
 
 
-def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
-    with connect(db_path) as conn:
-        rows = conn.execute(
-            """
+_VIDEO_LIST_SQL = """
             SELECT
               v.id, v.name, v.size_bytes, v.status, v.error, v.created_at, v.started_at, v.finished_at,
               v.device, v.progress, v.progress_at, v.path,
@@ -833,11 +869,45 @@ def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
               COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.bucket = 2), 0) AS review_count,
               COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.bucket = 3), 0) AS unopened_count
             FROM videos v
-            ORDER BY v.id DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
+"""
+
+
+def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
+    """Video đang chờ hoặc đang đọc luôn hiện, kể cả khi đã có nhiều video xong mới hơn.
+
+    Trong nhóm đã xong, video mới đứng trước. Hàng chờ sắp theo id: vào trước được đọc trước.
+    """
+    with connect(db_path) as conn:
+        active_ids = [
+            int(row["id"])
+            for row in conn.execute(
+                """
+                SELECT id FROM videos
+                WHERE status IN ('uploading', 'queued', 'running')
+                ORDER BY id
+                """
+            )
+        ]
+        recent_ids = [
+            int(row["id"])
+            for row in conn.execute(
+                """
+                SELECT id FROM videos
+                WHERE status IN ('done', 'error')
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+        ]
+        ids = active_ids + [item for item in recent_ids if item not in set(active_ids)]
+        if not ids:
+            rows = []
+        else:
+            marks = ",".join("?" for _ in ids)
+            found = conn.execute(_VIDEO_LIST_SQL + f" WHERE v.id IN ({marks})", ids).fetchall()
+            order = {video_id: index for index, video_id in enumerate(ids)}
+            rows = sorted(found, key=lambda row: order[int(row["id"])])
     items: list[dict[str, object]] = []
     for row in rows:
         item = dict(row)

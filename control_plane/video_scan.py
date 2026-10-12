@@ -60,6 +60,20 @@ BRIEF_EXIT_READS = 3
 # Ba ô Số + Tên + @ của một hàng nằm trong 4 giây. Chỗ thiếu ô thì đọc lại ±4 giây.
 REFILL_RADIUS_SEC = 4.0
 REFILL_FPS = 10.0
+# Mỗi luồng đọc tự đặt số luồng ffmpeg. 0 = ffmpeg tự lấy hết nhân.
+_FFMPEG_THREADS = threading.local()
+
+
+def use_ffmpeg_threads(count: int) -> None:
+    """Giới hạn luồng giải mã của luồng đang đọc. Nhiều video cùng lúc thì chia nhân."""
+    _FFMPEG_THREADS.n = max(0, int(count))
+
+
+def _ffmpeg_threads_arg() -> str:
+    count = int(getattr(_FFMPEG_THREADS, "n", 0) or 0)
+    if count <= 0:
+        return "0"
+    return str(count)
 
 Submit = Callable[..., Future]
 
@@ -741,7 +755,7 @@ def plan_video(path: Path, fps: float = SCAN_FPS, on_progress: Progress | None =
         "-loglevel",
         "error",
         "-threads",
-        "0",
+        _ffmpeg_threads_arg(),
         "-i",
         str(path),
         "-map",
@@ -971,7 +985,7 @@ def extract_frames(
                 "-loglevel",
                 "error",
                 "-threads",
-                "0",
+                _ffmpeg_threads_arg(),
                 "-i",
                 str(path),
                 "-map",

@@ -36,6 +36,7 @@ from control_plane.video_store import (
     list_videos,
     queued_bytes,
     reader_alive,
+    rescue_stuck_uploads,
     retry,
     search_results,
     should_pause_ocr,
@@ -71,10 +72,15 @@ def _uploads_db() -> Path:
 def _cleanup_uploads() -> int:
     """Dọn phiên tải chết / file mồ côi — gọi nhẹ mỗi lần xem hàng đợi."""
     try:
-        return cleanup_stale_uploads(_uploads_db(), settings.video_dir)
+        removed = cleanup_stale_uploads(_uploads_db(), settings.video_dir)
     except Exception as exc:
         print(f"cleanup uploads: {exc}", flush=True)
-        return 0
+        removed = 0
+    try:
+        rescue_stuck_uploads(settings.video_db_path, settings.video_dir)
+    except Exception as exc:
+        print(f"rescue uploads: {exc}", flush=True)
+    return removed
 
 
 def _locked_http(_exc: sqlite3.OperationalError) -> HTTPException:

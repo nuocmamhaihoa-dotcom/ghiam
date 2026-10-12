@@ -1,9 +1,9 @@
 """Đọc video trong hàng đợi. Đóng trình duyệt không dừng việc này.
 
-Nhiều máy (iPhone) đẩy video lên cùng lúc vẫn chỉ xếp hàng; mỗi video được đọc
-bằng một nhóm tiến trình riêng, xong mới sang video kế. Đọc chạy trên máy chủ
-(systemd): thoát app / đổi phần mềm không làm dừng. Chỉ restart khi nhóm tiến
-trình chết thật — không giết job đang tách khung hoặc OCR.
+Nhiều máy đẩy video lên thì xếp hàng, không bỏ video nào. Một nhóm tiến trình
+dùng chung: chỉ một video thì dùng hết nhân, nhiều video thì chia nhân, video
+vào trước được nhận trước. Đang tải chỉ nhường vài nhân, không dừng hàng đọc.
+Đọc chạy trên máy chủ (systemd). Chỉ restart khi nhóm tiến trình chết thật.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ import functools
 import multiprocessing
 import os
 import shutil
-import signal
 import sqlite3
 import threading
 import time
@@ -21,7 +20,7 @@ from pathlib import Path
 
 from control_plane.ocr_backend import describe_ocr, gpu_available, resolve_ocr_engine
 from control_plane.settings import settings
-from control_plane.video_scan import scan_paths
+from control_plane.video_scan import scan_paths, use_ffmpeg_threads
 from control_plane.video_store import (
     claim,
     fail,
@@ -33,6 +32,7 @@ from control_plane.video_store import (
     rematch_results,
     requeue,
     requeue_running,
+    rescue_stuck_uploads,
     set_duration,
     set_progress,
     should_pause_ocr,
@@ -42,6 +42,10 @@ from control_plane.video_store import (
     worker_count,
 )
 from control_plane.video_validate import probe_duration_sec
+
+
+_JOBS = 0
+_JOBS_LOCK = threading.Lock()
 
 
 def heartbeat_path() -> Path:
@@ -117,34 +121,56 @@ def _ocr_descendant_pids(root: int) -> list[int]:
     return found
 
 
-def _signal_ocr_tree(sig: int) -> None:
+def _upload_reserved_cores() -> int:
+    """Số nhân để trống cho đường tải khi đang có byte vào. Phần còn lại vẫn đọc."""
+    cpus = os.cpu_count() or 2
+    raw = os.environ.get("CONTROL_VIDEO_UPLOAD_CORES", "").strip()
+    if raw:
+        return max(1, min(cpus - 1, int(raw)))
+    if cpus >= 8:
+        return 4
+    if cpus >= 4:
+        return 2
+    return 1
+
+
+def _pin_ocr_tree(uploading: bool) -> None:
+    """Đang tải thì ghim OCR/ffmpeg ra khỏi vài nhân. Không dừng hẳn — hàng đọc vẫn chạy."""
+    if not hasattr(os, "sched_setaffinity"):
+        return
+    cpus = os.cpu_count() or 1
+    reserved = _upload_reserved_cores()
+    if uploading and reserved < cpus:
+        allowed = set(range(reserved, cpus))
+    else:
+        allowed = set(range(cpus))
+    if not allowed:
+        allowed = {0}
     for pid in _ocr_descendant_pids(os.getpid()):
         try:
-            os.kill(pid, sig)
+            os.sched_setaffinity(pid, allowed)
         except OSError:
             pass
 
 
 def _yield_ocr_while_uploading(db_path: Path, stop: threading.Event) -> None:
-    """OCR 16 nhân làm upload ngắt quãng (đĩa/CPU đầy, iPhone phải chờ ACK).
-
-    Đang có byte vào thì SIGSTOP cả cây OCR; nguội vài chục giây thì SIGCONT.
-    """
+    """Có byte đang vào thì nhường vài nhân cho upload. Hết byte thì đọc dùng lại hết nhân."""
     held = False
-    while not stop.wait(1.0):
+    while not stop.wait(0.5):
         try:
             active = uploads_are_flowing(db_path)
         except Exception:
             active = False
-        if active:
-            _signal_ocr_tree(signal.SIGSTOP)
-            if not held:
-                held = True
-                print("Tạm dừng OCR để nhường CPU và đĩa cho upload.", flush=True)
-        elif held:
-            _signal_ocr_tree(signal.SIGCONT)
+        _pin_ocr_tree(active)
+        if active and not held:
+            held = True
+            print(
+                f"Đang tải — dành {_upload_reserved_cores()} nhân cho upload, phần còn lại vẫn đọc.",
+                flush=True,
+            )
+        elif held and not active:
             held = False
-            print("Upload nguội — OCR chạy tiếp.", flush=True)
+            print("Upload nguội — đọc dùng lại hết nhân.", flush=True)
 
 
 def _rematch_process(path: str) -> None:
@@ -161,7 +187,6 @@ def _rematch_process(path: str) -> None:
 def run_job(
     db_path: Path,
     job: dict[str, object],
-    workers: int,
     work_dir: Path,
     pool: ProcessPoolExecutor,
 ) -> None:
@@ -191,7 +216,10 @@ def run_job(
 
     pulse = threading.Thread(target=_pulse, daemon=True)
     pulse.start()
+    global _JOBS
     try:
+        with _JOBS_LOCK:
+            _JOBS += 1
         try:
             seconds = probe_duration_sec(path)
             if seconds > 0:
@@ -199,6 +227,10 @@ def run_job(
         except Exception as dur_exc:
             print(f"duration video {video_id}: {dur_exc}", flush=True)
         device = str(job.get("device") or "")
+        cpus = os.cpu_count() or 2
+        with _JOBS_LOCK:
+            running = max(1, _JOBS)
+        use_ffmpeg_threads(max(2, cpus // running))
         scan = functools.partial(
             scan_paths,
             submit=pool.submit,
@@ -224,6 +256,8 @@ def run_job(
             print(f"Dọn video cũ lỗi: {prune_exc}", flush=True)
         return
     finally:
+        with _JOBS_LOCK:
+            _JOBS = max(0, _JOBS - 1)
         stop_pulse.set()
         pulse.join(timeout=1.0)
     # Gói S: giữ file để Đọc lại; chỉ xóa khi vượt cửa sổ KEEP.
@@ -244,20 +278,18 @@ def run_job(
 
 def _feed(
     db_path: Path,
-    workers: int,
     work_dir: Path,
-    context: multiprocessing.context.BaseContext,
+    pool: ProcessPoolExecutor,
     stop: threading.Event,
     broken: threading.Event,
 ) -> None:
     current: dict[str, object] | None = None
-    pool: ProcessPoolExecutor | None = None
     try:
         while not stop.is_set():
             touch_heartbeat(heartbeat_path())
-            # Nhiều iPhone đang up / đĩa căng → nhường băng thông + chỗ trống, chưa nhận OCR mới.
+            # Chỉ nhường job mới khi đĩa sắp đầy. Đang tải thì vẫn nhận — upload đã có nhân riêng.
             if should_pause_ocr(db_path, settings.video_dir):
-                stop.wait(5.0)
+                stop.wait(2.0)
                 continue
             try:
                 current = claim(db_path, os.getpid())
@@ -267,31 +299,17 @@ def _feed(
                 stop.wait(1.0)
                 continue
             if current is None:
-                stop.wait(1.0)
+                stop.wait(0.4)
                 continue
             try:
-                # Giữ pool qua nhiều video — tránh spawn lại 15 tiến trình mỗi lần (cùng logic OCR).
-                if pool is None:
-                    pool = ProcessPoolExecutor(max_workers=workers, mp_context=context)
-                run_job(db_path, current, workers, work_dir, pool)
+                run_job(db_path, current, work_dir, pool)
             except BrokenExecutor:
                 # run_job đã đưa video về hàng đợi.
                 current = None
-                if pool is not None:
-                    try:
-                        pool.shutdown(wait=False, cancel_futures=True)
-                    except Exception:
-                        pass
-                    pool = None
                 broken.set()
                 return
             current = None
     finally:
-        if pool is not None:
-            try:
-                pool.shutdown(wait=False, cancel_futures=True)
-            except Exception:
-                pass
         # Luồng nhận video chết giữa chừng mà tiến trình vẫn sống thì recover_dead không cứu được.
         if current is not None:
             requeue(db_path, int(current["id"]))
@@ -330,15 +348,20 @@ def main() -> None:
     for stale in stale_dirs:
         shutil.rmtree(stale, ignore_errors=True)
     work_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        rescued = rescue_stuck_uploads(db_path, settings.video_dir)
+        if rescued:
+            print(f"Đưa {rescued} video kẹt lúc tải vào hàng đọc hoặc bỏ dòng không còn file.", flush=True)
+    except Exception as exc:
+        print(f"rescue upload kẹt lỗi (bỏ qua): {exc}", flush=True)
     total_workers = worker_count()
     feeders = feeder_count()
-    per_workers = max(1, total_workers // feeders)
     engine = resolve_ocr_engine()
     if engine == "paddle" and not gpu_available():
         engine = "tesserocr"
     print(
-        f"Đọc video bằng {per_workers} tiến trình/video, xếp hàng {feeders} video một lúc "
-        f"(tối đa {per_workers * feeders} nhân, khung tại {work_dir}). "
+        f"Đọc bằng {total_workers} tiến trình dùng chung, tối đa {feeders} video cùng lúc "
+        f"(video vào hàng trước được nhận trước, khung tại {work_dir}). "
         f"{describe_ocr()}. Chỉ đọc luồng hình (bỏ audio). "
         f"Chạy liên tục trên máy chủ — thoát app không dừng.",
         flush=True,
@@ -358,12 +381,13 @@ def main() -> None:
         daemon=True,
     ).start()
     context = multiprocessing.get_context("spawn")
+    pool = ProcessPoolExecutor(max_workers=total_workers, mp_context=context)
     threads: list[threading.Thread] = []
 
     def start_feeder() -> threading.Thread:
         thread = threading.Thread(
             target=_feed,
-            args=(db_path, per_workers, work_dir, context, stop, broken),
+            args=(db_path, work_dir, pool, stop, broken),
             daemon=True,
         )
         thread.start()
