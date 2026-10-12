@@ -57,6 +57,7 @@ class WarehouseApiTests(unittest.TestCase):
         page = self.client.get("/kho")
         self.assertEqual(page.status_code, 200)
         self.assertIn("Kho tổng", page.text)
+        self.assertIn("100 triệu", page.text)
 
         preview = self.client.post(
             "/v1/kho/preview",
@@ -91,6 +92,11 @@ class WarehouseApiTests(unittest.TestCase):
         exported = self.client.get("/v1/kho/export", headers=self.headers, params={"q": "Vũ"})
         self.assertEqual(exported.status_code, 200)
         self.assertIn("0933000111", exported.text)
+
+        stats = self.client.get("/v1/kho/stats", headers=self.headers)
+        self.assertEqual(stats.status_code, 200)
+        self.assertEqual(stats.json()["contacts"], 2)
+        self.assertEqual(stats.json()["phones"], 2)
 
     def test_preview_marks_unique_phone_match(self) -> None:
         first = self.client.post(

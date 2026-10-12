@@ -24,14 +24,15 @@ from control_plane.warehouse import (
 )
 from control_plane.warehouse_store import (
     export_csv,
+    export_csv_rows,
     find_match,
     init_warehouse,
     list_templates,
-    load_lookups,
     preview_matches,
     save_template,
     search_contacts,
     upsert_records,
+    warehouse_stats,
 )
 from control_plane.db import session
 
@@ -252,6 +253,11 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(row["name"], "Lan")
         self.assertEqual(row["address"], "1 Đường Láng, Hà Nội")
         self.assertEqual(row["uid"], "6000111222333")
+        stats = warehouse_stats(self.db)
+        self.assertEqual(stats["contacts"], 1)
+        self.assertEqual(stats["phones"], 1)
+        self.assertEqual(stats["uids"], 1)
+        self.assertEqual(stats["batches"], 2)
 
     def test_unique_name_and_address_fill_empty(self) -> None:
         upsert_records(
@@ -352,25 +358,47 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(result["inserted"], 0)
         self.assertEqual(result["skipped"], 2)
         with session(self.db) as conn:
-            lookups = load_lookups(conn)
-        self.assertEqual(find_match(lookups, {"name": "Nguyễn Văn A", "phone": "", "uid": "", "id": "", "address": ""})[1], "ambiguous")
-        conflict = find_match(
-            lookups,
-            {
-                "name": "",
-                "phone": "0903333001",
-                "phone_key": "0903333001",
-                "uid": "111122223333444",
-                "id": "",
-                "address": "",
-            },
-        )
-        self.assertEqual(conflict, (None, "conflict"))
+            self.assertEqual(
+                find_match(conn, {"name": "Nguyễn Văn A", "phone": "", "uid": "", "id": "", "address": ""})[1],
+                "ambiguous",
+            )
+            conflict = find_match(
+                conn,
+                {
+                    "name": "",
+                    "phone": "0903333001",
+                    "phone_key": "0903333001",
+                    "uid": "111122223333444",
+                    "id": "",
+                    "address": "",
+                },
+            )
+            self.assertEqual(conflict, (None, "conflict"))
         previewed = preview_matches(
             self.db,
             [{"name": "Nguyễn Văn A", "phone": "", "address": "", "uid": "", "id": ""}],
         )
         self.assertEqual(previewed[0]["match"], "ambiguous")
+
+    def test_same_file_duplicate_phone_fills(self) -> None:
+        result = upsert_records(
+            self.db,
+            [
+                {"name": "Lan", "phone": "0901234567", "address": "", "uid": "", "id": ""},
+                {"name": "", "phone": "0901234567", "address": "1 Đường Láng, Hà Nội", "uid": "", "id": ""},
+            ],
+            filename="mot-file.xlsx",
+            source="mot",
+            mapping={"name": 0, "phone": 1},
+            at="2026-04-01T00:00:00+00:00",
+        )
+        self.assertEqual(result["inserted"], 1)
+        self.assertEqual(result["updated"], 1)
+        self.assertEqual(result["skipped"], 0)
+        found = search_contacts(self.db, "0901234567", limit=10, after=0)
+        self.assertEqual(found["count"], 1)
+        self.assertEqual(found["items"][0]["name"], "Lan")
+        self.assertEqual(found["items"][0]["address"], "1 Đường Láng, Hà Nội")
 
     def test_search_and_export(self) -> None:
         upsert_records(
@@ -393,6 +421,12 @@ class StoreTests(unittest.TestCase):
         csv_body = export_csv(self.db, "Minh").decode("utf-8")
         self.assertIn("0911111222", csv_body)
         self.assertIn("Tên", csv_body)
+        chunks = list(export_csv_rows(self.db, "0911111222"))
+        self.assertGreaterEqual(len(chunks), 2)
+        self.assertIn("0911111222", b"".join(chunks).decode("utf-8"))
+        stats = warehouse_stats(self.db)
+        self.assertEqual(stats["contacts"], 1)
+        self.assertEqual(stats["phones"], 1)
 
     def test_saved_template_roundtrip(self) -> None:
         save_template(self.db, "abc", ["ten", "sdt"], {"name": 0, "phone": 1}, "2026-01-01T00:00:00+00:00")

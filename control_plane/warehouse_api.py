@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, File, Header, HTTPException, Query, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from control_plane import db
@@ -25,7 +25,7 @@ from control_plane.warehouse import (
     sheet_to_dict,
 )
 from control_plane.warehouse_store import (
-    export_csv,
+    export_csv_rows,
     init_warehouse,
     list_templates,
     preview_matches,
@@ -37,7 +37,7 @@ from control_plane.warehouse_store import (
 
 router = APIRouter()
 UPLOAD_TTL_SEC = 2 * 60 * 60
-MAX_WAREHOUSE_MB = 80
+MAX_WAREHOUSE_MB = 200
 
 
 def _auth(authorization: str | None) -> None:
@@ -147,12 +147,11 @@ def kho_search(
 def kho_export(
     authorization: str | None = Header(default=None),
     q: str = Query(default=""),
-) -> Response:
+) -> StreamingResponse:
     _auth(authorization)
     init_warehouse(settings.db_path)
-    body = export_csv(settings.db_path, q)
-    return Response(
-        content=body,
+    return StreamingResponse(
+        export_csv_rows(settings.db_path, q),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="kho-tong.csv"'},
     )

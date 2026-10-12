@@ -15,6 +15,9 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute("PRAGMA temp_store=MEMORY;")
     conn.execute("PRAGMA cache_size=-128000;")  # ~128MB page cache
+    conn.execute("PRAGMA mmap_size=8589934592;")
+    conn.execute("PRAGMA wal_autocheckpoint=2000;")
+    conn.execute("PRAGMA busy_timeout=60000;")
     return conn
 
 

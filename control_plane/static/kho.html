@@ -53,7 +53,7 @@
 <body>
 <main>
   <h1>Kho tổng</h1>
-  <p class="lead">Mỗi dòng Excel là một dòng kho: tên, số điện thoại, địa chỉ, UID Facebook, ID TikTok. Cột lệch vẫn chia theo dấu hiệu của từng ô.</p>
+  <p class="lead">Mỗi dòng Excel là một dòng kho: tên, số điện thoại, địa chỉ, UID Facebook, ID TikTok. Cột lệch vẫn chia theo dấu hiệu của từng ô. Kho tra cứu theo chỉ mục, không tải hết vào RAM, chịu được tới khoảng 100 triệu dòng.</p>
   <nav>
     <a href="/">Đọc video</a>
     <a href="/danhba/">Danh bạ</a>
@@ -66,7 +66,7 @@
 
   <section>
     <h2>Nạp file</h2>
-    <p class="note">Nhận .xlsx, .csv, .tsv, .txt. ID TikTok phải có @ ở đầu. UID Facebook là dãy số không giống đầu số di động Việt, dài hơn số nhà/số đường. Ô không đủ dấu hiệu thì để trống, không đoán.</p>
+    <p class="note">Nhận .xlsx, .csv, .tsv, .txt. Excel tối đa khoảng 1 triệu dòng/file — nạp nhiều file để đủ 100 triệu. ID TikTok phải có @ ở đầu. UID Facebook là dãy số không giống đầu số di động Việt. Ô không đủ dấu hiệu thì để trống.</p>
     <div class="drop" id="drop">
       <p>Kéo file vào đây</p>
       <p class="note">hoặc</p>
@@ -156,6 +156,7 @@
       <ul>
         <li>Mỗi dòng file là một dòng kho. Ô số điện thoại, UID Facebook, @TikTok, địa chỉ, tên được nhận dù cột lệch.</li>
         <li>Tiêu đề vẫn dùng khi có. Ô không khớp tiêu đề thì chỉ nhận khi đúng dấu hiệu khóa.</li>
+        <li>Kho ghép và tìm theo chỉ mục số điện thoại / UID / TikTok / tên / địa chỉ, ghi từng lô 8.000 dòng, xuất CSV theo luồng. Không tải 100 triệu dòng vào RAM.</li>
       </ul>
     </details>
     <details>
