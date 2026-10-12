@@ -91,7 +91,7 @@
   <h1>Đọc video danh bạ</h1>
   <p class="lead">Thêm nhiều video / nhiều iPhone cùng lúc. Chọn xong là xếp phiên lên VPS ngay — hàng đợi hiện tên từng file. Tải theo mảnh, mất mạng chọn lại cùng file để tiếp tục. Đóng trang thì máy chủ vẫn đọc các video đã tải xong.</p>
   <div id="relayWarn" class="banner warn-banner __RELAY_HIDE__">__RELAY_TEXT__</div>
-  <p class="note" style="margin-bottom:0.8rem"><b>Để tải nhanh:</b> tắt iCloud Private Relay và Chế độ dữ liệu thấp, thoát app VideoUp, kéo tải lại trang này rồi chọn video trên Safari. Giữ màn hình sáng. Mỗi cổng Safari chỉ mở 6 đường — trang tự mở thêm cổng 8090 và 8091 để gửi nhiều đường cùng lúc. Dòng dưới hiện MB/s.</p>
+  <p class="note" style="margin-bottom:0.8rem"><b>Để Safari khỏi bị sập khi tải:</b> tắt VPN, tắt iCloud Private Relay và Chế độ dữ liệu thấp, kéo tải lại trang rồi chọn lại đúng video. iPhone chỉ gửi 2 đường nhỏ để khỏi đầy bộ nhớ. Phần đã lên được gửi tiếp, không tải lại từ đầu. Giữ màn hình sáng.</p>
 
   <div id="openWarn" class="banner hide" role="status"></div>
 
@@ -219,9 +219,20 @@
     note.className = "note ok";
   }
 
+  var PHONE_PARALLEL = 2;
+  var PHONE_CHUNK_BYTES = 4 * 1024 * 1024;
   var LANE_PORTS = [];
   var laneDetectGen = 0;
   var portFails = {};
+
+  function phoneBrowser() {
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+  }
+
+  function activeParallel() {
+    if (phoneBrowser()) return PHONE_PARALLEL;
+    return CHUNK_PARALLEL || 6;
+  }
 
   function pagePort() {
     return location.port || (location.protocol === "https:" ? "443" : "80");
@@ -255,6 +266,8 @@
 
   async function detectLanePorts() {
     var gen = ++laneDetectGen;
+    // iPhone + VPN: nhiều cổng và nhiều mảnh 16MB làm Safari sập giữa chừng.
+    if (phoneBrowser()) return usePageOriginOnly(PHONE_PARALLEL);
     // https hoặc Private Relay: 8090/8091 hay đứt. Chỉ gửi trên đúng địa chỉ trang đang mở.
     if (location.protocol === "https:" || relayActive()) {
       return usePageOriginOnly(relayActive() ? 4 : 6);
@@ -485,7 +498,7 @@
         loadResults().then(function (ok) {
           if (ok) lastResultTotal = stamp;
         });
-      }, 0);
+      }, phoneBrowser() ? 1500 : 0);
     }
     } catch (error) {
       if (error && error.name === "AbortError") return;
@@ -596,10 +609,12 @@
 
   var resultsAsked = 0;
   var RESULT_PAGE = 80;
+  var RESULT_DOM_CAP = 160;
   var resultsView = "complete";
   var resultsAbort = null;
   var refreshAbort = null;
   var loadedResults = [];
+  var resultsOffset = 0;
   var resultsTotal = 0;
   var resultsLoading = false;
   var resultsQueryTimer = null;
@@ -621,7 +636,8 @@
     var wrap = document.getElementById("resultsMoreWrap");
     var more = document.getElementById("resultsMore");
     if (!wrap) return;
-    wrap.hidden = !(loadedResults.length > 0 && loadedResults.length < resultsTotal);
+    var canMore = resultsOffset < resultsTotal && resultsOffset < RESULT_DOM_CAP;
+    wrap.hidden = !(loadedResults.length > 0 && canMore);
     if (more) more.disabled = !!resultsLoading;
   }
 
@@ -662,7 +678,7 @@
     var q = document.getElementById("query").value.trim();
     var box = document.getElementById("results");
     var note = document.getElementById("resultsNote");
-    var offset = append ? loadedResults.length : 0;
+    var offset = append ? resultsOffset : 0;
     var moreBtn = document.getElementById("resultsMore");
     resultsLoading = true;
     setViewButtons();
@@ -686,9 +702,13 @@
       }
       var body = await response.json();
       if (asked !== resultsAsked) return false;
-      var chunk = body.items || [];
+      var chunk = (body.items || []).slice(0, RESULT_PAGE);
       resultsTotal = typeof body.total === "number" ? body.total : (offset + chunk.length);
+      resultsOffset = offset + chunk.length;
       loadedResults = append ? loadedResults.concat(chunk) : chunk.slice();
+      if (loadedResults.length > RESULT_DOM_CAP) {
+        loadedResults = loadedResults.slice(loadedResults.length - RESULT_DOM_CAP);
+      }
       ok = true;
     } catch (error) {
       if (asked !== resultsAsked || (error && error.name === "AbortError")) return false;
@@ -715,9 +735,12 @@
       return true;
     }
     var shown = "Đang hiện " + loadedResults.length + "/" + resultsTotal + " dòng «" + viewLabel + "»";
+    var capNote = (!q && resultsOffset >= RESULT_DOM_CAP && resultsOffset < resultsTotal)
+      ? " Gõ số hoặc @ để xem tiếp — không tải hết để Safari khỏi bị sập."
+      : "";
     note.textContent = q
       ? (shown + " cho «" + q + "».")
-      : (shown + ". Mỗi lần chỉ lấy một trang nhỏ để đường tải video không bị nghẽn.");
+      : (shown + ". Mỗi lần chỉ lấy một trang nhỏ để đường tải video không bị nghẽn." + capNote);
     box.innerHTML = renderResultTable(loadedResults);
     syncMoreButton();
     return true;
@@ -809,6 +832,10 @@
   // Safari chỉ cho 6 kết nối mỗi cổng. detectLanePorts nhân thêm 8090/8091 nếu mở được.
   var CHUNK_PARALLEL = 6;
   var CHUNK_BYTES = 16 * 1024 * 1024;
+
+  function newChunkBytes() {
+    return phoneBrowser() ? PHONE_CHUNK_BYTES : CHUNK_BYTES;
+  }
 
   async function mapPool(items, concurrency, worker) {
     var cursor = 0;
@@ -990,7 +1017,7 @@
           size_bytes: file.size,
           device: deviceName(),
           client_key: clientKeyFor(file),
-          chunk_size: CHUNK_BYTES
+          chunk_size: newChunkBytes()
         }, function (sec, reason, attempt) {
           note.textContent = file.name + " — chờ chỗ trống (" + reason + "), thử lại sau " + sec + "s · lần " + attempt;
           note.className = "note warn";
@@ -1059,9 +1086,9 @@
             (behind ? (" · còn " + behind + " video trong hàng") : "");
           var parts = Object.keys(live).map(function (k) { return k.replace(/^.*\//, "").slice(0, 22) + " " + live[k]; });
           var slow = sec > 8 && mbps < 0.4 ? " Đường này đang rất chậm — tắt Private Relay rồi chọn lại file." : "";
-          note.textContent = "Đang gửi " + CHUNK_PARALLEL + " đường: " + parts.join(" · ") + " — đừng khóa máy." + slow;
+          note.textContent = "Đang gửi " + activeParallel() + " đường: " + parts.join(" · ") + " — đừng khóa máy." + slow;
           note.className = "note";
-        }, CHUNK_PARALLEL);
+        }, activeParallel());
         delete live[name];
         if (!result.ok && !resumeLater(result.status)) {
           result = await uploadWithFallbacks(job.file, result, function (msg) {

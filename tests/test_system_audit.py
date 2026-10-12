@@ -213,6 +213,8 @@ class SystemAuditTests(unittest.TestCase):
         self.assertIn("Xem thêm", text)
         self.assertIn("RESULT_PAGE = 80", text)
         self.assertNotIn("RESULT_PAGE = 1000", text)
+        self.assertIn("PHONE_PARALLEL = 2", text)
+        self.assertIn("Safari khỏi bị sập", text)
         self.assertIn("mất kết nối, giữ trong hàng", text)
 
     def test_results_page_is_capped_so_upload_is_not_starved(self) -> None:
