@@ -294,32 +294,25 @@ def read_headers_for_gaps(
     *,
     reader=None,
 ) -> Table:
-    """Hướng 3. Chỉ đọc vùng trên của khung gần chỗ còn thiếu. Hàng đủ 3 ô không đọc lại."""
+    """Hướng 3. Chỉ đọc vùng trên quanh số còn thiếu @. Hàng đủ 3 ô không đọc lại."""
     if not gaps_remain(table):
         return table
     frames = [obs for _path, obs in observations]
     if not any(obs.at >= 0 for obs in frames):
         return table
     phone_at = _phone_times(frames)
-    user_at = _user_times(frames)
+    # Chỉ đọc lại quanh số còn thiếu @. @ không có số không phải khách, khỏi chiếm lượt đọc.
     anchors: list[float] = []
     for item in table.unopened:
         at = phone_at.get(item.phone, -1.0)
         if at >= 0:
             anchors.append(at)
     for item in table.review:
-        name = item.contact_name or item.profile_name
-        if item.phone and name and item.username:
+        if not item.phone or item.username:
             continue
-        if item.phone:
-            at = phone_at.get(item.phone, -1.0)
-            if at >= 0:
-                anchors.append(at)
-        user = clean_username(item.username)
-        if user:
-            at = user_at.get(user, -1.0)
-            if at >= 0:
-                anchors.append(at)
+        at = phone_at.get(item.phone, -1.0)
+        if at >= 0:
+            anchors.append(at)
     if not anchors:
         return table
 

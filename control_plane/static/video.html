@@ -292,7 +292,7 @@
       <div><b>Cần xem</b><span>Số có trong danh bạ nhưng hàng đó thiếu Tên hoặc @.</span></div>
       <div><b>Lỗi quét</b><span>Không thành một hàng: mở hồ sơ mà không thấy số, trùng tên không ghép được, hoặc một số mở nhiều hồ sơ.</span></div>
     </div>
-    <p class="note legend-note">Phần trăm là % số trong danh bạ đã đủ 3 cột, không tính dòng lỗi quét.</p>
+    <p class="note legend-note">Số khách là tổng số điện thoại, mỗi số chỉ tính một lần — đó là mục tiêu cần đọc. Phần trăm là % số trong danh bạ đã đủ 3 cột, không tính dòng lỗi quét.</p>
     <div id="queue" class="table-wrap"></div>
   </section>
 
@@ -562,11 +562,11 @@
     return parts.join(" · ");
   }
 
-  function renderOpenBanner(saved, review, unopened) {
+  function renderOpenBanner(saved, review, unopened, phones) {
     var banner = document.getElementById("openWarn");
     var listTotal = saved + review;
-    var scanned = listTotal + unopened;
-    if (!scanned) {
+    var scanned = (phones || 0) + unopened;
+    if (!scanned && !listTotal) {
       banner.className = "banner hide";
       banner.textContent = "";
       return;
@@ -574,7 +574,8 @@
     var duPct = pct(saved, listTotal);
     banner.className = duPct != null && duPct >= 50 ? "banner ok-banner" : "banner warn-banner";
     var pctText = duPct != null ? (duPct + "% (" + saved + "/" + listTotal + ")") : "—";
-    banner.textContent = "Số trong danh bạ đã đủ 3 cột: " + pctText +
+    banner.textContent = "Số khách, mỗi số một lần: " + (phones || 0) +
+      ". Số trong danh bạ đã đủ 3 cột: " + pctText +
       ". Cần xem (có số, thiếu tên hoặc @): " + review +
       ". Lỗi quét: " + unopened + ".";
   }
@@ -613,6 +614,7 @@
     var listTotal = saved + review;
     var duPct = pct(saved, listTotal);
     document.getElementById("stats").innerHTML =
+      stat(body.phones || 0, "Số khách") +
       stat(saved, "Đủ 3 cột") +
       stat(review, "Cần xem") +
       stat(unopened, "Lỗi quét", unopened ? "warn" : "") +
@@ -621,7 +623,7 @@
       stat(body.running, "Video đang đọc") +
       stat(body.done, "Video đã xong") +
       stat(body.error, "Video lỗi");
-    renderOpenBanner(saved, review, unopened);
+    renderOpenBanner(saved, review, unopened, body.phones || 0);
     var reader = document.getElementById("reader");
     if (!body.reader_alive) {
       reader.textContent = body.queued > 0
@@ -718,9 +720,11 @@
         var saved = item.saved_count || 0;
         var review = item.review_count || 0;
         var scanErrors = item.unopened_count || 0;
+        var phones = item.phone_count || 0;
         var listTotal = saved + review;
         var duPct = pct(saved, listTotal);
-        resultText = saved + " đủ";
+        resultText = phones + " số";
+        resultText += " · " + saved + " đủ";
         if (review) resultText += " · " + review + " cần xem";
         if (scanErrors) resultText += " · " + scanErrors + " lỗi quét";
         if (duPct != null) {

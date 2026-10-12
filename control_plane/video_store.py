@@ -876,7 +876,8 @@ _VIDEO_LIST_SQL = """
               COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id), 0) AS result_count,
               COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.bucket = 1), 0) AS saved_count,
               COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.bucket = 2), 0) AS review_count,
-              COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.bucket = 3), 0) AS unopened_count
+              COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.bucket = 3), 0) AS unopened_count,
+              COALESCE((SELECT COUNT(*) FROM results r WHERE r.video_id = v.id AND r.phone != ''), 0) AS phone_count
             FROM videos v
 """
 
@@ -982,7 +983,9 @@ def stats(db_path: Path) -> dict[str, int]:
                 buckets["review"] = int(row["n"])
             elif row["bucket"] == BUCKET_UNOPENED:
                 buckets["unopened"] = int(row["n"])
+        phones = conn.execute("SELECT COUNT(*) AS n FROM results WHERE phone != ''").fetchone()
     counts.update(buckets)
+    counts["phones"] = int(phones["n"]) if phones is not None else 0
     counts["results"] = buckets["saved"] + buckets["review"] + buckets["unopened"]
     return counts
 

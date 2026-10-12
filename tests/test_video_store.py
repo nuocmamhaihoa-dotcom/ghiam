@@ -339,6 +339,7 @@ class VideoStoreTests(unittest.TestCase):
         self.assertNotIn("@nam", found)
         counted = stats(self.db)
         self.assertEqual((counted["saved"], counted["review"], counted["unopened"]), (1, 2, 1))
+        self.assertEqual(counted["phones"], 4)
         item = next(row for row in list_videos(self.db) if row["id"] == video_id)
         self.assertNotIn("đã mở hồ sơ nhưng chưa thấy số", str(item["error_summary"]))
         self.assertIn("một số mở nhiều hồ sơ", str(item["error_summary"]))

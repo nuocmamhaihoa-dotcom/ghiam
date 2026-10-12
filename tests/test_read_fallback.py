@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -121,6 +122,20 @@ class HeaderFallbackTests(unittest.TestCase):
         result = read_headers_for_gaps(table, frames, reader=reader)
         self.assertEqual([(row.phone, row.username) for row in result.rows], [("0982117072", "@dangtam.3")])
         self.assertFalse(result.unopened)
+
+    def test_header_pass_does_not_reread_a_profile_with_no_phone(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "frame.jpg"
+            Image.new("RGB", (40, 40), "white").save(path)
+            frames = [(path, _profile("Khác", "@khac.1", 3.0))]
+            table = Table(review=[Review("", "", "Khác", "@khac.1", "đã mở hồ sơ nhưng chưa thấy số")])
+
+            def reader(_path: Path) -> str:
+                raise AssertionError("không đọc lại hồ sơ không có số")
+
+            result = read_headers_for_gaps(table, frames, reader=reader)
+        self.assertEqual(result.rows, [])
+        self.assertEqual(result.review[0].username, "@khac.1")
 
     def test_unmatched_header_phone_is_not_added(self) -> None:
         frames = [(_profile_path(), _profile("Khác", "@khac.1", 3.0))]

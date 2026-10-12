@@ -95,8 +95,10 @@ class SystemAuditTests(unittest.TestCase):
         self.assertEqual(stats_body["saved"], 1)
         self.assertEqual(stats_body["unopened"], 0)
         self.assertEqual(stats_body["review"], 1)
+        self.assertEqual(stats_body["phones"], 2)
         videos = self.client.get("/v1/videos", headers=self._auth()).json()
         self.assertEqual(videos["items"][0]["saved_count"], 1)
+        self.assertEqual(videos["items"][0]["phone_count"], 2)
         ticket = self.client.post("/v1/backup/ticket", headers=self._auth()).json()["url"]
         raw = self.client.get(ticket)
         self.assertEqual(raw.status_code, 200)
