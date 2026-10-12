@@ -31,6 +31,8 @@ from control_plane.screen_table import (
     choose_phone,
     clean_name,
     clean_username,
+    is_profile_handle,
+    is_profile_name,
     is_skipped,
     phone_in_text,
 )
@@ -257,6 +259,29 @@ def _aggressive_once(image: Image.Image, profile_layout: LayoutProfile) -> Frame
     return FrameObs("unknown")
 
 
+def _name_then_handle(lines: list[Line]) -> tuple[Line, Line, str, str] | None:
+    """Chỉ nhận khi dòng ngay trên @ là tên khách, và @ là id hồ sơ.
+
+    Không nhảy qua dòng Đã follow / Follower / ngày / danh bạ để lấy tên ở trên.
+    """
+    for index, line in enumerate(lines):
+        if index == 0:
+            continue
+        username = clean_username(_username_token(line.text))
+        if not is_profile_handle(username):
+            continue
+        above = lines[index - 1]
+        gap = line.box.y0 - above.box.y1
+        limit = max(8, int(max(above.box.h, line.box.h, 1) * 1.35))
+        if gap > limit:
+            continue
+        name = clean_name(above.text)
+        if not is_profile_name(name):
+            continue
+        return above, line, name, username
+    return None
+
+
 def _hunt_profile_handle(
     image: Image.Image,
     layout: LayoutProfile | None = None,
@@ -313,31 +338,15 @@ def _hunt_profile_handle(
                 header.y0 + int(box.y1 * scale_y),
             )
             shifted.append(Word(word.text, word.conf, mapped))
-        lines = _lines(shifted)
-        handle_at = -1
-        username = ""
-        for index, line in enumerate(lines):
-            found = clean_username(_username_token(line.text))
-            if found and len(found) >= 4:  # "@" + ≥3
-                handle_at = index
-                username = found
-                break
-        if handle_at < 0:
+        found = _name_then_handle(_lines(shifted))
+        if found is None:
             continue
-        reread = _read_handle(image, lines[handle_at].box)
-        if reread and len(reread) >= 4:
+        _name_line, handle_line, draft, username = found
+        reread = _read_handle(image, handle_line.box)
+        if reread and is_profile_handle(reread):
             username = reread
-        handle_y = lines[handle_at].box.center_y()
-        draft = ""
-        for line in reversed(lines[:handle_at]):
-            if line.box.center_y() >= handle_y:
-                continue
-            text = clean_name(line.text)
-            if not text or is_skipped(text) or phone_in_text(text):
-                continue
-            draft = text
-            break
-        return choose_name(draft), username
+        if is_profile_name(draft) and is_profile_handle(username):
+            return draft, username
     return "", ""
 
 
@@ -607,10 +616,10 @@ def _read_rows(
 
 
 def _read_profile(image: Image.Image, button: Box, *, aggressive: bool = False) -> tuple[str, str]:
-    """Hồ sơ: tên nằm ngay phía trên @username.
+    """Hồ sơ: chỉ lấy tên lớn và dòng @ ngay dưới tên đó.
 
     Hồ sơ mở rất ngắn thường hơi nhòe — thử thêm crop phóng to/làm nét và
-    ngưỡng tin cậy thấp hơn trước khi bỏ qua khung.
+    ngưỡng tin cậy thấp hơn trước khi bỏ qua khung. Dòng không phải tên+@ thì bỏ.
     """
     header = Box(
         max(0, button.x0 - int(0.08 * button.w)),
@@ -630,9 +639,7 @@ def _read_profile(image: Image.Image, button: Box, *, aggressive: bool = False) 
     if aggressive:
         # PSM 11 bắt @ mờ. Không phóng 3× và không PSM 3: một khung unknown mất hàng chục giây.
         passes.append((_enhance(raw, 2), 11, 5))
-    lines: list[Line] = []
-    handle_at = -1
-    username = ""
+    found_pair: tuple[Line, Line, str, str] | None = None
     for crop, psm, min_conf in passes:
         words = _batch([crop], "vie+eng", psm)[0]
         scale_x = header.w / max(1, crop.width)
@@ -650,42 +657,29 @@ def _read_profile(image: Image.Image, button: Box, *, aggressive: bool = False) 
             )
             shifted.append(Word(word.text, word.conf, mapped))
         shifted = [word for word in shifted if word.box.center_x() < button.x1 + 0.45 * button.w]
-        lines = _lines(shifted)
-        handle_at = -1
-        username = ""
-        for index, line in enumerate(lines):
-            found = clean_username(_username_token(line.text))
-            if found:
-                handle_at = index
-                username = found
-                break
-        if handle_at >= 0:
-            break
-    if handle_at < 0:
-        return "", ""
-    reread = _read_handle(image, lines[handle_at].box)
-    if reread:
-        username = reread
-    handle_y = lines[handle_at].box.center_y()
-    draft = ""
-    name_box: Box | None = None
-    # Tên gần nhất phía trên username (không lấy chữ dưới @).
-    for line in reversed(lines[:handle_at]):
-        if line.box.center_y() >= handle_y:
+        found = _name_then_handle(_lines(shifted))
+        if found is None:
             continue
-        text = clean_name(line.text)
-        if not text or is_skipped(text) or phone_in_text(text):
-            continue
-        draft = text
-        name_box = line.box
+        found_pair = found
         break
-    if name_box is None:
-        return choose_name(draft), username
-    name_crop = [_pad(_upscale(_crop(image, name_box, 8, 6), 2))]
+    else:
+        return "", ""
+    name_line, handle_line, draft, username = found_pair
+    reread = _read_handle(image, handle_line.box)
+    if reread and is_profile_handle(reread):
+        username = reread
+    if not is_profile_handle(username) or not is_profile_name(draft):
+        return "", ""
+    name_crop = [_pad(_upscale(_crop(image, name_line.box, 8, 6), 2))]
     fast = _texts(_batch(name_crop, "vie", 7))[0]
     best = best_tessdata()
     sharp = _texts(_batch(name_crop, "vie", 7, tessdata=best))[0] if best else ""
-    return choose_name(fast, sharp, draft), username
+    name = choose_name(fast, sharp, draft)
+    if not is_profile_name(name):
+        name = draft
+    if not is_profile_name(name):
+        return "", ""
+    return name, username
 
 
 def _read_handle(image: Image.Image, box: Box) -> str:

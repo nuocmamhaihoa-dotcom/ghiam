@@ -104,6 +104,9 @@ class HeaderFallbackTests(unittest.TestCase):
         self.assertEqual(username, "@dangtam.3")
         self.assertEqual(phone, "0982117072")
         self.assertIn("Đặng", name)
+        self.assertEqual(parse_header_text("6 thg 10 2026 chọn\n@ngaychon1"), ("", "", ""))
+        self.assertEqual(parse_header_text("Phương Anh\n@0986249011"), ("0986249011", "", ""))
+        self.assertEqual(parse_header_text("@phuonganh99\nPhương Anh")[2], "")
 
     def test_header_read_fills_only_the_nearby_phone(self) -> None:
         frames = [(_profile_path(), _list("0982117072", "Đặng Thị Tâm", 10.0))]

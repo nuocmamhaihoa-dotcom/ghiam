@@ -17,12 +17,15 @@ from control_plane.screen_table import (
     choose_phone,
     clean_username,
     handle_matches_name,
+    is_profile_handle,
+    is_profile_name,
     name_key,
     joined_name,
     names_close,
     normalize_phone,
     pair_close_names,
     phone_in_text,
+    profile_fields,
     same_person_name,
 )
 from control_plane.video_scan import BRIEF_EXIT_READS, TAP_WINDOW, _Planner, write_table
@@ -58,6 +61,52 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(clean_username("@dangtam.3"), "@dangtam.3")
         self.assertEqual(clean_username("dangtam.3"), "")
         self.assertEqual(clean_username("@khactam60"), "@khactam60")
+        self.assertTrue(is_profile_name("Phương Anh"))
+        self.assertFalse(is_profile_name("6 thg 10 2026 chọn"))
+        self.assertFalse(is_profile_name("C3 Danh bạ"))
+        self.assertFalse(is_profile_name("Từ các liên hệ của bạn"))
+        self.assertFalse(is_profile_name("Đã follow"))
+        self.assertFalse(is_profile_name("0 Thích"))
+        self.assertFalse(is_profile_handle("@30452493001"))
+        self.assertFalse(is_profile_handle("@0986249011"))
+        self.assertFalse(is_profile_handle("@7"))
+        self.assertTrue(is_profile_handle("@nguyenphuong_68"))
+        self.assertEqual(profile_fields("Phương Anh", "@nguyenphuong_68"), ("Phương Anh", "@nguyenphuong_68"))
+        self.assertEqual(profile_fields("", "@dangtam.3"), ("", ""))
+        self.assertEqual(profile_fields("Phương Anh", "@0986249011"), ("", ""))
+
+    def test_name_then_handle_only_accepts_the_line_above_the_at(self) -> None:
+        from control_plane.screen_read import Box, Line, Word, _name_then_handle
+
+        def line(text: str, y: int, h: int = 20) -> Line:
+            return Line([Word(text, 90.0, Box(10, y, 220, y + h))])
+
+        found = _name_then_handle(
+            [
+                line("Phương Anh", 100),
+                line("@nguyenphuong_68", 128),
+                line("316 Đã follow", 170),
+            ]
+        )
+        self.assertIsNotNone(found)
+        assert found is not None
+        _name_line, _handle_line, name, username = found
+        self.assertEqual(name, "Phương Anh")
+        self.assertEqual(username, "@nguyenphuong_68")
+        self.assertIsNone(_name_then_handle([line("6 thg 10 2026 chọn", 40), line("@ngaychon1", 68)]))
+        self.assertIsNone(_name_then_handle([line("C3 Danh bạ", 40), line("@danhba99", 68)]))
+        self.assertIsNone(_name_then_handle([line("Phương Anh", 10), line("@phuonganh99", 200)]))
+        self.assertIsNone(_name_then_handle([line("Phương Anh", 10), line("@0986249011", 38)]))
+        self.assertIsNone(_name_then_handle([line("ce", 10), line("@30452493001", 38)]))
+        self.assertIsNone(
+            _name_then_handle(
+                [
+                    line("Phương Anh", 10),
+                    line("Đã follow", 38),
+                    line("@phuonganh99", 66),
+                ]
+            )
+        )
 
     def test_method_two_pairs_exact_names_and_leaves_the_rest(self) -> None:
         table = build_table(
@@ -181,10 +230,9 @@ class MergeTests(unittest.TestCase):
             ]
         )
         self.assertEqual([(row.phone, row.username) for row in table.rows], [("0982117072", "@dangtam.3")])
-        self.assertEqual([item.username for item in table.review], ["@khactam60"])
-        self.assertFalse(table.review[0].phone)
+        self.assertEqual(table.review, [])
 
-    def test_two_orphan_handles_of_one_name_both_stay(self) -> None:
+    def test_two_frames_of_one_open_keep_one_handle(self) -> None:
         table = build_table(
             [
                 frame_list(ContactHit("0332001753", "khactam")),
@@ -196,13 +244,14 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(table.rows, [])
         phones = [item.phone for item in table.unopened] + [item.phone for item in table.review if item.phone]
         self.assertEqual(phones, ["0332001753"])
+        # Hai khung khactam là một lần mở: giữ @ khớp tên, không thêm dòng cho @ còn lại.
         self.assertEqual(
             {item.username for item in table.review if item.username},
-            {"@khac.1", "@khactam60", "@khac.khac"},
+            {"@khac.1", "@khactam60"},
         )
 
-    def test_missing_profile_name_is_not_paired(self) -> None:
-        """Không đọc được tên hồ sơ thì không biết có cùng khách hay không, nên không ghép."""
+    def test_missing_profile_name_is_not_a_profile(self) -> None:
+        """Không đọc được tên thì không phải hồ sơ. Số ở lại Cần xem, không thêm lỗi quét."""
         table = build_table(
             [
                 frame_list(ContactHit("0982117072", "Đặng Thị Tâm", selected=True)),
@@ -211,8 +260,42 @@ class MergeTests(unittest.TestCase):
         )
         self.assertEqual(table.rows, [])
         self.assertEqual(table.unopened[0].phone, "0982117072")
-        self.assertEqual(table.review[0].username, "@dangtam.3")
-        self.assertFalse(table.review[0].phone)
+        self.assertEqual(table.review, [])
+
+    def test_junk_frames_do_not_block_the_real_profile_or_add_scan_errors(self) -> None:
+        table = build_table(
+            [
+                frame_list(ContactHit("0974813731", "Phương Anh", selected=True)),
+                frame_profile("6 thg 10 2026 chọn", "@ngaychon1"),
+                frame_profile("C3 Danh bạ", "@danhba99"),
+                frame_profile("Đã follow Follower", "@follc7oy"),
+                frame_profile("Từ các liên hệ của bạn", "@lienhe99"),
+                frame_profile("ce", "@30452493001"),
+                frame_profile("Phương Anh", "@0986249011"),
+                frame_profile("", "@nguyenphuong_68"),
+                frame_profile("Phương Anh", "@noiseaa"),
+                frame_profile("Phương Anh", "@phuonganh99"),
+                frame_profile("Phương Anh", "@noisebb"),
+            ]
+        )
+        self.assertEqual([(row.phone, row.username) for row in table.rows], [("0974813731", "@phuonganh99")])
+        self.assertEqual(table.review, [])
+        self.assertEqual(table.unopened, [])
+
+    def test_a_different_name_between_still_blocks_the_pair(self) -> None:
+        table = build_table(
+            [
+                frame_list(ContactHit("0974813731", "Phương Anh", selected=True)),
+                frame_profile("khactam", "@khactam60"),
+                frame_profile("Phương Anh", "@phuonganh99"),
+            ]
+        )
+        self.assertEqual(table.rows, [])
+        self.assertEqual(table.unopened[0].phone, "0974813731")
+        self.assertEqual(
+            {item.username for item in table.review if item.username},
+            {"@khactam60", "@phuonganh99"},
+        )
 
     def test_second_profile_without_returning_to_list_is_not_the_same_tap(self) -> None:
         table = build_table(

@@ -21,7 +21,8 @@ from control_plane.screen_table import (
     Unopened,
     clean_name,
     clean_username,
-    is_skipped,
+    is_profile_handle,
+    is_profile_name,
     joined_name,
     normalize_phone,
     phone_in_text,
@@ -223,29 +224,31 @@ def maybe_handle(line: str) -> str:
 
 
 def parse_header_text(text: str) -> tuple[str, str, str]:
-    """Tách số, tên, @ từ chữ đọc ở vùng trên khung. Thiếu thì để rỗng."""
+    """Tách số, tên, @ từ chữ đọc ở vùng trên khung.
+
+    @ chỉ nhận khi dòng ngay phía trên là tên khách. Ngày, nút follow,
+    danh bạ và @ toàn số không thành hồ sơ.
+    """
     phone = ""
     username = ""
     name = ""
-    for raw in text.splitlines():
-        line = " ".join(raw.split())
-        if not line:
-            continue
-        if not username:
-            username = maybe_handle(line)
+    lines = [" ".join(raw.split()) for raw in text.splitlines()]
+    lines = [line for line in lines if line]
+    for index, line in enumerate(lines):
         found = phone_in_text(line)
         if found and not phone:
             phone = found
-        cleaned = clean_name(line)
-        if (
-            cleaned
-            and not name
-            and not is_skipped(cleaned)
-            and not phone_in_text(cleaned)
-            and "@" not in line
-            and not maybe_handle(line)
-        ):
-            name = cleaned
+        if username or index == 0:
+            continue
+        handle = maybe_handle(line)
+        if not is_profile_handle(handle):
+            continue
+        above = lines[index - 1]
+        shown = clean_name(above)
+        if not is_profile_name(shown) or "@" in above or maybe_handle(above):
+            continue
+        username = handle
+        name = shown
     return phone, name, username
 
 

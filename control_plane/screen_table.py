@@ -165,6 +165,43 @@ def is_skipped(name: str) -> bool:
     return False
 
 
+def is_profile_name(name: str) -> bool:
+    """Tên lớn trên hồ sơ. Nút, ngày, danh bạ và số điện thoại không phải tên khách."""
+    text = clean_name(name)
+    if not text or is_skipped(text) or phone_in_text(text):
+        return False
+    folded = fold_marks(text)
+    if any(token in folded.split() for token in ("follow", "follower", "thich", "thg", "chon")):
+        return False
+    if any(phrase in folded for phrase in ("da follow", "tin nhan", "danh ba", "lien he")):
+        return False
+    if any(token.startswith("20") and len(token) == 4 and token.isdigit() for token in folded.split()):
+        return False
+    return True
+
+
+def is_profile_handle(username: str) -> bool:
+    """Id hồ sơ bắt đầu bằng @ và có chữ. @ toàn số hoặc @ là số điện thoại thì bỏ."""
+    handle = clean_username(username)
+    if not handle:
+        return False
+    body = handle[1:]
+    if sum(ch.isalpha() for ch in body) < 2:
+        return False
+    if phone_in_text(body):
+        return False
+    return True
+
+
+def profile_fields(name: str, username: str) -> tuple[str, str]:
+    """Chỉ nhận hồ sơ khi có cả tên khách và @. Thiếu tên thì không phải hồ sơ."""
+    shown = clean_name(name)
+    handle = clean_username(username)
+    if not is_profile_name(shown) or not is_profile_handle(handle):
+        return "", ""
+    return shown, handle
+
+
 def clean_username(value: str) -> str:
     text = "".join(str(value or "").split())
     if not text.startswith("@"):
@@ -570,21 +607,13 @@ def build_table(frames: list[FrameObs]) -> Table:
     phone_name = {phone: tally.best() for phone, tally in contacts.items()}
     phone_name = {phone: name for phone, name in phone_name.items() if name and not is_skipped(name)}
     for index, visit in enumerate(visits):
+        # Một lần mở chỉ một hồ sơ: tên và một @ rõ nhất. Khung lệch không thành thêm dòng.
         visit_name = visit.name()
-        handles = collapse_handles(list(visit.usernames), visit_name)
-        if not handles:
+        username = visit.username()
+        if not username or not is_profile_handle(username) or not is_profile_name(visit_name):
             continue
-        contact = phone_name.get(visit.phone, "") if visit.phone else ""
-        will_pair = bool(contact and visit_name and same_person_name(contact, visit_name))
-        # Ghép được thì chỉ giữ @ chọn (OCR lệch của một hồ sơ). Không ghép thì giữ mọi @.
-        if will_pair:
-            chosen = visit.username()
-            handles = [chosen] if chosen else []
-        for username in handles:
-            if not username:
-                continue
-            profiles.setdefault(username, _Tally()).add(visit_name)
-            user_seen.setdefault(username, index)
+        profiles.setdefault(username, _Tally()).add(visit_name)
+        user_seen.setdefault(username, index)
     user_name: dict[str, str] = {}
     for user, tally in profiles.items():
         name = tally.best()
@@ -906,10 +935,11 @@ def _walk(
                         cues[:] = [cue for cue in cues if cue.phone != stale]
             continue
 
-        username = clean_username(frame.profile_username)
-        if frame.kind != "profile" or not username:
+        if frame.kind != "profile":
             continue
-        profile_name = clean_name(frame.profile_name)
+        profile_name, username = profile_fields(frame.profile_name, frame.profile_username)
+        if not username:
+            continue
         if open_visit is None or phase != "profile":
             close()
             phone, visit_window = take_phone_for_profile(frame.at)

@@ -1,7 +1,8 @@
 """99999 kịch bản đường tải video và đường đọc/ghép.
 
 Mỗi kịch bản có đáp án: hàng đủ chỉ khi danh bạ và hồ sơ cùng tên đứng liền,
-không có khách khác chen giữa. Số không mất, @ không bị bỏ, file tải lên
+không có khách khác chen giữa. Số không mất. @ chỉ được bỏ khi khung đó
+không phải hồ sơ (thiếu tên, @ toàn số, @ là số điện thoại). File tải lên
 khớp từng byte sau khi ghép mảnh theo mọi thứ tự.
 """
 
@@ -24,6 +25,7 @@ from control_plane.screen_table import (
     clean_username,
     is_skipped,
     normalize_phone,
+    profile_fields,
     phone_distance,
     same_person_name,
 )
@@ -138,6 +140,8 @@ def _assert_common(table, frames: list[FrameObs]) -> None:
         if not any(same_person_name(left, right) for left in pnames for right in unames if right):
             raise AssertionError(f"ghép hai tên khác nhau {row} {pnames} {unames}")
     for username, names in user_names.items():
+        if not any(profile_fields(name, username)[1] for name in names):
+            continue
         if any(_handles_are_same(username, found) for found in users):
             continue
         raise AssertionError(f"mất @{username} {names}")
