@@ -284,18 +284,26 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(count_results(self.db, view="incomplete"), 1)
         self.assertEqual(rematch_results(self.db), 0)
 
-    def test_finished_video_can_be_uploaded_again_and_reread(self) -> None:
+    def test_finished_video_stays_done_when_the_same_file_is_uploaded(self) -> None:
         video_id = self._add("a.mp4", "same")
         claim(self.db, 7)
         finish(self.db, video_id, Table())
         again = begin_upload(self.db, name="a.mp4", size_bytes=10, sha256="same")
+        self.assertTrue(again["duplicate"])
+        self.assertEqual(again["id"], video_id)
+        self.assertEqual(stats(self.db)["done"], 1)
+        self.assertTrue(retry(self.db, video_id))
+        self.assertEqual(stats(self.db)["queued"], 1)
+
+    def test_failed_video_can_be_uploaded_again(self) -> None:
+        video_id = self._add("a.mp4", "broken")
+        claim(self.db, 7)
+        fail(self.db, video_id, "hỏng")
+        again = begin_upload(self.db, name="a.mp4", size_bytes=10, sha256="broken")
         self.assertFalse(again["duplicate"])
         self.assertTrue(again["reopened"])
         self.assertEqual(again["id"], video_id)
         self.assertEqual(stats(self.db)["uploading"], 1)
-        abort_upload(self.db, video_id, reopened=True)
-        self.assertEqual(stats(self.db)["error"], 1)
-        self.assertEqual(len(list_videos(self.db)), 1)
 
     def test_video_waiting_in_the_queue_is_still_a_duplicate(self) -> None:
         self._add("a.mp4", "same")

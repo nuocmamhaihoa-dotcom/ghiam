@@ -831,6 +831,18 @@ def _tesserocr_api(lang: str, tessdata: str | None):
     return api
 
 
+# Ảnh thấp hơn mức này làm Tesseract 4 gọi pixScaleAreaMap / boxClip lỗi và tốn cả nhân.
+_MIN_OCR_SIDE = 8
+
+
+def _for_ocr(image: Image.Image) -> Image.Image | None:
+    if image.width < _MIN_OCR_SIDE or image.height < _MIN_OCR_SIDE:
+        return None
+    prepared = image if image.mode == "RGB" else image.convert("RGB")
+    prepared.info["dpi"] = (300, 300)
+    return prepared
+
+
 def _batch_tesserocr(
     images: list[Image.Image],
     lang: str,
@@ -850,9 +862,14 @@ def _batch_tesserocr(
     api.SetVariable("tessedit_char_whitelist", whitelist or "")
     # Học thích nghi không giúp chữ UI cố định, chỉ tốn CPU mỗi khung.
     api.SetVariable("classify_enable_learning", "0")
+    # DPI cố định: Tesseract 4 khỏi tự phóng/thu ảnh về kích thước 0 rồi báo pixd too small.
+    api.SetVariable("user_defined_dpi", "300")
     level = RIL.WORD
     for index, image in enumerate(images):
-        api.SetImage(image if image.mode == "RGB" else image.convert("RGB"))
+        prepared = _for_ocr(image)
+        if prepared is None:
+            continue
+        api.SetImage(prepared)
         try:
             api.Recognize()
         except RuntimeError:
@@ -895,7 +912,11 @@ def _batch_cli(
         paths = []
         for index, image in enumerate(images):
             path = Path(folder) / f"{index:04d}.bmp"
-            image.convert("RGB").save(path, format="BMP")
+            prepared = _for_ocr(image)
+            if prepared is None:
+                Image.new("RGB", (_MIN_OCR_SIDE, _MIN_OCR_SIDE), "white").save(path, format="BMP")
+            else:
+                prepared.save(path, format="BMP")
             paths.append(str(path))
         listing = Path(folder) / "list.txt"
         listing.write_text("\n".join(paths) + "\n", encoding="utf-8")

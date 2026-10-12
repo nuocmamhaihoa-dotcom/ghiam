@@ -12,6 +12,9 @@ from control_plane.read_fallback import (
     parse_header_text,
     read_headers_for_gaps,
 )
+from PIL import Image
+
+from control_plane.screen_read import _for_ocr
 from control_plane.screen_table import ContactHit, FrameObs, Review, Row, Table, Unopened
 
 
@@ -159,6 +162,21 @@ class PathExistsTests(unittest.TestCase):
         result = read_headers_for_gaps(table, frames, reader=reader)
         self.assertEqual(called, [])
         self.assertEqual(result.unopened[0].phone, "0982117072")
+
+
+class OcrInputTests(unittest.TestCase):
+    def test_tiny_image_is_not_sent_to_tesseract(self) -> None:
+        self.assertIsNone(_for_ocr(Image.new("RGB", (2, 40), "white")))
+        self.assertIsNone(_for_ocr(Image.new("RGB", (80, 3), "white")))
+
+    def test_normal_image_is_rgb_with_fixed_dpi(self) -> None:
+        prepared = _for_ocr(Image.new("L", (120, 40), 255))
+        self.assertIsNotNone(prepared)
+        assert prepared is not None
+        self.assertEqual(prepared.mode, "RGB")
+        self.assertEqual(prepared.info.get("dpi"), (300, 300))
+        self.assertGreaterEqual(prepared.width, 8)
+        self.assertGreaterEqual(prepared.height, 8)
 
 
 if __name__ == "__main__":

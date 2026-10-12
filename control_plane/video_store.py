@@ -732,14 +732,18 @@ def clean_device(device: str) -> str:
 
 
 def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str, device: str = "") -> dict[str, object]:
-    """Cùng một file đang chờ hoặc đang đọc thì bỏ qua. Đã đọc xong hoặc lỗi thì đọc lại bằng bộ đọc hiện tại."""
+    """Cùng một file đang chờ, đang đọc, hoặc đã xong thì bỏ qua.
+
+    File lỗi được nhận lại để đọc lại. File đã xong giữ nguyên kết quả —
+    muốn đọc lại thì bấm Đọc lại, không tải lại cả file.
+    """
     machine = clean_device(device)
 
     def _begin(conn: sqlite3.Connection) -> dict[str, object]:
         existing = conn.execute(
             "SELECT id, status, name, path FROM videos WHERE sha256 = ?", (sha256,)
         ).fetchone()
-        if existing and existing["status"] in ("done", "error"):
+        if existing and existing["status"] == "error":
             conn.execute(
                 """
                 UPDATE videos
