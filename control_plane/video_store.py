@@ -417,6 +417,11 @@ def _reclassify_results(conn: sqlite3.Connection) -> None:
         """,
         (BUCKET_SCAN, REASON_NO_PHONE, BUCKET_SCAN),
     )
+    # @ mồ côi không còn là một hàng. Số trong danh bạ và dòng trùng tên giữ nguyên.
+    conn.execute(
+        "DELETE FROM results WHERE phone = '' AND reason = ?",
+        (REASON_NO_PHONE,),
+    )
 
 
 
@@ -1780,6 +1785,10 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
             _drop_lone_username(conn, item.username, bucket)
         return
     if not item.username:
+        return
+    # @ không có số danh bạ đi kèm thì không ghi thành hàng. Ghép cặp liền không đổi.
+    # Trùng tên và một số mở nhiều hồ sơ vẫn giữ — đó là khách thật, không phải @ mồ côi.
+    if (item.reason or "").strip() in ("", REASON_NO_PHONE):
         return
     existing = conn.execute(
         "SELECT id FROM results WHERE username = ? AND username != '' LIMIT 1",

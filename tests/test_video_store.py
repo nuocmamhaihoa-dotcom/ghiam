@@ -159,9 +159,7 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(found["0900000001"]["username"], "")
         self.assertEqual(found["0900000002"]["username"], "")
         listed = search_results(self.db, limit=20, view="all")
-        self.assertTrue(any(item["username"] == "@user1" and item["phone"] == "" for item in listed))
-        self.assertTrue(any(item["username"] == "@quang.le354" and item["phone"] == "" for item in listed))
-        self.assertTrue(any(item["username"] == "@dangtam.3" and item["phone"] == "" for item in listed))
+        self.assertFalse(any(item["username"] in {"@user1", "@quang.le354", "@dangtam.3"} and item["phone"] == "" for item in listed))
         complete = search_results(self.db, limit=20, view="complete")
         self.assertTrue(all(item["phone"] and item["username"] for item in complete))
         self.assertEqual(rematch_results(self.db), 0)
@@ -176,13 +174,13 @@ class VideoStoreTests(unittest.TestCase):
                 review=[Review("", "", "khactam", "@khactam60", "đã mở hồ sơ nhưng chưa thấy số")],
             ),
         )
-        # Không đứng liền nên không ghép: số là Cần xem, @ là Lỗi quét.
-        self.assertEqual((stats(self.db)["saved"], stats(self.db)["review"], stats(self.db)["unopened"]), (0, 1, 1))
+        # Không đứng liền nên không ghép. Số ở Cần xem. @ không có số thì không ghi hàng.
+        self.assertEqual((stats(self.db)["saved"], stats(self.db)["review"], stats(self.db)["unopened"]), (0, 1, 0))
         listed = search_results(self.db, limit=20, view="all")
         by_phone = {item["phone"]: item for item in listed if item["phone"]}
         self.assertEqual(by_phone["0332001753"]["username"], "")
         self.assertEqual(by_phone["0332001753"]["bucket"], "Cần xem")
-        self.assertTrue(any(item["username"] == "@khactam60" and item["phone"] == "" for item in listed))
+        self.assertFalse(any(item["username"] == "@khactam60" for item in listed))
         second = self._add("b.mp4", "b")
         finish(self.db, second, Table(rows=[Row("0332001753", "khactam", "@khactam60")]))
         counted = stats(self.db)
@@ -261,7 +259,7 @@ class VideoStoreTests(unittest.TestCase):
         # Tên hồ sơ khác tên danh bạ: không ghép theo @ một mình.
         self.assertEqual(found["username"], "")
         self.assertEqual(found["bucket"], "Cần xem")
-        self.assertEqual(stats(self.db)["results"], 2)
+        self.assertEqual(stats(self.db)["results"], 1)
         self.assertEqual(rematch_results(self.db), 0)
 
     def test_ocr_phone_twin_is_absorbed_into_complete_row(self) -> None:
@@ -338,11 +336,11 @@ class VideoStoreTests(unittest.TestCase):
         self.assertIn("@", found["0900000002"]["reason"])
         self.assertEqual(found["0900000003"]["bucket"], "Cần xem")
         self.assertEqual(found["0900000004"]["bucket"], "Lỗi quét")
-        self.assertEqual(found["@nam"]["bucket"], "Lỗi quét")
+        self.assertNotIn("@nam", found)
         counted = stats(self.db)
-        self.assertEqual((counted["saved"], counted["review"], counted["unopened"]), (1, 2, 2))
+        self.assertEqual((counted["saved"], counted["review"], counted["unopened"]), (1, 2, 1))
         item = next(row for row in list_videos(self.db) if row["id"] == video_id)
-        self.assertIn("đã mở hồ sơ nhưng chưa thấy số", str(item["error_summary"]))
+        self.assertNotIn("đã mở hồ sơ nhưng chưa thấy số", str(item["error_summary"]))
         self.assertIn("một số mở nhiều hồ sơ", str(item["error_summary"]))
 
     def test_old_unopened_bucket_is_reclassified_as_needs_review(self) -> None:
@@ -368,7 +366,7 @@ class VideoStoreTests(unittest.TestCase):
             _reclassify_results(conn)
         found = {item["phone"] or item["username"]: item for item in search_results(self.db, view="all", limit=20)}
         self.assertEqual(found["0900000008"]["bucket"], "Cần xem")
-        self.assertEqual(found["@roi"]["bucket"], "Lỗi quét")
+        self.assertNotIn("@roi", found)
         self.assertEqual(found["0900000009"]["bucket"], "Đủ")
 
     def test_ocr_fragments_of_one_profile_collapse_in_the_database(self) -> None:
