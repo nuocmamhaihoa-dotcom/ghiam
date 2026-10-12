@@ -5,165 +5,323 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Đọc video danh bạ</title>
   <style>
-    :root { color-scheme: light; --ink: #17202a; --muted: #5c6770; --line: #e4e7ec; --bg: #f4f6f8; --card: #fff; --blue: #0b6bcb; }
+    :root {
+      color-scheme: light;
+      --ink: #1c2430;
+      --muted: #5c6b7a;
+      --line: #e4e9ee;
+      --bg: #eef2f5;
+      --card: #fff;
+      --accent: #0f6e6a;
+      --accent-2: #0c5855;
+      --ok: #0d6b3a;
+      --warn: #8a2b2b;
+    }
     * { box-sizing: border-box; }
-    body { margin: 0; font: 16px/1.45 "Segoe UI", system-ui, sans-serif; color: var(--ink); background: var(--bg); }
-    main { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
-    h1 { font-size: 1.7rem; margin: 0 0 0.25rem; }
-    h2 { font-size: 1.15rem; margin: 0 0 0.7rem; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    main { max-width: 980px; margin: 0 auto; padding: 0.85rem 0.75rem 2.4rem; }
+    h1 { font-size: 1.35rem; line-height: 1.2; margin: 0; letter-spacing: -0.02em; }
+    h2 {
+      font-size: 0.98rem; margin: 0 0 0.55rem; display: flex; align-items: center; gap: 0.4rem;
+    }
+    h2::before {
+      content: ""; width: 3px; height: 0.9em; border-radius: 2px; background: var(--accent); flex: 0 0 auto;
+    }
+    h3 { margin: 0 0 0.4rem; font-size: 0.95rem; }
     p { margin: 0; }
-    .lead { color: var(--muted); margin-bottom: 1rem; }
-    section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem; margin: 0 0 0.8rem; }
-    label { display: block; font-weight: 650; margin: 0 0 0.35rem; }
+    .lead { color: var(--muted); margin-top: 0.2rem; font-size: 0.92rem; }
+    section {
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      padding: 0.75rem 0.8rem; margin: 0 0 0.6rem;
+      scroll-margin-top: 3rem;
+    }
+    .jump {
+      position: sticky; top: 0; z-index: 4;
+      display: flex; gap: 0.35rem; overflow-x: auto;
+      margin: 0.55rem -0.15rem 0.6rem; padding: 0.35rem 0.15rem;
+      background: rgba(238, 242, 245, 0.94);
+      -webkit-overflow-scrolling: touch;
+    }
+    .jump a {
+      flex: 0 0 auto; text-decoration: none; color: var(--ink);
+      background: #fff; border: 1px solid var(--line); border-radius: 999px;
+      padding: 0.28rem 0.7rem; font-size: 0.84rem; font-weight: 650;
+    }
+    .jump a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 2px;
+    }
+    label { display: block; font-weight: 650; margin: 0 0 0.3rem; font-size: 0.92rem; }
     input[type="text"], input[type="password"], input[type="search"] {
-      width: 100%; font: inherit; padding: 0.7rem 0.75rem; border: 1px solid #cfd5dc; border-radius: 10px; background: #fff;
+      width: 100%; font: inherit; font-size: 16px; padding: 0.62rem 0.7rem;
+      border: 1px solid #cfd6de; border-radius: 10px; background: #fff; color: var(--ink);
     }
-    .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    .row { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
     button, .file {
-      font: inherit; font-weight: 700; border: 0; border-radius: 10px; min-height: 46px; padding: 0 1rem; cursor: pointer;
+      font: inherit; font-weight: 700; border: 0; border-radius: 10px;
+      min-height: 44px; padding: 0 0.95rem; cursor: pointer;
+      touch-action: manipulation;
     }
-    button.primary, .file { background: var(--blue); color: #fff; }
-    button.ghost { background: #eef1f4; color: var(--ink); }
+    button.primary, .file { background: var(--accent); color: #fff; }
+    button.primary:active, .file:active { background: var(--accent-2); }
+    button.ghost { background: #eef2f4; color: var(--ink); }
+    button.mini { min-height: 32px; padding: 0 0.65rem; font-size: 0.82rem; font-weight: 650; margin: 0.2rem 0.15rem 0 0; }
     button:disabled { opacity: 0.55; cursor: default; }
+    .seg { background: #eef2f4; padding: 3px; border-radius: 12px; gap: 3px; }
+    .seg button { flex: 1 1 0; min-width: 0; border-radius: 9px; }
+    .seg button.ghost { background: transparent; }
+    .top-grid { display: grid; gap: 0.6rem; }
+    .device-box { margin-bottom: 0.55rem; }
     .drop {
-      margin-top: 0.7rem; padding: 1.1rem; border: 1.5px dashed #b7c0ca; border-radius: 12px; background: #fbfcfd; text-align: center;
+      display: flex; flex-direction: column; align-items: stretch; gap: 0.45rem;
+      padding: 0.8rem; border: 1.5px dashed #b7c3cc; border-radius: 12px; background: #f8fbfb; text-align: center;
     }
-    .drop.over { background: #e8f2fc; border-color: var(--blue); }
+    .drop-title { font-weight: 750; }
+    .drop .note { margin-top: 0.1rem; }
+    .results-table td:nth-child(1),
+    .results-table td:nth-child(3) { font-weight: 700; }
+    .drop .file { width: 100%; }
+    .drop.over { background: #e5f4f3; border-color: var(--accent); }
     .drop.locked { opacity: 0.55; }
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.55rem; }
-    .stat { background: #f7f9fb; border-radius: 10px; padding: 0.7rem 0.75rem; }
-    .stat b { display: block; font-size: 1.35rem; }
-    .stat span { color: var(--muted); font-size: 0.92rem; }
+    .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; }
+    .stat { background: #f6f8fa; border-radius: 10px; padding: 0.5rem 0.55rem; min-width: 0; }
+    .stat b { display: block; font-size: 1.2rem; line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+    .stat span { color: var(--muted); font-size: 0.75rem; line-height: 1.25; }
     .stat.warn-stat { background: #fdecec; border: 1px solid #f0c2c2; }
     .stat.ok-stat { background: #eef7f1; border: 1px solid #b9dbc6; }
     .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     table { width: 100%; border-collapse: collapse; min-width: 560px; }
-    table.results-table { min-width: 420px; }
-    table.queue-table { min-width: 520px; }
+    table.results-table { min-width: 640px; }
+    table.queue-table { min-width: 640px; }
     th, td {
-      text-align: left; padding: 0.45rem 0.3rem; border-bottom: 1px solid var(--line);
-      vertical-align: top; font-size: 0.95rem; word-break: break-word; overflow-wrap: anywhere;
+      text-align: left; padding: 0.4rem 0.35rem; border-bottom: 1px solid var(--line);
+      vertical-align: top; font-size: 0.9rem; word-break: break-word; overflow-wrap: anywhere;
     }
-    th { color: var(--muted); font-weight: 650; }
+    th { color: var(--muted); font-weight: 650; font-size: 0.75rem; background: #f7f9fb; }
+    tr:hover td { background: #f7fafb; }
     .results-table td:nth-child(3),
     .results-table td:nth-child(4) { white-space: nowrap; }
-    .queue-table td:nth-child(1) { white-space: nowrap; font-variant-numeric: tabular-nums; }
-    .note { color: var(--muted); margin-top: 0.55rem; }
-    .warn { color: #8a2b2b; font-weight: 650; }
-    .ok { color: #0d6b3a; }
+    .results-table tr.row-ok td:first-child { box-shadow: inset 3px 0 0 #1b8a4a; }
+    .results-table tr.row-review td:first-child { box-shadow: inset 3px 0 0 #c48a12; }
+    .results-table tr.row-scan td:first-child { box-shadow: inset 3px 0 0 #c04545; }
+    .queue-table td:nth-child(1) { font-variant-numeric: tabular-nums; }
+    .note { color: var(--muted); margin-top: 0.35rem; font-size: 0.86rem; }
+    .warn { color: var(--warn); font-weight: 650; }
+    .ok { color: var(--ok); }
     .banner {
-      margin: 0 0 0.8rem; padding: 0.75rem 0.9rem; border-radius: 12px; font-weight: 650;
+      margin: 0 0 0.55rem; padding: 0.6rem 0.75rem; border-radius: 12px; font-weight: 650; font-size: 0.92rem;
     }
     .banner.warn-banner { background: #fdecec; border: 1px solid #e8b4b4; color: #7a1f1f; }
     .banner.ok-banner { background: #eef7f1; border: 1px solid #b9dbc6; color: #143524; }
     .banner.hide { display: none; }
-    #file { display: none; }
-    .device-box { margin-bottom: 0.7rem; }
-    .howto {
-      margin: 0 0 0.85rem; padding: 0.85rem 0.95rem; border-radius: 12px;
-      background: #eef7f1; border: 1px solid #b9dbc6; color: #143524;
+    .callout {
+      margin: 0 0 0.55rem; padding: 0.55rem 0.7rem; border-radius: 12px;
+      background: #fff8e8; border: 1px solid #ebd59a; color: #5c4310; font-size: 0.86rem; line-height: 1.4;
     }
-    .howto h3 { margin: 0 0 0.45rem; font-size: 1rem; }
-    .howto ol { margin: 0; padding-left: 1.2rem; }
-    .howto li { margin: 0.25rem 0; }
-    .howto .tiny { margin-top: 0.45rem; color: #3d5c48; font-size: 0.92rem; }
-    .howto .danger { margin-top: 0.45rem; color: #7a1f1f; font-weight: 700; font-size: 0.95rem; }
+    #file { display: none; }
+    .howto {
+      padding: 0.7rem 0.75rem; border-radius: 14px; margin: 0 0 0.6rem;
+      background: #eef7f1; border: 1px solid #b9dbc6; color: #143524;
+      scroll-margin-top: 3rem;
+    }
+    .howto ol {
+      list-style: none; margin: 0; padding: 0;
+      display: grid; grid-template-columns: 1fr; gap: 0.35rem;
+    }
+    .howto li {
+      margin: 0; background: #fff; border-radius: 10px; padding: 0.4rem 0.5rem;
+      font-size: 0.88rem; line-height: 1.35; color: var(--ink);
+    }
+    .howto .tiny { margin-top: 0.35rem; color: #3d5c48; font-size: 0.86rem; }
+    .howto .danger { margin-top: 0.45rem; color: #7a1f1f; font-weight: 700; font-size: 0.9rem; }
+    .howto summary { cursor: pointer; font-weight: 650; color: #24543a; font-size: 0.88rem; margin-top: 0.45rem; }
     .checklist {
-      margin: 0 0 0.7rem; padding: 0.85rem 0.95rem; border-radius: 12px;
+      margin: 0 0 0.6rem; padding: 0.7rem 0.75rem; border-radius: 14px;
       background: #fff8e8; border: 1px solid #ebd59a; color: #4a3b12;
     }
-    .checklist h3 { margin: 0 0 0.45rem; font-size: 1rem; }
+    .checks { display: grid; gap: 0.3rem; }
     .checklist label.check {
-      display: flex; gap: 0.55rem; align-items: flex-start; font-weight: 500; margin: 0.4rem 0;
-      cursor: pointer;
+      display: grid; grid-template-columns: 1.1rem minmax(0, 1fr); gap: 0.4rem 0.45rem;
+      align-items: start; font-weight: 500; margin: 0; font-size: 0.88rem; line-height: 1.35;
     }
-    .checklist input { width: auto; margin-top: 0.25rem; flex: 0 0 auto; }
+    .checklist input { width: 1rem; height: 1rem; margin-top: 0.15rem; flex: 0 0 auto; accent-color: var(--ok); }
+    .legend { display: grid; gap: 0.35rem; margin-bottom: 0.35rem; }
+    .legend div { background: #f6f8fa; border-radius: 10px; padding: 0.4rem 0.5rem; font-size: 0.84rem; line-height: 1.35; }
+    .legend b { display: block; font-size: 0.82rem; }
+    .legend span { color: var(--muted); }
+    .legend-note { margin-top: 0; margin-bottom: 0.45rem; }
     .badge {
-      display: inline-block; margin-top: 0.25rem; padding: 0.1rem 0.45rem; border-radius: 999px;
-      font-size: 0.82rem; font-weight: 700;
+      display: inline-block; margin-top: 0.2rem; padding: 0.08rem 0.45rem; border-radius: 999px;
+      font-size: 0.78rem; font-weight: 700;
     }
-    .badge.bad { background: #fdecec; color: #8a2b2b; }
-    .badge.good { background: #eef7f1; color: #0d6b3a; }
+    .badge.bad { background: #fdecec; color: var(--warn); }
+    .badge.good { background: #eef7f1; color: var(--ok); }
+    .backup {
+      display: flex; flex-direction: column; gap: 0.55rem; align-items: stretch;
+    }
+    .backup h2 { margin-bottom: 0.25rem; }
+    .backup .primary { width: 100%; }
+    #resultsMoreWrap:not([hidden]) { margin-top: 0.5rem; }
+    #resultsMoreWrap[hidden] { display: none !important; }
+    #resultsMore { width: 100%; }
+    @media (min-width: 720px) {
+      .howto ol { grid-template-columns: 1fr 1fr; }
+      .legend { grid-template-columns: 1fr 1fr 1fr; }
+      .drop { flex-direction: row; align-items: center; justify-content: space-between; text-align: left; }
+      .drop .file { width: auto; min-width: 160px; }
+      .backup { flex-direction: row; align-items: center; justify-content: space-between; }
+      .backup .primary { width: auto; flex: 0 0 auto; }
+      .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    @media (min-width: 900px) {
+      .top-grid { grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr); align-items: start; }
+      .top-grid .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .howto ol { grid-template-columns: repeat(4, 1fr); }
+      .checks { grid-template-columns: 1fr 1fr 1fr; gap: 0.4rem; }
+    }
+    @media (max-width: 720px) {
+      .table-wrap { overflow: visible; }
+      table.results-table, table.queue-table,
+      table.results-table tbody, table.queue-table tbody { min-width: 0; display: block; width: 100%; }
+      .drop .note { margin-top: 0.1rem; }
+      table.results-table tr:first-child, table.queue-table tr:first-child { display: none; }
+      table.results-table tr, table.queue-table tr {
+        display: block; background: #fff; border: 1px solid var(--line); border-radius: 12px;
+        padding: 0.4rem 0.65rem; margin: 0 0 0.4rem;
+      }
+      table.results-table tr:hover td, table.queue-table tr:hover td { background: transparent; }
+      table.results-table td, table.queue-table td {
+        display: flex; flex-direction: column; gap: 0;
+        border: 0; padding: 0.2rem 0; align-items: flex-start;
+      }
+      table.results-table td:empty, table.queue-table td:empty { display: none; }
+      table.results-table td::before, table.queue-table td::before {
+        content: attr(data-label); color: var(--muted); font-size: 0.72rem; font-weight: 650; padding-top: 0.12rem;
+      }
+      td.warn::before, td.ok::before { color: var(--muted); font-weight: 650; }
+      .results-table td:nth-child(3), .results-table td:nth-child(4) { white-space: normal; }
+      .results-table tr.row-ok { border-left: 3px solid #1b8a4a; }
+      .results-table tr.row-review { border-left: 3px solid #c48a12; }
+      .results-table tr.row-scan { border-left: 3px solid #c04545; }
+      .results-table tr.row-ok td:first-child,
+      .results-table tr.row-review td:first-child,
+      .results-table tr.row-scan td:first-child { box-shadow: none; }
+    }
   </style>
 </head>
 <body>
 <main>
-  <h1>Đọc video danh bạ</h1>
-  <p class="lead">Thêm nhiều video / nhiều iPhone cùng lúc. Chọn xong là xếp phiên lên VPS ngay — hàng đợi hiện tên từng file. Tải theo mảnh, mất mạng chọn lại cùng file để tiếp tục. Đóng trang thì máy chủ vẫn đọc các video đã tải xong.</p>
+  <header>
+    <h1>Đọc video danh bạ</h1>
+    <p class="lead">Nhiều video, nhiều iPhone cùng lúc. Chọn xong là xếp hàng — mất mạng chọn lại cùng file. Đóng trang, máy chủ vẫn đọc.</p>
+  </header>
+  <nav class="jump" aria-label="Mục trên trang">
+    <a href="#sec-upload">Tải lên</a>
+    <a href="#howto">Cách quay</a>
+    <a href="#sec-stats">Số liệu</a>
+    <a href="#sec-queue">Hàng đợi</a>
+    <a href="#sec-results">Kết quả</a>
+    <a href="#sec-backup">Sao lưu</a>
+  </nav>
+
   <div id="relayWarn" class="banner warn-banner __RELAY_HIDE__">__RELAY_TEXT__</div>
-  <p class="note" style="margin-bottom:0.8rem"><b>Để Safari khỏi bị sập khi tải:</b> tắt VPN, tắt iCloud Private Relay và Chế độ dữ liệu thấp, kéo tải lại trang rồi chọn lại đúng video. iPhone chỉ gửi 2 đường nhỏ để khỏi đầy bộ nhớ. Phần đã lên được gửi tiếp, không tải lại từ đầu. Giữ màn hình sáng.</p>
+  <p class="callout"><b>Để Safari khỏi bị sập khi tải:</b> tắt VPN, tắt iCloud Private Relay và Chế độ dữ liệu thấp, kéo tải lại trang rồi chọn lại đúng video. iPhone chỉ gửi 2 đường nhỏ để khỏi đầy bộ nhớ. Phần đã lên được gửi tiếp, không tải lại từ đầu. Giữ màn hình sáng.</p>
+
+  <div class="top-grid">
+    <section id="sec-upload">
+      <h2>Thêm video</h2>
+      <div class="device-box">
+        <label for="device">Tên máy iPhone quét</label>
+        <input id="device" type="text" maxlength="80" placeholder="VD: iPhone 13 của An" />
+        <p class="note">Tên này gắn vào mọi kết quả của video bạn tải lên từ máy này.</p>
+      </div>
+      <div class="drop" id="drop">
+        <div>
+          <p class="drop-title">Kéo nhiều video vào đây</p>
+          <p class="note">hoặc chọn từ máy</p>
+        </div>
+        <button class="file" type="button" id="pick">Chọn video</button>
+        <input id="file" type="file" accept="video/*,image/*" multiple />
+      </div>
+      <p id="uploadNote" class="note"></p>
+    </section>
+
+    <section id="sec-stats">
+      <h2>Thống kê</h2>
+      <div class="stats" id="stats"></div>
+      <p id="reader" class="note"></p>
+    </section>
+  </div>
 
   <div id="openWarn" class="banner hide" role="status"></div>
 
-  <section>
-    <h2>Thêm video</h2>
-    <div class="device-box">
-      <label for="device">Tên máy iPhone quét</label>
-      <input id="device" type="text" maxlength="80" placeholder="VD: iPhone 13 của An" />
-      <p class="note">Tên này gắn vào mọi kết quả của video bạn tải lên từ máy này.</p>
-    </div>
-    <div class="howto" id="howto">
-      <h3>Cách chắc nhất để có hàng đủ (số + tên + @)</h3>
-      <ol>
-        <li>Trong Messenger/Facebook: mở danh bạ, <b>bấm vào từng người cần lấy</b>.</li>
-        <li>Đợi trang hồ sơ hiện ra và <b>nhìn rõ dòng @username</b> (khoảng một nhịp thở ngắn).</li>
-        <li><b>Rồi mới thoát</b> về danh bạ — không chạm mở rồi back ngay lúc chữ còn đang nhòe.</li>
-        <li>Làm lần lượt <b>từng người</b> cần lấy, rồi tải video lên đây.</li>
-      </ol>
+  <div class="howto" id="howto">
+    <h3>Cách chắc nhất để có hàng đủ (số + tên + @)</h3>
+    <ol>
+      <li>Trong Messenger/Facebook: mở danh bạ, <b>bấm vào từng người cần lấy</b>.</li>
+      <li>Đợi trang hồ sơ hiện ra và <b>nhìn rõ dòng @username</b> (khoảng một nhịp thở ngắn).</li>
+      <li><b>Rồi mới thoát</b> về danh bạ — không chạm mở rồi back ngay lúc chữ còn đang nhòe.</li>
+      <li>Làm lần lượt <b>từng người</b> cần lấy, rồi tải video lên đây.</li>
+    </ol>
+    <details>
+      <summary>Máy chủ đọc và tải lại thế nào</summary>
       <p class="tiny">Máy chủ quét 30 khung/giây và tăng dày 60 khung/giây quanh lúc mở/đóng hồ sơ; học bố cục theo từng máy. Hàng chưa đủ 3 ô được đọc lại 4 giây trước và sau khung thiếu. Nếu vẫn còn hồ sơ chưa ghép, máy thử tiếp ghép theo thời gian rồi đọc riêng vùng tên và @. Tải lên lỗi thì tự chuyển sang mảnh nhỏ một đường, rồi gửi cả file một lần. Chỉ lướt danh bạ (không mở hồ sơ) thì số nằm ở <b>Cần xem</b>: có số và tên, chưa có @.</p>
-      <p class="danger">Danh bạ không hiện @. Không mở hồ sơ = máy chủ không thể tự tạo @.</p>
-    </div>
-    <div class="checklist" id="checklist">
-      <h3>Cách quay đã được đồng ý</h3>
-      <label class="check"><input type="checkbox" id="checkOpen" checked disabled /> Tôi đã <b>bấm mở hồ sơ từng người</b> cần lấy (không chỉ lướt danh bạ).</label>
-      <label class="check"><input type="checkbox" id="checkAt" checked disabled /> Mỗi lần mở tôi đã <b>nhìn rõ dòng @</b> rồi mới thoát.</label>
-      <label class="check"><input type="checkbox" id="checkBack" checked disabled /> Tôi <b>không back ngay</b> lúc chữ còn đang nhòe / đang chuyển cảnh.</label>
-      <p id="checkNote" class="note">Đã đồng ý cả 3 ý — chọn video được ngay, không cần tick.</p>
-    </div>
-    <div class="drop" id="drop">
-      <p>Kéo nhiều video vào đây</p>
-      <p class="note">hoặc</p>
-      <button class="file" type="button" id="pick">Chọn video</button>
-      <input id="file" type="file" accept="video/*,image/*" multiple />
-    </div>
-    <p id="uploadNote" class="note"></p>
-  </section>
+    </details>
+    <p class="danger">Danh bạ không hiện @. Không mở hồ sơ = máy chủ không thể tự tạo @.</p>
+  </div>
 
-  <section>
-    <h2>Thống kê</h2>
-    <div class="stats" id="stats"></div>
-    <p id="reader" class="note"></p>
-  </section>
+  <div class="checklist" id="checklist">
+    <h3>Cách quay đã được đồng ý</h3>
+    <div class="checks">
+      <label class="check"><input type="checkbox" id="checkOpen" checked disabled /><span>Tôi đã <b>bấm mở hồ sơ từng người</b> cần lấy (không chỉ lướt danh bạ).</span></label>
+      <label class="check"><input type="checkbox" id="checkAt" checked disabled /><span>Mỗi lần mở tôi đã <b>nhìn rõ dòng @</b> rồi mới thoát.</span></label>
+      <label class="check"><input type="checkbox" id="checkBack" checked disabled /><span>Tôi <b>không back ngay</b> lúc chữ còn đang nhòe / đang chuyển cảnh.</span></label>
+    </div>
+    <p id="checkNote" class="note">Đã đồng ý cả 3 ý — chọn video được ngay, không cần tick.</p>
+  </div>
 
-  <section>
+  <section id="sec-queue">
     <h2>Hàng đợi</h2>
-    <p class="note"><b>Đủ</b> = một hàng đã có đủ Số + Tên + @. <b>Cần xem</b> = số có trong danh bạ nhưng hàng đó thiếu Tên hoặc @. <b>Lỗi quét</b> = không thành một hàng: mở hồ sơ mà không thấy số, trùng tên không ghép được, hoặc một số mở nhiều hồ sơ. Phần trăm là số điện thoại trong danh bạ đã đủ 3 cột, không tính dòng lỗi quét.</p>
+    <div class="legend">
+      <div><b>Đủ</b><span>Một hàng đã có đủ Số + Tên + @.</span></div>
+      <div><b>Cần xem</b><span>Số có trong danh bạ nhưng hàng đó thiếu Tên hoặc @.</span></div>
+      <div><b>Lỗi quét</b><span>Không thành một hàng: mở hồ sơ mà không thấy số, trùng tên không ghép được, hoặc một số mở nhiều hồ sơ.</span></div>
+    </div>
+    <p class="note legend-note">Phần trăm là % số trong danh bạ đã đủ 3 cột, không tính dòng lỗi quét.</p>
     <div id="queue" class="table-wrap"></div>
   </section>
 
-  <section>
+  <section id="sec-results">
     <h2>Kết quả đã lưu</h2>
-    <div class="row" style="margin-bottom:0.55rem">
-      <button class="ghost" type="button" data-view="complete" id="viewComplete">Đủ 3 cột</button>
+    <div class="row seg" style="margin-bottom:0.45rem">
+      <button class="primary" type="button" data-view="complete" id="viewComplete">Đủ 3 cột</button>
       <button class="ghost" type="button" data-view="incomplete" id="viewIncomplete">Chưa đủ</button>
       <button class="ghost" type="button" data-view="all" id="viewAll">Tất cả</button>
     </div>
     <input id="query" type="search" placeholder="Gõ đầu số, @username hoặc tên video (VD: IMG_0018)" />
     <p id="resultsNote" class="note"></p>
     <div id="results" class="table-wrap"></div>
-    <p id="resultsMoreWrap" hidden style="margin-top:0.55rem">
+    <p id="resultsMoreWrap" hidden>
       <button class="ghost" type="button" id="resultsMore">Xem thêm</button>
     </p>
   </section>
 
-  <section>
-    <h2>Sao lưu về PC</h2>
-    <p>File nén này là bản sao các kết quả đã lưu. Tải về và giữ trên máy tính. Đó là bản dự phòng ngoài VPS.</p>
-    <p class="note">Bấm một lần. Trình duyệt sẽ tải file .csv.gz.</p>
-    <p style="margin-top:0.8rem"><button id="backup" class="primary" type="button">Tải bản sao lưu về PC</button></p>
-    <p id="backupNote" class="note"></p>
+  <section id="sec-backup" class="backup">
+    <div>
+      <h2>Sao lưu về PC</h2>
+      <p>File nén này là bản sao các kết quả đã lưu. Tải về và giữ trên máy tính. Đó là bản dự phòng ngoài VPS.</p>
+      <p class="note">Bấm một lần. Trình duyệt sẽ tải file .csv.gz.</p>
+      <p id="backupNote" class="note"></p>
+    </div>
+    <button id="backup" class="primary" type="button">Tải bản sao lưu về PC</button>
   </section>
 </main>
+
 <script>
   var serverToken = __CONTROL_TOKEN__;
   var DEVICE_KEY = "video-device-name";
@@ -520,7 +678,7 @@
     items.forEach(function (item) {
       var isUpload = item.kind === "upload" || (!item.id && item.upload_id);
       var canRetry = !isUpload && item.file_kept && (item.status === "error" || item.status === "done");
-      var retry = canRetry ? " <button class='ghost' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
+      var retry = canRetry ? " <button class='ghost mini' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
       var keptNote = "";
       if (!isUpload && item.status === "done" && item.file_kept) {
         keptNote = "<div class='note'>Còn file — có thể Đọc lại</div>";
@@ -547,7 +705,7 @@
       var resultText = "—";
       var cancelUpload = "";
       if (isUpload && item.upload_id) {
-        cancelUpload = " <button class='ghost' type='button' data-cancel-upload='" +
+        cancelUpload = " <button class='ghost mini' type='button' data-cancel-upload='" +
           escapeHtml(item.upload_id) + "'>Hủy phiên dở</button>";
       }
       if (isUpload) {
@@ -572,15 +730,16 @@
         if (item.error_summary) {
           resultText += "<div class='note'>" + escapeHtml(item.error_summary) + "</div>";
         }
-        resultText += " <button class='ghost' type='button' data-filter='" + escapeHtml(item.name) + "'>Xem</button>";
+        resultText += " <button class='ghost mini' type='button' data-filter='" + escapeHtml(item.name) + "'>Xem</button>";
       }
-      var leftLabel = isUpload
-        ? (escapeHtml(item.name || "video") + "<div class='note'>" + escapeHtml(formatBytes(item.size_bytes || 0)) + "</div>")
-        : escapeHtml(formatDuration(item.duration_sec));
-      var leftTitle = isUpload ? (item.name || "") : (item.name || "");
-      html += "<tr><td title='" + escapeHtml(leftTitle) + "'>" + leftLabel + "</td><td class='" + issueClass + "'>" +
-        escapeHtml(issue) + "</td><td>" + statusText(item.status) + progress + keptNote + retry +
-        "</td><td>" + resultText + "</td></tr>";
+      var leftLabel = escapeHtml(item.name || "video") + "<div class='note'>" +
+        (isUpload ? escapeHtml(formatBytes(item.size_bytes || 0)) : escapeHtml(formatDuration(item.duration_sec))) +
+        "</div>";
+      var leftTitle = item.name || "";
+      html += "<tr><td data-label='Video' title='" + escapeHtml(leftTitle) + "'>" + leftLabel +
+        "</td><td data-label='Trạng thái' class='" + issueClass + "'>" + escapeHtml(issue) +
+        "</td><td data-label='Tiến độ'>" + statusText(item.status) + progress + keptNote + retry +
+        "</td><td data-label='Kết quả'>" + resultText + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-retry]").forEach(function (button) {
@@ -659,9 +818,13 @@
   function renderResultTable(items) {
     var html = "<table class='results-table'><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Loại</th><th>Lỗi khi quét</th><th>Thời gian quét</th></tr>";
     items.forEach(function (item) {
-      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) +
-        "</td><td>" + escapeHtml(item.bucket) + "</td><td>" + escapeHtml(item.reason) +
-        "</td><td>" + escapeHtml(formatTime(item.scanned_at)) + "</td></tr>";
+      var rowKind = item.bucket === "Đủ" ? "row-ok" : (item.bucket === "Cần xem" ? "row-review" : (item.bucket === "Lỗi quét" ? "row-scan" : ""));
+      html += "<tr class='" + rowKind + "'><td data-label='Số điện thoại'>" + escapeHtml(item.phone) +
+        "</td><td data-label='Tên'>" + escapeHtml(item.name) +
+        "</td><td data-label='Username'>" + escapeHtml(item.username) +
+        "</td><td data-label='Loại'>" + escapeHtml(item.bucket) +
+        "</td><td data-label='Lỗi khi quét'>" + escapeHtml(item.reason) +
+        "</td><td data-label='Thời gian quét'>" + escapeHtml(formatTime(item.scanned_at)) + "</td></tr>";
     });
     return html + "</table>";
   }
