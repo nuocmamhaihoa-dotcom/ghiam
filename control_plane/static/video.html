@@ -114,16 +114,16 @@
       <p class="danger">Danh bạ không hiện @. Không mở hồ sơ = máy chủ không thể tự tạo @.</p>
     </div>
     <div class="checklist" id="checklist">
-      <h3>Trước khi tải lên — xác nhận cách quay</h3>
-      <label class="check"><input type="checkbox" id="checkOpen" /> Tôi đã <b>bấm mở hồ sơ từng người</b> cần lấy (không chỉ lướt danh bạ).</label>
-      <label class="check"><input type="checkbox" id="checkAt" /> Mỗi lần mở tôi đã <b>nhìn rõ dòng @</b> rồi mới thoát.</label>
-      <label class="check"><input type="checkbox" id="checkBack" /> Tôi <b>không back ngay</b> lúc chữ còn đang nhòe / đang chuyển cảnh.</label>
-      <p id="checkNote" class="note">Tick đủ 3 ô để mở nút chọn video.</p>
+      <h3>Cách quay đã được đồng ý</h3>
+      <label class="check"><input type="checkbox" id="checkOpen" checked disabled /> Tôi đã <b>bấm mở hồ sơ từng người</b> cần lấy (không chỉ lướt danh bạ).</label>
+      <label class="check"><input type="checkbox" id="checkAt" checked disabled /> Mỗi lần mở tôi đã <b>nhìn rõ dòng @</b> rồi mới thoát.</label>
+      <label class="check"><input type="checkbox" id="checkBack" checked disabled /> Tôi <b>không back ngay</b> lúc chữ còn đang nhòe / đang chuyển cảnh.</label>
+      <p id="checkNote" class="note">Đã đồng ý cả 3 ý — chọn video được ngay, không cần tick.</p>
     </div>
-    <div class="drop locked" id="drop">
+    <div class="drop" id="drop">
       <p>Kéo nhiều video vào đây</p>
       <p class="note">hoặc</p>
-      <button class="file" type="button" id="pick" disabled>Chọn video</button>
+      <button class="file" type="button" id="pick">Chọn video</button>
       <input id="file" type="file" accept="video/*,image/*" multiple />
     </div>
     <p id="uploadNote" class="note"></p>
@@ -192,42 +192,28 @@
   function checklistIds() { return ["checkOpen", "checkAt", "checkBack"]; }
 
   function checklistReady() {
-    return checklistIds().every(function (id) {
-      return document.getElementById(id).checked;
-    });
+    return true;
   }
 
-  function saveChecklist() {
-    var state = {};
-    checklistIds().forEach(function (id) {
-      state[id] = document.getElementById(id).checked;
-    });
-    try { sessionStorage.setItem(CHECK_KEY, JSON.stringify(state)); } catch (error) {}
-  }
+  function saveChecklist() {}
 
   function loadChecklist() {
-    try {
-      var raw = sessionStorage.getItem(CHECK_KEY);
-      if (!raw) return;
-      var state = JSON.parse(raw) || {};
-      checklistIds().forEach(function (id) {
-        if (state[id]) document.getElementById(id).checked = true;
-      });
-    } catch (error) {}
+    checklistIds().forEach(function (id) {
+      var box = document.getElementById(id);
+      box.checked = true;
+      box.disabled = true;
+    });
+    try { sessionStorage.removeItem(CHECK_KEY); } catch (error) {}
   }
 
   function syncUploadGate() {
-    var ready = checklistReady();
     var pick = document.getElementById("pick");
     var drop = document.getElementById("drop");
     var note = document.getElementById("checkNote");
-    pick.disabled = !ready;
-    if (ready) drop.classList.remove("locked");
-    else drop.classList.add("locked");
-    note.textContent = ready
-      ? "Đã xác nhận cách quay — có thể tải video."
-      : "Tick đủ 3 ô để mở nút chọn video.";
-    note.className = ready ? "note ok" : "note";
+    pick.disabled = false;
+    drop.classList.remove("locked");
+    note.textContent = "Đã đồng ý cả 3 ý — chọn video được ngay, không cần tick.";
+    note.className = "note ok";
   }
 
   var LANE_PORTS = [];
