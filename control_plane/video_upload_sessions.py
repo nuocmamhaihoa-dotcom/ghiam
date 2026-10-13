@@ -481,11 +481,10 @@ def list_receiving_uploads(db_path: Path, limit: int = 80) -> list[dict[str, obj
         elif percent <= 0 and chunks_done <= 0:
             if age >= 12:
                 issue = (
-                    "Đường tải kẹt ở 0 byte — trang Safari đang mở sẽ tự gửi lại một đường. "
-                    "Giữ Safari mở, đừng khóa máy."
+                    "Chưa có byte — trang sẽ tự gửi lại. Mở app khác vẫn được, đừng vuốt tắt Safari."
                 )
             else:
-                issue = "Đang mở đường tải — máy tự gửi, không cần chọn lại file."
+                issue = "Đang gửi — mở app khác vẫn chạy, không cần chọn lại file."
         elif speed and received / max(1.0, now - (created or now)) < 200 * 1024:
             issue = (
                 f"Đang tải lên {percent}% ({chunks_done}/{chunks_total} mảnh){speed}"

@@ -182,7 +182,9 @@ def apply_upload_priority(mode: str) -> None:
         klass, data, nice = _IOPRIO_CLASS_BE, 0, 0
         uploading = False
     elif mode == "arm":
-        klass, data, nice = _IOPRIO_CLASS_IDLE, 0, 12
+        # Không hạ xuống idle — đọc phải chạy liên tục, chỉ nhường nhẹ cho mảnh đang vào.
+        release_stopped()
+        klass, data, nice = _IOPRIO_CLASS_BE, 7, 5
         uploading = True
     else:
         release_stopped()

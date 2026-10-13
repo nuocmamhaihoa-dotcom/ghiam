@@ -247,7 +247,7 @@ class ChunkedUploadTests(unittest.TestCase):
         )
         self.assertEqual(upload_session_mode(self.db), "arm")
         fresh = list_receiving_uploads(self.db)
-        self.assertIn("tự gửi", str(fresh[0]["issue"]))
+        self.assertIn("mở app khác", str(fresh[0]["issue"]))
         put_chunk(self.db, str(session["upload_id"]), 0, b"b" * (16 * 1024))
         self.assertEqual(upload_session_mode(self.db), "flow")
         old = "2020-01-01T00:00:00+00:00"

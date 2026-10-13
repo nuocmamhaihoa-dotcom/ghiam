@@ -22,8 +22,6 @@ from control_plane.ocr_backend import describe_ocr, gpu_available, resolve_ocr_e
 from control_plane.settings import settings
 from control_plane.upload_priority import (
     apply_upload_priority,
-    pause_ffmpeg,
-    reader_descendant_pids,
     release_stopped,
     reserved_cores,
 )
@@ -90,55 +88,31 @@ def _restart_now(reason: str) -> None:
 
 
 def _yield_ocr_while_uploading(db_path: Path, stop: threading.Event) -> None:
-    """Phiên vừa mở thì nhường đĩa ngay. Có byte thì đọc tiếp, chỉ nhường vài nhân.
+    """Có byte thì nhường vài nhân cho đường tải. Không dừng ffmpeg — đọc vẫn chạy.
 
-    ffmpeg bị dừng từng nhịp 1.2s khi vẫn chưa có byte, để mảnh đầu không kẹt
-    sau hàng đọc. Có byte thì chạy lại ngay. Hết tải thì trả hết nhân cho OCR.
+    Sang app khác trên điện thoại không ảnh hưởng hàng đọc: việc này chạy trên máy chủ.
     """
     held = "off"
-    ffmpeg_held = False
-    held_since = 0.0
-    resume_at = 0.0
     try:
-        while not stop.wait(0.25):
+        while not stop.wait(0.5):
             try:
                 mode = upload_io_mode(db_path)
             except Exception:
                 mode = "off"
+            # arm và flow cùng mức: đọc tiếp, chỉ tránh để upload xếp sau đĩa.
+            priority = "off" if mode == "off" else "flow"
             try:
-                apply_upload_priority(mode)
+                apply_upload_priority(priority)
             except Exception:
                 pass
-            now = time.monotonic()
-            if mode != "arm":
-                if ffmpeg_held:
-                    release_stopped()
-                    ffmpeg_held = False
-                resume_at = 0.0
-            elif not ffmpeg_held:
-                if now >= resume_at:
-                    pause_ffmpeg(reader_descendant_pids())
-                    ffmpeg_held = True
-                    held_since = now
-            elif now - held_since < 1.2:
-                pause_ffmpeg(reader_descendant_pids())
-            else:
-                release_stopped()
-                ffmpeg_held = False
-                resume_at = now + 2.0
             if mode != held:
-                if mode == "arm":
-                    print(
-                        "Phiên tải vừa mở, chưa có byte — nhường đĩa ngay, đọc vẫn giữ khung đã tách.",
-                        flush=True,
-                    )
-                elif mode == "flow":
-                    print(
-                        f"Đang có byte — dành {reserved_cores()} nhân cho upload, phần còn lại vẫn đọc.",
-                        flush=True,
-                    )
-                elif held != "off":
+                if mode == "off":
                     print("Upload nguội — đọc dùng lại hết nhân.", flush=True)
+                else:
+                    print(
+                        f"Đang tải — dành {reserved_cores()} nhân cho upload, phần còn lại vẫn đọc.",
+                        flush=True,
+                    )
                 held = mode
     finally:
         release_stopped()

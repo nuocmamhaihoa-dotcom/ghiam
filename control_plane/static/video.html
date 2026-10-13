@@ -230,7 +230,8 @@
   </nav>
 
   <div id="relayWarn" class="banner warn-banner __RELAY_HIDE__">__RELAY_TEXT__</div>
-  <p class="callout"><b>Để Safari khỏi bị sập khi tải:</b> tắt VPN, tắt iCloud Private Relay và Chế độ dữ liệu thấp, kéo tải lại trang rồi chọn lại đúng video. iPhone chỉ gửi 2 đường nhỏ để khỏi đầy bộ nhớ. Phần đã lên được gửi tiếp, không tải lại từ đầu. Giữ màn hình sáng.</p>
+    <p class="callout"><b>Để Safari khỏi bị sập khi tải:</b> tắt VPN, tắt iCloud Private Relay và Chế độ dữ liệu thấp. Mở app khác vẫn được — trang phát một tiếng rất nhỏ để iPhone không cắt đường tải, máy chủ vẫn đọc video. Đừng vuốt tắt Safari. Phần đã lên được gửi tiếp, không tải lại từ đầu.</p>
+    <audio id="bgKeep" loop playsinline preload="auto" hidden></audio>
 
   <div class="top-grid">
     <section id="sec-upload">
@@ -584,6 +585,70 @@
   var uploadingActive = false;
   var wakeLock = null;
 
+  var bgToneUrl = "";
+
+  function toneWavBlob() {
+    var rate = 8000;
+    var n = rate;
+    var data = new Uint8Array(44 + n * 2);
+    var view = new DataView(data.buffer);
+    function wstr(offset, text) {
+      for (var i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i));
+    }
+    wstr(0, "RIFF");
+    view.setUint32(4, 36 + n * 2, true);
+    wstr(8, "WAVE");
+    wstr(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, rate, true);
+    view.setUint32(28, rate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    wstr(36, "data");
+    view.setUint32(40, n * 2, true);
+    for (var i = 0; i < n; i += 1) {
+      var sample = Math.sin((2 * Math.PI * 55 * i) / rate) * 5000;
+      view.setInt16(44 + i * 2, sample, true);
+    }
+    return new Blob([data], { type: "audio/wav" });
+  }
+
+  function holdBackground() {
+    // iOS đóng JavaScript khi sang app khác, trừ khi trang đang phát tiếng.
+    // Tiếng 40Hz rất nhỏ giữ trang sống để gửi tiếp mảnh. Đọc video là việc của máy chủ, không phụ thuộc trang.
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = "playback";
+    } catch (error) {}
+    var audio = document.getElementById("bgKeep");
+    if (!audio) return;
+    try {
+      if (!bgToneUrl) bgToneUrl = URL.createObjectURL(toneWavBlob());
+      if (audio.getAttribute("src") !== bgToneUrl) audio.src = bgToneUrl;
+      audio.loop = true;
+      audio.volume = 0.35;
+      var playing = audio.play();
+      if (playing && playing.catch) playing.catch(function () {});
+    } catch (error) {}
+    try {
+      if (navigator.mediaSession) {
+        navigator.mediaSession.playbackState = "playing";
+        if (window.MediaMetadata) {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: "Đang tải video",
+            artist: "Mở app khác vẫn chạy"
+          });
+        }
+      }
+    } catch (error) {}
+  }
+
+  function releaseBackground() {
+    var audio = document.getElementById("bgKeep");
+    try { if (audio) audio.pause(); } catch (error) {}
+  }
+
   async function requestWakeLock() {
     try {
       if (navigator.wakeLock && navigator.wakeLock.request) {
@@ -641,7 +706,7 @@
         " · đĩa " + usedGb + "/" + limitGb + "GB (còn " + freeGb + "GB). " +
         body.workers + " tiến trình đọc dùng chung" +
         (feeders > 1 ? (", tối đa " + feeders + " video cùng lúc, video vào trước được đọc trước") : "") +
-        ". Đóng trang vẫn chạy.";
+        ". Mở app khác vẫn đọc trên máy chủ.";
       reader.className = body.ocr_paused ? "note warn" : "note ok";
     } else {
       reader.textContent = "Bộ đọc máy chủ sẵn sàng. Upload xong có thể tắt trang — máy chủ tự đọc hết hàng đợi.";
@@ -980,44 +1045,70 @@
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
   }
 
-  function chunkTimeoutMs() {
-    // iPhone: 4MB mà quá 5 giây chưa ACK là đường đang kẹt, không chờ Safari treo.
-    return phoneBrowser() ? 5000 : 12000;
+  function putChunkOnce(uploadId, index, blob, onFly) {
+    return new Promise(function (resolve) {
+      var xhr = new XMLHttpRequest();
+      var url = chunkPutUrl(uploadId, index);
+      xhr.open("PUT", url);
+      xhr.setRequestHeader("Content-Type", "application/octet-stream");
+      if (token()) xhr.setRequestHeader("Authorization", "Bearer " + token());
+      var lastLoaded = 0;
+      var lastAt = Date.now();
+      var settled = false;
+      function finish(result) {
+        if (settled) return;
+        settled = true;
+        clearInterval(watcher);
+        resolve(result);
+      }
+      var watcher = setInterval(function () {
+        if (xhr.readyState === 4) return;
+        var quiet = Date.now() - lastAt;
+        // Chưa rời máy: 12 giây là kẹt. Đã có byte thì cứ để chạy, kể cả khi đang ở app khác.
+        if ((lastLoaded === 0 && quiet > 12000) || (lastLoaded > 0 && quiet > 60000)) {
+          try { xhr.abort(); } catch (error) {}
+        }
+      }, 1000);
+      xhr.upload.onprogress = function (event) {
+        if (event.loaded > lastLoaded) {
+          lastLoaded = event.loaded;
+          lastAt = Date.now();
+          if (onFly) onFly(event.loaded, event.total || blob.size || 0);
+        }
+      };
+      xhr.onload = function () {
+        var body = {};
+        try { body = JSON.parse(xhr.responseText || "{}"); } catch (error) { body = {}; }
+        if (xhr.status === 404 || xhr.status === 400) {
+          finish({ ok: false, status: xhr.status, body: body, stalled: xhr.status === 404 });
+          return;
+        }
+        if (xhr.status < 200 || xhr.status >= 300) noteChunkPortFailure(url);
+        finish({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body: body, stalled: false });
+      };
+      xhr.onerror = function () {
+        noteChunkPortFailure(url);
+        finish({ ok: false, status: 0, stalled: true, body: { detail: "mất kết nối" } });
+      };
+      xhr.onabort = function () {
+        finish({ ok: false, status: 0, stalled: true, body: { detail: "mảnh đứng — gửi lại" } });
+      };
+      try {
+        xhr.send(blob);
+      } catch (error) {
+        finish({ ok: false, status: 0, stalled: true, body: { detail: "không gửi được" } });
+      }
+    });
   }
 
-  async function putChunkBytes(uploadId, index, blob, attempts) {
+  async function putChunkBytes(uploadId, index, blob, attempts, onFly) {
     var limit = attempts || CHUNK_RETRIES;
     var last = { ok: false, status: 0, body: {}, stalled: false };
     for (var attempt = 0; attempt < limit; attempt += 1) {
-      var url = chunkPutUrl(uploadId, index);
-      var ctrl = new AbortController();
-      var timer = setTimeout(function () { ctrl.abort(); }, chunkTimeoutMs());
-      try {
-        var response = await api(url, {
-          method: "PUT",
-          headers: { "Content-Type": "application/octet-stream" },
-          body: blob,
-          signal: ctrl.signal
-        });
-        var body = {};
-        try { body = await response.json(); } catch (error) { body = {}; }
-        last = { ok: response.ok, status: response.status, body: body, stalled: false };
-        if (response.ok) return last;
-        // 400/404 = lỗi thật; còn lại (503/500/502) → thử lại ngay, không chờ hàng chục giây.
-        if (response.status === 404 || response.status === 400) return last;
-        noteChunkPortFailure(url);
-      } catch (error) {
-        noteChunkPortFailure(url);
-        var aborted = !!(error && error.name === "AbortError");
-        last = {
-          ok: false,
-          status: 0,
-          stalled: aborted,
-          body: { detail: aborted ? "mảnh quá hạn — tự gửi lại" : "mất kết nối" }
-        };
-      } finally {
-        clearTimeout(timer);
-      }
+      holdBackground();
+      last = await putChunkOnce(uploadId, index, blob, onFly);
+      if (last.ok) return last;
+      if (last.status === 404 || last.status === 400) return last;
       if (attempt + 1 >= limit) {
         last.stalled = true;
         return last;
@@ -1102,10 +1193,18 @@
     }
 
     async function sendIndex(index, attempts) {
-      while (document.hidden) await sleep(400);
       var start = index * chunkSize;
       var end = Math.min(file.size, start + chunkSize);
-      return putChunkBytes(session.upload_id, index, file.slice(start, end), attempts);
+      // Không chờ trang hiện. Sang app khác vẫn gửi tiếp mảnh này và mảnh sau.
+      return putChunkBytes(session.upload_id, index, file.slice(start, end), attempts, function (loaded) {
+        if (onProgress) onProgress(
+          Math.floor(((finished + loaded / Math.max(1, end - start)) * 100) / Math.max(1, total)),
+          finished,
+          total,
+          false,
+          loaded
+        );
+      });
     }
 
     // Mảnh đầu một mình. Kẹt thì trả ngay để đổi sang một đường mảnh nhỏ, không mở thêm kết nối.
@@ -1155,7 +1254,7 @@
     var completeOk = false;
     var completeStatus = 0;
     for (var c = 0; c < 20; c += 1) {
-      while (document.hidden) await sleep(1000);
+      holdBackground();
       try {
         var completeResponse = await api("/v1/videos/uploads/" + session.upload_id + "/complete", { method: "POST" });
         try { completeBody = await completeResponse.json(); } catch (error) { completeBody = {}; }
@@ -1268,6 +1367,7 @@
     var registered = [];
     note.className = "note";
     uploadingActive = true;
+    holdBackground();
     stopBackgroundReads();
 
     try {
@@ -1350,8 +1450,8 @@
         job._base = Math.min(job.file.size, have * chunkBytes);
         live[name] = "0%";
         paintUploadRow(job.session.upload_id, name, job._base, job.file.size, "Đang gửi mảnh đầu");
-        var result = await uploadSessionChunks(job.file, job.session, function (percent, finished, total, resumed) {
-          var sent = Math.min(job.file.size, finished * chunkBytes);
+        var result = await uploadSessionChunks(job.file, job.session, function (percent, finished, total, resumed, partial) {
+          var sent = Math.min(job.file.size, finished * chunkBytes + (partial || 0));
           var sec = Math.max(0.001, (Date.now() - job._t0) / 1000);
           var mbps = (sent - job._base) / sec / (1024 * 1024);
           var speed = mbps >= 1 ? (mbps.toFixed(1) + " MB/s") : (Math.max(0, Math.round(mbps * 1024)) + " KB/s");
@@ -1364,8 +1464,9 @@
           live[name] = percent + "% · " + speed + left + (resumed ? " · resume" : "") +
             (behind ? (" · còn " + behind + " video trong hàng") : "");
           var parts = Object.keys(live).map(function (k) { return k.replace(/^.*\//, "").slice(0, 22) + " " + live[k]; });
-          var slow = sec > 6 && mbps < 0.4 ? " Đang chậm — máy tự siết đường, không cần chọn lại." : "";
-          note.textContent = "Đang gửi " + activeParallel() + " đường: " + parts.join(" · ") + " — đừng khóa máy." + slow;
+          var slow = sec > 6 && mbps < 0.4 ? " Đang chậm — máy tự gửi lại, không cần chọn lại." : "";
+          note.textContent = "Đang gửi " + activeParallel() + " đường: " + parts.join(" · ") +
+            " — mở app khác vẫn chạy, đừng vuốt tắt Safari." + slow;
           note.className = "note";
           paintUploadRow(job.session.upload_id, name, sent, job.file.size, "Đang tải lên " + percent + "% · " + speed);
         }, activeParallel());
@@ -1457,12 +1558,14 @@
       note.className = "note warn";
     } finally {
       uploadingActive = false;
+      releaseBackground();
       await releaseWakeLock();
       try { await refresh(); } catch (error) {}
     }
   }
 
   document.getElementById("pick").addEventListener("click", function () {
+    holdBackground();
     if (!checklistReady()) {
       document.getElementById("uploadNote").textContent = "Hãy tick đủ 3 ô xác nhận cách quay trước khi tải video.";
       document.getElementById("uploadNote").className = "note warn";
@@ -1471,6 +1574,7 @@
     document.getElementById("file").click();
   });
   document.getElementById("file").addEventListener("change", function (event) {
+    holdBackground();
     var picked = Array.prototype.slice.call(event.target.files || []);
     event.target.value = "";
     sendFiles(picked);
@@ -1492,6 +1596,7 @@
   drop.addEventListener("drop", function (event) {
     event.preventDefault();
     drop.classList.remove("over");
+    holdBackground();
     sendFiles(event.dataTransfer.files);
   });
   document.getElementById("query").addEventListener("input", scheduleResults);
@@ -1530,8 +1635,13 @@
     refresh();
   }, 4000);
   document.addEventListener("visibilitychange", function () {
-    if (!document.hidden && uploadingActive) requestWakeLock();
+    if (!uploadingActive) return;
+    holdBackground();
+    if (!document.hidden) requestWakeLock();
   });
+  setInterval(function () {
+    if (uploadingActive) holdBackground();
+  }, 2000);
 </script>
 </body>
 </html>
