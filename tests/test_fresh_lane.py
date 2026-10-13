@@ -6,12 +6,16 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from control_plane.fresh_lane import fresh_report, import_kept_videos
+from control_plane.fresh_lane import fresh_report, import_kept_videos, is_test_upload
 from control_plane.screen_table import Row, Table
 from control_plane.video_store import begin_upload, commit_upload, finish, init_db, search_results, stats
 
 
 class FreshLaneTests(unittest.TestCase):
+    def test_test_marker_is_its_own_segment(self) -> None:
+        self.assertTrue(is_test_upload("iphone|clip.mp4|10|0|test"))
+        self.assertTrue(is_test_upload("iphone|clip.mp4|10|0|test|lane2"))
+        self.assertFalse(is_test_upload("iphone|latest.mp4|10|0"))
     def test_repeat_upload_is_a_new_video_and_the_live_table_stays(self) -> None:
         with TemporaryDirectory() as tmp:
             live = Path(tmp) / "video.db"

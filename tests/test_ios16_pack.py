@@ -458,6 +458,8 @@ class ClientContractTests(unittest.TestCase):
         self.assertIn("parent.insertBefore(tr, head.nextSibling)", page)
         self.assertNotIn("table.insertBefore", page)
         self.assertIn("không cắt mảnh", page)
+        self.assertIn("Tải video test", page)
+        self.assertIn("id=\"pickTest\"", page)
         self.assertIn("sendPhoneOriginal", page)
         self.assertIn("Không đoán chữ dưới chấm. Dải chữ chưa đọc được lưu thành ảnh trong đúng ô của hàng đó.", page)
         self.assertIn("data-shot", page)

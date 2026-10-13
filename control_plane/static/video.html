@@ -248,7 +248,11 @@
           <p class="drop-title">Kéo nhiều video vào đây</p>
           <p class="note">hoặc chọn từ máy</p>
         </div>
-        <button class="file" type="button" id="pick">Chọn video</button>
+        <div class="row">
+          <button class="file" type="button" id="pick">Chọn video</button>
+          <button class="ghost" type="button" id="pickTest">Tải video test</button>
+        </div>
+        <p class="note">Nút test dùng đủ cách tải và đủ cách đọc, nhưng video vào bảng riêng bên dưới — không đụng hàng đang chạy.</p>
         <input id="file" type="file" accept="video/*,image/*" multiple />
       </div>
       <p id="uploadNote" class="note"></p>
@@ -323,7 +327,7 @@
     <h2>Bảng đọc bản mới</h2>
     <p>Nút này tải video vào một bảng riêng và đọc từ đầu bằng cách làm mới nhất: ghép @ khi tên hồ sơ hỏng, hiện số còn thấy khi bị chấm che, và lưu ảnh dải chữ chưa đọc. Video đã tải trước đó cũng được nhận lại như video mới. Bảng và kết quả phía trên không bị đổi.</p>
     <div class="row" style="margin-bottom:0.45rem">
-      <button class="primary" type="button" id="pickFresh">Tải video vào bảng mới</button>
+      <button class="primary" type="button" id="pickFresh">Tải video test (đủ tính năng)</button>
       <button class="ghost" type="button" id="importFresh">Đưa video còn file trên máy chủ vào bảng mới</button>
     </div>
     <input id="fileFresh" type="file" accept="video/*,image/*" multiple hidden />
@@ -1148,9 +1152,13 @@
     return (file && (file._displayName || file.name)) || "video";
   }
 
+  var uploadPurpose = "";
+
   function clientKeyFor(file) {
     if (file && file._resumeKey) return file._resumeKey;
-    return [deviceName() || "iphone", file.name, String(file.size), String(file.lastModified || 0)].join("|");
+    var key = [deviceName() || "iphone", file.name, String(file.size), String(file.lastModified || 0)].join("|");
+    if (uploadPurpose === "test") key += "|test";
+    return key;
   }
 
   function loadOpfsQueue() {
@@ -1519,7 +1527,8 @@
       size_bytes: file.size,
       device: deviceName(),
       client_key: clientKeyFor(file) + "|lane2",
-      chunk_size: LANE2_CHUNK_BYTES
+      chunk_size: LANE2_CHUNK_BYTES,
+      purpose: uploadPurpose
     }, function (sec, reason, attempt) {
       if (onProgress) onProgress("hướng 2 chờ chỗ trống, thử lại sau " + sec + "s · lần " + attempt + " (" + reason + ")");
     });
@@ -1545,7 +1554,7 @@
         clearInterval(ticker);
         resolve(result);
       }
-      xhr.open("POST", url || "/v1/videos");
+      xhr.open("POST", url || (uploadPurpose === "test" ? "/v1/fresh/videos" : "/v1/videos"));
       xhr.timeout = 0;
       if (token()) xhr.setRequestHeader("Authorization", "Bearer " + token());
       var ticker = setInterval(function () {
@@ -1607,8 +1616,9 @@
     return uploadWholeFile(file, onProgress);
   }
 
-  async function sendFiles(fileList) {
-    var note = document.getElementById("uploadNote");
+  async function sendFiles(fileList, purpose) {
+    uploadPurpose = purpose === "test" ? "test" : "";
+    var note = document.getElementById(uploadPurpose === "test" ? "freshNote" : "uploadNote");
     if (!checklistReady()) {
       note.textContent = "Hãy tick đủ 3 ô xác nhận cách quay trước khi tải video.";
       note.className = "note warn";
@@ -1691,7 +1701,8 @@
           size_bytes: file.size,
           device: deviceName(),
           client_key: clientKeyFor(file),
-          chunk_size: newChunkBytes()
+          chunk_size: newChunkBytes(),
+          purpose: uploadPurpose
         }, function (sec, reason, attempt) {
           note.textContent = file.name + " — chờ chỗ trống (" + reason + "), thử lại sau " + sec + "s · lần " + attempt;
           note.className = "note warn";
@@ -1847,7 +1858,9 @@
       }
 
       var partsOut = [
-        "Đã giữ " + files.length + " video trong hàng, không bỏ video phía sau.",
+        uploadPurpose === "test"
+          ? "Video test đã giữ đủ cách tải. Kết quả chỉ hiện ở bảng test, không vào hàng đang chạy."
+          : "Đã giữ " + files.length + " video trong hàng, không bỏ video phía sau.",
         "Đã vào hàng đọc đủ 100%: " + added + "."
       ];
       if (already) partsOut.push(already + " video đã có sẵn.");
@@ -1868,11 +1881,14 @@
         releaseBackground();
         await releaseWakeLock();
         try { await refresh(); } catch (error) {}
+        if (uploadPurpose === "test") {
+          try { await loadFresh(); } catch (error) {}
+        }
       }
     }
     if (retrySend) {
       await sleep(document.hidden ? 8000 : 2500);
-      return sendFiles(todo.length ? todo : files);
+      return sendFiles(todo.length ? todo : files, uploadPurpose);
     }
   }
 
@@ -1937,49 +1953,23 @@
     } catch (error) {}
   }
 
-  async function sendFreshFiles(fileList) {
-    var note = document.getElementById("freshNote");
-    var files = Array.prototype.slice.call(fileList || []);
-    if (!files.length) return;
-    saveDevice();
-    uploadingActive = true;
+  function openTestPicker() {
     holdBackground();
-    var added = 0;
-    var failed = [];
-    try {
-      for (var i = 0; i < files.length; i++) {
-        var file = files[i];
-        var label = fileLabel(file);
-        note.className = "note";
-        note.textContent = "Đang gửi vào bảng mới, nguyên file: " + label;
-        var result = await uploadWholeFile(file, function (msg) {
-          note.textContent = label + " — " + msg;
-        }, "/v1/fresh/videos");
-        if (result && result.ok && !(result.body && result.body.duplicate)) added += 1;
-        else {
-          var why = (result && result.body && result.body.detail) || "không gửi được";
-          failed.push(label + " (" + why + ")");
-        }
-      }
-    } finally {
-      uploadingActive = false;
-      releaseBackground();
+    if (!checklistReady()) {
+      var note = document.getElementById("freshNote");
+      note.textContent = "Hãy tick đủ 3 ô xác nhận cách quay trước khi tải video test.";
+      note.className = "note warn";
+      document.getElementById("checklist").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
     }
-    note.className = failed.length ? "note warn" : "note ok";
-    note.textContent = "Đã đưa " + added + " video vào bảng mới, đọc từ đầu." +
-      (failed.length ? (" Lỗi: " + failed.join("; ")) : "");
-    loadFresh();
-  }
-
-  document.getElementById("pickFresh").addEventListener("click", function () {
-    holdBackground();
-    var input = document.getElementById("fileFresh");
+    var input = document.getElementById("file");
+    input._purpose = "test";
     try { input.value = ""; } catch (error) {}
     input.click();
-  });
-  document.getElementById("fileFresh").addEventListener("change", function (event) {
-    sendFreshFiles(event.target.files);
-  });
+  }
+
+  document.getElementById("pickFresh").addEventListener("click", openTestPicker);
+  document.getElementById("pickTest").addEventListener("click", openTestPicker);
   document.getElementById("importFresh").addEventListener("click", async function () {
     var note = document.getElementById("freshNote");
     note.className = "note";
@@ -2006,6 +1996,7 @@
       return;
     }
     var input = document.getElementById("file");
+    input._purpose = "";
     // Xóa giá trị trước khi mở hộp chọn. Xóa sau khi chọn làm Safari iOS hủy file, slice() ném lỗi.
     try { input.value = ""; } catch (error) {}
     input.click();
@@ -2013,7 +2004,9 @@
   document.getElementById("file").addEventListener("change", function (event) {
     holdBackground();
     var picked = Array.prototype.slice.call(event.target.files || []);
-    sendFiles(picked);
+    var purpose = event.target._purpose || "";
+    event.target._purpose = "";
+    sendFiles(picked, purpose);
   });
   document.getElementById("device").addEventListener("change", saveDevice);
   document.getElementById("device").addEventListener("blur", saveDevice);

@@ -796,6 +796,7 @@ def complete_upload(
     *,
     disk_limit_bytes: int,
     video_db_path: Path | None = None,
+    allow_repeat: bool = False,
 ) -> dict[str, object]:
     ensure_upload_tables(db_path)
     video_db = video_db_path or db_path
@@ -867,6 +868,7 @@ def complete_upload(
         size_bytes=size_bytes,
         sha256=digest,
         device=str(row["device"] or ""),
+        allow_repeat=allow_repeat,
     )
     partial = Path(str(row["path"]))
     sidecar = vision_partial_path(partial, upload_id)

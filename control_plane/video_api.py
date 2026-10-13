@@ -25,6 +25,7 @@ from control_plane.fresh_lane import (
     fresh_results,
     fresh_video_dir,
     import_kept_videos,
+    is_test_upload,
 )
 from control_plane.settings import derive_secret, settings
 from control_plane.video_scan import IMAGE_SUFFIXES, VIDEO_SUFFIXES
@@ -372,6 +373,7 @@ class ChunkInitBody(BaseModel):
     client_key: str = ""
     chunk_size: int | None = None
     sha256: str = ""
+    purpose: str = ""
 
 
 @router.post("/v1/videos/uploads")
@@ -387,19 +389,28 @@ async def start_chunked_upload(
     if suffix not in _ALLOWED:
         raise HTTPException(status_code=400, detail="Chỉ nhận video hoặc ảnh chụp màn hình.")
     uploads_db = _uploads_db()
+    test = body.purpose == "test" or is_test_upload(body.client_key)
+    client_key = body.client_key
+    if test and not is_test_upload(client_key):
+        client_key = (client_key + "|test").strip("|")
+    video_db = fresh_db_path(settings.data_dir) if test else settings.video_db_path
+    video_dir = fresh_video_dir(settings.data_dir) if test else settings.video_dir
+    if test:
+        await run_in_threadpool(init_db, video_db)
+        video_dir.mkdir(parents=True, exist_ok=True)
 
     def _open() -> dict[str, object]:
         opened = init_upload(
             uploads_db,
-            settings.video_dir,
+            video_dir,
             name=body.name,
             size_bytes=body.size_bytes,
             device=body.device,
-            client_key=body.client_key,
+            client_key=client_key,
             chunk_size=body.chunk_size or DEFAULT_CHUNK_SIZE,
             sha256=body.sha256,
             disk_limit_bytes=_limit_bytes(),
-            video_db_path=settings.video_db_path,
+            video_db_path=video_db,
             legacy_db=settings.video_db_path,
         )
         # Nhường đĩa trước khi iPhone gửi mảnh đầu — không đợi vòng thăm của bộ đọc.
@@ -545,16 +556,21 @@ async def finish_chunked_upload(
     authorization: str | None = Header(default=None),
 ) -> dict[str, object]:
     _auth(authorization)
-    await run_in_threadpool(init_db, settings.video_db_path)
     uploads_db = _uploads_db()
+    session = await run_in_threadpool(get_upload, uploads_db, upload_id)
+    test = is_test_upload(str((session or {}).get("client_key") or ""))
+    video_db = fresh_db_path(settings.data_dir) if test else settings.video_db_path
+    video_dir = fresh_video_dir(settings.data_dir) if test else settings.video_dir
+    await run_in_threadpool(init_db, video_db)
     try:
         return await run_in_threadpool(
             lambda: complete_upload(
                 uploads_db,
-                settings.video_dir,
+                video_dir,
                 upload_id,
                 disk_limit_bytes=_limit_bytes(),
-                video_db_path=settings.video_db_path,
+                video_db_path=video_db,
+                allow_repeat=test,
             )
         )
     except LookupError as exc:

@@ -37,6 +37,11 @@ def fresh_heartbeat(data_dir: Path) -> Path:
     return data_dir / "video-fresh.heartbeat"
 
 
+def is_test_upload(client_key: str) -> bool:
+    """Phiên có mảnh |test| là video thử. Đủ tính năng, không vào bảng đang chạy."""
+    return "test" in str(client_key or "").split("|")
+
+
 def _same_name_size(db_path: Path) -> set[tuple[str, int]]:
     with connect(db_path) as conn:
         return {
