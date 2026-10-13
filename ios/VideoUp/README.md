@@ -16,11 +16,12 @@ Gói `/tai/videoup.zip` trên hub cũng là mã nguồn Xcode này.
 1. Mở VideoUp → điền **URL hub** (`http://IP:8088`) và **Token**.
 2. Đặt **Tên máy** (vd. iPhone An).
 3. Chọn video từ Ảnh hoặc Files — có thể chọn nhiều.
-4. Để app chạy / khóa máy; nhìn tiến độ từng mảnh.
+4. Có thể rời app hoặc khóa máy. App đang mở thì gửi nhiều mảnh song song. Khi app vào nền, một mảnh tiếp tục bằng URLSession nền; xong mảnh đó iOS mở app trong nền để gửi mảnh kế.
 5. Xong: mở trang video trên hub để xem hàng đợi đọc.
 
 ## Lưu ý
 
 - Wi‑Fi ổn định vẫn tốt hơn 4G cho video lớn.
 - Trùng file (cùng nội dung) sẽ báo đã có trong hàng đợi VPS.
-- Safari vẫn dùng được (cũng cắt khúc + resume), nhưng **không** upload nền khi khóa máy — đó là việc của VideoUp.
+- Safari vẫn cắt khúc và gửi lại được khi còn mở trang, nhưng **không** gửi tiếp khi người dùng rời Safari. Việc đó chỉ có trên VideoUp.
+- Máy này không ký được app iPhone. Mở Xcode trên Mac, chọn Team, rồi Run lên máy.

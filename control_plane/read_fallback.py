@@ -7,10 +7,8 @@ Hướng 3: đọc riêng vùng trên khung (tên / @) quanh chỗ còn thiếu,
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 from control_plane.screen_table import (
@@ -253,39 +251,24 @@ def parse_header_text(text: str) -> tuple[str, str, str]:
 
 
 def _ocr_header_text(path: Path) -> str:
+    """Đọc lại chỉ các dòng trong vùng @. Không gửi nửa trên khung vào một lần OCR."""
     if shutil.which("tesseract") is None:
         return ""
     try:
-        from PIL import Image
+        from PIL import Image, ImageOps
+
+        from control_plane.screen_read import read_locked_header_text
     except ImportError:
         return ""
     try:
         with Image.open(path) as image:
-            rgb = image.convert("RGB")
-            width, height = rgb.size
-            crop = rgb.crop((0, 0, width, max(1, int(height * 0.45))))
-            if crop.width > 1080:
-                ratio = 1080 / crop.width
-                crop = crop.resize((1080, max(1, int(crop.height * ratio))))
-    except OSError:
+            rgb = ImageOps.exif_transpose(image).convert("RGB")
+            if rgb.width > 1080:
+                ratio = 1080 / rgb.width
+                rgb = rgb.resize((1080, max(1, int(rgb.height * ratio))))
+            return read_locked_header_text(rgb)
+    except (OSError, subprocess.SubprocessError, RuntimeError):
         return ""
-    with tempfile.TemporaryDirectory() as folder:
-        image_path = Path(folder) / "header.png"
-        crop.save(image_path)
-        try:
-            done = subprocess.run(
-                ["tesseract", str(image_path), "stdout", "--psm", "6", "-l", "vie+eng"],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=False,
-                env={**os.environ, "OMP_THREAD_LIMIT": "1", "OMP_NUM_THREADS": "1"},
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            return ""
-    if done.returncode != 0:
-        return ""
-    return done.stdout or ""
 
 
 def read_headers_for_gaps(
@@ -399,5 +382,14 @@ def apply_read_fallbacks(
     if not gaps_remain(table):
         return table
     if on_progress is not None:
-        on_progress("Hướng đọc 3: đọc riêng vùng tên và @ của hồ sơ chưa ghép")
-    return read_headers_for_gaps(table, observations)
+        on_progress("Hướng đọc 3: đọc riêng từng dòng tên và @ của hồ sơ chưa ghép")
+    table = read_headers_for_gaps(table, observations)
+    if not gaps_remain(table):
+        return table
+    from control_plane.vision_gap import apply_vision_for_gaps, vision_enabled
+
+    if not vision_enabled():
+        return table
+    if on_progress is not None:
+        on_progress("Hướng đọc 4: nhìn ảnh chỉ vùng @ của số còn thiếu")
+    return apply_vision_for_gaps(table, observations)

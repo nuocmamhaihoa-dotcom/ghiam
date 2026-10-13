@@ -1,8 +1,9 @@
 """Đọc một khung hình TikTok: cắt đúng vùng chữ của từng dòng hoặc của hồ sơ.
 
 Danh bạ nhận ra bằng cột nút Follow hồng bên phải. Mỗi nút là một dòng:
-số ở trên, tên ngay dưới. Hồ sơ nhận ra bằng nút Follow rộng bên trái;
-chỉ lấy tên lớn và dòng @ ngay dưới tên đó.
+số ở trên, tên ngay dưới — OCR chỉ dải chữ của dòng đó, không cả khung.
+Hồ sơ nhận ra bằng nút Follow rộng bên trái; chỉ lấy tên lớn và dòng @
+ngay dưới tên đó. Không đọc cả dải header một lần.
 
 Ưu tiên tesserocr (API Tesseract lâu dài trong mỗi worker) — cùng engine,
 không spawn process mỗi lần. Fallback CLI nếu chưa cài tesserocr.
@@ -222,7 +223,7 @@ def read_pillow(
     listed = _list_buttons(buttons, width, layout=profile_layout)
     if len(listed) >= 3:
         anchor_x, anchor_w = _column_anchor(listed)
-        strips = [_row_strip(image, button, anchor_x, anchor_w) for button in listed]
+        strips = [contact_row_box(image, button, anchor_x, anchor_w) for button in listed]
         tapped = _tapped_rows(image, listed, strips, anchor_x, anchor_w)
         contacts = tuple(_read_rows(image, strips, tapped))
         if contacts:
@@ -270,7 +271,7 @@ def _aggressive_once(image: Image.Image, profile_layout: LayoutProfile) -> Frame
     listed = _list_buttons(buttons, width, layout=profile_layout)
     if len(listed) >= 3:
         anchor_x, anchor_w = _column_anchor(listed)
-        strips = [_row_strip(image, button, anchor_x, anchor_w) for button in listed]
+        strips = [contact_row_box(image, button, anchor_x, anchor_w) for button in listed]
         tapped = _tapped_rows(image, listed, strips, anchor_x, anchor_w)
         contacts = tuple(_read_rows(image, strips, tapped, aggressive=True))
         if contacts:
@@ -384,7 +385,7 @@ def read_tap(paths: list[str | Path]) -> FrameObs:
         if len(listed) < 3:
             continue
         anchor_x, anchor_w = _column_anchor(listed)
-        strips = [_row_strip(image, button, anchor_x, anchor_w) for button in listed]
+        strips = [contact_row_box(image, button, anchor_x, anchor_w) for button in listed]
         tapped = _tapped_rows(image, listed, strips, anchor_x, anchor_w)
         if len(tapped) != 1:
             continue
@@ -543,6 +544,85 @@ def _row_strip(image: Image.Image, button: Box, anchor_x: int, anchor_w: int) ->
         max(0, anchor_x - 6),
         min(image.height, button.y1 + int(0.28 * button.h)),
     )
+
+
+def contact_row_box(image: Image.Image, button: Box, anchor_x: int, anchor_w: int) -> Box:
+    """Ô OCR của một dòng danh bạ: số và tên, cắt trước nút Follow, không lấy cả khung."""
+    return _row_strip(image, button, anchor_x, anchor_w)
+
+
+def split_locked_row(strip: Box) -> tuple[Box, Box]:
+    """Khóa dòng số (nửa trên) và dòng tên (nửa dưới) khi OCR dính hai dòng thành một."""
+    overlap = max(2, int(strip.h * 0.08))
+    mid = strip.y0 + max(1, int(strip.h * 0.48))
+    phone = Box(strip.x0, strip.y0, strip.x1, min(strip.y1, mid + overlap))
+    name = Box(strip.x0, max(strip.y0, mid - overlap), strip.x1, strip.y1)
+    return phone, name
+
+
+def _lines_merged(phone_box: Box, name_box: Box, strip: Box) -> bool:
+    """Ô chữ cao gần bằng cả hàng, hoặc tên đè lên số: chưa khóa được từng dòng."""
+    if strip.h <= 0 or phone_box.h <= 0:
+        return False
+    if phone_box.h >= int(0.75 * strip.h):
+        return True
+    overlap = min(phone_box.y1, name_box.y1) - max(phone_box.y0, name_box.y0)
+    smaller = min(phone_box.h, name_box.h)
+    return bool(overlap > 0 and smaller > 0 and overlap >= int(0.55 * smaller))
+
+
+def at_zone_box(width: int, height: int, layout: LayoutProfile | None = None) -> Box:
+    """Vùng tên + dòng @. Trên máy này @ nằm khoảng 10–20% chiều cao, ngay trên hàng Follower.
+
+    Không lấy status bar, không lấy nửa dưới danh bạ, không lấy cả header 6%–48%.
+    """
+    x0 = max(0, int(0.04 * width))
+    x1 = min(width, int(0.86 * width))
+    y0 = max(0, int(0.09 * height))
+    y1 = min(height, int(0.22 * height))
+    if layout is not None and layout.samples > 0:
+        hx0, hy0, hx1, hy1 = layout.header_box(width, height)
+        span = max(1, hy1 - hy0)
+        # @ nằm phần trên của header đã học. Phần dưới của header là Follower và nút Follow.
+        y0 = min(height - 1, hy0 + int(span * 0.08))
+        y1 = min(height, hy0 + int(span * 0.42))
+        x0 = max(0, hx0)
+        x1 = min(width, hx1, int(0.86 * width))
+    if y1 <= y0 + 12:
+        y0 = max(0, int(0.09 * height))
+        y1 = min(height, int(0.22 * height))
+    return Box(x0, y0, max(x0 + 1, x1), max(y0 + 1, y1))
+
+
+def header_line_bands(header: Box) -> list[Box]:
+    """Cắt một vùng thành các dải ngang một dòng. Không trả cả header một cục."""
+    if header.w < 40 or header.h < 24:
+        return []
+    line_h = max(18, min(48, max(18, header.h // 6)))
+    if header.h <= line_h + 8:
+        return [header]
+    step = max(12, int(line_h * 0.72))
+    bands: list[Box] = []
+    y = header.y0
+    while y + 12 < header.y1 and len(bands) < 8:
+        y1 = min(header.y1, y + line_h)
+        bands.append(Box(header.x0, y, header.x1, y1))
+        if y1 >= header.y1:
+            break
+        y += step
+    return bands
+
+
+_HANDLE_NOISE = {"follow", "follower", "followers", "following", "message", "tiktok", "facebook"}
+
+
+def _handle_is_customer(username: str) -> bool:
+    if not is_profile_handle(username):
+        return False
+    body = username[1:].lower().replace(".", "").replace("_", "")
+    if body in _HANDLE_NOISE or body.rstrip("0123456789") in _HANDLE_NOISE:
+        return False
+    return True
 
 
 def _touch_dots(image: Image.Image, button_h: float) -> list[tuple[float, float]]:
@@ -782,7 +862,12 @@ def _read_rows(
     for index, row in enumerate(pending):
         seen_left = ""
         seen_right = ""
-        if row.phone_gaps:
+        merged = (
+            _lines_merged(row.phone_box, row.name_box, row.strip) and not row.phone_gaps and not row.name_gaps
+        )
+        if merged:
+            phone, name = _read_split_row(image, row, best)
+        elif row.phone_gaps:
             band = _line_band(row.phone_box, row.strip)
             parts = _read_pieces(image, band, row.phone_gaps, "eng", DIGITS)
             slots = mask_digits(parts["left"], parts["right"])
@@ -794,7 +879,9 @@ def _read_rows(
         else:
             reads = digit_reads[per_phone * index : per_phone * index + per_phone]
             phone = choose_phone(*reads, row.phone)
-        if row.name_gaps:
+        if merged:
+            pass
+        elif row.name_gaps:
             band = _line_band(row.name_box, row.strip)
             parts = _read_pieces(image, band, row.name_gaps, "vie")
             recovered = narrow_join(
@@ -867,10 +954,14 @@ def _read_profile(image: Image.Image, button: Box, *, aggressive: bool = False) 
             continue
         found_pair = found
         break
-    else:
-        return _ProfileBits()
-    name_line, handle_line, draft, username = found_pair
-    return _finish_profile(image, name_line, handle_line, draft, username)
+    if found_pair is not None:
+        name_line, handle_line, draft, username = found_pair
+        if _line_is_thin(handle_line.box, header):
+            bits = _finish_profile(image, name_line, handle_line, draft, username)
+            if bits.as_obs() is not None:
+                return bits
+    # Nút Follow đã thấy mà dải rộng không ra @ — chỉ OCR từng dòng trong header đó.
+    return _read_locked_profile(image, header)
 
 
 def _finish_profile(
@@ -928,6 +1019,106 @@ def _finish_profile(
     if not username and not handle_left and not handle_right:
         return _ProfileBits()
     return _ProfileBits(name, username, handle_left, handle_right, name_left, name_right)
+
+
+def _line_is_thin(box: Box, header: Box) -> bool:
+    """Dòng @ khóa đúng một hàng chữ, không phải cả header dính follower."""
+    if box.h <= 0 or header.h <= 0:
+        return False
+    return box.h <= max(36, int(header.h * 0.34))
+
+
+def _read_split_row(image: Image.Image, row: _Pending, tessdata: str | None) -> tuple[str, str]:
+    """Đọc riêng nửa trên (số) và nửa dưới (tên). Mất số thì giữ số đã thấy ở lượt bố cục."""
+    phone_band, name_band = split_locked_row(row.strip)
+    phone_crop = _pad(_enhance(_crop(image, phone_band, 4, 2), 2))
+    name_crop = _pad(_upscale(_crop(image, name_band, 4, 2), 2))
+    try:
+        phone_text = _texts(_batch([phone_crop], "eng", 7, DIGITS, tessdata))[0]
+        name_text = _texts(_batch([name_crop], "vie", 7))[0]
+    except (OSError, subprocess.SubprocessError, RuntimeError):
+        return row.phone, row.draft if not is_skipped(row.draft) else ""
+    phone = choose_phone(phone_text, row.phone)
+    name = choose_name(name_text, row.draft)
+    if is_skipped(name):
+        name = ""
+    return phone, name
+
+
+def _locked_name_handle(image: Image.Image, header: Box) -> tuple[str, str, Box, Box] | None:
+    """OCR từng dải một dòng. @ chỉ nhận khi dòng ngay trên là tên khách."""
+    bands = header_line_bands(header)
+    if len(bands) < 2:
+        return None
+    crops: list[Image.Image] = []
+    for band in bands:
+        raw = _crop(image, band, 2, 1)
+        if raw.width < 8 or raw.height < 8:
+            crops.append(Image.new("RGB", (8, 8), "white"))
+        else:
+            crops.append(_enhance(raw, 2))
+    try:
+        pages = _batch(crops, "eng", 7, HANDLE_CHARS)
+    except (OSError, subprocess.SubprocessError, RuntimeError):
+        return None
+    found_at = -1
+    username = ""
+    for index, words in enumerate(pages):
+        text = "".join(word.text for word in words)
+        folded = text.lower()
+        if "follower" in folded or "following" in folded:
+            continue
+        token = clean_username(_username_token(text))
+        if not _handle_is_customer(token):
+            continue
+        found_at = index
+        username = token
+        break
+    if found_at <= 0:
+        return None
+    name_raw = _crop(image, bands[found_at - 1], 4, 2)
+    if name_raw.width < 8 or name_raw.height < 8:
+        return None
+    try:
+        name_text = _texts(_batch([_pad(_upscale(name_raw, 2))], "vie", 7))[0]
+    except (OSError, subprocess.SubprocessError, RuntimeError):
+        return None
+    name = clean_name(name_text)
+    if not is_profile_name(name):
+        return None
+    return name, username, bands[found_at - 1], bands[found_at]
+
+
+def _read_locked_profile(image: Image.Image, header: Box) -> _ProfileBits:
+    try:
+        found = _locked_name_handle(image, header)
+    except (OSError, subprocess.SubprocessError, RuntimeError):
+        return _ProfileBits()
+    if found is None:
+        return _ProfileBits()
+    name, username, name_box, handle_box = found
+    name_line = Line([Word(name, 90, name_box)])
+    handle_line = Line([Word(username, 90, handle_box)])
+    bits = _finish_profile(image, name_line, handle_line, name, username)
+    if bits.as_obs() is not None:
+        return bits
+    if _handle_is_customer(username):
+        return _ProfileBits(name if is_profile_name(name) else "", username)
+    return _ProfileBits()
+
+
+def read_locked_header_text(image: Image.Image, layout: LayoutProfile | None = None) -> str:
+    """Chữ vùng @ đã khóa từng dòng: 'tên' rồi '@id'. Không đọc cả khung, không đọc nửa trên một cục."""
+    zone = at_zone_box(image.width, image.height, layout)
+    if zone.w < 40 or zone.h < 24:
+        return ""
+    found = _locked_name_handle(image, zone)
+    if found is None:
+        return ""
+    name, username, _name_box, _handle_box = found
+    if not _handle_is_customer(username):
+        return ""
+    return f"{name}\n{username}"
 
 
 def _read_handle(image: Image.Image, box: Box) -> str:

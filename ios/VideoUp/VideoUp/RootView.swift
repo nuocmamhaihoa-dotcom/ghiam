@@ -3,6 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct RootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var queue: UploadQueue
     @State private var showImporter = false
     @State private var pickerItems: [PhotosPickerItem] = []
@@ -22,7 +23,7 @@ struct RootView: View {
                 }
 
                 Section("Thêm video vào hàng chờ máy") {
-                    Text("Chọn tới ~50 video (800MB–1.5GB/file). App xếp hàng trên máy, gửi từng file cắt khúc; đĩa đầy thì tự chờ rồi resume. Khóa máy vẫn gửi (URLSession nền). Nhiều iPhone cùng lúc được.")
+                    Text("Chọn tới ~50 video (800MB–1.5GB/file). App đang mở thì gửi nhiều mảnh cùng lúc. Rời app hoặc khóa máy, một mảnh vẫn đi tiếp (URLSession nền) rồi iOS đánh thức app để gửi mảnh sau. Safari không làm được việc này. Nhiều iPhone cùng lúc được.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     PhotosPicker(
@@ -85,6 +86,10 @@ struct RootView: View {
             }
             .onChange(of: pickerItems) { _, items in
                 Task { await importPhotos(items) }
+            }
+            .onAppear { queue.noteScene(active: scenePhase == .active) }
+            .onChange(of: scenePhase) { _, phase in
+                queue.noteScene(active: phase == .active)
             }
         }
     }
