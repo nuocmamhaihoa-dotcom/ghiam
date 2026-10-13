@@ -85,7 +85,10 @@
     .drop .note { margin-top: 0.1rem; }
     .results-table td:nth-child(1),
     .results-table td:nth-child(3) { font-weight: 700; }
-    .drop .file { width: 100%; }
+    .drop .file, #pickTest { width: 100%; }
+    #pickTest {
+      background: #1a3a4a; color: #fff; font-weight: 750;
+    }
     .drop.over { background: #e5f4f3; border-color: var(--accent); }
     .drop.locked { opacity: 0.55; }
     .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; }
@@ -248,10 +251,8 @@
           <p class="drop-title">Kéo nhiều video vào đây</p>
           <p class="note">hoặc chọn từ máy</p>
         </div>
-        <div class="row">
-          <button class="file" type="button" id="pick">Chọn video</button>
-          <button class="ghost" type="button" id="pickTest">Tải video test</button>
-        </div>
+        <button class="file" type="button" id="pick">Chọn video</button>
+        <button type="button" id="pickTest">Tải video test</button>
         <p class="note">Nút test dùng đủ cách tải và đủ cách đọc, nhưng video vào bảng riêng bên dưới — không đụng hàng đang chạy.</p>
         <input id="file" type="file" accept="video/*,image/*" multiple />
       </div>
