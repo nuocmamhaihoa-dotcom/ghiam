@@ -455,6 +455,8 @@ class ClientContractTests(unittest.TestCase):
         self.assertIn("Safari khỏi bị sập", page)
         self.assertIn("mất kết nối, giữ trong hàng", page)
         self.assertIn("RESULT_PAGE = 80", page)
+        self.assertIn("parent.insertBefore(tr, head.nextSibling)", page)
+        self.assertNotIn("table.insertBefore", page)
         self.assertIn("Không đoán chữ dưới chấm. Khung cắt không còn sau khi đọc.", page)
         self.assertIn("/v1/results/export.vcf", page)
         self.assertIn("data-edit", page)

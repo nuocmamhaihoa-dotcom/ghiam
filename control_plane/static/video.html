@@ -752,22 +752,27 @@
       "<td data-label='Trạng thái'>Đang mở đường tải</td>" +
       "<td data-label='Tiến độ'>Đang tải lên<div class='note'>0 B / " + escapeHtml(formatBytes(size)) + " · 0%</div></td>" +
       "<td data-label='Kết quả'><span class='note'>Chưa xong tải — chưa phân tích</span></td>";
+    // Trình duyệt bọc <tr> trong <tbody>. insertBefore trên <table> ném NotFoundError
+    // khi hàng đợi đã có video — phiên tạo xong nhưng không gửi được mảnh nào.
     var head = table.querySelector("tr");
-    if (head && head.nextSibling) table.insertBefore(tr, head.nextSibling);
-    else table.appendChild(tr);
+    var parent = (head && head.parentNode) || table;
+    if (head && head.nextSibling) parent.insertBefore(tr, head.nextSibling);
+    else parent.appendChild(tr);
     return tr;
   }
 
   function paintUploadRow(uploadId, name, received, size, detail) {
-    var row = ensureUploadRow(uploadId, name, size);
-    if (!row) return;
-    var cells = row.querySelectorAll("td");
-    if (cells.length < 3) return;
-    var pct = size ? Math.floor((Math.max(0, received) * 100) / size) : 0;
-    cells[1].textContent = detail || "Đang tải lên";
-    cells[1].className = "";
-    cells[2].innerHTML = "Đang tải lên<div class='note'>" + escapeHtml(formatBytes(received)) + " / " +
-      escapeHtml(formatBytes(size)) + " · " + pct + "%</div>";
+    try {
+      var row = ensureUploadRow(uploadId, name, size);
+      if (!row) return;
+      var cells = row.querySelectorAll("td");
+      if (cells.length < 3) return;
+      var pct = size ? Math.floor((Math.max(0, received) * 100) / size) : 0;
+      cells[1].textContent = detail || "Đang tải lên";
+      cells[1].className = "";
+      cells[2].innerHTML = "Đang tải lên<div class='note'>" + escapeHtml(formatBytes(received)) + " / " +
+        escapeHtml(formatBytes(size)) + " · " + pct + "%</div>";
+    } catch (error) {}
   }
 
   function dropUploadRow(uploadId) {
@@ -1093,6 +1098,8 @@
   var CHUNK_STORE = "video-chunk-uploads-v1";
   var CHUNK_RETRIES = 3;
   var OPFS_KEY = "video-opfs-queue-v1";
+  var chunkSends = 0;
+  var opfsStarted = {};
 
   function fileLabel(file) {
     return (file && (file._displayName || file.name)) || "video";
@@ -1129,6 +1136,8 @@
     var step = 8 * 1024 * 1024;
     try {
       while (offset < file.size) {
+        // Không đọc file cùng lúc với PUT. Safari iOS ném NotReadableError và mảnh không đi.
+        while (chunkSends > 0) await sleep(250);
         await writable.write(file.slice(offset, Math.min(file.size, offset + step)));
         offset += step;
       }
@@ -1163,11 +1172,17 @@
   }
 
   function keepLocalCopy(file) {
+    var key = clientKeyFor(file);
+    if (opfsStarted[key]) return;
+    opfsStarted[key] = true;
     copyFileToOpfs(file).then(function (name) {
-      if (!name) return;
+      if (!name) {
+        delete opfsStarted[key];
+        return;
+      }
       file._opfsName = name;
       rememberOpfs(file, name);
-    }).catch(function () {});
+    }).catch(function () { delete opfsStarted[key]; });
   }
 
   async function filesWaitingInOpfs() {
@@ -1213,9 +1228,14 @@
       var lastLoaded = 0;
       var lastAt = Date.now();
       var settled = false;
+      var armed = false;
       function finish(result) {
         if (settled) return;
         settled = true;
+        if (armed) {
+          armed = false;
+          chunkSends = Math.max(0, chunkSends - 1);
+        }
         clearInterval(watcher);
         resolve(result);
       }
@@ -1253,6 +1273,8 @@
         finish({ ok: false, status: 0, stalled: true, body: { detail: "mảnh đứng — gửi lại" } });
       };
       try {
+        armed = true;
+        chunkSends += 1;
         xhr.send(blob);
       } catch (error) {
         finish({ ok: false, status: 0, stalled: true, body: { detail: "không gửi được" } });
@@ -1354,8 +1376,9 @@
     async function sendIndex(index, attempts) {
       var start = index * chunkSize;
       var end = Math.min(file.size, start + chunkSize);
+      var blob = file.slice(start, end);
       // Không chờ trang hiện. Sang app khác vẫn gửi tiếp mảnh này và mảnh sau.
-      return putChunkBytes(session.upload_id, index, file.slice(start, end), attempts, function (loaded) {
+      var sending = putChunkBytes(session.upload_id, index, blob, attempts, function (loaded) {
         if (onProgress) onProgress(
           Math.floor(((finished + loaded / Math.max(1, end - start)) * 100) / Math.max(1, total)),
           finished,
@@ -1364,6 +1387,9 @@
           loaded
         );
       });
+      // Bản sao trên máy chỉ chạy khi không có PUT đang đọc file.
+      keepLocalCopy(file);
+      return sending;
     }
 
     // Mảnh đầu một mình. Kẹt thì trả ngay để đổi sang một đường mảnh nhỏ, không mở thêm kết nối.
@@ -1520,7 +1546,6 @@
     var files = Array.prototype.slice.call(fileList || []);
     if (!files.length) return;
     var todo = files.slice();
-    files.forEach(keepLocalCopy);
     saveDevice();
     var added = 0;
     var already = 0;
@@ -1755,12 +1780,14 @@
       document.getElementById("uploadNote").className = "note warn";
       return;
     }
-    document.getElementById("file").click();
+    var input = document.getElementById("file");
+    // Xóa giá trị trước khi mở hộp chọn. Xóa sau khi chọn làm Safari iOS hủy file, slice() ném lỗi.
+    try { input.value = ""; } catch (error) {}
+    input.click();
   });
   document.getElementById("file").addEventListener("change", function (event) {
     holdBackground();
     var picked = Array.prototype.slice.call(event.target.files || []);
-    event.target.value = "";
     sendFiles(picked);
   });
   document.getElementById("device").addEventListener("change", saveDevice);
