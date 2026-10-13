@@ -230,7 +230,7 @@
   </nav>
 
   <div id="relayWarn" class="banner warn-banner __RELAY_HIDE__">__RELAY_TEXT__</div>
-    <p class="callout"><b>Để Safari khỏi bị sập khi tải:</b> tắt VPN, tắt iCloud Private Relay và Chế độ dữ liệu thấp. Mở app khác vẫn được — trang phát một tiếng rất nhỏ để iPhone không cắt đường tải, máy chủ vẫn đọc video. Đừng vuốt tắt Safari. Phần đã lên được gửi tiếp, không tải lại từ đầu.</p>
+    <p class="callout"><b>Để Safari khỏi bị sập khi tải:</b> tắt VPN, tắt iCloud Private Relay và Chế độ dữ liệu thấp. Mở app khác vẫn gửi tiếp. Video đã lên đủ thì máy chủ đọc và phân tích dù Safari đã tắt. Vuốt tắt Safari thì phần chưa lên được giữ trên máy — mở lại trang là gửi tiếp, không cần chọn lại file.</p>
     <audio id="bgKeep" loop playsinline preload="auto" hidden></audio>
 
   <div class="top-grid">
@@ -1092,9 +1092,103 @@
 
   var CHUNK_STORE = "video-chunk-uploads-v1";
   var CHUNK_RETRIES = 3;
+  var OPFS_KEY = "video-opfs-queue-v1";
+
+  function fileLabel(file) {
+    return (file && (file._displayName || file.name)) || "video";
+  }
 
   function clientKeyFor(file) {
+    if (file && file._resumeKey) return file._resumeKey;
     return [deviceName() || "iphone", file.name, String(file.size), String(file.lastModified || 0)].join("|");
+  }
+
+  function loadOpfsQueue() {
+    try { return JSON.parse(localStorage.getItem(OPFS_KEY) || "[]") || []; } catch (error) { return []; }
+  }
+
+  function saveOpfsQueue(items) {
+    try { localStorage.setItem(OPFS_KEY, JSON.stringify(items)); } catch (error) {}
+  }
+
+  function opfsSafeName(file) {
+    var base = String(fileLabel(file) || "video.mp4").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 80);
+    return String(file.size) + "-" + String(file.lastModified || 0) + "-" + base;
+  }
+
+  async function copyFileToOpfs(file) {
+    if (!navigator.storage || !navigator.storage.getDirectory) return null;
+    var root = await navigator.storage.getDirectory();
+    var dir = await root.getDirectoryHandle("inbox", { create: true });
+    var name = opfsSafeName(file);
+    var handle = await dir.getFileHandle(name, { create: true });
+    var existing = await handle.getFile();
+    if (existing.size === file.size) return name;
+    var writable = await handle.createWritable();
+    var offset = 0;
+    var step = 8 * 1024 * 1024;
+    try {
+      while (offset < file.size) {
+        await writable.write(file.slice(offset, Math.min(file.size, offset + step)));
+        offset += step;
+      }
+      await writable.close();
+    } catch (error) {
+      try { await writable.abort(); } catch (ignore) {}
+      throw error;
+    }
+    return name;
+  }
+
+  function rememberOpfs(file, opfsName) {
+    var items = loadOpfsQueue().filter(function (item) { return item.opfsName !== opfsName; });
+    items.push({
+      opfsName: opfsName,
+      name: fileLabel(file),
+      size: file.size,
+      lastModified: file.lastModified || 0,
+      clientKey: clientKeyFor(file)
+    });
+    saveOpfsQueue(items);
+  }
+
+  async function forgetOpfs(file) {
+    var name = file && file._opfsName ? file._opfsName : opfsSafeName(file);
+    saveOpfsQueue(loadOpfsQueue().filter(function (item) { return item.opfsName !== name; }));
+    try {
+      var root = await navigator.storage.getDirectory();
+      var dir = await root.getDirectoryHandle("inbox", { create: true });
+      await dir.removeEntry(name);
+    } catch (error) {}
+  }
+
+  function keepLocalCopy(file) {
+    copyFileToOpfs(file).then(function (name) {
+      if (!name) return;
+      file._opfsName = name;
+      rememberOpfs(file, name);
+    }).catch(function () {});
+  }
+
+  async function filesWaitingInOpfs() {
+    if (!navigator.storage || !navigator.storage.getDirectory) return [];
+    var items = loadOpfsQueue();
+    if (!items.length) return [];
+    var root = await navigator.storage.getDirectory();
+    var dir = await root.getDirectoryHandle("inbox", { create: false });
+    var out = [];
+    for (var i = 0; i < items.length; i += 1) {
+      try {
+        var handle = await dir.getFileHandle(items[i].opfsName);
+        var file = await handle.getFile();
+        if (file.size !== items[i].size) continue;
+        file._resumeKey = items[i].clientKey;
+        file._displayName = items[i].name;
+        file._opfsName = items[i].opfsName;
+        out.push(file);
+      } catch (error) {}
+    }
+    return out;
   }
 
   function loadChunkStore() {
@@ -1127,8 +1221,9 @@
       }
       var watcher = setInterval(function () {
         if (xhr.readyState === 4) return;
+        // Sang app khác iOS tạm dừng đường gửi. Cắt ở đây làm mất kết nối dù mảnh vẫn sống.
+        if (document.hidden) return;
         var quiet = Date.now() - lastAt;
-        // Chưa rời máy: 12 giây là kẹt. Đã có byte thì cứ để chạy, kể cả khi đang ở app khác.
         if ((lastLoaded === 0 && quiet > 12000) || (lastLoaded > 0 && quiet > 60000)) {
           try { xhr.abort(); } catch (error) {}
         }
@@ -1166,7 +1261,7 @@
   }
 
   async function putChunkBytes(uploadId, index, blob, attempts, onFly) {
-    var limit = attempts || CHUNK_RETRIES;
+    var limit = attempts || (document.hidden ? 24 : CHUNK_RETRIES);
     var last = { ok: false, status: 0, body: {}, stalled: false };
     for (var attempt = 0; attempt < limit; attempt += 1) {
       holdBackground();
@@ -1177,7 +1272,7 @@
         last.stalled = true;
         return last;
       }
-      await sleep(Math.min(800, 200 * Math.pow(2, attempt)));
+      await sleep(document.hidden ? 8000 : Math.min(4000, 400 * Math.pow(2, attempt)));
     }
     last.stalled = true;
     return last;
@@ -1274,7 +1369,7 @@
     // Mảnh đầu một mình. Kẹt thì trả ngay để đổi sang một đường mảnh nhỏ, không mở thêm kết nối.
     if (pending.length && finished === 0) {
       var probe = pending[0];
-      var first = await sendIndex(probe, 2);
+      var first = await sendIndex(probe, document.hidden ? 12 : 2);
       if (!first.ok) {
         return {
           ok: false,
@@ -1351,7 +1446,7 @@
 
   async function uploadSmallChunks(file, onProgress) {
     var init = await initChunkedWithRetry({
-      name: file.name,
+      name: fileLabel(file),
       size_bytes: file.size,
       device: deviceName(),
       client_key: clientKeyFor(file) + "|lane2",
@@ -1387,7 +1482,7 @@
         resolve({ ok: false, status: 0, body: { detail: "mất kết nối" }, name: file.name });
       };
       var form = new FormData();
-      form.append("file", file, file.name);
+      form.append("file", file, fileLabel(file));
       form.append("device", deviceName());
       xhr.send(form);
     });
@@ -1424,11 +1519,14 @@
     }
     var files = Array.prototype.slice.call(fileList || []);
     if (!files.length) return;
+    var todo = files.slice();
+    files.forEach(keepLocalCopy);
     saveDevice();
     var added = 0;
     var already = 0;
     var failed = [];
     var registered = [];
+    var retrySend = false;
     note.className = "note";
     uploadingActive = true;
     holdBackground();
@@ -1449,7 +1547,7 @@
         var place = files.length - pending.length + 1;
         note.textContent = "Đang xếp hàng tải " + place + "/" + files.length + ": " + file.name;
         var init = await initChunkedWithRetry({
-          name: file.name,
+          name: fileLabel(file),
           size_bytes: file.size,
           device: deviceName(),
           client_key: clientKeyFor(file),
@@ -1530,7 +1628,7 @@
           var parts = Object.keys(live).map(function (k) { return k.replace(/^.*\//, "").slice(0, 22) + " " + live[k]; });
           var slow = sec > 6 && mbps < 0.4 ? " Đang chậm — máy tự gửi lại, không cần chọn lại." : "";
           note.textContent = "Đang gửi " + activeParallel() + " đường: " + parts.join(" · ") +
-            " — mở app khác vẫn chạy, đừng vuốt tắt Safari." + slow;
+            " — mở app khác vẫn gửi. Máy chủ đọc video đã lên đủ." + slow;
           note.className = "note";
           paintUploadRow(job.session.upload_id, name, sent, job.file.size, "Đang tải lên " + percent + "% · " + speed);
         }, activeParallel());
@@ -1590,6 +1688,8 @@
         if (result && result.ok) {
           if (result.body && result.body.duplicate) already += 1;
           else added += 1;
+          forgetOpfs(job.file);
+          todo = todo.filter(function (item) { return item !== job.file; });
         } else if (result && resumeLater(result.status)) {
           pending.unshift(job.file);
           var why = (result.body && result.body.detail) || "mất kết nối";
@@ -1616,16 +1716,36 @@
       note.textContent = partsOut.join(" ");
       note.className = failed.length ? "note warn" : "note ok";
     } catch (error) {
-      failed.push("mất kết nối giữa chừng");
-      note.textContent = "Mất kết nối khi gửi. Đã vào hàng đọc: " + added +
-        ". Chọn lại đúng file chưa xong — phần đã lên được gửi tiếp, không bỏ video.";
+      retrySend = true;
+      note.textContent = "Mất kết nối, giữ trong hàng và gửi tiếp. Đã vào hàng đọc: " + added +
+        ". Máy chủ vẫn đọc video đã lên đủ — không cần chọn lại file.";
       note.className = "note warn";
+      holdBackground();
     } finally {
-      uploadingActive = false;
-      releaseBackground();
-      await releaseWakeLock();
-      try { await refresh(); } catch (error) {}
+      if (!retrySend) {
+        uploadingActive = false;
+        releaseBackground();
+        await releaseWakeLock();
+        try { await refresh(); } catch (error) {}
+      }
     }
+    if (retrySend) {
+      await sleep(document.hidden ? 8000 : 2500);
+      return sendFiles(todo.length ? todo : files);
+    }
+  }
+
+  async function resumeOpfsQueue() {
+    if (uploadingActive) return;
+    var waiting = [];
+    try { waiting = await filesWaitingInOpfs(); } catch (error) { waiting = []; }
+    if (!waiting.length || uploadingActive) return;
+    var note = document.getElementById("uploadNote");
+    if (note) {
+      note.textContent = "Còn " + waiting.length + " video trên máy chưa lên đủ. Đang gửi tiếp, không cần chọn lại.";
+      note.className = "note";
+    }
+    sendFiles(waiting);
   }
 
   document.getElementById("pick").addEventListener("click", function () {
@@ -1710,6 +1830,7 @@
   loadChecklist();
   syncUploadGate();
   refresh();
+  resumeOpfsQueue();
   setInterval(function () {
     // PUT đang chiếm đủ 6 kết nối Safari. Làm mới bảng lúc này sẽ chèn vào hàng và kéo chậm từng mảnh.
     if (uploadingActive) return;

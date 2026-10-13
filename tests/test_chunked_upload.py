@@ -208,7 +208,7 @@ class ChunkedUploadTests(unittest.TestCase):
             chunk_size=16 * 1024,
             disk_limit_bytes=self.limit,
         )
-        old = (datetime.now(timezone.utc) - timedelta(seconds=180)).isoformat()
+        old = (datetime.now(timezone.utc) - timedelta(seconds=20 * 60)).isoformat()
         with uploads_connect(self.db) as conn:
             conn.execute(
                 "UPDATE upload_sessions SET created_at = ?, updated_at = ? WHERE id = ?",

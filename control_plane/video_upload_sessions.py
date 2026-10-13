@@ -38,10 +38,10 @@ MAX_CHUNK_SIZE = 16 * 1024 * 1024
 UPLOAD_TTL_SEC = 7 * 24 * 3600
 # Không nhận chunk mới trong khoảng này → coi là tải bị ngắt (Safari khóa máy…).
 STALE_UPLOAD_SEC = 20 * 60
-# Phiên stale quá lâu: xóa để nhường slot/đĩa; user chọn lại file sẽ tạo phiên mới.
-ABANDON_UPLOAD_SEC = 2 * 3600
-# Phiên 0 byte không chờ 2 giờ. iPhone không gửi được thì xóa ngay để hết kẹt hàng.
-ZERO_BYTE_ABANDON_SEC = 90
+# Phiên đã có byte: giữ tới 7 ngày. iPhone có thể tắt Safari rồi mở lại để gửi tiếp.
+ABANDON_UPLOAD_SEC = 7 * 24 * 3600
+# Chưa có byte: đợi 15 phút. Sang app khác có thể chậm hơn 90 giây trước mảnh đầu.
+ZERO_BYTE_ABANDON_SEC = 15 * 60
 _MIGRATED: set[str] = set()
 
 
@@ -331,7 +331,7 @@ def cleanup_stale_uploads(
     for row in rows:
         updated = _parse_updated_ts(row["updated_at"])
         received = int(row["received_bytes"] or 0)
-        # 0 byte quá 90 giây: iPhone không gửi được. Xóa ngay, trang đang mở sẽ tạo phiên mới.
+        # 0 byte quá 15 phút: không có mảnh nào tới. Xóa để nhường chỗ. Trang còn file sẽ tạo phiên mới.
         if received <= 0 and (not updated or updated < now - ZERO_BYTE_ABANDON_SEC):
             pass
         elif updated and updated >= soft_cutoff:
