@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import shutil
 import sqlite3
 import time
@@ -841,18 +842,32 @@ def clean_device(device: str) -> str:
     return " ".join((device or "").split())[:80]
 
 
-def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str, device: str = "") -> dict[str, object]:
+def begin_upload(
+    db_path: Path,
+    *,
+    name: str,
+    size_bytes: int,
+    sha256: str,
+    device: str = "",
+    allow_repeat: bool = False,
+) -> dict[str, object]:
     """Cùng một file đang chờ, đang đọc, hoặc đã xong thì bỏ qua.
 
     File lỗi được nhận lại để đọc lại. File đã xong giữ nguyên kết quả —
     muốn đọc lại thì bấm Đọc lại, không tải lại cả file.
+    allow_repeat: bảng đọc bản mới nhận lại đúng file đó như video mới.
     """
     machine = clean_device(device)
+    stored_sha = sha256
+    if allow_repeat:
+        stored_sha = f"{sha256}#fresh#{secrets.token_hex(4)}"
 
     def _begin(conn: sqlite3.Connection) -> dict[str, object]:
-        existing = conn.execute(
-            "SELECT id, status, name, path FROM videos WHERE sha256 = ?", (sha256,)
-        ).fetchone()
+        existing = None
+        if not allow_repeat:
+            existing = conn.execute(
+                "SELECT id, status, name, path FROM videos WHERE sha256 = ?", (sha256,)
+            ).fetchone()
         if existing and existing["status"] == "error":
             conn.execute(
                 """
@@ -886,7 +901,7 @@ def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str, devi
             INSERT INTO videos (name, size_bytes, sha256, path, status, created_at, device)
             VALUES (?, ?, ?, '', 'uploading', ?, ?)
             """,
-            (name, size_bytes, sha256, utcnow(), machine),
+            (name, size_bytes, stored_sha, utcnow(), machine),
         )
         return {
             "id": int(cur.lastrowid),

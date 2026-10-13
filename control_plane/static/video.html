@@ -227,6 +227,7 @@
     <a href="#sec-stats">Số liệu</a>
     <a href="#sec-queue">Hàng đợi</a>
     <a href="#sec-results">Kết quả</a>
+    <a href="#sec-fresh">Bảng mới</a>
     <a href="#sec-backup">Sao lưu</a>
   </nav>
 
@@ -316,6 +317,22 @@
     <p id="resultsMoreWrap" hidden>
       <button class="ghost" type="button" id="resultsMore">Xem thêm</button>
     </p>
+  </section>
+
+  <section id="sec-fresh">
+    <h2>Bảng đọc bản mới</h2>
+    <p>Nút này tải video vào một bảng riêng và đọc từ đầu bằng cách làm mới nhất: ghép @ khi tên hồ sơ hỏng, hiện số còn thấy khi bị chấm che, và lưu ảnh dải chữ chưa đọc. Video đã tải trước đó cũng được nhận lại như video mới. Bảng và kết quả phía trên không bị đổi.</p>
+    <div class="row" style="margin-bottom:0.45rem">
+      <button class="primary" type="button" id="pickFresh">Tải video vào bảng mới</button>
+      <button class="ghost" type="button" id="importFresh">Đưa video còn file trên máy chủ vào bảng mới</button>
+    </div>
+    <input id="fileFresh" type="file" accept="video/*,image/*" multiple hidden />
+    <p id="freshNote" class="note"></p>
+    <div id="freshReport"></div>
+    <h3>Hàng của bảng mới</h3>
+    <div id="freshQueue" class="table-wrap"></div>
+    <h3>Kết quả bảng mới</h3>
+    <div id="freshResults" class="table-wrap"></div>
   </section>
 
   <section id="sec-backup" class="backup">
@@ -721,6 +738,7 @@
     var queueResponse = await api("/v1/videos", { signal: ctrl.signal });
     if (ctrl.signal.aborted) return;
     if (queueResponse.ok) renderQueue((await queueResponse.json()).items || []);
+    if (!uploadingActive) loadFresh();
     // Không tải hết bảng kết quả khi đang gửi video — Safari chỉ có 6 kết nối.
     if (!uploadingActive && !resultsLoading && body.results !== lastResultTotal) {
       var stamp = body.results;
@@ -1515,7 +1533,7 @@
     }, 1);
   }
 
-  function uploadWholeFile(file, onProgress) {
+  function uploadWholeFile(file, onProgress, url) {
     return new Promise(function (resolve) {
       var xhr = new XMLHttpRequest();
       var settled = false;
@@ -1527,7 +1545,7 @@
         clearInterval(ticker);
         resolve(result);
       }
-      xhr.open("POST", "/v1/videos");
+      xhr.open("POST", url || "/v1/videos");
       xhr.timeout = 0;
       if (token()) xhr.setRequestHeader("Authorization", "Bearer " + token());
       var ticker = setInterval(function () {
@@ -1870,6 +1888,115 @@
     }
     sendFiles(waiting);
   }
+
+  function renderFreshReport(report) {
+    var box = document.getElementById("freshReport");
+    if (!box) return;
+    var notes = (report.notes || []).map(function (line) {
+      return "<p class='note'>" + escapeHtml(line) + "</p>";
+    }).join("");
+    var reader = report.reader_alive
+      ? "<p class='note ok'>Bộ đọc bảng mới đang chạy.</p>"
+      : "<p class='note warn'>Bộ đọc bảng mới chưa chạy. Video đã vào hàng sẽ được đọc khi bộ này bật.</p>";
+    box.innerHTML = reader + notes;
+  }
+
+  function renderFreshQueue(items) {
+    var box = document.getElementById("freshQueue");
+    if (!box) return;
+    if (!items.length) {
+      box.innerHTML = "<p class='note'>Chưa có video trong bảng mới.</p>";
+      return;
+    }
+    var html = "<table class='queue-table'><tr><th>Video</th><th>Trạng thái</th><th>Kết quả</th></tr>";
+    items.forEach(function (item) {
+      html += "<tr><td>" + escapeHtml(item.name || "") +
+        "</td><td>" + escapeHtml(issueText(item)) +
+        "</td><td>" + escapeHtml(item.progress || "") + "</td></tr>";
+    });
+    box.innerHTML = html + "</table>";
+  }
+
+  async function loadFresh() {
+    try {
+      var queueResponse = await api("/v1/fresh/videos");
+      if (queueResponse.ok) renderFreshQueue((await queueResponse.json()).items || []);
+      var reportResponse = await api("/v1/fresh/report");
+      if (reportResponse.ok) renderFreshReport(await reportResponse.json());
+      var resultResponse = await api("/v1/fresh/results?view=all&limit=80");
+      if (!resultResponse.ok) return;
+      var body = await resultResponse.json();
+      var box = document.getElementById("freshResults");
+      var items = body.items || [];
+      if (!items.length) {
+        box.innerHTML = "<p class='note'>Chưa có dòng kết quả trong bảng mới.</p>";
+        return;
+      }
+      box.innerHTML = renderResultTable(items);
+      fillShots(box);
+    } catch (error) {}
+  }
+
+  async function sendFreshFiles(fileList) {
+    var note = document.getElementById("freshNote");
+    var files = Array.prototype.slice.call(fileList || []);
+    if (!files.length) return;
+    saveDevice();
+    uploadingActive = true;
+    holdBackground();
+    var added = 0;
+    var failed = [];
+    try {
+      for (var i = 0; i < files.length; i++) {
+        var file = files[i];
+        var label = fileLabel(file);
+        note.className = "note";
+        note.textContent = "Đang gửi vào bảng mới, nguyên file: " + label;
+        var result = await uploadWholeFile(file, function (msg) {
+          note.textContent = label + " — " + msg;
+        }, "/v1/fresh/videos");
+        if (result && result.ok && !(result.body && result.body.duplicate)) added += 1;
+        else {
+          var why = (result && result.body && result.body.detail) || "không gửi được";
+          failed.push(label + " (" + why + ")");
+        }
+      }
+    } finally {
+      uploadingActive = false;
+      releaseBackground();
+    }
+    note.className = failed.length ? "note warn" : "note ok";
+    note.textContent = "Đã đưa " + added + " video vào bảng mới, đọc từ đầu." +
+      (failed.length ? (" Lỗi: " + failed.join("; ")) : "");
+    loadFresh();
+  }
+
+  document.getElementById("pickFresh").addEventListener("click", function () {
+    holdBackground();
+    var input = document.getElementById("fileFresh");
+    try { input.value = ""; } catch (error) {}
+    input.click();
+  });
+  document.getElementById("fileFresh").addEventListener("change", function (event) {
+    sendFreshFiles(event.target.files);
+  });
+  document.getElementById("importFresh").addEventListener("click", async function () {
+    var note = document.getElementById("freshNote");
+    note.className = "note";
+    note.textContent = "Đang đưa video còn file sang bảng mới...";
+    var response = await api("/v1/fresh/import", { method: "POST" });
+    var body = {};
+    try { body = await response.json(); } catch (error) { body = {}; }
+    if (!response.ok) {
+      note.className = "note warn";
+      note.textContent = (body && body.detail) || "Không đưa được video sang bảng mới.";
+      return;
+    }
+    note.className = "note ok";
+    note.textContent = "Đã đưa " + (body.imported || 0) + " video vào bảng mới để đọc từ đầu. Bỏ qua " +
+      (body.skipped || 0) + " video đã có trong bảng này. Không còn file: " + (body.missing || 0) + ".";
+    loadFresh();
+  });
 
   document.getElementById("pick").addEventListener("click", function () {
     holdBackground();

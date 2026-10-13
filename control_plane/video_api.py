@@ -18,6 +18,14 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
+from control_plane.fresh_lane import (
+    fresh_db_path,
+    fresh_heartbeat,
+    fresh_report,
+    fresh_results,
+    fresh_video_dir,
+    import_kept_videos,
+)
 from control_plane.settings import derive_secret, settings
 from control_plane.video_scan import IMAGE_SUFFIXES, VIDEO_SUFFIXES
 from control_plane.video_store import (
@@ -181,22 +189,23 @@ def _write_chunk(handle: BinaryIO, hasher: Any, chunk: bytes) -> None:
     handle.write(chunk)
 
 
-@router.post("/v1/videos")
-async def upload_video(
-    file: UploadFile = File(...),
-    device: str = Form(default=""),
-    authorization: str | None = Header(default=None),
+async def _store_video_upload(
+    file: UploadFile,
+    device: str,
+    db_path: Path,
+    video_dir: Path,
+    *,
+    allow_repeat: bool,
 ) -> dict[str, object]:
     """Ghi đĩa và cơ sở dữ liệu chạy ngoài vòng sự kiện, để một video lớn không làm đứng trang của máy khác."""
-    _auth(authorization)
-    await run_in_threadpool(init_db, settings.video_db_path)
-    settings.ensure_dirs()
+    await run_in_threadpool(init_db, db_path)
+    video_dir.mkdir(parents=True, exist_ok=True)
     original = Path(file.filename or "video.mp4").name
     suffix = Path(original).suffix.lower()
     if suffix not in _ALLOWED:
         raise HTTPException(status_code=400, detail="Chỉ nhận video hoặc ảnh chụp màn hình.")
     machine = clean_device(device)
-    tmp = settings.video_dir / f"up-{secrets.token_hex(8)}{suffix}"
+    tmp = video_dir / f"up-{secrets.token_hex(8)}{suffix}"
     hasher = hashlib.sha256()
     size = 0
     limit = settings.max_upload_mb * 1024 * 1024
@@ -216,43 +225,130 @@ async def upload_video(
             await run_in_threadpool(validate_media_file, tmp)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        free = shutil.disk_usage(settings.video_dir).free
-        used = await run_in_threadpool(queued_bytes, settings.video_db_path)
+        free = shutil.disk_usage(video_dir).free
+        used = await run_in_threadpool(queued_bytes, db_path)
         if not can_accept(used, size, _limit_bytes(), free):
             raise HTTPException(status_code=507, detail="Hàng đợi đã đầy. Đợi bớt video rồi thêm tiếp.")
         created = await run_in_threadpool(
             lambda: begin_upload(
-                settings.video_db_path,
+                db_path,
                 name=original,
                 size_bytes=size,
                 sha256=hasher.hexdigest(),
                 device=machine,
+                allow_repeat=allow_repeat,
             )
         )
         if created["duplicate"]:
             return created
         video_id = int(created["id"])
-        final = settings.video_dir / f"{video_id}{suffix}"
+        final = video_dir / f"{video_id}{suffix}"
         os.replace(tmp, final)
         old_path = str(created.pop("old_path", "") or "")
         if old_path and old_path != str(final):
             Path(old_path).unlink(missing_ok=True)
         duration = await run_in_threadpool(probe_duration_sec, final)
-        await run_in_threadpool(commit_upload, settings.video_db_path, video_id, str(final), duration)
+        await run_in_threadpool(commit_upload, db_path, video_id, str(final), duration)
         created["status"] = "queued"
         created["duration_sec"] = duration
         return created
     except Exception:
         if created is not None and not created.get("duplicate"):
-            await run_in_threadpool(
-                abort_upload, settings.video_db_path, int(created["id"]), bool(created.get("reopened"))
-            )
+            await run_in_threadpool(abort_upload, db_path, int(created["id"]), bool(created.get("reopened")))
         if final is not None:
             final.unlink(missing_ok=True)
         raise
     finally:
         tmp.unlink(missing_ok=True)
         await file.close()
+
+
+@router.post("/v1/videos")
+async def upload_video(
+    file: UploadFile = File(...),
+    device: str = Form(default=""),
+    authorization: str | None = Header(default=None),
+) -> dict[str, object]:
+    _auth(authorization)
+    settings.ensure_dirs()
+    return await _store_video_upload(
+        file, device, settings.video_db_path, settings.video_dir, allow_repeat=False
+    )
+
+
+@router.post("/v1/fresh/videos")
+async def upload_fresh_video(
+    file: UploadFile = File(...),
+    device: str = Form(default=""),
+    authorization: str | None = Header(default=None),
+) -> dict[str, object]:
+    """Tải vào bảng mới, kể cả file đã có ở bảng cũ. Đọc từ đầu, không đụng kết quả cũ."""
+    _auth(authorization)
+    return await _store_video_upload(
+        file,
+        device,
+        fresh_db_path(settings.data_dir),
+        fresh_video_dir(settings.data_dir),
+        allow_repeat=True,
+    )
+
+
+@router.get("/v1/fresh/videos")
+def fresh_videos(authorization: str | None = Header(default=None), limit: int = Query(default=40, ge=1, le=200)) -> dict[str, object]:
+    _auth(authorization)
+    db_path = fresh_db_path(settings.data_dir)
+    init_db(db_path)
+    items = list_videos(db_path, limit)
+    return {"count": len(items), "items": items}
+
+
+@router.post("/v1/fresh/import")
+def import_fresh_videos(authorization: str | None = Header(default=None)) -> dict[str, int]:
+    """Video còn file trên đĩa được đưa sang bảng mới và đọc lại từ đầu."""
+    _auth(authorization)
+    return import_kept_videos(settings.video_db_path, settings.data_dir)
+
+
+@router.get("/v1/fresh/report")
+def fresh_read_report(authorization: str | None = Header(default=None)) -> dict[str, object]:
+    _auth(authorization)
+    db_path = fresh_db_path(settings.data_dir)
+    report = fresh_report(db_path)
+    report["reader_alive"] = reader_alive(fresh_heartbeat(settings.data_dir))
+    return report
+
+
+@router.get("/v1/fresh/results")
+def fresh_result_list(
+    q: str = "",
+    limit: int = Query(default=80, ge=1, le=80),
+    offset: int = Query(default=0, ge=0),
+    view: str = Query(default="all"),
+    authorization: str | None = Header(default=None),
+) -> dict[str, object]:
+    _auth(authorization)
+    if view not in ("complete", "incomplete", "all"):
+        raise HTTPException(status_code=422, detail="view phải là complete, incomplete hoặc all.")
+    db_path = fresh_db_path(settings.data_dir)
+    init_db(db_path)
+    items = fresh_results(db_path, q, limit, offset, view)
+    total = count_results(db_path, q, view)
+    return {"count": len(items), "total": total, "offset": offset, "view": view, "items": items}
+
+
+@router.get("/v1/fresh/results/{result_id}/shot/{field}")
+def fresh_result_shot(
+    result_id: int,
+    field: str,
+    authorization: str | None = Header(default=None),
+) -> FileResponse:
+    _auth(authorization)
+    db_path = fresh_db_path(settings.data_dir)
+    init_db(db_path)
+    path = result_shot_path(db_path, result_id, field)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Không có ảnh dải chữ.")
+    return FileResponse(path, media_type="image/jpeg")
 
 
 @router.post("/v1/videos/{video_id}/retry")

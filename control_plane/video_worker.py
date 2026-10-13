@@ -54,6 +54,9 @@ _JOBS_LOCK = threading.Lock()
 
 
 def heartbeat_path() -> Path:
+    override = os.environ.get("CONTROL_VIDEO_HEARTBEAT", "").strip()
+    if override:
+        return Path(override)
     return settings.data_dir / "video-worker.heartbeat"
 
 

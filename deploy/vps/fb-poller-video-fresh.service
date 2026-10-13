@@ -1,0 +1,26 @@
+[Unit]
+Description=fb-poller fresh video reader
+After=network-online.target fb-poller-hub.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/fb-poller
+EnvironmentFile=/opt/fb-poller/control_data/server.env
+Environment=OMP_NUM_THREADS=1
+Environment=OMP_THREAD_LIMIT=1
+Environment=CONTROL_VIDEO_DB=/opt/fb-poller/control_data/video-fresh.db
+Environment=CONTROL_VIDEO_DIR=/opt/fb-poller/control_data/videos-fresh
+Environment=CONTROL_VIDEO_HEARTBEAT=/opt/fb-poller/control_data/video-fresh.heartbeat
+Environment=CONTROL_VIDEO_FEEDERS=1
+# Nhường CPU cho bộ đọc đang chạy.
+Nice=10
+ExecStart=/opt/fb-poller/.venv/bin/python -m control_plane.video_worker
+Restart=always
+RestartSec=2
+KillMode=control-group
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
