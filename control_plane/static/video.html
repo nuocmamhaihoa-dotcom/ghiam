@@ -230,7 +230,7 @@
   </nav>
 
   <div id="relayWarn" class="banner warn-banner __RELAY_HIDE__">__RELAY_TEXT__</div>
-    <p class="callout"><b>Để Safari khỏi bị sập khi tải:</b> tắt VPN, tắt iCloud Private Relay và Chế độ dữ liệu thấp. Mở app khác vẫn gửi tiếp. Video đã lên đủ thì máy chủ đọc và phân tích dù Safari đã tắt. Vuốt tắt Safari thì phần chưa lên được giữ trên máy — mở lại trang là gửi tiếp, không cần chọn lại file.</p>
+    <p class="callout"><b>Để Safari khỏi bị sập khi tải:</b> tắt VPN, tắt iCloud Private Relay và Chế độ dữ liệu thấp. iPhone gửi nguyên file, không cắt mảnh. Mở app khác vẫn gửi tiếp. Video đã lên đủ thì máy chủ đọc và phân tích dù Safari đã tắt. Đừng vuốt tắt Safari khi chưa lên 100% — đứt giữa chừng thì chọn lại cùng file để gửi lại từ đầu.</p>
     <audio id="bgKeep" loop playsinline preload="auto" hidden></audio>
 
   <div class="top-grid">
@@ -1493,24 +1493,53 @@
   function uploadWholeFile(file, onProgress) {
     return new Promise(function (resolve) {
       var xhr = new XMLHttpRequest();
+      var settled = false;
+      var seen = false;
+      var started = Date.now();
+      function finish(result) {
+        if (settled) return;
+        settled = true;
+        clearInterval(ticker);
+        resolve(result);
+      }
       xhr.open("POST", "/v1/videos");
+      xhr.timeout = 0;
       if (token()) xhr.setRequestHeader("Authorization", "Bearer " + token());
+      var ticker = setInterval(function () {
+        if (seen || !onProgress) return;
+        var sec = Math.round((Date.now() - started) / 1000);
+        onProgress("đang gửi nguyên file, không cắt mảnh · " + sec + " giây");
+      }, 2000);
       xhr.upload.onprogress = function (event) {
-        if (!event.lengthComputable || !onProgress) return;
-        onProgress("hướng 3 · gửi cả file · " + Math.floor((event.loaded * 100) / event.total) + "%");
+        if (!onProgress) return;
+        holdBackground();
+        if (!event.lengthComputable || !event.total) return;
+        seen = true;
+        var pct = Math.floor((event.loaded * 100) / event.total);
+        var sec = Math.max(0.001, (Date.now() - started) / 1000);
+        var mbps = event.loaded / sec / (1024 * 1024);
+        var speed = mbps >= 1 ? (mbps.toFixed(1) + " MB/s") : (Math.max(0, Math.round(mbps * 1024)) + " KB/s");
+        onProgress("nguyên file · " + pct + "% · " + formatBytes(event.loaded) + " / " + formatBytes(event.total) + " · " + speed);
       };
       xhr.onload = function () {
         var body = {};
         try { body = JSON.parse(xhr.responseText || "{}"); } catch (error) { body = {}; }
-        resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body: body, name: file.name });
+        finish({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body: body, name: file.name });
       };
       xhr.onerror = function () {
-        resolve({ ok: false, status: 0, body: { detail: "mất kết nối" }, name: file.name });
+        finish({ ok: false, status: 0, body: { detail: "mất kết nối, giữ trong hàng" }, name: file.name });
+      };
+      xhr.onabort = function () {
+        finish({ ok: false, status: 0, body: { detail: "mất kết nối, giữ trong hàng" }, name: file.name });
       };
       var form = new FormData();
       form.append("file", file, fileLabel(file));
       form.append("device", deviceName());
-      xhr.send(form);
+      try {
+        xhr.send(form);
+      } catch (error) {
+        finish({ ok: false, status: 0, body: { detail: "không gửi được file" }, name: file.name });
+      }
     });
   }
 
@@ -1563,9 +1592,52 @@
       // Gửi từng video một để đường tải đầy băng thông; video xong vào hàng đọc ngay.
       var pending = files.slice();
       note.className = "note";
-      note.textContent = "Đang kiểm tra thêm đường tải...";
-      await detectLanePorts();
+      note.textContent = phoneBrowser()
+        ? "Đang gửi nguyên file, không cắt mảnh..."
+        : "Đang kiểm tra thêm đường tải...";
+      if (!phoneBrowser()) await detectLanePorts();
 
+      async function sendPhoneOriginal() {
+        while (pending.length) {
+          var file = pending[0];
+          var label = fileLabel(file);
+          note.className = "note";
+          note.textContent = "Đang gửi nguyên file, không cắt mảnh: " + label;
+          holdBackground();
+          var result = null;
+          try {
+            result = await uploadWholeFile(file, function (msg) {
+              note.textContent = label + " — " + msg;
+              note.className = "note";
+            });
+          } catch (error) {
+            result = { ok: false, status: 0, body: { detail: "mất kết nối, giữ trong hàng" }, name: label };
+          }
+          if (result && result.ok) {
+            pending.shift();
+            if (result.body && result.body.duplicate) already += 1;
+            else added += 1;
+            forgetOpfs(file);
+            todo = todo.filter(function (item) { return item !== file; });
+            continue;
+          }
+          if (!result || resumeLater(result.status) || result.status === 500) {
+            var why = (result && result.body && result.body.detail) || "mất kết nối, giữ trong hàng";
+            note.textContent = label + " — " + why + ". Gửi lại nguyên file, không cắt mảnh.";
+            note.className = "note warn";
+            holdBackground();
+            await sleep(document.hidden ? 8000 : 2500);
+            continue;
+          }
+          pending.shift();
+          var reason = (result.body && result.body.detail) || ("lỗi " + result.status);
+          failed.push(label + " (" + reason + ")");
+        }
+      }
+
+      if (phoneBrowser()) {
+        await sendPhoneOriginal();
+      } else {
       async function registerNext() {
         if (!pending.length) return false;
         var file = pending[0];
@@ -1728,6 +1800,7 @@
           failed.push((result.name || job.file.name) + " (" + reason + ")");
         }
         try { await refresh(); } catch (error) {}
+      }
       }
 
       var partsOut = [
