@@ -243,19 +243,57 @@ def _map_dump(indices: list[int]) -> str:
     return json.dumps(sorted(set(indices)), separators=(",", ":"))
 
 
+def contiguous_offset(received: list[int], chunk_size: int, size_bytes: int) -> int:
+    """Byte đầu tiên còn thiếu. iOS 16 gửi một file phần đuôi từ đây, không dùng resume data."""
+    total = _chunks_needed(size_bytes, chunk_size)
+    if chunk_size <= 0 or total <= 0:
+        return 0
+    have = set(received)
+    done = 0
+    while done < total and done in have:
+        done += 1
+    if done >= total:
+        return size_bytes
+    return done * chunk_size
+
+
+def _chunks_covered(offset: int, written: int, chunk_size: int, size_bytes: int) -> list[int]:
+    """Mảnh nằm trọn trong [offset, offset+written). Mảnh viết dở không tính — lần sau gửi lại từ đầu mảnh."""
+    total = _chunks_needed(size_bytes, chunk_size)
+    if written <= 0 or total <= 0 or chunk_size <= 0 or offset < 0:
+        return []
+    end = min(size_bytes, offset + written)
+    if end <= offset:
+        return []
+    covered: list[int] = []
+    for index in range(total):
+        start = index * chunk_size
+        stop = size_bytes if index == total - 1 else (index + 1) * chunk_size
+        if start >= offset and stop <= end:
+            covered.append(index)
+    return covered
+
+
+class TailOffsetError(ValueError):
+    """Offset không phải byte liền mạch máy chủ đang chờ."""
+
+
 def _session_dict(row: sqlite3.Row) -> dict[str, object]:
     total = _chunks_needed(int(row["size_bytes"]), int(row["chunk_size"]))
     received = _map_list(str(row["received_map"] or ""), total)
+    chunk_size = int(row["chunk_size"])
+    size_bytes = int(row["size_bytes"])
     return {
         "upload_id": row["id"],
         "name": row["name"],
-        "size_bytes": int(row["size_bytes"]),
+        "size_bytes": size_bytes,
         "device": row["device"] or "",
         "client_key": row["client_key"] or "",
-        "chunk_size": int(row["chunk_size"]),
+        "chunk_size": chunk_size,
         "chunks_total": total,
         "received": received,
         "received_bytes": int(row["received_bytes"] or 0),
+        "contiguous_offset": contiguous_offset(received, chunk_size, size_bytes),
         "status": row["status"],
         "sha256": row["sha256"] or "",
         "created_at": row["created_at"],
@@ -606,6 +644,151 @@ def put_chunk(
     return {"ok": True, "upload_id": upload_id, "index": index, "received_bytes": received_bytes}
 
 
+def pwrite_at(path: Path, offset: int, data: bytes) -> int:
+    """Ghi một khúc vào file partial. Không giữ cả body 1.5GB trong RAM."""
+    if offset < 0:
+        raise ValueError("offset không hợp lệ")
+    if not data:
+        return 0
+    fd = os.open(str(path), os.O_RDWR)
+    try:
+        view = memoryview(data)
+        written = 0
+        while written < len(view):
+            n = os.pwrite(fd, view[written:], offset + written)
+            if n <= 0:
+                raise OSError("pwrite không ghi được")
+            written += n
+        return written
+    finally:
+        os.close(fd)
+
+
+def open_tail(db_path: Path, upload_id: str, offset: int) -> Path:
+    """Mở file partial khi offset đúng byte liền mạch. Lệch thì TailOffsetError (HTTP 409)."""
+    ensure_upload_tables(db_path)
+
+    def _load():
+        with uploads_connect(db_path) as conn:
+            return conn.execute("SELECT * FROM upload_sessions WHERE id = ?", (upload_id,)).fetchone()
+
+    row = _retry_locked(_load, label="open_tail")
+    if row is None or row["status"] != "receiving":
+        raise LookupError("Không thấy phiên tải hoặc đã xong.")
+    chunk_size = int(row["chunk_size"])
+    size_bytes = int(row["size_bytes"])
+    total = _chunks_needed(size_bytes, chunk_size)
+    received = _map_list(str(row["received_map"] or ""), total)
+    expected = contiguous_offset(received, chunk_size, size_bytes)
+    if int(offset) != expected:
+        raise TailOffsetError(f"offset {offset} không khớp byte liền {expected}")
+    path = Path(str(row["path"]))
+    if not path.exists():
+        raise LookupError("File partial đã mất — khởi tạo lại phiên tải.")
+    return path
+
+
+def note_tail(db_path: Path, upload_id: str, offset: int, written: int) -> dict[str, object]:
+    """Đánh dấu các mảnh nằm trọn trong đoạn vừa ghi. Không ghi byte — caller đã pwrite."""
+    ensure_upload_tables(db_path)
+
+    def _load():
+        with uploads_connect(db_path) as conn:
+            return conn.execute("SELECT * FROM upload_sessions WHERE id = ?", (upload_id,)).fetchone()
+
+    row = _retry_locked(_load, label="note_tail_load")
+    if row is None or row["status"] != "receiving":
+        raise LookupError("Không thấy phiên tải hoặc đã xong.")
+    chunk_size = int(row["chunk_size"])
+    size_bytes = int(row["size_bytes"])
+    total = _chunks_needed(size_bytes, chunk_size)
+    covered = _chunks_covered(int(offset), int(written), chunk_size, size_bytes)
+    now = utcnow()
+
+    def _update() -> None:
+        with uploads_connect(db_path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                fresh = conn.execute(
+                    "SELECT received_map, status FROM upload_sessions WHERE id = ?",
+                    (upload_id,),
+                ).fetchone()
+                if fresh is None or fresh["status"] != "receiving":
+                    raise LookupError("Không thấy phiên tải hoặc đã xong.")
+                merged = _map_list(str(fresh["received_map"] or ""), total)
+                for index in covered:
+                    if index not in merged:
+                        merged.append(index)
+                bytes_now = 0
+                for index in merged:
+                    bytes_now += chunk_size if index < total - 1 else size_bytes - index * chunk_size
+                conn.execute(
+                    """
+                    UPDATE upload_sessions
+                    SET received_map = ?, received_bytes = ?, updated_at = ?
+                    WHERE id = ? AND status = 'receiving'
+                    """,
+                    (_map_dump(merged), bytes_now, now, upload_id),
+                )
+                conn.execute("COMMIT")
+            except Exception:
+                try:
+                    conn.execute("ROLLBACK")
+                except sqlite3.Error:
+                    pass
+                raise
+
+    _retry_locked(_update, label="note_tail_update")
+    body = get_upload(db_path, upload_id)
+    if body is None:
+        raise LookupError("Không thấy phiên tải hoặc đã xong.")
+    return body
+
+
+_VISION_MAX_BYTES = 2 * 1024 * 1024
+
+
+def vision_partial_path(partial: Path, upload_id: str) -> Path:
+    return partial.with_name(f"{upload_id}.vision.json")
+
+
+def relocate_vision_sidecar(sidecar: Path, final: Path) -> None:
+    """Đưa chữ iPhone đọc sang cạnh file video đã vào hàng: {id}.vision.json."""
+    if not sidecar.is_file():
+        return
+    os.replace(sidecar, final.with_suffix(".vision.json"))
+
+
+def save_vision_payload(db_path: Path, upload_id: str, payload: bytes) -> dict[str, object]:
+    """Lưu JSON Vision cạnh file partial. Không thay lần quét 30/60 của máy chủ."""
+    ensure_upload_tables(db_path)
+    if len(payload) > _VISION_MAX_BYTES:
+        raise ValueError("Sidecar Vision quá 2MB")
+    try:
+        data = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Sidecar không phải JSON") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("frames"), list):
+        raise ValueError("Sidecar thiếu danh sách frames")
+    frames = data["frames"]
+    if len(frames) > 120:
+        raise ValueError("Sidecar quá nhiều khung")
+
+    def _load():
+        with uploads_connect(db_path) as conn:
+            return conn.execute("SELECT * FROM upload_sessions WHERE id = ?", (upload_id,)).fetchone()
+
+    row = _retry_locked(_load, label="save_vision")
+    if row is None or row["status"] != "receiving":
+        raise LookupError("Không thấy phiên tải hoặc đã xong.")
+    path = vision_partial_path(Path(str(row["path"])), upload_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(payload)
+    os.replace(tmp, path)
+    return {"ok": True, "bytes": len(payload), "frames": len(frames)}
+
+
 def complete_upload(
     db_path: Path,
     video_dir: Path,
@@ -652,6 +835,7 @@ def complete_upload(
         validate_media_file(path, original_name=str(row["name"]))
     except ValueError:
         path.unlink(missing_ok=True)
+        vision_partial_path(path, upload_id).unlink(missing_ok=True)
 
         def _delete() -> None:
             with uploads_connect(db_path) as conn:
@@ -684,8 +868,11 @@ def complete_upload(
         sha256=digest,
         device=str(row["device"] or ""),
     )
+    partial = Path(str(row["path"]))
+    sidecar = vision_partial_path(partial, upload_id)
     if created.get("duplicate"):
         path.unlink(missing_ok=True)
+        sidecar.unlink(missing_ok=True)
 
         def _mark_dup() -> None:
             with uploads_connect(db_path) as conn:
@@ -724,6 +911,10 @@ def complete_upload(
         abort_upload(video_db, video_id, bool(created.get("reopened")))
         final.unlink(missing_ok=True)
         raise
+    try:
+        relocate_vision_sidecar(sidecar, final)
+    except OSError as exc:
+        print(f"vision sidecar: {exc}", flush=True)
 
     def _mark_done() -> None:
         with uploads_connect(db_path) as conn:

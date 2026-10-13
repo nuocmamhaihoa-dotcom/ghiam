@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from fastapi import APIRouter, File, Form, Header, HTTPException, Query, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
@@ -26,7 +26,9 @@ from control_plane.video_store import (
     can_accept,
     clean_device,
     commit_upload,
+    correct_result,
     count_results,
+    export_contact_rows,
     feeder_count,
     free_reserve_bytes,
     init_db,
@@ -37,6 +39,8 @@ from control_plane.video_store import (
     queued_bytes,
     reader_alive,
     rescue_stuck_uploads,
+    render_csv,
+    render_vcf,
     retry,
     search_results,
     should_pause_ocr,
@@ -47,13 +51,18 @@ from control_plane.video_upload_sessions import (
     DEFAULT_CHUNK_SIZE,
     abort_session,
     cleanup_stale_uploads,
+    TailOffsetError,
     complete_upload,
     ensure_upload_tables,
     get_upload,
     init_upload,
     list_receiving_uploads,
+    note_tail,
+    open_tail,
     put_chunk,
+    pwrite_at,
     receiving_count,
+    save_vision_payload,
     upload_slots,
 )
 from control_plane.video_validate import probe_duration_sec, validate_media_file
@@ -363,6 +372,76 @@ async def upload_chunk(
         raise _locked_http(exc) from exc
 
 
+@router.put("/v1/videos/uploads/{upload_id}/body")
+async def upload_body(
+    upload_id: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+    x_upload_offset: str | None = Header(default=None),
+) -> dict[str, object]:
+    """Một file phần đuôi. Body được ghi từng khúc, không đọc hết 1.5GB vào RAM.
+
+    iOS 16 không có uploadTask(withResumeData:). Client hỏi contiguous_offset
+    rồi gửi một uploadTask(fromFile:) với header X-Upload-Offset.
+    """
+    _auth(authorization)
+    if x_upload_offset is None or not str(x_upload_offset).strip():
+        raise HTTPException(status_code=400, detail="Thiếu X-Upload-Offset")
+    try:
+        offset = int(x_upload_offset)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="X-Upload-Offset không phải số") from exc
+    uploads_db = _uploads_db()
+    try:
+        path = await run_in_threadpool(open_tail, uploads_db, upload_id, offset)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TailOffsetError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    written = 0
+    try:
+        async for chunk in request.stream():
+            if not chunk:
+                continue
+            n = await run_in_threadpool(pwrite_at, path, offset + written, bytes(chunk))
+            written += int(n)
+    finally:
+        if written > 0:
+            try:
+                await run_in_threadpool(note_tail, uploads_db, upload_id, offset, written)
+            except (LookupError, ValueError, sqlite3.OperationalError) as exc:
+                print(f"note_tail: {exc}", flush=True)
+    body = await run_in_threadpool(get_upload, uploads_db, upload_id)
+    return body or {"ok": True, "written": written}
+
+
+_VISION_BODY_LIMIT = 2 * 1024 * 1024
+
+
+@router.post("/v1/videos/uploads/{upload_id}/vision")
+async def upload_vision(
+    upload_id: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, object]:
+    """JSON chữ Apple Vision đọc trên iPhone khi app đang mở. Không thay quét máy chủ."""
+    _auth(authorization)
+    data = await request.body()
+    if len(data) > _VISION_BODY_LIMIT:
+        raise HTTPException(status_code=413, detail="Sidecar Vision quá 2MB")
+    try:
+        return await run_in_threadpool(save_vision_payload, _uploads_db(), upload_id, data)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except sqlite3.OperationalError as exc:
+        raise _locked_http(exc) from exc
+
+
 @router.post("/v1/videos/uploads/{upload_id}/complete")
 async def finish_chunked_upload(
     upload_id: str,
@@ -421,6 +500,63 @@ def results(
     items = search_results(settings.video_db_path, q, limit, offset, view)
     total = count_results(settings.video_db_path, q, view)
     return {"count": len(items), "total": total, "offset": offset, "view": view, "items": items}
+
+
+class ResultCorrection(BaseModel):
+    phone: str = ""
+    name: str = ""
+    username: str = ""
+
+
+@router.patch("/v1/results/{result_id}")
+def patch_result(
+    result_id: int,
+    body: ResultCorrection,
+    authorization: str | None = Header(default=None),
+) -> dict[str, object]:
+    """Sửa số, tên, @. Không có khung cắt để xem lại — người dùng gõ những gì đã thấy."""
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    try:
+        return correct_result(
+            settings.video_db_path,
+            result_id,
+            body.phone,
+            body.name,
+            body.username,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except sqlite3.OperationalError as exc:
+        raise _locked_http(exc) from exc
+
+
+@router.get("/v1/results/export.csv")
+def export_results_csv(authorization: str | None = Header(default=None)) -> Response:
+    """Một số một dòng. Không đổi % đủ."""
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    text = render_csv(export_contact_rows(settings.video_db_path))
+    return Response(
+        content=text,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="danh-ba.csv"'},
+    )
+
+
+@router.get("/v1/results/export.vcf")
+def export_results_vcf(authorization: str | None = Header(default=None)) -> Response:
+    """vCard: mỗi số điện thoại một thẻ. Không đổi % đủ."""
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    text = render_vcf(export_contact_rows(settings.video_db_path))
+    return Response(
+        content=text,
+        media_type="text/vcard; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="danh-ba.vcf"'},
+    )
 
 
 @router.post("/v1/backup/ticket")

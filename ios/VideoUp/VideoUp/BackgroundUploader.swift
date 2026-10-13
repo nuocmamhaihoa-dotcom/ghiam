@@ -1,8 +1,15 @@
 import Foundation
 
-/// URLSession nền: đúng một mảnh tại một thời điểm, từ file trên máy.
-/// iOS gửi tiếp khi app đã ra nền hoặc bị tắt, rồi đánh thức app để xếp mảnh kế.
-/// Không xếp hàng chục task nhỏ — hệ thống sẽ hoãn chúng hàng chục giây.
+/// URLSession nền trên iOS 16: đúng một `uploadTask(fromFile:)` cho phần byte còn lại.
+/// iOS 16 không có `uploadTask(withResumeData:)` của iOS 17. Task đứt thì app (khi được
+/// đánh thức) hỏi byte liền mạch rồi gửi một file đuôi mới. Không xếp nhiều mảnh nền.
+struct BackgroundLabel {
+    enum Kind { case chunk, body }
+    var kind: Kind
+    var jobId: String
+    var value: Int64
+}
+
 final class BackgroundUploader: NSObject, URLSessionTaskDelegate, URLSessionDataDelegate {
     static let shared = BackgroundUploader()
     static let sessionId = "local.fbpoller.videoup.bg"
@@ -46,25 +53,49 @@ final class BackgroundUploader: NSObject, URLSessionTaskDelegate, URLSessionData
         _ = session
     }
 
-    /// Nhãn gắn vào task để lần sau app bị đánh thức vẫn biết mảnh nào.
-    static func label(jobId: String, index: Int) -> String {
-        "\(jobId)#\(index)"
+    static func chunkLabel(jobId: String, index: Int) -> String {
+        "chunk|\(jobId)|\(index)"
     }
 
-    static func parseLabel(_ label: String?) -> (jobId: String, index: Int)? {
-        guard let label, let hash = label.lastIndex(of: "#") else { return nil }
-        let jobId = String(label[..<hash])
-        guard !jobId.isEmpty, let index = Int(label[label.index(after: hash)...]) else { return nil }
-        return (jobId, index)
+    static func bodyLabel(jobId: String, offset: Int64) -> String {
+        "body|\(jobId)|\(offset)"
     }
 
-    /// Bắt đầu một mảnh. File phải còn đến khi delegate báo xong.
-    func startChunk(fileURL: URL, to url: URL, authHeader: String?, label: String) {
+    /// Nhãn sống sót khi iOS mở lại app. taskIdentifier thì không.
+    static func parseLabel(_ label: String?) -> BackgroundLabel? {
+        guard let label else { return nil }
+        let parts = label.split(separator: "|", omittingEmptySubsequences: false)
+        guard parts.count == 3 else { return nil }
+        let kindText = String(parts[0])
+        let jobId = String(parts[1])
+        guard !jobId.isEmpty, let value = Int64(parts[2]) else { return nil }
+        let kind: BackgroundLabel.Kind
+        if kindText == "chunk" {
+            kind = .chunk
+        } else if kindText == "body" {
+            kind = .body
+        } else {
+            return nil
+        }
+        return BackgroundLabel(kind: kind, jobId: jobId, value: value)
+    }
+
+    /// Một file trên đĩa. `extraHeaders` mang X-Upload-Offset cho phần đuôi.
+    func startChunk(
+        fileURL: URL,
+        to url: URL,
+        authHeader: String?,
+        label: String,
+        extraHeaders: [String: String] = [:]
+    ) {
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         if let authHeader {
             request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        }
+        for (key, value) in extraHeaders {
+            request.setValue(value, forHTTPHeaderField: key)
         }
         let task = session.uploadTask(with: request, fromFile: fileURL)
         task.taskDescription = label

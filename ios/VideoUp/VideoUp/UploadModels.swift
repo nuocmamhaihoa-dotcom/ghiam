@@ -53,6 +53,7 @@ struct UploadSessionDTO: Codable {
     var chunks_total: Int
     var received: [Int]
     var received_bytes: Int64?
+    var contiguous_offset: Int64?
     var status: String
     var resumed: Bool?
 }

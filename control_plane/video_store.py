@@ -19,16 +19,22 @@ from typing import Iterator
 
 from control_plane.screen_table import (
     COVER_REASON,
+    HANDLE_CONF_MIN,
+    REASON_LOW_CONF,
     Review,
     Table,
     _compact,
     _handles_are_same,
     _prefer_handle,
+    clean_name,
+    clean_username,
     combine_similar_names,
     conflicts_with_other_person,
     handle_matches_name,
+    is_profile_handle,
     join_similar_leftovers,
     joined_name,
+    normalize_phone,
     pair_close_names,
     pair_names_alike_90,
     phone_distance,
@@ -384,11 +390,18 @@ def _ensure_video_columns(conn: sqlite3.Connection) -> None:
                 raise
 
 
-def classify_result(phone: str, name: str, username: str, reason: str = "") -> tuple[int, str]:
+def classify_result(
+    phone: str,
+    name: str,
+    username: str,
+    reason: str = "",
+    *,
+    handle_confidence: float = -1.0,
+) -> tuple[int, str]:
     """Xếp một hàng theo đúng 3 cột. Không đoán thêm.
 
     Đủ: số, tên và @ đều có, và không phải một số mở nhiều hồ sơ.
-    Cần xem: có số trong danh bạ nhưng thiếu tên hoặc @.
+    Cần xem: có số trong danh bạ nhưng thiếu tên hoặc @, hoặc @ điểm thấp.
     Lỗi quét: không có số, hoặc một số gắn với nhiều hồ sơ.
     """
     phone = (phone or "").strip()
@@ -398,6 +411,8 @@ def classify_result(phone: str, name: str, username: str, reason: str = "") -> t
     if reason == REASON_MULTI:
         return BUCKET_SCAN, REASON_MULTI
     if phone and name and username:
+        if reason == REASON_LOW_CONF or 0 <= handle_confidence < HANDLE_CONF_MIN:
+            return BUCKET_REVIEW, REASON_LOW_CONF
         return BUCKET_OK, ""
     if not phone and reason == COVER_REASON:
         return BUCKET_REVIEW, COVER_REASON
@@ -422,9 +437,10 @@ def _reclassify_results(conn: sqlite3.Connection) -> None:
         SET bucket = ?, reason = ''
         WHERE phone != '' AND name != '' AND username != ''
           AND reason != ?
+          AND reason != ?
           AND (bucket != ? OR reason != '')
         """,
-        (BUCKET_OK, REASON_MULTI, BUCKET_OK),
+        (BUCKET_OK, REASON_MULTI, REASON_LOW_CONF, BUCKET_OK),
     )
     conn.execute(
         """
@@ -1215,7 +1231,13 @@ def finish(db_path: Path, video_id: int, table: Table) -> None:
 
     def _write(conn: sqlite3.Connection) -> None:
         for row in table.rows:
-            bucket, reason = classify_result(row.phone, row.name, row.username, "")
+            bucket, reason = classify_result(
+                row.phone,
+                row.name,
+                row.username,
+                "",
+                handle_confidence=row.handle_confidence,
+            )
             _put(conn, row.phone, row.name, row.username, bucket, reason, video_id, upgrade=True)
         for item in table.unopened:
             # Có số trong danh bạ, chưa có @ — cần xem, không phải lỗi "chưa mở".
@@ -2019,6 +2041,113 @@ def _video_issue(item: dict[str, object]) -> str:
     if saved == total:
         return f"Tất cả đều tốt — {saved} đủ"
     return " · ".join(parts)
+
+
+def correct_result(
+    db_path: Path,
+    result_id: int,
+    phone: str,
+    name: str,
+    username: str,
+) -> dict[str, object]:
+    """Sửa một dòng đã lưu. Người gõ những gì đã nhìn thấy — không đoán chữ dưới chấm.
+
+    Hàng đủ số + tên + @ sau khi sửa tính là Đủ và bỏ lý do điểm thấp.
+    Số đã thuộc dòng khác thì từ chối.
+    """
+    shown = clean_name(name)
+    typed = "".join(str(username or "").split())
+    if typed and not typed.startswith("@"):
+        typed = "@" + typed
+    handle = clean_username(typed) if typed else ""
+    if typed and not is_profile_handle(handle):
+        raise ValueError("@ không đúng dạng hồ sơ. Không đoán chữ dưới chấm.")
+    number = normalize_phone(phone)
+    if not number:
+        raise ValueError("Cần số điện thoại đã nhìn thấy. Không đoán chữ dưới chấm.")
+    bucket, reason = classify_result(number, shown, handle, "")
+
+    def _update(conn: sqlite3.Connection) -> None:
+        row = conn.execute("SELECT id FROM results WHERE id = ?", (int(result_id),)).fetchone()
+        if row is None:
+            raise LookupError("Không thấy dòng kết quả.")
+        other = conn.execute(
+            "SELECT id FROM results WHERE phone = ? AND id != ?",
+            (number, int(result_id)),
+        ).fetchone()
+        if other is not None:
+            raise ValueError("Số này đã thuộc một dòng khác.")
+        conn.execute(
+            """
+            UPDATE results
+            SET phone = ?, name = ?, username = ?, bucket = ?, reason = ?
+            WHERE id = ?
+            """,
+            (number, shown, handle, bucket, reason, int(result_id)),
+        )
+
+    try:
+        _with_immediate(db_path, _update)
+    except sqlite3.IntegrityError as exc:
+        raise ValueError("Số này đã thuộc một dòng khác.") from exc
+    with connect(db_path) as conn:
+        saved = conn.execute(_RESULT_SELECT + " WHERE r.id = ?", (int(result_id),)).fetchone()
+    if saved is None:
+        raise LookupError("Không thấy dòng kết quả.")
+    return _public_result(saved)
+
+
+def export_contact_rows(db_path: Path) -> list[tuple[str, str, str]]:
+    """Một số điện thoại một dòng. Không đổi phần trăm đọc."""
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT phone, name, username
+            FROM results
+            WHERE phone != ''
+            ORDER BY phone
+            """
+        ).fetchall()
+    return [(str(row["phone"]), str(row["name"] or ""), str(row["username"] or "")) for row in rows]
+
+
+def _vcard_text(value: str) -> str:
+    return (
+        str(value or "")
+        .replace("\\", "\\\\")
+        .replace("\n", "\\n")
+        .replace("\r", "")
+        .replace(",", "\\,")
+        .replace(";", "\\;")
+    )
+
+
+def render_vcf(rows: list[tuple[str, str, str]]) -> str:
+    """vCard 3.0. NOTE giữ @. Mỗi số một thẻ."""
+    blocks: list[str] = []
+    for phone, name, username in rows:
+        if not phone:
+            continue
+        lines = [
+            "BEGIN:VCARD",
+            "VERSION:3.0",
+            f"FN:{_vcard_text(name or phone)}",
+            f"TEL;TYPE=CELL:{phone}",
+        ]
+        if username:
+            lines.append(f"NOTE:{_vcard_text(username)}")
+        lines.append("END:VCARD")
+        blocks.append("\r\n".join(lines))
+    if not blocks:
+        return ""
+    return "\r\n".join(blocks) + "\r\n"
+
+
+def render_csv(rows: list[tuple[str, str, str]]) -> str:
+    lines = [_csv_line(["phone", "name", "username"])]
+    for phone, name, username in rows:
+        lines.append(_csv_line([phone, name, username]))
+    return "".join(lines)
 
 
 def _public_result(row: sqlite3.Row) -> dict[str, object]:

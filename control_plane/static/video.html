@@ -304,6 +304,11 @@
       <button class="ghost" type="button" data-view="incomplete" id="viewIncomplete">Chưa đủ</button>
       <button class="ghost" type="button" data-view="all" id="viewAll">Tất cả</button>
     </div>
+    <div class="row" style="margin-bottom:0.45rem">
+      <button class="ghost" type="button" id="exportCsv">Xuất CSV</button>
+      <button class="ghost" type="button" id="exportVcf">Xuất vCard</button>
+    </div>
+    <p class="note">Không đoán chữ dưới chấm. Khung cắt không còn sau khi đọc. Mỗi số chỉ xuất một lần.</p>
     <input id="query" type="search" placeholder="Gõ đầu số, @username hoặc tên video (VD: IMG_0018)" />
     <p id="resultsNote" class="note"></p>
     <div id="results" class="table-wrap"></div>
@@ -927,7 +932,7 @@
   }
 
   function renderResultTable(items) {
-    var html = "<table class='results-table'><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Loại</th><th>Lỗi khi quét</th><th>Thời gian quét</th></tr>";
+    var html = "<table class='results-table'><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Loại</th><th>Lỗi khi quét</th><th>Thời gian quét</th><th></th></tr>";
     items.forEach(function (item) {
       var rowKind = item.bucket === "Đủ" ? "row-ok" : (item.bucket === "Cần xem" ? "row-review" : (item.bucket === "Lỗi quét" ? "row-scan" : ""));
       html += "<tr class='" + rowKind + "'><td data-label='Số điện thoại'>" + escapeHtml(item.phone) +
@@ -935,9 +940,68 @@
         "</td><td data-label='Username'>" + escapeHtml(item.username) +
         "</td><td data-label='Loại'>" + escapeHtml(item.bucket) +
         "</td><td data-label='Lỗi khi quét'>" + escapeHtml(item.reason) +
-        "</td><td data-label='Thời gian quét'>" + escapeHtml(formatTime(item.scanned_at)) + "</td></tr>";
+        "</td><td data-label='Thời gian quét'>" + escapeHtml(formatTime(item.scanned_at)) +
+        "</td><td data-label='Sửa'><button class='ghost mini' type='button' data-edit='" +
+        escapeHtml(item.id) + "'>Sửa</button></td></tr>";
     });
     return html + "</table>";
+  }
+
+  async function editResult(id) {
+    var item = null;
+    for (var i = 0; i < loadedResults.length; i++) {
+      if (String(loadedResults[i].id) === String(id)) item = loadedResults[i];
+    }
+    if (!item) return;
+    var hint = "Không đoán chữ dưới chấm. Khung cắt không còn sau khi đọc.";
+    var phone = window.prompt(hint + "\nSố điện thoại đã nhìn thấy:", item.phone || "");
+    if (phone === null) return;
+    var name = window.prompt(hint + "\nTên đã nhìn thấy:", item.name || "");
+    if (name === null) return;
+    var username = window.prompt(hint + "\n@ đã nhìn thấy:", item.username || "");
+    if (username === null) return;
+    var response = await api("/v1/results/" + encodeURIComponent(id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: phone, name: name, username: username })
+    });
+    var boxNote = document.getElementById("resultsNote");
+    if (!response.ok) {
+      var detail = "Không sửa được dòng này.";
+      try {
+        var err = await response.json();
+        if (err && err.detail) detail = String(err.detail);
+      } catch (error) {}
+      boxNote.textContent = detail;
+      boxNote.className = "note warn";
+      return;
+    }
+    boxNote.textContent = "Đã lưu dòng sửa. Hàng đủ số + tên + @ tính là Đủ.";
+    boxNote.className = "note ok";
+    loadResults();
+  }
+
+  async function downloadExport(path, filename) {
+    var note = document.getElementById("resultsNote");
+    note.textContent = "Đang xuất danh bạ...";
+    note.className = "note";
+    var response = await api(path);
+    if (!response.ok) {
+      note.textContent = "Chưa xuất được. Thử lại sau vài giây.";
+      note.className = "note warn";
+      return;
+    }
+    var blob = await response.blob();
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+    note.textContent = "Đã xuất. Mỗi số điện thoại một dòng, không đổi phần trăm đọc.";
+    note.className = "note ok";
   }
 
   async function loadResults(options) {
@@ -1609,6 +1673,23 @@
       resultsView = button.getAttribute("data-view") || "complete";
       loadResults();
     });
+  });
+  document.getElementById("exportCsv").addEventListener("click", function () {
+    downloadExport("/v1/results/export.csv", "danh-ba.csv");
+  });
+  document.getElementById("exportVcf").addEventListener("click", function () {
+    downloadExport("/v1/results/export.vcf", "danh-ba.vcf");
+  });
+  document.getElementById("results").addEventListener("click", function (event) {
+    var target = event.target;
+    if (!target || !target.getAttribute) return;
+    var id = target.getAttribute("data-edit");
+    if (!id && target.closest) {
+      var button = target.closest("[data-edit]");
+      id = button ? button.getAttribute("data-edit") : "";
+    }
+    if (!id) return;
+    editResult(id);
   });
   document.getElementById("backup").addEventListener("click", async function () {
     var note = document.getElementById("backupNote");

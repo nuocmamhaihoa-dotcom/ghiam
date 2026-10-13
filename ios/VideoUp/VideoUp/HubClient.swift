@@ -86,6 +86,20 @@ struct HubClient {
         try url("/v1/videos/uploads/\(uploadId)/chunks/\(index)")
     }
 
+    func bodyURL(uploadId: String) throws -> URL {
+        try url("/v1/videos/uploads/\(uploadId)/body")
+    }
+
+    func postVision(uploadId: String, body: Data) async throws {
+        var request = URLRequest(url: try url("/v1/videos/uploads/\(uploadId)/vision"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        authorized(&request)
+        request.httpBody = body
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try throwIfNeeded(response, data: data)
+    }
+
     func authHeader() -> String? {
         let token = settings.token.trimmingCharacters(in: .whitespacesAndNewlines)
         return token.isEmpty ? nil : "Bearer \(token)"

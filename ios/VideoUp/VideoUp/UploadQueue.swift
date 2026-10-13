@@ -20,12 +20,14 @@ final class UploadQueue: ObservableObject {
     private let inbox: URL
     /// Một video tới 100% rồi mới sang video kế — video xong được OCR ngay.
     private let parallelUploads = 1
-    /// Số mảnh gửi cùng lúc khi app đang mở. Ra nền thì chỉ một mảnh URLSession.
+    /// Số mảnh gửi cùng lúc khi app đang mở. Ra nền thì một file phần đuôi.
     private let parallelChunks = 8
     /// App đang ở trước màn hình. Nền thì không mở thêm phiên foreground.
     private var appIsActive = true
     /// Mảnh đang được một đường gửi giữ, tránh foreground và nền cùng gửi một index.
     private var claimedChunks: [String: Set<Int>] = [:]
+    /// Mỗi video chỉ đọc Vision một lần khi app đang mở.
+    private var visionStarted: Set<String> = []
 
     private init() {
         let defaults = UserDefaults.standard
@@ -42,6 +44,7 @@ final class UploadQueue: ObservableObject {
         try? FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: chunkTemp, withIntermediateDirectories: true)
         appIsActive = UIApplication.shared.applicationState == .active
+        ForegroundFlag.shared.setActive(appIsActive)
         if let data = defaults.data(forKey: jobsKey),
            let decoded = try? JSONDecoder().decode([QueueJob].self, from: data) {
             jobs = decoded
@@ -124,10 +127,14 @@ final class UploadQueue: ObservableObject {
         saveJobs()
     }
 
-    /// RootView báo cảnh app. Rời màn hình thì giao một mảnh cho URLSession nền.
+    /// RootView báo cảnh app. Rời màn hình thì gửi một file phần byte còn lại.
     func noteScene(active: Bool) {
         appIsActive = active
+        ForegroundFlag.shared.setActive(active)
         if active {
+            if !BackgroundUploader.shared.isBusy {
+                claimedChunks.removeAll()
+            }
             Task { await pump() }
             return
         }
@@ -145,38 +152,93 @@ final class UploadQueue: ObservableObject {
         }
     }
 
-    /// Delegate nền gọi trên main: ghi mảnh đã xong, rồi xếp đúng một mảnh kế.
+    /// Delegate nền gọi trên main. File đuôi xong thì xác nhận; đứt thì hỏi byte đã nhận.
     func noteBackgroundChunk(label: String?, error: Error?) {
         guard let parsed = BackgroundUploader.parseLabel(label) else { return }
         guard let index = jobs.firstIndex(where: { $0.id == parsed.jobId }) else { return }
-        let retryKey = "\(parsed.jobId)#\(parsed.index)"
-        unclaim(parsed.jobId, parsed.index)
-        let part = chunkTemp.appendingPathComponent("\(parsed.jobId)-\(parsed.index).part")
+        if parsed.kind == .body {
+            noteBodyFinished(jobIndex: index, error: error)
+            return
+        }
+        let chunkIndex = Int(parsed.value)
+        unclaim(parsed.jobId, chunkIndex)
+        let part = chunkTemp.appendingPathComponent("\(parsed.jobId)-\(chunkIndex).part")
         try? FileManager.default.removeItem(at: part)
         if let error {
-            let tries = (backgroundRetries[retryKey] ?? 0) + 1
-            backgroundRetries[retryKey] = tries
             jobs[index].status = "uploading"
             jobs[index].detail = "Mất kết nối, giữ trong hàng — \(error.localizedDescription)"
             jobs[index].updatedAt = Date()
             saveJobs()
             banner = jobs[index].detail
-            if !appIsActive && tries <= 3 {
-                scheduleNextBackgroundChunk(jobIndex: index)
+            if !appIsActive {
+                startTail(jobIndex: index)
             }
             return
         }
-        backgroundRetries[retryKey] = 0
-        if !jobs[index].received.contains(parsed.index) {
-            jobs[index].received.append(parsed.index)
+        if !jobs[index].received.contains(chunkIndex) {
+            jobs[index].received.append(chunkIndex)
         }
-        let sent = Set(jobs[index].received).count
         jobs[index].status = "uploading"
-        jobs[index].detail = "Đã gửi \(sent)/\(jobs[index].chunksTotal) mảnh (nền)"
         jobs[index].updatedAt = Date()
         saveJobs()
         if !appIsActive {
-            scheduleNextBackgroundChunk(jobIndex: index)
+            startTail(jobIndex: index)
+        }
+    }
+
+    private func noteBodyFinished(jobIndex: Int, error: Error?) {
+        guard jobs.indices.contains(jobIndex) else { return }
+        let jobId = jobs[jobIndex].id
+        claimedChunks[jobId] = []
+        let tail = chunkTemp.appendingPathComponent("\(jobId)-tail.part")
+        if FileManager.default.fileExists(atPath: tail.path) {
+            try? FileManager.default.removeItem(at: tail)
+        }
+        if let error {
+            let tries = (backgroundRetries[jobId] ?? 0) + 1
+            backgroundRetries[jobId] = tries
+            jobs[jobIndex].status = "uploading"
+            jobs[jobIndex].detail = "Mất kết nối, giữ trong hàng — \(error.localizedDescription)"
+            jobs[jobIndex].updatedAt = Date()
+            saveJobs()
+            banner = jobs[jobIndex].detail
+            if !appIsActive && tries <= 2 {
+                Task { await self.refreshThenTail(jobIndex: jobIndex) }
+            }
+            return
+        }
+        backgroundRetries[jobId] = 0
+        if jobs[jobIndex].chunksTotal > 0 {
+            jobs[jobIndex].received = Array(0..<jobs[jobIndex].chunksTotal)
+        }
+        jobs[jobIndex].status = "uploading"
+        jobs[jobIndex].detail = "Đã gửi hết file nền"
+        jobs[jobIndex].updatedAt = Date()
+        saveJobs()
+        Task { await self.completeIfReady(jobIndex: jobIndex) }
+    }
+
+    private func refreshThenTail(jobIndex: Int) async {
+        guard jobs.indices.contains(jobIndex), let uploadId = jobs[jobIndex].uploadId else { return }
+        let client = HubClient(settings: settings)
+        do {
+            let session = try await client.status(uploadId: uploadId)
+            jobs[jobIndex].received = session.received
+            if session.chunks_total > 0 {
+                jobs[jobIndex].chunksTotal = session.chunks_total
+            }
+            if session.chunk_size > 0 {
+                jobs[jobIndex].chunkSize = session.chunk_size
+            }
+            jobs[jobIndex].updatedAt = Date()
+            saveJobs()
+        } catch {
+            jobs[jobIndex].detail = "Mất kết nối, giữ trong hàng — chưa hỏi được byte đã nhận"
+            jobs[jobIndex].updatedAt = Date()
+            saveJobs()
+        }
+        if !appIsActive {
+            startTail(jobIndex: jobIndex)
         }
     }
 
@@ -222,7 +284,7 @@ final class UploadQueue: ObservableObject {
             }
         }
 
-        // Ra nền: một uploadTask từ file, iOS gửi tiếp khi app không còn mở.
+        // Ra nền: một uploadTask(fromFile:) phần byte còn lại. iOS 16 không resume theo byte.
         if !appIsActive {
             await handoffOneChunk()
             return
@@ -282,29 +344,35 @@ final class UploadQueue: ObservableObject {
             guard job.status == "registered" || job.status == "uploading" else { return false }
             return Set(job.received).count < job.chunksTotal
         }) else { return }
-        scheduleNextBackgroundChunk(jobIndex: jobIndex)
+        startTail(jobIndex: jobIndex)
     }
 
-    private func scheduleNextBackgroundChunk(jobIndex: Int) {
+    /// Một file phần còn lại. offset 0 dùng file gốc; offset > 0 copy đuôi từng 1MB.
+    private func startTail(jobIndex: Int) {
         guard jobs.indices.contains(jobIndex) else { return }
         guard !BackgroundUploader.shared.isBusy else { return }
         var job = jobs[jobIndex]
-        guard let uploadId = job.uploadId else { return }
-        let done = Set(job.received)
-        if done.count >= job.chunksTotal {
+        guard let uploadId = job.uploadId, job.chunksTotal > 0 else { return }
+        let offset = contiguousOffset(job)
+        if offset >= job.sizeBytes {
             Task { await self.completeIfReady(jobIndex: jobIndex) }
             return
         }
-        // Mảnh foreground đang giữ vẫn được xếp nền: PUT cùng index chỉ ghi đè đúng byte đó.
-        let index = (0..<job.chunksTotal).first { !done.contains($0) && claim(job.id, $0) }
-            ?? (0..<job.chunksTotal).first { !done.contains($0) }
-        guard let index else { return }
+        let done = Set(job.received)
+        for index in 0..<job.chunksTotal where !done.contains(index) {
+            _ = claim(job.id, index)
+        }
         let client = HubClient(settings: settings)
         do {
-            let file = try writeChunkFile(job: job, index: index)
-            let url = try client.chunkURL(uploadId: uploadId, index: index)
+            let file: URL
+            if offset == 0 {
+                file = URL(fileURLWithPath: job.localPath)
+            } else {
+                file = try writeTailFile(job: job, offset: offset)
+            }
+            let url = try client.bodyURL(uploadId: uploadId)
             job.status = "uploading"
-            job.detail = "Đang gửi nền mảnh \(index + 1)/\(job.chunksTotal)"
+            job.detail = "Đang gửi phần còn lại từ byte \(offset) (một file nền, iOS 16)"
             job.updatedAt = Date()
             jobs[jobIndex] = job
             saveJobs()
@@ -312,10 +380,11 @@ final class UploadQueue: ObservableObject {
                 fileURL: file,
                 to: url,
                 authHeader: client.authHeader(),
-                label: BackgroundUploader.label(jobId: job.id, index: index)
+                label: BackgroundUploader.bodyLabel(jobId: job.id, offset: offset),
+                extraHeaders: ["X-Upload-Offset": String(offset)]
             )
         } catch {
-            unclaim(job.id, index)
+            claimedChunks[job.id] = []
             job.status = "uploading"
             job.detail = "Mất kết nối, giữ trong hàng — \(error.localizedDescription)"
             job.updatedAt = Date()
@@ -324,26 +393,39 @@ final class UploadQueue: ObservableObject {
         }
     }
 
-    private func writeChunkFile(job: QueueJob, index: Int) throws -> URL {
-        let start = UInt64(index) * UInt64(max(job.chunkSize, 1))
-        let end = min(job.sizeBytes, Int64(start) + Int64(job.chunkSize))
-        let length = Int(end - Int64(start))
-        guard length > 0 else { throw HubError.message("Mảnh \(index) rỗng") }
+    private func contiguousOffset(_ job: QueueJob) -> Int64 {
+        let done = Set(job.received)
+        let chunk = max(job.chunkSize, 1)
+        var index = 0
+        while index < job.chunksTotal && done.contains(index) {
+            index += 1
+        }
+        if index >= job.chunksTotal { return job.sizeBytes }
+        return Int64(index) * Int64(chunk)
+    }
+
+    /// Copy phần đuôi từng 1MB. Không đọc cả GB vào RAM.
+    private func writeTailFile(job: QueueJob, offset: Int64) throws -> URL {
         let source = URL(fileURLWithPath: job.localPath)
-        let dest = chunkTemp.appendingPathComponent("\(job.id)-\(index).part")
+        let dest = chunkTemp.appendingPathComponent("\(job.id)-tail.part")
         if FileManager.default.fileExists(atPath: dest.path) {
             try? FileManager.default.removeItem(at: dest)
         }
         FileManager.default.createFile(atPath: dest.path, contents: nil)
         let input = try FileHandle(forReadingFrom: source)
         defer { try? input.close() }
-        try input.seek(toOffset: start)
-        guard let data = try input.read(upToCount: length), data.count == length else {
-            throw HubError.message("Không đọc được mảnh \(index)")
-        }
         let output = try FileHandle(forWritingTo: dest)
         defer { try? output.close() }
-        try output.write(contentsOf: data)
+        try input.seek(toOffset: UInt64(max(0, offset)))
+        let buffer = 1024 * 1024
+        while true {
+            guard let data = try input.read(upToCount: buffer), !data.isEmpty else { break }
+            try output.write(contentsOf: data)
+        }
+        let size = try dest.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        if size <= 0 {
+            throw HubError.message("Phần đuôi rỗng")
+        }
         return dest
     }
 
@@ -428,6 +510,7 @@ final class UploadQueue: ObservableObject {
         jobs[jobIndex] = job
         saveJobs()
 
+        beginVisionIfNeeded(jobIndex: jobIndex)
         let fileURL = URL(fileURLWithPath: job.localPath)
         let done = Set(job.received)
         let pending = (0..<job.chunksTotal).filter { !done.contains($0) }
@@ -497,6 +580,17 @@ final class UploadQueue: ObservableObject {
             }
         }
 
+        guard Set(job.received).count >= job.chunksTotal else {
+            job.status = "uploading"
+            job.detail = BackgroundUploader.shared.isBusy
+                ? "Phần còn lại đang gửi một file nền"
+                : "Còn byte chưa gửi — sẽ gửi tiếp"
+            job.updatedAt = Date()
+            jobs[jobIndex] = job
+            saveJobs()
+            return
+        }
+
         let complete = try await client.complete(uploadId: uploadId)
         job.status = complete.duplicate == true ? "duplicate" : "done"
         if complete.duplicate == true {
@@ -509,5 +603,17 @@ final class UploadQueue: ObservableObject {
         job.updatedAt = Date()
         jobs[jobIndex] = job
         saveJobs()
+    }
+
+    private func beginVisionIfNeeded(jobIndex: Int) {
+        guard appIsActive, jobs.indices.contains(jobIndex) else { return }
+        let job = jobs[jobIndex]
+        guard let uploadId = job.uploadId, !visionStarted.contains(job.id) else { return }
+        visionStarted.insert(job.id)
+        let path = job.localPath
+        let client = HubClient(settings: settings)
+        Task {
+            await VisionSidecar.send(filePath: path, uploadId: uploadId, client: client)
+        }
     }
 }

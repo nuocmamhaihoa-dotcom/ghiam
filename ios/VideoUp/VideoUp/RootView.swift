@@ -23,7 +23,7 @@ struct RootView: View {
                 }
 
                 Section("Thêm video vào hàng chờ máy") {
-                    Text("Chọn tới ~50 video (800MB–1.5GB/file). App đang mở thì gửi nhiều mảnh cùng lúc. Rời app hoặc khóa máy, một mảnh vẫn đi tiếp (URLSession nền) rồi iOS đánh thức app để gửi mảnh sau. Safari không làm được việc này. Nhiều iPhone cùng lúc được.")
+                    Text("Chọn tới ~50 video (800MB–1.5GB/file). App đang mở thì gửi nhiều mảnh cùng lúc và đọc chữ trên máy (Apple Vision, tiếng Việt). Rời app hoặc khóa máy, iOS 16 gửi nốt phần byte còn lại trong một lần. Nếu lần đó đứt, app được đánh thức rồi gửi tiếp từ byte máy chủ đã nhận. Safari không làm được việc này.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     PhotosPicker(
@@ -84,11 +84,11 @@ struct RootView: View {
                     queue.enqueue(urls: urls)
                 }
             }
-            .onChange(of: pickerItems) { _, items in
+            .onChange(of: pickerItems) { items in
                 Task { await importPhotos(items) }
             }
             .onAppear { queue.noteScene(active: scenePhase == .active) }
-            .onChange(of: scenePhase) { _, phase in
+            .onChange(of: scenePhase) { phase in
                 queue.noteScene(active: phase == .active)
             }
         }

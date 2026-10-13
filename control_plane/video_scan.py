@@ -202,6 +202,9 @@ def scan_paths(
             save_layout(data_dir, merged)
             if on_progress is not None:
                 on_progress(f"Đã lưu bố cục máy «{merged.device}» ({merged.samples} mẫu)")
+        from control_plane.vision_sidecar import attach_vision
+
+        ordered = attach_vision(ordered, paths)
         table = build_table([obs for _, obs in ordered])
         # Hướng 2 và 3 chỉ chạy khi hướng 1 còn hồ sơ chưa ghép. Hàng đã đủ 3 ô không đổi.
         from control_plane.read_fallback import apply_read_fallbacks
@@ -1107,8 +1110,8 @@ def _refill_missing_fields(
     return merged
 
 
-# Cùng màn hình giữ yên trong 2 giây. Phần đầu trang (tên / @) phải lệch ≤ 2 bit,
-# nếu không thì đó là hồ sơ khác dù nền giống.
+# Cùng màn hình trong 2 giây khi cả vùng @ và cột chữ danh bạ không đổi.
+# Đồng hồ ở status bar không buộc đọc lại. Một dòng danh bạ hoặc @ đổi thì đọc.
 _DHASH_WINDOW_SEC = 2.0
 _DHASH_MAX_DISTANCE = 4
 _DHASH_HEADER_DISTANCE = 2
@@ -1130,25 +1133,42 @@ def _dhash_bits(gray: object) -> int:
 
 
 def _frame_dhash(path: str) -> tuple[int, int] | None:
-    """Hash toàn khung + hash vùng trên (tên/@). None nếu không mở được ảnh."""
+    """Hash vùng @ (9–22% cao) và cột chữ danh bạ. None nếu không mở được ảnh."""
     try:
         from PIL import Image
 
         with Image.open(path) as image:
             gray = image.convert("L")
-            full = _dhash_bits(gray)
-            header = gray.crop((0, 0, gray.width, max(1, int(gray.height * 0.42))))
-            head = _dhash_bits(header)
+            width, height = gray.size
+            at_top = int(0.09 * height)
+            at_box = gray.crop(
+                (
+                    int(0.04 * width),
+                    at_top,
+                    max(int(0.04 * width) + 1, int(0.86 * width)),
+                    max(at_top + 1, int(0.22 * height)),
+                )
+            )
+            col_top = int(0.12 * height)
+            column = gray.crop(
+                (
+                    int(0.18 * width),
+                    col_top,
+                    max(int(0.18 * width) + 1, int(0.72 * width)),
+                    max(col_top + 1, int(0.92 * height)),
+                )
+            )
+            return _dhash_bits(at_box), _dhash_bits(column)
     except OSError:
         return None
-    return full, head
 
 
 def _same_screen(left: object, right: object) -> bool:
     if isinstance(left, tuple) and isinstance(right, tuple) and len(left) == 2 and len(right) == 2:
-        full = (int(left[0]) ^ int(right[0])).bit_count() <= _DHASH_MAX_DISTANCE
-        head = (int(left[1]) ^ int(right[1])).bit_count() <= _DHASH_HEADER_DISTANCE
-        return full and head
+        # [0] là vùng @, [1] là cột danh bạ. Một trong hai đổi thì đọc lại.
+        at_zone = (int(left[0]) ^ int(right[0])).bit_count() <= _DHASH_HEADER_DISTANCE
+        column = (int(left[1]) ^ int(right[1])).bit_count() <= _DHASH_MAX_DISTANCE
+        return at_zone and column
     if isinstance(left, int) and isinstance(right, int):
         return (left ^ right).bit_count() <= _DHASH_MAX_DISTANCE
     return False

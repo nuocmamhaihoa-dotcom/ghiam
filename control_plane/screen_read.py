@@ -110,6 +110,8 @@ class _ProfileBits:
     handle_right: str = ""
     name_left: str = ""
     name_right: str = ""
+    # Điểm dòng @, thang 0–100. -1 là chưa đo — không hạ hàng Đủ.
+    confidence: float = -1.0
 
     def as_obs(self) -> FrameObs | None:
         if not (self.username or self.handle_left or self.handle_right):
@@ -123,6 +125,7 @@ class _ProfileBits:
             handle_right=self.handle_right,
             name_left=self.name_left,
             name_right=self.name_right,
+            handle_confidence=self.confidence,
         )
 
 
@@ -907,6 +910,14 @@ def _read_rows(
     return hits
 
 
+def _line_confidence(line: Line) -> float:
+    """Trung bình điểm các chữ trên dòng @. Không có điểm thì -1."""
+    scores = [float(word.conf) for word in line.words if float(word.conf) >= 0]
+    if not scores:
+        return -1.0
+    return sum(scores) / len(scores)
+
+
 def _read_profile(image: Image.Image, button: Box, *, aggressive: bool = False) -> _ProfileBits:
     """Hồ sơ: chỉ lấy tên lớn và dòng @ ngay dưới tên đó.
 
@@ -959,7 +970,15 @@ def _read_profile(image: Image.Image, button: Box, *, aggressive: bool = False) 
         if _line_is_thin(handle_line.box, header):
             bits = _finish_profile(image, name_line, handle_line, draft, username)
             if bits.as_obs() is not None:
-                return bits
+                return _ProfileBits(
+                    bits.name,
+                    bits.username,
+                    bits.handle_left,
+                    bits.handle_right,
+                    bits.name_left,
+                    bits.name_right,
+                    _line_confidence(handle_line),
+                )
     # Nút Follow đã thấy mà dải rộng không ra @ — chỉ OCR từng dòng trong header đó.
     return _read_locked_profile(image, header)
 

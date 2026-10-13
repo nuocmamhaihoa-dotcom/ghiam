@@ -13,6 +13,7 @@
 		B10000000000000000000004 /* BackgroundUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* BackgroundUploader.swift */; };
 		B10000000000000000000005 /* UploadQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000005 /* UploadQueue.swift */; };
 		B10000000000000000000006 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000006 /* RootView.swift */; };
+		B1000000000000000000000B /* VisionSidecar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000B /* VisionSidecar.swift */; };
 		B10000000000000000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000007 /* Assets.xcassets */; };
 		B10000000000000000000008 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000008 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
@@ -24,6 +25,7 @@
 		B20000000000000000000004 /* BackgroundUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundUploader.swift; sourceTree = "<group>"; };
 		B20000000000000000000005 /* UploadQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadQueue.swift; sourceTree = "<group>"; };
 		B20000000000000000000006 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		B2000000000000000000000B /* VisionSidecar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionSidecar.swift; sourceTree = "<group>"; };
 		B20000000000000000000007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B20000000000000000000008 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		B20000000000000000000009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -58,6 +60,7 @@
 				B20000000000000000000004 /* BackgroundUploader.swift */,
 				B20000000000000000000005 /* UploadQueue.swift */,
 				B20000000000000000000006 /* RootView.swift */,
+				B2000000000000000000000B /* VisionSidecar.swift */,
 				B20000000000000000000007 /* Assets.xcassets */,
 				B20000000000000000000008 /* PrivacyInfo.xcprivacy */,
 				B20000000000000000000009 /* Info.plist */,
@@ -150,6 +153,7 @@
 				B10000000000000000000004 /* BackgroundUploader.swift in Sources */,
 				B10000000000000000000005 /* UploadQueue.swift in Sources */,
 				B10000000000000000000006 /* RootView.swift in Sources */,
+				B1000000000000000000000B /* VisionSidecar.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -167,7 +171,7 @@
 				ENABLE_TESTABILITY = YES;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_OPTIMIZATION_LEVEL = 0;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -184,7 +188,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
@@ -212,6 +216,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -239,6 +244,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;

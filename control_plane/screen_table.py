@@ -54,10 +54,15 @@ class FrameObs:
     handle_right: str = ""
     name_left: str = ""
     name_right: str = ""
+    # Điểm Tesseract/Vision của dòng @, thang 0–100. -1 là chưa đo, không hạ Đủ.
+    handle_confidence: float = -1.0
 
 
 # Số bị chấm che suốt video, ghép không đủ 10 số. Không ghi thành một số điện thoại.
 COVER_REASON = "chấm che, chưa đọc đủ số"
+# @ có chữ nhưng điểm đọc dưới ngưỡng này thì không tính Đủ.
+HANDLE_CONF_MIN = 60.0
+REASON_LOW_CONF = "điểm tin cậy thấp"
 
 
 @dataclass(frozen=True)
@@ -65,6 +70,7 @@ class Row:
     phone: str
     name: str
     username: str
+    handle_confidence: float = -1.0
 
 
 @dataclass(frozen=True)
@@ -840,8 +846,26 @@ def build_table(frames: list[FrameObs]) -> Table:
     used_phones: set[str] = set()
     used_users: set[str] = set()
     table = Table()
-    _apply_visits(visits, phone_name, user_name, used_phones, used_users, table)
-    _apply_names(phone_name, user_name, phone_seen, user_seen, used_phones, used_users, table)
+    scores = _confidence_by_user(frames)
+    _apply_visits(
+        visits,
+        phone_name,
+        user_name,
+        used_phones,
+        used_users,
+        table,
+        scores,
+    )
+    _apply_names(
+        phone_name,
+        user_name,
+        phone_seen,
+        user_seen,
+        used_phones,
+        used_users,
+        table,
+        scores,
+    )
     for phone, tally in contacts.items():
         if phone in phone_name or tally.best():
             continue
@@ -1208,6 +1232,20 @@ def _pair_orphan_visits_by_time(visits: list[_Visit]) -> None:
             used.add(uniq[0])
 
 
+def _confidence_by_user(frames: list[FrameObs]) -> dict[str, float]:
+    """Điểm thấp nhất của mỗi @ đã đo. @ chưa đo không có trong bảng."""
+    found: dict[str, float] = {}
+    for frame in frames:
+        if frame.handle_confidence < 0:
+            continue
+        user = clean_username(frame.profile_username)
+        if not user:
+            continue
+        previous = found.get(user)
+        found[user] = frame.handle_confidence if previous is None else min(previous, frame.handle_confidence)
+    return found
+
+
 def _apply_visits(
     visits: list[_Visit],
     phone_name: dict[str, str],
@@ -1215,6 +1253,7 @@ def _apply_visits(
     used_phones: set[str],
     used_users: set[str],
     table: Table,
+    user_confidence: dict[str, float] | None = None,
 ) -> None:
     grouped: dict[str, list[str]] = {}
     order: list[str] = []
@@ -1267,7 +1306,8 @@ def _apply_visits(
             display = combine_similar_names([contact_name, profile_name]) or contact_name
         else:
             display = contact_name
-        table.rows.append(Row(phone, display, username))
+        score = -1.0 if not user_confidence else user_confidence.get(username, -1.0)
+        table.rows.append(Row(phone, display, username, score))
 
 
 def _apply_names(
@@ -1278,6 +1318,7 @@ def _apply_names(
     used_phones: set[str],
     used_users: set[str],
     table: Table,
+    user_confidence: dict[str, float] | None = None,
 ) -> None:
     phones_by_name: dict[str, list[str]] = {}
     users_by_name: dict[str, list[str]] = {}
@@ -1316,7 +1357,8 @@ def _apply_names(
         for user in group:
             variants.append(user_name.get(user, ""))
         display = combine_similar_names(variants) or phone_name.get(phone, "")
-        table.rows.append(Row(phone, display, username))
+        score = -1.0 if not user_confidence else user_confidence.get(username, -1.0)
+        table.rows.append(Row(phone, display, username, score))
         paired_users.update(group)
         used_phones.add(phone)
         used_users.update(group)

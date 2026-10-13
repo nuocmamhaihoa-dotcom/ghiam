@@ -16,7 +16,7 @@ Gói `/tai/videoup.zip` trên hub cũng là mã nguồn Xcode này.
 1. Mở VideoUp → điền **URL hub** (`http://IP:8088`) và **Token**.
 2. Đặt **Tên máy** (vd. iPhone An).
 3. Chọn video từ Ảnh hoặc Files — có thể chọn nhiều.
-4. Có thể rời app hoặc khóa máy. App đang mở thì gửi nhiều mảnh song song. Khi app vào nền, một mảnh tiếp tục bằng URLSession nền; xong mảnh đó iOS mở app trong nền để gửi mảnh kế.
+4. Có thể rời app hoặc khóa máy. App đang mở thì gửi nhiều mảnh song song và đọc chữ bằng Apple Vision (tiếng Việt + tiếng Anh, tối đa khoảng 90 khung). Khi app vào nền, iOS 16 gửi nốt phần byte còn lại trong **một** `uploadTask(fromFile:)`. iOS 16 không có API tải tiếp của iOS 17: nếu lần gửi đó đứt, app được đánh thức, hỏi byte liền mạch trên máy chủ, rồi gửi một file đuôi mới.
 5. Xong: mở trang video trên hub để xem hàng đợi đọc.
 
 ## Lưu ý
