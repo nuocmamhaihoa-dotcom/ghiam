@@ -111,6 +111,7 @@
     .results-table tr.row-scan td:first-child { box-shadow: inset 3px 0 0 #c04545; }
     .queue-table td:nth-child(1) { font-variant-numeric: tabular-nums; }
     .note { color: var(--muted); margin-top: 0.35rem; font-size: 0.86rem; }
+    img.strip { display: block; max-width: 100%; height: auto; margin-top: 0.3rem; border-radius: 6px; background: #fff; }
     .warn { color: var(--warn); font-weight: 650; }
     .ok { color: var(--ok); }
     .banner {
@@ -308,7 +309,7 @@
       <button class="ghost" type="button" id="exportCsv">Xuất CSV</button>
       <button class="ghost" type="button" id="exportVcf">Xuất vCard</button>
     </div>
-    <p class="note">Không đoán chữ dưới chấm. Khung cắt không còn sau khi đọc. Mỗi số chỉ xuất một lần.</p>
+    <p class="note">Không đoán chữ dưới chấm. Dải chữ chưa đọc được lưu thành ảnh trong đúng ô của hàng đó. Mỗi số chỉ xuất một lần.</p>
     <input id="query" type="search" placeholder="Gõ đầu số, @username hoặc tên video (VD: IMG_0018)" />
     <p id="resultsNote" class="note"></p>
     <div id="results" class="table-wrap"></div>
@@ -936,13 +937,21 @@
     });
   }
 
+  function shotHtml(item, field) {
+    var shots = item.shots || {};
+    var url = shots[field];
+    if (!url) return "";
+    return "<img class='strip' alt='dải chữ chưa đọc' data-shot='" + escapeHtml(url) + "'>";
+  }
+
   function renderResultTable(items) {
     var html = "<table class='results-table'><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Loại</th><th>Lỗi khi quét</th><th>Thời gian quét</th><th></th></tr>";
     items.forEach(function (item) {
       var rowKind = item.bucket === "Đủ" ? "row-ok" : (item.bucket === "Cần xem" ? "row-review" : (item.bucket === "Lỗi quét" ? "row-scan" : ""));
-      html += "<tr class='" + rowKind + "'><td data-label='Số điện thoại'>" + escapeHtml(item.phone) +
-        "</td><td data-label='Tên'>" + escapeHtml(item.name) +
-        "</td><td data-label='Username'>" + escapeHtml(item.username) +
+      var phoneText = item.phone || item.phone_mask || "";
+      html += "<tr class='" + rowKind + "'><td data-label='Số điện thoại'>" + escapeHtml(phoneText) + shotHtml(item, "phone") +
+        "</td><td data-label='Tên'>" + escapeHtml(item.name) + shotHtml(item, "name") +
+        "</td><td data-label='Username'>" + escapeHtml(item.username) + shotHtml(item, "user") +
         "</td><td data-label='Loại'>" + escapeHtml(item.bucket) +
         "</td><td data-label='Lỗi khi quét'>" + escapeHtml(item.reason) +
         "</td><td data-label='Thời gian quét'>" + escapeHtml(formatTime(item.scanned_at)) +
@@ -952,13 +961,28 @@
     return html + "</table>";
   }
 
+  function fillShots(box) {
+    var nodes = box.querySelectorAll("img[data-shot]");
+    Array.prototype.forEach.call(nodes, function (img) {
+      var path = img.getAttribute("data-shot");
+      if (!path) return;
+      api(path).then(function (res) {
+        if (!res.ok) return null;
+        return res.blob();
+      }).then(function (blob) {
+        if (!blob) return;
+        img.src = URL.createObjectURL(blob);
+      }).catch(function () {});
+    });
+  }
+
   async function editResult(id) {
     var item = null;
     for (var i = 0; i < loadedResults.length; i++) {
       if (String(loadedResults[i].id) === String(id)) item = loadedResults[i];
     }
     if (!item) return;
-    var hint = "Không đoán chữ dưới chấm. Khung cắt không còn sau khi đọc.";
+    var hint = "Không đoán chữ dưới chấm. Ảnh chỉ là dải chữ chưa đọc.";
     var phone = window.prompt(hint + "\nSố điện thoại đã nhìn thấy:", item.phone || "");
     if (phone === null) return;
     var name = window.prompt(hint + "\nTên đã nhìn thấy:", item.name || "");
@@ -1085,6 +1109,7 @@
       ? (shown + " cho «" + q + "».")
       : (shown + ". Mỗi lần chỉ lấy một trang nhỏ để đường tải video không bị nghẽn." + capNote);
     box.innerHTML = renderResultTable(loadedResults);
+    fillShots(box);
     syncMoreButton();
     return true;
   }

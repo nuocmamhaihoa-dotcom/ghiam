@@ -93,7 +93,7 @@ class SystemAuditTests(unittest.TestCase):
         self._seed()
         stats_body = self.client.get("/v1/videos/stats", headers=self._auth()).json()
         self.assertEqual(stats_body["saved"], 1)
-        self.assertEqual(stats_body["unopened"], 0)
+        self.assertEqual(stats_body["unopened"], 1)
         self.assertEqual(stats_body["review"], 1)
         self.assertEqual(stats_body["phones"], 2)
         videos = self.client.get("/v1/videos", headers=self._auth()).json()

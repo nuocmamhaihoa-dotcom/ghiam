@@ -163,6 +163,7 @@ class _Frag:
     at: float
     selected: bool
     slots: list[str]
+    shot: bytes = b""
 
 
 @dataclass
@@ -267,7 +268,8 @@ def stitch_phone_fragments(
         if phone or explained or _known(slots) < 6:
             continue
         label = name or _pattern(slots)
-        notes.append(Review("", label, "", "", COVER_REASON))
+        shot = next((frag.shot for frag in group if frag.shot), b"")
+        notes.append(Review("", label, "", "", COVER_REASON, phone_mask=_pattern(slots), phone_shot=shot))
     return done, notes
 
 
@@ -394,12 +396,31 @@ def apply_cover_stitch(frames: list[FrameObs]) -> tuple[list[FrameObs], list[Rev
             phone = phone_from_slots(slots)
             if phone:
                 contacts = list(frame.contacts)
-                contacts[hit_i] = ContactHit(phone, name, hit.selected, from_cover=not name)
+                contacts[hit_i] = ContactHit(
+                    phone,
+                    name,
+                    hit.selected,
+                    from_cover=not name,
+                    phone_shot=hit.phone_shot,
+                    name_shot=hit.name_shot,
+                )
                 edited[frame_i] = replace(frame, contacts=tuple(contacts))
                 frame = edited[frame_i]
                 clean.append((phone, name))
                 continue
-            frags.append(_Frag(frame_i, hit_i, partial_digits(hit.seen_left), partial_digits(hit.seen_right), name, frame.at, hit.selected, slots))
+            frags.append(
+                _Frag(
+                    frame_i,
+                    hit_i,
+                    partial_digits(hit.seen_left),
+                    partial_digits(hit.seen_right),
+                    name,
+                    frame.at,
+                    hit.selected,
+                    slots,
+                    hit.phone_shot,
+                )
+            )
 
     done, notes = stitch_phone_fragments(frags, clean)
     for item in done:

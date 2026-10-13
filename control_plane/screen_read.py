@@ -26,6 +26,7 @@ from PIL import Image, ImageFilter, ImageOps
 from control_plane.cover_read import fill_hole, mask_digits, narrow_join, partial_digits, phone_from_slots
 from control_plane.ocr_backend import resolve_ocr_engine, system_tessdata, tesserocr_available
 from control_plane.screen_layout import LayoutProfile
+from control_plane.strip_shot import jpeg_strip
 from control_plane.screen_table import (
     ContactHit,
     FrameObs,
@@ -112,9 +113,11 @@ class _ProfileBits:
     name_right: str = ""
     # Điểm dòng @, thang 0–100. -1 là chưa đo — không hạ hàng Đủ.
     confidence: float = -1.0
+    name_shot: bytes = b""
+    user_shot: bytes = b""
 
     def as_obs(self) -> FrameObs | None:
-        if not (self.username or self.handle_left or self.handle_right):
+        if not (self.username or self.handle_left or self.handle_right or self.user_shot or self.name_shot):
             return None
         return FrameObs(
             "profile",
@@ -126,6 +129,8 @@ class _ProfileBits:
             name_left=self.name_left,
             name_right=self.name_right,
             handle_confidence=self.confidence,
+            name_shot=self.name_shot,
+            user_shot=self.user_shot,
         )
 
 
@@ -903,10 +908,27 @@ def _read_rows(
             continue
         if phone:
             # Số nằm ngoài chấm, tên thì không. Giữ số để xếp cần xem, không đoán tên.
-            hits.append(ContactHit(phone, "", row.selected, from_cover=True))
+            hits.append(
+                ContactHit(
+                    phone,
+                    "",
+                    row.selected,
+                    from_cover=True,
+                    name_shot=jpeg_strip(image, row.name_box),
+                )
+            )
             continue
         if seen_left or seen_right:
-            hits.append(ContactHit("", name, row.selected, seen_left=seen_left, seen_right=seen_right))
+            hits.append(
+                ContactHit(
+                    "",
+                    name,
+                    row.selected,
+                    seen_left=seen_left,
+                    seen_right=seen_right,
+                    phone_shot=jpeg_strip(image, row.phone_box),
+                )
+            )
     return hits
 
 
@@ -978,9 +1000,14 @@ def _read_profile(image: Image.Image, button: Box, *, aggressive: bool = False) 
                     bits.name_left,
                     bits.name_right,
                     _line_confidence(handle_line),
+                    bits.name_shot,
+                    bits.user_shot,
                 )
     # Nút Follow đã thấy mà dải rộng không ra @ — chỉ OCR từng dòng trong header đó.
-    return _read_locked_profile(image, header)
+    locked = _read_locked_profile(image, header)
+    if locked.username or locked.handle_left or locked.handle_right or locked.user_shot:
+        return locked
+    return _ProfileBits(user_shot=jpeg_strip(image, header))
 
 
 def _finish_profile(
@@ -1035,9 +1062,21 @@ def _finish_profile(
             name = draft if is_profile_name(draft) else ""
     if not is_profile_handle(username):
         username = ""
-    if not username and not handle_left and not handle_right:
+    shown_name = name if is_profile_name(name) else ""
+    name_shot = b"" if shown_name else jpeg_strip(image, name_line.box)
+    user_shot = b"" if (username or handle_left or handle_right) else jpeg_strip(image, handle_line.box)
+    if not username and not handle_left and not handle_right and not user_shot and not name_shot:
         return _ProfileBits()
-    return _ProfileBits(name, username, handle_left, handle_right, name_left, name_right)
+    return _ProfileBits(
+        shown_name,
+        username,
+        handle_left,
+        handle_right,
+        name_left,
+        name_right,
+        name_shot=name_shot,
+        user_shot=user_shot,
+    )
 
 
 def _line_is_thin(box: Box, header: Box) -> bool:

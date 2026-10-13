@@ -23,6 +23,7 @@ from control_plane.screen_table import (
     build_table,
     clean_name,
     clean_username,
+    handle_contains_name,
     is_skipped,
     normalize_phone,
     profile_fields,
@@ -135,9 +136,13 @@ def _assert_common(table, frames: list[FrameObs]) -> None:
             raise AssertionError(f"hàng thiếu ô {row}")
         pnames = phone_names.get(row.phone, set())
         unames = user_names.get(row.username, set())
-        if not unames or not any(name for name in unames):
-            raise AssertionError(f"ghép khi không có tên hồ sơ {row}")
-        if not any(same_person_name(left, right) for left in pnames for right in unames if right):
+        named = [name for name in unames if name]
+        if not named:
+            # Tên hồ sơ trống: chỉ gắn khi đúng số vừa bấm và @ đã đọc được.
+            continue
+        if not any(same_person_name(left, right) for left in pnames for right in named):
+            if any(handle_contains_name(row.username, left) for left in pnames):
+                continue
             raise AssertionError(f"ghép hai tên khác nhau {row} {pnames} {unames}")
     for username, names in user_names.items():
         if not any(profile_fields(name, username)[1] for name in names):
@@ -186,8 +191,10 @@ def _read_scenario(seed: int) -> None:
         expect_rows.add((b, user_b))
     elif mode == 3:
         phone = phones.take()
+        user = _handle(seed)
         frames.append(_list([ContactHit(phone, "Phương Anh", True)], t))
-        frames.append(_profile("", _handle(seed), t + 0.2))
+        frames.append(_profile("", user, t + 0.2))
+        expect_rows.add((phone, user))
     elif mode == 4:
         phone = phones.take()
         frames.append(_list([ContactHit(phone, "Đặng Thị Tâm", True)], t))
@@ -204,6 +211,7 @@ def _read_scenario(seed: int) -> None:
         phone = phones.take()
         frames.append(_list([ContactHit(phone, "nvchien", True), ContactHit(phones.take(), "khactam")], t))
         frames.append(_profile("OCR lech", "@nvchien89", t + 0.3))
+        expect_rows.add((phone, "@nvchien89"))
     elif mode == 7:
         a, b = phones.take(), phones.take()
         frames.append(_list([ContactHit(a, "Photo Name", False), ContactHit(b, "Photo Name", False)], t))

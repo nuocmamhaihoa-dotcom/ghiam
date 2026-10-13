@@ -7,6 +7,7 @@ Một dòng khoảng vài trăm byte. Một trăm triệu dòng nằm trong vài
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sqlite3
@@ -34,6 +35,7 @@ from control_plane.screen_table import (
     is_profile_handle,
     join_similar_leftovers,
     joined_name,
+    repair_table,
     normalize_phone,
     pair_close_names,
     pair_names_alike_90,
@@ -388,6 +390,18 @@ def _ensure_video_columns(conn: sqlite3.Connection) -> None:
         except sqlite3.OperationalError as exc:
             if "duplicate column" not in str(exc).lower():
                 raise
+    result_cols = {str(row[1]) for row in conn.execute("PRAGMA table_info(results)")}
+    for name, ddl in (
+        ("phone_mask", "ALTER TABLE results ADD COLUMN phone_mask TEXT NOT NULL DEFAULT ''"),
+        ("shots", "ALTER TABLE results ADD COLUMN shots TEXT NOT NULL DEFAULT ''"),
+    ):
+        if name in result_cols:
+            continue
+        try:
+            conn.execute(ddl)
+        except sqlite3.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                raise
 
 
 def classify_result(
@@ -465,11 +479,8 @@ def _reclassify_results(conn: sqlite3.Connection) -> None:
         """,
         (BUCKET_SCAN, REASON_NO_PHONE, COVER_REASON, BUCKET_SCAN),
     )
-    # @ mồ côi không còn là một hàng. Số trong danh bạ và dòng trùng tên giữ nguyên.
-    conn.execute(
-        "DELETE FROM results WHERE phone = '' AND reason = ?",
-        (REASON_NO_PHONE,),
-    )
+    # @ đã đọc mà không gắn được số thì giữ, để hàng kết quả còn ảnh dải chữ.
+    # Không ghép @ đó sang video khác.
 
 
 
@@ -1227,6 +1238,7 @@ def finish(db_path: Path, video_id: int, table: Table) -> None:
 
     Tên giống từ 90% thì gộp vào một hàng trước khi ghi. Không ghép sang video khác.
     """
+    repair_table(table)
     join_similar_leftovers(table)
 
     def _write(conn: sqlite3.Connection) -> None:
@@ -1238,11 +1250,32 @@ def finish(db_path: Path, video_id: int, table: Table) -> None:
                 "",
                 handle_confidence=row.handle_confidence,
             )
-            _put(conn, row.phone, row.name, row.username, bucket, reason, video_id, upgrade=True)
+            _put(
+                conn,
+                row.phone,
+                row.name,
+                row.username,
+                bucket,
+                reason,
+                video_id,
+                upgrade=True,
+                phone_mask=row.phone_mask,
+                shots=_shot_map(row),
+            )
         for item in table.unopened:
             # Có số trong danh bạ, chưa có @ — cần xem, không phải lỗi "chưa mở".
             bucket, reason = classify_result(item.phone, item.name, "", "")
-            _put(conn, item.phone, item.name, "", bucket, reason, video_id, upgrade=False)
+            _put(
+                conn,
+                item.phone,
+                item.name,
+                "",
+                bucket,
+                reason,
+                video_id,
+                upgrade=False,
+                shots=_shot_map(item),
+            )
         for item in table.review:
             _put_review(conn, item, video_id)
         conn.execute(
@@ -1723,6 +1756,8 @@ def _merge_pair_group(
 _RESULT_SELECT = """
     SELECT
       r.id, r.phone, r.name, r.username, r.bucket, r.reason, r.created_at AS scanned_at,
+      COALESCE(r.phone_mask, '') AS phone_mask,
+      COALESCE(r.shots, '') AS shots,
       COALESCE(v.device, '') AS device,
       COALESCE(v.name, '') AS video
     FROM results r
@@ -1894,6 +1929,74 @@ def iter_backup(db_path: Path) -> Iterator[str]:
         conn.close()
 
 
+def _shot_map(item: object) -> dict[str, bytes]:
+    found: dict[str, bytes] = {}
+    for key, attr in (("phone", "phone_shot"), ("name", "name_shot"), ("user", "user_shot")):
+        blob = getattr(item, attr, b"") or b""
+        if isinstance(blob, bytes) and blob:
+            found[key] = blob
+    return found
+
+
+def shots_root(db_path: Path) -> Path:
+    return db_path.parent / "shots"
+
+
+def result_shot_path(db_path: Path, result_id: int, field: str) -> Path | None:
+    if field not in {"phone", "name", "user"}:
+        return None
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT shots FROM results WHERE id = ?", (int(result_id),)).fetchone()
+    if row is None or not row["shots"]:
+        return None
+    try:
+        saved = json.loads(str(row["shots"]))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(saved, dict):
+        return None
+    return shot_file(db_path, str(saved.get(field) or ""))
+
+
+def shot_file(db_path: Path, relative: str) -> Path | None:
+    text = str(relative or "")
+    if not text or text.startswith("/") or ".." in text.split("/"):
+        return None
+    root = shots_root(db_path).resolve()
+    path = (root / text).resolve()
+    if path != root and root not in path.parents:
+        return None
+    if not path.is_file():
+        return None
+    return path
+
+
+def _stamp_evidence(
+    conn: sqlite3.Connection,
+    result_id: int,
+    video_id: int,
+    phone_mask: str,
+    shots: dict[str, bytes],
+) -> None:
+    mask = " ".join(str(phone_mask or "").split())
+    if mask:
+        conn.execute("UPDATE results SET phone_mask = ? WHERE id = ?", (mask[:40], int(result_id)))
+    if not shots:
+        return
+    root = shots_root(Path(conn.execute("PRAGMA database_list").fetchone()[2]))
+    saved: dict[str, str] = {}
+    for field, blob in shots.items():
+        if field not in {"phone", "name", "user"} or not blob:
+            continue
+        rel = f"{int(video_id)}_{int(result_id)}_{field}.jpg"
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(blob)
+        saved[field] = rel
+    if saved:
+        conn.execute("UPDATE results SET shots = ? WHERE id = ?", (json.dumps(saved), int(result_id)))
+
+
 def _put(
     conn: sqlite3.Connection,
     phone: str,
@@ -1903,6 +2006,8 @@ def _put(
     reason: str,
     video_id: int,
     upgrade: bool,
+    phone_mask: str = "",
+    shots: dict[str, bytes] | None = None,
 ) -> None:
     if not phone:
         return
@@ -1911,13 +2016,14 @@ def _put(
         (phone,),
     ).fetchone()
     if existing is None:
-        conn.execute(
+        cur = conn.execute(
             """
             INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (phone, name, username, bucket, reason, video_id, utcnow()),
         )
+        _stamp_evidence(conn, int(cur.lastrowid), video_id, phone_mask, shots or {})
         _drop_lone_username(conn, username, bucket)
         return
     if not upgrade:
@@ -1966,13 +2072,14 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
             _drop_lone_username(conn, merged_user, BUCKET_OK)
             return
         bucket, reason = classify_result(item.phone, name, item.username, item.reason)
-        conn.execute(
+        cur = conn.execute(
             """
             INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (item.phone, name, item.username, bucket, reason, video_id, utcnow()),
         )
+        _stamp_evidence(conn, int(cur.lastrowid), video_id, item.phone_mask, _shot_map(item))
         if bucket == BUCKET_OK:
             _drop_lone_username(conn, item.username, bucket)
         return
@@ -1983,17 +2090,18 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
                 (COVER_REASON, item.contact_name),
             ).fetchone()
             if existing is None:
-                conn.execute(
+                cur = conn.execute(
                     """
                     INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
                     VALUES ('', ?, '', ?, ?, ?, ?)
                     """,
                     (item.contact_name, BUCKET_REVIEW, COVER_REASON, video_id, utcnow()),
                 )
+                _stamp_evidence(conn, int(cur.lastrowid), video_id, item.phone_mask, _shot_map(item))
         return
-    # @ không có số danh bạ đi kèm thì không ghi thành hàng. Ghép cặp liền không đổi.
-    # Trùng tên và một số mở nhiều hồ sơ vẫn giữ — đó là khách thật, không phải @ mồ côi.
-    if (item.reason or "").strip() in ("", REASON_NO_PHONE):
+    # @ không có số: giữ lại để xem, không ghép sang video khác.
+    # Trùng tên và một số mở nhiều hồ sơ vẫn giữ.
+    if not (item.reason or "").strip():
         return
     existing = conn.execute(
         "SELECT id FROM results WHERE username = ? AND username != '' LIMIT 1",
@@ -2002,13 +2110,14 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
     if existing is not None:
         return
     bucket, reason = classify_result("", item.profile_name, item.username, item.reason)
-    conn.execute(
+    cur = conn.execute(
         """
         INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
         VALUES ('', ?, ?, ?, ?, ?, ?)
         """,
         (item.profile_name, item.username, bucket, reason, video_id, utcnow()),
     )
+    _stamp_evidence(conn, int(cur.lastrowid), video_id, item.phone_mask, _shot_map(item))
 
 
 def _video_issue(item: dict[str, object]) -> str:
@@ -2152,13 +2261,26 @@ def render_csv(rows: list[tuple[str, str, str]]) -> str:
 
 def _public_result(row: sqlite3.Row) -> dict[str, object]:
     keys = set(row.keys())
+    result_id = int(row["id"])
+    shots: dict[str, str] = {}
+    raw = row["shots"] if "shots" in keys else ""
+    try:
+        saved = json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        saved = {}
+    if isinstance(saved, dict):
+        for field in ("phone", "name", "user"):
+            if saved.get(field):
+                shots[field] = f"/v1/results/{result_id}/shot/{field}"
     return {
-        "id": int(row["id"]),
+        "id": result_id,
         "phone": row["phone"],
+        "phone_mask": row["phone_mask"] if "phone_mask" in keys else "",
         "name": row["name"],
         "username": row["username"],
         "bucket": BUCKET_LABEL.get(int(row["bucket"]), ""),
         "reason": row["reason"],
+        "shots": shots,
         "scanned_at": row["scanned_at"] if "scanned_at" in keys else row["created_at"] if "created_at" in keys else "",
         "device": row["device"] if "device" in keys else "",
         "video": row["video"] if "video" in keys else "",

@@ -168,7 +168,8 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(found["0900000001"]["username"], "")
         self.assertEqual(found["0900000002"]["username"], "")
         listed = search_results(self.db, limit=20, view="all")
-        self.assertFalse(any(item["username"] in {"@user1", "@quang.le354", "@dangtam.3"} and item["phone"] == "" for item in listed))
+        self.assertFalse(any(item["username"] == "@dangtam.3" and item["phone"] == "" for item in listed))
+        self.assertFalse(any(item["phone"] == "0900000003" and item["username"] for item in listed))
         complete = search_results(self.db, limit=20, view="complete")
         self.assertTrue(all(item["phone"] and item["username"] for item in complete))
         self.assertEqual(rematch_results(self.db), 0)
@@ -302,9 +303,9 @@ class VideoStoreTests(unittest.TestCase):
             ),
         )
         found = search_results(self.db, "0985721500", view="all")[0]
-        # Tên hồ sơ khác tên danh bạ: không ghép theo @ một mình.
-        self.assertEqual(found["username"], "")
-        self.assertEqual(found["bucket"], "Cần xem")
+        # @ chứa đúng tên danh bạ, chỉ một cặp: ghép dù tên hồ sơ đọc lệch.
+        self.assertEqual(found["username"], "@uniquehandle99")
+        self.assertEqual(found["bucket"], "Đủ")
         self.assertEqual(stats(self.db)["results"], 1)
         self.assertEqual(rematch_results(self.db), 0)
 
@@ -382,12 +383,13 @@ class VideoStoreTests(unittest.TestCase):
         self.assertIn("@", found["0900000002"]["reason"])
         self.assertEqual(found["0900000003"]["bucket"], "Cần xem")
         self.assertEqual(found["0900000004"]["bucket"], "Lỗi quét")
-        self.assertNotIn("@nam", found)
+        self.assertEqual(found["@nam"]["bucket"], "Lỗi quét")
+        self.assertEqual(found["@nam"]["reason"], "đã mở hồ sơ nhưng chưa thấy số")
         counted = stats(self.db)
-        self.assertEqual((counted["saved"], counted["review"], counted["unopened"]), (1, 2, 1))
+        self.assertEqual((counted["saved"], counted["review"], counted["unopened"]), (1, 2, 2))
         self.assertEqual(counted["phones"], 4)
         item = next(row for row in list_videos(self.db) if row["id"] == video_id)
-        self.assertNotIn("đã mở hồ sơ nhưng chưa thấy số", str(item["error_summary"]))
+        self.assertIn("đã mở hồ sơ nhưng chưa thấy số", str(item["error_summary"]))
         self.assertIn("một số mở nhiều hồ sơ", str(item["error_summary"]))
 
     def test_old_unopened_bucket_is_reclassified_as_needs_review(self) -> None:
@@ -413,7 +415,7 @@ class VideoStoreTests(unittest.TestCase):
             _reclassify_results(conn)
         found = {item["phone"] or item["username"]: item for item in search_results(self.db, view="all", limit=20)}
         self.assertEqual(found["0900000008"]["bucket"], "Cần xem")
-        self.assertNotIn("@roi", found)
+        self.assertEqual(found["@roi"]["bucket"], "Lỗi quét")
         self.assertEqual(found["0900000009"]["bucket"], "Đủ")
 
     def test_ocr_fragments_of_one_profile_collapse_in_the_database(self) -> None:

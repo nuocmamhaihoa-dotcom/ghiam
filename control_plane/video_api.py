@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from fastapi import APIRouter, File, Form, Header, HTTPException, Query, Request, UploadFile
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
@@ -42,6 +42,7 @@ from control_plane.video_store import (
     render_csv,
     render_vcf,
     retry,
+    result_shot_path,
     search_results,
     should_pause_ocr,
     stats,
@@ -508,13 +509,28 @@ class ResultCorrection(BaseModel):
     username: str = ""
 
 
+@router.get("/v1/results/{result_id}/shot/{field}")
+def result_shot(
+    result_id: int,
+    field: str,
+    authorization: str | None = Header(default=None),
+) -> FileResponse:
+    """Ảnh dải chữ chưa đọc được, đúng ô của hàng đó."""
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    path = result_shot_path(settings.video_db_path, result_id, field)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Không có ảnh dải chữ.")
+    return FileResponse(path, media_type="image/jpeg")
+
+
 @router.patch("/v1/results/{result_id}")
 def patch_result(
     result_id: int,
     body: ResultCorrection,
     authorization: str | None = Header(default=None),
 ) -> dict[str, object]:
-    """Sửa số, tên, @. Không có khung cắt để xem lại — người dùng gõ những gì đã thấy."""
+    """Sửa số, tên, @. Ảnh chỉ là dải chữ chưa đọc — không đoán chữ dưới chấm."""
     _auth(authorization)
     init_db(settings.video_db_path)
     try:

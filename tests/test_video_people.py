@@ -195,10 +195,9 @@ class MergeTests(unittest.TestCase):
                 FrameObs("profile", (), "OCR lech", "@nvchien89", at=2.3),
             ]
         )
-        self.assertEqual(table.rows, [])
-        self.assertEqual({item.phone for item in table.unopened}, {"0985721500", "0332001753"})
-        self.assertEqual(table.review[0].username, "@nvchien89")
-        self.assertFalse(table.review[0].phone)
+        self.assertEqual([(row.phone, row.username) for row in table.rows], [("0985721500", "@nvchien89")])
+        self.assertEqual({item.phone for item in table.unopened}, {"0332001753"})
+        self.assertFalse(table.review)
 
     def test_tap_then_profile_pairs_when_names_match(self) -> None:
         table = build_table(
@@ -236,7 +235,7 @@ class MergeTests(unittest.TestCase):
             ]
         )
         self.assertEqual([(row.phone, row.username) for row in table.rows], [("0982117072", "@dangtam.3")])
-        self.assertEqual(table.review, [])
+        self.assertEqual({item.username for item in table.review}, {"@khactam60"})
 
     def test_two_frames_of_one_open_keep_one_handle(self) -> None:
         table = build_table(
@@ -252,16 +251,16 @@ class MergeTests(unittest.TestCase):
         # @khac.khac cùng lần mở khactam đã gom. Người khác không đủ 90% nên không ghép.
         self.assertEqual({item.username for item in table.review if item.username}, {"@khac.1"})
 
-    def test_missing_profile_name_is_not_a_profile(self) -> None:
-        """Không đọc được tên thì không phải hồ sơ. Số ở lại Cần xem, không thêm lỗi quét."""
+    def test_missing_profile_name_stays_with_the_tapped_phone(self) -> None:
+        """Tên hồ sơ trống nhưng chỉ một @ ngay sau lần bấm thì vẫn gắn vào số đó."""
         table = build_table(
             [
                 frame_list(ContactHit("0982117072", "Đặng Thị Tâm", selected=True)),
                 frame_profile("", "@dangtam.3"),
             ]
         )
-        self.assertEqual(table.rows, [])
-        self.assertEqual(table.unopened[0].phone, "0982117072")
+        self.assertEqual([(row.phone, row.username) for row in table.rows], [("0982117072", "@dangtam.3")])
+        self.assertEqual(table.unopened, [])
         self.assertEqual(table.review, [])
 
     def test_junk_frames_do_not_block_the_real_profile_or_add_scan_errors(self) -> None:
@@ -281,7 +280,7 @@ class MergeTests(unittest.TestCase):
             ]
         )
         self.assertEqual([(row.phone, row.username) for row in table.rows], [("0974813731", "@phuonganh99")])
-        self.assertEqual(table.review, [])
+        self.assertEqual({item.username for item in table.review}, {"@nguyenphuong_68"})
         self.assertEqual(table.unopened, [])
 
     def test_same_name_still_pairs_when_another_profile_is_between(self) -> None:
