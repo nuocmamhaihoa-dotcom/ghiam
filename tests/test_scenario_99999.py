@@ -1,9 +1,9 @@
 """99999 kịch bản đường tải video và đường đọc/ghép.
 
-Mỗi kịch bản có đáp án: hàng đủ chỉ khi danh bạ và hồ sơ cùng tên đứng liền,
-không có khách khác chen giữa. Số không mất. @ chỉ được bỏ khi khung đó
-không phải hồ sơ (thiếu tên, @ toàn số, @ là số điện thoại). File tải lên
-khớp từng byte sau khi ghép mảnh theo mọi thứ tự.
+Hàng đủ khi danh bạ và hồ sơ cùng tên đứng liền, hoặc trong cùng video tên
+giống từ 90% và chỉ có một số với một @. Hai số hoặc hai @ thì không đoán.
+Không ghép hồ sơ của khách khác. Số không mất. @ chỉ được bỏ khi khung đó
+không phải hồ sơ. File tải lên khớp từng byte sau khi ghép mảnh.
 """
 
 from __future__ import annotations
@@ -183,6 +183,7 @@ def _read_scenario(seed: int) -> None:
         frames.append(_profile("Đặng Thị Tâm", user_a, t + 0.2))
         frames.append(_profile("khactam", user_b, t + 0.5))
         expect_rows.add((a, user_a))
+        expect_rows.add((b, user_b))
     elif mode == 3:
         phone = phones.take()
         frames.append(_list([ContactHit(phone, "Phương Anh", True)], t))
@@ -192,6 +193,7 @@ def _read_scenario(seed: int) -> None:
         frames.append(_list([ContactHit(phone, "Đặng Thị Tâm", True)], t))
         frames.append(_profile("khactam", _handle(seed), t + 0.2))
         frames.append(_profile("Đặng Thị Tâm", _handle(seed + 1), t + 0.5))
+        expect_rows.add((phone, _handle(seed + 1)))
     elif mode == 5:
         phone = phones.take()
         user = _handle(seed)
@@ -214,8 +216,10 @@ def _read_scenario(seed: int) -> None:
         expect_rows.add((a, user))
     elif mode == 9:
         phone = phones.take()
+        user = _handle(seed)
         frames.append(FrameObs("tap", (ContactHit(phone, "Quang Le", True),), at=t))
-        frames.append(_profile("Quang Le", _handle(seed), t + 9.0))
+        frames.append(_profile("Quang Le", user, t + 9.0))
+        expect_rows.add((phone, user))
     elif mode == 10:
         base = phones.take()
         # Hai số cùng khung, lệch đúng 1 chữ số, cùng tên: giữ cả hai.
@@ -252,18 +256,21 @@ def _read_scenario(seed: int) -> None:
     got = {(row.phone, row.username) for row in table.rows}
     if mode != 11 and got != expect_rows:
         raise AssertionError(f"mode {mode} rows {got} != {expect_rows}")
-    if mode in (4, 9) and table.rows:
-        raise AssertionError(f"ghép cặp không liền {table.rows}")
-    # Hướng đọc 2 không được ghép xuyên qua hồ sơ khách khác.
+    # Không gắn @ của khách khác vào số, kể cả khi hướng 2 chạy thêm.
     if mode == 4:
         again = pair_leftovers_by_time(table, frames)
-        if again.rows:
-            raise AssertionError(f"hướng 2 ghép xuyên khách khác {again.rows}")
+        if any(row.username == _handle(seed) for row in again.rows):
+            raise AssertionError(f"ghép nhầm hồ sơ khách khác {again.rows}")
     if mode == 4 and seed % 5 == 0:
-        _assert_store_keeps_them_apart(frames)
+        _assert_store_joins_same_video_name(frames, phone, _handle(seed + 1), _handle(seed))
 
 
-def _assert_store_keeps_them_apart(frames: list[FrameObs]) -> None:
+def _assert_store_joins_same_video_name(
+    frames: list[FrameObs],
+    phone: str,
+    good_user: str,
+    bad_user: str,
+) -> None:
     table = build_table(frames)
     with tempfile.TemporaryDirectory() as folder:
         db = Path(folder) / "video.db"
@@ -271,8 +278,11 @@ def _assert_store_keeps_them_apart(frames: list[FrameObs]) -> None:
         created = begin_upload(db, name="clip.mp4", size_bytes=8, sha256=f"s-{id(frames)}-{frames[0].at}", device="t")
         finish(db, int(created["id"]), table)
         rows = search_results(db, view="complete", limit=20)
-        if rows:
-            raise AssertionError(f"lưu DB vẫn ghép cặp không liền {rows}")
+        got = {(item["phone"], item["username"]) for item in rows}
+        if (phone, good_user) not in got:
+            raise AssertionError(f"cùng video không ghép tên giống {rows}")
+        if any(item["username"] == bad_user for item in rows):
+            raise AssertionError(f"ghép nhầm @ khách khác {rows}")
 
 
 def _base_image():

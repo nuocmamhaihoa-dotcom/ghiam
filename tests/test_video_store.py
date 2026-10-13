@@ -137,9 +137,14 @@ class VideoStoreTests(unittest.TestCase):
             ),
         )
         found = {item["phone"]: item for item in search_results(self.db, limit=20, view="all")}
-        # Cùng tên nhưng không đứng liền trong video: không ghép thành hàng đủ.
-        self.assertEqual(found["0982117072"]["username"], "")
-        self.assertEqual(found["0982117072"]["bucket"], "Cần xem")
+        # Cùng video, tên giống ≥90%, đúng một số và một @: ghép, ghi cả hai cách viết.
+        self.assertEqual(found["0982117072"]["username"], "@hanhnguyenn375")
+        self.assertEqual(found["0982117072"]["bucket"], "Đủ")
+        self.assertIn("Hanhnguyen", str(found["0982117072"]["name"]))
+        self.assertIn("yHanhnguyen", str(found["0982117072"]["name"]))
+        self.assertEqual(found["0900000001"]["username"], "")
+        self.assertEqual(found["0900000002"]["username"], "")
+        self.assertEqual(found["0900000003"]["username"], "")
         second = self._add("b.mp4", "b")
         finish(
             self.db,
@@ -154,7 +159,11 @@ class VideoStoreTests(unittest.TestCase):
         )
         self.assertEqual(rematch_results(self.db), 0)
         found = {item["phone"]: item for item in search_results(self.db, limit=20, view="all")}
-        self.assertEqual(found["0911111111"]["username"], "")
+        self.assertEqual(found["0911111111"]["username"], "@dangtam.3")
+        self.assertEqual(found["0911111111"]["bucket"], "Đủ")
+        self.assertIn("Đặng Thị Tâm", str(found["0911111111"]["name"]))
+        self.assertIn("Dang Thi Tam", str(found["0911111111"]["name"]))
+        # @ Quang Le ở video khác: không kéo sang số của video trước.
         self.assertEqual(found["0900000003"]["username"], "")
         self.assertEqual(found["0900000001"]["username"], "")
         self.assertEqual(found["0900000002"]["username"], "")
@@ -162,6 +171,43 @@ class VideoStoreTests(unittest.TestCase):
         self.assertFalse(any(item["username"] in {"@user1", "@quang.le354", "@dangtam.3"} and item["phone"] == "" for item in listed))
         complete = search_results(self.db, limit=20, view="complete")
         self.assertTrue(all(item["phone"] and item["username"] for item in complete))
+        self.assertEqual(rematch_results(self.db), 0)
+
+    def test_rematch_joins_similar_names_only_inside_one_video(self) -> None:
+        from control_plane.video_store import connect
+
+        first = self._add("a.mp4", "a")
+        second = self._add("b.mp4", "b")
+        now = "2026-10-13T00:00:00+00:00"
+        with connect(self.db) as conn:
+            rows = [
+                ("0901000001", "kim Loan", "", 2, "có số trong danh bạ nhưng chưa đọc được @", first),
+                ("", "Kim Loa", "@kim_loa", 3, "trùng tên, không tự ghép", first),
+                ("0901000002", "Quang Le", "", 2, "có số trong danh bạ nhưng chưa đọc được @", first),
+                ("", "Quang Le", "@quang.le354", 3, "trùng tên, không tự ghép", second),
+                ("0901000003", "Photo", "", 2, "trùng tên, không tự ghép", first),
+                ("0901000004", "Photo", "", 2, "trùng tên, không tự ghép", first),
+                ("", "Photo", "@photo.1", 3, "trùng tên, không tự ghép", first),
+            ]
+            for phone, name, username, bucket, reason, vid in rows:
+                conn.execute(
+                    """
+                    INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (phone, name, username, bucket, reason, vid, now),
+                )
+        self.assertEqual(rematch_results(self.db), 1)
+        found = {item["phone"] or item["username"]: item for item in search_results(self.db, view="all", limit=20)}
+        self.assertEqual(found["0901000001"]["username"], "@kim_loa")
+        self.assertEqual(found["0901000001"]["bucket"], "Đủ")
+        self.assertIn("kim Loan", str(found["0901000001"]["name"]))
+        self.assertIn("Kim Loa", str(found["0901000001"]["name"]))
+        self.assertEqual(found["0901000002"]["username"], "")
+        self.assertEqual(found["@quang.le354"]["phone"], "")
+        self.assertEqual(found["0901000003"]["username"], "")
+        self.assertEqual(found["0901000004"]["username"], "")
+        self.assertEqual(found["@photo.1"]["phone"], "")
         self.assertEqual(rematch_results(self.db), 0)
 
     def test_counts_follow_every_insert_upgrade_and_merge(self) -> None:
@@ -174,13 +220,13 @@ class VideoStoreTests(unittest.TestCase):
                 review=[Review("", "", "khactam", "@khactam60", "đã mở hồ sơ nhưng chưa thấy số")],
             ),
         )
-        # Không đứng liền nên không ghép. Số ở Cần xem. @ không có số thì không ghi hàng.
-        self.assertEqual((stats(self.db)["saved"], stats(self.db)["review"], stats(self.db)["unopened"]), (0, 1, 0))
+        # Cùng video, tên giống: ghép thành hàng đủ. @ không còn đứng riêng.
+        self.assertEqual((stats(self.db)["saved"], stats(self.db)["review"], stats(self.db)["unopened"]), (1, 0, 0))
         listed = search_results(self.db, limit=20, view="all")
         by_phone = {item["phone"]: item for item in listed if item["phone"]}
-        self.assertEqual(by_phone["0332001753"]["username"], "")
-        self.assertEqual(by_phone["0332001753"]["bucket"], "Cần xem")
-        self.assertFalse(any(item["username"] == "@khactam60" for item in listed))
+        self.assertEqual(by_phone["0332001753"]["username"], "@khactam60")
+        self.assertEqual(by_phone["0332001753"]["bucket"], "Đủ")
+        self.assertFalse(any(item["phone"] == "" and item["username"] == "@khactam60" for item in listed))
         second = self._add("b.mp4", "b")
         finish(self.db, second, Table(rows=[Row("0332001753", "khactam", "@khactam60")]))
         counted = stats(self.db)

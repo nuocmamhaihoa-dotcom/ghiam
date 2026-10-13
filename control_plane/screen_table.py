@@ -1,8 +1,9 @@
 """Ghép số, tên và username từ các khung hình danh bạ và hồ sơ.
 
-Quét danh bạ lấy số + tên. Đọc hồ sơ lấy tên + @. Chỉ ghép thành một hàng
-khi danh bạ đứng ngay trước hồ sơ, hai tên là cùng một khách, và không có
-khách khác chen giữa. Tên khác nhau thì không ghép, kể cả vừa bấm dòng đó.
+Quét danh bạ lấy số + tên. Đọc hồ sơ lấy tên + @. Ghép khi danh bạ đứng ngay
+trước hồ sơ và hai tên là cùng một khách. Trong cùng một video, tên giống từ
+90% thì ghép đúng một số với đúng một @, và ghi mọi cách viết gần giống vào
+cùng ô tên. Hai số hoặc hai @ thì không đoán. Không ghép sang video khác.
 """
 
 from __future__ import annotations
@@ -406,6 +407,50 @@ def _mark_sits_on_digits(name: str) -> bool:
     return False
 
 
+NAME_ALIKE_MIN = 0.90
+_NAME_CELL_LIMIT = 6
+_NAME_CELL_CHARS = 240
+
+
+def name_similarity(left: str, right: str) -> float:
+    """Độ giống tên sau khi bỏ dấu, chỉ tính chữ và số. Tên dưới 4 ký tự thì 0."""
+    a = _compact(left)
+    b = _compact(right)
+    if len(a) < 4 or len(b) < 4:
+        return 0.0
+    if a == b:
+        return 1.0
+    return SequenceMatcher(None, a, b).ratio()
+
+
+def names_alike_90(left: str, right: str) -> bool:
+    """Cùng một video: tên giống từ 90%. Không nới names_close."""
+    return name_similarity(left, right) >= NAME_ALIKE_MIN
+
+
+def combine_similar_names(names: list[str]) -> str:
+    """Ghi các cách viết gần giống vào một ô. Tên danh bạ đứng trước."""
+    parts: list[str] = []
+    seen: set[str] = set()
+    for name in names:
+        text = clean_name(name)
+        if not text:
+            continue
+        key = name_key(text)
+        if key in seen:
+            continue
+        seen.add(key)
+        parts.append(text)
+        if len(parts) >= _NAME_CELL_LIMIT:
+            break
+    text = " · ".join(parts)
+    if len(text) <= _NAME_CELL_CHARS:
+        return text
+    trimmed = text[:_NAME_CELL_CHARS]
+    cut = trimmed.rsplit(" · ", 1)[0]
+    return cut or trimmed
+
+
 def joined_name(contact: str, profile: str) -> str:
     """Tên hiển thị khi ghép. Ưu tiên dấu tiếng Việt, bỏ ký tự đọc nhầm."""
     contact = clean_name(contact)
@@ -605,6 +650,159 @@ def pair_close_names(
             continue
         pairs.append((phone_id, user_id))
     return pairs
+
+
+def _alike_hits(
+    phones: list[tuple[str, str]],
+    users: list[tuple[str, str]],
+) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    phone_hits: dict[str, list[str]] = {}
+    user_hits: dict[str, list[str]] = {}
+    for phone_id, phone_name in phones:
+        for user_id, user_name in users:
+            if not names_alike_90(phone_name, user_name):
+                continue
+            phone_hits.setdefault(phone_id, []).append(user_id)
+            user_hits.setdefault(user_id, []).append(phone_id)
+    return phone_hits, user_hits
+
+
+def conflicts_with_other_person(username: str, name: str, owned: list[tuple[str, str]]) -> bool:
+    """Không gắn @ đọc lệch của một hồ sơ đã thuộc người khác trong cùng video."""
+    raw = clean_username(username).lstrip("@").casefold()
+    if len(raw) < 8:
+        return False
+    for other_name, other_user in owned:
+        parts = [other_name, *other_name.split(" · ")]
+        if any(names_alike_90(name, part) for part in parts):
+            continue
+        other = clean_username(other_user).lstrip("@").casefold()
+        if len(other) < 8 or abs(len(raw) - len(other)) > 3:
+            continue
+        if _edit_within(raw, other, 3):
+            return True
+    return False
+
+
+def _edit_within(left: str, right: str, limit: int) -> bool:
+    if abs(len(left) - len(right)) > limit:
+        return False
+    prev = list(range(len(right) + 1))
+    for i, ca in enumerate(left, 1):
+        cur = [i]
+        for j, cb in enumerate(right, 1):
+            cur.append(min(prev[j] + 1, cur[-1] + 1, prev[j - 1] + (ca != cb)))
+        if min(cur) > limit:
+            return False
+        prev = cur
+    return prev[-1] <= limit
+
+
+def pair_names_alike_90(
+    phones: list[tuple[str, str]],
+    users: list[tuple[str, str]],
+) -> list[tuple[str, str, list[str]]]:
+    """Ghép đúng một số với đúng một @ khi tên giống từ 90%.
+
+    Trả về (số, @ đã chọn, mọi @ đã gom vào hồ sơ đó). Hai số hoặc hai @ thì bỏ.
+    """
+    if not phones or not users:
+        return []
+    phone_name = dict(phones)
+    phone_hits, user_hits = _alike_hits(phones, users)
+    taken_phones: set[str] = set()
+    taken_users: set[str] = set()
+    pairs: list[tuple[str, str, list[str]]] = []
+    for phone_id, _name in phones:
+        if phone_id in taken_phones:
+            continue
+        raw = [user_id for user_id in phone_hits.get(phone_id, []) if user_id not in taken_users]
+        if not raw:
+            continue
+        handles = collapse_handles(raw, phone_name.get(phone_id, ""))
+        if len(handles) != 1:
+            continue
+        handle = handles[0]
+        group = [
+            user_id
+            for user_id in raw
+            if _handles_are_same(user_id, handle) or clean_username(user_id) == clean_username(handle)
+        ]
+        if not group:
+            continue
+        owners = {
+            owner
+            for user_id in group
+            for owner in user_hits.get(user_id, [])
+            if owner not in taken_phones
+        }
+        if owners != {phone_id}:
+            continue
+        pairs.append((phone_id, handle, group))
+        taken_phones.add(phone_id)
+        taken_users.update(group)
+    return pairs
+
+
+def join_similar_leftovers(table: Table) -> None:
+    """Trong bảng của một video: tên giống ≥90% thì gộp số và @ vào một hàng.
+
+    Ô tên chứa mọi cách viết. Không đụng hàng đã đủ. Không đoán khi còn hai số hoặc hai @.
+    """
+    taken_phones = {row.phone for row in table.rows if row.phone}
+    taken_users = {clean_username(row.username) for row in table.rows if row.username}
+    phone_names: dict[str, str] = {}
+    for item in table.unopened:
+        if item.phone and item.name and item.phone not in taken_phones:
+            phone_names.setdefault(item.phone, item.name)
+    for item in table.review:
+        if item.phone and not item.username and item.phone not in taken_phones:
+            name = item.contact_name or item.profile_name
+            if name:
+                phone_names.setdefault(item.phone, name)
+    user_names: dict[str, list[str]] = {}
+    user_order: list[str] = []
+    for item in table.review:
+        user = clean_username(item.username)
+        if not user or item.phone or user in taken_users:
+            continue
+        name = item.profile_name or item.contact_name
+        if not name:
+            continue
+        if user not in user_names:
+            user_order.append(user)
+            user_names[user] = []
+        if name not in user_names[user]:
+            user_names[user].append(name)
+    pairs = pair_names_alike_90(
+        [(phone, name) for phone, name in phone_names.items()],
+        [(user, user_names[user][0]) for user in user_order],
+    )
+    owned = [(row.name, row.username) for row in table.rows if row.username]
+    pairs = [
+        item
+        for item in pairs
+        if not conflicts_with_other_person(item[1], phone_names.get(item[0], ""), owned)
+    ]
+    if not pairs:
+        return
+    paired_phones: set[str] = set()
+    paired_users: set[str] = set()
+    for phone, username, group in pairs:
+        variants = [phone_names.get(phone, "")]
+        for user in group:
+            variants.extend(user_names.get(user, []))
+        display = combine_similar_names(variants) or phone_names.get(phone, "")
+        table.rows.append(Row(phone, display, username))
+        paired_phones.add(phone)
+        paired_users.update(clean_username(user) for user in group)
+        paired_users.add(clean_username(username))
+    table.unopened = [item for item in table.unopened if item.phone not in paired_phones]
+    table.review = [
+        item
+        for item in table.review
+        if item.phone not in paired_phones and clean_username(item.username) not in paired_users
+    ]
 
 
 def build_table(frames: list[FrameObs]) -> Table:
@@ -1066,7 +1264,7 @@ def _apply_visits(
         username = usernames[0]
         profile_name = user_name.get(username, "")
         if profile_name and same_person_name(contact_name, profile_name):
-            display = joined_name(contact_name, profile_name)
+            display = combine_similar_names([contact_name, profile_name]) or contact_name
         else:
             display = contact_name
         table.rows.append(Row(phone, display, username))
@@ -1098,20 +1296,41 @@ def _apply_names(
             continue
         users_by_name.setdefault(name_key(name), []).append(username)
 
-    for key in phones_by_name:
-        phones_by_name[key].sort(key=lambda phone: phone_seen.get(phone, 0))
-    for key in users_by_name:
-        users_by_name[key].sort(key=lambda username: user_seen.get(username, 0))
-
-    # Số và @ còn lại không đứng liền nhau. Không ghép thêm theo tên ở chỗ khác trong video.
-    for key in set(phones_by_name) | set(users_by_name):
-        _emit_unpaired(
-            phones_by_name.get(key, []),
-            users_by_name.get(key, []),
-            phone_name,
-            user_name,
-            table,
-        )
+    phones = [(phone, phone_name[phone]) for key in phones_by_name for phone in phones_by_name[key]]
+    users = [(username, user_name[username]) for key in users_by_name for username in users_by_name[key]]
+    phones.sort(key=lambda item: phone_seen.get(item[0], 0))
+    users.sort(key=lambda item: user_seen.get(item[0], 0))
+    # Cùng video: tên giống ≥90% thì ghép đúng một số với đúng một @, kể cả không đứng liền.
+    pairs = pair_names_alike_90(phones, users)
+    owned = [(row.name, row.username) for row in table.rows if row.username]
+    pairs = [
+        item
+        for item in pairs
+        if not conflicts_with_other_person(item[1], phone_name.get(item[0], ""), owned)
+    ]
+    phone_hits, user_hits = _alike_hits(phones, users)
+    paired_phones = {phone for phone, _username, _group in pairs}
+    paired_users: set[str] = set()
+    for phone, username, group in pairs:
+        variants = [phone_name.get(phone, "")]
+        for user in group:
+            variants.append(user_name.get(user, ""))
+        display = combine_similar_names(variants) or phone_name.get(phone, "")
+        table.rows.append(Row(phone, display, username))
+        paired_users.update(group)
+        used_phones.add(phone)
+        used_users.update(group)
+    _emit_alike_rest(
+        phones,
+        users,
+        phone_hits,
+        user_hits,
+        paired_phones,
+        paired_users,
+        phone_name,
+        user_name,
+        table,
+    )
 
 
 def _pair_by_handle(phones: list[tuple[str, str]], users: list[tuple[str, str]]) -> list[tuple[str, str]]:
@@ -1135,41 +1354,58 @@ def _pair_by_handle(phones: list[tuple[str, str]], users: list[tuple[str, str]])
     return pairs
 
 
-def _emit_unpaired(
-    phones: list[str],
-    usernames: list[str],
+def _emit_alike_rest(
+    phones: list[tuple[str, str]],
+    users: list[tuple[str, str]],
+    phone_hits: dict[str, list[str]],
+    user_hits: dict[str, list[str]],
+    paired_phones: set[str],
+    paired_users: set[str],
     phone_name: dict[str, str],
     user_name: dict[str, str],
     table: Table,
 ) -> None:
-    if len(phones) == 1 and usernames:
-        contact_name = phone_name[phones[0]]
-        # Gom @ đọc lệch của một username. Hai @ khác nhau thì giữ cả hai, không bỏ.
-        usernames = collapse_handles(usernames, contact_name)
-    elif usernames:
-        sample = user_name.get(usernames[0], "") if usernames else ""
-        usernames = collapse_handles(usernames, sample)
-    if len(phones) == 1 and len(usernames) == 1:
-        # Cùng tên nhưng không phải cặp liền nhau: không ghép.
-        phone = phones[0]
-        username = usernames[0]
-        table.unopened.append(Unopened(phone, phone_name[phone]))
-        table.review.append(
-            Review("", "", user_name.get(username, ""), username, "đã mở hồ sơ nhưng chưa thấy số")
+    """Phần không ghép được: thiếu @, thiếu số, trùng tên, hoặc một số mở nhiều hồ sơ."""
+    emitted_users = set(paired_users)
+    for phone, name in phones:
+        if phone in paired_phones:
+            continue
+        raw = [user for user in phone_hits.get(phone, []) if user not in paired_users]
+        if not raw:
+            table.unopened.append(Unopened(phone, phone_name.get(phone, name)))
+            continue
+        handles = collapse_handles(raw, name)
+        exclusive = all(
+            {owner for owner in user_hits.get(user, []) if owner not in paired_phones} == {phone}
+            for user in raw
         )
-        return
-    if len(phones) == 1 and not usernames:
-        table.unopened.append(Unopened(phones[0], phone_name[phones[0]]))
-        return
-    if not phones and len(usernames) == 1:
-        username = usernames[0]
-        table.review.append(Review("", "", user_name.get(username, ""), username, "đã mở hồ sơ nhưng chưa thấy số"))
-        return
-    if usernames:
-        for phone in phones:
-            table.review.append(Review(phone, phone_name[phone], "", "", "trùng tên, không tự ghép"))
-        for username in usernames:
-            table.review.append(Review("", "", user_name.get(username, ""), username, "trùng tên, không tự ghép"))
-        return
-    for phone in phones:
-        table.unopened.append(Unopened(phone, phone_name[phone]))
+        if len(handles) > 1 and exclusive:
+            # Số chỉ xuất hiện một lần. Mỗi @ còn lại là một dòng lỗi, không nhân đôi số.
+            first, *rest = handles
+            table.review.append(
+                Review(
+                    phone,
+                    phone_name.get(phone, name),
+                    user_name.get(first, ""),
+                    first,
+                    "một số mở nhiều hồ sơ",
+                )
+            )
+            for username in rest:
+                table.review.append(
+                    Review("", "", user_name.get(username, ""), username, "một số mở nhiều hồ sơ")
+                )
+            emitted_users.update(raw)
+            continue
+        table.review.append(Review(phone, phone_name.get(phone, name), "", "", "trùng tên, không tự ghép"))
+        for username in raw:
+            if username in emitted_users:
+                continue
+            table.review.append(
+                Review("", "", user_name.get(username, ""), username, "trùng tên, không tự ghép")
+            )
+            emitted_users.add(username)
+    for username, name in users:
+        if username in emitted_users:
+            continue
+        table.review.append(Review("", "", user_name.get(username, name), username, "đã mở hồ sơ nhưng chưa thấy số"))

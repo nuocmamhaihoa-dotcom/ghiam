@@ -24,9 +24,13 @@ from control_plane.screen_table import (
     _compact,
     _handles_are_same,
     _prefer_handle,
+    combine_similar_names,
+    conflicts_with_other_person,
     handle_matches_name,
+    join_similar_leftovers,
     joined_name,
     pair_close_names,
+    pair_names_alike_90,
     phone_distance,
     same_person_name,
 )
@@ -1203,11 +1207,12 @@ def _parse_ts(value: object) -> float | None:
 
 
 def finish(db_path: Path, video_id: int, table: Table) -> None:
-    """Lưu kết quả rồi ghép ngay số + username thành hàng ngang đủ ba cột.
+    """Lưu kết quả rồi ghép số + @ còn thiếu trong cùng video.
 
-    Ghi kết quả trong một giao dịch ngắn. Sau đó chỉ gộp số đọc lệch,
-    không ghép số với @ theo tên khi hai bên không đứng liền lúc đọc.
+    Tên giống từ 90% thì gộp vào một hàng trước khi ghi. Không ghép sang video khác.
     """
+    join_similar_leftovers(table)
+
     def _write(conn: sqlite3.Connection) -> None:
         for row in table.rows:
             bucket, reason = classify_result(row.phone, row.name, row.username, "")
@@ -1350,10 +1355,11 @@ def rematch_results(
     merged = 0
     merged += int(_with_immediate(db_path, lambda c: _promote_phone_username_reviews(c, video_id)))
 
-    # Không ghép số với @ theo tên ở chỗ khác trong video. Ghép chỉ xảy ra lúc đọc,
-    # khi danh bạ và hồ sơ cùng tên đứng liền nhau.
+    # Cùng một video: tên giống ≥90% thì ghép đúng một số với đúng một @.
+    # Không ghép sang video khác, không đoán khi còn hai số hoặc hai @.
     target_videos = _rematch_video_ids(db_path, video_id)
     for vid in target_videos:
+        merged += int(_with_immediate(db_path, lambda c, v=vid: _join_similar_names(c, v)))
         merged += int(_with_immediate(db_path, lambda c, v=vid: _absorb_ocr_phone_twins(c, v)))
 
     if video_id is None and cross_video:
@@ -1471,11 +1477,98 @@ def _apply_merge_pairs(
 
 
 def _rematch_conn(conn: sqlite3.Connection, video_id: int | None = None) -> int:
-    """Dọn số OCR lệch và nâng hàng đã có đủ số + @. Không ghép theo tên khi đã mất thứ tự khung."""
+    """Dọn số OCR lệch, ghép tên giống ≥90% trong từng video, nâng hàng đã đủ số + @."""
     merged = 0
     merged += _promote_phone_username_reviews(conn, video_id)
+    if video_id is None:
+        ids = [int(row[0]) for row in conn.execute("SELECT DISTINCT video_id FROM results")]
+        for vid in ids:
+            merged += _join_similar_names(conn, vid)
+    else:
+        merged += _join_similar_names(conn, video_id)
     merged += _absorb_ocr_phone_twins(conn, video_id)
     merged += _promote_phone_username_reviews(conn, video_id)
+    return merged
+
+
+def _join_similar_names(conn: sqlite3.Connection, video_id: int) -> int:
+    """Trong một video: tên giống ≥90% thì gắn @ vào đúng một số và ghi mọi cách viết.
+
+    Không đụng video khác. Hai số cùng khớp một @, hoặc một số khớp hai @, thì để nguyên.
+    """
+    rows = list(
+        conn.execute(
+            "SELECT id, phone, name, username FROM results WHERE video_id = ?",
+            (video_id,),
+        )
+    )
+    if not rows:
+        return 0
+    taken_handles = [
+        str(row["username"])
+        for row in rows
+        if str(row["phone"] or "").strip() and str(row["username"] or "").strip()
+    ]
+    phones: list[tuple[str, str, int]] = []
+    orphans: dict[str, list[sqlite3.Row]] = {}
+    for row in rows:
+        phone = str(row["phone"] or "").strip()
+        username = str(row["username"] or "").strip()
+        name = str(row["name"] or "").strip()
+        if phone and not username and name:
+            phones.append((phone, name, int(row["id"])))
+            continue
+        if phone or not username or not name:
+            continue
+        if any(_handles_are_same(username, other) for other in taken_handles):
+            continue
+        orphans.setdefault(username, []).append(row)
+    if not phones or not orphans:
+        return 0
+    user_name = {
+        username: str(group[0]["name"] or "")
+        for username, group in orphans.items()
+    }
+    phone_id = {phone: rid for phone, _name, rid in phones}
+    phone_name = {phone: name for phone, name, _rid in phones}
+    owned = [
+        (str(row["name"] or ""), str(row["username"] or ""))
+        for row in rows
+        if str(row["phone"] or "").strip() and str(row["username"] or "").strip()
+    ]
+    pairs = pair_names_alike_90(
+        [(phone, name) for phone, name, _rid in phones],
+        [(username, user_name[username]) for username in orphans],
+    )
+    pairs = [
+        item
+        for item in pairs
+        if not conflicts_with_other_person(item[1], phone_name.get(item[0], ""), owned)
+    ]
+    merged = 0
+    for phone, username, group in pairs:
+        variants = [phone_name.get(phone, "")]
+        delete_ids: list[int] = []
+        for handle in group:
+            for row in orphans.get(handle, []):
+                variants.append(str(row["name"] or ""))
+                delete_ids.append(int(row["id"]))
+        display = combine_similar_names(variants) or phone_name.get(phone, "")
+        if not display or not username:
+            continue
+        updated = conn.execute(
+            """
+            UPDATE results
+            SET name = ?, username = ?, bucket = ?, reason = ''
+            WHERE id = ? AND username = '' AND phone != ''
+            """,
+            (display, username, BUCKET_OK, phone_id[phone]),
+        )
+        if updated.rowcount != 1:
+            continue
+        for rid in delete_ids:
+            conn.execute("DELETE FROM results WHERE id = ? AND phone = ''", (rid,))
+        merged += 1
     return merged
 
 

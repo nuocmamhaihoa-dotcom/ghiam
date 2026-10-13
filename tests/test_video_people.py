@@ -20,7 +20,9 @@ from control_plane.screen_table import (
     is_profile_handle,
     is_profile_name,
     name_key,
+    combine_similar_names,
     joined_name,
+    names_alike_90,
     names_close,
     normalize_phone,
     pair_close_names,
@@ -122,11 +124,15 @@ class MergeTests(unittest.TestCase):
             ]
         )
         ready = {(row.phone, row.name, row.username) for row in table.rows}
-        self.assertEqual(ready, {("0982117072", "Đặng Thị Tâm", "@dangtam.3")})
-        unopened = {item.phone for item in table.unopened}
-        self.assertEqual(unopened, {"0332001753", "0373793079"})
-        self.assertEqual(table.review[0].username, "@khactam60")
-        self.assertFalse(table.review[0].phone)
+        self.assertEqual(
+            ready,
+            {
+                ("0982117072", "Đặng Thị Tâm", "@dangtam.3"),
+                ("0332001753", "khactam", "@khactam60"),
+            },
+        )
+        self.assertEqual({item.phone for item in table.unopened}, {"0373793079"})
+        self.assertFalse(any(item.username == "@khactam60" for item in table.review))
 
     def test_accent_loss_pairs_a_long_name(self) -> None:
         table = build_table(
@@ -137,7 +143,7 @@ class MergeTests(unittest.TestCase):
         )
         self.assertEqual(len(table.rows), 1)
         self.assertEqual(table.rows[0].phone, "0982117072")
-        self.assertEqual(table.rows[0].name, "Đặng Thị Tâm")
+        self.assertEqual(table.rows[0].name, "Đặng Thị Tâm · Dang Thi Tam")
         self.assertEqual(table.rows[0].username, "@dangtam.3")
         self.assertFalse(table.review)
 
@@ -241,14 +247,10 @@ class MergeTests(unittest.TestCase):
                 frame_profile("khactam", "@khac.khac"),
             ]
         )
-        self.assertEqual(table.rows, [])
-        phones = [item.phone for item in table.unopened] + [item.phone for item in table.review if item.phone]
-        self.assertEqual(phones, ["0332001753"])
-        # Hai khung khactam là một lần mở: giữ @ khớp tên, không thêm dòng cho @ còn lại.
-        self.assertEqual(
-            {item.username for item in table.review if item.username},
-            {"@khac.1", "@khactam60"},
-        )
+        self.assertEqual([(row.phone, row.username) for row in table.rows], [("0332001753", "@khactam60")])
+        self.assertFalse(table.unopened)
+        # @khac.khac cùng lần mở khactam đã gom. Người khác không đủ 90% nên không ghép.
+        self.assertEqual({item.username for item in table.review if item.username}, {"@khac.1"})
 
     def test_missing_profile_name_is_not_a_profile(self) -> None:
         """Không đọc được tên thì không phải hồ sơ. Số ở lại Cần xem, không thêm lỗi quét."""
@@ -282,7 +284,7 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(table.review, [])
         self.assertEqual(table.unopened, [])
 
-    def test_a_different_name_between_still_blocks_the_pair(self) -> None:
+    def test_same_name_still_pairs_when_another_profile_is_between(self) -> None:
         table = build_table(
             [
                 frame_list(ContactHit("0974813731", "Phương Anh", selected=True)),
@@ -290,12 +292,9 @@ class MergeTests(unittest.TestCase):
                 frame_profile("Phương Anh", "@phuonganh99"),
             ]
         )
-        self.assertEqual(table.rows, [])
-        self.assertEqual(table.unopened[0].phone, "0974813731")
-        self.assertEqual(
-            {item.username for item in table.review if item.username},
-            {"@khactam60", "@phuonganh99"},
-        )
+        self.assertEqual([(row.phone, row.username) for row in table.rows], [("0974813731", "@phuonganh99")])
+        self.assertFalse(table.unopened)
+        self.assertEqual({item.username for item in table.review if item.username}, {"@khactam60"})
 
     def test_second_profile_without_returning_to_list_is_not_the_same_tap(self) -> None:
         table = build_table(
@@ -309,10 +308,9 @@ class MergeTests(unittest.TestCase):
             ]
         )
         ready = {row.phone: row.username for row in table.rows}
-        self.assertEqual(ready, {"0982117072": "@dangtam.3"})
-        self.assertEqual(table.unopened[0].phone, "0332001753")
-        self.assertEqual(table.review[0].username, "@khactam60")
-        self.assertFalse(table.review[0].phone)
+        self.assertEqual(ready, {"0982117072": "@dangtam.3", "0332001753": "@khactam60"})
+        self.assertFalse(table.unopened)
+        self.assertFalse(any(item.username == "@khactam60" for item in table.review))
 
     def test_noisy_handles_of_one_open_collapse_to_the_name_match(self) -> None:
         self.assertTrue(_handles_are_same("@nggialinh.2014", "@nggialinh.2014C3"))
@@ -425,6 +423,16 @@ class CloseNameTests(unittest.TestCase):
         self.assertEqual(joined_name("ÿHanhnguyen", "Hanhnguyen"), "Hanhnguyen")
         self.assertEqual(joined_name("Phuong Le44036", "Phuong Le4405ó"), "Phuong Le44036")
         self.assertEqual(joined_name("Dang Thi Tam", "Đặng Thị Tâm"), "Đặng Thị Tâm")
+        self.assertTrue(names_alike_90("Đặng Thị Tâm", "Dang Thi Tam"))
+        self.assertTrue(names_alike_90("kim Loan", "Kim Loa"))
+        self.assertTrue(names_alike_90("liên", "lien"))
+        self.assertFalse(names_close("liên", "lien"))
+        self.assertFalse(names_alike_90("tân", "Tuấn"))
+        self.assertFalse(names_alike_90("Lý Mai Trang", "hoa hồng trắng"))
+        self.assertEqual(
+            combine_similar_names(["kim Loan", "Kim Loa", "kim Loan"]),
+            "kim Loan · Kim Loa",
+        )
 
     def test_two_phones_with_one_username_are_not_paired(self) -> None:
         pairs = pair_close_names(
@@ -497,13 +505,14 @@ class SampleFrameTests(unittest.TestCase):
         from control_plane.video_scan import scan_paths
 
         table, frames = scan_paths(assets)
-        ready = {(row.phone, row.name, row.username) for row in table.rows}
-        # Ảnh 1 danh bạ (Đặng đang chọn) rồi ảnh 2 đúng hồ sơ Đặng. Ảnh 3 là hồ sơ
-        # khactam, không quay lại danh bạ ở giữa, nên không ghép.
-        self.assertEqual(ready, {("0982117072", "Đặng Thị Tâm", "@dangtam.3")})
-        self.assertIn("@khactam60", {item.username for item in table.review})
+        ready = {(row.phone, row.username) for row in table.rows}
+        # Ảnh 1 danh bạ rồi hồ sơ Đặng. Hồ sơ khactam cùng video, tên giống, đúng một số:
+        # ghép vào hàng khactam dù không đứng liền.
+        self.assertIn(("0982117072", "@dangtam.3"), ready)
+        self.assertIn(("0332001753", "@khactam60"), ready)
+        self.assertNotIn("@khactam60", {item.username for item in table.review})
         unopened = {item.phone: item.name for item in table.unopened}
-        self.assertEqual(unopened["0332001753"], "khactam")
+        self.assertNotIn("0332001753", unopened)
         self.assertEqual(unopened["0373793079"], "tinh11")
         self.assertEqual(unopened["0918046839"], "Trọng Nguyễn 67AG")
         self.assertNotIn("0369610446", unopened)
