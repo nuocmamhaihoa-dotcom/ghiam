@@ -16,6 +16,8 @@ MOBILE_PREFIXES = frozenset(
 DIGIT_LOOKALIKE = str.maketrans({"ó": "6", "ò": "6", "Ó": "6", "O": "0", "o": "0", "l": "1", "I": "1", "|": "1", "S": "5"})
 HANDLE_RE = re.compile(r"@([A-Za-z0-9._]{2,24})")
 SCREEN_WORDS = {"follow", "follower", "thich", "tin nhan", "da follow", "danh ba", "thong bao he thong"}
+# Phần chữ của tên và @id mặc định TikTok đặt sẵn. Giống nhau ở phần này không phải bằng chứng cùng người.
+GENERIC_NAMES = frozenset({"user", "tiktok", "tiktoker"})
 # Ký tự đặc biệt giữ lại trong tên. "|" bị bỏ vì bộ đọc hay thấy nó ở mép ảnh đại diện.
 NAME_SYMBOLS = "._-&()'+#!/"
 
@@ -78,6 +80,9 @@ def handle_matches_name(handle: str, name: str) -> bool:
     if _same_text(folded, compact):
         return True
     letters = "".join(ch for ch in folded if ch.isalpha())
+    if letters in GENERIC_NAMES or "".join(ch for ch in compact if ch.isalpha()) in GENERIC_NAMES:
+        # Tên mặc định của TikTok (user + dãy số): chỉ phần chữ "user" giống nhau thì chưa nói lên gì.
+        return False
     prefix: list[str] = []
     for ch in compact:
         if not ch.isalpha():
@@ -126,6 +131,28 @@ def handle_from_viet(text: str) -> str:
     if len(body) > 1 and body[0] in "OQ0o":
         body = body[1:]
     return find_handle("@" + body)
+
+
+def fix_underscores(handle: str, strokes: list[tuple[float, float]]) -> str:
+    """Sửa số gạch dưới của @id theo các nét ngang đo trên ảnh (xem frame._underscore_strokes).
+
+    strokes: (vị trí bắt đầu, chiều dài) tính bằng bề rộng một ký tự, ký tự 0 là @.
+    Một gạch dưới dài khoảng 0,7 đến 1 ký tự, hai gạch liền nhau khoảng 1,5.
+    Chỉ sửa hai lỗi bộ đọc hay mắc: hai gạch đọc thành một, và mất gạch ngay sau @.
+    """
+    if not handle.startswith("@") or not strokes:
+        return handle
+    out = handle
+    groups = [(match.start(), match.end() - match.start()) for match in re.finditer("_+", handle)]
+    for start, size in reversed(groups):
+        near = [length for begin, length in strokes if start - 1.0 <= begin <= start + 1.2]
+        if size == 1 and near and max(near) >= 1.3:
+            out = out[:start] + "__" + out[start + 1 :]
+    first = out[1:2]
+    if first != "_" and first not in "gjpqy" and len(out) > 2:
+        if any(1.0 <= begin <= 2.2 and length >= 0.75 for begin, length in strokes):
+            out = "@_" + out[1:]
+    return out
 
 
 def vote_chars(reads: list[tuple[str, float]] | list[tuple[str, float, float]], loose: bool = True) -> str:
