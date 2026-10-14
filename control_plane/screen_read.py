@@ -1,12 +1,15 @@
 """Đọc một khung hình TikTok: cắt đúng vùng chữ của từng dòng hoặc của hồ sơ.
 
 Danh bạ nhận ra bằng cột nút Follow hồng bên phải. Mỗi nút là một dòng:
-số ở trên, tên ngay dưới. Hồ sơ nhận ra bằng nút Follow rộng bên trái;
-chỉ lấy tên lớn và dòng @ ngay dưới tên đó.
+số ở trên, tên ngay dưới — OCR chỉ dải chữ của dòng đó, không cả khung.
+Hồ sơ nhận ra bằng nút Follow rộng bên trái; chỉ lấy tên lớn và dòng @
+ngay dưới tên đó. Không đọc cả dải header một lần.
+OCR chỉ giữ mực đen và đen nhạt. Chữ đỏ như Follow bị xóa trước khi đọc.
+Ba chấm chạm: chấm ở giữa là dòng mở hồ sơ.
 
-Mỗi lần chạy tesseract tốn thời gian nạp bộ chữ, nên một khung chỉ gọi vài
-lần, mỗi lần đọc cả loạt ô chữ. Số và username đọc bằng bộ chữ lớn
-(tessdata_best) nếu máy có; bộ chữ nhỏ đọc nhầm 3 thành 5 nhiều hơn.
+Ưu tiên tesserocr (API Tesseract lâu dài trong mỗi worker) — cùng engine,
+không spawn process mỗi lần. Fallback CLI nếu chưa cài tesserocr.
+Số và username đọc bằng bộ chữ lớn (tessdata_best) nếu máy có.
 """
 
 from __future__ import annotations
@@ -22,6 +25,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
+from control_plane.cover_read import fill_hole, mask_digits, narrow_join, partial_digits, phone_from_slots
+from control_plane.ocr_backend import resolve_ocr_engine, system_tessdata, tesserocr_available
+from control_plane.screen_layout import LayoutProfile
+from control_plane.strip_shot import jpeg_strip
 from control_plane.screen_table import (
     ContactHit,
     FrameObs,
@@ -29,6 +36,8 @@ from control_plane.screen_table import (
     choose_phone,
     clean_name,
     clean_username,
+    is_profile_handle,
+    is_profile_name,
     is_skipped,
     phone_in_text,
 )
@@ -37,6 +46,8 @@ DIGITS = "0123456789"
 HANDLE_CHARS = "@._0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 # Nhiều tesseract chạy song song mà mỗi cái tự mở nhiều luồng thì giành nhân và gần như đứng.
 _ONE_THREAD = {**os.environ, "OMP_THREAD_LIMIT": "1", "OMP_NUM_THREADS": "1"}
+# API Tesseract lâu dài theo từng tiến trình worker: (lang, tessdata) -> PyTessBaseAPI
+_TESS_APIS: dict[tuple[str, str], object] = {}
 
 
 @dataclass(frozen=True)
@@ -94,6 +105,37 @@ class Line:
         return sum(word.box.center_y() for word in self.words) / len(self.words)
 
 
+@dataclass(frozen=True)
+class _ProfileBits:
+    name: str = ""
+    username: str = ""
+    handle_left: str = ""
+    handle_right: str = ""
+    name_left: str = ""
+    name_right: str = ""
+    # Điểm dòng @, thang 0–100. -1 là chưa đo — không hạ hàng Đủ.
+    confidence: float = -1.0
+    name_shot: bytes = b""
+    user_shot: bytes = b""
+
+    def as_obs(self) -> FrameObs | None:
+        if not (self.username or self.handle_left or self.handle_right or self.user_shot or self.name_shot):
+            return None
+        return FrameObs(
+            "profile",
+            (),
+            self.name if is_profile_name(self.name) else "",
+            self.username if is_profile_handle(self.username) else "",
+            handle_left=self.handle_left,
+            handle_right=self.handle_right,
+            name_left=self.name_left,
+            name_right=self.name_right,
+            handle_confidence=self.confidence,
+            name_shot=self.name_shot,
+            user_shot=self.user_shot,
+        )
+
+
 @dataclass
 class _Pending:
     strip: Box
@@ -102,6 +144,8 @@ class _Pending:
     phone_box: Box
     name_box: Box
     selected: bool
+    phone_gaps: tuple[tuple[int, int], ...] = ()
+    name_gaps: tuple[tuple[int, int], ...] = ()
 
 
 @functools.lru_cache(maxsize=1)
@@ -124,31 +168,239 @@ def best_tessdata() -> str | None:
     return None
 
 
-def read_image(path: str | Path) -> FrameObs:
+@functools.lru_cache(maxsize=1)
+def _ocr_temp_root() -> str | None:
+    """Ưu tiên /dev/shm để ghi ảnh OCR tạm — cùng pixel, I/O nhanh hơn đĩa."""
+    override = os.environ.get("CONTROL_OCR_TMPDIR", "").strip()
+    if override:
+        path = Path(override)
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return None
+        return str(path)
+    shm = Path("/dev/shm")
+    try:
+        if shm.is_dir() and shutil.disk_usage(shm).free >= 512 * 1024 * 1024:
+            path = shm / "fb-poller-ocr"
+            path.mkdir(parents=True, exist_ok=True)
+            return str(path)
+    except OSError:
+        return None
+    return None
+
+
+def read_image(path: str | Path, layout: dict[str, object] | LayoutProfile | None = None) -> FrameObs:
     image = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
-    return read_pillow(image)
+    return read_pillow(image, layout=layout)
 
 
-def read_pillow(image: Image.Image) -> FrameObs:
+def read_image_aggressive(
+    path: str | Path, layout: dict[str, object] | LayoutProfile | None = None
+) -> FrameObs:
+    """Vòng 2: OCR mạnh hơn cho khung lượt một trả unknown."""
+    image = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+    return read_pillow_aggressive(image, layout=layout)
+
+
+def keep_dark_ink(image: Image.Image) -> Image.Image:
+    """Xóa pixel đỏ/hồng trước OCR. Nút Follow và chấm chạm vẫn đo trên ảnh gốc."""
+    rgb = image if image.mode == "RGB" else image.convert("RGB")
+    array = np.asarray(rgb)
+    red = array[:, :, 0].astype(np.int16)
+    green = array[:, :, 1].astype(np.int16)
+    blue = array[:, :, 2].astype(np.int16)
+    pink = (red >= 160) & (red >= green + 40) & (red >= blue + 30)
+    if not bool(pink.any()):
+        return rgb
+    cleaned = np.array(array, copy=True)
+    cleaned[pink] = (255, 255, 255)
+    return Image.fromarray(cleaned, "RGB")
+
+
+def _is_light(image: Image.Image) -> bool:
+    """Màn hình sáng (chữ tối). Tesseract đọc được, không cần đảo cả ảnh."""
+    sample = image.convert("L").resize((16, 16), Image.Resampling.BOX)
+    return (sum(sample.tobytes()) / 256) >= 110
+
+
+def _limit_width(image: Image.Image, max_width: int = 1080) -> Image.Image:
+    """Ảnh quay màn hình lớn hơn 1080px chỉ làm Tesseract chậm, không rõ chữ hơn."""
+    if image.width <= max_width or image.width < 2:
+        return image
+    ratio = max_width / image.width
+    return image.resize((max_width, max(1, int(image.height * ratio))), Image.Resampling.BILINEAR)
+
+
+def read_pillow(
+    image: Image.Image,
+    layout: dict[str, object] | LayoutProfile | None = None,
+) -> FrameObs:
     _require_tesseract()
+    image = _limit_width(image)
+    profile_layout = (
+        layout
+        if isinstance(layout, LayoutProfile)
+        else LayoutProfile.from_dict(layout if isinstance(layout, dict) else None)
+    )
     width, height = image.size
     buttons = _pink_boxes(image)
-    listed = _list_buttons(buttons, width)
+    listed = _list_buttons(buttons, width, layout=profile_layout)
     if len(listed) >= 3:
         anchor_x, anchor_w = _column_anchor(listed)
-        strips = [_row_strip(image, button, anchor_x, anchor_w) for button in listed]
+        strips = [contact_row_box(image, button, anchor_x, anchor_w) for button in listed]
         tapped = _tapped_rows(image, listed, strips, anchor_x, anchor_w)
         contacts = tuple(_read_rows(image, strips, tapped))
         if contacts:
             return FrameObs("list", contacts)
         return FrameObs("unknown")
     profile = _profile_button(buttons, width, height)
-    if profile is None:
-        return FrameObs("unknown")
-    name, username = _read_profile(image, profile)
-    if not username:
-        return FrameObs("unknown")
-    return FrameObs("profile", (), name, username)
+    if profile is not None:
+        obs = _read_profile(image, profile).as_obs()
+        if obs is not None:
+            return obs
+    # P2: không thấy / không đọc được nút Follow — vẫn săn @ ở vùng đầu trang hồ sơ.
+    obs = _hunt_profile_handle(image, layout=profile_layout).as_obs()
+    if obs is not None:
+        return obs
+    return FrameObs("unknown")
+
+
+def read_pillow_aggressive(
+    image: Image.Image,
+    layout: dict[str, object] | LayoutProfile | None = None,
+) -> FrameObs:
+    """OCR vòng 2: phóng to mạnh, đảo màu, PSM rộng, ngưỡng tin cậy thấp hơn."""
+    _require_tesseract()
+    image = _limit_width(image)
+    profile_layout = (
+        layout
+        if isinstance(layout, LayoutProfile)
+        else LayoutProfile.from_dict(layout if isinstance(layout, dict) else None)
+    )
+    # Thử ảnh gốc với hunt mở rộng trước khi đảo màu.
+    obs = _aggressive_once(image, profile_layout)
+    if obs.kind != "unknown" or _is_light(image):
+        return obs
+    # Nền tối (chữ sáng): đảo một lần. Nền sáng không đảo — đảo cả ảnh gần như nhân đôi thời gian.
+    # Xóa Follow đỏ trước khi đảo, kẻo chữ đỏ thành chữ xanh rồi bị đọc.
+    try:
+        inverted = ImageOps.invert(keep_dark_ink(image))
+    except Exception:
+        return obs
+    return _aggressive_once(inverted, profile_layout)
+
+
+def _aggressive_once(image: Image.Image, profile_layout: LayoutProfile) -> FrameObs:
+    width, height = image.size
+    buttons = _pink_boxes(image)
+    listed = _list_buttons(buttons, width, layout=profile_layout)
+    if len(listed) >= 3:
+        anchor_x, anchor_w = _column_anchor(listed)
+        strips = [contact_row_box(image, button, anchor_x, anchor_w) for button in listed]
+        tapped = _tapped_rows(image, listed, strips, anchor_x, anchor_w)
+        contacts = tuple(_read_rows(image, strips, tapped, aggressive=True))
+        if contacts:
+            return FrameObs("list", contacts)
+    profile = _profile_button(buttons, width, height)
+    if profile is not None:
+        obs = _read_profile(image, profile, aggressive=True).as_obs()
+        if obs is not None:
+            return obs
+    obs = _hunt_profile_handle(image, layout=profile_layout, aggressive=True).as_obs()
+    if obs is not None:
+        return obs
+    return FrameObs("unknown")
+
+
+def _name_then_handle(lines: list[Line]) -> tuple[Line, Line, str, str] | None:
+    """Chỉ nhận khi dòng ngay trên @ là tên khách, và @ là id hồ sơ.
+
+    Không nhảy qua dòng Đã follow / Follower / ngày / danh bạ để lấy tên ở trên.
+    """
+    for index, line in enumerate(lines):
+        if index == 0:
+            continue
+        username = clean_username(_username_token(line.text))
+        if not is_profile_handle(username):
+            continue
+        above = lines[index - 1]
+        gap = line.box.y0 - above.box.y1
+        limit = max(8, int(max(above.box.h, line.box.h, 1) * 1.35))
+        if gap > limit:
+            continue
+        name = clean_name(above.text)
+        if not is_profile_name(name):
+            continue
+        return above, line, name, username
+    return None
+
+
+def _hunt_profile_handle(
+    image: Image.Image,
+    layout: LayoutProfile | None = None,
+    *,
+    aggressive: bool = False,
+) -> _ProfileBits:
+    """Đọc @username khi layout hồ sơ không nhận ra nút Follow hồng.
+
+    Chỉ lấy vùng trên màn hình (header hồ sơ). Cần handle hợp lệ (≥3 ký tự sau @).
+    """
+    image = keep_dark_ink(image)
+    width, height = image.size
+    if width < 80 or height < 80:
+        return _ProfileBits()
+    if layout is not None and layout.samples >= 0:
+        x0, y0, x1, y1 = layout.header_box(width, height)
+    else:
+        x0, y0, x1, y1 = (
+            max(0, int(0.04 * width)),
+            max(0, int(0.06 * height)),
+            min(width, int(0.82 * width)),
+            min(height, int(0.48 * height)),
+        )
+    if aggressive:
+        # Mở rộng vùng săn @ khi lượt một thất bại.
+        x0 = max(0, int(0.02 * width))
+        y0 = max(0, int(0.03 * height))
+        x1 = min(width, int(0.92 * width))
+        y1 = min(height, int(0.58 * height))
+    header = Box(x0, y0, x1, y1)
+    if header.w < 40 or header.h < 40:
+        return _ProfileBits()
+    raw = image.crop((header.x0, header.y0, header.x1, header.y1))
+    passes: list[tuple[Image.Image, int, int]] = [
+        (raw, 6, 15),
+        (_enhance(raw, 2), 7, 10),
+    ]
+    if aggressive:
+        # PSM 11 (một dòng thưa) bắt @ mờ. Không phóng 3× và không PSM 3:
+        # ảnh 3× khiến một khung unknown mất hàng chục giây mà hiếm khi ra thêm hồ sơ.
+        passes.append((_enhance(raw, 2), 11, 5))
+    for crop, psm, min_conf in passes:
+        words = _batch([crop], "vie+eng", psm)[0]
+        scale_x = header.w / max(1, crop.width)
+        scale_y = header.h / max(1, crop.height)
+        shifted: list[Word] = []
+        for word in words:
+            if word.conf < min_conf:
+                continue
+            box = word.box
+            mapped = Box(
+                header.x0 + int(box.x0 * scale_x),
+                header.y0 + int(box.y0 * scale_y),
+                header.x0 + int(box.x1 * scale_x),
+                header.y0 + int(box.y1 * scale_y),
+            )
+            shifted.append(Word(word.text, word.conf, mapped))
+        found = _name_then_handle(_lines(shifted))
+        if found is None:
+            continue
+        name_line, handle_line, draft, username = found
+        bits = _finish_profile(image, name_line, handle_line, draft, username)
+        if bits.as_obs() is not None:
+            return bits
+    return _ProfileBits()
 
 
 def read_tap(paths: list[str | Path]) -> FrameObs:
@@ -160,7 +412,7 @@ def read_tap(paths: list[str | Path]) -> FrameObs:
         if len(listed) < 3:
             continue
         anchor_x, anchor_w = _column_anchor(listed)
-        strips = [_row_strip(image, button, anchor_x, anchor_w) for button in listed]
+        strips = [contact_row_box(image, button, anchor_x, anchor_w) for button in listed]
         tapped = _tapped_rows(image, listed, strips, anchor_x, anchor_w)
         if len(tapped) != 1:
             continue
@@ -228,8 +480,16 @@ def _pink_boxes(image: Image.Image) -> list[Box]:
     ]
 
 
-def _list_buttons(boxes: list[Box], width: int) -> list[Box]:
+def _list_buttons(
+    boxes: list[Box],
+    width: int,
+    layout: LayoutProfile | None = None,
+) -> list[Box]:
     candidates = []
+    # B2/B3: nếu đã biết cột Follow của máy, nới mép trái chọn ứng viên quanh đó.
+    min_x = 0.58 * width
+    if layout is not None and layout.samples > 0:
+        min_x = max(0.50 * width, (layout.follow_x0 - 0.08) * width)
     for box in boxes:
         if box.w <= 0 or box.h <= 0:
             continue
@@ -238,12 +498,16 @@ def _list_buttons(boxes: list[Box], width: int) -> list[Box]:
             continue
         if not 0.08 * width <= box.w <= 0.25 * width:
             continue
-        if box.x0 <= 0.58 * width:
+        if box.x0 <= min_x:
             continue
         candidates.append(box)
     if len(candidates) < 3:
         return []
-    anchor = sorted(box.x0 for box in candidates)[len(candidates) // 2]
+    if layout is not None and layout.samples > 0:
+        expect = layout.follow_x0 * width
+        anchor = min(candidates, key=lambda box: abs(box.x0 - expect)).x0
+    else:
+        anchor = sorted(box.x0 for box in candidates)[len(candidates) // 2]
     column = [box for box in candidates if abs(box.x0 - anchor) <= max(24, int(0.04 * width))]
     column.sort(key=lambda box: box.y0)
     kept: list[Box] = []
@@ -309,6 +573,85 @@ def _row_strip(image: Image.Image, button: Box, anchor_x: int, anchor_w: int) ->
     )
 
 
+def contact_row_box(image: Image.Image, button: Box, anchor_x: int, anchor_w: int) -> Box:
+    """Ô OCR của một dòng danh bạ: số và tên, cắt trước nút Follow, không lấy cả khung."""
+    return _row_strip(image, button, anchor_x, anchor_w)
+
+
+def split_locked_row(strip: Box) -> tuple[Box, Box]:
+    """Khóa dòng số (nửa trên) và dòng tên (nửa dưới) khi OCR dính hai dòng thành một."""
+    overlap = max(2, int(strip.h * 0.08))
+    mid = strip.y0 + max(1, int(strip.h * 0.48))
+    phone = Box(strip.x0, strip.y0, strip.x1, min(strip.y1, mid + overlap))
+    name = Box(strip.x0, max(strip.y0, mid - overlap), strip.x1, strip.y1)
+    return phone, name
+
+
+def _lines_merged(phone_box: Box, name_box: Box, strip: Box) -> bool:
+    """Ô chữ cao gần bằng cả hàng, hoặc tên đè lên số: chưa khóa được từng dòng."""
+    if strip.h <= 0 or phone_box.h <= 0:
+        return False
+    if phone_box.h >= int(0.75 * strip.h):
+        return True
+    overlap = min(phone_box.y1, name_box.y1) - max(phone_box.y0, name_box.y0)
+    smaller = min(phone_box.h, name_box.h)
+    return bool(overlap > 0 and smaller > 0 and overlap >= int(0.55 * smaller))
+
+
+def at_zone_box(width: int, height: int, layout: LayoutProfile | None = None) -> Box:
+    """Vùng tên + dòng @. Trên máy này @ nằm khoảng 10–20% chiều cao, ngay trên hàng Follower.
+
+    Không lấy status bar, không lấy nửa dưới danh bạ, không lấy cả header 6%–48%.
+    """
+    x0 = max(0, int(0.04 * width))
+    x1 = min(width, int(0.86 * width))
+    y0 = max(0, int(0.09 * height))
+    y1 = min(height, int(0.22 * height))
+    if layout is not None and layout.samples > 0:
+        hx0, hy0, hx1, hy1 = layout.header_box(width, height)
+        span = max(1, hy1 - hy0)
+        # @ nằm phần trên của header đã học. Phần dưới của header là Follower và nút Follow.
+        y0 = min(height - 1, hy0 + int(span * 0.08))
+        y1 = min(height, hy0 + int(span * 0.42))
+        x0 = max(0, hx0)
+        x1 = min(width, hx1, int(0.86 * width))
+    if y1 <= y0 + 12:
+        y0 = max(0, int(0.09 * height))
+        y1 = min(height, int(0.22 * height))
+    return Box(x0, y0, max(x0 + 1, x1), max(y0 + 1, y1))
+
+
+def header_line_bands(header: Box) -> list[Box]:
+    """Cắt một vùng thành các dải ngang một dòng. Không trả cả header một cục."""
+    if header.w < 40 or header.h < 24:
+        return []
+    line_h = max(18, min(48, max(18, header.h // 6)))
+    if header.h <= line_h + 8:
+        return [header]
+    step = max(12, int(line_h * 0.72))
+    bands: list[Box] = []
+    y = header.y0
+    while y + 12 < header.y1 and len(bands) < 8:
+        y1 = min(header.y1, y + line_h)
+        bands.append(Box(header.x0, y, header.x1, y1))
+        if y1 >= header.y1:
+            break
+        y += step
+    return bands
+
+
+_HANDLE_NOISE = {"follow", "follower", "followers", "following", "message", "tiktok", "facebook"}
+
+
+def _handle_is_customer(username: str) -> bool:
+    if not is_profile_handle(username):
+        return False
+    body = username[1:].lower().replace(".", "").replace("_", "")
+    if body in _HANDLE_NOISE or body.rstrip("0123456789") in _HANDLE_NOISE:
+        return False
+    return True
+
+
 def _touch_dots(image: Image.Image, button_h: float) -> list[tuple[float, float]]:
     """Chấm chạm: hình tròn xám đậm nửa trong suốt, đường kính khoảng 1,3 lần chiều cao nút Follow."""
     scale = max(1, image.width // 400)
@@ -334,63 +677,306 @@ def _touch_dots(image: Image.Image, button_h: float) -> list[tuple[float, float]
     return dots
 
 
+def _cover_boxes(image: Image.Image) -> list[Box]:
+    """Vòng xám che chữ: một chấm hoặc hai chấm dính nhau. Không lấy avatar và nút hồng."""
+    scale = max(1, image.width // 360)
+    small = image.resize((max(1, image.width // scale), max(1, image.height // scale)), Image.Resampling.BOX)
+    array = np.asarray(small).astype(np.int32)
+    red, green, blue = array[:, :, 0], array[:, :, 1], array[:, :, 2]
+    lum = (299 * red + 587 * green + 114 * blue) // 1000
+    spread = array.max(axis=2) - array.min(axis=2)
+    height, width = lum.shape
+    mask = (lum >= 95) & (lum <= 140) & (spread <= 18)
+    mask[: max(1, int(0.12 * height)), :] = False
+    mask[:, : max(1, int(0.08 * width))] = False
+    found: list[Box] = []
+    min_h = 0.035 * height
+    max_h = 0.14 * height
+    for x0, y0, x1, y1, count in _blobs(mask, 40):
+        wide = x1 - x0
+        high = y1 - y0
+        if high < min_h or high > max_h:
+            continue
+        if not (0.65 * high <= wide <= 2.8 * high):
+            continue
+        if count / float(wide * high) < 0.55:
+            continue
+        found.append(Box(x0 * scale, y0 * scale, min(image.width, x1 * scale), min(image.height, y1 * scale)))
+    return found
+
+
+def _cover_gaps(box: Box, covers: list[Box]) -> tuple[tuple[int, int], ...]:
+    """Khoảng ngang mà chấm đè lên dòng chữ. Chấm sát nhau tính một khoảng."""
+    if box.w < 8 or box.h < 8 or not covers:
+        return ()
+    raw: list[tuple[int, int]] = []
+    for cover in covers:
+        ix0 = max(box.x0, cover.x0)
+        iy0 = max(box.y0, cover.y0)
+        ix1 = min(box.x1, cover.x1)
+        iy1 = min(box.y1, cover.y1)
+        if ix1 - ix0 < 4 or iy1 - iy0 < 0.45 * box.h:
+            continue
+        raw.append((ix0, ix1))
+    if not raw:
+        return ()
+    raw.sort()
+    merged: list[list[int]] = [[raw[0][0], raw[0][1]]]
+    join = max(4, int(0.3 * box.h))
+    for start, end in raw[1:]:
+        if start <= merged[-1][1] + join:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    gaps = tuple((start, end) for start, end in merged if end - start >= max(6, int(0.35 * box.h)))
+    return gaps
+
+
+def _slice_boxes(band: Box, gaps: tuple[tuple[int, int], ...]) -> list[tuple[str, Box]]:
+    """Mảnh chữ nằm ngoài chấm: trái, giữa, phải."""
+    pieces: list[tuple[str, Box]] = []
+    cursor = band.x0
+    for index, (start, end) in enumerate(gaps):
+        if start - cursor >= 8:
+            kind = "left" if index == 0 else "mid"
+            pieces.append((kind, Box(cursor, band.y0, start, band.y1)))
+        cursor = max(cursor, end)
+    if band.x1 - cursor >= 8:
+        kind = "right" if gaps else "left"
+        pieces.append((kind, Box(cursor, band.y0, band.x1, band.y1)))
+    return pieces
+
+
+def _line_band(text_box: Box, strip: Box) -> Box:
+    """Vùng dòng chữ, nới sang hai bên để bắt số bị chấm che khuất khỏi ô OCR, không lấy cả avatar."""
+    reach = max(8, int(6.5 * max(text_box.h, 8)))
+    return Box(
+        max(strip.x0, text_box.x0 - reach),
+        max(strip.y0, text_box.y0),
+        min(strip.x1, max(text_box.x1 + reach, text_box.x1)),
+        min(strip.y1, text_box.y1),
+    )
+
+
+def _text_gaps(text_box: Box, strip: Box, covers: list[Box]) -> tuple[tuple[int, int], ...]:
+    band = _line_band(text_box, strip)
+    margin = max(6, int(0.35 * max(text_box.h, 8)))
+    kept = []
+    for start, end in _cover_gaps(band, covers):
+        if end < text_box.x0 - margin or start > text_box.x1 + margin:
+            continue
+        kept.append((start, end))
+    return tuple(kept)
+
+
+def _gaps_are_narrow(box: Box, gaps: tuple[tuple[int, int], ...]) -> bool:
+    """Khe nhỏ hơn một nét chữ thì chấm không nuốt ký tự, chỉ nằm giữa hai mảnh."""
+    if len(gaps) != 1:
+        return False
+    return gaps[0][1] - gaps[0][0] <= max(3, int(0.22 * box.h))
+
+
+def _read_pieces(
+    image: Image.Image,
+    box: Box,
+    gaps: tuple[tuple[int, int], ...],
+    lang: str,
+    whitelist: str = "",
+) -> dict[str, str]:
+    texts = {"left": "", "mid": "", "right": ""}
+    if not gaps:
+        return texts
+    kinds: list[str] = []
+    crops: list[Image.Image] = []
+    for kind, piece in _slice_boxes(box, gaps):
+        raw = _crop(image, piece, 3, 2)
+        # Mảnh dưới 3px không còn nét chữ. Đưa vào Tesseract chỉ tạo ảnh trắng và lỗi pixd too small.
+        if raw.width < 3 or raw.height < 3:
+            continue
+        kinds.append(kind)
+        crops.append(_pad(_upscale(raw, 2)))
+    if not crops:
+        return texts
+    reads = _texts(_batch(crops, lang, 7, whitelist, best_tessdata() if whitelist else None))
+    for kind, text in zip(kinds, reads):
+        texts[kind] = f"{texts[kind]} {text}".strip()
+    return texts
+
+
 def _tapped_rows(image: Image.Image, buttons: list[Box], strips: list[Box], anchor_x: int, anchor_w: int) -> set[int]:
-    """Dòng đang bấm: có chấm chạm nằm trong dòng, hoặc nền xám. Hai dấu hiệu chỉ hai dòng khác nhau thì bỏ."""
+    """Dòng đang bấm.
+
+    Đúng ba chấm: chấm ở giữa theo chiều dọc là nút mở hồ sơ.
+    Một chấm: dòng đó, trừ khi nền xám chỉ một dòng khác.
+    Hai chấm, hoặc nhiều hơn ba chấm mà rơi vào nhiều dòng: bỏ, không đoán.
+    Không thấy chấm thì dùng nền xám.
+    """
     button_h = float(np.median([button.h for button in buttons]))
     centers = [button.center_y() for button in buttons]
     gaps = [b - a for a, b in zip(centers, centers[1:]) if b > a]
     pitch = float(np.median(gaps)) if gaps else button_h * 2.5
+    dots = _touch_dots(image, button_h)
+    middle_only = len(dots) == 3
+    if middle_only:
+        dots = [sorted(dots, key=lambda point: (point[1], point[0]))[1]]
     dot_rows: set[int] = set()
-    for x, y in _touch_dots(image, button_h):
+    for x, y in dots:
         for index, (center, strip) in enumerate(zip(centers, strips)):
             if abs(y - center) <= pitch / 2 and strip.x0 <= x <= anchor_x + anchor_w:
                 dot_rows.add(index)
     grey_rows = {index for index, strip in enumerate(strips) if _selected(image, strip)}
     if len(dot_rows) == 1:
-        if grey_rows and grey_rows != dot_rows:
+        if not middle_only and grey_rows and grey_rows != dot_rows:
             return set()
         return dot_rows
-    if dot_rows:
+    if dot_rows or middle_only:
         return set()
     return grey_rows
 
 
-def _read_rows(image: Image.Image, strips: list[Box], tapped: set[int]) -> list[ContactHit]:
+def _read_rows(
+    image: Image.Image,
+    strips: list[Box],
+    tapped: set[int],
+    *,
+    aggressive: bool = False,
+) -> list[ContactHit]:
+    image = keep_dark_ink(image)
     usable = [(index, strip) for index, strip in enumerate(strips) if strip.w >= 40 and strip.h >= 20]
     layouts = _batch([image.crop((s.x0, s.y0, s.x1, s.y1)) for _, s in usable], "vie+eng", 6)
+    min_layout_conf = 12 if aggressive else 20
+    covers = _cover_boxes(image)
     pending: list[_Pending] = []
     for (index, strip), words in zip(usable, layouts):
-        placed = [Word(word.text, word.conf, word.box.shift(strip.x0, strip.y0)) for word in words if word.conf >= 20]
+        placed = [
+            Word(word.text, word.conf, word.box.shift(strip.x0, strip.y0))
+            for word in words
+            if word.conf >= min_layout_conf
+        ]
         phone, draft, name_box, phone_box = _phone_and_name(placed)
-        if not draft or name_box is None or phone_box is None:
+        if phone_box is None:
             continue
-        pending.append(_Pending(strip, phone, draft, phone_box, name_box, index in tapped))
+        if name_box is None:
+            name_box = Box(
+                phone_box.x0,
+                min(strip.y1 - 4, phone_box.y1),
+                phone_box.x1,
+                min(strip.y1, phone_box.y1 + max(8, phone_box.h)),
+            )
+        phone_gaps = _text_gaps(phone_box, strip, covers)
+        name_gaps = _text_gaps(name_box, strip, covers)
+        if not draft and not phone_gaps:
+            continue
+        pending.append(
+            _Pending(
+                strip,
+                phone,
+                draft,
+                phone_box,
+                name_box,
+                index in tapped,
+                phone_gaps,
+                name_gaps,
+            )
+        )
     if not pending:
         return []
 
     best = best_tessdata()
     digit_crops: list[Image.Image] = []
+    per_phone = 2
     for row in pending:
         crop = _crop(image, row.phone_box, 6, 4)
+        # Phóng 2× là đủ cho số/tên. Phóng 3× cả hàng làm vòng 2 chậm mà ít khi ra thêm số đúng.
         digit_crops.extend([_pad(_upscale(crop, 2)), _pad(_enhance(crop, 2))])
     digit_reads = _texts(_batch(digit_crops, "eng", 7, DIGITS, best))
 
     name_crops = [_pad(_upscale(_crop(image, row.name_box, 8, 6), 2)) for row in pending]
     fast_names = _texts(_batch(name_crops, "vie", 7))
     best_names = _texts(_batch(name_crops, "vie", 7, tessdata=best)) if best else [""] * len(pending)
+    sharp_names = [""] * len(pending)
 
     hits: list[ContactHit] = []
     for index, row in enumerate(pending):
-        reads = digit_reads[2 * index : 2 * index + 2]
-        phone = choose_phone(*reads, row.phone)
-        name = choose_name(fast_names[index], best_names[index], row.draft)
-        if not phone or not name or is_skipped(name):
+        seen_left = ""
+        seen_right = ""
+        merged = (
+            _lines_merged(row.phone_box, row.name_box, row.strip) and not row.phone_gaps and not row.name_gaps
+        )
+        if merged:
+            phone, name = _read_split_row(image, row, best)
+        elif row.phone_gaps:
+            band = _line_band(row.phone_box, row.strip)
+            parts = _read_pieces(image, band, row.phone_gaps, "eng", DIGITS)
+            slots = mask_digits(parts["left"], parts["right"])
+            if slots is not None:
+                slots = fill_hole(slots, parts["mid"])
+            phone = phone_from_slots(slots)
+            seen_left = partial_digits(parts["left"])
+            seen_right = partial_digits(parts["right"])
+        else:
+            reads = digit_reads[per_phone * index : per_phone * index + per_phone]
+            phone = choose_phone(*reads, row.phone)
+        if merged:
+            pass
+        elif row.name_gaps:
+            band = _line_band(row.name_box, row.strip)
+            parts = _read_pieces(image, band, row.name_gaps, "vie")
+            recovered = narrow_join(
+                clean_name(parts["left"]),
+                clean_name(parts["right"]),
+                narrow=_gaps_are_narrow(row.name_box, row.name_gaps),
+                sep=" ",
+            )
+            name = recovered if recovered and not is_skipped(recovered) else ""
+        else:
+            name = choose_name(fast_names[index], best_names[index], sharp_names[index], row.draft)
+            if is_skipped(name):
+                name = ""
+        if phone and name:
+            hits.append(ContactHit(phone, name, row.selected))
             continue
-        hits.append(ContactHit(phone, name, row.selected))
+        if phone:
+            # Số nằm ngoài chấm, tên thì không. Giữ số để xếp cần xem, không đoán tên.
+            hits.append(
+                ContactHit(
+                    phone,
+                    "",
+                    row.selected,
+                    from_cover=True,
+                    name_shot=jpeg_strip(image, row.name_box),
+                )
+            )
+            continue
+        if seen_left or seen_right:
+            hits.append(
+                ContactHit(
+                    "",
+                    name,
+                    row.selected,
+                    seen_left=seen_left,
+                    seen_right=seen_right,
+                    phone_shot=jpeg_strip(image, row.phone_box),
+                )
+            )
     return hits
 
 
-def _read_profile(image: Image.Image, button: Box) -> tuple[str, str]:
+def _line_confidence(line: Line) -> float:
+    """Trung bình điểm các chữ trên dòng @. Không có điểm thì -1."""
+    scores = [float(word.conf) for word in line.words if float(word.conf) >= 0]
+    if not scores:
+        return -1.0
+    return sum(scores) / len(scores)
+
+
+def _read_profile(image: Image.Image, button: Box, *, aggressive: bool = False) -> _ProfileBits:
+    """Hồ sơ: chỉ lấy tên lớn và dòng @ ngay dưới tên đó.
+
+    Hồ sơ mở rất ngắn thường hơi nhòe — thử thêm crop phóng to/làm nét và
+    ngưỡng tin cậy thấp hơn trước khi bỏ qua khung. Dòng không phải tên+@ thì bỏ.
+    """
+    image = keep_dark_ink(image)
     header = Box(
         max(0, button.x0 - int(0.08 * button.w)),
         max(0, button.y0 - int(3.9 * button.h)),
@@ -398,44 +984,231 @@ def _read_profile(image: Image.Image, button: Box) -> tuple[str, str]:
         max(0, button.y0 - int(0.12 * button.h)),
     )
     if header.w < 20 or header.h < 20:
-        return "", ""
-    words = _batch([image.crop((header.x0, header.y0, header.x1, header.y1))], "vie+eng", 6)[0]
-    words = [
-        Word(word.text, word.conf, word.box.shift(header.x0, header.y0))
-        for word in words
-        if word.conf >= 20
+        return _ProfileBits()
+    raw = image.crop((header.x0, header.y0, header.x1, header.y1))
+    # Không dùng _pad ở đây để tỉ lệ tọa độ crop → ảnh gốc còn đúng.
+    passes: list[tuple[Image.Image, int, int]] = [
+        (raw, 6, 20),
+        (_enhance(raw, 2), 7, 12),
+        (_upscale(raw, 2), 6, 12),
     ]
-    words = [word for word in words if word.box.center_x() < button.x1 + 0.45 * button.w]
-    lines = _lines(words)
-    handle_at = -1
-    username = ""
-    for index, line in enumerate(lines):
-        found = clean_username(_username_token(line.text))
-        if found:
-            handle_at = index
-            username = found
-            break
-    if handle_at < 0:
-        return "", ""
-    reread = _read_handle(image, lines[handle_at].box)
-    if reread:
-        username = reread
-    draft = ""
-    name_box: Box | None = None
-    for line in reversed(lines[:handle_at]):
-        text = clean_name(line.text)
-        if not text or is_skipped(text) or phone_in_text(text):
+    if aggressive:
+        # PSM 11 bắt @ mờ. Không phóng 3× và không PSM 3: một khung unknown mất hàng chục giây.
+        passes.append((_enhance(raw, 2), 11, 5))
+    found_pair: tuple[Line, Line, str, str] | None = None
+    for crop, psm, min_conf in passes:
+        words = _batch([crop], "vie+eng", psm)[0]
+        scale_x = header.w / max(1, crop.width)
+        scale_y = header.h / max(1, crop.height)
+        shifted = []
+        for word in words:
+            if word.conf < min_conf:
+                continue
+            box = word.box
+            mapped = Box(
+                header.x0 + int(box.x0 * scale_x),
+                header.y0 + int(box.y0 * scale_y),
+                header.x0 + int(box.x1 * scale_x),
+                header.y0 + int(box.y1 * scale_y),
+            )
+            shifted.append(Word(word.text, word.conf, mapped))
+        shifted = [word for word in shifted if word.box.center_x() < button.x1 + 0.45 * button.w]
+        found = _name_then_handle(_lines(shifted))
+        if found is None:
             continue
-        draft = text
-        name_box = line.box
+        found_pair = found
         break
-    if name_box is None:
-        return choose_name(draft), username
-    crop = [_pad(_upscale(_crop(image, name_box, 8, 6), 2))]
-    fast = _texts(_batch(crop, "vie", 7))[0]
-    best = best_tessdata()
-    sharp = _texts(_batch(crop, "vie", 7, tessdata=best))[0] if best else ""
-    return choose_name(fast, sharp, draft), username
+    if found_pair is not None:
+        name_line, handle_line, draft, username = found_pair
+        if _line_is_thin(handle_line.box, header):
+            bits = _finish_profile(image, name_line, handle_line, draft, username)
+            if bits.as_obs() is not None:
+                return _ProfileBits(
+                    bits.name,
+                    bits.username,
+                    bits.handle_left,
+                    bits.handle_right,
+                    bits.name_left,
+                    bits.name_right,
+                    _line_confidence(handle_line),
+                    bits.name_shot,
+                    bits.user_shot,
+                )
+    # Nút Follow đã thấy mà dải rộng không ra @ — chỉ OCR từng dòng trong header đó.
+    locked = _read_locked_profile(image, header)
+    if locked.username or locked.handle_left or locked.handle_right or locked.user_shot:
+        return locked
+    return _ProfileBits(user_shot=jpeg_strip(image, header))
+
+
+def _finish_profile(
+    image: Image.Image,
+    name_line: Line,
+    handle_line: Line,
+    draft: str,
+    username: str,
+) -> _ProfileBits:
+    """Bỏ chữ OCR nằm dưới chấm. Chỉ giữ mảnh nhìn thấy, hoặc cả dòng khi chấm không đè."""
+    covers = _cover_boxes(image)
+    name_gaps = _cover_gaps(name_line.box, covers)
+    handle_gaps = _cover_gaps(handle_line.box, covers)
+    handle_left = ""
+    handle_right = ""
+    name_left = ""
+    name_right = ""
+    if handle_gaps:
+        parts = _read_pieces(image, handle_line.box, handle_gaps, "eng", HANDLE_CHARS)
+        left = _username_token(parts["left"]) or parts["left"].strip()
+        right = parts["right"].strip().lstrip("@")
+        joined = narrow_join(left, right, narrow=_gaps_are_narrow(handle_line.box, handle_gaps))
+        if joined and not joined.startswith("@"):
+            joined = "@" + joined
+        cleaned = clean_username(joined)
+        if is_profile_handle(cleaned):
+            username = cleaned
+        else:
+            username = ""
+            handle_left = left if left.startswith("@") else f"@{left}" if left else ""
+            handle_right = right
+    else:
+        reread = _read_handle(image, handle_line.box)
+        if reread and is_profile_handle(reread):
+            username = reread
+    if name_gaps:
+        parts = _read_pieces(image, name_line.box, name_gaps, "vie")
+        left = clean_name(parts["left"])
+        right = clean_name(parts["right"])
+        joined = narrow_join(left, right, narrow=_gaps_are_narrow(name_line.box, name_gaps), sep=" ")
+        name = joined if is_profile_name(joined) else ""
+        if not name:
+            name_left = left
+            name_right = right
+    else:
+        name_crop = [_pad(_upscale(_crop(image, name_line.box, 8, 6), 2))]
+        fast = _texts(_batch(name_crop, "vie", 7))[0]
+        best = best_tessdata()
+        sharp = _texts(_batch(name_crop, "vie", 7, tessdata=best))[0] if best else ""
+        name = choose_name(fast, sharp, draft)
+        if not is_profile_name(name):
+            name = draft if is_profile_name(draft) else ""
+    if not is_profile_handle(username):
+        username = ""
+    shown_name = name if is_profile_name(name) else ""
+    name_shot = b"" if shown_name else jpeg_strip(image, name_line.box)
+    user_shot = b"" if (username or handle_left or handle_right) else jpeg_strip(image, handle_line.box)
+    if not username and not handle_left and not handle_right and not user_shot and not name_shot:
+        return _ProfileBits()
+    return _ProfileBits(
+        shown_name,
+        username,
+        handle_left,
+        handle_right,
+        name_left,
+        name_right,
+        name_shot=name_shot,
+        user_shot=user_shot,
+    )
+
+
+def _line_is_thin(box: Box, header: Box) -> bool:
+    """Dòng @ khóa đúng một hàng chữ, không phải cả header dính follower."""
+    if box.h <= 0 or header.h <= 0:
+        return False
+    return box.h <= max(36, int(header.h * 0.34))
+
+
+def _read_split_row(image: Image.Image, row: _Pending, tessdata: str | None) -> tuple[str, str]:
+    """Đọc riêng nửa trên (số) và nửa dưới (tên). Mất số thì giữ số đã thấy ở lượt bố cục."""
+    phone_band, name_band = split_locked_row(row.strip)
+    phone_crop = _pad(_enhance(_crop(image, phone_band, 4, 2), 2))
+    name_crop = _pad(_upscale(_crop(image, name_band, 4, 2), 2))
+    try:
+        phone_text = _texts(_batch([phone_crop], "eng", 7, DIGITS, tessdata))[0]
+        name_text = _texts(_batch([name_crop], "vie", 7))[0]
+    except (OSError, subprocess.SubprocessError, RuntimeError):
+        return row.phone, row.draft if not is_skipped(row.draft) else ""
+    phone = choose_phone(phone_text, row.phone)
+    name = choose_name(name_text, row.draft)
+    if is_skipped(name):
+        name = ""
+    return phone, name
+
+
+def _locked_name_handle(image: Image.Image, header: Box) -> tuple[str, str, Box, Box] | None:
+    """OCR từng dải một dòng. @ chỉ nhận khi dòng ngay trên là tên khách."""
+    bands = header_line_bands(header)
+    if len(bands) < 2:
+        return None
+    crops: list[Image.Image] = []
+    for band in bands:
+        raw = _crop(image, band, 2, 1)
+        if raw.width < 8 or raw.height < 8:
+            crops.append(Image.new("RGB", (8, 8), "white"))
+        else:
+            crops.append(_enhance(raw, 2))
+    try:
+        pages = _batch(crops, "eng", 7, HANDLE_CHARS)
+    except (OSError, subprocess.SubprocessError, RuntimeError):
+        return None
+    found_at = -1
+    username = ""
+    for index, words in enumerate(pages):
+        text = "".join(word.text for word in words)
+        folded = text.lower()
+        if "follower" in folded or "following" in folded:
+            continue
+        token = clean_username(_username_token(text))
+        if not _handle_is_customer(token):
+            continue
+        found_at = index
+        username = token
+        break
+    if found_at <= 0:
+        return None
+    name_raw = _crop(image, bands[found_at - 1], 4, 2)
+    if name_raw.width < 8 or name_raw.height < 8:
+        return None
+    try:
+        name_text = _texts(_batch([_pad(_upscale(name_raw, 2))], "vie", 7))[0]
+    except (OSError, subprocess.SubprocessError, RuntimeError):
+        return None
+    name = clean_name(name_text)
+    if not is_profile_name(name):
+        return None
+    return name, username, bands[found_at - 1], bands[found_at]
+
+
+def _read_locked_profile(image: Image.Image, header: Box) -> _ProfileBits:
+    try:
+        found = _locked_name_handle(image, header)
+    except (OSError, subprocess.SubprocessError, RuntimeError):
+        return _ProfileBits()
+    if found is None:
+        return _ProfileBits()
+    name, username, name_box, handle_box = found
+    name_line = Line([Word(name, 90, name_box)])
+    handle_line = Line([Word(username, 90, handle_box)])
+    bits = _finish_profile(image, name_line, handle_line, name, username)
+    if bits.as_obs() is not None:
+        return bits
+    if _handle_is_customer(username):
+        return _ProfileBits(name if is_profile_name(name) else "", username)
+    return _ProfileBits()
+
+
+def read_locked_header_text(image: Image.Image, layout: LayoutProfile | None = None) -> str:
+    """Chữ vùng @ đã khóa từng dòng: 'tên' rồi '@id'. Không đọc cả khung, không đọc nửa trên một cục."""
+    image = keep_dark_ink(image)
+    zone = at_zone_box(image.width, image.height, layout)
+    if zone.w < 40 or zone.h < 24:
+        return ""
+    found = _locked_name_handle(image, zone)
+    if found is None:
+        return ""
+    name, username, _name_box, _handle_box = found
+    if not _handle_is_customer(username):
+        return ""
+    return f"{name}\n{username}"
 
 
 def _read_handle(image: Image.Image, box: Box) -> str:
@@ -449,7 +1222,7 @@ def _read_handle(image: Image.Image, box: Box) -> str:
 
 
 def _phone_and_name(words: list[Word]) -> tuple[str, str, Box | None, Box | None]:
-    """Dòng số là dòng đầu có số hợp lệ hoặc có từ 9 chữ số. Số đọc ở đây chỉ là một phiếu, có thể rỗng."""
+    """Danh bạ: số điện thoại ở trên, tên kèm theo nằm ngay phía dưới số đó."""
     lines = _lines(words)
     phone = ""
     phone_at = -1
@@ -462,14 +1235,15 @@ def _phone_and_name(words: list[Word]) -> tuple[str, str, Box | None, Box | None
     if phone_at < 0:
         return "", "", None, None
     phone_box = lines[phone_at].box
+    phone_y = phone_box.center_y()
+    # Chỉ lấy tên gần nhất phía dưới số — không lấy chữ phía trên hoặc cùng dòng.
     for line in lines[phone_at + 1 :]:
+        if line.box.center_y() <= phone_y:
+            continue
         text = clean_name(line.text)
         if not text or is_skipped(text) or phone_in_text(text):
             continue
         return phone, text, line.box, phone_box
-    same = clean_name(_without_phone(lines[phone_at].text, phone)) if phone else ""
-    if same and not is_skipped(same):
-        return phone, same, lines[phone_at].box, phone_box
     return phone, "", None, phone_box
 
 
@@ -564,22 +1338,142 @@ def _texts(pages: list[list[Word]]) -> list[str]:
     return [" ".join(word.text for word in words) for words in pages]
 
 
-def _batch(
+def _tessdata_path(tessdata: str | None) -> str | None:
+    if tessdata:
+        return tessdata
+    return system_tessdata()
+
+
+def _quiet_leptonica() -> None:
+    """Tắt dòng pixScaleAreaMap trên stderr. OCR vẫn chạy; chỉ hết bão log làm chậm journal."""
+    if getattr(_quiet_leptonica, "done", False):
+        return
+    setattr(_quiet_leptonica, "done", True)
+    try:
+        import ctypes
+        import ctypes.util
+
+        found = ctypes.util.find_library("lept")
+        names = [found] if found else []
+        names.extend(["liblept.so.5", "liblept.so"])
+        for name in names:
+            if not name:
+                continue
+            try:
+                lib = ctypes.CDLL(name)
+            except OSError:
+                continue
+            lib.setMsgSeverity.argtypes = [ctypes.c_int]
+            lib.setMsgSeverity.restype = ctypes.c_int
+            lib.setMsgSeverity(6)  # L_SEVERITY_NONE
+            return
+    except Exception:
+        return
+
+
+def _tesserocr_api(lang: str, tessdata: str | None):
+    from tesserocr import OEM, PyTessBaseAPI
+
+    _quiet_leptonica()
+    folder = _tessdata_path(tessdata) or ""
+    key = (lang, folder)
+    api = _TESS_APIS.get(key)
+    if api is not None:
+        return api
+    kwargs: dict[str, object] = {"lang": lang, "oem": OEM.LSTM_ONLY}
+    if folder:
+        kwargs["path"] = folder
+    api = PyTessBaseAPI(**kwargs)
+    _TESS_APIS[key] = api
+    return api
+
+
+# Ảnh thấp hơn mức này làm Tesseract 4 gọi pixScaleAreaMap / boxClip lỗi và tốn cả nhân.
+_MIN_OCR_SIDE = 8
+
+
+def _for_ocr(image: Image.Image) -> Image.Image | None:
+    if image.width < _MIN_OCR_SIDE or image.height < _MIN_OCR_SIDE:
+        return None
+    prepared = image if image.mode == "RGB" else image.convert("RGB")
+    prepared.info["dpi"] = (300, 300)
+    return prepared
+
+
+def _batch_tesserocr(
     images: list[Image.Image],
     lang: str,
     psm: int,
     whitelist: str = "",
     tessdata: str | None = None,
 ) -> list[list[Word]]:
-    """Một lần chạy tesseract cho cả loạt ảnh. Trả về các chữ của từng ảnh, tọa độ tính trong ảnh đó."""
+    """OCR bằng API lâu dài — không ghi file, không spawn process."""
+    from tesserocr import RIL
+
     pages: list[list[Word]] = [[] for _ in images]
     if not images:
         return pages
-    with tempfile.TemporaryDirectory(prefix="ocr-") as folder:
+    api = _tesserocr_api(lang, tessdata)
+    api.SetPageSegMode(psm)
+    # Xóa whitelist cũ khi không dùng — biến này dính trên API tái sử dụng.
+    api.SetVariable("tessedit_char_whitelist", whitelist or "")
+    # Học thích nghi không giúp chữ UI cố định, chỉ tốn CPU mỗi khung.
+    api.SetVariable("classify_enable_learning", "0")
+    # DPI cố định: Tesseract 4 khỏi tự phóng/thu ảnh về kích thước 0 rồi báo pixd too small.
+    api.SetVariable("user_defined_dpi", "300")
+    level = RIL.WORD
+    for index, image in enumerate(images):
+        prepared = _for_ocr(image)
+        if prepared is None:
+            continue
+        api.SetImage(prepared)
+        try:
+            api.Recognize()
+        except RuntimeError:
+            continue
+        iterator = api.GetIterator()
+        if iterator is None:
+            continue
+        while True:
+            try:
+                token = (iterator.GetUTF8Text(level) or "").strip()
+            except RuntimeError:
+                token = ""
+            if token:
+                try:
+                    conf = float(iterator.Confidence(level))
+                    left, top, right, bottom = iterator.BoundingBox(level)
+                except (RuntimeError, TypeError, ValueError):
+                    pass
+                else:
+                    if conf >= 0 and right > left and bottom > top:
+                        pages[index].append(Word(token, conf, Box(left, top, right, bottom)))
+            if not iterator.Next(level):
+                break
+    return pages
+
+
+def _batch_cli(
+    images: list[Image.Image],
+    lang: str,
+    psm: int,
+    whitelist: str = "",
+    tessdata: str | None = None,
+) -> list[list[Word]]:
+    """Fallback: gọi binary tesseract (chậm hơn vì spawn + ghi BMP)."""
+    pages: list[list[Word]] = [[] for _ in images]
+    if not images:
+        return pages
+    root = _ocr_temp_root()
+    with tempfile.TemporaryDirectory(prefix="ocr-", dir=root) as folder:
         paths = []
         for index, image in enumerate(images):
-            path = Path(folder) / f"{index:04d}.png"
-            image.save(path, compress_level=1, dpi=(300, 300))
+            path = Path(folder) / f"{index:04d}.bmp"
+            prepared = _for_ocr(image)
+            if prepared is None:
+                Image.new("RGB", (_MIN_OCR_SIDE, _MIN_OCR_SIDE), "white").save(path, format="BMP")
+            else:
+                prepared.save(path, format="BMP")
             paths.append(str(path))
         listing = Path(folder) / "list.txt"
         listing.write_text("\n".join(paths) + "\n", encoding="utf-8")
@@ -589,15 +1483,20 @@ def _batch(
             "stdout",
             "-l",
             lang,
+            "--oem",
+            "1",
             "--psm",
             str(psm),
             "-c",
             "tessedit_create_tsv=1",
             "-c",
             "tessedit_create_txt=0",
+            "-c",
+            "classify_enable_learning=0",
         ]
-        if tessdata:
-            command.extend(["--tessdata-dir", tessdata])
+        folder_tess = _tessdata_path(tessdata)
+        if folder_tess:
+            command.extend(["--tessdata-dir", folder_tess])
         if whitelist:
             command.extend(["-c", f"tessedit_char_whitelist={whitelist}"])
         done = subprocess.run(command, capture_output=True, text=True, check=False, timeout=180, env=_ONE_THREAD)
@@ -618,3 +1517,20 @@ def _batch(
             continue
         pages[page].append(Word(token, conf, Box(left, top, left + width, top + height)))
     return pages
+
+
+def _batch(
+    images: list[Image.Image],
+    lang: str,
+    psm: int,
+    whitelist: str = "",
+    tessdata: str | None = None,
+) -> list[list[Word]]:
+    """OCR một loạt ảnh. Ưu tiên tesserocr; fallback CLI cùng oem/psm/whitelist."""
+    engine = resolve_ocr_engine()
+    if engine == "tesserocr" and tesserocr_available():
+        try:
+            return _batch_tesserocr(images, lang, psm, whitelist, tessdata)
+        except Exception as exc:
+            print(f"tesserocr lỗi, fallback CLI: {exc}", flush=True)
+    return _batch_cli(images, lang, psm, whitelist, tessdata)

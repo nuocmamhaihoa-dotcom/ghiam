@@ -5,88 +5,505 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Đọc video danh bạ</title>
   <style>
-    :root { color-scheme: light; --ink: #17202a; --muted: #5c6770; --line: #e4e7ec; --bg: #f4f6f8; --card: #fff; --blue: #0b6bcb; }
+    :root {
+      color-scheme: light;
+      --ink: #1c2430;
+      --muted: #5c6b7a;
+      --line: #e4e9ee;
+      --bg: #eef2f5;
+      --card: #fff;
+      --accent: #0f6e6a;
+      --accent-2: #0c5855;
+      --ok: #0d6b3a;
+      --warn: #8a2b2b;
+    }
     * { box-sizing: border-box; }
-    body { margin: 0; font: 16px/1.45 "Segoe UI", system-ui, sans-serif; color: var(--ink); background: var(--bg); }
-    main { max-width: 920px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
-    h1 { font-size: 1.7rem; margin: 0 0 0.25rem; }
-    h2 { font-size: 1.15rem; margin: 0 0 0.7rem; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    main { max-width: 980px; margin: 0 auto; padding: 0.85rem 0.75rem 2.4rem; }
+    h1 { font-size: 1.35rem; line-height: 1.2; margin: 0; letter-spacing: -0.02em; }
+    h2 {
+      font-size: 0.98rem; margin: 0 0 0.55rem; display: flex; align-items: center; gap: 0.4rem;
+    }
+    h2::before {
+      content: ""; width: 3px; height: 0.9em; border-radius: 2px; background: var(--accent); flex: 0 0 auto;
+    }
+    h3 { margin: 0 0 0.4rem; font-size: 0.95rem; }
     p { margin: 0; }
-    .lead { color: var(--muted); margin-bottom: 1rem; }
-    section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem; margin: 0 0 0.8rem; }
-    label { display: block; font-weight: 650; margin: 0 0 0.35rem; }
+    .lead { color: var(--muted); margin-top: 0.2rem; font-size: 0.92rem; }
+    section {
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      padding: 0.75rem 0.8rem; margin: 0 0 0.6rem;
+      scroll-margin-top: 3rem;
+    }
+    .jump {
+      position: sticky; top: 0; z-index: 4;
+      display: flex; gap: 0.35rem; overflow-x: auto;
+      margin: 0.55rem -0.15rem 0.6rem; padding: 0.35rem 0.15rem;
+      background: rgba(238, 242, 245, 0.94);
+      -webkit-overflow-scrolling: touch;
+    }
+    .jump a {
+      flex: 0 0 auto; text-decoration: none; color: var(--ink);
+      background: #fff; border: 1px solid var(--line); border-radius: 999px;
+      padding: 0.28rem 0.7rem; font-size: 0.84rem; font-weight: 650;
+    }
+    .jump a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 2px;
+    }
+    label { display: block; font-weight: 650; margin: 0 0 0.3rem; font-size: 0.92rem; }
     input[type="text"], input[type="password"], input[type="search"] {
-      width: 100%; font: inherit; padding: 0.7rem 0.75rem; border: 1px solid #cfd5dc; border-radius: 10px; background: #fff;
+      width: 100%; font: inherit; font-size: 16px; padding: 0.62rem 0.7rem;
+      border: 1px solid #cfd6de; border-radius: 10px; background: #fff; color: var(--ink);
     }
-    .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    .row { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
     button, .file {
-      font: inherit; font-weight: 700; border: 0; border-radius: 10px; min-height: 46px; padding: 0 1rem; cursor: pointer;
+      font: inherit; font-weight: 700; border: 0; border-radius: 10px;
+      min-height: 44px; padding: 0 0.95rem; cursor: pointer;
+      touch-action: manipulation;
     }
-    button.primary, .file { background: var(--blue); color: #fff; }
-    button.ghost { background: #eef1f4; color: var(--ink); }
+    button.primary, .file { background: var(--accent); color: #fff; }
+    button.primary:active, .file:active { background: var(--accent-2); }
+    button.ghost { background: #eef2f4; color: var(--ink); }
+    button.mini { min-height: 32px; padding: 0 0.65rem; font-size: 0.82rem; font-weight: 650; margin: 0.2rem 0.15rem 0 0; }
     button:disabled { opacity: 0.55; cursor: default; }
+    .seg { background: #eef2f4; padding: 3px; border-radius: 12px; gap: 3px; }
+    .seg button { flex: 1 1 0; min-width: 0; border-radius: 9px; }
+    .seg button.ghost { background: transparent; }
+    .top-grid { display: grid; gap: 0.6rem; }
+    .device-box { margin-bottom: 0.55rem; }
     .drop {
-      margin-top: 0.7rem; padding: 1.1rem; border: 1.5px dashed #b7c0ca; border-radius: 12px; background: #fbfcfd; text-align: center;
+      display: flex; flex-direction: column; align-items: stretch; gap: 0.45rem;
+      padding: 0.8rem; border: 1.5px dashed #b7c3cc; border-radius: 12px; background: #f8fbfb; text-align: center;
     }
-    .drop.over { background: #e8f2fc; border-color: var(--blue); }
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.55rem; }
-    .stat { background: #f7f9fb; border-radius: 10px; padding: 0.7rem 0.75rem; }
-    .stat b { display: block; font-size: 1.35rem; }
-    .stat span { color: var(--muted); font-size: 0.92rem; }
+    .drop-title { font-weight: 750; }
+    .drop .note { margin-top: 0.1rem; }
+    .results-table td:nth-child(1),
+    .results-table td:nth-child(3) { font-weight: 700; }
+    .drop .file, #pickTest { width: 100%; }
+    #pickTest {
+      background: #1a3a4a; color: #fff; font-weight: 750;
+    }
+    .drop.over { background: #e5f4f3; border-color: var(--accent); }
+    .drop.locked { opacity: 0.55; }
+    .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; }
+    .stat { background: #f6f8fa; border-radius: 10px; padding: 0.5rem 0.55rem; min-width: 0; }
+    .stat b { display: block; font-size: 1.2rem; line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+    .stat span { color: var(--muted); font-size: 0.75rem; line-height: 1.25; }
+    .stat.warn-stat { background: #fdecec; border: 1px solid #f0c2c2; }
+    .stat.ok-stat { background: #eef7f1; border: 1px solid #b9dbc6; }
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 0.45rem 0.3rem; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 0.95rem; }
-    th { color: var(--muted); font-weight: 650; }
-    .note { color: var(--muted); margin-top: 0.55rem; }
-    .warn { color: #8a2b2b; font-weight: 650; }
-    .ok { color: #0d6b3a; }
+    table.queue-table, table.results-table { border: 1px solid #b7c3cc; }
+    table.results-table { min-width: 720px; }
+    table.queue-table { min-width: 100%; }
+    th, td {
+      text-align: left; padding: 0.35rem 0.4rem; border: 1px solid #b7c3cc;
+      vertical-align: top; font-size: 0.88rem; word-break: break-word; overflow-wrap: anywhere;
+    }
+    th { color: var(--ink); font-weight: 700; font-size: 0.75rem; background: #eef3f6; white-space: nowrap; }
+    tr:hover td { background: #f7fafb; }
+    .results-table td:nth-child(3),
+    .results-table td:nth-child(4) { white-space: nowrap; }
+    .results-table tr.row-ok td:first-child { box-shadow: inset 3px 0 0 #1b8a4a; }
+    .results-table tr.row-review td:first-child { box-shadow: inset 3px 0 0 #c48a12; }
+    .results-table tr.row-scan td:first-child { box-shadow: inset 3px 0 0 #c04545; }
+    .vname { font-weight: 750; }
+    .vprogress { font-size: 0.82rem; line-height: 1.35; color: var(--ink); }
+    .vstate { font-size: 0.82rem; font-weight: 700; color: var(--muted); white-space: nowrap; }
+    td.vscore, .vscore { font-variant-numeric: tabular-nums; font-weight: 750; white-space: nowrap; }
+    .vstate.run { color: var(--accent); }
+    .vstate.bad { color: var(--warn); }
+    .vstate.ok { color: var(--ok); }
+    .scoreline { margin: 0 0 0.4rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+    details.fold { margin: 0 0 0.6rem; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 0.45rem 0.7rem; }
+    details.fold > summary { cursor: pointer; font-weight: 700; }
+    .note { color: var(--muted); margin-top: 0.35rem; font-size: 0.86rem; }
+    img.strip { display: block; max-width: 100%; height: auto; margin-top: 0.3rem; border-radius: 6px; background: #fff; }
+    .warn { color: var(--warn); font-weight: 650; }
+    .ok { color: var(--ok); }
+    .banner {
+      margin: 0 0 0.55rem; padding: 0.6rem 0.75rem; border-radius: 12px; font-weight: 650; font-size: 0.92rem;
+    }
+    .banner.warn-banner { background: #fdecec; border: 1px solid #e8b4b4; color: #7a1f1f; }
+    .banner.ok-banner { background: #eef7f1; border: 1px solid #b9dbc6; color: #143524; }
+    .banner.hide { display: none; }
+    .callout {
+      margin: 0 0 0.55rem; padding: 0.55rem 0.7rem; border-radius: 12px;
+      background: #fff8e8; border: 1px solid #ebd59a; color: #5c4310; font-size: 0.86rem; line-height: 1.4;
+    }
     #file { display: none; }
+    .howto {
+      padding: 0.7rem 0.75rem; border-radius: 14px; margin: 0 0 0.6rem;
+      background: #eef7f1; border: 1px solid #b9dbc6; color: #143524;
+      scroll-margin-top: 3rem;
+    }
+    .howto ol {
+      list-style: none; margin: 0; padding: 0;
+      display: grid; grid-template-columns: 1fr; gap: 0.35rem;
+    }
+    .howto li {
+      margin: 0; background: #fff; border-radius: 10px; padding: 0.4rem 0.5rem;
+      font-size: 0.88rem; line-height: 1.35; color: var(--ink);
+    }
+    .howto .tiny { margin-top: 0.35rem; color: #3d5c48; font-size: 0.86rem; }
+    .howto .danger { margin-top: 0.45rem; color: #7a1f1f; font-weight: 700; font-size: 0.9rem; }
+    .howto summary { cursor: pointer; font-weight: 650; color: #24543a; font-size: 0.88rem; margin-top: 0.45rem; }
+    .checklist {
+      margin: 0 0 0.6rem; padding: 0.7rem 0.75rem; border-radius: 14px;
+      background: #fff8e8; border: 1px solid #ebd59a; color: #4a3b12;
+    }
+    .checks { display: grid; gap: 0.3rem; }
+    .checklist label.check {
+      display: grid; grid-template-columns: 1.1rem minmax(0, 1fr); gap: 0.4rem 0.45rem;
+      align-items: start; font-weight: 500; margin: 0; font-size: 0.88rem; line-height: 1.35;
+    }
+    .checklist input { width: 1rem; height: 1rem; margin-top: 0.15rem; flex: 0 0 auto; accent-color: var(--ok); }
+    .legend { display: grid; gap: 0.35rem; margin-bottom: 0.35rem; }
+    .legend div { background: #f6f8fa; border-radius: 10px; padding: 0.4rem 0.5rem; font-size: 0.84rem; line-height: 1.35; }
+    .legend b { display: block; font-size: 0.82rem; }
+    .legend span { color: var(--muted); }
+    .legend-note { margin-top: 0; margin-bottom: 0.45rem; }
+    .badge {
+      display: inline-block; margin-top: 0.2rem; padding: 0.08rem 0.45rem; border-radius: 999px;
+      font-size: 0.78rem; font-weight: 700;
+    }
+    .badge.bad { background: #fdecec; color: var(--warn); }
+    .badge.good { background: #eef7f1; color: var(--ok); }
+    .backup {
+      display: flex; flex-direction: column; gap: 0.55rem; align-items: stretch;
+    }
+    .backup h2 { margin-bottom: 0.25rem; }
+    .backup .primary { width: 100%; }
+    #resultsMoreWrap:not([hidden]) { margin-top: 0.5rem; }
+    #resultsMoreWrap[hidden] { display: none !important; }
+    #resultsMore { width: 100%; }
+    @media (min-width: 720px) {
+      .howto ol { grid-template-columns: 1fr 1fr; }
+      .legend { grid-template-columns: 1fr 1fr 1fr; }
+      .drop { flex-direction: row; align-items: center; justify-content: space-between; text-align: left; }
+      .drop .file { width: auto; min-width: 160px; }
+      .backup { flex-direction: row; align-items: center; justify-content: space-between; }
+      .backup .primary { width: auto; flex: 0 0 auto; }
+      .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    @media (min-width: 900px) {
+      .top-grid { grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr); align-items: start; }
+      .top-grid .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .howto ol { grid-template-columns: repeat(4, 1fr); }
+      .checks { grid-template-columns: 1fr 1fr 1fr; gap: 0.4rem; }
+    }
+    @media (max-width: 720px) {
+      .drop .note { margin-top: 0.1rem; }
+      th, td { font-size: 0.82rem; padding: 0.28rem 0.32rem; }
+    }
+    body[data-page="kho"] #sec-queue,
+    body[data-page="kho"] #sec-upload,
+    body[data-page="kho"] .fold,
+    body[data-page="kho"] #sec-results,
+    body[data-page="kho"] #sec-fresh,
+    body[data-page="kho"] #sec-backup,
+    body[data-page="kho"] #openWarn { display: none !important; }
+    body:not([data-page="kho"]) #sec-kho { display: none !important; }
   </style>
 </head>
 <body>
 <main>
-  <h1>Đọc video danh bạ</h1>
-  <p class="lead">Thêm video từ nhiều máy cùng lúc. Đóng trang này thì máy chủ vẫn đọc tiếp.</p>
+  <header>
+    <h1>Đọc video danh bạ</h1>
+  </header>
+  <nav class="jump" aria-label="Mục trên trang">
+    <a href="#sec-queue" id="goHome">Hôm nay</a>
+    <a href="#sec-upload">Tải lên</a>
+    <a href="#sec-results">Kết quả</a>
+    <a href="#kho" id="goKho">Kho tổng</a>
+    <a href="#sec-fresh">Bảng mới</a>
+    <a href="#sec-backup">Sao lưu</a>
+  </nav>
 
-  <section>
+  <div id="relayWarn" class="banner warn-banner __RELAY_HIDE__">__RELAY_TEXT__</div>
+  <audio id="bgKeep" loop playsinline preload="auto" hidden></audio>
+
+  <section id="sec-queue">
+    <h2>Video trong ngày</h2>
+    <p id="scoreLine" class="scoreline"></p>
+    <div id="queue" class="table-wrap"></div>
+    <p id="reader" class="note"></p>
+    <div id="stats" hidden></div>
+  </section>
+  <div id="openWarn" class="banner hide" role="status"></div>
+
+  <section id="sec-upload">
     <h2>Thêm video</h2>
+    <div class="device-box">
+      <label for="device">Tên máy iPhone quét</label>
+      <input id="device" type="text" maxlength="80" placeholder="VD: iPhone 13 của An" />
+    </div>
     <div class="drop" id="drop">
-      <p>Kéo nhiều video vào đây</p>
-      <p class="note">hoặc</p>
       <button class="file" type="button" id="pick">Chọn video</button>
+      <button type="button" id="pickTest">Tải video test</button>
       <input id="file" type="file" accept="video/*,image/*" multiple />
     </div>
     <p id="uploadNote" class="note"></p>
   </section>
 
-  <section>
-    <h2>Thống kê</h2>
-    <div class="stats" id="stats"></div>
-    <p id="reader" class="note"></p>
+  <details class="fold">
+    <summary>Ghi chú</summary>
+    <p class="callout"><b>Để Safari khỏi bị sập khi tải:</b> tắt VPN, tắt iCloud Private Relay và Chế độ dữ liệu thấp. iPhone gửi nguyên file, không cắt mảnh. Mở app khác vẫn gửi tiếp. Video đã lên đủ thì máy chủ đọc và phân tích dù Safari đã tắt. Đừng vuốt tắt Safari khi chưa lên 100% — đứt giữa chừng thì chọn lại cùng file để gửi lại từ đầu.</p>
+    <div class="howto" id="howto">
+      <h3>Cách chắc nhất để có hàng đủ (số + tên + @)</h3>
+      <ol>
+        <li>Trong Messenger/Facebook: mở danh bạ, <b>bấm vào từng người cần lấy</b>.</li>
+        <li>Đợi trang hồ sơ hiện ra và <b>nhìn rõ dòng @username</b> (khoảng một nhịp thở ngắn).</li>
+        <li><b>Rồi mới thoát</b> về danh bạ — không chạm mở rồi back ngay lúc chữ còn đang nhòe.</li>
+        <li>Làm lần lượt <b>từng người</b> cần lấy, rồi tải video lên đây.</li>
+      </ol>
+      <details>
+        <summary>Máy chủ đọc và tải lại thế nào</summary>
+        <p class="tiny">Máy chủ quét 30 khung/giây và tăng dày 60 khung/giây quanh lúc mở/đóng hồ sơ; học bố cục theo từng máy. Hàng chưa đủ 3 ô được đọc lại 4 giây trước và sau khung thiếu. Nếu vẫn còn hồ sơ chưa ghép, máy thử tiếp ghép theo thời gian rồi đọc riêng vùng tên và @. Tải lên lỗi thì tự chuyển sang mảnh nhỏ một đường, rồi gửi cả file một lần. Chỉ lướt danh bạ (không mở hồ sơ) thì số nằm ở <b>Cần xem</b>: có số và tên, chưa có @.</p>
+      </details>
+      <p class="danger">Danh bạ không hiện @. Không mở hồ sơ = máy chủ không thể tự tạo @.</p>
+    </div>
+    <div class="checklist" id="checklist">
+      <h3>Cách quay đã được đồng ý</h3>
+      <div class="checks">
+        <label class="check"><input type="checkbox" id="checkOpen" checked disabled /><span>Tôi đã <b>bấm mở hồ sơ từng người</b> cần lấy (không chỉ lướt danh bạ).</span></label>
+        <label class="check"><input type="checkbox" id="checkAt" checked disabled /><span>Mỗi lần mở tôi đã <b>nhìn rõ dòng @</b> rồi mới thoát.</span></label>
+        <label class="check"><input type="checkbox" id="checkBack" checked disabled /><span>Tôi <b>không back ngay</b> lúc chữ còn đang nhòe / đang chuyển cảnh.</span></label>
+      </div>
+      <p id="checkNote" class="note">Đã đồng ý cả 3 ý — chọn video được ngay, không cần tick.</p>
+    </div>
+    <div class="legend">
+      <div><b>Đủ</b><span>Một hàng đã có đủ Số + Tên + @.</span></div>
+      <div><b>Cần xem</b><span>Số có trong danh bạ nhưng hàng đó thiếu Tên hoặc @.</span></div>
+      <div><b>Lỗi quét</b><span>Không thành một hàng: mở hồ sơ mà không thấy số, trùng tên không ghép được, hoặc một số mở nhiều hồ sơ.</span></div>
+    </div>
+    <p class="note legend-note">Số khách là tổng số điện thoại, mỗi số chỉ tính một lần — đó là mục tiêu cần đọc. Phần trăm là % số trong danh bạ đã đủ 3 cột, không tính dòng lỗi quét.</p>
+  </details>
+
+  <section id="sec-results">
+    <h2>Kết quả trong ngày</h2>
+    <div class="row seg" style="margin-bottom:0.45rem">
+      <button class="primary" type="button" data-view="complete" id="viewComplete">Đủ 3 cột</button>
+      <button class="ghost" type="button" data-view="incomplete" id="viewIncomplete">Chưa đủ</button>
+      <button class="ghost" type="button" data-view="all" id="viewAll">Tất cả</button>
+    </div>
+    <div class="row" style="margin-bottom:0.45rem">
+      <button class="ghost" type="button" id="exportCsv">Xuất CSV</button>
+      <button class="ghost" type="button" id="exportVcf">Xuất vCard</button>
+    </div>
+    <p class="note">Không đoán chữ dưới chấm. Dải chữ chưa đọc được lưu thành ảnh trong đúng ô của hàng đó. Mỗi số chỉ xuất một lần.</p>
+    <input id="query" type="search" placeholder="Gõ đầu số, @username hoặc tên video (VD: IMG_0018)" />
+    <p id="resultsNote" class="note"></p>
+    <div id="results" class="table-wrap"></div>
+    <p id="resultsMoreWrap" hidden>
+      <button class="ghost" type="button" id="resultsMore">Xem thêm</button>
+    </p>
   </section>
 
-  <section>
-    <h2>Hàng đợi</h2>
-    <div id="queue"></div>
+  <section id="sec-fresh">
+    <h2>Bảng mới</h2>
+    <div class="row" style="margin-bottom:0.45rem">
+      <button class="primary" type="button" id="pickFresh">Tải video test (đủ tính năng)</button>
+      <button class="ghost" type="button" id="importFresh">Đưa video còn file trên máy chủ vào bảng mới</button>
+    </div>
+    <input id="fileFresh" type="file" accept="video/*,image/*" multiple hidden />
+    <p id="freshNote" class="note"></p>
+    <div id="freshReport"></div>
+    <h3>Hàng của bảng mới</h3>
+    <div id="freshQueue" class="table-wrap"></div>
+    <h3>Kết quả bảng mới</h3>
+    <div id="freshResults" class="table-wrap"></div>
   </section>
 
-  <section>
-    <h2>Kết quả đã lưu</h2>
-    <input id="query" type="search" placeholder="Gõ đầu số điện thoại hoặc @username" />
-    <div id="results"></div>
+  <section id="sec-kho">
+    <h2>Kho tổng</h2>
+    <p id="archiveScore" class="scoreline"></p>
+    <h3>Video cũ</h3>
+    <div id="archiveQueue" class="table-wrap"></div>
+    <p id="archiveQueueMoreWrap" hidden>
+      <button class="ghost" type="button" id="archiveQueueMore">Xem thêm</button>
+    </p>
+    <h3>Kết quả cũ</h3>
+    <div class="row seg" style="margin-bottom:0.45rem">
+      <button class="primary" type="button" data-archive-view="complete" id="archiveViewComplete">Đủ 3 cột</button>
+      <button class="ghost" type="button" data-archive-view="incomplete">Chưa đủ</button>
+      <button class="ghost" type="button" data-archive-view="all">Tất cả</button>
+    </div>
+    <input id="archiveQuery" type="search" placeholder="Gõ đầu số, @username hoặc tên video" />
+    <p id="archiveNote" class="note"></p>
+    <div id="archiveResults" class="table-wrap"></div>
+    <p id="archiveMoreWrap" hidden>
+      <button class="ghost" type="button" id="archiveMore">Xem thêm</button>
+    </p>
   </section>
 
-  <section>
-    <h2>Sao lưu về PC</h2>
-    <p>File nén này là bản sao các kết quả đã lưu. Tải về và giữ trên máy tính. Đó là bản dự phòng ngoài VPS.</p>
-    <p class="note">Bấm một lần. Trình duyệt sẽ tải file .csv.gz.</p>
-    <p style="margin-top:0.8rem"><button id="backup" class="primary" type="button">Tải bản sao lưu về PC</button></p>
-    <p id="backupNote" class="note"></p>
+  <section id="sec-backup" class="backup">
+    <div>
+      <h2>Sao lưu</h2>
+      <p id="backupNote" class="note"></p>
+    </div>
+    <button id="backup" class="primary" type="button">Tải bản sao lưu về PC</button>
   </section>
 </main>
+
 <script>
   var serverToken = __CONTROL_TOKEN__;
+  var DEVICE_KEY = "video-device-name";
+  var CHECK_KEY = "video-upload-checklist-v1";
 
   function token() { return serverToken; }
+
+  function deviceName() {
+    return (document.getElementById("device").value || "").trim();
+  }
+
+  function saveDevice() {
+    try { localStorage.setItem(DEVICE_KEY, deviceName()); } catch (error) {}
+  }
+
+  function loadDevice() {
+    var input = document.getElementById("device");
+    try {
+      var saved = localStorage.getItem(DEVICE_KEY) || "";
+      if (saved) input.value = saved;
+    } catch (error) {}
+    if (!input.value) {
+      var ua = navigator.userAgent || "";
+      if (/iPhone/i.test(ua)) input.value = "iPhone";
+      else if (/iPad/i.test(ua)) input.value = "iPad";
+    }
+  }
+
+  function checklistIds() { return ["checkOpen", "checkAt", "checkBack"]; }
+
+  function checklistReady() {
+    return true;
+  }
+
+  function saveChecklist() {}
+
+  function loadChecklist() {
+    checklistIds().forEach(function (id) {
+      var box = document.getElementById(id);
+      box.checked = true;
+      box.disabled = true;
+    });
+    try { sessionStorage.removeItem(CHECK_KEY); } catch (error) {}
+  }
+
+  function syncUploadGate() {
+    var pick = document.getElementById("pick");
+    var drop = document.getElementById("drop");
+    var note = document.getElementById("checkNote");
+    pick.disabled = false;
+    drop.classList.remove("locked");
+    note.textContent = "Đã đồng ý cả 3 ý — chọn video được ngay, không cần tick.";
+    note.className = "note ok";
+  }
+
+  var PHONE_PARALLEL = 2;
+  var PHONE_CHUNK_BYTES = 4 * 1024 * 1024;
+  var LANE_PORTS = [];
+  var laneDetectGen = 0;
+  var portFails = {};
+
+  function phoneBrowser() {
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+  }
+
+  function activeParallel() {
+    if (phoneBrowser()) return PHONE_PARALLEL;
+    return CHUNK_PARALLEL || 6;
+  }
+
+  function pagePort() {
+    return location.port || (location.protocol === "https:" ? "443" : "80");
+  }
+
+  function relayActive() {
+    var banner = document.getElementById("relayWarn");
+    return !!(banner && !banner.classList.contains("hide"));
+  }
+
+  function usePageOriginOnly(parallel) {
+    LANE_PORTS = [pagePort()];
+    CHUNK_PARALLEL = parallel;
+    return LANE_PORTS;
+  }
+
+  function probePort(port) {
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); }, 2000);
+    return fetch(location.protocol + "//" + location.hostname + ":" + port + "/health", {
+      signal: ctrl.signal,
+      cache: "no-store"
+    }).then(function (res) {
+      clearTimeout(timer);
+      return res.ok ? port : null;
+    }).catch(function () {
+      clearTimeout(timer);
+      return null;
+    });
+  }
+
+  async function detectLanePorts() {
+    var gen = ++laneDetectGen;
+    // iPhone + VPN: nhiều cổng và nhiều mảnh 16MB làm Safari sập giữa chừng.
+    if (phoneBrowser()) return usePageOriginOnly(PHONE_PARALLEL);
+    // https hoặc Private Relay: 8090/8091 hay đứt. Chỉ gửi trên đúng địa chỉ trang đang mở.
+    if (location.protocol === "https:" || relayActive()) {
+      return usePageOriginOnly(relayActive() ? 4 : 6);
+    }
+    var found = null;
+    try {
+      found = await Promise.race([
+        Promise.all(["8090", "8091"].map(probePort)),
+        sleep(2200).then(function () { return null; })
+      ]);
+    } catch (error) {
+      found = null;
+    }
+    if (gen !== laneDetectGen) return LANE_PORTS.length ? LANE_PORTS : usePageOriginOnly(6);
+    if (!found) return usePageOriginOnly(6);
+    var extras = found.filter(function (port) { return port && String(port) !== String(pagePort()); });
+    LANE_PORTS = [pagePort()].concat(extras);
+    CHUNK_PARALLEL = 6 * LANE_PORTS.length;
+    return LANE_PORTS;
+  }
+
+  function chunkPutUrl(uploadId, index) {
+    var ports = LANE_PORTS.length ? LANE_PORTS : [pagePort()];
+    var use = ports[index % ports.length];
+    var path = "/v1/videos/uploads/" + uploadId + "/chunks/" + index;
+    if (String(use) === String(pagePort())) return path;
+    return location.protocol + "//" + location.hostname + ":" + use + path;
+  }
+
+  function portOfUrl(url) {
+    if (!url || url.charAt(0) === "/") return String(pagePort());
+    try {
+      var parsed = new URL(url, location.href);
+      return String(parsed.port || (parsed.protocol === "https:" ? "443" : "80"));
+    } catch (error) {
+      return String(pagePort());
+    }
+  }
+
+  function noteChunkPortFailure(url) {
+    var port = portOfUrl(url);
+    if (port === String(pagePort())) return;
+    portFails[port] = (portFails[port] || 0) + 1;
+    if (portFails[port] < 2) return;
+    LANE_PORTS = LANE_PORTS.filter(function (item) { return String(item) !== port; });
+    if (!LANE_PORTS.length) LANE_PORTS = [pagePort()];
+    CHUNK_PARALLEL = 6 * LANE_PORTS.length;
+  }
 
   async function api(path, options) {
     var headers = options && options.headers ? options.headers : {};
@@ -100,12 +517,20 @@
     return response;
   }
 
-  function stat(value, label) {
-    return "<div class='stat'><b>" + value + "</b><span>" + label + "</span></div>";
+  function stat(value, label, kind) {
+    var cls = "stat";
+    if (kind === "warn") cls += " warn-stat";
+    if (kind === "ok") cls += " ok-stat";
+    return "<div class='" + cls + "'><b>" + value + "</b><span>" + label + "</span></div>";
+  }
+
+  function pct(part, whole) {
+    if (!whole) return null;
+    return Math.round((part * 100) / whole);
   }
 
   function statusText(status) {
-    if (status === "queued") return "Đang chờ";
+    if (status === "queued") return "Đang chờ đọc";
     if (status === "running") return "Đang đọc";
     if (status === "done") return "Xong";
     if (status === "error") return "Lỗi";
@@ -113,76 +538,701 @@
     return status;
   }
 
+  function formatBytes(n) {
+    var v = Number(n) || 0;
+    if (v >= 1024 * 1024 * 1024) return (v / (1024 * 1024 * 1024)).toFixed(1) + " GB";
+    if (v >= 1024 * 1024) return (v / (1024 * 1024)).toFixed(0) + " MB";
+    if (v >= 1024) return (v / 1024).toFixed(0) + " KB";
+    return v + " B";
+  }
+
+  function formatTime(value) {
+    if (!value) return "";
+    var date = new Date(value);
+    if (isNaN(date.getTime())) return String(value);
+    var d = date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "2-digit" });
+    var t = date.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false });
+    return d + " " + t;
+  }
+
+  function formatDuration(seconds) {
+    var n = Number(seconds);
+    if (!isFinite(n) || n <= 0) return "—";
+    var total = Math.round(n);
+    var h = Math.floor(total / 3600);
+    var m = Math.floor((total % 3600) / 60);
+    var s = total % 60;
+    function pad(v) { return (v < 10 ? "0" : "") + v; }
+    if (h > 0) return h + ":" + pad(m) + ":" + pad(s);
+    return pad(m) + ":" + pad(s);
+  }
+
+  function issueText(item) {
+    if (item.issue) return String(item.issue);
+    if (item.status === "error") return item.error || "Lỗi khi đọc video";
+    if (item.status === "uploading") {
+      if (item.stale) {
+        return "Tải bị ngắt ở " + (item.percent || 0) + "% — chọn lại cùng file để tiếp tục";
+      }
+      if (item.percent != null) return "Đang tải lên " + item.percent + "%";
+      return "Đang tải lên";
+    }
+    if (item.status === "queued") return "Chờ đọc — đã lên VPS, đợi máy chủ phân tích";
+    if (item.status === "running") return item.progress || "Đang đọc";
+    if (item.status !== "done") return item.status || "—";
+    var saved = item.saved_count || 0;
+    var review = item.review_count || 0;
+    var scanErrors = item.unopened_count || 0;
+    var total = saved + review + scanErrors;
+    if (!total) return "Không có dòng kết quả";
+    if (saved === total) return "Tất cả đều tốt — " + saved + " đủ";
+    var parts = [saved + " đủ"];
+    if (review) parts.push(review + " cần xem (có số, thiếu tên hoặc @)");
+    if (scanErrors) parts.push(scanErrors + " lỗi quét");
+    return parts.join(" · ");
+  }
+
+  function renderOpenBanner() {
+    var banner = document.getElementById("openWarn");
+    if (!banner) return;
+    banner.className = "banner hide";
+    banner.textContent = "";
+  }
+
+  function videoStamp(item) {
+    if (item.kind === "upload" || (!item.id && item.upload_id)) return 1000000000000;
+    return Number(item.id) || 0;
+  }
+
+  function newestFirst(items) {
+    return items.slice().sort(function (a, b) { return videoStamp(b) - videoStamp(a); });
+  }
+
+  function stateClass(item) {
+    if (item.status === "error" || item.stale) return "bad";
+    if (item.kind === "upload" || item.status === "uploading" || item.status === "running") return "run";
+    if (item.status === "done") return "ok";
+    return "";
+  }
+
+  function scoreText(item) {
+    var isUpload = item.kind === "upload" || (!item.id && item.upload_id);
+    if (isUpload) return item.percent != null ? (item.percent + "%") : "—";
+    var saved = item.saved_count || 0;
+    var phones = item.phone_count || 0;
+    if (item.status === "done" || item.status === "error" || saved || phones) {
+      return saved + " đủ / " + phones + " số";
+    }
+    return "—";
+  }
+
+  function agoText(value) {
+    if (!value) return "";
+    var date = new Date(value);
+    if (isNaN(date.getTime())) return "";
+    var sec = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000));
+    if (sec < 60) return sec + " giây";
+    if (sec < 3600) return Math.floor(sec / 60) + " phút";
+    var hours = Math.floor(sec / 3600);
+    var minutes = Math.floor((sec % 3600) / 60);
+    return hours + " giờ " + minutes + " phút";
+  }
+
+  function progressDetail(item, items) {
+    var isUpload = item.kind === "upload" || (!item.id && item.upload_id);
+    if (isUpload || item.status === "uploading") {
+      if (item.issue) return String(item.issue);
+      var bits = [];
+      if (item.percent != null) bits.push(item.percent + "%");
+      if (item.received_bytes != null && item.size_bytes) {
+        bits.push(formatBytes(item.received_bytes) + " / " + formatBytes(item.size_bytes));
+      } else if (item.size_bytes) {
+        bits.push(formatBytes(item.size_bytes));
+      }
+      if (item.chunks_total) bits.push((item.chunks_done || 0) + "/" + item.chunks_total + " mảnh");
+      return bits.join(" · ") || "Đang tải lên";
+    }
+    if (item.status === "queued") {
+      var wait = ["Đã lên máy chủ, chờ đến lượt đọc"];
+      if (item.size_bytes) wait.push(formatBytes(item.size_bytes));
+      if (item.duration_sec) wait.push("dài " + formatDuration(item.duration_sec));
+      var waited = agoText(item.created_at);
+      if (waited) wait.push("chờ " + waited);
+      if (items) {
+        var reading = items.filter(function (other) { return other.status === "running"; }).length;
+        var ahead = items.filter(function (other) {
+          return other.status === "queued" && Number(other.id) && Number(other.id) < Number(item.id);
+        }).length;
+        if (reading) wait.push(reading + " video đang đọc");
+        if (ahead) wait.push(ahead + " video chờ trước");
+      }
+      return wait.join(" · ");
+    }
+    if (item.status === "running") {
+      var text = String(item.progress || item.issue || "Đang đọc");
+      var run = agoText(item.started_at);
+      if (run) text += " · đã chạy " + run;
+      if (item.progress_at) {
+        var beat = new Date(item.progress_at).getTime();
+        if (!isNaN(beat) && Date.now() - beat > 120000) {
+          text += " · cập nhật " + agoText(item.progress_at) + " trước";
+        }
+      }
+      if (item.duration_sec) text += " · dài " + formatDuration(item.duration_sec);
+      return text;
+    }
+    if (item.status === "error") return item.error || item.issue || "Lỗi khi đọc video";
+    if (item.status === "done") {
+      var when = formatTime(item.finished_at);
+      return when ? ("Xong " + when) : "Xong";
+    }
+    return item.issue || statusText(item.status);
+  }
+
+  var lastResultTotal = -1;
+  var uploadingActive = false;
+  var wakeLock = null;
+
+  var bgToneUrl = "";
+
+  function toneWavBlob() {
+    var rate = 8000;
+    var n = rate;
+    var data = new Uint8Array(44 + n * 2);
+    var view = new DataView(data.buffer);
+    function wstr(offset, text) {
+      for (var i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i));
+    }
+    wstr(0, "RIFF");
+    view.setUint32(4, 36 + n * 2, true);
+    wstr(8, "WAVE");
+    wstr(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, rate, true);
+    view.setUint32(28, rate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    wstr(36, "data");
+    view.setUint32(40, n * 2, true);
+    for (var i = 0; i < n; i += 1) {
+      var sample = Math.sin((2 * Math.PI * 55 * i) / rate) * 5000;
+      view.setInt16(44 + i * 2, sample, true);
+    }
+    return new Blob([data], { type: "audio/wav" });
+  }
+
+  function holdBackground() {
+    // iOS đóng JavaScript khi sang app khác, trừ khi trang đang phát tiếng.
+    // Tiếng 40Hz rất nhỏ giữ trang sống để gửi tiếp mảnh. Đọc video là việc của máy chủ, không phụ thuộc trang.
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = "playback";
+    } catch (error) {}
+    var audio = document.getElementById("bgKeep");
+    if (!audio) return;
+    try {
+      if (!bgToneUrl) bgToneUrl = URL.createObjectURL(toneWavBlob());
+      if (audio.getAttribute("src") !== bgToneUrl) audio.src = bgToneUrl;
+      audio.loop = true;
+      audio.volume = 0.35;
+      var playing = audio.play();
+      if (playing && playing.catch) playing.catch(function () {});
+    } catch (error) {}
+    try {
+      if (navigator.mediaSession) {
+        navigator.mediaSession.playbackState = "playing";
+        if (window.MediaMetadata) {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: "Đang tải video",
+            artist: "Mở app khác vẫn chạy"
+          });
+        }
+      }
+    } catch (error) {}
+  }
+
+  function releaseBackground() {
+    var audio = document.getElementById("bgKeep");
+    try { if (audio) audio.pause(); } catch (error) {}
+  }
+
+  async function requestWakeLock() {
+    try {
+      if (navigator.wakeLock && navigator.wakeLock.request) {
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", function () { wakeLock = null; });
+      }
+    } catch (error) { wakeLock = null; }
+  }
+
+  async function releaseWakeLock() {
+    try { if (wakeLock) await wakeLock.release(); } catch (error) {}
+    wakeLock = null;
+  }
+
   async function refresh() {
-    var statsResponse = await api("/v1/videos/stats");
+    if (refreshAbort) {
+      try { refreshAbort.abort(); } catch (error) {}
+    }
+    var ctrl = new AbortController();
+    refreshAbort = ctrl;
+    try {
+    var statsResponse = await api("/v1/videos/stats", { signal: ctrl.signal });
     if (!statsResponse.ok) return;
     var body = await statsResponse.json();
-    document.getElementById("stats").innerHTML =
-      stat(body.saved, "Đã lưu") +
-      stat(body.review, "Cần xem") +
-      stat(body.unopened, "Chưa mở hồ sơ") +
-      stat(body.queued, "Video đang chờ") +
-      stat(body.running, "Video đang đọc") +
-      stat(body.done, "Video đã xong") +
-      stat(body.error, "Video lỗi");
+    var saved = body.today_saved || 0;
+    var phones = body.today_phones || 0;
+    var scoreLine = document.getElementById("scoreLine");
+    if (scoreLine) scoreLine.textContent = saved + " đủ / " + phones + " số";
+    var archiveScore = document.getElementById("archiveScore");
+    if (archiveScore) archiveScore.textContent = (body.older_saved || 0) + " đủ / " + (body.older_phones || 0) + " số";
+    renderOpenBanner();
     var reader = document.getElementById("reader");
     if (!body.reader_alive) {
       reader.textContent = body.queued > 0
         ? "Hàng đợi còn video nhưng bộ đọc trên máy chủ chưa chạy."
         : "Bộ đọc trên máy chủ chưa chạy.";
       reader.className = "note warn";
-    } else if (body.running > 0 || body.queued > 0) {
-      reader.textContent = "Máy chủ đang đọc bằng " + body.workers + " tiến trình, chia nhau từng khung hình. Đóng trang không làm dừng.";
-      reader.className = "note ok";
+    } else if (body.ocr_paused) {
+      reader.textContent = "Tạm dừng nhận video mới vì đĩa sắp đầy.";
+      reader.className = "note warn";
     } else {
-      reader.textContent = "Bộ đọc đang chạy, sẵn sàng nhận video. Dùng " + body.workers + " nhân, chừa một nhân cho trang này.";
-      reader.className = "note ok";
+      reader.textContent = "";
+      reader.className = "note";
     }
-    var queueResponse = await api("/v1/videos");
-    if (queueResponse.ok) renderQueue((await queueResponse.json()).items || []);
-    loadResults();
+    var queueResponse = await api("/v1/videos?day=today&limit=200", { signal: ctrl.signal });
+    if (ctrl.signal.aborted) return;
+    if (queueResponse.ok) renderQueue((await queueResponse.json()).items || [], "queue", "Chưa có video trong ngày.");
+    if (!uploadingActive) loadFresh();
+    // Không tải hết bảng kết quả khi đang gửi video — Safari chỉ có 6 kết nối.
+    if (!uploadingActive && !resultsLoading && body.results !== lastResultTotal) {
+      var stamp = body.results;
+      setTimeout(function () {
+        if (uploadingActive || resultsLoading) return;
+        loadResults().then(function (ok) {
+          if (ok) lastResultTotal = stamp;
+        });
+      }, phoneBrowser() ? 1500 : 0);
+    }
+    } catch (error) {
+      if (error && error.name === "AbortError") return;
+    }
   }
 
-  function renderQueue(items) {
+  function ensureUploadRow(uploadId, name, size) {
     var box = document.getElementById("queue");
+    if (!box || !uploadId) return null;
+    var found = box.querySelector("[data-upload='" + uploadId + "']");
+    if (found) return found;
+    var table = box.querySelector("table");
+    if (!table) {
+      box.innerHTML = "<table class='queue-table'><tr><th>Video</th><th>Trạng thái</th><th>Tiến trình</th><th>Đủ / số</th><th></th></tr></table>";
+      table = box.querySelector("table");
+    }
+    var tr = document.createElement("tr");
+    tr.setAttribute("data-upload", uploadId);
+    tr.innerHTML = "<td class='vname'>" + escapeHtml(name) + "</td>" +
+      "<td class='vstate run'>Đang tải</td>" +
+      "<td class='vprogress'>0%</td>" +
+      "<td class='vscore'>0%</td><td></td>";
+    // Trình duyệt bọc <tr> trong <tbody>. insertBefore trên <table> ném NotFoundError
+    // khi hàng đợi đã có video — phiên tạo xong nhưng không gửi được mảnh nào.
+    var head = table.querySelector("tr");
+    var parent = (head && head.parentNode) || table;
+    if (head && head.nextSibling) parent.insertBefore(tr, head.nextSibling);
+    else parent.appendChild(tr);
+    return tr;
+  }
+
+  function paintUploadRow(uploadId, name, received, size, detail) {
+    try {
+      var row = ensureUploadRow(uploadId, name, size);
+      if (!row) return;
+      var cells = row.querySelectorAll("td");
+      if (cells.length < 4) return;
+      var pct = size ? Math.floor((Math.max(0, received) * 100) / size) : 0;
+      cells[1].textContent = "Đang tải";
+      cells[2].textContent = detail || (pct + "%");
+      cells[3].textContent = pct + "%";
+    } catch (error) {}
+  }
+
+  function dropUploadRow(uploadId) {
+    if (!uploadId) return;
+    var row = document.querySelector("[data-upload='" + uploadId + "']");
+    if (row && row.parentNode) row.parentNode.removeChild(row);
+  }
+
+  function renderQueue(items, boxId, emptyText) {
+    var box = document.getElementById(boxId || "queue");
+    if (!box) return;
     if (!items.length) {
-      box.innerHTML = "<p class='note'>Chưa có video.</p>";
+      box.innerHTML = "<p class='note'>" + (emptyText || "Chưa có video.") + "</p>";
       return;
     }
-    var html = "<table><tr><th>Video</th><th>Trạng thái</th></tr>";
+    items = newestFirst(items);
+    var html = "<table class='queue-table'><tr><th>Video</th><th>Trạng thái</th><th>Tiến trình</th><th>Đủ / số</th><th></th></tr>";
     items.forEach(function (item) {
-      var extra = item.error ? "<div class='warn'>" + escapeHtml(item.error) + "</div>" : "";
-      var retry = item.status === "error" ? " <button class='ghost' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
-      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + statusText(item.status) + retry + "</td></tr>";
+      var isUpload = item.kind === "upload" || (!item.id && item.upload_id);
+      var canRetry = !isUpload && item.file_kept && (item.status === "error" || item.status === "done");
+      var retry = canRetry ? "<button class='ghost mini' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
+      var extra = "";
+      if (isUpload && item.upload_id) {
+        extra = "<button class='ghost mini' type='button' data-cancel-upload='" +
+          escapeHtml(item.upload_id) + "'>Hủy</button>";
+      } else if (item.status === "done") {
+        extra = "<button class='ghost mini' type='button' data-filter='" + escapeHtml(item.name) + "'>Xem</button>";
+      }
+      var state = isUpload ? (item.stale ? "Tải dở" : "Đang tải") : statusText(item.status);
+      html += "<tr" + (isUpload && item.upload_id ? (" data-upload='" + escapeHtml(item.upload_id) + "'") : "") +
+        "><td class='vname'>" + escapeHtml(item.name || "video") +
+        "</td><td class='vstate " + stateClass(item) + "'>" + escapeHtml(state) +
+        "</td><td class='vprogress'>" + escapeHtml(progressDetail(item, items)) +
+        "</td><td class='vscore'>" + escapeHtml(scoreText(item)) +
+        "</td><td>" + extra + retry + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-retry]").forEach(function (button) {
       button.addEventListener("click", async function () {
         await api("/v1/videos/" + button.getAttribute("data-retry") + "/retry", { method: "POST" });
         refresh();
+        if ((boxId || "queue") === "archiveQueue") loadArchiveVideos(false);
+      });
+    });
+    box.querySelectorAll("[data-cancel-upload]").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        var id = button.getAttribute("data-cancel-upload");
+        if (!id) return;
+        if (!confirm("Hủy phiên tải dở này để nhường chỗ? Có thể chọn lại cùng file để tải lại.")) return;
+        await api("/v1/videos/uploads/" + id, { method: "DELETE" });
+        refresh();
+      });
+    });
+    box.querySelectorAll("[data-filter]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var name = button.getAttribute("data-filter") || "";
+        if ((boxId || "queue") === "archiveQueue") {
+          showPage("kho");
+          document.getElementById("archiveQuery").value = name;
+          archiveView = "all";
+          loadArchiveResults();
+          return;
+        }
+        showPage("home");
+        document.getElementById("query").value = name;
+        resultsView = "all";
+        loadResults();
       });
     });
   }
 
   var resultsAsked = 0;
+  var RESULT_PAGE = 80;
+  var RESULT_DOM_CAP = 160;
+  var resultsView = "complete";
+  var pageName = "home";
+  var archiveView = "complete";
+  var archiveLoaded = [];
+  var archiveOffset = 0;
+  var archiveTotal = 0;
+  var archiveLoading = false;
+  var archiveVideoItems = [];
+  var archiveVideoOffset = 0;
+  var archiveVideoTotal = 0;
+  var resultsAbort = null;
+  var refreshAbort = null;
+  var loadedResults = [];
+  var resultsOffset = 0;
+  var resultsTotal = 0;
+  var resultsLoading = false;
+  var resultsQueryTimer = null;
 
-  async function loadResults() {
-    var asked = ++resultsAsked;
-    var q = document.getElementById("query").value.trim();
-    var response = await api("/v1/results?q=" + encodeURIComponent(q));
-    var box = document.getElementById("results");
-    if (!response.ok) return;
-    var items = (await response.json()).items || [];
-    if (asked !== resultsAsked) return;
-    if (!items.length) {
-      box.innerHTML = "<p class='note'>Chưa có dòng nào.</p>";
+  function stopBackgroundReads() {
+    resultsAsked += 1;
+    resultsLoading = false;
+    if (resultsAbort) {
+      try { resultsAbort.abort(); } catch (error) {}
+      resultsAbort = null;
+    }
+    if (refreshAbort) {
+      try { refreshAbort.abort(); } catch (error) {}
+      refreshAbort = null;
+    }
+  }
+
+  function syncMoreButton() {
+    var wrap = document.getElementById("resultsMoreWrap");
+    var more = document.getElementById("resultsMore");
+    if (!wrap) return;
+    var canMore = resultsOffset < resultsTotal && resultsOffset < RESULT_DOM_CAP;
+    wrap.hidden = !(loadedResults.length > 0 && canMore);
+    if (more) more.disabled = !!resultsLoading;
+  }
+
+  function scheduleResults() {
+    clearTimeout(resultsQueryTimer);
+    resultsQueryTimer = setTimeout(function () {
+      if (!uploadingActive) loadResults();
+    }, 400);
+  }
+
+  function setViewButtons() {
+    ["complete", "incomplete", "all"].forEach(function (kind) {
+      var button = document.querySelector("[data-view='" + kind + "']");
+      if (!button) return;
+      button.className = kind === resultsView ? "primary" : "ghost";
+    });
+  }
+
+  function shotHtml(item, field) {
+    var shots = item.shots || {};
+    var url = shots[field];
+    if (!url) return "";
+    return "<img class='strip' alt='dải chữ chưa đọc' data-shot='" + escapeHtml(url) + "'>";
+  }
+
+  function renderResultTable(items) {
+    var html = "<table class='results-table'><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Loại</th><th>Lỗi khi quét</th><th>Thời gian quét</th><th>Sửa</th></tr>";
+    items.forEach(function (item) {
+      var rowKind = item.bucket === "Đủ" ? "row-ok" : (item.bucket === "Cần xem" ? "row-review" : (item.bucket === "Lỗi quét" ? "row-scan" : ""));
+      var phoneText = item.phone || item.phone_mask || "";
+      html += "<tr class='" + rowKind + "'><td data-label='Số điện thoại'>" + escapeHtml(phoneText) + shotHtml(item, "phone") +
+        "</td><td data-label='Tên'>" + escapeHtml(item.name) + shotHtml(item, "name") +
+        "</td><td data-label='Username'>" + escapeHtml(item.username) + shotHtml(item, "user") +
+        "</td><td data-label='Loại'>" + escapeHtml(item.bucket) +
+        "</td><td data-label='Lỗi khi quét'>" + escapeHtml(item.reason) +
+        "</td><td data-label='Thời gian quét'>" + escapeHtml(formatTime(item.scanned_at)) +
+        "</td><td data-label='Sửa'><button class='ghost mini' type='button' data-edit='" +
+        escapeHtml(item.id) + "'>Sửa</button></td></tr>";
+    });
+    return html + "</table>";
+  }
+
+  function fillShots(box) {
+    var nodes = box.querySelectorAll("img[data-shot]");
+    Array.prototype.forEach.call(nodes, function (img) {
+      var path = img.getAttribute("data-shot");
+      if (!path) return;
+      api(path).then(function (res) {
+        if (!res.ok) return null;
+        return res.blob();
+      }).then(function (blob) {
+        if (!blob) return;
+        img.src = URL.createObjectURL(blob);
+      }).catch(function () {});
+    });
+  }
+
+  async function editResult(id) {
+    var lists = [loadedResults, archiveLoaded];
+    var item = null;
+    for (var n = 0; n < lists.length && !item; n++) {
+      for (var i = 0; i < lists[n].length; i++) {
+        if (String(lists[n][i].id) === String(id)) item = lists[n][i];
+      }
+    }
+    if (!item) return;
+    var hint = "Không đoán chữ dưới chấm. Ảnh chỉ là dải chữ chưa đọc.";
+    var phone = window.prompt(hint + "\nSố điện thoại đã nhìn thấy:", item.phone || "");
+    if (phone === null) return;
+    var name = window.prompt(hint + "\nTên đã nhìn thấy:", item.name || "");
+    if (name === null) return;
+    var username = window.prompt(hint + "\n@ đã nhìn thấy:", item.username || "");
+    if (username === null) return;
+    var response = await api("/v1/results/" + encodeURIComponent(id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: phone, name: name, username: username })
+    });
+    var boxNote = document.getElementById(pageName === "kho" ? "archiveNote" : "resultsNote");
+    if (!response.ok) {
+      var detail = "Không sửa được dòng này.";
+      try {
+        var err = await response.json();
+        if (err && err.detail) detail = String(err.detail);
+      } catch (error) {}
+      boxNote.textContent = detail;
+      boxNote.className = "note warn";
       return;
     }
-    var html = "<table><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Loại</th></tr>";
-    items.forEach(function (item) {
-      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(item.bucket) + "</td></tr>";
+    boxNote.textContent = "Đã lưu dòng sửa. Hàng đủ số + tên + @ tính là Đủ.";
+    boxNote.className = "note ok";
+    if (pageName === "kho") loadArchiveResults();
+    else loadResults();
+  }
+
+  function showPage(name) {
+    pageName = name === "kho" ? "kho" : "home";
+    document.body.setAttribute("data-page", pageName);
+    if (pageName === "kho") {
+      loadArchiveVideos(false);
+      loadArchiveResults();
+    }
+  }
+
+  async function loadArchiveVideos(append) {
+    var offset = append ? archiveVideoOffset : 0;
+    var response = await api("/v1/videos?day=older&limit=80&offset=" + offset);
+    if (!response.ok) return;
+    var body = await response.json();
+    var chunk = body.items || [];
+    archiveVideoTotal = typeof body.total === "number" ? body.total : chunk.length;
+    archiveVideoItems = append ? archiveVideoItems.concat(chunk) : chunk.slice();
+    archiveVideoOffset = offset + chunk.length;
+    renderQueue(archiveVideoItems, "archiveQueue", "Chưa có video cũ.");
+    var wrap = document.getElementById("archiveQueueMoreWrap");
+    if (wrap) wrap.hidden = archiveVideoOffset >= archiveVideoTotal;
+  }
+
+  function setArchiveViewButtons() {
+    document.querySelectorAll("[data-archive-view]").forEach(function (button) {
+      button.className = button.getAttribute("data-archive-view") === archiveView ? "primary" : "ghost";
     });
-    box.innerHTML = html + "</table>";
+  }
+
+  async function loadArchiveResults(options) {
+    if (uploadingActive || archiveLoading) return;
+    var append = !!(options && options.append);
+    archiveLoading = true;
+    var offset = append ? archiveOffset : 0;
+    var q = (document.getElementById("archiveQuery").value || "").trim();
+    var note = document.getElementById("archiveNote");
+    var box = document.getElementById("archiveResults");
+    setArchiveViewButtons();
+    if (note) note.textContent = append ? "Đang tải thêm..." : "";
+    try {
+      var response = await api(
+        "/v1/results?q=" + encodeURIComponent(q) +
+        "&view=" + encodeURIComponent(archiveView) +
+        "&day=older&limit=" + RESULT_PAGE + "&offset=" + offset
+      );
+      if (!response.ok) {
+        if (note) note.textContent = "Chưa tải được kho kết quả.";
+        return;
+      }
+      var body = await response.json();
+      var chunk = (body.items || []).slice(0, RESULT_PAGE);
+      archiveTotal = typeof body.total === "number" ? body.total : (offset + chunk.length);
+      archiveOffset = offset + chunk.length;
+      archiveLoaded = append ? archiveLoaded.concat(chunk) : chunk.slice();
+      if (!archiveLoaded.length) {
+        box.innerHTML = "<p class='note'>Chưa có kết quả cũ.</p>";
+      } else {
+        box.innerHTML = renderResultTable(archiveLoaded);
+        fillShots(box);
+      }
+      if (note && archiveLoaded.length) note.textContent = "Đang hiện " + archiveLoaded.length + "/" + archiveTotal + " dòng cũ.";
+      var wrap = document.getElementById("archiveMoreWrap");
+      if (wrap) wrap.hidden = !(archiveLoaded.length && archiveOffset < archiveTotal);
+    } catch (error) {
+      if (note) note.textContent = "Mất kết nối khi tải kho kết quả.";
+    } finally {
+      archiveLoading = false;
+    }
+  }
+
+  async function downloadExport(path, filename) {
+    var note = document.getElementById("resultsNote");
+    note.textContent = "Đang xuất danh bạ...";
+    note.className = "note";
+    var response = await api(path);
+    if (!response.ok) {
+      note.textContent = "Chưa xuất được. Thử lại sau vài giây.";
+      note.className = "note warn";
+      return;
+    }
+    var blob = await response.blob();
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+    note.textContent = "Đã xuất. Mỗi số điện thoại một dòng, không đổi phần trăm đọc.";
+    note.className = "note ok";
+  }
+
+  async function loadResults(options) {
+    if (uploadingActive) return false;
+    var append = !!(options && options.append);
+    if (resultsAbort) {
+      try { resultsAbort.abort(); } catch (error) {}
+    }
+    var ctrl = new AbortController();
+    resultsAbort = ctrl;
+    var asked = ++resultsAsked;
+    var q = document.getElementById("query").value.trim();
+    var box = document.getElementById("results");
+    var note = document.getElementById("resultsNote");
+    var offset = append ? resultsOffset : 0;
+    var moreBtn = document.getElementById("resultsMore");
+    resultsLoading = true;
+    setViewButtons();
+    note.textContent = append ? "Đang tải thêm..." : "Đang tải kết quả...";
+    note.className = "note";
+    if (moreBtn) moreBtn.disabled = true;
+    var ok = false;
+    try {
+      var response = await api(
+        "/v1/results?q=" + encodeURIComponent(q) +
+        "&view=" + encodeURIComponent(resultsView) +
+        "&day=today" +
+        "&limit=" + RESULT_PAGE +
+        "&offset=" + offset,
+        { signal: ctrl.signal }
+      );
+      if (asked !== resultsAsked) return false;
+      if (!response.ok) {
+        note.textContent = "Chưa tải được bảng kết quả. Tải video vẫn làm được — bấm lại mục đang xem để thử.";
+        note.className = "note warn";
+        return false;
+      }
+      var body = await response.json();
+      if (asked !== resultsAsked) return false;
+      var chunk = (body.items || []).slice(0, RESULT_PAGE);
+      resultsTotal = typeof body.total === "number" ? body.total : (offset + chunk.length);
+      resultsOffset = offset + chunk.length;
+      loadedResults = append ? loadedResults.concat(chunk) : chunk.slice();
+      if (loadedResults.length > RESULT_DOM_CAP) {
+        loadedResults = loadedResults.slice(loadedResults.length - RESULT_DOM_CAP);
+      }
+      ok = true;
+    } catch (error) {
+      if (asked !== resultsAsked || (error && error.name === "AbortError")) return false;
+      note.textContent = "Mất kết nối khi tải bảng kết quả. Tải video không phụ thuộc bảng này.";
+      note.className = "note warn";
+      return false;
+    } finally {
+      if (asked === resultsAsked) {
+        resultsLoading = false;
+        if (moreBtn) moreBtn.disabled = false;
+        syncMoreButton();
+      }
+    }
+    if (!ok || asked !== resultsAsked) return false;
+    var viewLabel = resultsView === "complete" ? "đủ 3 cột" : (resultsView === "incomplete" ? "chưa đủ" : "tất cả");
+    if (!loadedResults.length) {
+      box.innerHTML = "<p class='note'>Chưa có dòng nào trong ngày, mục «" + viewLabel + "».</p>";
+      note.textContent = q
+        ? ("Không có kết quả trong ngày «" + viewLabel + "» cho từ khóa này.")
+        : "Chưa có kết quả trong ngày. Video cũ nằm ở Kho tổng.";
+      syncMoreButton();
+      return true;
+    }
+    var shown = "Đang hiện " + loadedResults.length + "/" + resultsTotal + " dòng «" + viewLabel + "»";
+    var capNote = (!q && resultsOffset >= RESULT_DOM_CAP && resultsOffset < resultsTotal)
+      ? " Gõ số hoặc @ để xem tiếp — không tải hết để Safari khỏi bị sập."
+      : "";
+    note.textContent = q
+      ? (shown + " cho «" + q + "».")
+      : (shown + ". Mỗi lần chỉ lấy một trang nhỏ để đường tải video không bị nghẽn." + capNote);
+    box.innerHTML = renderResultTable(loadedResults);
+    fillShots(box);
+    syncMoreButton();
+    return true;
   }
 
   function escapeHtml(value) {
@@ -191,67 +1241,957 @@
     });
   }
 
-  function uploadOne(file, onProgress) {
+  var CHUNK_STORE = "video-chunk-uploads-v1";
+  var CHUNK_RETRIES = 3;
+  var OPFS_KEY = "video-opfs-queue-v1";
+  var chunkSends = 0;
+  var opfsStarted = {};
+
+  function fileLabel(file) {
+    return (file && (file._displayName || file.name)) || "video";
+  }
+
+  var uploadPurpose = "";
+
+  function clientKeyFor(file) {
+    if (file && file._resumeKey) return file._resumeKey;
+    var key = [deviceName() || "iphone", file.name, String(file.size), String(file.lastModified || 0)].join("|");
+    if (uploadPurpose === "test") key += "|test";
+    return key;
+  }
+
+  function loadOpfsQueue() {
+    try { return JSON.parse(localStorage.getItem(OPFS_KEY) || "[]") || []; } catch (error) { return []; }
+  }
+
+  function saveOpfsQueue(items) {
+    try { localStorage.setItem(OPFS_KEY, JSON.stringify(items)); } catch (error) {}
+  }
+
+  function opfsSafeName(file) {
+    var base = String(fileLabel(file) || "video.mp4").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 80);
+    return String(file.size) + "-" + String(file.lastModified || 0) + "-" + base;
+  }
+
+  async function copyFileToOpfs(file) {
+    if (!navigator.storage || !navigator.storage.getDirectory) return null;
+    var root = await navigator.storage.getDirectory();
+    var dir = await root.getDirectoryHandle("inbox", { create: true });
+    var name = opfsSafeName(file);
+    var handle = await dir.getFileHandle(name, { create: true });
+    var existing = await handle.getFile();
+    if (existing.size === file.size) return name;
+    var writable = await handle.createWritable();
+    var offset = 0;
+    var step = 8 * 1024 * 1024;
+    try {
+      while (offset < file.size) {
+        // Không đọc file cùng lúc với PUT. Safari iOS ném NotReadableError và mảnh không đi.
+        while (chunkSends > 0) await sleep(250);
+        await writable.write(file.slice(offset, Math.min(file.size, offset + step)));
+        offset += step;
+      }
+      await writable.close();
+    } catch (error) {
+      try { await writable.abort(); } catch (ignore) {}
+      throw error;
+    }
+    return name;
+  }
+
+  function rememberOpfs(file, opfsName) {
+    var items = loadOpfsQueue().filter(function (item) { return item.opfsName !== opfsName; });
+    items.push({
+      opfsName: opfsName,
+      name: fileLabel(file),
+      size: file.size,
+      lastModified: file.lastModified || 0,
+      clientKey: clientKeyFor(file)
+    });
+    saveOpfsQueue(items);
+  }
+
+  async function forgetOpfs(file) {
+    var name = file && file._opfsName ? file._opfsName : opfsSafeName(file);
+    saveOpfsQueue(loadOpfsQueue().filter(function (item) { return item.opfsName !== name; }));
+    try {
+      var root = await navigator.storage.getDirectory();
+      var dir = await root.getDirectoryHandle("inbox", { create: true });
+      await dir.removeEntry(name);
+    } catch (error) {}
+  }
+
+  function keepLocalCopy(file) {
+    var key = clientKeyFor(file);
+    if (opfsStarted[key]) return;
+    opfsStarted[key] = true;
+    copyFileToOpfs(file).then(function (name) {
+      if (!name) {
+        delete opfsStarted[key];
+        return;
+      }
+      file._opfsName = name;
+      rememberOpfs(file, name);
+    }).catch(function () { delete opfsStarted[key]; });
+  }
+
+  async function filesWaitingInOpfs() {
+    if (!navigator.storage || !navigator.storage.getDirectory) return [];
+    var items = loadOpfsQueue();
+    if (!items.length) return [];
+    var root = await navigator.storage.getDirectory();
+    var dir = await root.getDirectoryHandle("inbox", { create: false });
+    var out = [];
+    for (var i = 0; i < items.length; i += 1) {
+      try {
+        var handle = await dir.getFileHandle(items[i].opfsName);
+        var file = await handle.getFile();
+        if (file.size !== items[i].size) continue;
+        file._resumeKey = items[i].clientKey;
+        file._displayName = items[i].name;
+        file._opfsName = items[i].opfsName;
+        out.push(file);
+      } catch (error) {}
+    }
+    return out;
+  }
+
+  function loadChunkStore() {
+    try { return JSON.parse(localStorage.getItem(CHUNK_STORE) || "{}") || {}; } catch (error) { return {}; }
+  }
+
+  function saveChunkStore(map) {
+    try { localStorage.setItem(CHUNK_STORE, JSON.stringify(map)); } catch (error) {}
+  }
+
+  function sleep(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function putChunkOnce(uploadId, index, blob, onFly) {
     return new Promise(function (resolve) {
       var xhr = new XMLHttpRequest();
-      xhr.open("POST", "/v1/videos");
+      var url = chunkPutUrl(uploadId, index);
+      xhr.open("PUT", url);
+      xhr.setRequestHeader("Content-Type", "application/octet-stream");
       if (token()) xhr.setRequestHeader("Authorization", "Bearer " + token());
+      var lastLoaded = 0;
+      var lastAt = Date.now();
+      var settled = false;
+      var armed = false;
+      function finish(result) {
+        if (settled) return;
+        settled = true;
+        if (armed) {
+          armed = false;
+          chunkSends = Math.max(0, chunkSends - 1);
+        }
+        clearInterval(watcher);
+        resolve(result);
+      }
+      var watcher = setInterval(function () {
+        if (xhr.readyState === 4) return;
+        // Sang app khác iOS tạm dừng đường gửi. Cắt ở đây làm mất kết nối dù mảnh vẫn sống.
+        if (document.hidden) return;
+        var quiet = Date.now() - lastAt;
+        if ((lastLoaded === 0 && quiet > 12000) || (lastLoaded > 0 && quiet > 60000)) {
+          try { xhr.abort(); } catch (error) {}
+        }
+      }, 1000);
       xhr.upload.onprogress = function (event) {
-        if (event.lengthComputable) onProgress(Math.floor((event.loaded * 100) / event.total));
+        if (event.loaded > lastLoaded) {
+          lastLoaded = event.loaded;
+          lastAt = Date.now();
+          if (onFly) onFly(event.loaded, event.total || blob.size || 0);
+        }
       };
       xhr.onload = function () {
         var body = {};
         try { body = JSON.parse(xhr.responseText || "{}"); } catch (error) { body = {}; }
-        resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body: body });
+        if (xhr.status === 404 || xhr.status === 400) {
+          finish({ ok: false, status: xhr.status, body: body, stalled: xhr.status === 404 });
+          return;
+        }
+        if (xhr.status < 200 || xhr.status >= 300) noteChunkPortFailure(url);
+        finish({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body: body, stalled: false });
       };
-      xhr.onerror = function () { resolve({ ok: false, status: 0, body: {} }); };
-      xhr.onabort = function () { resolve({ ok: false, status: 0, body: {} }); };
-      var form = new FormData();
-      form.append("file", file, file.name);
-      xhr.send(form);
+      xhr.onerror = function () {
+        noteChunkPortFailure(url);
+        finish({ ok: false, status: 0, stalled: true, body: { detail: "mất kết nối" } });
+      };
+      xhr.onabort = function () {
+        finish({ ok: false, status: 0, stalled: true, body: { detail: "mảnh đứng — gửi lại" } });
+      };
+      try {
+        armed = true;
+        chunkSends += 1;
+        xhr.send(blob);
+      } catch (error) {
+        finish({ ok: false, status: 0, stalled: true, body: { detail: "không gửi được" } });
+      }
     });
   }
 
-  async function sendFiles(fileList) {
-    var note = document.getElementById("uploadNote");
+  async function putChunkBytes(uploadId, index, blob, attempts, onFly) {
+    var limit = attempts || (document.hidden ? 24 : CHUNK_RETRIES);
+    var last = { ok: false, status: 0, body: {}, stalled: false };
+    for (var attempt = 0; attempt < limit; attempt += 1) {
+      holdBackground();
+      last = await putChunkOnce(uploadId, index, blob, onFly);
+      if (last.ok) return last;
+      if (last.status === 404 || last.status === 400) return last;
+      if (attempt + 1 >= limit) {
+        last.stalled = true;
+        return last;
+      }
+      await sleep(document.hidden ? 8000 : Math.min(4000, 400 * Math.pow(2, attempt)));
+    }
+    last.stalled = true;
+    return last;
+  }
+
+  async function initChunkedWithRetry(initBody, onWait, attempts) {
+    var limit = attempts || 60;
+    var last = { ok: false, status: 0, body: { detail: "mất kết nối" } };
+    for (var attempt = 0; attempt < limit; attempt += 1) {
+      try {
+        var initResponse = await api("/v1/videos/uploads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(initBody)
+        });
+        var session = {};
+        try { session = await initResponse.json(); } catch (error) { session = {}; }
+        last = { ok: initResponse.ok, status: initResponse.status, body: session, response: initResponse };
+        if (initResponse.ok) return last;
+        var retryable = initResponse.status === 507 || initResponse.status === 503 || initResponse.status === 500;
+        if (!retryable) return last;
+      } catch (error) {
+        last = { ok: false, status: 0, body: { detail: "mất kết nối" } };
+      }
+      if (attempt + 1 >= limit) return last;
+      var waitSec = last.status === 503 ? 5 : (last.status === 0 ? 3 : 15);
+      var ra = last.response && last.response.headers ? last.response.headers.get("Retry-After") : null;
+      if (ra && !isNaN(Number(ra))) waitSec = Math.max(3, Math.min(30, Number(ra)));
+      if (onWait) onWait(waitSec, (last.body && last.body.detail) || "mất kết nối", attempt + 1);
+      await sleep(waitSec * 1000);
+    }
+    return last;
+  }
+
+  // Một video tới 100% rồi sang video kế — video xong vào OCR ngay.
+  var UPLOAD_PARALLEL = 1;
+  // Safari chỉ cho 6 kết nối mỗi cổng. detectLanePorts nhân thêm 8090/8091 nếu mở được.
+  var CHUNK_PARALLEL = 6;
+  var CHUNK_BYTES = 16 * 1024 * 1024;
+
+  function newChunkBytes() {
+    return phoneBrowser() ? PHONE_CHUNK_BYTES : CHUNK_BYTES;
+  }
+
+  async function mapPool(items, concurrency, worker) {
+    var cursor = 0;
+    var results = new Array(items.length);
+    async function run() {
+      while (cursor < items.length) {
+        var index = cursor;
+        cursor += 1;
+        results[index] = await worker(items[index], index);
+      }
+    }
+    var runners = [];
+    for (var n = 0; n < Math.min(concurrency, items.length); n += 1) runners.push(run());
+    await Promise.all(runners);
+    return results;
+  }
+
+  async function uploadSessionChunks(file, session, onProgress, parallel) {
+    var key = clientKeyFor(file);
+    var store = loadChunkStore();
+    store[key] = { upload_id: session.upload_id, name: file.name, size: file.size };
+    saveChunkStore(store);
+
+    var chunkSize = session.chunk_size || CHUNK_BYTES;
+    var total = session.chunks_total || Math.ceil(file.size / chunkSize);
+    var done = {};
+    (session.received || []).forEach(function (i) { done[i] = true; });
+    var finished = Object.keys(done).length;
+    onProgress(Math.floor((finished * 100) / Math.max(1, total)), finished, total, !!session.resumed);
+
+    var pending = [];
+    for (var index = 0; index < total; index += 1) {
+      if (!done[index]) pending.push(index);
+    }
+
+    async function sendIndex(index, attempts) {
+      var start = index * chunkSize;
+      var end = Math.min(file.size, start + chunkSize);
+      var blob = file.slice(start, end);
+      // Không chờ trang hiện. Sang app khác vẫn gửi tiếp mảnh này và mảnh sau.
+      var sending = putChunkBytes(session.upload_id, index, blob, attempts, function (loaded) {
+        if (onProgress) onProgress(
+          Math.floor(((finished + loaded / Math.max(1, end - start)) * 100) / Math.max(1, total)),
+          finished,
+          total,
+          false,
+          loaded
+        );
+      });
+      // Bản sao trên máy chỉ chạy khi không có PUT đang đọc file.
+      keepLocalCopy(file);
+      return sending;
+    }
+
+    // Mảnh đầu một mình. Kẹt thì trả ngay để đổi sang một đường mảnh nhỏ, không mở thêm kết nối.
+    if (pending.length && finished === 0) {
+      var probe = pending[0];
+      var first = await sendIndex(probe, document.hidden ? 12 : 2);
+      if (!first.ok) {
+        return {
+          ok: false,
+          status: first.status,
+          stalled: !!(first.stalled || first.status === 0 || first.status === 404),
+          body: first.body,
+          upload_id: session.upload_id,
+          name: file.name,
+          finished: 0
+        };
+      }
+      pending.shift();
+      finished += 1;
+      onProgress(Math.floor((finished * 100) / Math.max(1, total)), finished, total, false);
+    }
+
+    var failed = null;
+    await mapPool(pending, parallel || CHUNK_PARALLEL, async function (index) {
+      if (failed) return;
+      var put = await sendIndex(index, CHUNK_RETRIES);
+      if (!put.ok) {
+        failed = put;
+        return;
+      }
+      finished += 1;
+      onProgress(Math.floor((finished * 100) / Math.max(1, total)), finished, total, false);
+    });
+    if (failed) {
+      return {
+        ok: false,
+        status: failed.status,
+        stalled: !!(failed.stalled || failed.status === 0),
+        body: failed.body,
+        upload_id: session.upload_id,
+        name: file.name,
+        finished: finished
+      };
+    }
+
+    var completeBody = {};
+    var completeOk = false;
+    var completeStatus = 0;
+    for (var c = 0; c < 20; c += 1) {
+      holdBackground();
+      try {
+        var completeResponse = await api("/v1/videos/uploads/" + session.upload_id + "/complete", { method: "POST" });
+        try { completeBody = await completeResponse.json(); } catch (error) { completeBody = {}; }
+        completeOk = completeResponse.ok;
+        completeStatus = completeResponse.status;
+        if (completeOk) break;
+        if (completeStatus === 400 || completeStatus === 404) break;
+      } catch (error) {
+        completeOk = false;
+        completeStatus = 0;
+        completeBody = { detail: "mất kết nối" };
+      }
+      await sleep(Math.min(15000, 1000 * (c + 1)));
+    }
+    if (completeOk) {
+      delete store[key];
+      saveChunkStore(store);
+    }
+    return {
+      ok: completeOk,
+      status: completeStatus,
+      body: completeBody,
+      name: file.name,
+      upload_id: session.upload_id,
+      finished: finished
+    };
+  }
+
+  var LANE2_CHUNK_BYTES = 1024 * 1024;
+
+  async function uploadSmallChunks(file, onProgress) {
+    var init = await initChunkedWithRetry({
+      name: fileLabel(file),
+      size_bytes: file.size,
+      device: deviceName(),
+      client_key: clientKeyFor(file) + "|lane2",
+      chunk_size: LANE2_CHUNK_BYTES,
+      purpose: uploadPurpose
+    }, function (sec, reason, attempt) {
+      if (onProgress) onProgress("hướng 2 chờ chỗ trống, thử lại sau " + sec + "s · lần " + attempt + " (" + reason + ")");
+    });
+    if (!init.ok) return { ok: false, status: init.status, body: init.body, name: file.name };
+    var session = init.body || {};
+    return uploadSessionChunks(file, session, function (percent, finished, total) {
+      var chunk = session.chunk_size || LANE2_CHUNK_BYTES;
+      var sent = Math.min(file.size, finished * chunk);
+      paintUploadRow(session.upload_id, file.name, sent, file.size, "Đường dự phòng · " + percent + "% · một đường");
+      if (onProgress) onProgress("hướng 2 · mảnh 1MB một đường · " + percent + "% (" + finished + "/" + total + ")");
+    }, 1);
+  }
+
+  function uploadWholeFile(file, onProgress, url) {
+    return new Promise(function (resolve) {
+      var xhr = new XMLHttpRequest();
+      var settled = false;
+      var seen = false;
+      var started = Date.now();
+      function finish(result) {
+        if (settled) return;
+        settled = true;
+        clearInterval(ticker);
+        resolve(result);
+      }
+      xhr.open("POST", url || (uploadPurpose === "test" ? "/v1/fresh/videos" : "/v1/videos"));
+      xhr.timeout = 0;
+      if (token()) xhr.setRequestHeader("Authorization", "Bearer " + token());
+      var ticker = setInterval(function () {
+        if (seen || !onProgress) return;
+        var sec = Math.round((Date.now() - started) / 1000);
+        onProgress("đang gửi nguyên file, không cắt mảnh · " + sec + " giây");
+      }, 2000);
+      xhr.upload.onprogress = function (event) {
+        if (!onProgress) return;
+        holdBackground();
+        if (!event.lengthComputable || !event.total) return;
+        seen = true;
+        var pct = Math.floor((event.loaded * 100) / event.total);
+        var sec = Math.max(0.001, (Date.now() - started) / 1000);
+        var mbps = event.loaded / sec / (1024 * 1024);
+        var speed = mbps >= 1 ? (mbps.toFixed(1) + " MB/s") : (Math.max(0, Math.round(mbps * 1024)) + " KB/s");
+        onProgress("nguyên file · " + pct + "% · " + formatBytes(event.loaded) + " / " + formatBytes(event.total) + " · " + speed);
+      };
+      xhr.onload = function () {
+        var body = {};
+        try { body = JSON.parse(xhr.responseText || "{}"); } catch (error) { body = {}; }
+        finish({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body: body, name: file.name });
+      };
+      xhr.onerror = function () {
+        finish({ ok: false, status: 0, body: { detail: "mất kết nối, giữ trong hàng" }, name: file.name });
+      };
+      xhr.onabort = function () {
+        finish({ ok: false, status: 0, body: { detail: "mất kết nối, giữ trong hàng" }, name: file.name });
+      };
+      var form = new FormData();
+      form.append("file", file, fileLabel(file));
+      form.append("device", deviceName());
+      try {
+        xhr.send(form);
+      } catch (error) {
+        finish({ ok: false, status: 0, body: { detail: "không gửi được file" }, name: file.name });
+      }
+    });
+  }
+
+  function resumeLater(status) {
+    return status === 0 || status === 502 || status === 503 || status === 504 || status === 507;
+  }
+
+  async function uploadWithFallbacks(file, primary, onProgress) {
+    var result = primary;
+    // Mất mạng hoặc hết chỗ: giữ phiên đã lên, không xóa rồi gửi lại từ đầu.
+    if (!result || result.ok || result.status === 413 || resumeLater(result.status)) return result;
+    if (result.upload_id) {
+      try { await api("/v1/videos/uploads/" + result.upload_id, { method: "DELETE" }); } catch (error) {}
+    }
+    if (onProgress) onProgress("hướng 1 lỗi, chuyển hướng 2 (mảnh nhỏ, một đường)");
+    result = await uploadSmallChunks(file, onProgress);
+    if (result.ok || result.status === 413 || resumeLater(result.status)) return result;
+    if (result.upload_id) {
+      try { await api("/v1/videos/uploads/" + result.upload_id, { method: "DELETE" }); } catch (error) {}
+    }
+    if (onProgress) onProgress("hướng 2 lỗi, chuyển hướng 3 (gửi cả file một lần)");
+    return uploadWholeFile(file, onProgress);
+  }
+
+  async function sendFiles(fileList, purpose) {
+    uploadPurpose = purpose === "test" ? "test" : "";
+    var note = document.getElementById(uploadPurpose === "test" ? "freshNote" : "uploadNote");
+    if (!checklistReady()) {
+      note.textContent = "Hãy tick đủ 3 ô xác nhận cách quay trước khi tải video.";
+      note.className = "note warn";
+      document.getElementById("checklist").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     var files = Array.prototype.slice.call(fileList || []);
     if (!files.length) return;
+    var todo = files.slice();
+    saveDevice();
     var added = 0;
     var already = 0;
     var failed = [];
+    var registered = [];
+    var retrySend = false;
     note.className = "note";
-    for (var i = 0; i < files.length; i += 1) {
-      var file = files[i];
-      var label = "Đang tải " + (i + 1) + "/" + files.length + ": " + file.name;
-      note.textContent = label;
-      var result = await uploadOne(file, function (percent) { note.textContent = label + " — " + percent + "%"; });
-      if (result.ok) {
-        if (result.body.duplicate) already += 1; else added += 1;
-        continue;
+    uploadingActive = true;
+    holdBackground();
+    stopBackgroundReads();
+
+    try {
+      await requestWakeLock();
+      // Xếp được bao nhiêu thì xếp, không bỏ video phía sau khi hàng nhận đầy.
+      // Gửi từng video một để đường tải đầy băng thông; video xong vào hàng đọc ngay.
+      var pending = files.slice();
+      note.className = "note";
+      note.textContent = phoneBrowser()
+        ? "Đang gửi nguyên file, không cắt mảnh..."
+        : "Đang kiểm tra thêm đường tải...";
+      if (!phoneBrowser()) await detectLanePorts();
+
+      async function sendPhoneOriginal() {
+        while (pending.length) {
+          var file = pending[0];
+          var label = fileLabel(file);
+          note.className = "note";
+          note.textContent = "Đang gửi nguyên file, không cắt mảnh: " + label;
+          holdBackground();
+          var result = null;
+          try {
+            result = await uploadWholeFile(file, function (msg) {
+              note.textContent = label + " — " + msg;
+              note.className = "note";
+            });
+          } catch (error) {
+            result = { ok: false, status: 0, body: { detail: "mất kết nối, giữ trong hàng" }, name: label };
+          }
+          if (result && result.ok) {
+            pending.shift();
+            if (result.body && result.body.duplicate) already += 1;
+            else added += 1;
+            forgetOpfs(file);
+            todo = todo.filter(function (item) { return item !== file; });
+            continue;
+          }
+          if (!result || resumeLater(result.status) || result.status === 500) {
+            var why = (result && result.body && result.body.detail) || "mất kết nối, giữ trong hàng";
+            note.textContent = label + " — " + why + ". Gửi lại nguyên file, không cắt mảnh.";
+            note.className = "note warn";
+            holdBackground();
+            await sleep(document.hidden ? 8000 : 2500);
+            continue;
+          }
+          pending.shift();
+          var reason = (result.body && result.body.detail) || ("lỗi " + result.status);
+          failed.push(label + " (" + reason + ")");
+        }
       }
-      var reason = result.body.detail || (result.status === 0 ? "mất kết nối" : "lỗi " + result.status);
-      failed.push(file.name + " (" + reason + ")");
-      if (result.status === 507) break;
+
+      if (phoneBrowser()) {
+        await sendPhoneOriginal();
+      } else {
+      async function registerNext() {
+        if (!pending.length) return false;
+        var file = pending[0];
+        var place = files.length - pending.length + 1;
+        note.textContent = "Đang xếp hàng tải " + place + "/" + files.length + ": " + file.name;
+        var init = await initChunkedWithRetry({
+          name: fileLabel(file),
+          size_bytes: file.size,
+          device: deviceName(),
+          client_key: clientKeyFor(file),
+          chunk_size: newChunkBytes(),
+          purpose: uploadPurpose
+        }, function (sec, reason, attempt) {
+          note.textContent = file.name + " — chờ chỗ trống (" + reason + "), thử lại sau " + sec + "s · lần " + attempt;
+          note.className = "note warn";
+        }, 3);
+        if (init.ok) {
+          pending.shift();
+          var session = init.body || {};
+          registered.push({ file: file, session: session });
+          paintUploadRow(
+            session.upload_id,
+            file.name,
+            session.received_bytes || 0,
+            file.size,
+            "Đang gửi — máy tự đổi đường nếu kẹt"
+          );
+          note.className = "note";
+          return true;
+        }
+        if (init.status === 507 || init.status === 503 || init.status === 500 || init.status === 0) {
+          note.textContent = init.status === 0
+            ? (file.name + " — mất kết nối, giữ trong hàng và thử lại...")
+            : (file.name + " — chờ chỗ trống, giữ trong hàng và thử lại...");
+          note.className = "note warn";
+          return false;
+        }
+        pending.shift();
+        var rescued = null;
+        try {
+          rescued = await uploadWithFallbacks(file, {
+            ok: false, status: init.status, body: init.body, name: file.name
+          }, function (msg) {
+            note.textContent = file.name + " — " + msg;
+            note.className = "note warn";
+          });
+        } catch (error) {
+          pending.unshift(file);
+          note.textContent = file.name + " — mất kết nối, giữ trong hàng và thử lại...";
+          note.className = "note warn";
+          return false;
+        }
+        if (rescued && rescued.ok) {
+          if (rescued.body && rescued.body.duplicate) already += 1;
+          else added += 1;
+          return true;
+        }
+        var why = (init.body && init.body.detail) || ("lỗi " + init.status);
+        failed.push(file.name + " (chưa xếp được: " + why + ")");
+        return true;
+      }
+
+      var live = {};
+
+      async function uploadOne(job) {
+        var name = job.file.name;
+        var chunkBytes = job.session.chunk_size || CHUNK_BYTES;
+        var have = (job.session.received || []).length;
+        job._t0 = Date.now();
+        job._base = Math.min(job.file.size, have * chunkBytes);
+        live[name] = "0%";
+        paintUploadRow(job.session.upload_id, name, job._base, job.file.size, "Đang gửi mảnh đầu");
+        var result = await uploadSessionChunks(job.file, job.session, function (percent, finished, total, resumed, partial) {
+          var sent = Math.min(job.file.size, finished * chunkBytes + (partial || 0));
+          var sec = Math.max(0.001, (Date.now() - job._t0) / 1000);
+          var mbps = (sent - job._base) / sec / (1024 * 1024);
+          var speed = mbps >= 1 ? (mbps.toFixed(1) + " MB/s") : (Math.max(0, Math.round(mbps * 1024)) + " KB/s");
+          var left = "";
+          if (mbps > 0.05 && sent < job.file.size) {
+            var eta = (job.file.size - sent) / (mbps * 1024 * 1024);
+            left = eta < 90 ? (" · còn " + Math.max(1, Math.round(eta)) + " giây") : (" · còn " + Math.round(eta / 60) + " phút");
+          }
+          var behind = pending.length + registered.length;
+          live[name] = percent + "% · " + speed + left + (resumed ? " · resume" : "") +
+            (behind ? (" · còn " + behind + " video trong hàng") : "");
+          var parts = Object.keys(live).map(function (k) { return k.replace(/^.*\//, "").slice(0, 22) + " " + live[k]; });
+          var slow = sec > 6 && mbps < 0.4 ? " Đang chậm — máy tự gửi lại, không cần chọn lại." : "";
+          note.textContent = "Đang gửi " + activeParallel() + " đường: " + parts.join(" · ") +
+            " — mở app khác vẫn gửi. Máy chủ đọc video đã lên đủ." + slow;
+          note.className = "note";
+          paintUploadRow(job.session.upload_id, name, sent, job.file.size, "Đang tải lên " + percent + "% · " + speed);
+        }, activeParallel());
+        delete live[name];
+        var noBytes = !!(result && result.finished === 0 && have === 0);
+        if (result && !result.ok && noBytes && (result.stalled || result.status === 0 || result.status === 404)) {
+          if (result.upload_id) {
+            try { await api("/v1/videos/uploads/" + result.upload_id, { method: "DELETE" }); } catch (error) {}
+            dropUploadRow(result.upload_id);
+          }
+          note.textContent = name + " — đường kẹt ở 0 byte, tự chuyển một đường mảnh nhỏ...";
+          note.className = "note warn";
+          result = await uploadSmallChunks(job.file, function (msg) {
+            note.textContent = name + " — " + msg;
+            note.className = "note warn";
+          });
+          result.lane2 = true;
+          if (result && !result.ok && !(result.finished > 0) && result.upload_id) {
+            try { await api("/v1/videos/uploads/" + result.upload_id, { method: "DELETE" }); } catch (error) {}
+            dropUploadRow(result.upload_id);
+          }
+        }
+        if (result && !result.ok && !result.lane2 && !resumeLater(result.status)) {
+          result = await uploadWithFallbacks(job.file, result, function (msg) {
+            note.textContent = name + " — " + msg;
+            note.className = "note warn";
+          });
+        }
+        return result;
+      }
+
+      while (registered.length || pending.length) {
+        if (!registered.length) {
+          var opened = await registerNext();
+          if (!registered.length) {
+            if (!pending.length) break;
+            if (!opened) {
+              note.textContent = "Chưa gửi được " + pending.length + " video. Giữ trong hàng, thử lại đến khi lên — không bỏ.";
+              note.className = "note warn";
+              await sleep(600);
+            }
+            continue;
+          }
+        }
+        var job = registered.shift();
+        var result = null;
+        try {
+          result = await uploadOne(job);
+        } catch (error) {
+          result = {
+            ok: false,
+            status: 0,
+            body: { detail: "mất kết nối — chọn lại cùng file để tiếp tục" },
+            name: job.file.name
+          };
+        }
+        if (result && result.ok) {
+          if (result.body && result.body.duplicate) already += 1;
+          else added += 1;
+          forgetOpfs(job.file);
+          todo = todo.filter(function (item) { return item !== job.file; });
+        } else if (result && resumeLater(result.status)) {
+          pending.unshift(job.file);
+          var why = (result.body && result.body.detail) || "mất kết nối";
+          note.textContent = job.file.name + " — " + why + ". Giữ trong hàng và gửi tiếp, không bỏ.";
+          note.className = "note warn";
+          try { await refresh(); } catch (error) {}
+          await sleep(600);
+          continue;
+        } else if (result) {
+          var reason = (result.body && result.body.detail) || ("lỗi " + result.status);
+          failed.push((result.name || job.file.name) + " (" + reason + ")");
+        }
+        try { await refresh(); } catch (error) {}
+      }
+      }
+
+      var partsOut = [
+        uploadPurpose === "test"
+          ? "Video test đã giữ đủ cách tải. Kết quả chỉ hiện ở bảng test, không vào hàng đang chạy."
+          : "Đã giữ " + files.length + " video trong hàng, không bỏ video phía sau.",
+        "Đã vào hàng đọc đủ 100%: " + added + "."
+      ];
+      if (already) partsOut.push(already + " video đã có sẵn.");
+      if (failed.length) {
+        partsOut.push("Chưa xong (chọn lại cùng file để resume tới 100%): " + failed.join(", ") + ".");
+      }
+      note.textContent = partsOut.join(" ");
+      note.className = failed.length ? "note warn" : "note ok";
+    } catch (error) {
+      retrySend = true;
+      note.textContent = "Mất kết nối, giữ trong hàng và gửi tiếp. Đã vào hàng đọc: " + added +
+        ". Máy chủ vẫn đọc video đã lên đủ — không cần chọn lại file.";
+      note.className = "note warn";
+      holdBackground();
+    } finally {
+      if (!retrySend) {
+        uploadingActive = false;
+        releaseBackground();
+        await releaseWakeLock();
+        try { await refresh(); } catch (error) {}
+        if (uploadPurpose === "test") {
+          try { await loadFresh(); } catch (error) {}
+        }
+      }
     }
-    var parts = ["Đã đưa " + added + " video vào hàng đợi."];
-    if (already) parts.push(already + " video đang có sẵn trong hàng đợi.");
-    if (failed.length) parts.push("Không tải được: " + failed.join(", ") + ".");
-    note.textContent = parts.join(" ");
-    note.className = failed.length ? "note warn" : "note ok";
-    refresh();
+    if (retrySend) {
+      await sleep(document.hidden ? 8000 : 2500);
+      return sendFiles(todo.length ? todo : files, uploadPurpose);
+    }
   }
 
-  document.getElementById("pick").addEventListener("click", function () { document.getElementById("file").click(); });
-  document.getElementById("file").addEventListener("change", function (event) { sendFiles(event.target.files); event.target.value = ""; });
+  async function resumeOpfsQueue() {
+    if (uploadingActive) return;
+    var waiting = [];
+    try { waiting = await filesWaitingInOpfs(); } catch (error) { waiting = []; }
+    if (!waiting.length || uploadingActive) return;
+    var note = document.getElementById("uploadNote");
+    if (note) {
+      note.textContent = "Còn " + waiting.length + " video trên máy chưa lên đủ. Đang gửi tiếp, không cần chọn lại.";
+      note.className = "note";
+    }
+    sendFiles(waiting);
+  }
+
+  function renderFreshReport(report) {
+    var box = document.getElementById("freshReport");
+    if (!box) return;
+    box.innerHTML = report.reader_alive ? "" : "<p class='note warn'>Bộ đọc bảng mới chưa chạy.</p>";
+  }
+
+  function renderFreshQueue(items) {
+    var box = document.getElementById("freshQueue");
+    if (!box) return;
+    if (!items.length) {
+      box.innerHTML = "<p class='note'>Chưa có video trong bảng mới.</p>";
+      return;
+    }
+    items = newestFirst(items);
+    var html = "<table class='queue-table'><tr><th>Video</th><th>Trạng thái</th><th>Tiến trình</th><th>Đủ / số</th></tr>";
+    items.forEach(function (item) {
+      html += "<tr><td class='vname'>" + escapeHtml(item.name || "") +
+        "</td><td class='vstate " + stateClass(item) + "'>" + escapeHtml(statusText(item.status)) +
+        "</td><td class='vprogress'>" + escapeHtml(progressDetail(item, items)) +
+        "</td><td class='vscore'>" + escapeHtml(scoreText(item)) + "</td></tr>";
+    });
+    box.innerHTML = html + "</table>";
+  }
+
+  async function loadFresh() {
+    try {
+      var queueResponse = await api("/v1/fresh/videos");
+      if (queueResponse.ok) renderFreshQueue((await queueResponse.json()).items || []);
+      var reportResponse = await api("/v1/fresh/report");
+      if (reportResponse.ok) renderFreshReport(await reportResponse.json());
+      var resultResponse = await api("/v1/fresh/results?view=all&limit=80");
+      if (!resultResponse.ok) return;
+      var body = await resultResponse.json();
+      var box = document.getElementById("freshResults");
+      var items = body.items || [];
+      if (!items.length) {
+        box.innerHTML = "<p class='note'>Chưa có dòng kết quả trong bảng mới.</p>";
+        return;
+      }
+      box.innerHTML = renderResultTable(items);
+      fillShots(box);
+    } catch (error) {}
+  }
+
+  function openTestPicker() {
+    holdBackground();
+    if (!checklistReady()) {
+      var note = document.getElementById("freshNote");
+      note.textContent = "Hãy tick đủ 3 ô xác nhận cách quay trước khi tải video test.";
+      note.className = "note warn";
+      document.getElementById("checklist").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    var input = document.getElementById("file");
+    input._purpose = "test";
+    try { input.value = ""; } catch (error) {}
+    input.click();
+  }
+
+  document.getElementById("pickFresh").addEventListener("click", openTestPicker);
+  document.getElementById("pickTest").addEventListener("click", openTestPicker);
+  document.getElementById("importFresh").addEventListener("click", async function () {
+    var note = document.getElementById("freshNote");
+    note.className = "note";
+    note.textContent = "Đang đưa video còn file sang bảng mới...";
+    var response = await api("/v1/fresh/import", { method: "POST" });
+    var body = {};
+    try { body = await response.json(); } catch (error) { body = {}; }
+    if (!response.ok) {
+      note.className = "note warn";
+      note.textContent = (body && body.detail) || "Không đưa được video sang bảng mới.";
+      return;
+    }
+    note.className = "note ok";
+    note.textContent = "Đã đưa " + (body.imported || 0) + " video vào bảng mới để đọc từ đầu. Bỏ qua " +
+      (body.skipped || 0) + " video đã có trong bảng này. Không còn file: " + (body.missing || 0) + ".";
+    loadFresh();
+  });
+
+  document.getElementById("pick").addEventListener("click", function () {
+    holdBackground();
+    if (!checklistReady()) {
+      document.getElementById("uploadNote").textContent = "Hãy tick đủ 3 ô xác nhận cách quay trước khi tải video.";
+      document.getElementById("uploadNote").className = "note warn";
+      return;
+    }
+    var input = document.getElementById("file");
+    input._purpose = "";
+    // Xóa giá trị trước khi mở hộp chọn. Xóa sau khi chọn làm Safari iOS hủy file, slice() ném lỗi.
+    try { input.value = ""; } catch (error) {}
+    input.click();
+  });
+  document.getElementById("file").addEventListener("change", function (event) {
+    holdBackground();
+    var picked = Array.prototype.slice.call(event.target.files || []);
+    var purpose = event.target._purpose || "";
+    event.target._purpose = "";
+    sendFiles(picked, purpose);
+  });
+  document.getElementById("device").addEventListener("change", saveDevice);
+  document.getElementById("device").addEventListener("blur", saveDevice);
+  checklistIds().forEach(function (id) {
+    document.getElementById(id).addEventListener("change", function () {
+      saveChecklist();
+      syncUploadGate();
+    });
+  });
   var drop = document.getElementById("drop");
-  drop.addEventListener("dragover", function (event) { event.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragover", function (event) {
+    event.preventDefault();
+    if (checklistReady()) drop.classList.add("over");
+  });
   drop.addEventListener("dragleave", function () { drop.classList.remove("over"); });
   drop.addEventListener("drop", function (event) {
     event.preventDefault();
     drop.classList.remove("over");
+    holdBackground();
     sendFiles(event.dataTransfer.files);
   });
-  document.getElementById("query").addEventListener("input", loadResults);
+  document.getElementById("query").addEventListener("input", scheduleResults);
+  document.getElementById("resultsMore").addEventListener("click", function () {
+    if (uploadingActive || resultsLoading) return;
+    loadResults({ append: true });
+  });
+  document.querySelectorAll("[data-view]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      resultsView = button.getAttribute("data-view") || "complete";
+      loadResults();
+    });
+  });
+  document.getElementById("exportCsv").addEventListener("click", function () {
+    downloadExport("/v1/results/export.csv", "danh-ba.csv");
+  });
+  document.getElementById("exportVcf").addEventListener("click", function () {
+    downloadExport("/v1/results/export.vcf", "danh-ba.vcf");
+  });
+  document.getElementById("archiveResults").addEventListener("click", function (event) {
+    var target = event.target;
+    if (!target || !target.getAttribute) return;
+    var id = target.getAttribute("data-edit");
+    if (!id && target.closest) {
+      var button = target.closest("[data-edit]");
+      id = button ? button.getAttribute("data-edit") : "";
+    }
+    if (!id) return;
+    editResult(id);
+  });
+  document.getElementById("archiveMore").addEventListener("click", function () {
+    if (uploadingActive || archiveLoading) return;
+    loadArchiveResults({ append: true });
+  });
+  document.getElementById("archiveQueueMore").addEventListener("click", function () {
+    loadArchiveVideos(true);
+  });
+  document.querySelectorAll("[data-archive-view]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      archiveView = button.getAttribute("data-archive-view") || "complete";
+      loadArchiveResults();
+    });
+  });
+  var archiveQueryTimer = null;
+  document.getElementById("archiveQuery").addEventListener("input", function () {
+    clearTimeout(archiveQueryTimer);
+    archiveQueryTimer = setTimeout(function () { loadArchiveResults(); }, 400);
+  });
+  document.querySelectorAll("nav.jump a").forEach(function (link) {
+    link.addEventListener("click", function (event) {
+      if ((link.getAttribute("href") || "") === "#kho") {
+        event.preventDefault();
+        showPage("kho");
+        if (location.hash !== "#kho") location.hash = "kho";
+        return;
+      }
+      showPage("home");
+    });
+  });
+  if (location.hash === "#kho") showPage("kho");
+  document.getElementById("results").addEventListener("click", function (event) {
+    var target = event.target;
+    if (!target || !target.getAttribute) return;
+    var id = target.getAttribute("data-edit");
+    if (!id && target.closest) {
+      var button = target.closest("[data-edit]");
+      id = button ? button.getAttribute("data-edit") : "";
+    }
+    if (!id) return;
+    editResult(id);
+  });
   document.getElementById("backup").addEventListener("click", async function () {
     var note = document.getElementById("backupNote");
     note.textContent = "Đang tạo liên kết tải...";
@@ -267,8 +2207,24 @@
     window.location.href = body.url;
   });
 
+  loadDevice();
+  loadChecklist();
+  syncUploadGate();
   refresh();
-  setInterval(refresh, 4000);
+  resumeOpfsQueue();
+  setInterval(function () {
+    // PUT đang chiếm đủ 6 kết nối Safari. Làm mới bảng lúc này sẽ chèn vào hàng và kéo chậm từng mảnh.
+    if (uploadingActive) return;
+    refresh();
+  }, 4000);
+  document.addEventListener("visibilitychange", function () {
+    if (!uploadingActive) return;
+    holdBackground();
+    if (!document.hidden) requestWakeLock();
+  });
+  setInterval(function () {
+    if (uploadingActive) holdBackground();
+  }, 2000);
 </script>
 </body>
 </html>

@@ -97,3 +97,35 @@ def ensure_danhba_package(source: Path, data_dir: Path) -> Path | None:
             archive.write(path, f"DanhBa/{path.relative_to(source).as_posix()}")
     marker.write_text(stamp, encoding="utf-8")
     return dest
+
+
+VIDEOUP_NAME = "videoup.zip"
+_VIDEOUP_GUIDE = """VideoUp — tải video lên VPS (cắt khúc + nền)
+
+1. Giải nén, mở VideoUp.xcodeproj trên Mac.
+2. Signing → Team Apple ID → cắm iPhone → Run.
+3. Trong app: điền URL hub (http://IP:8088), Token, tên máy.
+4. Chọn nhiều video — khóa máy vẫn gửi tiếp; VPS xếp hàng đọc OCR.
+
+Safari vẫn tải được trên trang video (cũng cắt khúc), nhưng không upload nền.
+"""
+
+
+def ensure_videoup_package(source: Path, data_dir: Path) -> Path | None:
+    if not source.is_dir():
+        return None
+    folder = data_dir / "delivery"
+    folder.mkdir(parents=True, exist_ok=True)
+    dest = folder / VIDEOUP_NAME
+    marker = folder / "videoup-stamp.txt"
+    stamp = _danhba_stamp(source) + hashlib.sha256(_VIDEOUP_GUIDE.encode()).hexdigest()[:16]
+    if dest.is_file() and marker.is_file() and marker.read_text(encoding="utf-8").strip() == stamp:
+        return dest
+    with zipfile.ZipFile(dest, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("VideoUp/HUONG-DAN.txt", _VIDEOUP_GUIDE)
+        for path in sorted(source.rglob("*")):
+            if not path.is_file() or _danhba_skipped(path):
+                continue
+            archive.write(path, f"VideoUp/{path.relative_to(source).as_posix()}")
+    marker.write_text(stamp, encoding="utf-8")
+    return dest

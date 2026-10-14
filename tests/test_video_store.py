@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import gzip
 import os
+import sqlite3
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from control_plane.screen_table import Review, Row, Table, Unopened
@@ -14,18 +16,28 @@ from control_plane.video_store import (
     begin_upload,
     can_accept,
     claim,
+    clear_missing_video_paths,
     commit_upload,
+    count_results,
     fail,
+    feeder_count,
     finish,
     init_db,
     iter_backup,
+    keep_video_count,
     list_videos,
-    merge_close_results,
+    prune_old_videos,
+    rematch_results,
     queued_bytes,
     recover_dead,
+    rescue_stuck_uploads,
+    requeue,
     requeue_running,
     retry,
     search_results,
+    set_duration,
+    set_progress,
+    stale_running,
     stats,
 )
 
@@ -39,8 +51,8 @@ class VideoStoreTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def _add(self, name: str, sha: str, size: int = 10) -> int:
-        created = begin_upload(self.db, name=name, size_bytes=size, sha256=sha)
+    def _add(self, name: str, sha: str, size: int = 10, device: str = "") -> int:
+        created = begin_upload(self.db, name=name, size_bytes=size, sha256=sha, device=device)
         self.assertFalse(created["duplicate"])
         video_id = int(created["id"])
         path = Path(self._tmp.name) / f"{video_id}.mp4"
@@ -84,9 +96,10 @@ class VideoStoreTests(unittest.TestCase):
                 review=[Review("0900000001", "Một", "Khác", "@khac", "tên danh bạ và tên hồ sơ khác nhau")],
             ),
         )
-        self.assertEqual(stats(self.db)["saved"], 1)
-        self.assertEqual(stats(self.db)["unopened"], 1)
+        # Hàng đủ 3 cột (kể cả review đã có số+tên+@). Số chỉ có tên, chưa có @ → cần xem.
+        self.assertEqual(stats(self.db)["saved"], 2)
         self.assertEqual(stats(self.db)["review"], 1)
+        self.assertEqual(stats(self.db)["unopened"], 0)
         second = self._add("b.mp4", "b")
         finish(
             self.db,
@@ -101,10 +114,10 @@ class VideoStoreTests(unittest.TestCase):
         found = {item["phone"]: item for item in search_results(self.db, limit=20)}
         self.assertEqual(found["0982117072"]["username"], "@dangtam.3")
         self.assertEqual(found["0332001753"]["username"], "@khactam60")
-        self.assertEqual(found["0332001753"]["bucket"], "Đã lưu")
+        self.assertEqual(found["0332001753"]["bucket"], "Đủ")
         self.assertEqual(stats(self.db)["results"], 3)
 
-    def test_close_names_in_one_video_merge_and_other_videos_stay_apart(self) -> None:
+    def test_close_names_merge_inside_finish_and_global_rematch(self) -> None:
         first = self._add("a.mp4", "a")
         finish(
             self.db,
@@ -123,6 +136,15 @@ class VideoStoreTests(unittest.TestCase):
                 ],
             ),
         )
+        found = {item["phone"]: item for item in search_results(self.db, limit=20, view="all")}
+        # Cùng video, tên giống ≥90%, đúng một số và một @: ghép, ghi cả hai cách viết.
+        self.assertEqual(found["0982117072"]["username"], "@hanhnguyenn375")
+        self.assertEqual(found["0982117072"]["bucket"], "Đủ")
+        self.assertIn("Hanhnguyen", str(found["0982117072"]["name"]))
+        self.assertIn("yHanhnguyen", str(found["0982117072"]["name"]))
+        self.assertEqual(found["0900000001"]["username"], "")
+        self.assertEqual(found["0900000002"]["username"], "")
+        self.assertEqual(found["0900000003"]["username"], "")
         second = self._add("b.mp4", "b")
         finish(
             self.db,
@@ -135,18 +157,59 @@ class VideoStoreTests(unittest.TestCase):
                 ],
             ),
         )
-        self.assertEqual(merge_close_results(self.db), 2)
-        found = {item["phone"]: item for item in search_results(self.db, limit=20)}
-        self.assertEqual(found["0982117072"]["username"], "@hanhnguyenn375")
-        self.assertEqual(found["0982117072"]["bucket"], "Đã lưu")
+        self.assertEqual(rematch_results(self.db), 0)
+        found = {item["phone"]: item for item in search_results(self.db, limit=20, view="all")}
         self.assertEqual(found["0911111111"]["username"], "@dangtam.3")
+        self.assertEqual(found["0911111111"]["bucket"], "Đủ")
+        self.assertIn("Đặng Thị Tâm", str(found["0911111111"]["name"]))
+        self.assertIn("Dang Thi Tam", str(found["0911111111"]["name"]))
+        # @ Quang Le ở video khác: không kéo sang số của video trước.
+        self.assertEqual(found["0900000003"]["username"], "")
         self.assertEqual(found["0900000001"]["username"], "")
         self.assertEqual(found["0900000002"]["username"], "")
-        self.assertEqual(found["0900000003"]["username"], "")
-        listed = search_results(self.db, limit=20)
-        self.assertTrue(any(item["username"] == "@user1" and item["phone"] == "" for item in listed))
-        self.assertTrue(any(item["username"] == "@quang.le354" and item["phone"] == "" for item in listed))
-        self.assertEqual(merge_close_results(self.db), 0)
+        listed = search_results(self.db, limit=20, view="all")
+        self.assertFalse(any(item["username"] == "@dangtam.3" and item["phone"] == "" for item in listed))
+        self.assertFalse(any(item["phone"] == "0900000003" and item["username"] for item in listed))
+        complete = search_results(self.db, limit=20, view="complete")
+        self.assertTrue(all(item["phone"] and item["username"] for item in complete))
+        self.assertEqual(rematch_results(self.db), 0)
+
+    def test_rematch_joins_similar_names_only_inside_one_video(self) -> None:
+        from control_plane.video_store import connect
+
+        first = self._add("a.mp4", "a")
+        second = self._add("b.mp4", "b")
+        now = "2026-10-13T00:00:00+00:00"
+        with connect(self.db) as conn:
+            rows = [
+                ("0901000001", "kim Loan", "", 2, "có số trong danh bạ nhưng chưa đọc được @", first),
+                ("", "Kim Loa", "@kim_loa", 3, "trùng tên, không tự ghép", first),
+                ("0901000002", "Quang Le", "", 2, "có số trong danh bạ nhưng chưa đọc được @", first),
+                ("", "Quang Le", "@quang.le354", 3, "trùng tên, không tự ghép", second),
+                ("0901000003", "Photo", "", 2, "trùng tên, không tự ghép", first),
+                ("0901000004", "Photo", "", 2, "trùng tên, không tự ghép", first),
+                ("", "Photo", "@photo.1", 3, "trùng tên, không tự ghép", first),
+            ]
+            for phone, name, username, bucket, reason, vid in rows:
+                conn.execute(
+                    """
+                    INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (phone, name, username, bucket, reason, vid, now),
+                )
+        self.assertEqual(rematch_results(self.db), 1)
+        found = {item["phone"] or item["username"]: item for item in search_results(self.db, view="all", limit=20)}
+        self.assertEqual(found["0901000001"]["username"], "@kim_loa")
+        self.assertEqual(found["0901000001"]["bucket"], "Đủ")
+        self.assertIn("kim Loan", str(found["0901000001"]["name"]))
+        self.assertIn("Kim Loa", str(found["0901000001"]["name"]))
+        self.assertEqual(found["0901000002"]["username"], "")
+        self.assertEqual(found["@quang.le354"]["phone"], "")
+        self.assertEqual(found["0901000003"]["username"], "")
+        self.assertEqual(found["0901000004"]["username"], "")
+        self.assertEqual(found["@photo.1"]["phone"], "")
+        self.assertEqual(rematch_results(self.db), 0)
 
     def test_counts_follow_every_insert_upgrade_and_merge(self) -> None:
         first = self._add("a.mp4", "a")
@@ -158,13 +221,17 @@ class VideoStoreTests(unittest.TestCase):
                 review=[Review("", "", "khactam", "@khactam60", "đã mở hồ sơ nhưng chưa thấy số")],
             ),
         )
-        self.assertEqual((stats(self.db)["saved"], stats(self.db)["review"], stats(self.db)["unopened"]), (0, 1, 1))
+        # Cùng video, tên giống: ghép thành hàng đủ. @ không còn đứng riêng.
+        self.assertEqual((stats(self.db)["saved"], stats(self.db)["review"], stats(self.db)["unopened"]), (1, 0, 0))
+        listed = search_results(self.db, limit=20, view="all")
+        by_phone = {item["phone"]: item for item in listed if item["phone"]}
+        self.assertEqual(by_phone["0332001753"]["username"], "@khactam60")
+        self.assertEqual(by_phone["0332001753"]["bucket"], "Đủ")
+        self.assertFalse(any(item["phone"] == "" and item["username"] == "@khactam60" for item in listed))
         second = self._add("b.mp4", "b")
         finish(self.db, second, Table(rows=[Row("0332001753", "khactam", "@khactam60")]))
         counted = stats(self.db)
         self.assertEqual((counted["saved"], counted["review"], counted["unopened"]), (1, 0, 0))
-        listed = search_results(self.db, limit=20)
-        self.assertEqual([(item["phone"], item["username"]) for item in listed], [("0332001753", "@khactam60")])
 
     def test_lone_username_is_not_added_when_it_already_has_a_phone(self) -> None:
         first = self._add("a.mp4", "a")
@@ -178,7 +245,7 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(stats(self.db)["results"], 1)
 
     def test_search_by_phone_prefix_and_username(self) -> None:
-        video_id = self._add("a.mp4", "a")
+        video_id = self._add("IMG_0018.MOV", "a", device="iPhone An")
         finish(
             self.db,
             video_id,
@@ -189,19 +256,99 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual([item["phone"] for item in search_results(self.db, "dangtam")], ["0982117072"])
         self.assertEqual([item["phone"] for item in search_results(self.db, "@khac")], ["0332001753"])
         self.assertEqual(search_results(self.db, "0999"), [])
+        by_video = search_results(self.db, "IMG_0018")
+        self.assertEqual(len(by_video), 2)
+        self.assertEqual(by_video[0]["video"], "IMG_0018.MOV")
+        self.assertEqual(by_video[0]["device"], "iPhone An")
+        self.assertTrue(by_video[0]["scanned_at"])
+        self.assertEqual(count_results(self.db, "IMG_0018"), 2)
+        self.assertEqual(len(search_results(self.db, "IMG_0018", limit=1, offset=1)), 1)
+        listed = list_videos(self.db)
+        self.assertEqual(listed[0]["device"], "iPhone An")
+        self.assertEqual(listed[0]["saved_count"], 2)
+        self.assertEqual(listed[0]["result_count"], 2)
 
-    def test_finished_video_can_be_uploaded_again_and_reread(self) -> None:
+    def test_results_newest_first_and_queue_issue_duration(self) -> None:
+        older = self._add("old.mp4", "old")
+        finish(self.db, older, Table(rows=[Row("0900000001", "A", "@aaa")]))
+        newer = self._add("new.mp4", "new")
+        finish(
+            self.db,
+            newer,
+            Table(
+                rows=[Row("0900000002", "B", "@bbb")],
+                review=[Review("0900000003", "C", "C", "", "thiếu @")],
+                unopened=[Unopened("0900000004", "D")],
+            ),
+        )
+        phones = [item["phone"] for item in search_results(self.db, limit=20, view="all")]
+        # finish chèn rows → unopened → review; id mới nhất lên đầu.
+        self.assertEqual(phones[0], "0900000003")
+        self.assertLess(phones.index("0900000002"), phones.index("0900000001"))
+        set_duration(self.db, newer, 125.4)
+        item = next(row for row in list_videos(self.db) if row["id"] == newer)
+        self.assertAlmostEqual(float(item["duration_sec"]), 125.4, places=1)
+        self.assertIn("cần xem", str(item["issue"]))
+        good = next(row for row in list_videos(self.db) if row["id"] == older)
+        self.assertEqual(good["issue"], "Tất cả đều tốt — 1 đủ")
+
+    def test_same_name_merge_joins_phone_and_username_rows(self) -> None:
+        video_id = self._add("clip.mp4", "merge-handle")
+        finish(
+            self.db,
+            video_id,
+            Table(
+                unopened=[Unopened("0985721500", "uniquehandle")],
+                review=[Review("", "", "OCR lech", "@uniquehandle99", "đã mở hồ sơ nhưng chưa thấy số")],
+            ),
+        )
+        found = search_results(self.db, "0985721500", view="all")[0]
+        # @ chứa đúng tên danh bạ, chỉ một cặp: ghép dù tên hồ sơ đọc lệch.
+        self.assertEqual(found["username"], "@uniquehandle99")
+        self.assertEqual(found["bucket"], "Đủ")
+        self.assertEqual(stats(self.db)["results"], 1)
+        self.assertEqual(rematch_results(self.db), 0)
+
+    def test_ocr_phone_twin_is_absorbed_into_complete_row(self) -> None:
+        video_id = self._add("twins.mp4", "twins")
+        finish(
+            self.db,
+            video_id,
+            Table(
+                rows=[Row("0393525302", "kimngn2298", "@kimngn2298")],
+                unopened=[
+                    Unopened("0898525302", "kimngn2298"),  # lệch 2 chữ số → số ma
+                    Unopened("0593525202", "kimngn2298"),  # lệch 2 chữ số → số ma
+                    Unopened("0912345678", "kimngn2298"),  # lệch nhiều → giữ (có thể là số khác)
+                ],
+            ),
+        )
+        phones = sorted(item["phone"] for item in search_results(self.db, view="all", limit=20))
+        self.assertEqual(phones, ["0393525302", "0912345678"])
+        self.assertEqual(count_results(self.db, view="complete"), 1)
+        self.assertEqual(count_results(self.db, view="incomplete"), 1)
+        self.assertEqual(rematch_results(self.db), 0)
+
+    def test_finished_video_stays_done_when_the_same_file_is_uploaded(self) -> None:
         video_id = self._add("a.mp4", "same")
         claim(self.db, 7)
         finish(self.db, video_id, Table())
         again = begin_upload(self.db, name="a.mp4", size_bytes=10, sha256="same")
+        self.assertTrue(again["duplicate"])
+        self.assertEqual(again["id"], video_id)
+        self.assertEqual(stats(self.db)["done"], 1)
+        self.assertTrue(retry(self.db, video_id))
+        self.assertEqual(stats(self.db)["queued"], 1)
+
+    def test_failed_video_can_be_uploaded_again(self) -> None:
+        video_id = self._add("a.mp4", "broken")
+        claim(self.db, 7)
+        fail(self.db, video_id, "hỏng")
+        again = begin_upload(self.db, name="a.mp4", size_bytes=10, sha256="broken")
         self.assertFalse(again["duplicate"])
         self.assertTrue(again["reopened"])
         self.assertEqual(again["id"], video_id)
         self.assertEqual(stats(self.db)["uploading"], 1)
-        abort_upload(self.db, video_id, reopened=True)
-        self.assertEqual(stats(self.db)["error"], 1)
-        self.assertEqual(len(list_videos(self.db)), 1)
 
     def test_video_waiting_in_the_queue_is_still_a_duplicate(self) -> None:
         self._add("a.mp4", "same")
@@ -214,6 +361,115 @@ class VideoStoreTests(unittest.TestCase):
         fail(self.db, video_id, "hỏng")
         self.assertEqual(queued_bytes(self.db), 500)
 
+    def test_three_fields_split_complete_review_and_scan_errors(self) -> None:
+        video_id = self._add("rules.mp4", "rules")
+        finish(
+            self.db,
+            video_id,
+            Table(
+                rows=[Row("0900000001", "Một", "@mot")],
+                unopened=[Unopened("0900000002", "Hai")],
+                review=[
+                    Review("0900000003", "Ba", "Ba", "", "trùng tên, không tự ghép"),
+                    Review("0900000004", "Bốn", "Bốn", "@bon", "một số mở nhiều hồ sơ"),
+                    Review("", "", "Năm", "@nam", "đã mở hồ sơ nhưng chưa thấy số"),
+                ],
+            ),
+        )
+        found = {item["phone"] or item["username"]: item for item in search_results(self.db, view="all", limit=20)}
+        self.assertEqual(found["0900000001"]["bucket"], "Đủ")
+        self.assertEqual(found["0900000001"]["reason"], "")
+        self.assertEqual(found["0900000002"]["bucket"], "Cần xem")
+        self.assertIn("@", found["0900000002"]["reason"])
+        self.assertEqual(found["0900000003"]["bucket"], "Cần xem")
+        self.assertEqual(found["0900000004"]["bucket"], "Lỗi quét")
+        self.assertEqual(found["@nam"]["bucket"], "Lỗi quét")
+        self.assertEqual(found["@nam"]["reason"], "đã mở hồ sơ nhưng chưa thấy số")
+        counted = stats(self.db)
+        self.assertEqual((counted["saved"], counted["review"], counted["unopened"]), (1, 2, 2))
+        self.assertEqual(counted["phones"], 4)
+        item = next(row for row in list_videos(self.db) if row["id"] == video_id)
+        self.assertIn("đã mở hồ sơ nhưng chưa thấy số", str(item["error_summary"]))
+        self.assertIn("một số mở nhiều hồ sơ", str(item["error_summary"]))
+
+    def test_old_unopened_bucket_is_reclassified_as_needs_review(self) -> None:
+        from control_plane.video_store import _reclassify_results, connect
+
+        video_id = self._add("old.mp4", "old")
+        finish(self.db, video_id, Table(rows=[Row("0900000009", "Chín", "@chin")]))
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
+                VALUES ('0900000008', 'Tám', '', 3, '', ?, '2026-10-10T00:00:00+00:00')
+                """,
+                (video_id,),
+            )
+            conn.execute(
+                """
+                INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
+                VALUES ('', 'Rời', '@roi', 2, 'đã mở hồ sơ nhưng chưa thấy số', ?, '2026-10-10T00:00:00+00:00')
+                """,
+                (video_id,),
+            )
+            _reclassify_results(conn)
+        found = {item["phone"] or item["username"]: item for item in search_results(self.db, view="all", limit=20)}
+        self.assertEqual(found["0900000008"]["bucket"], "Cần xem")
+        self.assertEqual(found["@roi"]["bucket"], "Lỗi quét")
+        self.assertEqual(found["0900000009"]["bucket"], "Đủ")
+
+    def test_ocr_fragments_of_one_profile_collapse_in_the_database(self) -> None:
+        from control_plane.video_store import REASON_MULTI, _collapse_ocr_fragments, connect
+
+        video_id = self._add("frag.mp4", "frag")
+        other = self._add("other.mp4", "other")
+        now = "2026-10-11T00:00:00+00:00"
+        with connect(self.db) as conn:
+            conn.execute("DELETE FROM meta WHERE key = 'ocr_collapse_v1'")
+            rows = [
+                ("0976456667", "gialinh", "@eaaa26q", 1, "", video_id),
+                ("", "gialinh", "@nggialinh.2014", 3, "đã mở hồ sơ nhưng chưa thấy số", video_id),
+                ("", "gialinh .", "@nggialinh.2014C3", 3, "trùng tên, không tự ghép", video_id),
+                ("", "gialinh", "@coyaii5", 3, "đã mở hồ sơ nhưng chưa thấy số", video_id),
+                ("0981111111", "Mot", "@mot.user", 3, REASON_MULTI, video_id),
+                ("0982222222", "Hiền Tê", "", 2, "có số trong danh bạ nhưng chưa đọc được @", video_id),
+                ("", "Hien Te", "@O0095hien", 3, "đã mở hồ sơ nhưng chưa thấy số", video_id),
+                ("", "Hiền Tê", "@0095hienoD", 3, "trùng tên, không tự ghép", video_id),
+                ("0983333331", "Photo", "", 2, "trùng tên, không tự ghép", video_id),
+                ("0983333332", "Photo", "", 2, "trùng tên, không tự ghép", video_id),
+                ("", "Photo", "@photo.1", 3, "trùng tên, không tự ghép", video_id),
+                ("", "Khác hẳn", "@khachan99", 3, "đã mở hồ sơ nhưng chưa thấy số", video_id),
+                ("0910000001", "Giữ nguyên", "@giunguyen", 1, "", other),
+            ]
+            for phone, name, username, bucket, reason, vid in rows:
+                conn.execute(
+                    """
+                    INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (phone, name, username, bucket, reason, vid, now),
+                )
+            _collapse_ocr_fragments(conn)
+            _collapse_ocr_fragments(conn)
+        found = {item["phone"] or item["username"]: item for item in search_results(self.db, view="all", limit=30)}
+        self.assertEqual(found["0976456667"]["username"], "@nggialinh.2014")
+        self.assertEqual(found["0976456667"]["bucket"], "Đủ")
+        self.assertNotIn("@eaaa26q", found)
+        self.assertNotIn("@nggialinh.2014C3", found)
+        self.assertNotIn("@coyaii5", found)
+        self.assertEqual(found["0981111111"]["bucket"], "Đủ")
+        self.assertEqual(found["0981111111"]["reason"], "")
+        self.assertEqual(found["0982222222"]["bucket"], "Đủ")
+        self.assertIn(found["0982222222"]["username"], {"@O0095hien", "@0095hienoD"})
+        self.assertNotIn("@O0095hien", found)
+        self.assertNotIn("@0095hienoD", found)
+        self.assertEqual(found["0983333331"]["bucket"], "Cần xem")
+        self.assertEqual(found["0983333332"]["bucket"], "Cần xem")
+        self.assertEqual(found["@photo.1"]["bucket"], "Lỗi quét")
+        self.assertEqual(found["@khachan99"]["bucket"], "Lỗi quét")
+        self.assertEqual(found["0910000001"]["username"], "@giunguyen")
+        self.assertEqual(found["0910000001"]["bucket"], "Đủ")
+
     def test_unopened_phone_keeps_the_username_seen_later(self) -> None:
         first = self._add("a.mp4", "a")
         finish(self.db, first, Table(unopened=[Unopened("0332001753", "khactam")]))
@@ -225,8 +481,94 @@ class VideoStoreTests(unittest.TestCase):
         )
         found = search_results(self.db, "0332001753")[0]
         self.assertEqual(found["username"], "@khactam60")
-        self.assertEqual(found["bucket"], "Cần xem")
-        self.assertEqual((stats(self.db)["review"], stats(self.db)["unopened"]), (1, 0))
+        # Đã có số + tên + @ → hàng đủ, không còn nằm ở Cần xem.
+        self.assertEqual(found["bucket"], "Đủ")
+        self.assertEqual((stats(self.db)["saved"], stats(self.db)["unopened"]), (1, 0))
+
+    def test_rematch_promotes_old_phone_username_reviews(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        finish(
+            self.db,
+            video_id,
+            Table(review=[Review("0332001753", "khactam", "", "@khactam60", "một số mở nhiều hồ sơ")]),
+        )
+        # Giả lập dữ liệu cũ còn reason OCR tên hồ sơ.
+        from control_plane.video_store import connect, rematch_results
+
+        with connect(self.db) as conn:
+            conn.execute(
+                "UPDATE results SET reason = 'không đọc được tên hồ sơ', bucket = 2 WHERE phone = '0332001753'"
+            )
+        self.assertEqual(rematch_results(self.db), 1)
+        found = search_results(self.db, "0332001753")[0]
+        self.assertEqual(found["bucket"], "Đủ")
+        self.assertEqual(found["username"], "@khactam60")
+        items = list_videos(self.db)
+        self.assertEqual(items[0]["saved_count"], 1)
+        self.assertEqual(items[0]["review_count"], 0)
+
+    def test_claim_and_upload_stay_responsive_during_global_rematch(self) -> None:
+        """Rematch hàng loạt không được giữ khóa exclusive làm nghẽn claim/upload."""
+        import threading
+        import time
+
+        from control_plane.video_store import connect
+
+        seed = self._add("seed.mp4", "seed")
+        finish(self.db, seed, Table(unopened=[Unopened("0900000000", "Seed Name")]))
+        with connect(self.db) as conn:
+            now = "2026-10-10T00:00:00+00:00"
+            for i in range(120):
+                conn.execute(
+                    """
+                    INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
+                    VALUES (?, ?, '', 3, '', ?, ?)
+                    """,
+                    (f"08{i:08d}", f"Phone Name {i % 17}", seed, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
+                    VALUES ('', ?, ?, 2, 'đã mở hồ sơ nhưng chưa thấy số', ?, ?)
+                    """,
+                    (f"User Name {i % 19}", f"@loaduser{i}", seed, now),
+                )
+
+        waiting = self._add("wait.mp4", "wait")
+        errors: list[BaseException] = []
+        claimed_ids: list[int] = []
+
+        def _rematch() -> None:
+            try:
+                rematch_results(self.db)
+            except BaseException as exc:  # noqa: BLE001 — thu về thread chính
+                errors.append(exc)
+
+        thread = threading.Thread(target=_rematch, daemon=True)
+        thread.start()
+        deadline = time.monotonic() + 8.0
+        while thread.is_alive() and time.monotonic() < deadline:
+            try:
+                created = begin_upload(
+                    self.db, name="live.mp4", size_bytes=12, sha256=f"live-{time.time()}", device="iPhone"
+                )
+                abort_upload(self.db, int(created["id"]))
+                job = claim(self.db, os.getpid())
+                if job is not None:
+                    claimed_ids.append(int(job["id"]))
+                    requeue(self.db, int(job["id"]))
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+                break
+            time.sleep(0.01)
+        thread.join(timeout=30)
+        self.assertFalse(errors, f"DB bị nghẽn trong rematch: {errors}")
+        self.assertFalse(thread.is_alive(), "rematch treo quá lâu")
+        # claim vẫn lấy được video đang chờ trong lúc rematch chạy.
+        self.assertTrue(
+            waiting in claimed_ids or stats(self.db)["queued"] >= 1,
+            "claim/upload không vào được trong lúc rematch",
+        )
 
     def test_startup_returns_half_read_videos_to_the_queue(self) -> None:
         self._add("a.mp4", "a")
@@ -235,12 +577,75 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(requeue_running(self.db, os.getpid()), 1)
         self.assertEqual(stats(self.db)["queued"], 1)
 
+    def test_default_feeder_count_is_one(self) -> None:
+        old = os.environ.pop("CONTROL_VIDEO_FEEDERS", None)
+        try:
+            self.assertEqual(feeder_count(), 1)
+        finally:
+            if old is not None:
+                os.environ["CONTROL_VIDEO_FEEDERS"] = old
+
+    def test_progress_and_stale_running_detect_quiet_jobs(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        # pid giả không có process con — mới bị coi là nghẽn khi im tiến độ.
+        claim(self.db, 2_000_000_001)
+        set_progress(self.db, video_id, "Đang tách khung 10/100")
+        item = next(row for row in list_videos(self.db) if row["id"] == video_id)
+        self.assertEqual(item["progress"], "Đang tách khung 10/100")
+        self.assertTrue(item["progress_at"])
+        self.assertEqual(stale_running(self.db, quiet_sec=3600, max_sec=7200), [])
+        stuck = stale_running(self.db, quiet_sec=0.0, max_sec=7200)
+        self.assertEqual(stuck, [video_id])
+        requeue(self.db, video_id)
+        self.assertEqual(stats(self.db)["queued"], 1)
+        item = next(row for row in list_videos(self.db) if row["id"] == video_id)
+        self.assertEqual(item["progress"], "")
+        self.assertIsNone(item["progress_at"])
+
+    def test_only_ffmpeg_or_running_children_count_as_live_work(self) -> None:
+        from control_plane.video_store import _child_is_working, _stat_after_comm
+
+        parts = _stat_after_comm("10 (my worker) S 42 7")
+        self.assertIsNotNone(parts)
+        assert parts is not None
+        self.assertEqual(parts[0], "S")
+        self.assertEqual(parts[1], "42")
+        self.assertFalse(_child_is_working("10 (python) S 1 1", "python\x00"))
+        self.assertTrue(_child_is_working("10 (python) R 1 1", "python\x00"))
+        self.assertTrue(_child_is_working("10 (ffmpeg) S 1 1", "ffmpeg\x00-i\x00clip.mp4"))
+        self.assertFalse(_child_is_working("10 (resource_tracker) R 1 1", "resource_tracker\x00"))
+
+    def test_stale_running_skips_jobs_with_live_child_processes(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        claim(self.db, os.getpid())
+        set_progress(self.db, video_id, "Đang tách khung")
+        # Tiến trình test thường không có con → vẫn có thể bị stale; giả lập có con.
+        from control_plane import video_store as store
+
+        from unittest import mock
+
+        with mock.patch.object(store, "worker_has_live_children", return_value=True):
+            self.assertEqual(stale_running(self.db, quiet_sec=0.0, max_sec=7200), [])
+
+    def test_resource_tracker_alone_is_not_busy_work(self) -> None:
+        from unittest import mock
+
+        from control_plane.video_store import worker_has_live_children
+
+        with mock.patch("control_plane.video_store._alive", return_value=True):
+            with mock.patch("control_plane.video_store.Path") as path_cls:
+                # Không giả lập /proc đầy đủ — chỉ cần hàm không nổ khi không có con thật.
+                path_cls.return_value.iterdir.side_effect = OSError("no proc")
+                self.assertFalse(worker_has_live_children(12345))
+
     def test_backup_contains_the_saved_row(self) -> None:
-        video_id = self._add("clip.mp4", "a")
+        video_id = self._add("clip.mp4", "a", device="iPhone 13")
         finish(self.db, video_id, Table(rows=[Row("0332001753", "khactam", "@khactam60")]))
         text = "".join(iter_backup(self.db))
-        self.assertIn("Số điện thoại,Tên,Username", text)
-        self.assertIn("0332001753,khactam,@khactam60,Đã lưu,,clip.mp4", text)
+        self.assertIn("Số điện thoại,Tên,Username,Thời gian quét,Tên máy,Video", text)
+        self.assertNotIn(",Loại,", text)
+        self.assertIn("0332001753,khactam,@khactam60,", text)
+        self.assertIn(",iPhone 13,clip.mp4", text)
 
     def test_error_can_be_retried_only_while_the_file_remains(self) -> None:
         video_id = self._add("a.mp4", "a")
@@ -252,12 +657,155 @@ class VideoStoreTests(unittest.TestCase):
         fail(self.db, video_id, "hỏng lần nữa")
         self.assertFalse(retry(self.db, video_id))
 
+    def test_done_video_can_be_reread_while_file_kept(self) -> None:
+        video_id = self._add("a.mp4", "a", size=40)
+        claim(self.db, 4)
+        finish(self.db, video_id, Table(rows=[Row("0332001753", "khactam", "@khactam60")]))
+        items = list_videos(self.db)
+        self.assertTrue(items[0]["file_kept"])
+        self.assertEqual(queued_bytes(self.db), 40)
+        self.assertTrue(retry(self.db, video_id))
+        self.assertEqual(stats(self.db)["queued"], 1)
+
+    def test_prune_keeps_newest_videos_and_preserves_results(self) -> None:
+        ids = [self._add(f"{i}.mp4", f"sha-{i}", size=10) for i in range(5)]
+        for video_id in ids:
+            claim(self.db, 9)
+            finish(self.db, video_id, Table(rows=[Row(f"03{video_id:08d}", "n", f"@u{video_id}")]))
+        removed = prune_old_videos(self.db, keep=2)
+        self.assertEqual(removed, 3)
+        items = {item["id"]: item for item in list_videos(self.db, limit=20)}
+        self.assertFalse(items[ids[0]]["file_kept"])
+        self.assertFalse(items[ids[1]]["file_kept"])
+        self.assertFalse(items[ids[2]]["file_kept"])
+        self.assertTrue(items[ids[3]]["file_kept"])
+        self.assertTrue(items[ids[4]]["file_kept"])
+        # Kết quả DB vẫn còn dù file đã xóa.
+        self.assertEqual(count_results(self.db, view="all"), 5)
+        self.assertFalse(retry(self.db, ids[0]))
+        self.assertTrue(retry(self.db, ids[4]))
+
+    def test_keep_video_count_env(self) -> None:
+        old = os.environ.get("CONTROL_VIDEO_KEEP")
+        try:
+            os.environ["CONTROL_VIDEO_KEEP"] = "7"
+            self.assertEqual(keep_video_count(), 7)
+            os.environ["CONTROL_VIDEO_KEEP"] = "0"
+            self.assertEqual(keep_video_count(), 0)
+        finally:
+            if old is None:
+                os.environ.pop("CONTROL_VIDEO_KEEP", None)
+            else:
+                os.environ["CONTROL_VIDEO_KEEP"] = old
+
+    def test_newer_video_is_listed_above_an_older_queued_one(self) -> None:
+        waiting = self._add("wait.mp4", "wait")
+        newest = 0
+        for index in range(3):
+            done = self._add(f"done-{index}.mp4", f"done-{index}")
+            finish(self.db, done, Table())
+            newest = done
+        listed = list_videos(self.db, limit=2)
+        self.assertEqual(listed[0]["id"], newest)
+        self.assertEqual(listed[0]["status"], "done")
+        self.assertIn(waiting, [item["id"] for item in listed])
+        self.assertLess(len([item for item in listed if item["status"] == "done"]), 3)
+
+    def test_today_list_keeps_archive_off_the_home_page(self) -> None:
+        old = self._add("old.mp4", "old-day")
+        finish(self.db, old, Table(rows=[Row("0901000001", "Cu", "@cu.1")]))
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+        with sqlite3.connect(self.db) as conn:
+            conn.execute(
+                """
+                UPDATE videos
+                SET created_at = ?, started_at = ?, finished_at = ?, progress_at = ?
+                WHERE id = ?
+                """,
+                (yesterday, yesterday, yesterday, yesterday, old),
+            )
+            conn.execute("UPDATE results SET created_at = ? WHERE video_id = ?", (yesterday, old))
+        current = self._add("new.mp4", "new-day")
+        finish(self.db, current, Table(rows=[Row("0901000002", "Moi", "@moi.1")]))
+        carried = self._add("span.mp4", "span-day")
+        finish(self.db, carried, Table(rows=[Row("0901000003", "Noi", "@noi.1")]))
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE videos SET created_at = ? WHERE id = ?", (yesterday, carried))
+        today_ids = [item["id"] for item in list_videos(self.db, day="today", limit=20)]
+        older_ids = [item["id"] for item in list_videos(self.db, day="older", limit=20)]
+        self.assertEqual(today_ids, [carried, current])
+        self.assertEqual(older_ids, [old])
+        self.assertEqual(
+            [item["phone"] for item in search_results(self.db, view="all", day="today")],
+            ["0901000003", "0901000002"],
+        )
+        self.assertEqual(
+            [item["phone"] for item in search_results(self.db, view="all", day="older")],
+            ["0901000001"],
+        )
+        self.assertEqual(count_results(self.db, view="all", day="today"), 2)
+        self.assertEqual(count_results(self.db, view="all", day="older"), 1)
+
+    def test_stuck_upload_without_a_file_is_dropped_and_a_file_is_queued(self) -> None:
+        empty = begin_upload(self.db, name="empty.mp4", size_bytes=10, sha256="empty-sha")
+        kept = begin_upload(self.db, name="kept.mp4", size_bytes=80, sha256="kept-sha")
+        fresh = begin_upload(self.db, name="fresh.mp4", size_bytes=10, sha256="fresh-sha")
+        old = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE videos SET created_at = ? WHERE id IN (?, ?)", (old, empty["id"], kept["id"]))
+        video_dir = Path(self._tmp.name) / "videos"
+        video_dir.mkdir()
+        (video_dir / f"{kept['id']}.mp4").write_bytes(b"x" * 80)
+        self.assertEqual(rescue_stuck_uploads(self.db, video_dir, min_age_sec=600), 2)
+        counts = stats(self.db)
+        self.assertEqual(counts["uploading"], 1)
+        self.assertEqual(counts["queued"], 1)
+        self.assertEqual(int(fresh["id"]), next(item["id"] for item in list_videos(self.db) if item["status"] == "uploading"))
+        self.assertEqual(int(kept["id"]), next(item["id"] for item in list_videos(self.db) if item["status"] == "queued"))
+
+    def test_clear_missing_video_paths(self) -> None:
+        video_id = self._add("a.mp4", "gone", size=33)
+        job = claim(self.db, 3)
+        path = Path(str(job["path"]))
+        finish(self.db, video_id, Table())
+        path.unlink()
+        self.assertFalse(list_videos(self.db)[0]["file_kept"])
+        self.assertEqual(clear_missing_video_paths(self.db), 1)
+        self.assertEqual(queued_bytes(self.db), 0)
+        self.assertFalse(list_videos(self.db)[0]["file_kept"])
+        self.assertFalse(retry(self.db, video_id))
+
     def test_disk_limit(self) -> None:
         gb = 1024 * 1024 * 1024
-        self.assertTrue(can_accept(0, 100, 80 * gb, 10 * gb))
-        self.assertFalse(can_accept(79 * gb, 2 * gb, 80 * gb, 10 * gb))
-        self.assertFalse(can_accept(0, 100, 80 * gb, 1 * gb))
+        old = os.environ.get("CONTROL_VIDEO_FREE_RESERVE_GB")
+        try:
+            os.environ["CONTROL_VIDEO_FREE_RESERVE_GB"] = "2"
+            # Còn 10GB trống, reserve 2GB → nhận file nhỏ OK.
+            self.assertTrue(can_accept(0, 100, 80 * gb, 10 * gb))
+            self.assertFalse(can_accept(79 * gb, 2 * gb, 80 * gb, 10 * gb))
+            self.assertFalse(can_accept(0, 100, 80 * gb, 1 * gb))
+            # reserve tối thiểu code = 4GB; 1.5GB file cần free > 5.5GB.
+            self.assertFalse(can_accept(0, int(1.5 * gb), 120 * gb, int(5 * gb)))
+            self.assertTrue(can_accept(0, int(1.5 * gb), 120 * gb, int(6 * gb)))
+        finally:
+            if old is None:
+                os.environ.pop("CONTROL_VIDEO_FREE_RESERVE_GB", None)
+            else:
+                os.environ["CONTROL_VIDEO_FREE_RESERVE_GB"] = old
         self.assertEqual(queued_bytes(self.db), 0)
+
+    def test_prune_respects_keep_gb_budget(self) -> None:
+        ids = []
+        for i in range(4):
+            video_id = self._add(f"{i}.mp4", f"gb-{i}", size=600 * 1024 * 1024)
+            ids.append(video_id)
+            claim(self.db, 1)
+            finish(self.db, video_id, Table())
+        # Giữ tối đa ~1.1GB → chỉ còn khoảng 1 file lớn nhất (mới nhất).
+        removed = prune_old_videos(self.db, keep=50, keep_gb=1.1)
+        self.assertGreaterEqual(removed, 2)
+        kept = [item for item in list_videos(self.db, limit=20) if item["file_kept"]]
+        self.assertLessEqual(len(kept), 2)
 
 
 class BackupGzipTests(unittest.TestCase):

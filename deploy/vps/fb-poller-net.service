@@ -1,0 +1,12 @@
+[Unit]
+Description=fb-poller upload network tuning
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/fb-poller/deploy/vps/tune-upload-net.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
