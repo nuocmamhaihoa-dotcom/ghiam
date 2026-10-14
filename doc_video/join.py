@@ -14,10 +14,16 @@ không đoán tên gần giống:
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from difflib import SequenceMatcher
 
 from doc_video.frame import FrameRead
-from doc_video.text import handle_matches_name, name_key
+from doc_video.text import find_handle, handle_matches_name, name_key, vote_chars
+
+# Các ký tự bộ đọc hay nhầm với nhau trong @id.
+_LOOKALIKE = [set("l1i"), set("o0"), set("qg9"), set("s5"), set("b6"), set("d4"), set("z2"), set("b8")]
+# Hai lần đọc @id trong cùng một lượt mở hồ sơ giống nhau ít nhất chừng này.
+_SAME_VISIT = 0.6
 
 
 @dataclass(frozen=True)
@@ -57,8 +63,14 @@ class _Seen:
     near: set[str] = field(default_factory=set)
 
     def name(self) -> str:
+        """Bỏ phiếu theo từng ký tự giữa các khung đã đọc tên này. Mỗi khung sai một chỗ khác nhau."""
         if not self.names:
             return ""
+        if len(self.names) == 1:
+            return next(iter(self.names))
+        voted = " ".join(vote_chars(list(self.names.items()), loose=True).split())
+        if voted:
+            return voted
         top = max(self.names.values())
         return min((name for name, hits in self.names.items() if hits == top), key=lambda name: -_marks(name))
 
@@ -88,7 +100,86 @@ def _merge_misreads(phones: dict[str, _Seen], frames_with: dict[str, set[int]]) 
             break
 
 
+def _vote_visits(frames: list[FrameRead]) -> list[FrameRead]:
+    """Một lượt mở hồ sơ kéo dài nhiều khung. Bỏ phiếu @id giữa các khung đó.
+
+    Lượt mở hết khi gặp lại màn danh bạ, hoặc khi @id khác hẳn (một hồ sơ khác).
+    Không bỏ phiếu thì mỗi lần đọc sai một ký tự thành một hồ sơ riêng, và
+    việc ghép theo thứ tự mở bị lệch số.
+    """
+    out = list(frames)
+    run: list[int] = []
+
+    def close() -> None:
+        if len(run) > 1:
+            counts = Counter(out[index].handle[1:] for index in run)
+            voted = find_handle("@" + vote_chars(list(counts.items()), loose=False))
+            if voted:
+                for index in run:
+                    out[index] = replace(out[index], handle=voted)
+        run.clear()
+
+    for index, frame in enumerate(frames):
+        if frame.kind == "list":
+            close()
+            continue
+        if frame.kind != "profile" or not frame.handle:
+            continue
+        if run:
+            last = frames[run[-1]].handle
+            if SequenceMatcher(None, last, frame.handle, autojunk=False).ratio() < _SAME_VISIT:
+                close()
+        run.append(index)
+    close()
+    return out
+
+
+def _lookalike(left: str, right: str) -> bool:
+    """Hai @id chỉ khác nhau ở một chỗ, và chỗ đó là cặp ký tự hay đọc nhầm (l với 1, q với g, _ với __)."""
+    if left.replace("__", "_") == right.replace("__", "_") and left != right:
+        return True
+    if len(left) != len(right):
+        return False
+    diffs = [(a, b) for a, b in zip(left, right) if a != b]
+    return len(diffs) == 1 and any(diffs[0][0] in group and diffs[0][1] in group for group in _LOOKALIKE)
+
+
+def _merge_handle_misreads(frames: list[FrameRead]) -> list[FrameRead]:
+    """@id đọc nhầm một ký tự dễ lẫn, cùng tên hồ sơ, gộp vào @id đọc được nhiều lần hơn."""
+    counts: Counter = Counter()
+    names: dict[str, Counter] = {}
+    for frame in frames:
+        if frame.kind == "profile" and frame.handle:
+            counts[frame.handle] += 1
+            names.setdefault(frame.handle, Counter())[name_key(frame.profile_name)] += 1
+    mapping: dict[str, str] = {}
+    for weak in sorted(counts, key=lambda handle: counts[handle]):
+        for strong in sorted(counts, key=lambda handle: -counts[handle]):
+            if strong == weak or strong in mapping or counts[strong] <= counts[weak]:
+                continue
+            if not _lookalike(weak, strong):
+                continue
+            weak_name = names[weak].most_common(1)[0][0]
+            strong_name = names[strong].most_common(1)[0][0]
+            if weak_name and strong_name and weak_name != strong_name:
+                continue
+            mapping[weak] = strong
+            break
+    if not mapping:
+        return frames
+
+    def target(handle: str) -> str:
+        seen = {handle}
+        while handle in mapping and mapping[handle] not in seen:
+            handle = mapping[handle]
+            seen.add(handle)
+        return handle
+
+    return [replace(frame, handle=target(frame.handle)) if frame.handle in mapping else frame for frame in frames]
+
+
 def build(frames: list[FrameRead]) -> Result:
+    frames = _merge_handle_misreads(_vote_visits(frames))
     phones: dict[str, _Seen] = {}
     handles: dict[str, _Seen] = {}
     frames_with: dict[str, set[int]] = {}

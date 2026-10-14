@@ -8,7 +8,16 @@ from pathlib import Path
 
 from doc_video.frame import Contact, FrameRead
 from doc_video.join import build
-from doc_video.text import find_handle, handle_matches_name, looks_like_phone, merge_name, name_key, normalize_phone
+from doc_video.text import (
+    clean_name,
+    find_handle,
+    handle_from_viet,
+    handle_matches_name,
+    looks_like_phone,
+    name_key,
+    normalize_phone,
+    vote_chars,
+)
 
 
 def listing(*pairs: tuple[str, str]) -> FrameRead:
@@ -38,13 +47,31 @@ class TextTests(unittest.TestCase):
         self.assertFalse(handle_matches_name("@anhphonglacuatao2", "Phương Anh"))
         self.assertFalse(handle_matches_name("@linh234_50", "Kim Linh"))
 
-    def test_merge_keeps_marks_and_fixes_case_and_digits(self) -> None:
-        self.assertEqual(merge_name(["TrUC"], "Truc"), "Truc")
-        self.assertEqual(merge_name(["TrUcC"], "Truc"), "Truc")
-        self.assertEqual(merge_name(["Thoa ó756599815570"], "Thoa 6736599813370"), "Thoa 6736599813370")
-        self.assertEqual(merge_name(["Phước Lê"], "Phudc Le"), "Phước Lê")
-        self.assertEqual(merge_name(["LêLee"], "LELee"), "LêLee")
-        self.assertEqual(merge_name(["Hồng Mến"], "Hong Men"), "Hồng Mến")
+    def test_handles_are_lowercase_like_tiktok(self) -> None:
+        self.assertEqual(find_handle("@User_Abc.12"), "@user_abc.12")
+        self.assertEqual(handle_from_viet("Oquocnguyet81792"), "@quocnguyet81792")
+        self.assertEqual(handle_from_viet("Qhuong.tv"), "@huong.tv")
+        self.assertEqual(handle_from_viet("0090fy5xr"), "@090fy5xr")
+
+    def test_names_keep_special_characters_except_bar(self) -> None:
+        self.assertEqual(clean_name("Huyền Phương (Cà)"), "Huyền Phương (Cà)")
+        self.assertEqual(clean_name("Lan & Hoa"), "Lan & Hoa")
+        self.assertEqual(clean_name("Thắm | Shop"), "Thắm Shop")
+
+    def test_vote_keeps_what_most_readers_agree_on(self) -> None:
+        reads = [("Hữu Nhung", 1.5), ("Hữ Nhung", 1.0), ("Hữu Nhung", 1.0), ("Huu Nhung", 0.7)]
+        self.assertEqual(vote_chars(reads), "Hữu Nhung")
+        reads = [("Ngô Lan", 1.5), ("Ng6 Lan", 1.0), ("Ngô Lan", 1.0), ("Ngo Lan", 0.7)]
+        self.assertEqual(vote_chars(reads), "Ngô Lan")
+        reads = [("nhungphuong 8712", 1.5), ("nhungphuong8712", 1.0), ("nhungphuong8712", 1.0), ("nhungphuong8712", 0.7)]
+        self.assertEqual(vote_chars(reads), "nhungphuong8712")
+        reads = [("_thoa.xuan_", 0.7), ("thoa.xuan", 1.5), ("_thoa.xuan_", 1.0), ("_thoa.xuan_", 1.0)]
+        self.assertEqual(vote_chars(reads), "_thoa.xuan_")
+
+    def test_vote_on_handles_is_exact(self) -> None:
+        reads = [("tamphuongca14899", 1), ("tamphuongcal4899", 1), ("tamphuongca14899", 1)]
+        self.assertEqual(vote_chars(reads, loose=False), "tamphuongca14899")
+        self.assertEqual(vote_chars([], loose=False), "")
 
 
 class JoinTests(unittest.TestCase):
@@ -171,6 +198,61 @@ class JoinTests(unittest.TestCase):
         result = build(frames)
         self.assertEqual([r.phone for r in result.rows], ["0919313090"])
         self.assertNotIn("0919313080", [phone for phone, _ in result.unopened])
+
+    def test_misread_handle_frames_of_one_visit_count_as_one_profile(self) -> None:
+        screen = (("0900000001", "Nhà gỗ"), ("0900000002", "Quốc Thanh"))
+        result = build(
+            [
+                listing(*screen),
+                profile("Wood", "@woodhouse1"),
+                profile("Wood", "@woodhousel"),
+                profile("Wood", "@woodhouse1"),
+                listing(*screen),
+                profile("TV", "@televisionnn"),
+            ]
+        )
+        self.assertEqual(
+            [(row.phone, row.handle) for row in result.rows],
+            [("0900000001", "@woodhouse1"), ("0900000002", "@televisionnn")],
+        )
+        self.assertEqual(result.review, [])
+
+    def test_lookalike_handle_from_another_visit_merges_into_the_common_one(self) -> None:
+        result = build(
+            [
+                listing(("0900000001", "Lan")),
+                profile("Lan", "@lan_shop"),
+                profile("Lan", "@lan_shop"),
+                listing(("0900000001", "Lan")),
+                profile("Lan", "@lan__shop"),
+            ]
+        )
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0900000001", "@lan_shop")])
+        self.assertEqual(result.review, [])
+
+    def test_different_people_with_lookalike_handles_stay_apart(self) -> None:
+        result = build(
+            [
+                listing(("0900000001", "Lan"), ("0900000002", "Linh")),
+                profile("Lan", "@lan1"),
+                profile("Lan", "@lan1"),
+                listing(("0900000001", "Lan"), ("0900000002", "Linh")),
+                profile("Linh", "@lanl"),
+            ]
+        )
+        self.assertEqual(
+            {(row.phone, row.handle) for row in result.rows},
+            {("0900000001", "@lan1"), ("0900000002", "@lanl")},
+        )
+
+    def test_name_read_differently_on_each_frame_is_voted_by_character(self) -> None:
+        frames = [
+            listing(("0908035416", "Hữ Nhung")),
+            listing(("0908035416", "Hữu Nhưng")),
+            listing(("0908035416", "Hữu Nhung")),
+            profile("Hữu Nhung", "@huunhung"),
+        ]
+        self.assertEqual(build(frames).rows[0].name, "Hữu Nhung")
 
     def test_most_frequent_name_wins(self) -> None:
         frames = [listing(("0908035416", "thovahanh"), ("0908031961", "Thu Vân")) for _ in range(3)]

@@ -24,10 +24,20 @@ class TextLine:
     y0: int
     x1: int
     y1: int
+    # Chiều cao chữ: trung vị chiều cao các từ. Vòng tròn chạm màn hình đè lên
+    # dòng làm khung dòng cao vọt, nhưng không làm đổi trung vị.
+    word_h: int = 0
 
     @property
     def h(self) -> int:
         return self.y1 - self.y0
+
+    @property
+    def text_h(self) -> int:
+        """Chiều cao khung dòng, trừ khi khung cao vọt quá chiều cao chữ (có vật đè lên dòng)."""
+        if self.word_h and self.h > 1.6 * self.word_h:
+            return self.word_h
+        return self.h
 
 
 def check_tesseract() -> None:
@@ -91,11 +101,18 @@ def find_lines(image: Image.Image) -> list[TextLine]:
     lines = []
     for words in grouped.values():
         words.sort(key=lambda parts: int(parts[6]))
+        if len(words) >= 2:
+            # Vòng tròn chạm màn hình bị đọc thành một "từ" cao gấp mấy lần chữ. Bỏ nó khỏi dòng.
+            ordered = sorted(int(p[9]) for p in words)
+            median = ordered[(len(ordered) - 1) // 2]
+            words = [p for p in words if int(p[9]) <= 1.8 * median] or words
         x0 = min(int(p[6]) for p in words)
         y0 = min(int(p[7]) for p in words)
         x1 = max(int(p[6]) + int(p[8]) for p in words)
         y1 = max(int(p[7]) + int(p[9]) for p in words)
-        lines.append(TextLine(" ".join(p[11].strip() for p in words), x0, y0, x1, y1))
+        heights = sorted(int(p[9]) for p in words)
+        word_h = heights[(len(heights) - 1) // 2]
+        lines.append(TextLine(" ".join(p[11].strip() for p in words), x0, y0, x1, y1, word_h))
     lines.sort(key=lambda line: (line.y0, line.x0))
     return lines
 

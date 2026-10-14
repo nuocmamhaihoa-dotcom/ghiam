@@ -19,6 +19,17 @@ for l in eng vie; do
 done
 ```
 
+VietOCR (không bắt buộc, đọc dấu tiếng Việt chuẩn hơn; mỗi tiến trình đọc dùng thêm khoảng 0,9 GB RAM):
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install vietocr
+mkdir -p models
+curl -fL -o models/vgg_transformer.pth https://vocr.vn/data/vietocr/vgg_transformer.pth
+```
+
+Thiếu VietOCR thì bộ đọc chỉ dùng tesseract. Tắt hẳn bằng `DOC_VIDEO_VIETOCR=0`.
+
 ## Chạy
 
 ```bash
@@ -35,12 +46,19 @@ Ra 3 file CSV (mở bằng Excel):
 
 ## Cách đọc
 
-1. Bỏ dải đen quanh màn hình điện thoại, phóng ảnh lên đủ lớn.
+1. Bỏ dải đen quanh màn hình điện thoại, phóng ảnh lên đủ lớn. Giao diện tối thì đảo màu.
 2. Đọc cả màn hình để biết dòng nào ở đâu. Dòng toàn chữ số là số điện thoại, tên là dòng ngay dưới.
-   Dòng có `@` là ID, tên là dòng ngay trên.
-3. Cắt riêng từng dòng, phóng to, đọc lại bằng bộ đọc hợp loại dữ liệu:
-   số và ID bằng bộ tiếng Anh chỉ cho chữ số/chữ không dấu (bộ tiếng Việt hay đọc 3 thành 5, 6 thành ó);
-   tên đọc cả hai bộ rồi ghép từng ký tự: chữ có dấu theo bộ tiếng Việt, hoa thường và chữ số theo bộ không dấu.
-4. Mỗi người hiện ở nhiều khung: lấy số và tên được đọc nhiều lần nhất.
-5. Ghép theo tên, không phân biệt hoa thường/dấu/khoảng trắng. Một tên có nhiều số thì chọn số
-   đang hiện trên màn hình danh bạ ngay trước khi mở hồ sơ; vẫn không chắc thì đưa vào bảng cần xem.
+   Dòng có `@` là ID, tên là dòng ngay trên. Không thấy `@` thì ID là dòng ngay trên hàng
+   Đã follow / Follower / Thích. Vòng tròn chạm màn hình đè lên dòng chữ được bỏ ra.
+3. Cắt riêng từng dòng, đọc lại bằng nhiều bộ đọc ở nhiều cỡ phóng, rồi bỏ phiếu theo từng ký tự:
+   - tên: tesseract tiếng Việt (chữ cao khoảng 32 điểm ảnh), tesseract chỉ chữ không dấu và VietOCR
+     (khoảng 80 điểm ảnh). Chữ số và hoa thường lấy theo bộ không dấu.
+   - ID: sáu lần đọc tesseract ở các cỡ 28 đến 80 điểm ảnh, cộng VietOCR. ID TikTok luôn là chữ thường.
+4. Mỗi người hiện ở nhiều khung: bỏ phiếu tên theo từng ký tự giữa các khung. Các khung của một lần
+   mở hồ sơ được gộp, ID đọc lệch một ký tự dễ nhầm (l với 1, q với g) được gộp vào ID đọc nhiều hơn.
+5. Ghép theo tên, @id trùng tên danh bạ, hoặc thứ tự mở hồ sơ khi đã mở hết một màn danh bạ.
+   Không chắc thì đưa vào bảng cần xem.
+
+Đo trên 400 ảnh danh bạ và hồ sơ dựng lại có đáp án, mỗi khung hình đọc riêng: tên danh bạ đúng
+từng ký tự khoảng 97%, ID khoảng 93%, tên hồ sơ khoảng 90%. Video có nhiều khung cho mỗi người nên
+kết quả cuối còn cao hơn. ID có hai gạch dưới liền nhau (`__`) đôi khi vẫn bị đọc thành một.
