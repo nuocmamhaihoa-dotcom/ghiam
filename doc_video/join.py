@@ -7,7 +7,9 @@ không đoán tên gần giống:
 1. Cùng tên, và tên đó chỉ có một số với một @id. Nhiều số cùng tên thì lấy
    số đang hiện trên danh bạ ngay trước hồ sơ, nếu chỉ còn một số như vậy.
 2. @id trùng với tên danh bạ (TikTok tạo @id từ tên đó).
-3. Một màn danh bạ được mở lần lượt hết từng dòng, từ trên xuống: dòng thứ
+3. Dòng vừa bấm: khung danh bạ ngay trước hồ sơ có vòng tròn chạm màn hình
+   nằm trên đúng một dòng. Các lần mở cùng hồ sơ phải chỉ cùng một dòng.
+4. Một màn danh bạ được mở lần lượt hết từng dòng, từ trên xuống: dòng thứ
    nhất ứng với hồ sơ mở đầu tiên. Mở thiếu một dòng thì không ghép theo thứ tự.
 """
 
@@ -61,6 +63,7 @@ class _Seen:
     first: int = 0
     count: int = 0
     near: set[str] = field(default_factory=set)
+    taps: Counter = field(default_factory=Counter)
 
     def name(self) -> str:
         """Bỏ phiếu theo từng ký tự giữa các khung đã đọc tên này. Mỗi khung sai một chỗ khác nhau."""
@@ -79,8 +82,12 @@ def _marks(name: str) -> int:
     return sum(1 for ch in name if ord(ch) > 127)
 
 
-def _merge_misreads(phones: dict[str, _Seen], frames_with: dict[str, set[int]]) -> None:
-    """Số lệch đúng một chữ số so với số đọc được nhiều hơn, cùng tên, chưa từng cùng hiện trên một khung: là đọc nhầm."""
+def _merge_misreads(phones: dict[str, _Seen], frames_with: dict[str, set[int]]) -> dict[str, str]:
+    """Số lệch đúng một chữ số so với số đọc được nhiều hơn, cùng tên, chưa từng cùng hiện trên một khung: là đọc nhầm.
+
+    Trả về số đọc nhầm và số đúng tương ứng.
+    """
+    merged: dict[str, str] = {}
     for weak in sorted(phones, key=lambda phone: phones[phone].count):
         if weak not in phones:
             continue
@@ -97,7 +104,9 @@ def _merge_misreads(phones: dict[str, _Seen], frames_with: dict[str, set[int]]) 
             seen.count += phones[weak].count
             frames_with[strong] |= frames_with.pop(weak)
             del phones[weak]
+            merged[weak] = strong
             break
+    return merged
 
 
 def _vote_visits(frames: list[FrameRead]) -> list[FrameRead]:
@@ -185,16 +194,20 @@ def build(frames: list[FrameRead]) -> Result:
     frames_with: dict[str, set[int]] = {}
     visits: list[_Visit] = []
     visible: tuple[str, ...] = ()
+    last_tap = ""
     order = 0
     for index, frame in enumerate(frames):
         if frame.kind == "list":
+            # Chỉ khung danh bạ cuối cùng trước hồ sơ cho biết dòng vừa bấm.
+            last_tap = frame.tapped
             ordered: list[str] = []
             for contact in frame.contacts:
                 seen = phones.get(contact.phone)
                 if seen is None:
                     seen = phones[contact.phone] = _Seen(first=order)
                     order += 1
-                seen.names[contact.name] += 1
+                if contact.name:
+                    seen.names[contact.name] += 1
                 seen.count += 1
                 frames_with.setdefault(contact.phone, set()).add(index)
                 if contact.phone not in ordered:
@@ -211,7 +224,13 @@ def build(frames: list[FrameRead]) -> Result:
             seen.near.update(visible)
             if not visits or visits[-1].handle != frame.handle:
                 visits.append(_Visit(frame.handle, visible))
-    _merge_misreads(phones, frames_with)
+                if last_tap:
+                    seen.taps[last_tap] += 1
+            last_tap = ""
+    merged = _merge_misreads(phones, frames_with)
+    for seen in handles.values():
+        if merged and seen.taps:
+            seen.taps = Counter({merged.get(phone, phone): hits for phone, hits in seen.taps.items()})
     return _pair(phones, handles, visits)
 
 
@@ -249,6 +268,7 @@ def _pair(phones: dict[str, _Seen], handles: dict[str, _Seen], visits: list[_Vis
         if len(chosen) == 1:
             _add(result, phones, handles, chosen[0], handle, used_phones, used_handles)
 
+    _pair_tapped(result, phones, handles, used_phones, used_handles)
     _pair_opened_screen(result, phones, handles, visits, used_phones, used_handles)
 
     left_phones = [phone for phone in phones if phone not in used_phones]
@@ -270,6 +290,31 @@ def _pair(phones: dict[str, _Seen], handles: dict[str, _Seen], visits: list[_Vis
     result.rows.sort(key=lambda row: phones[row.phone].first)
     result.unopened.sort(key=lambda item: phones[item[0]].first)
     return result
+
+
+def _pair_tapped(
+    result: Result,
+    phones: dict[str, _Seen],
+    handles: dict[str, _Seen],
+    used_phones: set[str],
+    used_handles: set[str],
+) -> None:
+    """Ghép hồ sơ với dòng vừa bấm trước khi nó mở.
+
+    Mọi lần mở hồ sơ đó phải chỉ cùng một dòng, và dòng đó không được là dòng
+    vừa bấm của một hồ sơ khác. Có mâu thuẫn thì bỏ, để cách khác quyết định.
+    """
+    claims: dict[str, str] = {}
+    for handle, seen in handles.items():
+        if handle in used_handles:
+            continue
+        tapped = {phone for phone in seen.taps if phone in phones}
+        if len(tapped) == 1:
+            claims[handle] = next(iter(tapped))
+    claimed = Counter(claims.values())
+    for handle, phone in claims.items():
+        if claimed[phone] == 1 and phone not in used_phones:
+            _add(result, phones, handles, phone, handle, used_phones, used_handles)
 
 
 def _pair_opened_screen(

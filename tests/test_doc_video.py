@@ -8,9 +8,13 @@ from pathlib import Path
 
 from doc_video.frame import Contact, FrameRead
 from doc_video.join import build
+from doc_video.ocr import TextLine
+from doc_video.frame import Layout, ListRow
+from doc_video.video import plan_reads, resolve_taps
 from doc_video.text import (
     clean_name,
     find_handle,
+    fix_underscores,
     handle_from_viet,
     handle_matches_name,
     looks_like_phone,
@@ -46,6 +50,9 @@ class TextTests(unittest.TestCase):
         self.assertTrue(handle_matches_name("@thoa.6736599813370", "Thoa 6736599813370"))
         self.assertFalse(handle_matches_name("@anhphonglacuatao2", "Phương Anh"))
         self.assertFalse(handle_matches_name("@linh234_50", "Kim Linh"))
+        self.assertFalse(handle_matches_name("@user06867539", "user606720361"))
+        self.assertFalse(handle_matches_name("@user54308927", "user6289208064852"))
+        self.assertTrue(handle_matches_name("@user6289208064852", "user6289208064852"))
 
     def test_handles_are_lowercase_like_tiktok(self) -> None:
         self.assertEqual(find_handle("@User_Abc.12"), "@user_abc.12")
@@ -67,6 +74,14 @@ class TextTests(unittest.TestCase):
         self.assertEqual(vote_chars(reads), "nhungphuong8712")
         reads = [("_thoa.xuan_", 0.7), ("thoa.xuan", 1.5), ("_thoa.xuan_", 1.0), ("_thoa.xuan_", 1.0)]
         self.assertEqual(vote_chars(reads), "_thoa.xuan_")
+
+    def test_underscore_strokes_fix_double_and_leading_underscores(self) -> None:
+        # Nét ở vị trí 0 là chân chữ @, không phải gạch dưới.
+        self.assertEqual(fix_underscores("@tam_400", [(0.4, 0.9), (4.5, 1.5)]), "@tam__400")
+        self.assertEqual(fix_underscores("@tam_400", [(0.4, 0.9), (4.5, 0.8)]), "@tam_400")
+        self.assertEqual(fix_underscores("@vantuyet._", [(0.3, 0.9), (1.6, 0.8), (10.2, 0.8)]), "@_vantuyet._")
+        self.assertEqual(fix_underscores("@ydieu", [(0.3, 0.9), (1.5, 0.8)]), "@ydieu")
+        self.assertEqual(fix_underscores("@lan", []), "@lan")
 
     def test_vote_on_handles_is_exact(self) -> None:
         reads = [("tamphuongca14899", 1), ("tamphuongcal4899", 1), ("tamphuongca14899", 1)]
@@ -199,6 +214,40 @@ class JoinTests(unittest.TestCase):
         self.assertEqual([r.phone for r in result.rows], ["0919313090"])
         self.assertNotIn("0919313080", [phone for phone, _ in result.unopened])
 
+    def test_the_tapped_row_joins_a_profile_with_another_name(self) -> None:
+        screen = (("0900000001", "Nhà gỗ"), ("0900000002", "Quốc Thanh"), ("0900000003", "Kim Hoa"))
+        result = build(
+            [
+                FrameRead("list", [Contact(p, n) for p, n in screen], tapped="0900000002"),
+                profile("TV", "@televisionnn"),
+                FrameRead("list", [Contact(p, n) for p, n in screen]),
+            ]
+        )
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0900000002", "@televisionnn")])
+        self.assertEqual(len(result.unopened), 2)
+
+    def test_two_profiles_claiming_one_tapped_row_are_not_joined(self) -> None:
+        screen = (("0900000001", "Nhà gỗ"), ("0900000002", "Quốc Thanh"), ("0900000003", "Kim Hoa"))
+        result = build(
+            [
+                FrameRead("list", [Contact(p, n) for p, n in screen], tapped="0900000002"),
+                profile("TV", "@televisionnn"),
+                FrameRead("list", [Contact(p, n) for p, n in screen], tapped="0900000002"),
+                profile("Wood", "@woodhouse"),
+            ]
+        )
+        self.assertEqual(result.rows, [])
+
+    def test_a_tap_seen_before_scrolling_away_is_not_used(self) -> None:
+        result = build(
+            [
+                FrameRead("list", [Contact("0900000001", "An"), Contact("0900000002", "Binh")], tapped="0900000001"),
+                FrameRead("list", [Contact("0900000005", "Cuong"), Contact("0900000006", "Dung")]),
+                profile("Biệt danh", "@xyzxyz"),
+            ]
+        )
+        self.assertNotIn("0900000001", [row.phone for row in result.rows])
+
     def test_misread_handle_frames_of_one_visit_count_as_one_profile(self) -> None:
         screen = (("0900000001", "Nhà gỗ"), ("0900000002", "Quốc Thanh"))
         result = build(
@@ -259,6 +308,37 @@ class JoinTests(unittest.TestCase):
         frames.append(listing(("0908035416", "Am _ Â 2m ls")))
         frames.append(profile("thovahanh", "@thova"))
         self.assertEqual(build(frames).rows[0].name, "thovahanh")
+
+
+def list_layout(phones: list[str], tap_y: float = -1.0, clear: bool = True) -> Layout:
+    line = TextLine("x", 0, 0, 10, 10)
+    rows = [ListRow(phone, line, clear, 100 + 230 * index) for index, phone in enumerate(phones)]
+    return Layout("list", rows=rows, tap_y=tap_y, row_pitch=230.0)
+
+
+class PlanTests(unittest.TestCase):
+    def test_each_number_is_read_in_at_most_three_clear_frames(self) -> None:
+        layouts = [list_layout(["0900000001", "0900000002"]) for _ in range(10)]
+        layouts[0] = list_layout(["0900000001", "0900000002"], clear=False)
+        plan = plan_reads(layouts)
+        reads = [index for index, rows in plan.items() if rows and 0 in rows]
+        self.assertEqual(len(reads), 3)
+        self.assertNotIn(0, reads)
+
+    def test_each_profile_visit_is_read_in_two_frames(self) -> None:
+        layouts = [list_layout(["0900000001", "0900000002"])]
+        layouts += [Layout("profile", handle_line=TextLine("@a", 0, 0, 10, 10), handle_hint="@abc") for _ in range(4)]
+        layouts += [list_layout(["0900000001", "0900000002"])]
+        plan = plan_reads(layouts)
+        self.assertEqual(sorted(index for index, rows in plan.items() if rows is None), [2, 4])
+
+    def test_a_tap_that_erased_its_row_is_found_on_the_next_frame(self) -> None:
+        phones = ["0900000001", "0900000002", "0900000003"]
+        tapped = list_layout(["0900000001", "0900000003"], tap_y=100 + 230 + 60)
+        tapped.rows[1] = ListRow("0900000003", tapped.rows[1].name_line, True, 100 + 460)
+        layouts = [tapped, Layout("profile"), list_layout(phones)]
+        resolve_taps(layouts)
+        self.assertEqual(layouts[0].tapped, "0900000002")
 
 
 ASSETS = Path("/home/ubuntu/.cursor/projects/workspace/assets")
