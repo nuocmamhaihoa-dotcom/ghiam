@@ -37,11 +37,15 @@ def worker_count() -> int:
 
 
 def feeder_count() -> int:
-    """Số video tách khung cùng lúc. Một video đang tách khung thì video kia đang được đọc."""
+    """Số video đọc cùng lúc. Mặc định một video: các video còn lại nằm trong hàng chờ.
+
+    Một video đã dùng hết các nhân để đọc khung. Đọc thêm video cùng lúc chỉ thêm đĩa và bộ nhớ,
+    và một video hỏng làm phải khởi động lại cả nhóm.
+    """
     raw = os.environ.get("CONTROL_VIDEO_FEEDERS", "").strip()
     if raw:
         return max(1, int(raw))
-    return 3
+    return 1
 
 
 @contextmanager
@@ -196,6 +200,24 @@ def commit_upload(db_path: Path, video_id: int, path: str) -> None:
             "UPDATE videos SET path = ?, status = 'queued' WHERE id = ? AND status = 'uploading'",
             (path, video_id),
         )
+
+
+def drop_stale_uploads(db_path: Path, older_than_seconds: float = 1800) -> int:
+    """Tải lên dở hơn 30 phút là trình duyệt đã đóng giữa chừng. Xóa dòng đó để nó không chiếm chỗ hàng đợi."""
+    cutoff = time.time() - older_than_seconds
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT id, created_at FROM videos WHERE status = 'uploading'").fetchall()
+        dropped = 0
+        for row in rows:
+            try:
+                created = datetime.fromisoformat(str(row["created_at"])).timestamp()
+            except ValueError:
+                created = 0
+            if created > cutoff:
+                continue
+            conn.execute("DELETE FROM videos WHERE id = ? AND status = 'uploading'", (row["id"],))
+            dropped += 1
+        return dropped
 
 
 def abort_upload(db_path: Path, video_id: int, reopened: bool = False) -> None:

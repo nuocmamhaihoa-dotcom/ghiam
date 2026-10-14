@@ -25,6 +25,7 @@ from control_plane.screen_table import Review, Row, Table, Unopened
 from control_plane.settings import settings
 from control_plane.video_store import (
     claim,
+    drop_stale_uploads,
     fail,
     feeder_count,
     finish,
@@ -47,6 +48,19 @@ def scan_paths(paths: list[Path], submit=None, work_dir: Path | None = None) -> 
         unopened=[Unopened(phone, name) for phone, name in result.unopened],
     )
     return table, frames
+
+
+def _drop_old_parts(folder: Path) -> None:
+    """File tạm của lần tải bị đứt hơn 30 phút. Lần tải đang chạy ghi tiếp vào file của nó, không đụng tới."""
+    if not folder.is_dir():
+        return
+    cutoff = time.time() - 1800
+    for path in folder.glob("up-*"):
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink(missing_ok=True)
+        except OSError:
+            continue
 
 
 def heartbeat_path() -> Path:
@@ -110,9 +124,10 @@ def main() -> None:
     work_dir.mkdir(parents=True, exist_ok=True)
     count = worker_count()
     feeders = feeder_count()
-    print(f"Đọc video bằng {count} tiến trình, nhận {feeders} video một lúc. Để trống một nhân cho trang web.", flush=True)
+    print(f"Đọc từng video một, bằng {count} tiến trình. Video còn lại nằm trong hàng chờ.", flush=True)
     stop = threading.Event()
     broken = threading.Event()
+    last_sweep = 0.0
     context = multiprocessing.get_context("spawn")
     with ProcessPoolExecutor(max_workers=count, mp_context=context, max_tasks_per_child=400) as pool:
         threads: list[threading.Thread] = []
@@ -125,6 +140,11 @@ def main() -> None:
         threads = [start_feeder() for _ in range(feeders)]
         while not broken.is_set():
             touch_heartbeat(heartbeat_path())
+            now = time.monotonic()
+            if now - last_sweep >= 60:
+                last_sweep = now
+                drop_stale_uploads(db_path)
+                _drop_old_parts(settings.video_dir)
             for index, thread in enumerate(threads):
                 if not thread.is_alive() and not broken.is_set():
                     threads[index] = start_feeder()

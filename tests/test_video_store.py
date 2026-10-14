@@ -15,6 +15,7 @@ from control_plane.video_store import (
     can_accept,
     claim,
     commit_upload,
+    connect,
     fail,
     finish,
     init_db,
@@ -22,6 +23,7 @@ from control_plane.video_store import (
     list_videos,
     merge_close_results,
     queued_bytes,
+    drop_stale_uploads,
     recover_dead,
     requeue_running,
     retry,
@@ -47,6 +49,15 @@ class VideoStoreTests(unittest.TestCase):
         path.write_bytes(b"video")
         commit_upload(self.db, video_id, str(path))
         return video_id
+
+    def test_upload_abandoned_for_half_an_hour_is_removed(self) -> None:
+        fresh = begin_upload(self.db, name="dang-tai.mp4", size_bytes=10, sha256="fresh")
+        stale = begin_upload(self.db, name="dut.mp4", size_bytes=10, sha256="stale")
+        with connect(self.db) as conn:
+            conn.execute("UPDATE videos SET created_at = '2020-01-01T00:00:00+00:00' WHERE id = ?", (stale["id"],))
+        self.assertEqual(drop_stale_uploads(self.db), 1)
+        self.assertEqual(stats(self.db)["uploading"], 1)
+        self.assertEqual(list_videos(self.db)[0]["id"], fresh["id"])
 
     def test_same_file_is_not_queued_twice(self) -> None:
         first = self._add("a.mp4", "abc")
