@@ -348,14 +348,20 @@ def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
         rows = conn.execute(
             """
             SELECT id, name, size_bytes, status, error, created_at, started_at, finished_at,
-                   phone_count, full_count
+                   phone_count, full_count, path
             FROM videos
             ORDER BY id DESC
             LIMIT ?
             """,
             (limit,),
         ).fetchall()
-    return [dict(row) for row in rows]
+    items = []
+    for row in rows:
+        item = dict(row)
+        path = str(item.pop("path") or "")
+        item["has_file"] = bool(path) and Path(path).is_file()
+        items.append(item)
+    return items
 
 
 def stats(db_path: Path) -> dict[str, int]:
@@ -604,12 +610,22 @@ def fail(db_path: Path, video_id: int, message: str) -> None:
 
 
 def retry(db_path: Path, video_id: int) -> bool:
+    """Đưa video lỗi hoặc đã đọc xong về hàng chờ, nếu file còn trên máy chủ.
+
+    Đọc lại dùng bộ đọc hiện tại. Kết quả mới chỉ nâng dòng cần xem hoặc chưa
+    mở hồ sơ lên đã lưu; dòng đã lưu đủ ba ô không bị ghi đè.
+    """
     with connect(db_path) as conn:
         row = conn.execute("SELECT path, status FROM videos WHERE id = ?", (video_id,)).fetchone()
-        if row is None or row["status"] != "error" or not row["path"] or not Path(row["path"]).exists():
+        if row is None or row["status"] not in ("error", "done") or not row["path"] or not Path(row["path"]).exists():
             return False
         cur = conn.execute(
-            "UPDATE videos SET status = 'queued', error = '', finished_at = NULL, pid = NULL WHERE id = ? AND status = 'error'",
+            """
+            UPDATE videos
+            SET status = 'queued', error = '', finished_at = NULL, pid = NULL,
+                phone_count = NULL, full_count = NULL
+            WHERE id = ? AND status IN ('error', 'done')
+            """,
             (video_id,),
         )
         return cur.rowcount == 1

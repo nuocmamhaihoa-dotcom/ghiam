@@ -369,6 +369,23 @@ class VideoStoreTests(unittest.TestCase):
         fail(self.db, video_id, "hỏng lần nữa")
         self.assertFalse(retry(self.db, video_id))
 
+    def test_finished_video_kept_on_disk_can_be_read_again(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        claim(self.db, 4)
+        finish(self.db, video_id, Table(unopened=[Unopened("0919313090", "Truc")]))
+        item = list_videos(self.db)[0]
+        self.assertTrue(item["has_file"])
+        self.assertNotIn("path", item)
+        self.assertTrue(retry(self.db, video_id))
+        self.assertEqual(stats(self.db)["queued"], 1)
+        self.assertIsNone(list_videos(self.db)[0]["phone_count"])
+        claim(self.db, 4)
+        finish(self.db, video_id, Table(rows=[Row("0919313090", "Truc", "@truc31798")]))
+        self.assertEqual(search_results(self.db, "0919313090")[0]["bucket"], "Đã lưu")
+        Path(self._tmp.name, f"{video_id}.mp4").unlink()
+        self.assertFalse(list_videos(self.db)[0]["has_file"])
+        self.assertFalse(retry(self.db, video_id))
+
     def test_disk_limit(self) -> None:
         gb = 1024 * 1024 * 1024
         self.assertTrue(can_accept(0, 100, 80 * gb, 10 * gb))
