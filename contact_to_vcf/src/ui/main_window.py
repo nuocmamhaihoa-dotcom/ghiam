@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 from core.checkpoint import load_checkpoint
 from models.records import Checkpoint, FileInspection, JobConfig, JobResult, Progress
 from parsers.column_suggest import suggest_columns
-from parsers.detect import detect_format
+from parsers.detect import detect_format, inspect_source
 from processors.pool import CONTACTS_PER_FILE, export_book, list_books, pool_total
 from ui.worker import ConversionWorker, InspectWorker, PoolImportWorker
 from utils.format import format_duration, format_int, format_percent
@@ -63,6 +63,7 @@ class MainWindow(QMainWindow):
         self._saved: Checkpoint | None = None
         self._saved_columns: tuple[int, int] | None = None
         self._auto_delimiter = False
+        self._file_queue: list[Path] = []
         self._narrow: bool | None = None
         self._page_layout: QVBoxLayout | None = None
         self._build()
@@ -92,7 +93,7 @@ class MainWindow(QMainWindow):
         self.file_edit = QLineEdit()
         self.file_edit.setReadOnly(True)
         self.file_edit.setPlaceholderText("File CSV, Excel hoặc TXT")
-        pick_file = QPushButton("Chọn file")
+        pick_file = QPushButton("Chọn nhiều file")
         pick_file.clicked.connect(self._pick_file)
         file_row.addWidget(self.file_edit, stretch=1)
         file_row.addWidget(pick_file)
@@ -322,15 +323,21 @@ class MainWindow(QMainWindow):
         )
 
     def _pick_file(self) -> None:
-        selected, _filter = QFileDialog.getOpenFileName(
+        selected, _filter = QFileDialog.getOpenFileNames(
             self,
-            "Chọn file nguồn",
+            "Chọn một hoặc nhiều file",
             "",
             "Mọi định dạng (*.*)",
         )
         if not selected:
             return
-        path = Path(selected)
+        if len(selected) > 1:
+            self._file_queue = [Path(item) for item in selected]
+            self.file_edit.setText(f"{len(selected)} file")
+            self._log(f"Đã chọn {len(selected)} file. Bấm Nạp vào kho để nạp tất cả.")
+            return
+        self._file_queue = []
+        path = Path(selected[0])
         try:
             detect_format(path)
         except ValueError as exc:
@@ -596,6 +603,12 @@ class MainWindow(QMainWindow):
     def _import_pool(self) -> None:
         if self._busy():
             return
+        if self._file_queue:
+            if self.output_dir is None:
+                QMessageBox.warning(self, "Thiếu thông tin", "Hãy chọn thư mục kho")
+                return
+            self._import_next_queued_file()
+            return
         try:
             config = self._config()
         except ValueError as exc:
@@ -623,6 +636,54 @@ class MainWindow(QMainWindow):
             f"Đang nạp {config.input_path.name} vào kho, mỗi danh bạ {format_int(CONTACTS_PER_FILE)} số."
         )
         self._refresh_buttons()
+
+    def _import_next_queued_file(self) -> None:
+        if not self._file_queue:
+            self._reload_books()
+            self._refresh_buttons()
+            return
+        if self.output_dir is None:
+            return
+        path = self._file_queue[0]
+        try:
+            info = inspect_source(path)
+        except (OSError, ValueError) as exc:
+            self._log(f"{path.name}: {exc}")
+            self._file_queue.pop(0)
+            self._import_next_queued_file()
+            return
+        _name_index, phone_index = suggest_columns(info.columns, info.samples)
+        self.pool_worker = PoolImportWorker(
+            self.output_dir,
+            path,
+            info.file_format,
+            info.delimiter or ",",
+            info.has_header,
+            info.encoding,
+            phone_index,
+            CONTACTS_PER_FILE,
+        )
+        self.pool_worker.progressed.connect(self._on_pool_progress)
+        self.pool_worker.succeeded.connect(self._on_queued_file_done)
+        self.pool_worker.failed.connect(self._on_queued_file_failed)
+        self.pool_worker.start()
+        self._log(f"Đang nạp {path.name}. Còn {len(self._file_queue)} file.")
+        self._refresh_buttons()
+
+    def _on_queued_file_done(self, stats: object) -> None:
+        if self._file_queue:
+            self._file_queue.pop(0)
+        self._on_pool_done(stats)
+        if self._file_queue:
+            self._import_next_queued_file()
+
+    def _on_queued_file_failed(self, message: str) -> None:
+        self._log(message)
+        if self._file_queue:
+            self._file_queue.pop(0)
+        self._refresh_buttons()
+        if self._file_queue:
+            self._import_next_queued_file()
 
     def _on_pool_progress(self, seen: int) -> None:
         self.run_labels["processed"].setText(format_int(seen))

@@ -118,11 +118,11 @@
       <div class="layout">
         <section class="card stack">
           <label>File số điện thoại</label>
-          <button class="ghost file-btn" id="pick" type="button">Chọn file</button>
-          <input id="file" class="hide" type="file">
+          <button class="ghost file-btn" id="pick" type="button">Chọn nhiều file</button>
+          <input id="file" class="hide" type="file" multiple>
           <p class="status" id="file-name">Chưa chọn file.</p>
           <button class="primary" id="import" type="button">Tạo danh bạ</button>
-          <p class="status" id="result">Chọn file là danh bạ được tạo, mỗi danh bạ 1.000 số.</p>
+          <p class="status" id="result">Chọn một hoặc nhiều file. Mỗi danh bạ 1.000 số.</p>
           <div id="columns" class="hide stack">
             <label>Cột số</label>
             <div class="chips" id="chips"></div>
@@ -169,8 +169,8 @@
     const touch = navigator.maxTouchPoints > 0 || window.matchMedia("(max-width: 800px)").matches;
     document.body.classList.add(touch ? "phone" : "desktop");
     document.getElementById("lead").textContent = touch
-      ? "Giao diện điện thoại. Chọn file là danh bạ được tạo và tải về."
-      : "Giao diện máy tính. Chọn file là danh bạ được tạo và tải về.";
+      ? "Giao diện điện thoại. Chọn nhiều file cùng lúc, không giới hạn số file."
+      : "Giao diện máy tính. Chọn nhiều file cùng lúc, không giới hạn số file.";
 
     const $ = (id) => document.getElementById(id);
     let upload = null;
@@ -210,41 +210,69 @@
 
     $("pick").onclick = () => $("file").click();
     $("file").onchange = () => {
-      const file = $("file").files[0];
-      if (file) createBook(file);
+      const files = Array.from($("file").files || []);
+      if (files.length) createBooks(files);
     };
 
-    async function createBook(file) {
-      $("file-name").textContent = file.name;
+    async function createBooks(files) {
       $("import").disabled = true;
-      $("result").textContent = "Đang tạo danh bạ…";
+      $("pick").disabled = true;
+      let added = 0;
+      let duplicate = 0;
+      let rejected = 0;
+      let total = 0;
+      let last = null;
+      const failed = [];
       try {
-        const body = new FormData();
-        body.append("file", file);
-        const data = await api("/api/import-now", { method: "POST", body });
-        upload = data;
-        phoneColumn = data.phone_column;
-        if (data.columns) {
-          $("header").checked = !!data.has_header;
-          if ([",", ";", "\t", "|"].includes(data.delimiter)) $("delimiter").value = data.delimiter;
+        for (let index = 0; index < files.length; index += 1) {
+          const file = files[index];
+          $("file-name").textContent = (index + 1) + "/" + files.length + " — " + file.name;
+          $("result").textContent = "Đang nạp " + (index + 1) + "/" + files.length + "…";
+          try {
+            const body = new FormData();
+            body.append("file", file);
+            const data = await api("/api/import-now", { method: "POST", body });
+            added += data.added;
+            duplicate += data.duplicate;
+            rejected += data.rejected;
+            total = data.total;
+            last = data;
+          } catch (error) {
+            failed.push(file.name + ": " + error.message);
+          }
+        }
+        upload = last;
+        if (last && last.columns) {
+          phoneColumn = last.phone_column;
+          $("header").checked = !!last.has_header;
+          if ([",", ";", "\t", "|"].includes(last.delimiter)) $("delimiter").value = last.delimiter;
           $("columns").classList.remove("hide");
           drawChips();
           drawPreview();
         }
-        $("result").textContent = "Thêm " + data.added + " số. Trùng " + data.duplicate + ". Bỏ qua " + data.rejected + ". Kho có " + data.total + " số.";
+        let message = "Đã nạp " + files.length + " file. Thêm " + added + ". Trùng " + duplicate + ". Bỏ qua " + rejected + ".";
+        if (total) message += " Kho có " + total + " số.";
+        if (failed.length) message += " Lỗi: " + failed.join("; ");
+        $("result").textContent = message;
         await loadBooks();
-        if (data.added > 0 && data.pending.length === 1) {
+        if (added > 0 && last && last.pending.length === 1) {
           window.location.href = touch
-            ? iphoneFile(data.pending[0])
-            : ("/api/books/" + data.pending[0] + "/download");
-        } else if (data.added > 0 && data.pending.length > 1) {
+            ? iphoneFile(last.pending[0])
+            : ("/api/books/" + last.pending[0] + "/download");
+        } else if (added > 0 && last && last.pending.length > 1) {
           window.location.href = touch ? "/iphone" : "/api/download-pending";
         }
       } catch (error) {
         $("result").textContent = error.message;
       } finally {
         $("import").disabled = false;
+        $("pick").disabled = false;
+        $("file").value = "";
       }
+    }
+
+    async function createBook(file) {
+      await createBooks([file]);
     }
 
     function drawChips() {
@@ -278,12 +306,12 @@
     };
 
     $("import").onclick = () => {
-      const file = $("file").files[0];
-      if (!file) {
+      const files = Array.from($("file").files || []);
+      if (!files.length) {
         $("result").textContent = "Hãy chọn file số điện thoại.";
         return;
       }
-      createBook(file);
+      createBooks(files);
     };
 
     $("filters").onclick = (event) => {
