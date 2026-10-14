@@ -698,7 +698,13 @@ class TapFrameTests(unittest.TestCase):
 
 
 class TapSpotTests(unittest.TestCase):
-    def _list_image(self, dot_row: int | None, grey_row: int | None = None, dot_x: int = 620) -> tuple:
+    def _list_image(
+        self,
+        dot_row: int | None,
+        grey_row: int | None = None,
+        dot_x: int = 620,
+        extra_dot_rows: tuple[int, ...] = (),
+    ) -> tuple:
         from PIL import Image, ImageDraw
 
         from control_plane.screen_read import _column_anchor, _list_buttons, _pink_boxes, _row_strip
@@ -710,8 +716,12 @@ class TapSpotTests(unittest.TestCase):
             if grey_row == index:
                 draw.rectangle((0, top - 50, 900, top + 120), fill=(240, 240, 240, 255))
             draw.rounded_rectangle((640, top, 820, top + 64), radius=30, fill=(234, 64, 86, 255))
+        rows = []
         if dot_row is not None:
-            cy = 200 + dot_row * 170 + 32
+            rows.append(dot_row)
+        rows.extend(extra_dot_rows)
+        for row in rows:
+            cy = 200 + row * 170 + 32
             draw.ellipse((dot_x - 42, cy - 42, dot_x + 42, cy + 42), fill=(0, 0, 0, 189))
         listed = _list_buttons(_pink_boxes(image), image.width)
         anchor_x, anchor_w = _column_anchor(listed)
@@ -749,6 +759,101 @@ class TapSpotTests(unittest.TestCase):
         image, listed, strips, anchor_x, anchor_w = self._list_image(dot_row=2, dot_x=730)
         self.assertEqual(len(listed), 6)
         self.assertEqual(_tapped_rows(image, listed, strips, anchor_x, anchor_w), {2})
+
+    def test_three_dots_mark_the_middle_row(self) -> None:
+        from control_plane.screen_read import _tapped_rows, _touch_dots
+
+        image, listed, strips, anchor_x, anchor_w = self._list_image(dot_row=2, extra_dot_rows=(1, 4))
+        self.assertEqual(len(_touch_dots(image, float(listed[0].h))), 3)
+        self.assertEqual(_tapped_rows(image, listed, strips, anchor_x, anchor_w), {2})
+
+    def test_three_dots_keep_the_middle_when_another_row_is_grey(self) -> None:
+        from control_plane.screen_read import _tapped_rows
+
+        image, listed, strips, anchor_x, anchor_w = self._list_image(
+            dot_row=2,
+            grey_row=4,
+            extra_dot_rows=(0, 4),
+        )
+        self.assertEqual(_tapped_rows(image, listed, strips, anchor_x, anchor_w), {2})
+
+    def test_two_dots_on_different_rows_are_ignored(self) -> None:
+        from control_plane.screen_read import _tapped_rows
+
+        image, listed, strips, anchor_x, anchor_w = self._list_image(dot_row=1, extra_dot_rows=(4,))
+        self.assertEqual(_tapped_rows(image, listed, strips, anchor_x, anchor_w), set())
+
+
+class StrictReadTests(unittest.TestCase):
+    def test_strict_tap_pairs_when_the_profile_name_matches(self) -> None:
+        frames = [
+            FrameObs("tap", (ContactHit("0982117072", "Đặng Thị Tâm", True),), at=1.0),
+            FrameObs("profile", (), "Đặng Thị Tâm", "@dangtam.3", at=1.4),
+        ]
+        table = build_table(frames, strict=True)
+        self.assertEqual([(row.phone, row.username) for row in table.rows], [("0982117072", "@dangtam.3")])
+        self.assertTrue(table.strict)
+        self.assertFalse(table.unopened)
+        self.assertFalse(table.review)
+
+    def test_strict_does_not_pair_an_untapped_phone(self) -> None:
+        frames = [
+            FrameObs(
+                "list",
+                (
+                    ContactHit("0982117072", "Đặng Thị Tâm", False),
+                    ContactHit("0332001753", "khactam", False),
+                ),
+                at=1.0,
+            ),
+            FrameObs("profile", (), "Đặng Thị Tâm", "@dangtam.3", at=1.4),
+        ]
+        table = build_table(frames, strict=True)
+        self.assertEqual(table.rows, [])
+        self.assertEqual(sorted(item.phone for item in table.unopened), ["0332001753", "0982117072"])
+        self.assertEqual(table.review[0].username, "@dangtam.3")
+        self.assertFalse(table.review[0].phone)
+
+    def test_strict_does_not_pair_when_the_handle_contains_a_different_name(self) -> None:
+        frames = [
+            FrameObs("tap", (ContactHit("0985721500", "nvchien", True),), at=2.0),
+            FrameObs("profile", (), "OCR lech", "@nvchien89", at=2.3),
+        ]
+        table = build_table(frames, strict=True)
+        self.assertEqual(table.rows, [])
+        self.assertEqual(table.unopened[0].phone, "0985721500")
+        self.assertEqual(table.review[0].username, "@nvchien89")
+
+    def test_wrong_profile_does_not_consume_the_tap(self) -> None:
+        frames = [
+            FrameObs("tap", (ContactHit("0982117072", "Đặng Thị Tâm", True),), at=1.0),
+            FrameObs("profile", (), "khactam", "@khactam60", at=1.3),
+            FrameObs("profile", (), "Đặng Thị Tâm", "@dangtam.3", at=1.8),
+        ]
+        table = build_table(frames, strict=True)
+        self.assertEqual([(row.phone, row.username) for row in table.rows], [("0982117072", "@dangtam.3")])
+        self.assertEqual(table.review[0].username, "@khactam60")
+        self.assertFalse(table.review[0].phone)
+
+    def test_time_pass_fills_only_the_gap_and_keeps_the_strict_row(self) -> None:
+        from control_plane.read_fallback import pair_leftovers_by_time
+
+        frames = [
+            FrameObs("tap", (ContactHit("0982117072", "Đặng Thị Tâm", True),), at=1.0),
+            FrameObs("profile", (), "Đặng Thị Tâm", "@dangtam.3", at=1.4),
+            FrameObs("list", (ContactHit("0332001753", "khactam", False),), at=10.0),
+            FrameObs("profile", (), "khactam", "@khactam60", at=11.0),
+        ]
+        table = build_table(frames, strict=True)
+        self.assertEqual([(row.phone, row.username) for row in table.rows], [("0982117072", "@dangtam.3")])
+        filled = pair_leftovers_by_time(table, frames)
+        self.assertEqual(filled.rows[0].phone, "0982117072")
+        self.assertEqual(filled.rows[0].username, "@dangtam.3")
+        self.assertEqual(filled.rows[1].phone, "0332001753")
+        self.assertEqual(filled.rows[1].username, "@khactam60")
+        self.assertTrue(filled.strict)
+        self.assertFalse(filled.unopened)
+        self.assertFalse(filled.review)
 
 
 class VideoFailureTests(unittest.TestCase):

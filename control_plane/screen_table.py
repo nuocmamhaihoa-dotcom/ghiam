@@ -4,6 +4,10 @@ Quét danh bạ lấy số + tên. Đọc hồ sơ lấy tên + @. Ghép khi dan
 trước hồ sơ và hai tên là cùng một khách. Trong cùng một video, tên giống từ
 90% thì ghép đúng một số với đúng một @, và ghi mọi cách viết gần giống vào
 cùng ô tên. Hai số hoặc hai @ thì không đoán. Không ghép sang video khác.
+
+Cách 3 (strict=True) chỉ ghi hàng khi lần bấm — chấm giữa, hoặc dòng đang
+chọn — có số và tên, và tên hồ sơ khớp tên đó. @ là dòng ngay dưới tên.
+Không ghép 90% và không ghép vì @ chứa tên. Số và @ còn thiếu để cách 2 quét thêm.
 """
 
 from __future__ import annotations
@@ -110,6 +114,8 @@ class Table:
     rows: list[Row] = field(default_factory=list)
     review: list[Review] = field(default_factory=list)
     unopened: list[Unopened] = field(default_factory=list)
+    # Cách 3: không cho repair/finish ghép lỏng 90% đè lên hàng đã chốt.
+    strict: bool = False
 
 
 @dataclass
@@ -849,7 +855,7 @@ def join_similar_leftovers(table: Table) -> None:
     ]
 
 
-def build_table(frames: list[FrameObs]) -> Table:
+def build_table(frames: list[FrameObs], *, strict: bool = False) -> Table:
     from control_plane.cover_read import apply_cover_stitch
 
     frames, cover_notes = apply_cover_stitch(frames)
@@ -859,8 +865,10 @@ def build_table(frames: list[FrameObs]) -> Table:
     user_seen: dict[str, int] = {}
     phone_hits: dict[str, int] = {}
     shown: dict[str, set[int]] = {}
-    visits = _walk(frames, contacts, phone_seen, phone_hits, shown)
-    _pick_from_window(visits)
+    visits = _walk(frames, contacts, phone_seen, phone_hits, shown, strict=strict)
+    # Cách 3 không lấy một dòng khác trên cùng màn hình khi không có lần bấm.
+    if not strict:
+        _pick_from_window(visits)
     _collapse_rare_digits(contacts, phone_hits, phone_seen, visits, shown)
 
     phone_name = {phone: tally.best() for phone, tally in contacts.items()}
@@ -901,17 +909,20 @@ def build_table(frames: list[FrameObs]) -> Table:
         table,
         scores,
     )
-    _pair_unnamed_profiles(visits, phone_name, used_phones, used_users, table, scores)
-    _apply_names(
-        phone_name,
-        user_name,
-        phone_seen,
-        user_seen,
-        used_phones,
-        used_users,
-        table,
-        scores,
-    )
+    if strict:
+        _emit_strict_rest(phone_name, user_name, used_phones, used_users, table)
+    else:
+        _pair_unnamed_profiles(visits, phone_name, used_phones, used_users, table, scores)
+        _apply_names(
+            phone_name,
+            user_name,
+            phone_seen,
+            user_seen,
+            used_phones,
+            used_users,
+            table,
+            scores,
+        )
     for phone, tally in contacts.items():
         if phone in phone_name or tally.best():
             continue
@@ -924,13 +935,19 @@ def build_table(frames: list[FrameObs]) -> Table:
     table.rows.sort(key=lambda row: phone_seen.get(row.phone, 0))
     table.unopened.sort(key=lambda row: phone_seen.get(row.phone, 0))
     table.review.sort(key=lambda row: (phone_seen.get(row.phone, 10**9), user_seen.get(row.username, 10**9)))
+    table.strict = strict
     return table
 
 
 def repair_table(table: Table) -> None:
-    """Dọn @ rác, bỏ dòng chấm che trùng, ghép @ chứa đúng tên. Không cần khung hình."""
+    """Dọn @ rác, bỏ dòng chấm che trùng, ghép @ chứa đúng tên. Không cần khung hình.
+
+    Cách 3 đã chốt hàng khớp tên. Không ghép thêm vì @ chứa tên.
+    """
     drop_duplicate_covers(table)
     _drop_garbage_reviews(table)
+    if table.strict:
+        return
     _pair_handle_leftovers(table)
 
 
@@ -1300,12 +1317,21 @@ def _same_open(visit: _Visit, username: str, profile_name: str) -> bool:
     return same_person_name(known, profile_name)
 
 
+def _window_name(phone: str, source: tuple[tuple[str, str], ...]) -> str:
+    for item_phone, item_name in reversed(source):
+        if item_phone == phone and item_name:
+            return item_name
+    return ""
+
+
 def _walk(
     frames: list[FrameObs],
     contacts: dict[str, _Tally],
     phone_seen: dict[str, int],
     phone_hits: dict[str, int],
     shown: dict[str, set[int]],
+    *,
+    strict: bool = False,
 ) -> list[_Visit]:
     phase = "none"
     armed = ""
@@ -1357,16 +1383,26 @@ def _walk(
             return cue.phone
         return ""
 
-    def take_phone_for_profile(profile_at: float) -> tuple[str, tuple[tuple[str, str], ...]]:
-        """Lấy SĐT đang armed hoặc cue gần nhất còn trong cửa sổ thời gian."""
+    def take_phone_for_profile(
+        profile_at: float,
+        profile_name: str = "",
+    ) -> tuple[str, tuple[tuple[str, str], ...]]:
+        """Lấy SĐT đang armed hoặc cue gần nhất còn trong cửa sổ thời gian.
+
+        Cách 3 chỉ lấy số của lần bấm khi tên danh bạ khớp tên hồ sơ.
+        Hồ sơ khác tên không được nuốt lần bấm, cũng không lấy dòng khác.
+        """
         nonlocal armed, clear_run, tap_at, held_by_tap
         phone = ""
         # Danh bạ quá lâu trước hồ sơ thì không còn là cặp liền — không giữ cửa sổ tên.
         list_fresh = phase == "list" and (tap_at is None or _cue_still_fresh(tap_at, profile_at))
         visit_window: tuple[tuple[str, str], ...] = window if list_fresh else ()
         if list_fresh and armed:
-            phone = armed
-        if not phone:
+            if not strict or same_person_name(_window_name(armed, window), profile_name):
+                phone = armed
+        # Cách 3: lần bấm đang chờ mà tên không khớp thì giữ nguyên, không lấy cue cũ hơn.
+        blocked = strict and list_fresh and bool(armed) and not phone
+        if not phone and not blocked:
             for cue in reversed(cues):
                 if not _cue_still_fresh(cue.at, profile_at):
                     continue
@@ -1375,8 +1411,11 @@ def _walk(
                     continue
                 if open_visit and open_visit.phone == cue.phone:
                     continue
+                source = cue.window or visit_window
+                if strict and not same_person_name(_window_name(cue.phone, source), profile_name):
+                    break
                 phone = cue.phone
-                visit_window = cue.window or visit_window
+                visit_window = source
                 break
         if phone:
             armed = ""
@@ -1500,12 +1539,12 @@ def _walk(
             continue
         if open_visit is None or phase != "profile":
             close()
-            phone, visit_window = take_phone_for_profile(frame.at)
+            phone, visit_window = take_phone_for_profile(frame.at, profile_name)
             open_visit = _Visit(phone=phone, window=visit_window, at=frame.at)
             phase = "profile"
         elif username and not _same_open(open_visit, username, profile_name):
             close()
-            phone, visit_window = take_phone_for_profile(frame.at)
+            phone, visit_window = take_phone_for_profile(frame.at, profile_name)
             open_visit = _Visit(phone=phone, window=visit_window, at=frame.at)
         if open_visit.at < 0:
             open_visit.at = frame.at
@@ -1785,6 +1824,31 @@ def _pair_by_handle(phones: list[tuple[str, str]], users: list[tuple[str, str]])
             continue
         pairs.append((phone_id, user_id))
     return pairs
+
+
+def _emit_strict_rest(
+    phone_name: dict[str, str],
+    user_name: dict[str, str],
+    used_phones: set[str],
+    used_users: set[str],
+    table: Table,
+) -> None:
+    """Cách 3 không ghép lỏng. Số và @ chưa đủ thành hàng sót để cách 2 quét thêm."""
+    seen_phones = {item.phone for item in table.unopened if item.phone}
+    seen_phones.update(item.phone for item in table.review if item.phone)
+    seen_phones.update(row.phone for row in table.rows if row.phone)
+    for phone, name in phone_name.items():
+        if phone in used_phones or phone in seen_phones:
+            continue
+        table.unopened.append(Unopened(phone, name))
+        seen_phones.add(phone)
+    seen_users = {clean_username(item.username) for item in table.review if item.username}
+    seen_users.update(clean_username(row.username) for row in table.rows if row.username)
+    for username, name in user_name.items():
+        if username in used_users or username in seen_users:
+            continue
+        table.review.append(Review("", "", name, username, "đã mở hồ sơ nhưng chưa thấy số"))
+        seen_users.add(username)
 
 
 def _emit_alike_rest(

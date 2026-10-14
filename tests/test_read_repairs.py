@@ -137,6 +137,40 @@ class ReadRepairTests(unittest.TestCase):
             self.assertEqual(rows[0]["phone_mask"], "0989····820")
             self.assertIn("phone", rows[0]["shots"])
 
+    def test_strict_repair_does_not_pair_a_handle_that_contains_the_name(self) -> None:
+        table = Table(
+            strict=True,
+            unopened=[Unopened("0985721500", "nvchien")],
+            review=[Review("", "", "OCR lech", "@nvchien89", "đã mở hồ sơ nhưng chưa thấy số")],
+        )
+        repair_table(table)
+        self.assertEqual(table.rows, [])
+        self.assertEqual(table.unopened[0].phone, "0985721500")
+        self.assertEqual(table.review[0].username, "@nvchien89")
+
+    def test_strict_finish_does_not_join_similar_names(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "video.db"
+            init_db(db)
+            created = begin_upload(db, name="a.mp4", size_bytes=10, sha256="strict-finish")
+            video_id = int(created["id"])
+            path = Path(tmp) / "a.mp4"
+            path.write_bytes(b"x")
+            commit_upload(db, video_id, str(path))
+            finish(
+                db,
+                video_id,
+                Table(
+                    strict=True,
+                    unopened=[Unopened("0982117072", "yHanhnguyen")],
+                    review=[Review("", "", "Hanhnguyen", "@hanhnguyenn375", "đã mở hồ sơ nhưng chưa thấy số")],
+                ),
+            )
+            rows = search_results(db, view="all", limit=10)
+            by_phone = {item["phone"]: item for item in rows if item["phone"]}
+            self.assertEqual(by_phone["0982117072"]["username"], "")
+            self.assertTrue(any(item["username"] == "@hanhnguyenn375" and item["phone"] == "" for item in rows))
+
 
 if __name__ == "__main__":
     unittest.main()

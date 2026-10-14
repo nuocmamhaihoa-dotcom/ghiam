@@ -4,6 +4,8 @@ Danh bạ nhận ra bằng cột nút Follow hồng bên phải. Mỗi nút là 
 số ở trên, tên ngay dưới — OCR chỉ dải chữ của dòng đó, không cả khung.
 Hồ sơ nhận ra bằng nút Follow rộng bên trái; chỉ lấy tên lớn và dòng @
 ngay dưới tên đó. Không đọc cả dải header một lần.
+OCR chỉ giữ mực đen và đen nhạt. Chữ đỏ như Follow bị xóa trước khi đọc.
+Ba chấm chạm: chấm ở giữa là dòng mở hồ sơ.
 
 Ưu tiên tesserocr (API Tesseract lâu dài trong mỗi worker) — cùng engine,
 không spawn process mỗi lần. Fallback CLI nếu chưa cài tesserocr.
@@ -201,6 +203,21 @@ def read_image_aggressive(
     return read_pillow_aggressive(image, layout=layout)
 
 
+def keep_dark_ink(image: Image.Image) -> Image.Image:
+    """Xóa pixel đỏ/hồng trước OCR. Nút Follow và chấm chạm vẫn đo trên ảnh gốc."""
+    rgb = image if image.mode == "RGB" else image.convert("RGB")
+    array = np.asarray(rgb)
+    red = array[:, :, 0].astype(np.int16)
+    green = array[:, :, 1].astype(np.int16)
+    blue = array[:, :, 2].astype(np.int16)
+    pink = (red >= 160) & (red >= green + 40) & (red >= blue + 30)
+    if not bool(pink.any()):
+        return rgb
+    cleaned = np.array(array, copy=True)
+    cleaned[pink] = (255, 255, 255)
+    return Image.fromarray(cleaned, "RGB")
+
+
 def _is_light(image: Image.Image) -> bool:
     """Màn hình sáng (chữ tối). Tesseract đọc được, không cần đảo cả ảnh."""
     sample = image.convert("L").resize((16, 16), Image.Resampling.BOX)
@@ -266,8 +283,9 @@ def read_pillow_aggressive(
     if obs.kind != "unknown" or _is_light(image):
         return obs
     # Nền tối (chữ sáng): đảo một lần. Nền sáng không đảo — đảo cả ảnh gần như nhân đôi thời gian.
+    # Xóa Follow đỏ trước khi đảo, kẻo chữ đỏ thành chữ xanh rồi bị đọc.
     try:
-        inverted = ImageOps.invert(image.convert("RGB"))
+        inverted = ImageOps.invert(keep_dark_ink(image))
     except Exception:
         return obs
     return _aggressive_once(inverted, profile_layout)
@@ -328,6 +346,7 @@ def _hunt_profile_handle(
 
     Chỉ lấy vùng trên màn hình (header hồ sơ). Cần handle hợp lệ (≥3 ký tự sau @).
     """
+    image = keep_dark_ink(image)
     width, height = image.size
     if width < 80 or height < 80:
         return _ProfileBits()
@@ -785,22 +804,32 @@ def _read_pieces(
 
 
 def _tapped_rows(image: Image.Image, buttons: list[Box], strips: list[Box], anchor_x: int, anchor_w: int) -> set[int]:
-    """Dòng đang bấm: có chấm chạm nằm trong dòng, hoặc nền xám. Hai dấu hiệu chỉ hai dòng khác nhau thì bỏ."""
+    """Dòng đang bấm.
+
+    Đúng ba chấm: chấm ở giữa theo chiều dọc là nút mở hồ sơ.
+    Một chấm: dòng đó, trừ khi nền xám chỉ một dòng khác.
+    Hai chấm, hoặc nhiều hơn ba chấm mà rơi vào nhiều dòng: bỏ, không đoán.
+    Không thấy chấm thì dùng nền xám.
+    """
     button_h = float(np.median([button.h for button in buttons]))
     centers = [button.center_y() for button in buttons]
     gaps = [b - a for a, b in zip(centers, centers[1:]) if b > a]
     pitch = float(np.median(gaps)) if gaps else button_h * 2.5
+    dots = _touch_dots(image, button_h)
+    middle_only = len(dots) == 3
+    if middle_only:
+        dots = [sorted(dots, key=lambda point: (point[1], point[0]))[1]]
     dot_rows: set[int] = set()
-    for x, y in _touch_dots(image, button_h):
+    for x, y in dots:
         for index, (center, strip) in enumerate(zip(centers, strips)):
             if abs(y - center) <= pitch / 2 and strip.x0 <= x <= anchor_x + anchor_w:
                 dot_rows.add(index)
     grey_rows = {index for index, strip in enumerate(strips) if _selected(image, strip)}
     if len(dot_rows) == 1:
-        if grey_rows and grey_rows != dot_rows:
+        if not middle_only and grey_rows and grey_rows != dot_rows:
             return set()
         return dot_rows
-    if dot_rows:
+    if dot_rows or middle_only:
         return set()
     return grey_rows
 
@@ -812,6 +841,7 @@ def _read_rows(
     *,
     aggressive: bool = False,
 ) -> list[ContactHit]:
+    image = keep_dark_ink(image)
     usable = [(index, strip) for index, strip in enumerate(strips) if strip.w >= 40 and strip.h >= 20]
     layouts = _batch([image.crop((s.x0, s.y0, s.x1, s.y1)) for _, s in usable], "vie+eng", 6)
     min_layout_conf = 12 if aggressive else 20
@@ -946,6 +976,7 @@ def _read_profile(image: Image.Image, button: Box, *, aggressive: bool = False) 
     Hồ sơ mở rất ngắn thường hơi nhòe — thử thêm crop phóng to/làm nét và
     ngưỡng tin cậy thấp hơn trước khi bỏ qua khung. Dòng không phải tên+@ thì bỏ.
     """
+    image = keep_dark_ink(image)
     header = Box(
         max(0, button.x0 - int(0.08 * button.w)),
         max(0, button.y0 - int(3.9 * button.h)),
@@ -1167,6 +1198,7 @@ def _read_locked_profile(image: Image.Image, header: Box) -> _ProfileBits:
 
 def read_locked_header_text(image: Image.Image, layout: LayoutProfile | None = None) -> str:
     """Chữ vùng @ đã khóa từng dòng: 'tên' rồi '@id'. Không đọc cả khung, không đọc nửa trên một cục."""
+    image = keep_dark_ink(image)
     zone = at_zone_box(image.width, image.height, layout)
     if zone.w < 40 or zone.h < 24:
         return ""

@@ -207,7 +207,12 @@ def apply_vision_for_gaps(
     if not added_users:
         return table
     result = pair_leftovers_by_time(
-        Table(rows=list(table.rows), review=temp_review, unopened=list(table.unopened)),
+        Table(
+            rows=list(table.rows),
+            review=temp_review,
+            unopened=list(table.unopened),
+            strict=table.strict,
+        ),
         extra_frames,
     )
     # @ đọc thêm chỉ để gắn vào số đã có. @ không ghép được thì không lưu thành hàng.
@@ -219,4 +224,5 @@ def apply_vision_for_gaps(
             for item in result.review
             if not (not item.phone and clean_username(item.username) in added_users)
         ],
+        strict=table.strict,
     )

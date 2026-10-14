@@ -1343,10 +1343,13 @@ def _parse_ts(value: object) -> float | None:
 def finish(db_path: Path, video_id: int, table: Table) -> None:
     """Lưu kết quả rồi ghép số + @ còn thiếu trong cùng video.
 
-    Tên giống từ 90% thì gộp vào một hàng trước khi ghi. Không ghép sang video khác.
+    Bảng thường: tên giống từ 90% thì gộp vào một hàng trước khi ghi.
+    Cách 3: hàng khớp tên đã chốt, cách 2 đã điền sót — không ghép lỏng 90%.
+    Không ghép sang video khác.
     """
     repair_table(table)
-    join_similar_leftovers(table)
+    if not table.strict:
+        join_similar_leftovers(table)
 
     def _write(conn: sqlite3.Connection) -> None:
         for row in table.rows:
@@ -1396,7 +1399,8 @@ def finish(db_path: Path, video_id: int, table: Table) -> None:
         )
 
     _with_immediate(db_path, _write)
-    rematch_results(db_path, video_id)
+    if not table.strict:
+        rematch_results(db_path, video_id)
 
 
 def fail(db_path: Path, video_id: int, message: str) -> None:

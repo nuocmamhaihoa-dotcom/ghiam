@@ -1,8 +1,8 @@
-"""Hai hướng đọc thêm, chỉ chạy khi hướng chính còn hồ sơ chưa ghép.
+"""Cách 2: chỉ chạy khi cách 3 còn số hoặc @ chưa ghép.
 
-Hướng 1 là pipeline hiện tại (không đụng hàng đã đủ Số + Tên + @).
-Hướng 2: ghép số và @ còn sót nếu trong 4 giây chỉ có đúng một cặp.
-Hướng 3: đọc riêng vùng trên khung (tên / @) quanh chỗ còn thiếu, rồi ghép lại theo hướng 2.
+Không đụng hàng đã đủ Số + Tên + @. Ghép sót nếu trong 4 giây chỉ có đúng một
+cặp cùng tên, không có khách khác chen giữa. Rồi đọc lại dòng tên và @ quanh
+chỗ còn thiếu. @ chỉ nhận khi nằm ngay dưới tên.
 """
 
 from __future__ import annotations
@@ -199,7 +199,7 @@ def pair_leftovers_by_time(table: Table, frames: list[FrameObs]) -> Table:
         if username in paired_users:
             continue
         kept_review.append(user_items[username])
-    return Table(rows=rows, review=kept_review, unopened=kept_unopened)
+    return Table(rows=rows, review=kept_review, unopened=kept_unopened, strict=table.strict)
 
 
 def maybe_handle(line: str) -> str:
@@ -350,7 +350,10 @@ def read_headers_for_gaps(
             added_phones.add(phone)
     if not added_phones and not added_users:
         return table
-    result = pair_leftovers_by_time(Table(rows=list(table.rows), review=temp_review, unopened=temp_unopened), extra_frames)
+    result = pair_leftovers_by_time(
+        Table(rows=list(table.rows), review=temp_review, unopened=temp_unopened, strict=table.strict),
+        extra_frames,
+    )
     # Số/@ chỉ đọc thêm để ghép phần đã có. Cặp do chính lượt này bịa ra thì bỏ.
     return Table(
         rows=[
@@ -364,6 +367,7 @@ def read_headers_for_gaps(
             for item in result.review
             if not (not item.phone and clean_username(item.username) in added_users)
         ],
+        strict=table.strict,
     )
 
 
@@ -372,17 +376,17 @@ def apply_read_fallbacks(
     observations: list[tuple[Path, FrameObs]],
     on_progress=None,
 ) -> Table:
-    """Hướng 1 đã chạy xong. Chỉ khi còn sót thì lần lượt hướng 2 rồi hướng 3."""
+    """Cách 3 đã xong. Chỉ khi còn sót thì cách 2 ghép theo thời gian, rồi đọc lại dòng @."""
     if not gaps_remain(table):
         return table
     frames = [obs for _path, obs in observations]
     if on_progress is not None:
-        on_progress("Hướng đọc 2: ghép theo thời gian 4 giây các hồ sơ còn sót")
+        on_progress("Cách 2: ghép số và @ còn thiếu trong 4 giây")
     table = pair_leftovers_by_time(table, frames)
     if not gaps_remain(table):
         return table
     if on_progress is not None:
-        on_progress("Hướng đọc 3: đọc riêng từng dòng tên và @ của hồ sơ chưa ghép")
+        on_progress("Cách 2: đọc lại dòng tên và @ của hồ sơ còn thiếu")
     table = read_headers_for_gaps(table, observations)
     if not gaps_remain(table):
         return table

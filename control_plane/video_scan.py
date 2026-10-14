@@ -205,8 +205,10 @@ def scan_paths(
         from control_plane.vision_sidecar import attach_vision
 
         ordered = attach_vision(ordered, paths)
-        table = build_table([obs for _, obs in ordered])
-        # Hướng 2 và 3 chỉ chạy khi hướng 1 còn hồ sơ chưa ghép. Hàng đã đủ 3 ô không đổi.
+        frames = [obs for _, obs in ordered]
+        # Video có mốc thời gian đi cách 3. Ảnh không có thời điểm giữ ghép cũ.
+        table = build_table(frames, strict=any(obs.at >= 0 for obs in frames))
+        # Cách 2 chỉ chạy khi cách 3 còn sót. Hàng đã đủ 3 ô không đổi.
         from control_plane.read_fallback import apply_read_fallbacks
 
         table = apply_read_fallbacks(table, ordered, on_progress=on_progress)
@@ -1042,7 +1044,7 @@ def _refill_missing_fields(
     frames = [obs for _file, obs in observations]
     if not any(obs.at >= 0 for obs in frames):
         return observations
-    table = build_table(frames)
+    table = build_table(frames, strict=True)
     anchors = incomplete_anchors(frames, table)
     if not anchors:
         return observations

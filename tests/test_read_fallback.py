@@ -15,7 +15,7 @@ from control_plane.read_fallback import (
 )
 from PIL import Image
 
-from control_plane.screen_read import _for_ocr
+from control_plane.screen_read import _for_ocr, keep_dark_ink
 from control_plane.screen_table import ContactHit, FrameObs, Review, Row, Table, Unopened
 
 
@@ -192,6 +192,15 @@ class OcrInputTests(unittest.TestCase):
         self.assertEqual(prepared.info.get("dpi"), (300, 300))
         self.assertGreaterEqual(prepared.width, 8)
         self.assertGreaterEqual(prepared.height, 8)
+
+    def test_red_follow_is_whited_out_and_dark_ink_stays(self) -> None:
+        image = Image.new("RGB", (4, 2), (20, 20, 20))
+        image.putpixel((0, 0), (234, 64, 86))
+        image.putpixel((1, 0), (80, 78, 76))
+        cleaned = keep_dark_ink(image)
+        self.assertEqual(cleaned.getpixel((0, 0)), (255, 255, 255))
+        self.assertEqual(cleaned.getpixel((1, 0)), (80, 78, 76))
+        self.assertEqual(cleaned.getpixel((2, 1)), (20, 20, 20))
 
 
 if __name__ == "__main__":
