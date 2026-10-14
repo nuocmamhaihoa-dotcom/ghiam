@@ -15,7 +15,8 @@ import shutil
 import subprocess
 import tempfile
 from collections.abc import Callable
-from concurrent.futures import Future, ProcessPoolExecutor
+from concurrent.futures import BrokenExecutor, Future, ProcessPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -194,10 +195,12 @@ def read_inputs(
     workers: int | None = None,
     submit: Callable[..., Future] | None = None,
     work_dir: Path | None = None,
+    task_timeout: float | None = None,
 ) -> list[FrameRead]:
     """Đọc ảnh và video theo đúng thứ tự đưa vào. Thứ tự này dùng để biết hồ sơ mở sau danh bạ nào.
 
     submit là executor.submit của một nhóm tiến trình có sẵn; không có thì tự mở nhóm riêng.
+    task_timeout: chờ một khung lâu hơn chừng này giây thì coi nhóm tiến trình đã hỏng (BrokenExecutor).
     """
     jobs: list[tuple[str, float]] = []
     temps: list[tempfile.TemporaryDirectory[str]] = []
@@ -219,11 +222,11 @@ def read_inputs(
             if workers > 1 and len(jobs) > 1:
                 pool = ProcessPoolExecutor(max_workers=workers)
                 submit = pool.submit
-        layouts = _run(submit, [(_scan_file, path, at) for path, at in jobs])
+        layouts = _run(submit, [(_scan_file, path, at) for path, at in jobs], task_timeout)
         resolve_taps(layouts)
         plan = plan_reads(layouts)
         order = sorted(plan)
-        reads = _run(submit, [(_read_file, jobs[index][0], layouts[index], plan[index]) for index in order])
+        reads = _run(submit, [(_read_file, jobs[index][0], layouts[index], plan[index]) for index in order], task_timeout)
         done = dict(zip(order, reads))
         return [done[index] if index in done else _unread(layout) for index, layout in enumerate(layouts)]
     finally:
@@ -233,12 +236,16 @@ def read_inputs(
             folder.cleanup()
 
 
-def _run(submit: Callable[..., Future] | None, calls: list[tuple]) -> list:
+def _run(submit: Callable[..., Future] | None, calls: list[tuple], timeout: float | None = None) -> list:
     if submit is None:
         return [call[0](*call[1:]) for call in calls]
     futures = [submit(*call) for call in calls]
     try:
-        return [future.result() for future in futures]
+        return [future.result(timeout=timeout) for future in futures]
+    except FutureTimeout as exc:
+        for future in futures:
+            future.cancel()
+        raise BrokenExecutor(f"Một khung không đọc xong sau {timeout:.0f} giây.") from exc
     except BaseException:
         for future in futures:
             future.cancel()

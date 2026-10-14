@@ -41,9 +41,14 @@ from control_plane.video_store import (
 )
 
 
+# Một khung đọc mất vài giây. Chờ một khung quá lâu là nhóm tiến trình đọc đã hỏng: đưa video về
+# hàng chờ và khởi động lại bộ đọc, thay vì treo mãi.
+FRAME_TIMEOUT_SECONDS = 900
+
+
 def scan_paths(paths: list[Path], submit=None, work_dir: Path | None = None) -> tuple[Table, list[FrameRead]]:
     """Đọc bằng doc_video rồi đổi sang dạng bảng mà kho kết quả đang lưu."""
-    frames = read_inputs(paths, submit=submit, work_dir=work_dir)
+    frames = read_inputs(paths, submit=submit, work_dir=work_dir, task_timeout=FRAME_TIMEOUT_SECONDS)
     result = build(frames)
     table = Table(
         rows=[Row(row.phone, row.name, row.handle) for row in result.rows],
@@ -149,7 +154,9 @@ def main() -> None:
     broken = threading.Event()
     last_sweep = 0.0
     context = multiprocessing.get_context("spawn")
-    with ProcessPoolExecutor(max_workers=count, mp_context=context, max_tasks_per_child=400) as pool:
+    # Không dùng max_tasks_per_child: khi mọi tiến trình đọc cùng hết lượt, nhóm không mở tiến trình mới
+    # và lần đọc treo mãi (đã gặp trên VPS với Python 3.12).
+    with ProcessPoolExecutor(max_workers=count, mp_context=context) as pool:
         threads: list[threading.Thread] = []
 
         def start_feeder() -> threading.Thread:
