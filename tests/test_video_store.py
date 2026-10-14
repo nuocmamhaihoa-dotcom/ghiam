@@ -711,6 +711,41 @@ class VideoStoreTests(unittest.TestCase):
         self.assertIn(waiting, [item["id"] for item in listed])
         self.assertLess(len([item for item in listed if item["status"] == "done"]), 3)
 
+    def test_today_list_keeps_archive_off_the_home_page(self) -> None:
+        old = self._add("old.mp4", "old-day")
+        finish(self.db, old, Table(rows=[Row("0901000001", "Cu", "@cu.1")]))
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+        with sqlite3.connect(self.db) as conn:
+            conn.execute(
+                """
+                UPDATE videos
+                SET created_at = ?, started_at = ?, finished_at = ?, progress_at = ?
+                WHERE id = ?
+                """,
+                (yesterday, yesterday, yesterday, yesterday, old),
+            )
+            conn.execute("UPDATE results SET created_at = ? WHERE video_id = ?", (yesterday, old))
+        current = self._add("new.mp4", "new-day")
+        finish(self.db, current, Table(rows=[Row("0901000002", "Moi", "@moi.1")]))
+        carried = self._add("span.mp4", "span-day")
+        finish(self.db, carried, Table(rows=[Row("0901000003", "Noi", "@noi.1")]))
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE videos SET created_at = ? WHERE id = ?", (yesterday, carried))
+        today_ids = [item["id"] for item in list_videos(self.db, day="today", limit=20)]
+        older_ids = [item["id"] for item in list_videos(self.db, day="older", limit=20)]
+        self.assertEqual(today_ids, [carried, current])
+        self.assertEqual(older_ids, [old])
+        self.assertEqual(
+            [item["phone"] for item in search_results(self.db, view="all", day="today")],
+            ["0901000003", "0901000002"],
+        )
+        self.assertEqual(
+            [item["phone"] for item in search_results(self.db, view="all", day="older")],
+            ["0901000001"],
+        )
+        self.assertEqual(count_results(self.db, view="all", day="today"), 2)
+        self.assertEqual(count_results(self.db, view="all", day="older"), 1)
+
     def test_stuck_upload_without_a_file_is_dropped_and_a_file_is_queued(self) -> None:
         empty = begin_upload(self.db, name="empty.mp4", size_bytes=10, sha256="empty-sha")
         kept = begin_upload(self.db, name="kept.mp4", size_bytes=80, sha256="kept-sha")

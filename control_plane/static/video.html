@@ -201,6 +201,14 @@
       .drop .note { margin-top: 0.1rem; }
       th, td { font-size: 0.82rem; padding: 0.28rem 0.32rem; }
     }
+    body[data-page="kho"] #sec-queue,
+    body[data-page="kho"] #sec-upload,
+    body[data-page="kho"] .fold,
+    body[data-page="kho"] #sec-results,
+    body[data-page="kho"] #sec-fresh,
+    body[data-page="kho"] #sec-backup,
+    body[data-page="kho"] #openWarn { display: none !important; }
+    body:not([data-page="kho"]) #sec-kho { display: none !important; }
   </style>
 </head>
 <body>
@@ -209,9 +217,10 @@
     <h1>Đọc video danh bạ</h1>
   </header>
   <nav class="jump" aria-label="Mục trên trang">
-    <a href="#sec-queue">Video</a>
+    <a href="#sec-queue" id="goHome">Hôm nay</a>
     <a href="#sec-upload">Tải lên</a>
     <a href="#sec-results">Kết quả</a>
+    <a href="#kho" id="goKho">Kho tổng</a>
     <a href="#sec-fresh">Bảng mới</a>
     <a href="#sec-backup">Sao lưu</a>
   </nav>
@@ -220,7 +229,7 @@
   <audio id="bgKeep" loop playsinline preload="auto" hidden></audio>
 
   <section id="sec-queue">
-    <h2>Video</h2>
+    <h2>Video trong ngày</h2>
     <p id="scoreLine" class="scoreline"></p>
     <div id="queue" class="table-wrap"></div>
     <p id="reader" class="note"></p>
@@ -277,7 +286,7 @@
   </details>
 
   <section id="sec-results">
-    <h2>Kết quả đã lưu</h2>
+    <h2>Kết quả trong ngày</h2>
     <div class="row seg" style="margin-bottom:0.45rem">
       <button class="primary" type="button" data-view="complete" id="viewComplete">Đủ 3 cột</button>
       <button class="ghost" type="button" data-view="incomplete" id="viewIncomplete">Chưa đủ</button>
@@ -309,6 +318,28 @@
     <div id="freshQueue" class="table-wrap"></div>
     <h3>Kết quả bảng mới</h3>
     <div id="freshResults" class="table-wrap"></div>
+  </section>
+
+  <section id="sec-kho">
+    <h2>Kho tổng</h2>
+    <p id="archiveScore" class="scoreline"></p>
+    <h3>Video cũ</h3>
+    <div id="archiveQueue" class="table-wrap"></div>
+    <p id="archiveQueueMoreWrap" hidden>
+      <button class="ghost" type="button" id="archiveQueueMore">Xem thêm</button>
+    </p>
+    <h3>Kết quả cũ</h3>
+    <div class="row seg" style="margin-bottom:0.45rem">
+      <button class="primary" type="button" data-archive-view="complete" id="archiveViewComplete">Đủ 3 cột</button>
+      <button class="ghost" type="button" data-archive-view="incomplete">Chưa đủ</button>
+      <button class="ghost" type="button" data-archive-view="all">Tất cả</button>
+    </div>
+    <input id="archiveQuery" type="search" placeholder="Gõ đầu số, @username hoặc tên video" />
+    <p id="archiveNote" class="note"></p>
+    <div id="archiveResults" class="table-wrap"></div>
+    <p id="archiveMoreWrap" hidden>
+      <button class="ghost" type="button" id="archiveMore">Xem thêm</button>
+    </p>
   </section>
 
   <section id="sec-backup" class="backup">
@@ -686,10 +717,12 @@
     var statsResponse = await api("/v1/videos/stats", { signal: ctrl.signal });
     if (!statsResponse.ok) return;
     var body = await statsResponse.json();
-    var saved = body.saved || 0;
-    var phones = body.phones || 0;
+    var saved = body.today_saved || 0;
+    var phones = body.today_phones || 0;
     var scoreLine = document.getElementById("scoreLine");
     if (scoreLine) scoreLine.textContent = saved + " đủ / " + phones + " số";
+    var archiveScore = document.getElementById("archiveScore");
+    if (archiveScore) archiveScore.textContent = (body.older_saved || 0) + " đủ / " + (body.older_phones || 0) + " số";
     renderOpenBanner();
     var reader = document.getElementById("reader");
     if (!body.reader_alive) {
@@ -704,9 +737,9 @@
       reader.textContent = "";
       reader.className = "note";
     }
-    var queueResponse = await api("/v1/videos", { signal: ctrl.signal });
+    var queueResponse = await api("/v1/videos?day=today&limit=200", { signal: ctrl.signal });
     if (ctrl.signal.aborted) return;
-    if (queueResponse.ok) renderQueue((await queueResponse.json()).items || []);
+    if (queueResponse.ok) renderQueue((await queueResponse.json()).items || [], "queue", "Chưa có video trong ngày.");
     if (!uploadingActive) loadFresh();
     // Không tải hết bảng kết quả khi đang gửi video — Safari chỉ có 6 kết nối.
     if (!uploadingActive && !resultsLoading && body.results !== lastResultTotal) {
@@ -765,10 +798,11 @@
     if (row && row.parentNode) row.parentNode.removeChild(row);
   }
 
-  function renderQueue(items) {
-    var box = document.getElementById("queue");
+  function renderQueue(items, boxId, emptyText) {
+    var box = document.getElementById(boxId || "queue");
+    if (!box) return;
     if (!items.length) {
-      box.innerHTML = "<p class='note'>Chưa có video.</p>";
+      box.innerHTML = "<p class='note'>" + (emptyText || "Chưa có video.") + "</p>";
       return;
     }
     items = newestFirst(items);
@@ -796,6 +830,7 @@
       button.addEventListener("click", async function () {
         await api("/v1/videos/" + button.getAttribute("data-retry") + "/retry", { method: "POST" });
         refresh();
+        if ((boxId || "queue") === "archiveQueue") loadArchiveVideos(false);
       });
     });
     box.querySelectorAll("[data-cancel-upload]").forEach(function (button) {
@@ -809,7 +844,16 @@
     });
     box.querySelectorAll("[data-filter]").forEach(function (button) {
       button.addEventListener("click", function () {
-        document.getElementById("query").value = button.getAttribute("data-filter") || "";
+        var name = button.getAttribute("data-filter") || "";
+        if ((boxId || "queue") === "archiveQueue") {
+          showPage("kho");
+          document.getElementById("archiveQuery").value = name;
+          archiveView = "all";
+          loadArchiveResults();
+          return;
+        }
+        showPage("home");
+        document.getElementById("query").value = name;
         resultsView = "all";
         loadResults();
       });
@@ -820,6 +864,15 @@
   var RESULT_PAGE = 80;
   var RESULT_DOM_CAP = 160;
   var resultsView = "complete";
+  var pageName = "home";
+  var archiveView = "complete";
+  var archiveLoaded = [];
+  var archiveOffset = 0;
+  var archiveTotal = 0;
+  var archiveLoading = false;
+  var archiveVideoItems = [];
+  var archiveVideoOffset = 0;
+  var archiveVideoTotal = 0;
   var resultsAbort = null;
   var refreshAbort = null;
   var loadedResults = [];
@@ -905,9 +958,12 @@
   }
 
   async function editResult(id) {
+    var lists = [loadedResults, archiveLoaded];
     var item = null;
-    for (var i = 0; i < loadedResults.length; i++) {
-      if (String(loadedResults[i].id) === String(id)) item = loadedResults[i];
+    for (var n = 0; n < lists.length && !item; n++) {
+      for (var i = 0; i < lists[n].length; i++) {
+        if (String(lists[n][i].id) === String(id)) item = lists[n][i];
+      }
     }
     if (!item) return;
     var hint = "Không đoán chữ dưới chấm. Ảnh chỉ là dải chữ chưa đọc.";
@@ -922,7 +978,7 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone: phone, name: name, username: username })
     });
-    var boxNote = document.getElementById("resultsNote");
+    var boxNote = document.getElementById(pageName === "kho" ? "archiveNote" : "resultsNote");
     if (!response.ok) {
       var detail = "Không sửa được dòng này.";
       try {
@@ -935,7 +991,78 @@
     }
     boxNote.textContent = "Đã lưu dòng sửa. Hàng đủ số + tên + @ tính là Đủ.";
     boxNote.className = "note ok";
-    loadResults();
+    if (pageName === "kho") loadArchiveResults();
+    else loadResults();
+  }
+
+  function showPage(name) {
+    pageName = name === "kho" ? "kho" : "home";
+    document.body.setAttribute("data-page", pageName);
+    if (pageName === "kho") {
+      loadArchiveVideos(false);
+      loadArchiveResults();
+    }
+  }
+
+  async function loadArchiveVideos(append) {
+    var offset = append ? archiveVideoOffset : 0;
+    var response = await api("/v1/videos?day=older&limit=80&offset=" + offset);
+    if (!response.ok) return;
+    var body = await response.json();
+    var chunk = body.items || [];
+    archiveVideoTotal = typeof body.total === "number" ? body.total : chunk.length;
+    archiveVideoItems = append ? archiveVideoItems.concat(chunk) : chunk.slice();
+    archiveVideoOffset = offset + chunk.length;
+    renderQueue(archiveVideoItems, "archiveQueue", "Chưa có video cũ.");
+    var wrap = document.getElementById("archiveQueueMoreWrap");
+    if (wrap) wrap.hidden = archiveVideoOffset >= archiveVideoTotal;
+  }
+
+  function setArchiveViewButtons() {
+    document.querySelectorAll("[data-archive-view]").forEach(function (button) {
+      button.className = button.getAttribute("data-archive-view") === archiveView ? "primary" : "ghost";
+    });
+  }
+
+  async function loadArchiveResults(options) {
+    if (uploadingActive || archiveLoading) return;
+    var append = !!(options && options.append);
+    archiveLoading = true;
+    var offset = append ? archiveOffset : 0;
+    var q = (document.getElementById("archiveQuery").value || "").trim();
+    var note = document.getElementById("archiveNote");
+    var box = document.getElementById("archiveResults");
+    setArchiveViewButtons();
+    if (note) note.textContent = append ? "Đang tải thêm..." : "";
+    try {
+      var response = await api(
+        "/v1/results?q=" + encodeURIComponent(q) +
+        "&view=" + encodeURIComponent(archiveView) +
+        "&day=older&limit=" + RESULT_PAGE + "&offset=" + offset
+      );
+      if (!response.ok) {
+        if (note) note.textContent = "Chưa tải được kho kết quả.";
+        return;
+      }
+      var body = await response.json();
+      var chunk = (body.items || []).slice(0, RESULT_PAGE);
+      archiveTotal = typeof body.total === "number" ? body.total : (offset + chunk.length);
+      archiveOffset = offset + chunk.length;
+      archiveLoaded = append ? archiveLoaded.concat(chunk) : chunk.slice();
+      if (!archiveLoaded.length) {
+        box.innerHTML = "<p class='note'>Chưa có kết quả cũ.</p>";
+      } else {
+        box.innerHTML = renderResultTable(archiveLoaded);
+        fillShots(box);
+      }
+      if (note && archiveLoaded.length) note.textContent = "Đang hiện " + archiveLoaded.length + "/" + archiveTotal + " dòng cũ.";
+      var wrap = document.getElementById("archiveMoreWrap");
+      if (wrap) wrap.hidden = !(archiveLoaded.length && archiveOffset < archiveTotal);
+    } catch (error) {
+      if (note) note.textContent = "Mất kết nối khi tải kho kết quả.";
+    } finally {
+      archiveLoading = false;
+    }
   }
 
   async function downloadExport(path, filename) {
@@ -985,6 +1112,7 @@
       var response = await api(
         "/v1/results?q=" + encodeURIComponent(q) +
         "&view=" + encodeURIComponent(resultsView) +
+        "&day=today" +
         "&limit=" + RESULT_PAGE +
         "&offset=" + offset,
         { signal: ctrl.signal }
@@ -1020,12 +1148,10 @@
     if (!ok || asked !== resultsAsked) return false;
     var viewLabel = resultsView === "complete" ? "đủ 3 cột" : (resultsView === "incomplete" ? "chưa đủ" : "tất cả");
     if (!loadedResults.length) {
-      box.innerHTML = "<p class='note'>Chưa có dòng nào trong mục «" + viewLabel + "».</p>";
+      box.innerHTML = "<p class='note'>Chưa có dòng nào trong ngày, mục «" + viewLabel + "».</p>";
       note.textContent = q
-        ? ("Không có kết quả «" + viewLabel + "» cho từ khóa này.")
-        : (resultsView === "complete"
-          ? "Chưa có hàng đủ số + tên + @. Quay lại: mở từng người tới khi thấy rõ @ rồi mới thoát. Hoặc xem mục Chưa đủ."
-          : "");
+        ? ("Không có kết quả trong ngày «" + viewLabel + "» cho từ khóa này.")
+        : "Chưa có kết quả trong ngày. Video cũ nằm ở Kho tổng.";
       syncMoreButton();
       return true;
     }
@@ -1946,6 +2072,47 @@
   document.getElementById("exportVcf").addEventListener("click", function () {
     downloadExport("/v1/results/export.vcf", "danh-ba.vcf");
   });
+  document.getElementById("archiveResults").addEventListener("click", function (event) {
+    var target = event.target;
+    if (!target || !target.getAttribute) return;
+    var id = target.getAttribute("data-edit");
+    if (!id && target.closest) {
+      var button = target.closest("[data-edit]");
+      id = button ? button.getAttribute("data-edit") : "";
+    }
+    if (!id) return;
+    editResult(id);
+  });
+  document.getElementById("archiveMore").addEventListener("click", function () {
+    if (uploadingActive || archiveLoading) return;
+    loadArchiveResults({ append: true });
+  });
+  document.getElementById("archiveQueueMore").addEventListener("click", function () {
+    loadArchiveVideos(true);
+  });
+  document.querySelectorAll("[data-archive-view]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      archiveView = button.getAttribute("data-archive-view") || "complete";
+      loadArchiveResults();
+    });
+  });
+  var archiveQueryTimer = null;
+  document.getElementById("archiveQuery").addEventListener("input", function () {
+    clearTimeout(archiveQueryTimer);
+    archiveQueryTimer = setTimeout(function () { loadArchiveResults(); }, 400);
+  });
+  document.querySelectorAll("nav.jump a").forEach(function (link) {
+    link.addEventListener("click", function (event) {
+      if ((link.getAttribute("href") || "") === "#kho") {
+        event.preventDefault();
+        showPage("kho");
+        if (location.hash !== "#kho") location.hash = "kho";
+        return;
+      }
+      showPage("home");
+    });
+  });
+  if (location.hash === "#kho") showPage("kho");
   document.getElementById("results").addEventListener("click", function (event) {
     var target = event.target;
     if (!target || !target.getAttribute) return;

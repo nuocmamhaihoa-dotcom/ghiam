@@ -15,7 +15,7 @@ import sqlite3
 import time
 from collections import defaultdict
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
@@ -60,6 +60,43 @@ _COLLAPSE_KEY = "ocr_collapse_v1"
 
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def vn_day_bounds(now: datetime | None = None) -> tuple[str, str]:
+    """Mốc đầu và cuối ngày theo giờ Việt Nam, dạng UTC giống cột thời gian trong DB."""
+    vn = timezone(timedelta(hours=7))
+    current = now.astimezone(vn) if now is not None else datetime.now(vn)
+    start = current.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    return start.astimezone(timezone.utc).isoformat(), end.astimezone(timezone.utc).isoformat()
+
+
+def _day_filter(day: str, column: str) -> tuple[str, tuple[str, ...]]:
+    kind = (day or "all").strip().lower()
+    if kind not in ("today", "older"):
+        return "1=1", ()
+    start, end = vn_day_bounds()
+    if kind == "today":
+        return f"{column} >= ? AND {column} < ?", (start, end)
+    return f"{column} < ?", (start,)
+
+
+def _video_day_sql(day: str) -> tuple[str, tuple[str, ...]]:
+    """Video làm trong ngày: tải lên, bắt đầu đọc, đang đọc hoặc đọc xong trong ngày đó."""
+    kind = (day or "all").strip().lower()
+    if kind not in ("today", "older"):
+        return "", ()
+    start, end = vn_day_bounds()
+    touched = """(
+        (created_at >= ? AND created_at < ?)
+        OR (started_at >= ? AND started_at < ?)
+        OR (finished_at >= ? AND finished_at < ?)
+        OR (progress_at >= ? AND progress_at < ?)
+    )"""
+    params = (start, end, start, end, start, end, start, end)
+    if kind == "today":
+        return touched, params
+    return f"NOT {touched}", params
 
 
 def worker_count() -> int:
@@ -1002,36 +1039,56 @@ _VIDEO_LIST_SQL = """
 """
 
 
-def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
-    """Video đang xử lý luôn có trong danh sách. Video mới hơn đứng trên.
+def list_videos(
+    db_path: Path,
+    limit: int = 40,
+    day: str = "all",
+    offset: int = 0,
+) -> list[dict[str, object]]:
+    """Video mới hơn đứng trên. day=today chỉ video làm trong ngày, day=older là kho.
 
     Hàng chờ vẫn được đọc theo id tăng (vào trước đọc trước). Chỉ thứ tự hiện trên trang đổi.
     """
+    day_sql, day_params = _video_day_sql(day)
     with connect(db_path) as conn:
-        active_ids = [
-            int(row["id"])
-            for row in conn.execute(
-                """
-                SELECT id FROM videos
-                WHERE status IN ('uploading', 'queued', 'running')
-                """
-            )
-        ]
-        recent_ids = [
-            int(row["id"])
-            for row in conn.execute(
-                """
-                SELECT id FROM videos
-                WHERE status IN ('done', 'error')
-                ORDER BY id DESC
-                LIMIT ?
-                """,
-                (limit,),
-            )
-        ]
-        seen = set(active_ids)
-        ids = active_ids + [item for item in recent_ids if item not in seen]
-        ids.sort(reverse=True)
+        if day_sql:
+            ids = [
+                int(row["id"])
+                for row in conn.execute(
+                    f"""
+                    SELECT id FROM videos
+                    WHERE {day_sql}
+                    ORDER BY id DESC
+                    LIMIT ? OFFSET ?
+                    """,
+                    (*day_params, limit, max(0, int(offset))),
+                )
+            ]
+        else:
+            active_ids = [
+                int(row["id"])
+                for row in conn.execute(
+                    """
+                    SELECT id FROM videos
+                    WHERE status IN ('uploading', 'queued', 'running')
+                    """
+                )
+            ]
+            recent_ids = [
+                int(row["id"])
+                for row in conn.execute(
+                    """
+                    SELECT id FROM videos
+                    WHERE status IN ('done', 'error')
+                    ORDER BY id DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                )
+            ]
+            seen = set(active_ids)
+            ids = active_ids + [item for item in recent_ids if item not in seen]
+            ids.sort(reverse=True)
         if not ids:
             rows = []
         else:
@@ -1090,6 +1147,19 @@ def _attach_scan_errors(db_path: Path, items: list[dict[str, object]]) -> None:
         item["error_summary"] = " · ".join(f"{reason} ×{count}" for count, reason in reasons[:3])
 
 
+def count_videos(db_path: Path, day: str = "all") -> int:
+    day_sql, params = _video_day_sql(day)
+    with connect(db_path) as conn:
+        if not day_sql:
+            row = conn.execute("SELECT COUNT(*) AS n FROM videos").fetchone()
+        else:
+            row = conn.execute(
+                f"SELECT COUNT(*) AS n FROM videos WHERE {day_sql}",
+                params,
+            ).fetchone()
+    return int(row["n"]) if row is not None else 0
+
+
 def stats(db_path: Path) -> dict[str, int]:
     counts = {"queued": 0, "running": 0, "done": 0, "error": 0, "uploading": 0}
     buckets = {"saved": 0, "review": 0, "unopened": 0}
@@ -1105,9 +1175,30 @@ def stats(db_path: Path) -> dict[str, int]:
             elif row["bucket"] == BUCKET_UNOPENED:
                 buckets["unopened"] = int(row["n"])
         phones = conn.execute("SELECT COUNT(*) AS n FROM results WHERE phone != ''").fetchone()
+        start, end = vn_day_bounds()
+        today_saved = conn.execute(
+            "SELECT COUNT(*) AS n FROM results WHERE bucket = ? AND created_at >= ? AND created_at < ?",
+            (BUCKET_OK, start, end),
+        ).fetchone()
+        today_phones = conn.execute(
+            "SELECT COUNT(*) AS n FROM results WHERE phone != '' AND created_at >= ? AND created_at < ?",
+            (start, end),
+        ).fetchone()
+        older_saved = conn.execute(
+            "SELECT COUNT(*) AS n FROM results WHERE bucket = ? AND created_at < ?",
+            (BUCKET_OK, start),
+        ).fetchone()
+        older_phones = conn.execute(
+            "SELECT COUNT(*) AS n FROM results WHERE phone != '' AND created_at < ?",
+            (start,),
+        ).fetchone()
     counts.update(buckets)
     counts["phones"] = int(phones["n"]) if phones is not None else 0
     counts["results"] = buckets["saved"] + buckets["review"] + buckets["unopened"]
+    counts["today_saved"] = int(today_saved["n"]) if today_saved is not None else 0
+    counts["today_phones"] = int(today_phones["n"]) if today_phones is not None else 0
+    counts["older_saved"] = int(older_saved["n"]) if older_saved is not None else 0
+    counts["older_phones"] = int(older_phones["n"]) if older_phones is not None else 0
     return counts
 
 
@@ -1797,33 +1888,35 @@ def search_results(
     limit: int = 50,
     offset: int = 0,
     view: str = "complete",
+    day: str = "all",
 ) -> list[dict[str, object]]:
     """Tìm theo đầu số, đầu username hoặc tên video. Mặc định chỉ hàng đủ số + @."""
     text = "".join(query.split())
     if text.startswith("+84"):
         text = "0" + text[3:]
-    start = max(0, int(offset))
+    start_at = max(0, int(offset))
     view_clause = _view_sql(view)
+    day_sql, day_params = _day_filter(day, "r.created_at")
     with connect(db_path) as conn:
         if text.isdigit():
             rows = conn.execute(
                 _RESULT_SELECT
                 + f"""
-                WHERE r.phone >= ? AND r.phone < ? AND r.phone != '' AND {view_clause}
+                WHERE r.phone >= ? AND r.phone < ? AND r.phone != '' AND {view_clause} AND {day_sql}
                 ORDER BY r.phone
                 LIMIT ? OFFSET ?
                 """,
-                (text, text + ":", limit, start),
+                (text, text + ":", *day_params, limit, start_at),
             ).fetchall()
         elif text.startswith("@"):
             rows = conn.execute(
                 _RESULT_SELECT
                 + f"""
-                WHERE r.username >= ? AND r.username < ? AND r.username != '' AND {view_clause}
+                WHERE r.username >= ? AND r.username < ? AND r.username != '' AND {view_clause} AND {day_sql}
                 ORDER BY r.username
                 LIMIT ? OFFSET ?
                 """,
-                (text, text + "\U0010ffff", limit, start),
+                (text, text + "\U0010ffff", *day_params, limit, start_at),
             ).fetchall()
         elif text:
             video_ids = [
@@ -1838,52 +1931,53 @@ def search_results(
                 rows = conn.execute(
                     _RESULT_SELECT
                     + f"""
-                    WHERE r.video_id IN ({marks}) AND {view_clause}
+                    WHERE r.video_id IN ({marks}) AND {view_clause} AND {day_sql}
                     ORDER BY r.id DESC
                     LIMIT ? OFFSET ?
                     """,
-                    (*video_ids, limit, start),
+                    (*video_ids, *day_params, limit, start_at),
                 ).fetchall()
             else:
                 handle = "@" + text
                 rows = conn.execute(
                     _RESULT_SELECT
                     + f"""
-                    WHERE r.username >= ? AND r.username < ? AND r.username != '' AND {view_clause}
+                    WHERE r.username >= ? AND r.username < ? AND r.username != '' AND {view_clause} AND {day_sql}
                     ORDER BY r.username
                     LIMIT ? OFFSET ?
                     """,
-                    (handle, handle + "\U0010ffff", limit, start),
+                    (handle, handle + "\U0010ffff", *day_params, limit, start_at),
                 ).fetchall()
         else:
             rows = conn.execute(
                 _RESULT_SELECT
                 + f"""
-                WHERE {view_clause}
+                WHERE {view_clause} AND {day_sql}
                 ORDER BY r.id DESC
                 LIMIT ? OFFSET ?
                 """,
-                (limit, start),
+                (*day_params, limit, start_at),
             ).fetchall()
     return [_public_result(row) for row in rows]
 
 
-def count_results(db_path: Path, query: str = "", view: str = "complete") -> int:
+def count_results(db_path: Path, query: str = "", view: str = "complete", day: str = "all") -> int:
     """Đếm tổng dòng khớp bộ lọc để trang chủ biết còn phải tải tiếp không."""
     text = "".join(query.split())
     if text.startswith("+84"):
         text = "0" + text[3:]
     view_clause = _view_sql(view).replace("r.", "")
+    day_sql, day_params = _day_filter(day, "created_at")
     with connect(db_path) as conn:
         if text.isdigit():
             row = conn.execute(
-                f"SELECT COUNT(*) AS n FROM results WHERE phone >= ? AND phone < ? AND phone != '' AND {view_clause}",
-                (text, text + ":"),
+                f"SELECT COUNT(*) AS n FROM results WHERE phone >= ? AND phone < ? AND phone != '' AND {view_clause} AND {day_sql}",
+                (text, text + ":", *day_params),
             ).fetchone()
         elif text.startswith("@"):
             row = conn.execute(
-                f"SELECT COUNT(*) AS n FROM results WHERE username >= ? AND username < ? AND username != '' AND {view_clause}",
-                (text, text + "\U0010ffff"),
+                f"SELECT COUNT(*) AS n FROM results WHERE username >= ? AND username < ? AND username != '' AND {view_clause} AND {day_sql}",
+                (text, text + "\U0010ffff", *day_params),
             ).fetchone()
         elif text:
             video_ids = [
@@ -1896,17 +1990,20 @@ def count_results(db_path: Path, query: str = "", view: str = "complete") -> int
             if video_ids:
                 marks = ",".join("?" for _ in video_ids)
                 row = conn.execute(
-                    f"SELECT COUNT(*) AS n FROM results WHERE video_id IN ({marks}) AND {view_clause}",
-                    video_ids,
+                    f"SELECT COUNT(*) AS n FROM results WHERE video_id IN ({marks}) AND {view_clause} AND {day_sql}",
+                    (*video_ids, *day_params),
                 ).fetchone()
             else:
                 handle = "@" + text
                 row = conn.execute(
-                    f"SELECT COUNT(*) AS n FROM results WHERE username >= ? AND username < ? AND username != '' AND {view_clause}",
-                    (handle, handle + "\U0010ffff"),
+                    f"SELECT COUNT(*) AS n FROM results WHERE username >= ? AND username < ? AND username != '' AND {view_clause} AND {day_sql}",
+                    (handle, handle + "\U0010ffff", *day_params),
                 ).fetchone()
         else:
-            row = conn.execute(f"SELECT COUNT(*) AS n FROM results WHERE {view_clause}").fetchone()
+            row = conn.execute(
+                f"SELECT COUNT(*) AS n FROM results WHERE {view_clause} AND {day_sql}",
+                day_params,
+            ).fetchone()
     return int(row["n"])
 
 

@@ -44,6 +44,7 @@ from control_plane.video_store import (
     iter_backup,
     keep_video_count,
     keep_video_gb,
+    count_videos,
     list_videos,
     queued_bytes,
     reader_alive,
@@ -169,18 +170,24 @@ def video_stats(authorization: str | None = Header(default=None)) -> dict[str, o
 
 
 @router.get("/v1/videos")
-def videos(authorization: str | None = Header(default=None), limit: int = Query(default=40, ge=1, le=200)) -> dict[str, object]:
+def videos(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=40, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    day: str = Query(default="all", pattern="^(all|today|older)$"),
+) -> dict[str, object]:
     _auth(authorization)
     init_db(settings.video_db_path)
     _cleanup_uploads()
     uploads = list_receiving_uploads(_uploads_db(), limit=min(80, max(limit, 40)))
-    items = list_videos(settings.video_db_path, limit)
-    # Phiên đang tải lên trước — luôn thấy trong hàng đợi kể cả khi iPhone ngủ giữa chừng.
-    merged = uploads + items
+    items = list_videos(settings.video_db_path, limit, day=day, offset=offset)
+    # Phiên đang tải là việc của hôm nay. Kho tổng không kéo các phiên này lên.
+    merged = (uploads + items) if day != "older" else items
     return {
         "count": len(merged),
+        "total": count_videos(settings.video_db_path, day),
         "items": merged,
-        "uploads": uploads,
+        "uploads": uploads if day != "older" else [],
         "uploads_receiving": receiving_count(_uploads_db()),
     }
 
@@ -606,13 +613,14 @@ def results(
     limit: int = Query(default=80, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
     view: str = Query(default="complete", pattern="^(complete|incomplete|all)$"),
+    day: str = Query(default="all", pattern="^(all|today|older)$"),
 ) -> dict[str, object]:
     _auth(authorization)
     init_db(settings.video_db_path)
     limit = min(int(limit), _RESULTS_PAGE_CAP)
-    items = search_results(settings.video_db_path, q, limit, offset, view)
-    total = count_results(settings.video_db_path, q, view)
-    return {"count": len(items), "total": total, "offset": offset, "view": view, "items": items}
+    items = search_results(settings.video_db_path, q, limit, offset, view, day)
+    total = count_results(settings.video_db_path, q, view, day)
+    return {"count": len(items), "total": total, "offset": offset, "view": view, "day": day, "items": items}
 
 
 class ResultCorrection(BaseModel):
