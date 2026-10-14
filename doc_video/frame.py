@@ -77,6 +77,8 @@ class ListRow:
     name_line: ocr.TextLine
     clear: bool
     top: int = 0
+    # False khi tên chỉ gồm biểu tượng cảm xúc: không đọc, để tên trống thay vì chữ rác.
+    readable: bool = True
 
 
 @dataclass
@@ -89,6 +91,7 @@ class Layout:
     handle_line: ocr.TextLine | None = None
     handle_hint: str = ""
     clear: bool = True
+    name_readable: bool = True
     at: float = -1.0
     tapped: str = ""
     # Độ cao tâm vòng tròn chạm màn hình trên vùng danh bạ, -1 nếu không có hoặc có nhiều vòng.
@@ -115,7 +118,8 @@ def touch_mask(gray: np.ndarray, chroma: np.ndarray | None = None) -> np.ndarray
     """
     width = gray.shape[1]
     core_radius = max(3, round(0.006 * width))
-    solid = (gray > 62) & (gray < 112)
+    # Mức xám của vòng tròn đổi theo máy quay: 95 trên ảnh mẫu, 114 trên video thật.
+    solid = (gray > 62) & (gray < 140)
     if chroma is not None:
         solid &= chroma < 30
     core = _window_sum(solid, core_radius) >= (2 * core_radius + 1) ** 2
@@ -124,8 +128,11 @@ def touch_mask(gray: np.ndarray, chroma: np.ndarray | None = None) -> np.ndarray
     return _window_sum(core, 3 * core_radius) > 0
 
 
-def _prepare(image: Image.Image) -> tuple[Image.Image, np.ndarray]:
-    """Màn hình đã cắt, phóng, xoá vòng tròn chạm màn hình, đảo màu nếu giao diện tối; kèm vùng vòng tròn."""
+def _prepare(image: Image.Image) -> tuple[Image.Image, np.ndarray, np.ndarray]:
+    """Màn hình đã cắt, phóng, xoá vòng tròn chạm và biểu tượng cảm xúc, đảo màu nếu giao diện tối.
+
+    Kèm vùng vòng tròn chạm và vùng quanh biểu tượng cảm xúc.
+    """
     upright = ImageOps.exif_transpose(image)
     gray = upright.convert("L")
     channels = np.asarray(upright.convert("RGB"))
@@ -149,19 +156,50 @@ def _prepare(image: Image.Image) -> tuple[Image.Image, np.ndarray]:
         gray = gray.resize(size, Image.Resampling.LANCZOS)
         chroma = chroma.resize(size, Image.Resampling.BILINEAR)
     pixels = np.asarray(gray).copy()
-    touched = touch_mask(pixels, np.asarray(chroma))
+    colors = np.asarray(chroma)
+    touched = touch_mask(pixels, colors)
+    # Chữ trong tên và @id chỉ đen hoặc xám. Biểu tượng cảm xúc có màu và bị bộ đọc
+    # đọc thành chữ rác (😴 thành 5), nên tô thành nền. Nút Follow đỏ và ảnh đại diện cũng mất, không sao.
+    colorful = colors > 60
+    near = np.zeros_like(colorful)
+    if colorful.any():
+        # Nới ra để phủ cả viền mờ quanh biểu tượng, vốn gần như không màu. Quanh đó,
+        # nét nhạt còn sót cũng tô thành nền; nét chữ thật đậm hơn nhiều nên vẫn giữ.
+        span = pixels.shape[1]
+        near = _window_sum(colorful, max(4, round(0.012 * span))) > 0
+        colorful = _window_sum(colorful, max(2, round(0.004 * span))) > 0
+        if dark:
+            pixels[colorful | (near & (pixels < 55))] = 0
+        else:
+            pixels[colorful | (near & (pixels > 200))] = 255
     if touched.any():
-        pixels[touched] = 0 if dark else 255
-        gray = Image.fromarray(pixels)
+        if dark:
+            pixels[touched] = 0
+        else:
+            # Vòng tròn trong suốt một phần: chữ nằm dưới vẫn tối hơn hẳn nền xám của vòng tròn.
+            # Chỉ đổi phần xám (và viền mờ) thành nền trắng, giữ lại nét chữ.
+            gray_part = touched & (pixels > 62) & (pixels < 140)
+            level = float(np.median(pixels[gray_part])) if gray_part.any() else 110.0
+            lift = touched & (pixels >= level - 30)
+            pixels[lift] = 255
+    gray = Image.fromarray(pixels)
     # Giao diện tối: đảo màu để mọi bước sau chỉ phải đọc chữ tối trên nền sáng.
     if dark:
         gray = ImageOps.invert(gray)
-    return ImageOps.autocontrast(gray), touched
+    return ImageOps.autocontrast(gray), touched, near
 
 
 def phone_screen(image: Image.Image) -> Image.Image:
     """Bỏ dải đen quanh màn hình điện thoại, xoá vòng tròn chạm màn hình, phóng lên đủ lớn cho bộ đọc."""
     return _prepare(image)[0]
+
+
+def _only_emoji(emoji: np.ndarray, line: ocr.TextLine | None) -> bool:
+    """Dòng gần như nằm trọn trong vùng biểu tượng cảm xúc: tên chỉ gồm biểu tượng, không có chữ để đọc."""
+    if line is None or not emoji.any():
+        return False
+    columns = emoji[line.y0 : line.y1, line.x0 : line.x1].any(axis=0)
+    return bool(columns.size) and float(columns.mean()) >= 0.6
 
 
 def _covered(touched: np.ndarray, *lines: ocr.TextLine) -> bool:
@@ -196,6 +234,28 @@ def _tap_center(touched: np.ndarray, pairs: list[tuple[ocr.TextLine, ocr.TextLin
     return centers[0] if len(centers) == 1 else -1.0
 
 
+def _highlighted_row(screen: Image.Image, rows: list[ListRow], pitch: float) -> str:
+    """Dòng đang được bấm: TikTok tô nền dòng đó xám nhạt (khoảng 244 so với nền trắng 254).
+
+    Đo độ sáng giữa của vùng giữa dòng (bỏ ảnh đại diện và nút Follow). Chỉ nhận
+    khi đúng một dòng tối hơn hẳn các dòng còn lại.
+    """
+    if pitch <= 0 or len(rows) < 3:
+        return ""
+    pixels = np.asarray(screen)
+    width = pixels.shape[1]
+    left, right = int(0.18 * width), int(0.70 * width)
+    levels = []
+    for row in rows:
+        top = max(0, int(row.top - 0.2 * pitch))
+        bottom = min(pixels.shape[0], int(row.top + 0.7 * pitch))
+        band = pixels[top:bottom, left:right]
+        levels.append(float(np.median(band)) if band.size else 255.0)
+    usual = float(np.median(levels))
+    darker = [index for index, level in enumerate(levels) if level <= usual - 5]
+    return rows[darker[0]].phone if len(darker) == 1 else ""
+
+
 def row_at(rows: list[ListRow], y: float, pitch: float) -> str:
     """Số điện thoại của dòng chứa độ cao y (dòng chiếm từ trên dòng số một chút tới hết dòng tên)."""
     for row in rows:
@@ -204,9 +264,30 @@ def row_at(rows: list[ListRow], y: float, pitch: float) -> str:
     return ""
 
 
+def _phones_without_name(
+    lines: list[ocr.TextLine], pairs: list[tuple[ocr.TextLine, ocr.TextLine]], height: int
+) -> list[tuple[ocr.TextLine, ocr.TextLine]]:
+    """Dòng số mà tên chỉ gồm biểu tượng cảm xúc (đã xoá trước khi đọc), nên không có dòng tên bên dưới.
+
+    Vẫn giữ số đó, kèm một ô tên trống ngay dưới dòng số, thẳng mép trái với các dòng số khác.
+    """
+    known = {id(phone_line) for phone_line, _ in pairs}
+    left = sorted(phone_line.x0 for phone_line, _ in pairs)[len(pairs) // 2]
+    extra = []
+    for line in lines:
+        if id(line) in known or not looks_like_phone(line.text):
+            continue
+        if abs(line.x0 - left) > 1.5 * line.text_h or line.y1 + 2.5 * line.h >= height:
+            continue
+        top = line.y1 + max(2, line.h // 3)
+        blank = ocr.TextLine("", line.x0, top, line.x1, top + line.h, line.text_h)
+        extra.append((line, blank))
+    return extra
+
+
 def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
     """Bước quét: loại màn hình, vị trí các dòng, số điện thoại. Không đọc kỹ tên và @id."""
-    screen, touched = _prepare(image)
+    screen, touched, emoji = _prepare(image)
     lines = ocr.find_lines(screen)
     pairs = [
         pair
@@ -214,26 +295,35 @@ def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
         if pair[1].y1 + pair[1].h < screen.height and is_name(clean_name(pair[1].text))
     ]
     if len(pairs) >= 2:
+        pairs = sorted(pairs + _phones_without_name(lines, pairs, screen.height), key=lambda pair: pair[0].y0)
         phones = _read_phones(screen, pairs)
         rows = [
-            ListRow(phone, name_line, not _covered(touched, phone_line, name_line), phone_line.y0)
+            ListRow(
+                phone,
+                name_line,
+                not _covered(touched, phone_line, name_line),
+                phone_line.y0,
+                bool(name_line.text) and not _only_emoji(emoji, name_line),
+            )
             for phone, (phone_line, name_line) in zip(phones, pairs)
             if phone
         ]
         pitch = _row_pitch(pairs)
         tap_y = _tap_center(touched, pairs, pitch)
-        tapped = row_at(rows, tap_y, pitch) if tap_y >= 0 else ""
+        tapped = _highlighted_row(screen, rows, pitch) or (row_at(rows, tap_y, pitch) if tap_y >= 0 else "")
         return Layout("list", rows=rows, at=at, tapped=tapped, tap_y=tap_y, row_pitch=pitch)
     profile = _profile_lines(lines, screen.height)
     if profile is not None:
         name_line, handle_line = profile
         lines_to_check = [handle_line] + ([name_line] if name_line is not None else [])
+        name_area = name_line or _band_line(screen, handle_line)
         return Layout(
             "profile",
             name_line=name_line,
             handle_line=handle_line,
             handle_hint=find_handle(handle_line.text),
             clear=not _covered(touched, *lines_to_check),
+            name_readable=not _only_emoji(emoji, name_area),
             at=at,
         )
     return Layout(at=at)
@@ -245,7 +335,7 @@ def read_layout(image: Image.Image, layout: Layout, rows: list[int] | None = Non
     Dòng không được chọn vẫn có mặt với số điện thoại, tên để trống.
     """
     if layout.kind == "list":
-        chosen = range(len(layout.rows)) if rows is None else rows
+        chosen = [index for index in (range(len(layout.rows)) if rows is None else rows) if layout.rows[index].readable]
         names: dict[int, str] = {}
         if chosen:
             screen = phone_screen(image)
@@ -255,7 +345,7 @@ def read_layout(image: Image.Image, layout: Layout, rows: list[int] | None = Non
         contacts = [Contact(row.phone, names.get(index, "")) for index, row in enumerate(layout.rows)]
         return FrameRead("list", contacts, at=layout.at, tapped=layout.tapped)
     if layout.kind == "profile" and layout.handle_line is not None:
-        name, handle = _read_profile(phone_screen(image), layout.name_line, layout.handle_line)
+        name, handle = _read_profile(phone_screen(image), layout.name_line, layout.handle_line, layout.name_readable)
         if handle:
             return FrameRead("profile", profile_name=name, handle=handle, at=layout.at)
     return FrameRead(at=layout.at)
@@ -474,19 +564,21 @@ def _underscore_strokes(screen: Image.Image, line: ocr.TextLine, chars: int) -> 
     return best
 
 
-def _read_profile(screen: Image.Image, name_line: ocr.TextLine | None, handle_line: ocr.TextLine) -> tuple[str, str]:
+def _read_profile(
+    screen: Image.Image, name_line: ocr.TextLine | None, handle_line: ocr.TextLine, name_readable: bool = True
+) -> tuple[str, str]:
     handle = _read_handle(screen, handle_line)
-    if not handle:
+    if not handle or not name_readable:
         return "", handle
     candidates: list[str] = []
     if name_line is not None:
         candidates.append(_read_names([_crop(screen, name_line, NAME_SMALL)], [_crop(screen, name_line)])[0])
         candidates.append(name_line.text)
     else:
-        band = _band_above(screen, handle_line)
+        band = _band_line(screen, handle_line)
         if band is not None:
-            piece, text_height = band
-            candidates.append(_read_names([_fit(piece, text_height, NAME_SMALL)], [_fit(piece, text_height, NAME_LARGE)])[0])
+            piece = screen.crop((band.x0, band.y0, band.x1, band.y1))
+            candidates.append(_read_names([_fit(piece, band.h, NAME_SMALL)], [_fit(piece, band.h, NAME_LARGE)])[0])
     for raw in candidates:
         name = clean_name(raw)
         if is_name(name):
@@ -494,15 +586,12 @@ def _read_profile(screen: Image.Image, name_line: ocr.TextLine | None, handle_li
     return "", handle
 
 
-def _band_above(screen: Image.Image, line: ocr.TextLine) -> tuple[Image.Image, int] | None:
-    """Dải chữ ngay trên @id khi lần dò dòng không tách được tên."""
-    top = int(line.y0 - 2.2 * line.h)
-    bottom = int(line.y0 - 0.15 * line.h)
-    if bottom - top < 8:
-        return None
+def _band_line(screen: Image.Image, line: ocr.TextLine) -> ocr.TextLine | None:
+    """Ô dải chữ ngay trên @id, dùng khi lần dò dòng không tách được tên."""
+    top = max(0, int(line.y0 - 2.2 * line.h))
+    bottom = min(screen.height, int(line.y0 - 0.15 * line.h))
     left = max(0, line.x0 - line.h)
     right = min(screen.width, max(line.x1, line.x0 + 6 * line.h))
-    piece = screen.crop((left, max(0, top), right, min(screen.height, bottom)))
-    if piece.width < 8 or piece.height < 8:
+    if bottom - top < 8 or right - left < 8:
         return None
-    return piece, piece.height
+    return ocr.TextLine("", left, top, right, bottom)
