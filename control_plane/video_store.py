@@ -1003,9 +1003,9 @@ _VIDEO_LIST_SQL = """
 
 
 def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
-    """Video đang chờ hoặc đang đọc luôn hiện, kể cả khi đã có nhiều video xong mới hơn.
+    """Video đang xử lý luôn có trong danh sách. Video mới hơn đứng trên.
 
-    Trong nhóm đã xong, video mới đứng trước. Hàng chờ sắp theo id: vào trước được đọc trước.
+    Hàng chờ vẫn được đọc theo id tăng (vào trước đọc trước). Chỉ thứ tự hiện trên trang đổi.
     """
     with connect(db_path) as conn:
         active_ids = [
@@ -1014,7 +1014,6 @@ def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
                 """
                 SELECT id FROM videos
                 WHERE status IN ('uploading', 'queued', 'running')
-                ORDER BY id
                 """
             )
         ]
@@ -1030,7 +1029,9 @@ def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
                 (limit,),
             )
         ]
-        ids = active_ids + [item for item in recent_ids if item not in set(active_ids)]
+        seen = set(active_ids)
+        ids = active_ids + [item for item in recent_ids if item not in seen]
+        ids.sort(reverse=True)
         if not ids:
             rows = []
         else:

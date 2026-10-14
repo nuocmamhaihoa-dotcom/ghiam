@@ -112,7 +112,17 @@
     .results-table tr.row-ok td:first-child { box-shadow: inset 3px 0 0 #1b8a4a; }
     .results-table tr.row-review td:first-child { box-shadow: inset 3px 0 0 #c48a12; }
     .results-table tr.row-scan td:first-child { box-shadow: inset 3px 0 0 #c04545; }
-    .queue-table td:nth-child(1) { font-variant-numeric: tabular-nums; }
+    table.queue-table { min-width: 0; }
+    .vtop { display: flex; gap: 0.5rem; justify-content: space-between; align-items: baseline; }
+    .vname { font-weight: 750; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vstate { flex: 0 0 auto; font-size: 0.78rem; font-weight: 700; color: var(--muted); }
+    .vstate.run { color: var(--accent); }
+    .vstate.bad { color: var(--warn); }
+    .vstate.ok { color: var(--ok); }
+    .vscore { font-variant-numeric: tabular-nums; font-weight: 750; font-size: 1.05rem; line-height: 1.2; }
+    .scoreline { margin: 0 0 0.4rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+    details.fold { margin: 0 0 0.6rem; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 0.45rem 0.7rem; }
+    details.fold > summary { cursor: pointer; font-weight: 700; }
     .note { color: var(--muted); margin-top: 0.35rem; font-size: 0.86rem; }
     img.strip { display: block; max-width: 100%; height: auto; margin-top: 0.3rem; border-radius: 6px; background: #fff; }
     .warn { color: var(--warn); font-weight: 650; }
@@ -207,6 +217,8 @@
       table.results-table td::before, table.queue-table td::before {
         content: attr(data-label); color: var(--muted); font-size: 0.72rem; font-weight: 650; padding-top: 0.12rem;
       }
+      table.queue-table td::before { display: none; }
+      table.queue-table td { padding: 0.08rem 0; }
       td.warn::before, td.ok::before { color: var(--muted); font-weight: 650; }
       .results-table td:nth-child(3), .results-table td:nth-child(4) { white-space: normal; }
       .results-table tr.row-ok { border-left: 3px solid #1b8a4a; }
@@ -222,87 +234,74 @@
 <main>
   <header>
     <h1>Đọc video danh bạ</h1>
-    <p class="lead">Nhiều video, nhiều iPhone cùng lúc. Chọn xong là xếp hàng — mất mạng chọn lại cùng file. Đóng trang, máy chủ vẫn đọc.</p>
   </header>
   <nav class="jump" aria-label="Mục trên trang">
+    <a href="#sec-queue">Video</a>
     <a href="#sec-upload">Tải lên</a>
-    <a href="#howto">Cách quay</a>
-    <a href="#sec-stats">Số liệu</a>
-    <a href="#sec-queue">Hàng đợi</a>
     <a href="#sec-results">Kết quả</a>
     <a href="#sec-fresh">Bảng mới</a>
     <a href="#sec-backup">Sao lưu</a>
   </nav>
 
   <div id="relayWarn" class="banner warn-banner __RELAY_HIDE__">__RELAY_TEXT__</div>
-    <p class="callout"><b>Để Safari khỏi bị sập khi tải:</b> tắt VPN, tắt iCloud Private Relay và Chế độ dữ liệu thấp. iPhone gửi nguyên file, không cắt mảnh. Mở app khác vẫn gửi tiếp. Video đã lên đủ thì máy chủ đọc và phân tích dù Safari đã tắt. Đừng vuốt tắt Safari khi chưa lên 100% — đứt giữa chừng thì chọn lại cùng file để gửi lại từ đầu.</p>
-    <audio id="bgKeep" loop playsinline preload="auto" hidden></audio>
-
-  <div class="top-grid">
-    <section id="sec-upload">
-      <h2>Thêm video</h2>
-      <div class="device-box">
-        <label for="device">Tên máy iPhone quét</label>
-        <input id="device" type="text" maxlength="80" placeholder="VD: iPhone 13 của An" />
-        <p class="note">Tên này gắn vào mọi kết quả của video bạn tải lên từ máy này.</p>
-      </div>
-      <div class="drop" id="drop">
-        <div>
-          <p class="drop-title">Kéo nhiều video vào đây</p>
-          <p class="note">hoặc chọn từ máy</p>
-        </div>
-        <button class="file" type="button" id="pick">Chọn video</button>
-        <button type="button" id="pickTest">Tải video test</button>
-        <p class="note">Nút test dùng đủ cách tải và đủ cách đọc, nhưng video vào bảng riêng bên dưới — không đụng hàng đang chạy.</p>
-        <input id="file" type="file" accept="video/*,image/*" multiple />
-      </div>
-      <p id="uploadNote" class="note"></p>
-    </section>
-
-    <section id="sec-stats">
-      <h2>Thống kê</h2>
-      <div class="stats" id="stats"></div>
-      <p id="reader" class="note"></p>
-    </section>
-  </div>
-
-  <div id="openWarn" class="banner hide" role="status"></div>
-
-  <div class="howto" id="howto">
-    <h3>Cách chắc nhất để có hàng đủ (số + tên + @)</h3>
-    <ol>
-      <li>Trong Messenger/Facebook: mở danh bạ, <b>bấm vào từng người cần lấy</b>.</li>
-      <li>Đợi trang hồ sơ hiện ra và <b>nhìn rõ dòng @username</b> (khoảng một nhịp thở ngắn).</li>
-      <li><b>Rồi mới thoát</b> về danh bạ — không chạm mở rồi back ngay lúc chữ còn đang nhòe.</li>
-      <li>Làm lần lượt <b>từng người</b> cần lấy, rồi tải video lên đây.</li>
-    </ol>
-    <details>
-      <summary>Máy chủ đọc và tải lại thế nào</summary>
-      <p class="tiny">Máy chủ quét 30 khung/giây và tăng dày 60 khung/giây quanh lúc mở/đóng hồ sơ; học bố cục theo từng máy. Hàng chưa đủ 3 ô được đọc lại 4 giây trước và sau khung thiếu. Nếu vẫn còn hồ sơ chưa ghép, máy thử tiếp ghép theo thời gian rồi đọc riêng vùng tên và @. Tải lên lỗi thì tự chuyển sang mảnh nhỏ một đường, rồi gửi cả file một lần. Chỉ lướt danh bạ (không mở hồ sơ) thì số nằm ở <b>Cần xem</b>: có số và tên, chưa có @.</p>
-    </details>
-    <p class="danger">Danh bạ không hiện @. Không mở hồ sơ = máy chủ không thể tự tạo @.</p>
-  </div>
-
-  <div class="checklist" id="checklist">
-    <h3>Cách quay đã được đồng ý</h3>
-    <div class="checks">
-      <label class="check"><input type="checkbox" id="checkOpen" checked disabled /><span>Tôi đã <b>bấm mở hồ sơ từng người</b> cần lấy (không chỉ lướt danh bạ).</span></label>
-      <label class="check"><input type="checkbox" id="checkAt" checked disabled /><span>Mỗi lần mở tôi đã <b>nhìn rõ dòng @</b> rồi mới thoát.</span></label>
-      <label class="check"><input type="checkbox" id="checkBack" checked disabled /><span>Tôi <b>không back ngay</b> lúc chữ còn đang nhòe / đang chuyển cảnh.</span></label>
-    </div>
-    <p id="checkNote" class="note">Đã đồng ý cả 3 ý — chọn video được ngay, không cần tick.</p>
-  </div>
+  <audio id="bgKeep" loop playsinline preload="auto" hidden></audio>
 
   <section id="sec-queue">
-    <h2>Hàng đợi</h2>
+    <h2>Video</h2>
+    <p id="scoreLine" class="scoreline"></p>
+    <div id="queue" class="table-wrap"></div>
+    <p id="reader" class="note"></p>
+    <div id="stats" hidden></div>
+  </section>
+  <div id="openWarn" class="banner hide" role="status"></div>
+
+  <section id="sec-upload">
+    <h2>Thêm video</h2>
+    <div class="device-box">
+      <label for="device">Tên máy iPhone quét</label>
+      <input id="device" type="text" maxlength="80" placeholder="VD: iPhone 13 của An" />
+    </div>
+    <div class="drop" id="drop">
+      <button class="file" type="button" id="pick">Chọn video</button>
+      <button type="button" id="pickTest">Tải video test</button>
+      <input id="file" type="file" accept="video/*,image/*" multiple />
+    </div>
+    <p id="uploadNote" class="note"></p>
+  </section>
+
+  <details class="fold">
+    <summary>Ghi chú</summary>
+    <p class="callout"><b>Để Safari khỏi bị sập khi tải:</b> tắt VPN, tắt iCloud Private Relay và Chế độ dữ liệu thấp. iPhone gửi nguyên file, không cắt mảnh. Mở app khác vẫn gửi tiếp. Video đã lên đủ thì máy chủ đọc và phân tích dù Safari đã tắt. Đừng vuốt tắt Safari khi chưa lên 100% — đứt giữa chừng thì chọn lại cùng file để gửi lại từ đầu.</p>
+    <div class="howto" id="howto">
+      <h3>Cách chắc nhất để có hàng đủ (số + tên + @)</h3>
+      <ol>
+        <li>Trong Messenger/Facebook: mở danh bạ, <b>bấm vào từng người cần lấy</b>.</li>
+        <li>Đợi trang hồ sơ hiện ra và <b>nhìn rõ dòng @username</b> (khoảng một nhịp thở ngắn).</li>
+        <li><b>Rồi mới thoát</b> về danh bạ — không chạm mở rồi back ngay lúc chữ còn đang nhòe.</li>
+        <li>Làm lần lượt <b>từng người</b> cần lấy, rồi tải video lên đây.</li>
+      </ol>
+      <details>
+        <summary>Máy chủ đọc và tải lại thế nào</summary>
+        <p class="tiny">Máy chủ quét 30 khung/giây và tăng dày 60 khung/giây quanh lúc mở/đóng hồ sơ; học bố cục theo từng máy. Hàng chưa đủ 3 ô được đọc lại 4 giây trước và sau khung thiếu. Nếu vẫn còn hồ sơ chưa ghép, máy thử tiếp ghép theo thời gian rồi đọc riêng vùng tên và @. Tải lên lỗi thì tự chuyển sang mảnh nhỏ một đường, rồi gửi cả file một lần. Chỉ lướt danh bạ (không mở hồ sơ) thì số nằm ở <b>Cần xem</b>: có số và tên, chưa có @.</p>
+      </details>
+      <p class="danger">Danh bạ không hiện @. Không mở hồ sơ = máy chủ không thể tự tạo @.</p>
+    </div>
+    <div class="checklist" id="checklist">
+      <h3>Cách quay đã được đồng ý</h3>
+      <div class="checks">
+        <label class="check"><input type="checkbox" id="checkOpen" checked disabled /><span>Tôi đã <b>bấm mở hồ sơ từng người</b> cần lấy (không chỉ lướt danh bạ).</span></label>
+        <label class="check"><input type="checkbox" id="checkAt" checked disabled /><span>Mỗi lần mở tôi đã <b>nhìn rõ dòng @</b> rồi mới thoát.</span></label>
+        <label class="check"><input type="checkbox" id="checkBack" checked disabled /><span>Tôi <b>không back ngay</b> lúc chữ còn đang nhòe / đang chuyển cảnh.</span></label>
+      </div>
+      <p id="checkNote" class="note">Đã đồng ý cả 3 ý — chọn video được ngay, không cần tick.</p>
+    </div>
     <div class="legend">
       <div><b>Đủ</b><span>Một hàng đã có đủ Số + Tên + @.</span></div>
       <div><b>Cần xem</b><span>Số có trong danh bạ nhưng hàng đó thiếu Tên hoặc @.</span></div>
       <div><b>Lỗi quét</b><span>Không thành một hàng: mở hồ sơ mà không thấy số, trùng tên không ghép được, hoặc một số mở nhiều hồ sơ.</span></div>
     </div>
     <p class="note legend-note">Số khách là tổng số điện thoại, mỗi số chỉ tính một lần — đó là mục tiêu cần đọc. Phần trăm là % số trong danh bạ đã đủ 3 cột, không tính dòng lỗi quét.</p>
-    <div id="queue" class="table-wrap"></div>
-  </section>
+  </details>
 
   <section id="sec-results">
     <h2>Kết quả đã lưu</h2>
@@ -325,8 +324,7 @@
   </section>
 
   <section id="sec-fresh">
-    <h2>Bảng đọc bản mới</h2>
-    <p>Nút này tải video vào một bảng riêng và đọc từ đầu bằng cách làm mới nhất: ghép @ khi tên hồ sơ hỏng, hiện số còn thấy khi bị chấm che, và lưu ảnh dải chữ chưa đọc. Video đã tải trước đó cũng được nhận lại như video mới. Bảng và kết quả phía trên không bị đổi.</p>
+    <h2>Bảng mới</h2>
     <div class="row" style="margin-bottom:0.45rem">
       <button class="primary" type="button" id="pickFresh">Tải video test (đủ tính năng)</button>
       <button class="ghost" type="button" id="importFresh">Đưa video còn file trên máy chủ vào bảng mới</button>
@@ -342,9 +340,7 @@
 
   <section id="sec-backup" class="backup">
     <div>
-      <h2>Sao lưu về PC</h2>
-      <p>File nén này là bản sao các kết quả đã lưu. Tải về và giữ trên máy tính. Đó là bản dự phòng ngoài VPS.</p>
-      <p class="note">Bấm một lần. Trình duyệt sẽ tải file .csv.gz.</p>
+      <h2>Sao lưu</h2>
       <p id="backupNote" class="note"></p>
     </div>
     <button id="backup" class="primary" type="button">Tải bản sao lưu về PC</button>
@@ -591,22 +587,38 @@
     return parts.join(" · ");
   }
 
-  function renderOpenBanner(saved, review, unopened, phones) {
+  function renderOpenBanner() {
     var banner = document.getElementById("openWarn");
-    var listTotal = saved + review;
-    var scanned = (phones || 0) + unopened;
-    if (!scanned && !listTotal) {
-      banner.className = "banner hide";
-      banner.textContent = "";
-      return;
+    if (!banner) return;
+    banner.className = "banner hide";
+    banner.textContent = "";
+  }
+
+  function videoStamp(item) {
+    if (item.kind === "upload" || (!item.id && item.upload_id)) return 1000000000000;
+    return Number(item.id) || 0;
+  }
+
+  function newestFirst(items) {
+    return items.slice().sort(function (a, b) { return videoStamp(b) - videoStamp(a); });
+  }
+
+  function stateClass(item) {
+    if (item.status === "error" || item.stale) return "bad";
+    if (item.kind === "upload" || item.status === "uploading" || item.status === "running") return "run";
+    if (item.status === "done") return "ok";
+    return "";
+  }
+
+  function scoreText(item) {
+    var isUpload = item.kind === "upload" || (!item.id && item.upload_id);
+    if (isUpload) return item.percent != null ? (item.percent + "%") : "Đang tải";
+    var saved = item.saved_count || 0;
+    var phones = item.phone_count || 0;
+    if (item.status === "done" || item.status === "error" || saved || phones) {
+      return saved + " đủ / " + phones + " số";
     }
-    var duPct = pct(saved, listTotal);
-    banner.className = duPct != null && duPct >= 50 ? "banner ok-banner" : "banner warn-banner";
-    var pctText = duPct != null ? (duPct + "% (" + saved + "/" + listTotal + ")") : "—";
-    banner.textContent = "Số khách, mỗi số một lần: " + (phones || 0) +
-      ". Số trong danh bạ đã đủ 3 cột: " + pctText +
-      ". Cần xem (có số, thiếu tên hoặc @): " + review +
-      ". Lỗi quét: " + unopened + ".";
+    return statusText(item.status);
   }
 
   var lastResultTotal = -1;
@@ -702,43 +714,22 @@
     if (!statsResponse.ok) return;
     var body = await statsResponse.json();
     var saved = body.saved || 0;
-    var review = body.review || 0;
-    var unopened = body.unopened || 0;
-    var listTotal = saved + review;
-    var duPct = pct(saved, listTotal);
-    document.getElementById("stats").innerHTML =
-      stat(body.phones || 0, "Số khách") +
-      stat(saved, "Đủ 3 cột") +
-      stat(review, "Cần xem") +
-      stat(unopened, "Lỗi quét", unopened ? "warn" : "") +
-      stat(duPct != null ? (duPct + "%") : "—", "% số trong danh bạ đã đủ", duPct != null && duPct >= 50 ? "ok" : "warn") +
-      stat(body.queued, "Video đang chờ") +
-      stat(body.running, "Video đang đọc") +
-      stat(body.done, "Video đã xong") +
-      stat(body.error, "Video lỗi");
-    renderOpenBanner(saved, review, unopened, body.phones || 0);
+    var phones = body.phones || 0;
+    var scoreLine = document.getElementById("scoreLine");
+    if (scoreLine) scoreLine.textContent = saved + " đủ / " + phones + " số";
+    renderOpenBanner();
     var reader = document.getElementById("reader");
     if (!body.reader_alive) {
       reader.textContent = body.queued > 0
         ? "Hàng đợi còn video nhưng bộ đọc trên máy chủ chưa chạy."
         : "Bộ đọc trên máy chủ chưa chạy.";
       reader.className = "note warn";
-    } else if (body.running > 0 || body.queued > 0 || body.uploads_receiving > 0) {
-      var feeders = body.feeders || 1;
-      var freeGb = body.disk_free_bytes != null ? (body.disk_free_bytes / (1024*1024*1024)).toFixed(1) : "?";
-      var usedGb = body.disk_used_bytes != null ? (body.disk_used_bytes / (1024*1024*1024)).toFixed(1) : "?";
-      var limitGb = body.disk_limit_bytes != null ? (body.disk_limit_bytes / (1024*1024*1024)).toFixed(0) : "?";
-      reader.textContent = "Máy chủ: đang tải " + (body.uploads_receiving || 0) + "/" + (body.upload_slots || "?") +
-        " · chờ đọc " + (body.queued || 0) + " · đang đọc " + (body.running || 0) +
-        (body.ocr_paused ? " · tạm dừng nhận video mới vì đĩa sắp đầy" : "") +
-        " · đĩa " + usedGb + "/" + limitGb + "GB (còn " + freeGb + "GB). " +
-        body.workers + " tiến trình đọc dùng chung" +
-        (feeders > 1 ? (", tối đa " + feeders + " video cùng lúc, video vào trước được đọc trước") : "") +
-        ". Mở app khác vẫn đọc trên máy chủ.";
-      reader.className = body.ocr_paused ? "note warn" : "note ok";
+    } else if (body.ocr_paused) {
+      reader.textContent = "Tạm dừng nhận video mới vì đĩa sắp đầy.";
+      reader.className = "note warn";
     } else {
-      reader.textContent = "Bộ đọc máy chủ sẵn sàng. Upload xong có thể tắt trang — máy chủ tự đọc hết hàng đợi.";
-      reader.className = "note ok";
+      reader.textContent = "";
+      reader.className = "note";
     }
     var queueResponse = await api("/v1/videos", { signal: ctrl.signal });
     if (ctrl.signal.aborted) return;
@@ -766,16 +757,14 @@
     if (found) return found;
     var table = box.querySelector("table");
     if (!table) {
-      box.innerHTML = "<table class='queue-table'><tr><th>Video / Độ dài</th><th>Vấn đề / Trạng thái</th><th>Tiến độ</th><th>Kết quả</th></tr></table>";
+      box.innerHTML = "<table class='queue-table'><tr><th>Video</th><th>Đủ / số</th></tr></table>";
       table = box.querySelector("table");
     }
     var tr = document.createElement("tr");
     tr.setAttribute("data-upload", uploadId);
-    tr.innerHTML = "<td data-label='Video'>" + escapeHtml(name) +
-      "<div class='note'>" + escapeHtml(formatBytes(size)) + "</div></td>" +
-      "<td data-label='Trạng thái'>Đang mở đường tải</td>" +
-      "<td data-label='Tiến độ'>Đang tải lên<div class='note'>0 B / " + escapeHtml(formatBytes(size)) + " · 0%</div></td>" +
-      "<td data-label='Kết quả'><span class='note'>Chưa xong tải — chưa phân tích</span></td>";
+    tr.innerHTML = "<td data-label='Video'><div class='vtop'><b class='vname'>" + escapeHtml(name) +
+      "</b><span class='vstate run'>Đang tải</span></div></td>" +
+      "<td data-label='Kết quả'><div class='vscore'>0%</div></td>";
     // Trình duyệt bọc <tr> trong <tbody>. insertBefore trên <table> ném NotFoundError
     // khi hàng đợi đã có video — phiên tạo xong nhưng không gửi được mảnh nào.
     var head = table.querySelector("tr");
@@ -790,12 +779,12 @@
       var row = ensureUploadRow(uploadId, name, size);
       if (!row) return;
       var cells = row.querySelectorAll("td");
-      if (cells.length < 3) return;
+      if (cells.length < 2) return;
       var pct = size ? Math.floor((Math.max(0, received) * 100) / size) : 0;
-      cells[1].textContent = detail || "Đang tải lên";
-      cells[1].className = "";
-      cells[2].innerHTML = "Đang tải lên<div class='note'>" + escapeHtml(formatBytes(received)) + " / " +
-        escapeHtml(formatBytes(size)) + " · " + pct + "%</div>";
+      var state = cells[0].querySelector(".vstate");
+      if (state) state.textContent = detail || "Đang tải";
+      var score = cells[1].querySelector(".vscore");
+      if (score) score.textContent = pct + "%";
     } catch (error) {}
   }
 
@@ -811,80 +800,25 @@
       box.innerHTML = "<p class='note'>Chưa có video.</p>";
       return;
     }
-    var queueRank = {};
-    var rank = 0;
-    items.filter(function (item) { return item.status === "queued" && item.id; })
-      .sort(function (a, b) { return a.id - b.id; })
-      .forEach(function (item) { rank += 1; queueRank[item.id] = rank; });
-    var html = "<table class='queue-table'><tr><th>Video / Độ dài</th><th>Vấn đề / Trạng thái</th><th>Tiến độ</th><th>Kết quả</th></tr>";
+    items = newestFirst(items);
+    var html = "<table class='queue-table'><tr><th>Video</th><th>Đủ / số</th></tr>";
     items.forEach(function (item) {
       var isUpload = item.kind === "upload" || (!item.id && item.upload_id);
       var canRetry = !isUpload && item.file_kept && (item.status === "error" || item.status === "done");
       var retry = canRetry ? " <button class='ghost mini' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
-      var keptNote = "";
-      if (!isUpload && item.status === "done" && item.file_kept) {
-        keptNote = "<div class='note'>Còn file — có thể Đọc lại</div>";
-      } else if (!isUpload && (item.status === "done" || item.status === "error") && !item.file_kept) {
-        keptNote = "<div class='note'>Hết file trên đĩa</div>";
-      }
-      var progress = "";
-      if (item.status === "running" && item.progress) {
-        progress = "<div class='note'>" + escapeHtml(item.progress) + "</div>";
-      } else if (isUpload) {
-        progress = "<div class='note'>" + escapeHtml(formatBytes(item.received_bytes || 0)) +
-          " / " + escapeHtml(formatBytes(item.size_bytes || 0)) +
-          (item.percent != null ? (" · " + item.percent + "%") : "") + "</div>";
-      }
-      var issue = issueText(item);
-      if (item.status === "queued" && queueRank[item.id]) {
-        issue = "Chờ đọc — thứ " + queueRank[item.id] + ". Video vào hàng trước được đọc trước, không bị bỏ.";
-      }
-      var issueClass = (item.status === "error" || item.stale || issue.indexOf("Cảnh báo") === 0 ||
-        issue.indexOf("Lỗi") === 0 || issue.indexOf("Tải bị ngắt") === 0)
-        ? "warn"
-        : (issue.indexOf("Tất cả đều tốt") === 0 || issue.indexOf("Tốt —") === 0 ||
-          issue.indexOf("Chờ đọc") === 0 ? "ok" : "");
-      var resultText = "—";
-      var cancelUpload = "";
+      var extra = "";
       if (isUpload && item.upload_id) {
-        cancelUpload = " <button class='ghost mini' type='button' data-cancel-upload='" +
-          escapeHtml(item.upload_id) + "'>Hủy phiên dở</button>";
-      }
-      if (isUpload) {
-        resultText = item.stale
-          ? "<span class='warn'>Chưa vào hàng đọc — tải dở</span>" + cancelUpload
-          : "<span class='note'>Chưa xong tải — chưa phân tích</span>" + cancelUpload;
-      } else if (item.status === "queued") {
-        resultText = "<span class='ok'>Đã lên VPS — chờ phân tích</span>";
+        extra = " <button class='ghost mini' type='button' data-cancel-upload='" +
+          escapeHtml(item.upload_id) + "'>Hủy</button>";
       } else if (item.status === "done") {
-        var saved = item.saved_count || 0;
-        var review = item.review_count || 0;
-        var scanErrors = item.unopened_count || 0;
-        var phones = item.phone_count || 0;
-        var listTotal = saved + review;
-        var duPct = pct(saved, listTotal);
-        resultText = phones + " số";
-        resultText += " · " + saved + " đủ";
-        if (review) resultText += " · " + review + " cần xem";
-        if (scanErrors) resultText += " · " + scanErrors + " lỗi quét";
-        if (duPct != null) {
-          var badgeClass = duPct >= 50 ? "good" : "bad";
-          resultText += "<div><span class='badge " + badgeClass + "'>" + duPct + "% số trong danh bạ đã đủ</span></div>";
-        }
-        if (item.error_summary) {
-          resultText += "<div class='note'>" + escapeHtml(item.error_summary) + "</div>";
-        }
-        resultText += " <button class='ghost mini' type='button' data-filter='" + escapeHtml(item.name) + "'>Xem</button>";
+        extra = " <button class='ghost mini' type='button' data-filter='" + escapeHtml(item.name) + "'>Xem</button>";
       }
-      var leftLabel = escapeHtml(item.name || "video") + "<div class='note'>" +
-        (isUpload ? escapeHtml(formatBytes(item.size_bytes || 0)) : escapeHtml(formatDuration(item.duration_sec))) +
-        "</div>";
-      var leftTitle = item.name || "";
+      var state = isUpload ? (item.stale ? "Tải dở" : "Đang tải") : statusText(item.status);
       html += "<tr" + (isUpload && item.upload_id ? (" data-upload='" + escapeHtml(item.upload_id) + "'") : "") +
-        "><td data-label='Video' title='" + escapeHtml(leftTitle) + "'>" + leftLabel +
-        "</td><td data-label='Trạng thái' class='" + issueClass + "'>" + escapeHtml(issue) +
-        "</td><td data-label='Tiến độ'>" + statusText(item.status) + progress + keptNote + retry +
-        "</td><td data-label='Kết quả'>" + resultText + "</td></tr>";
+        "><td data-label='Video' title='" + escapeHtml(item.name || "") + "'><div class='vtop'><b class='vname'>" +
+        escapeHtml(item.name || "video") + "</b><span class='vstate " + stateClass(item) + "'>" +
+        escapeHtml(state) + "</span></div></td><td data-label='Kết quả'><div class='vscore'>" +
+        escapeHtml(scoreText(item)) + "</div>" + extra + retry + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-retry]").forEach(function (button) {
@@ -1909,13 +1843,7 @@
   function renderFreshReport(report) {
     var box = document.getElementById("freshReport");
     if (!box) return;
-    var notes = (report.notes || []).map(function (line) {
-      return "<p class='note'>" + escapeHtml(line) + "</p>";
-    }).join("");
-    var reader = report.reader_alive
-      ? "<p class='note ok'>Bộ đọc bảng mới đang chạy.</p>"
-      : "<p class='note warn'>Bộ đọc bảng mới chưa chạy. Video đã vào hàng sẽ được đọc khi bộ này bật.</p>";
-    box.innerHTML = reader + notes;
+    box.innerHTML = report.reader_alive ? "" : "<p class='note warn'>Bộ đọc bảng mới chưa chạy.</p>";
   }
 
   function renderFreshQueue(items) {
@@ -1925,11 +1853,13 @@
       box.innerHTML = "<p class='note'>Chưa có video trong bảng mới.</p>";
       return;
     }
-    var html = "<table class='queue-table'><tr><th>Video</th><th>Trạng thái</th><th>Kết quả</th></tr>";
+    items = newestFirst(items);
+    var html = "<table class='queue-table'><tr><th>Video</th><th>Đủ / số</th></tr>";
     items.forEach(function (item) {
-      html += "<tr><td>" + escapeHtml(item.name || "") +
-        "</td><td>" + escapeHtml(issueText(item)) +
-        "</td><td>" + escapeHtml(item.progress || "") + "</td></tr>";
+      html += "<tr><td data-label='Video'><div class='vtop'><b class='vname'>" + escapeHtml(item.name || "") +
+        "</b><span class='vstate " + stateClass(item) + "'>" + escapeHtml(statusText(item.status)) +
+        "</span></div></td><td data-label='Kết quả'><div class='vscore'>" + escapeHtml(scoreText(item)) +
+        "</div></td></tr>";
     });
     box.innerHTML = html + "</table>";
   }

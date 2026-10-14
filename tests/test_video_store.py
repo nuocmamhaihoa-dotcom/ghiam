@@ -698,14 +698,17 @@ class VideoStoreTests(unittest.TestCase):
             else:
                 os.environ["CONTROL_VIDEO_KEEP"] = old
 
-    def test_old_queued_video_stays_ahead_of_newer_finished_ones(self) -> None:
+    def test_newer_video_is_listed_above_an_older_queued_one(self) -> None:
         waiting = self._add("wait.mp4", "wait")
+        newest = 0
         for index in range(3):
             done = self._add(f"done-{index}.mp4", f"done-{index}")
             finish(self.db, done, Table())
+            newest = done
         listed = list_videos(self.db, limit=2)
-        self.assertEqual(listed[0]["id"], waiting)
-        self.assertEqual(listed[0]["status"], "queued")
+        self.assertEqual(listed[0]["id"], newest)
+        self.assertEqual(listed[0]["status"], "done")
+        self.assertIn(waiting, [item["id"] for item in listed])
         self.assertLess(len([item for item in listed if item["status"] == "done"]), 3)
 
     def test_stuck_upload_without_a_file_is_dropped_and_a_file_is_queued(self) -> None:
