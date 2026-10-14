@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gzip
 import os
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,10 +12,13 @@ from pathlib import Path
 from control_plane.screen_table import Review, Row, Table, Unopened
 from control_plane.video_store import (
     abort_upload,
+    backfill_video_counts,
     begin_upload,
     can_accept,
     claim,
     commit_upload,
+    confirm_open_profiles,
+    connect,
     fail,
     finish,
     init_db,
@@ -22,6 +26,7 @@ from control_plane.video_store import (
     list_videos,
     merge_close_results,
     queued_bytes,
+    drop_stale_uploads,
     recover_dead,
     requeue_running,
     retry,
@@ -47,6 +52,15 @@ class VideoStoreTests(unittest.TestCase):
         path.write_bytes(b"video")
         commit_upload(self.db, video_id, str(path))
         return video_id
+
+    def test_upload_abandoned_for_half_an_hour_is_removed(self) -> None:
+        fresh = begin_upload(self.db, name="dang-tai.mp4", size_bytes=10, sha256="fresh")
+        stale = begin_upload(self.db, name="dut.mp4", size_bytes=10, sha256="stale")
+        with connect(self.db) as conn:
+            conn.execute("UPDATE videos SET created_at = '2020-01-01T00:00:00+00:00' WHERE id = ?", (stale["id"],))
+        self.assertEqual(drop_stale_uploads(self.db), 1)
+        self.assertEqual(stats(self.db)["uploading"], 1)
+        self.assertEqual(list_videos(self.db)[0]["id"], fresh["id"])
 
     def test_same_file_is_not_queued_twice(self) -> None:
         first = self._add("a.mp4", "abc")
@@ -190,6 +204,104 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual([item["phone"] for item in search_results(self.db, "@khac")], ["0332001753"])
         self.assertEqual(search_results(self.db, "0999"), [])
 
+    def test_finished_video_counts_phones_and_complete_rows(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        finish(
+            self.db,
+            video_id,
+            Table(
+                rows=[
+                    Row("0911111111", "An", "@an"),
+                    Row("0922222222", "Binh", ""),
+                    Row("0911111111", "An", "@an"),
+                ],
+                unopened=[Unopened("0933333333", "Chi"), Unopened("0911111111", "An")],
+                review=[Review("0944444444", "Dung", "Dung", "@dung", "tên chưa khớp")],
+            ),
+        )
+        listed = list_videos(self.db)[0]
+        self.assertEqual(listed["phone_count"], 4)
+        self.assertEqual(listed["full_count"], 1)
+
+    def test_unopened_only_video_has_phones_but_no_complete_rows(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        finish(
+            self.db,
+            video_id,
+            Table(unopened=[Unopened("0911111111", "An"), Unopened("0922222222", "Binh")]),
+        )
+        listed = list_videos(self.db)[0]
+        self.assertEqual((listed["phone_count"], listed["full_count"]), (2, 0))
+
+    def test_backfill_fills_old_done_videos_and_leaves_the_queue_alone(self) -> None:
+        done = self._add("a.mp4", "a")
+        finish(self.db, done, Table(rows=[Row("0911111111", "An", "@an")], unopened=[Unopened("0922222222", "Binh")]))
+        waiting = self._add("b.mp4", "b")
+        with connect(self.db) as conn:
+            conn.execute("UPDATE videos SET phone_count = NULL, full_count = NULL")
+        self.assertEqual(backfill_video_counts(self.db), 1)
+        by_id = {item["id"]: item for item in list_videos(self.db)}
+        self.assertEqual((by_id[done]["phone_count"], by_id[done]["full_count"]), (2, 1))
+        self.assertIsNone(by_id[waiting]["phone_count"])
+        self.assertEqual(backfill_video_counts(self.db), 0)
+
+    def test_old_database_gains_count_columns(self) -> None:
+        path = Path(self._tmp.name) / "old.db"
+        raw = sqlite3.connect(path)
+        raw.execute(
+            """
+            CREATE TABLE videos (
+              id INTEGER PRIMARY KEY,
+              name TEXT NOT NULL,
+              size_bytes INTEGER NOT NULL,
+              sha256 TEXT NOT NULL,
+              path TEXT NOT NULL DEFAULT '',
+              status TEXT NOT NULL,
+              error TEXT NOT NULL DEFAULT '',
+              pid INTEGER,
+              created_at TEXT NOT NULL,
+              started_at TEXT,
+              finished_at TEXT
+            )
+            """
+        )
+        raw.execute(
+            """
+            INSERT INTO videos (name, size_bytes, sha256, status, created_at)
+            VALUES ('cu.mp4', 1, 'cu', 'done', '2020-01-01T00:00:00+00:00')
+            """
+        )
+        raw.commit()
+        raw.close()
+        init_db(path)
+        self.assertEqual(backfill_video_counts(path), 1)
+        listed = list_videos(path)[0]
+        self.assertEqual((listed["phone_count"], listed["full_count"]), (0, 0))
+
+    def test_review_rows_with_a_matching_handle_become_saved(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        finish(
+            self.db,
+            video_id,
+            Table(
+                unopened=[Unopened("0919188997", "Hồng Mến")],
+                review=[
+                    Review("0919313090", "Truc", "khác", "@truc99", "tên gần giống, cần xem"),
+                    Review("0900000002", "Phương Anh", "Phương An", "@anhphonglacuatao", "tên gần giống, cần xem"),
+                    Review("", "", "", "@hongmen999", "không đọc được tên trên hồ sơ"),
+                ],
+            ),
+        )
+        self.assertGreater(confirm_open_profiles(self.db), 0)
+        found = {item["phone"]: item for item in search_results(self.db, limit=20)}
+        self.assertEqual(found["0919313090"]["bucket"], "Đã lưu")
+        self.assertEqual(found["0919313090"]["username"], "@truc99")
+        self.assertEqual(found["0919188997"]["bucket"], "Đã lưu")
+        self.assertEqual(found["0919188997"]["username"], "@hongmen999")
+        self.assertEqual(found["0900000002"]["bucket"], "Cần xem")
+        self.assertEqual(found["0900000002"]["username"], "@anhphonglacuatao")
+        self.assertEqual(confirm_open_profiles(self.db), 0)
+
     def test_finished_video_can_be_uploaded_again_and_reread(self) -> None:
         video_id = self._add("a.mp4", "same")
         claim(self.db, 7)
@@ -199,6 +311,9 @@ class VideoStoreTests(unittest.TestCase):
         self.assertTrue(again["reopened"])
         self.assertEqual(again["id"], video_id)
         self.assertEqual(stats(self.db)["uploading"], 1)
+        reopened = list_videos(self.db)[0]
+        self.assertIsNone(reopened["phone_count"])
+        self.assertIsNone(reopened["full_count"])
         abort_upload(self.db, video_id, reopened=True)
         self.assertEqual(stats(self.db)["error"], 1)
         self.assertEqual(len(list_videos(self.db)), 1)

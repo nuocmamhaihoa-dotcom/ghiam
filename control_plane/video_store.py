@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
+from doc_video.text import handle_matches_name
+
 from control_plane.screen_table import Review, Table, joined_name, pair_close_names
 
 BUCKET_OK = 1
@@ -37,11 +39,15 @@ def worker_count() -> int:
 
 
 def feeder_count() -> int:
-    """Số video tách khung cùng lúc. Một video đang tách khung thì video kia đang được đọc."""
+    """Số video đọc cùng lúc. Mặc định một video: các video còn lại nằm trong hàng chờ.
+
+    Một video đã dùng hết các nhân để đọc khung. Đọc thêm video cùng lúc chỉ thêm đĩa và bộ nhớ,
+    và một video hỏng làm phải khởi động lại cả nhóm.
+    """
     raw = os.environ.get("CONTROL_VIDEO_FEEDERS", "").strip()
     if raw:
         return max(1, int(raw))
-    return 3
+    return 1
 
 
 @contextmanager
@@ -87,7 +93,9 @@ def init_db(db_path: Path) -> None:
               pid INTEGER,
               created_at TEXT NOT NULL,
               started_at TEXT,
-              finished_at TEXT
+              finished_at TEXT,
+              phone_count INTEGER,
+              full_count INTEGER
             );
             CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_sha ON videos(sha256);
             CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status, id);
@@ -126,7 +134,21 @@ def init_db(db_path: Path) -> None:
             COMMIT;
             """
         )
+        _ensure_video_count_columns(conn)
     _READY.add(key)
+
+
+def _ensure_video_count_columns(conn: sqlite3.Connection) -> None:
+    """Cột thống kê thêm sau. CREATE IF NOT EXISTS không sửa bảng đã có."""
+    columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(videos)")}
+    for name in ("phone_count", "full_count"):
+        if name in columns:
+            continue
+        try:
+            conn.execute(f"ALTER TABLE videos ADD COLUMN {name} INTEGER")
+        except sqlite3.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                raise
 
 
 def queued_bytes(db_path: Path) -> int:
@@ -157,7 +179,8 @@ def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str) -> d
                 """
                 UPDATE videos
                 SET name = ?, size_bytes = ?, path = '', status = 'uploading', error = '',
-                    pid = NULL, started_at = NULL, finished_at = NULL, created_at = ?
+                    pid = NULL, started_at = NULL, finished_at = NULL, created_at = ?,
+                    phone_count = NULL, full_count = NULL
                 WHERE id = ?
                 """,
                 (name, size_bytes, utcnow(), existing["id"]),
@@ -198,6 +221,24 @@ def commit_upload(db_path: Path, video_id: int, path: str) -> None:
         )
 
 
+def drop_stale_uploads(db_path: Path, older_than_seconds: float = 1800) -> int:
+    """Tải lên dở hơn 30 phút là trình duyệt đã đóng giữa chừng. Xóa dòng đó để nó không chiếm chỗ hàng đợi."""
+    cutoff = time.time() - older_than_seconds
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT id, created_at FROM videos WHERE status = 'uploading'").fetchall()
+        dropped = 0
+        for row in rows:
+            try:
+                created = datetime.fromisoformat(str(row["created_at"])).timestamp()
+            except ValueError:
+                created = 0
+            if created > cutoff:
+                continue
+            conn.execute("DELETE FROM videos WHERE id = ? AND status = 'uploading'", (row["id"],))
+            dropped += 1
+        return dropped
+
+
 def abort_upload(db_path: Path, video_id: int, reopened: bool = False) -> None:
     with connect(db_path) as conn:
         if reopened:
@@ -213,7 +254,8 @@ def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
     with connect(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT id, name, size_bytes, status, error, created_at, started_at, finished_at
+            SELECT id, name, size_bytes, status, error, created_at, started_at, finished_at,
+                   phone_count, full_count
             FROM videos
             ORDER BY id DESC
             LIMIT ?
@@ -302,7 +344,30 @@ def recover_dead(db_path: Path) -> int:
         return recovered
 
 
+def video_counts(table: Table) -> tuple[int, int]:
+    """Số điện thoại gặp trong video, và số hàng chắc chắn đủ số, tên, id.
+
+    Hàng cần xem không tính là đủ ba ô. Cùng một số ở nhiều chỗ chỉ tính một lần.
+    """
+    phones: set[str] = set()
+    complete: set[str] = set()
+    for row in table.rows:
+        if not row.phone:
+            continue
+        phones.add(row.phone)
+        if row.name and row.username:
+            complete.add(row.phone)
+    for item in table.unopened:
+        if item.phone:
+            phones.add(item.phone)
+    for item in table.review:
+        if item.phone:
+            phones.add(item.phone)
+    return len(phones), len(complete)
+
+
 def finish(db_path: Path, video_id: int, table: Table) -> None:
+    phones, full = video_counts(table)
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         for row in table.rows:
@@ -312,10 +377,129 @@ def finish(db_path: Path, video_id: int, table: Table) -> None:
         for item in table.review:
             _put_review(conn, item, video_id)
         conn.execute(
-            "UPDATE videos SET status = 'done', pid = NULL, finished_at = ?, error = '' WHERE id = ?",
-            (utcnow(), video_id),
+            """
+            UPDATE videos
+            SET status = 'done', pid = NULL, finished_at = ?, error = '',
+                phone_count = ?, full_count = ?
+            WHERE id = ?
+            """,
+            (utcnow(), phones, full, video_id),
         )
         conn.execute("COMMIT")
+
+
+def backfill_video_counts(db_path: Path) -> int:
+    """Điền thống kê cho video đã xong từ trước, khi còn dòng trống.
+
+    Chỉ bộ đọc gọi hàm này, trong lần quét định kỳ. Trang tải video không gọi.
+    Quét bảng kết quả nhiều nhất một lần: sau đó mọi video đã xong đều có số.
+    """
+    with connect(db_path) as conn:
+        pending = conn.execute(
+            "SELECT 1 FROM videos WHERE status = 'done' AND phone_count IS NULL LIMIT 1"
+        ).fetchone()
+        if pending is None:
+            return 0
+        grouped = conn.execute(
+            """
+            SELECT video_id,
+                   COUNT(DISTINCT phone) AS phones,
+                   SUM(CASE
+                     WHEN bucket = ? AND name != '' AND username != '' THEN 1
+                     ELSE 0
+                   END) AS fulls
+            FROM results
+            WHERE phone != ''
+            GROUP BY video_id
+            """,
+            (BUCKET_OK,),
+        ).fetchall()
+        filled = 0
+        for row in grouped:
+            cur = conn.execute(
+                """
+                UPDATE videos
+                SET phone_count = ?, full_count = ?
+                WHERE id = ? AND status = 'done' AND phone_count IS NULL
+                """,
+                (int(row["phones"]), int(row["fulls"] or 0), int(row["video_id"])),
+            )
+            filled += cur.rowcount
+        cur = conn.execute(
+            """
+            UPDATE videos
+            SET phone_count = 0, full_count = 0
+            WHERE status = 'done' AND phone_count IS NULL
+            """
+        )
+        filled += cur.rowcount
+        return filled
+
+
+def confirm_open_profiles(db_path: Path) -> int:
+    """Đưa vào đã lưu những dòng đã mở hồ sơ mà @id khớp tên danh bạ.
+
+    Chạy một lần trong lần quét của bộ đọc. Không đọc lại video và không chặn trang tải lên.
+    """
+    with connect(db_path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        done = conn.execute("SELECT value FROM meta WHERE key = 'confirm_profiles'").fetchone()
+        if done is not None:
+            conn.execute("COMMIT")
+            return 0
+        changed = _confirm_open_profiles(conn)
+        conn.execute("INSERT INTO meta (key, value) VALUES ('confirm_profiles', ?)", (utcnow(),))
+        conn.execute("COMMIT")
+    return changed
+
+
+def _confirm_open_profiles(conn: sqlite3.Connection) -> int:
+    changed = 0
+    reviews = conn.execute(
+        "SELECT id, phone, name, username, reason FROM results WHERE bucket = ?",
+        (BUCKET_REVIEW,),
+    ).fetchall()
+    for row in reviews:
+        phone = str(row["phone"])
+        username = str(row["username"])
+        if not phone or not username or row["reason"] != "tên gần giống, cần xem":
+            continue
+        if not handle_matches_name(username, str(row["name"])):
+            continue
+        conn.execute(
+            "UPDATE results SET bucket = ?, reason = '' WHERE id = ?",
+            (BUCKET_OK, row["id"]),
+        )
+        changed += 1
+
+    orphans = conn.execute(
+        "SELECT id, username FROM results WHERE bucket = ? AND phone = '' AND username != ''",
+        (BUCKET_REVIEW,),
+    ).fetchall()
+    unopened = conn.execute(
+        "SELECT id, phone, name FROM results WHERE bucket = ? AND phone != '' AND username = ''",
+        (BUCKET_UNOPENED,),
+    ).fetchall()
+    free = {int(row["id"]): row for row in unopened}
+    for orphan in orphans:
+        username = str(orphan["username"])
+        if conn.execute(
+            "SELECT id FROM results WHERE username = ? AND phone != ''",
+            (username,),
+        ).fetchone():
+            continue
+        hits = [row for row in free.values() if handle_matches_name(username, str(row["name"]))]
+        if len(hits) != 1:
+            continue
+        target = hits[0]
+        conn.execute(
+            "UPDATE results SET username = ?, bucket = ?, reason = '' WHERE id = ?",
+            (username, BUCKET_OK, target["id"]),
+        )
+        conn.execute("DELETE FROM results WHERE id = ?", (orphan["id"],))
+        del free[int(target["id"])]
+        changed += 1
+    return changed
 
 
 def fail(db_path: Path, video_id: int, message: str) -> None:
