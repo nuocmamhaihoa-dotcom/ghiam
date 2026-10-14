@@ -114,6 +114,7 @@
     .results-table tr.row-review td:first-child { box-shadow: inset 3px 0 0 #c48a12; }
     .results-table tr.row-scan td:first-child { box-shadow: inset 3px 0 0 #c04545; }
     .vname { font-weight: 750; }
+    .vprogress { font-size: 0.82rem; line-height: 1.35; color: var(--ink); }
     .vstate { font-size: 0.82rem; font-weight: 700; color: var(--muted); white-space: nowrap; }
     td.vscore, .vscore { font-variant-numeric: tabular-nums; font-weight: 750; white-space: nowrap; }
     .vstate.run { color: var(--accent); }
@@ -616,13 +617,76 @@
 
   function scoreText(item) {
     var isUpload = item.kind === "upload" || (!item.id && item.upload_id);
-    if (isUpload) return item.percent != null ? (item.percent + "%") : "Đang tải";
+    if (isUpload) return item.percent != null ? (item.percent + "%") : "—";
     var saved = item.saved_count || 0;
     var phones = item.phone_count || 0;
     if (item.status === "done" || item.status === "error" || saved || phones) {
       return saved + " đủ / " + phones + " số";
     }
-    return statusText(item.status);
+    return "—";
+  }
+
+  function agoText(value) {
+    if (!value) return "";
+    var date = new Date(value);
+    if (isNaN(date.getTime())) return "";
+    var sec = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000));
+    if (sec < 60) return sec + " giây";
+    if (sec < 3600) return Math.floor(sec / 60) + " phút";
+    var hours = Math.floor(sec / 3600);
+    var minutes = Math.floor((sec % 3600) / 60);
+    return hours + " giờ " + minutes + " phút";
+  }
+
+  function progressDetail(item, items) {
+    var isUpload = item.kind === "upload" || (!item.id && item.upload_id);
+    if (isUpload || item.status === "uploading") {
+      if (item.issue) return String(item.issue);
+      var bits = [];
+      if (item.percent != null) bits.push(item.percent + "%");
+      if (item.received_bytes != null && item.size_bytes) {
+        bits.push(formatBytes(item.received_bytes) + " / " + formatBytes(item.size_bytes));
+      } else if (item.size_bytes) {
+        bits.push(formatBytes(item.size_bytes));
+      }
+      if (item.chunks_total) bits.push((item.chunks_done || 0) + "/" + item.chunks_total + " mảnh");
+      return bits.join(" · ") || "Đang tải lên";
+    }
+    if (item.status === "queued") {
+      var wait = ["Đã lên máy chủ, chờ đến lượt đọc"];
+      if (item.size_bytes) wait.push(formatBytes(item.size_bytes));
+      if (item.duration_sec) wait.push("dài " + formatDuration(item.duration_sec));
+      var waited = agoText(item.created_at);
+      if (waited) wait.push("chờ " + waited);
+      if (items) {
+        var reading = items.filter(function (other) { return other.status === "running"; }).length;
+        var ahead = items.filter(function (other) {
+          return other.status === "queued" && Number(other.id) && Number(other.id) < Number(item.id);
+        }).length;
+        if (reading) wait.push(reading + " video đang đọc");
+        if (ahead) wait.push(ahead + " video chờ trước");
+      }
+      return wait.join(" · ");
+    }
+    if (item.status === "running") {
+      var text = String(item.progress || item.issue || "Đang đọc");
+      var run = agoText(item.started_at);
+      if (run) text += " · đã chạy " + run;
+      if (item.progress_at) {
+        var beat = new Date(item.progress_at).getTime();
+        if (!isNaN(beat) && Date.now() - beat > 120000) {
+          text += " · cập nhật " + agoText(item.progress_at) + " trước";
+        }
+      }
+      if (item.duration_sec) text += " · dài " + formatDuration(item.duration_sec);
+      return text;
+    }
+    if (item.status === "error") return item.error || item.issue || "Lỗi khi đọc video";
+    if (item.status === "done") {
+      var when = formatTime(item.finished_at);
+      return when ? ("Xong " + when) : "Xong";
+    }
+    return item.issue || statusText(item.status);
   }
 
   var lastResultTotal = -1;
@@ -763,13 +827,14 @@
     if (found) return found;
     var table = box.querySelector("table");
     if (!table) {
-      box.innerHTML = "<table class='queue-table'><tr><th>Video</th><th>Trạng thái</th><th>Đủ / số</th><th></th></tr></table>";
+      box.innerHTML = "<table class='queue-table'><tr><th>Video</th><th>Trạng thái</th><th>Tiến trình</th><th>Đủ / số</th><th></th></tr></table>";
       table = box.querySelector("table");
     }
     var tr = document.createElement("tr");
     tr.setAttribute("data-upload", uploadId);
     tr.innerHTML = "<td class='vname'>" + escapeHtml(name) + "</td>" +
       "<td class='vstate run'>Đang tải</td>" +
+      "<td class='vprogress'>0%</td>" +
       "<td class='vscore'>0%</td><td></td>";
     // Trình duyệt bọc <tr> trong <tbody>. insertBefore trên <table> ném NotFoundError
     // khi hàng đợi đã có video — phiên tạo xong nhưng không gửi được mảnh nào.
@@ -785,10 +850,11 @@
       var row = ensureUploadRow(uploadId, name, size);
       if (!row) return;
       var cells = row.querySelectorAll("td");
-      if (cells.length < 3) return;
+      if (cells.length < 4) return;
       var pct = size ? Math.floor((Math.max(0, received) * 100) / size) : 0;
-      cells[1].textContent = detail || "Đang tải";
-      cells[2].textContent = pct + "%";
+      cells[1].textContent = "Đang tải";
+      cells[2].textContent = detail || (pct + "%");
+      cells[3].textContent = pct + "%";
     } catch (error) {}
   }
 
@@ -806,7 +872,7 @@
       return;
     }
     items = newestFirst(items);
-    var html = "<table class='queue-table'><tr><th>Video</th><th>Trạng thái</th><th>Đủ / số</th><th></th></tr>";
+    var html = "<table class='queue-table'><tr><th>Video</th><th>Trạng thái</th><th>Tiến trình</th><th>Đủ / số</th><th></th></tr>";
     items.forEach(function (item) {
       var isUpload = item.kind === "upload" || (!item.id && item.upload_id);
       var canRetry = !isUpload && item.file_kept && (item.status === "error" || item.status === "done");
@@ -822,6 +888,7 @@
       html += "<tr" + (isUpload && item.upload_id ? (" data-upload='" + escapeHtml(item.upload_id) + "'") : "") +
         "><td class='vname'>" + escapeHtml(item.name || "video") +
         "</td><td class='vstate " + stateClass(item) + "'>" + escapeHtml(state) +
+        "</td><td class='vprogress'>" + escapeHtml(progressDetail(item, items)) +
         "</td><td class='vscore'>" + escapeHtml(scoreText(item)) +
         "</td><td>" + extra + retry + "</td></tr>";
     });
@@ -1951,10 +2018,11 @@
       return;
     }
     items = newestFirst(items);
-    var html = "<table class='queue-table'><tr><th>Video</th><th>Trạng thái</th><th>Đủ / số</th></tr>";
+    var html = "<table class='queue-table'><tr><th>Video</th><th>Trạng thái</th><th>Tiến trình</th><th>Đủ / số</th></tr>";
     items.forEach(function (item) {
       html += "<tr><td class='vname'>" + escapeHtml(item.name || "") +
         "</td><td class='vstate " + stateClass(item) + "'>" + escapeHtml(statusText(item.status)) +
+        "</td><td class='vprogress'>" + escapeHtml(progressDetail(item, items)) +
         "</td><td class='vscore'>" + escapeHtml(scoreText(item)) + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
