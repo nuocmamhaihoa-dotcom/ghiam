@@ -386,6 +386,48 @@ class VideoStoreTests(unittest.TestCase):
         self.assertFalse(list_videos(self.db)[0]["has_file"])
         self.assertFalse(retry(self.db, video_id))
 
+    def test_reading_a_video_again_replaces_what_that_video_left_before(self) -> None:
+        other = self._add("khac.mp4", "other")
+        claim(self.db, 4)
+        finish(self.db, other, Table(rows=[Row("0900000009", "Lan", "@lan_dung")]))
+        video_id = self._add("a.mp4", "a")
+        claim(self.db, 4)
+        finish(
+            self.db,
+            video_id,
+            Table(
+                rows=[Row("0900000002", "Hoa", "@hoa_cu"), Row("0900000009", "Lan", "@lan_sai")],
+                unopened=[Unopened("0900000001", "Truc")],
+                review=[Review("", "", "CA", "@ff", "đã mở hồ sơ nhưng không thấy số cùng tên")],
+            ),
+        )
+        self.assertTrue(retry(self.db, video_id))
+        claim(self.db, 4)
+        finish(
+            self.db,
+            video_id,
+            Table(rows=[Row("0900000001", "Truc", "@truc31798"), Row("0900000002", "Hoa", "@hoa_moi")]),
+        )
+        found = {item["phone"] or item["username"]: item for item in search_results(self.db, limit=20)}
+        self.assertNotIn("@ff", found)
+        self.assertEqual(found["0900000001"]["username"], "@truc31798")
+        self.assertEqual(found["0900000002"]["username"], "@hoa_moi")
+        self.assertEqual(found["0900000009"]["username"], "@lan_dung")
+        self.assertEqual(stats(self.db)["review"], 0)
+
+    def test_orphan_profile_with_a_lookalike_handle_is_not_added(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        claim(self.db, 4)
+        finish(self.db, video_id, Table(rows=[Row("0917129188", "Phan Hưng Thanh", "@dy8b4fvimkx4")]))
+        second = self._add("b.mp4", "b")
+        claim(self.db, 4)
+        finish(
+            self.db,
+            second,
+            Table(review=[Review("", "", "Phan Hưng Thar", "@dy8b4fvlmkx4", "đã mở hồ sơ nhưng không thấy số cùng tên")]),
+        )
+        self.assertEqual(stats(self.db)["review"], 0)
+
     def test_disk_limit(self) -> None:
         gb = 1024 * 1024 * 1024
         self.assertTrue(can_accept(0, 100, 80 * gb, 10 * gb))

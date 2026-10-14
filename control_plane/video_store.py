@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
-from doc_video.text import handle_matches_name
+from doc_video.text import handle_matches_name, lookalike_handles
 
 from control_plane.screen_table import Review, Table, joined_name, pair_close_names
 
@@ -466,9 +466,17 @@ def video_counts(table: Table) -> tuple[int, int]:
 
 
 def finish(db_path: Path, video_id: int, table: Table) -> None:
+    """Ghi kết quả một lần đọc video.
+
+    Đọc lại một video thì bỏ các dòng cần xem và chưa mở hồ sơ mà chính video đó
+    để lại từ lần đọc trước, rồi ghi kết quả mới; nếu không, dòng sai của bộ đọc
+    cũ nằm lại mãi. Dòng đã lưu của video đó được thay bằng dòng đã lưu mới.
+    Dòng do video khác tạo ra không bị đụng tới.
+    """
     phones, full = video_counts(table)
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
+        conn.execute("DELETE FROM results WHERE video_id = ? AND bucket != ?", (video_id, BUCKET_OK))
         for row in table.rows:
             _put(conn, row.phone, row.name, row.username, BUCKET_OK, "", video_id, upgrade=True)
         for item in table.unopened:
@@ -776,7 +784,7 @@ def _put(
     if not phone:
         return
     existing = conn.execute(
-        "SELECT id, bucket, username FROM results WHERE phone = ? AND phone != ''",
+        "SELECT id, bucket, username, video_id FROM results WHERE phone = ? AND phone != ''",
         (phone,),
     ).fetchone()
     if existing is None:
@@ -791,9 +799,10 @@ def _put(
         return
     if not upgrade:
         return
-    if int(existing["bucket"]) == BUCKET_OK and existing["username"]:
-        return
     if bucket != BUCKET_OK:
+        return
+    same_video = int(existing["video_id"]) == video_id
+    if int(existing["bucket"]) == BUCKET_OK and existing["username"] and not same_video:
         return
     conn.execute(
         "UPDATE results SET name = ?, username = ?, bucket = ?, reason = '', video_id = ? WHERE id = ?",
@@ -844,11 +853,12 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
         return
     if not item.username:
         return
-    existing = conn.execute(
-        "SELECT id FROM results WHERE username = ? AND username != '' LIMIT 1",
-        (item.username,),
-    ).fetchone()
-    if existing is not None:
+    nearby = conn.execute(
+        "SELECT username FROM results WHERE username != '' AND length(username) BETWEEN ? AND ?",
+        (len(item.username) - 1, len(item.username) + 1),
+    ).fetchall()
+    # Đã có @id này, hoặc @id chỉ khác một ký tự dễ đọc nhầm (l với i, _ với __): không thêm dòng mồ côi.
+    if any(row["username"] == item.username or lookalike_handles(row["username"], item.username) for row in nearby):
         return
     conn.execute(
         """
