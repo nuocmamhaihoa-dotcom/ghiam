@@ -17,8 +17,12 @@ import time
 from concurrent.futures import BrokenExecutor, ProcessPoolExecutor
 from pathlib import Path
 
+from doc_video.frame import FrameRead
+from doc_video.join import build
+from doc_video.video import read_inputs
+
+from control_plane.screen_table import Review, Row, Table, Unopened
 from control_plane.settings import settings
-from control_plane.video_scan import scan_paths
 from control_plane.video_store import (
     claim,
     fail,
@@ -31,6 +35,18 @@ from control_plane.video_store import (
     touch_heartbeat,
     worker_count,
 )
+
+
+def scan_paths(paths: list[Path], submit=None, work_dir: Path | None = None) -> tuple[Table, list[FrameRead]]:
+    """Đọc bằng doc_video rồi đổi sang dạng bảng mà kho kết quả đang lưu."""
+    frames = read_inputs(paths, submit=submit, work_dir=work_dir)
+    result = build(frames)
+    table = Table(
+        rows=[Row(row.phone, row.name, row.handle) for row in result.rows],
+        review=[Review(item.phone, item.list_name, item.profile_name, item.handle, item.reason) for item in result.review],
+        unopened=[Unopened(phone, name) for phone, name in result.unopened],
+    )
+    return table, frames
 
 
 def heartbeat_path() -> Path:

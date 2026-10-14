@@ -6,7 +6,8 @@ import os
 import shutil
 import subprocess
 import tempfile
-from concurrent.futures import ProcessPoolExecutor
+from collections.abc import Callable
+from concurrent.futures import Future, ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -62,8 +63,17 @@ def drop_repeats(frames: list[tuple[Path, float]]) -> list[tuple[Path, float]]:
     return kept
 
 
-def read_inputs(paths: list[Path], fps: float = 2.0, workers: int | None = None) -> list[FrameRead]:
-    """Đọc ảnh và video theo đúng thứ tự đưa vào. Thứ tự này dùng để biết hồ sơ mở sau danh bạ nào."""
+def read_inputs(
+    paths: list[Path],
+    fps: float = 2.0,
+    workers: int | None = None,
+    submit: Callable[..., Future] | None = None,
+    work_dir: Path | None = None,
+) -> list[FrameRead]:
+    """Đọc ảnh và video theo đúng thứ tự đưa vào. Thứ tự này dùng để biết hồ sơ mở sau danh bạ nào.
+
+    submit là executor.submit của một nhóm tiến trình có sẵn; không có thì tự mở nhóm riêng.
+    """
     jobs: list[tuple[str, float]] = []
     temps: list[tempfile.TemporaryDirectory[str]] = []
     try:
@@ -72,12 +82,20 @@ def read_inputs(paths: list[Path], fps: float = 2.0, workers: int | None = None)
             if suffix in IMAGE_SUFFIXES:
                 jobs.append((str(path), -1.0))
             elif suffix in VIDEO_SUFFIXES:
-                folder = tempfile.TemporaryDirectory(prefix="docvideo-frames-")
+                folder = tempfile.TemporaryDirectory(prefix="docvideo-frames-", dir=work_dir)
                 temps.append(folder)
                 frames = drop_repeats(extract_frames(path, Path(folder.name), fps))
                 jobs.extend((str(frame), at) for frame, at in frames)
             else:
                 raise RuntimeError(f"Không đọc được {path.name}: cần ảnh hoặc video.")
+        if submit is not None:
+            futures = [submit(_read_file, path, at) for path, at in jobs]
+            try:
+                return [future.result() for future in futures]
+            except BaseException:
+                for future in futures:
+                    future.cancel()
+                raise
         workers = workers or max(1, (os.cpu_count() or 2) - 1)
         if workers == 1 or len(jobs) <= 1:
             return [_read_file(path, at) for path, at in jobs]
