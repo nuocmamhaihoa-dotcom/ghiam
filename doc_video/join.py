@@ -175,13 +175,18 @@ def _merge_handle_misreads(frames: list[FrameRead]) -> list[FrameRead]:
     return [replace(frame, handle=target(frame.handle)) if frame.handle in mapping else frame for frame in frames]
 
 
-def _recent_tap(tap: tuple[str, int, float], index: int, at: float, visible: tuple[str, ...]) -> bool:
+def _recent_tap(
+    tap: tuple[str, int, float], index: int, at: float, visible: tuple[str, ...], last_list: int
+) -> bool:
     """Nền xám của dòng bấm tắt ngay khi nhấc ngón tay, nên khung cuối trước hồ sơ thường không còn thấy.
 
-    Nhận dòng bấm trong khoảng 3 giây (hoặc 6 khung với ảnh không có giờ) trước hồ sơ, nếu dòng
-    đó vẫn còn trên màn danh bạ ngay trước hồ sơ, tức là chưa cuộn đi nơi khác.
+    Dòng bấm ở chính khung danh bạ cuối cùng trước hồ sơ thì nhận ngay. Sớm hơn thì nhận trong
+    khoảng 3 giây (hoặc 6 khung với ảnh không có giờ), nếu dòng đó vẫn còn trên màn danh bạ ngay
+    trước hồ sơ, tức là chưa cuộn đi nơi khác.
     """
     phone, tap_index, tap_at = tap
+    if tap_index == last_list:
+        return True
     if phone not in visible:
         return False
     if at >= 0 and tap_at >= 0:
@@ -198,9 +203,11 @@ def build(frames: list[FrameRead]) -> Result:
     visible: tuple[str, ...] = ()
     # Dòng vừa bấm thấy gần nhất kể từ lần mở hồ sơ trước: (số, vị trí khung, giây).
     tap: tuple[str, int, float] | None = None
+    last_list = -1
     order = 0
     for index, frame in enumerate(frames):
         if frame.kind == "list":
+            last_list = index
             if frame.tapped:
                 tap = (frame.tapped, index, frame.at)
             ordered: list[str] = []
@@ -227,7 +234,7 @@ def build(frames: list[FrameRead]) -> Result:
             seen.near.update(visible)
             if not visits or visits[-1].handle != frame.handle:
                 visits.append(_Visit(frame.handle, visible))
-                if tap is not None and _recent_tap(tap, index, frame.at, visible):
+                if tap is not None and _recent_tap(tap, index, frame.at, visible, last_list):
                     seen.taps[tap[0]] += 1
             tap = None
     merged = _merge_misreads(phones, frames_with)

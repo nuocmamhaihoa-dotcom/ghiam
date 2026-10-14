@@ -361,6 +361,18 @@ def list_layout(phones: list[str], tap_y: float = -1.0, clear: bool = True) -> L
     return Layout("list", rows=rows, tap_y=tap_y, row_pitch=230.0)
 
 
+class PoolTests(unittest.TestCase):
+    def test_a_frame_that_never_finishes_breaks_the_run_instead_of_hanging(self) -> None:
+        import time
+        from concurrent.futures import BrokenExecutor, ThreadPoolExecutor
+
+        from doc_video.video import _run
+
+        with ThreadPoolExecutor(1) as pool:
+            with self.assertRaises(BrokenExecutor):
+                _run(pool.submit, [(time.sleep, 0.5)], timeout=0.05)
+
+
 class PlanTests(unittest.TestCase):
     def test_each_number_is_read_in_at_most_three_clear_frames(self) -> None:
         layouts = [list_layout(["0900000001", "0900000002"]) for _ in range(10)]
