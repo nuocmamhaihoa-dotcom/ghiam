@@ -128,7 +128,7 @@ def _yield_ocr_while_uploading(db_path: Path, stop: threading.Event) -> None:
 def _rematch_process(path: str) -> None:
     """Tiến trình riêng: pair_close_names nặng không giữ GIL của feeder/OCR."""
     if os.environ.get("CONTROL_VIDEO_SKIP_STARTUP_REMATCH") == "1":
-        print("Bỏ rematch lúc mở máy — video mới dùng cách 3 rồi cách 2.", flush=True)
+        print("Bỏ rematch lúc mở máy — ghép số với @ khi cùng tên khách.", flush=True)
         return
     try:
         # Chỉ ghép trong từng video — không O(n×m) toàn DB (tránh chiếm 1 CPU hàng giờ).
