@@ -17,6 +17,7 @@ from control_plane.video_store import (
     can_accept,
     claim,
     commit_upload,
+    confirm_open_profiles,
     connect,
     fail,
     finish,
@@ -276,6 +277,30 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(backfill_video_counts(path), 1)
         listed = list_videos(path)[0]
         self.assertEqual((listed["phone_count"], listed["full_count"]), (0, 0))
+
+    def test_review_rows_with_a_matching_handle_become_saved(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        finish(
+            self.db,
+            video_id,
+            Table(
+                unopened=[Unopened("0919188997", "Hồng Mến")],
+                review=[
+                    Review("0919313090", "Truc", "khác", "@truc99", "tên gần giống, cần xem"),
+                    Review("0900000002", "Phương Anh", "Phương An", "@anhphonglacuatao", "tên gần giống, cần xem"),
+                    Review("", "", "", "@hongmen999", "không đọc được tên trên hồ sơ"),
+                ],
+            ),
+        )
+        self.assertGreater(confirm_open_profiles(self.db), 0)
+        found = {item["phone"]: item for item in search_results(self.db, limit=20)}
+        self.assertEqual(found["0919313090"]["bucket"], "Đã lưu")
+        self.assertEqual(found["0919313090"]["username"], "@truc99")
+        self.assertEqual(found["0919188997"]["bucket"], "Đã lưu")
+        self.assertEqual(found["0919188997"]["username"], "@hongmen999")
+        self.assertEqual(found["0900000002"]["bucket"], "Cần xem")
+        self.assertEqual(found["0900000002"]["username"], "@anhphonglacuatao")
+        self.assertEqual(confirm_open_profiles(self.db), 0)
 
     def test_finished_video_can_be_uploaded_again_and_reread(self) -> None:
         video_id = self._add("a.mp4", "same")

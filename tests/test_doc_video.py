@@ -8,7 +8,7 @@ from pathlib import Path
 
 from doc_video.frame import Contact, FrameRead
 from doc_video.join import build
-from doc_video.text import find_handle, looks_like_phone, merge_name, name_key, normalize_phone
+from doc_video.text import find_handle, handle_matches_name, looks_like_phone, merge_name, name_key, normalize_phone
 
 
 def listing(*pairs: tuple[str, str]) -> FrameRead:
@@ -33,6 +33,10 @@ class TextTests(unittest.TestCase):
         self.assertFalse(looks_like_phone("Thoa 6736599813370"))
         self.assertEqual(find_handle("(@truc31798"), "@truc31798")
         self.assertEqual(find_handle("@ 07:49"), "")
+        self.assertTrue(handle_matches_name("@thuvan99", "Thu Vân"))
+        self.assertTrue(handle_matches_name("@thoa.6736599813370", "Thoa 6736599813370"))
+        self.assertFalse(handle_matches_name("@anhphonglacuatao2", "Phương Anh"))
+        self.assertFalse(handle_matches_name("@linh234_50", "Kim Linh"))
 
     def test_merge_keeps_marks_and_fixes_case_and_digits(self) -> None:
         self.assertEqual(merge_name(["TrUC"], "Truc"), "Truc")
@@ -59,6 +63,91 @@ class JoinTests(unittest.TestCase):
         result = build([listing(("0919313090", "Truc"), ("0908031961", "Thu Vân")), profile("Phuong Huynh", "@phuong")])
         self.assertEqual(result.rows, [])
         self.assertEqual(result.review[0].handle, "@phuong")
+
+    def test_handle_built_from_the_contact_name_joins(self) -> None:
+        result = build(
+            [
+                listing(("0919313090", "Truc"), ("0908031961", "Thu Vân")),
+                profile("Tên khác hẳn", "@thuvan99"),
+            ]
+        )
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0908031961", "@thuvan99")])
+        self.assertEqual(result.unopened, [("0919313090", "Truc")])
+
+    def test_similar_name_without_a_matching_handle_is_not_attached(self) -> None:
+        result = build(
+            [
+                listing(("0919200084", "Phương Anh"), ("0900000002", "Lan")),
+                profile("Phương An", "@anhphonglacuatao"),
+            ]
+        )
+        self.assertEqual(result.rows, [])
+        self.assertEqual([phone for phone, _ in result.unopened], ["0919200084", "0900000002"])
+
+    def test_opening_every_row_on_a_screen_joins_in_order(self) -> None:
+        screen = (("0900000001", "Nhà gỗ"), ("0900000002", "Quốc Thanh"), ("0900000003", "Kim Hoa"))
+        result = build(
+            [
+                listing(*screen),
+                profile("Wood", "@woodhouse"),
+                listing(*screen),
+                profile("TV", "@televisionnn"),
+                listing(*screen),
+                profile("Vinh", "@shopvinh"),
+            ]
+        )
+        self.assertEqual(
+            [(row.phone, row.handle) for row in result.rows],
+            [("0900000001", "@woodhouse"), ("0900000002", "@televisionnn"), ("0900000003", "@shopvinh")],
+        )
+        self.assertEqual(result.unopened, [])
+        self.assertEqual(result.review, [])
+
+    def test_scrolling_one_row_at_a_time_still_joins_in_order(self) -> None:
+        people = [(f"090000000{i}", f"Khach{i}qq") for i in range(1, 5)]
+        frames: list[FrameRead] = []
+        for index, person in enumerate(people):
+            window = people[max(0, index - 2) : index + 1]
+            frames.append(listing(*window))
+            frames.append(profile("Tên TikTok", f"@khac{index}xxxx"))
+        result = build(frames)
+        self.assertEqual([row.phone for row in result.rows], [phone for phone, _ in people])
+        self.assertEqual(result.unopened, [])
+
+    def test_one_profile_on_a_full_screen_is_not_guessed(self) -> None:
+        result = build(
+            [
+                listing(("0900000001", "Nhà gỗ"), ("0900000002", "Quốc Thanh"), ("0900000003", "Kim Hoa")),
+                profile("Wood", "@woodhouse"),
+            ]
+        )
+        self.assertEqual(result.rows, [])
+        self.assertEqual(len(result.unopened), 3)
+
+    def test_holding_one_profile_on_screen_counts_as_one_visit(self) -> None:
+        result = build(
+            [
+                listing(("0900000001", "An")),
+                profile("Biệt danh", "@xxxx"),
+                profile("Biệt danh", "@xxxx"),
+            ]
+        )
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0900000001", "@xxxx")])
+
+    def test_the_last_unopened_row_on_the_screen_gets_the_profile(self) -> None:
+        screen = (("0900000001", "Truc"), ("0900000002", "Lan"))
+        result = build(
+            [
+                listing(*screen),
+                profile("Truc", "@truc"),
+                listing(*screen),
+                profile("Biệt danh", "@khac"),
+            ]
+        )
+        self.assertEqual(
+            {(row.phone, row.handle) for row in result.rows},
+            {("0900000001", "@truc"), ("0900000002", "@khac")},
+        )
 
     def test_two_numbers_with_one_name_use_the_screen_before_the_profile(self) -> None:
         result = build(

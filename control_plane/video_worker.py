@@ -26,6 +26,7 @@ from control_plane.settings import settings
 from control_plane.video_store import (
     backfill_video_counts,
     claim,
+    confirm_open_profiles,
     drop_stale_uploads,
     fail,
     feeder_count,
@@ -150,6 +151,7 @@ def main() -> None:
                 drop_stale_uploads(db_path)
                 _drop_old_parts(settings.video_dir)
                 backfill_video_counts(db_path)
+                confirm_open_profiles(db_path)
             for index, thread in enumerate(threads):
                 if not thread.is_alive() and not broken.is_set():
                     threads[index] = start_feeder()

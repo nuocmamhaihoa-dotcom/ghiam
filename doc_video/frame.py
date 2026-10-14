@@ -99,17 +99,21 @@ def _list_pairs(lines: list[ocr.TextLine]) -> list[tuple[ocr.TextLine, ocr.TextL
 
 
 def _profile_lines(lines: list[ocr.TextLine], height: int) -> tuple[ocr.TextLine | None, ocr.TextLine] | None:
-    """Dòng @id ở nửa trên màn hình và dòng tên ngay trên nó."""
+    """Dòng @id ở phần trên màn hình và dòng tên ngay trên nó.
+
+    Ảnh đại diện cao đẩy @id xuống quá nửa màn hình. Lấy @id trên cùng còn
+    trong vùng này, không lấy @id của tài khoản gợi ý ở phía dưới.
+    """
     for index, line in enumerate(lines):
-        if line.y0 < 0.05 * height or line.y0 > 0.5 * height or not find_handle(line.text):
+        if line.y0 < 0.05 * height or line.y0 > 0.62 * height or not find_handle(line.text):
             continue
         name_line = None
         for above in reversed(lines[:index]):
-            if above.y1 < line.y0 - 4 * line.h:
+            if above.y1 < line.y0 - 6 * line.h:
                 break
             if above.y1 > line.y0 + 0.3 * line.h:
                 continue
-            if abs(above.x0 - line.x0) > 2 * line.h:
+            if abs(above.x0 - line.x0) > 4 * line.h:
                 continue
             if is_name(above.text):
                 name_line = above
@@ -156,7 +160,38 @@ def _read_profile(screen: Image.Image, name_line: ocr.TextLine | None, handle_li
     crop = _crop(screen, handle_line)
     reads = ocr.read_texts([crop], "eng", ocr.ASCII) + ocr.read_texts([crop], "eng", ocr.ASCII, best=False)
     handle = vote([find_handle(text if "@" in text else "@" + text.strip()) for text in reads] + [find_handle(handle_line.text)])
-    if not handle or name_line is None:
+    if not handle:
         return "", handle
-    name = clean_name(_read_names([_crop(screen, name_line)])[0])
-    return (name if is_name(name) else ""), handle
+    candidates: list[str] = []
+    if name_line is not None:
+        candidates.append(_read_names([_crop(screen, name_line)])[0])
+        candidates.append(name_line.text)
+    else:
+        band = _band_above(screen, handle_line)
+        if band is not None:
+            candidates.append(_read_names([band])[0])
+    for raw in candidates:
+        name = clean_name(raw)
+        if is_name(name):
+            return name, handle
+    return "", handle
+
+
+def _band_above(screen: Image.Image, line: ocr.TextLine) -> Image.Image | None:
+    """Dải chữ ngay trên @id khi lần dò dòng không tách được tên."""
+    top = int(line.y0 - 2.2 * line.h)
+    bottom = int(line.y0 - 0.15 * line.h)
+    if bottom - top < 8:
+        return None
+    left = max(0, line.x0 - line.h)
+    right = min(screen.width, max(line.x1, line.x0 + 6 * line.h))
+    piece = screen.crop((left, max(0, top), right, min(screen.height, bottom)))
+    if piece.width < 8 or piece.height < 8:
+        return None
+    scale = max(1, min(4, round(80 / piece.height)))
+    if scale > 1:
+        piece = piece.resize((piece.width * scale, piece.height * scale), Image.Resampling.LANCZOS)
+    border = 20
+    canvas = Image.new("L", (piece.width + 2 * border, piece.height + 2 * border), 255)
+    canvas.paste(piece, (border, border))
+    return canvas

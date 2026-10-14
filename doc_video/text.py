@@ -63,6 +63,44 @@ def normalize_phone(text: str) -> str:
     return ""
 
 
+def handle_matches_name(handle: str, name: str) -> bool:
+    """@id sinh từ tên danh bạ thì là cùng một người, dù tên hiển thị trên hồ sơ khác.
+
+    Khớp khi phần chữ của @id trùng tên, hoặc hai chuỗi gần như chứa nhau.
+    Tên ngắn nằm trong tên dài hơn (Linh trong Kim Linh) không tính.
+    """
+    folded = name_key(name)
+    compact = "".join(ch for ch in str(handle or "").lstrip("@").casefold() if ch.isalnum())
+    if len(folded) < 3 or len(compact) < 3:
+        return False
+    if _same_text(folded, compact):
+        return True
+    letters = "".join(ch for ch in folded if ch.isalpha())
+    prefix: list[str] = []
+    for ch in compact:
+        if not ch.isalpha():
+            break
+        prefix.append(ch)
+    prefix_text = "".join(prefix)
+    if len(prefix_text) >= 3 and prefix_text == letters:
+        return True
+    handle_letters = "".join(ch for ch in compact if ch.isalpha())
+    if len(letters) >= 3 and letters == handle_letters:
+        return True
+    if len(letters) >= 8 and len(handle_letters) >= 8:
+        return SequenceMatcher(None, letters, handle_letters).ratio() >= 0.9
+    return False
+
+
+def _same_text(left: str, right: str) -> bool:
+    if left == right:
+        return True
+    short, long = (left, right) if len(left) <= len(right) else (right, left)
+    if short not in long:
+        return False
+    return len(short) >= 6 or len(short) >= 0.72 * len(long)
+
+
 def find_handle(text: str) -> str:
     match = HANDLE_RE.search("".join(str(text or "").split()))
     if not match:

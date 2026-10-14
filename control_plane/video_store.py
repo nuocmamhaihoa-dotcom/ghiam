@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
+from doc_video.text import handle_matches_name
+
 from control_plane.screen_table import Review, Table, joined_name, pair_close_names
 
 BUCKET_OK = 1
@@ -432,6 +434,72 @@ def backfill_video_counts(db_path: Path) -> int:
         )
         filled += cur.rowcount
         return filled
+
+
+def confirm_open_profiles(db_path: Path) -> int:
+    """Đưa vào đã lưu những dòng đã mở hồ sơ mà @id khớp tên danh bạ.
+
+    Chạy một lần trong lần quét của bộ đọc. Không đọc lại video và không chặn trang tải lên.
+    """
+    with connect(db_path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        done = conn.execute("SELECT value FROM meta WHERE key = 'confirm_profiles'").fetchone()
+        if done is not None:
+            conn.execute("COMMIT")
+            return 0
+        changed = _confirm_open_profiles(conn)
+        conn.execute("INSERT INTO meta (key, value) VALUES ('confirm_profiles', ?)", (utcnow(),))
+        conn.execute("COMMIT")
+    return changed
+
+
+def _confirm_open_profiles(conn: sqlite3.Connection) -> int:
+    changed = 0
+    reviews = conn.execute(
+        "SELECT id, phone, name, username, reason FROM results WHERE bucket = ?",
+        (BUCKET_REVIEW,),
+    ).fetchall()
+    for row in reviews:
+        phone = str(row["phone"])
+        username = str(row["username"])
+        if not phone or not username or row["reason"] != "tên gần giống, cần xem":
+            continue
+        if not handle_matches_name(username, str(row["name"])):
+            continue
+        conn.execute(
+            "UPDATE results SET bucket = ?, reason = '' WHERE id = ?",
+            (BUCKET_OK, row["id"]),
+        )
+        changed += 1
+
+    orphans = conn.execute(
+        "SELECT id, username FROM results WHERE bucket = ? AND phone = '' AND username != ''",
+        (BUCKET_REVIEW,),
+    ).fetchall()
+    unopened = conn.execute(
+        "SELECT id, phone, name FROM results WHERE bucket = ? AND phone != '' AND username = ''",
+        (BUCKET_UNOPENED,),
+    ).fetchall()
+    free = {int(row["id"]): row for row in unopened}
+    for orphan in orphans:
+        username = str(orphan["username"])
+        if conn.execute(
+            "SELECT id FROM results WHERE username = ? AND phone != ''",
+            (username,),
+        ).fetchone():
+            continue
+        hits = [row for row in free.values() if handle_matches_name(username, str(row["name"]))]
+        if len(hits) != 1:
+            continue
+        target = hits[0]
+        conn.execute(
+            "UPDATE results SET username = ?, bucket = ?, reason = '' WHERE id = ?",
+            (username, BUCKET_OK, target["id"]),
+        )
+        conn.execute("DELETE FROM results WHERE id = ?", (orphan["id"],))
+        del free[int(target["id"])]
+        changed += 1
+    return changed
 
 
 def fail(db_path: Path, video_id: int, message: str) -> None:
