@@ -124,7 +124,10 @@ def main() -> None:
     work_dir.mkdir(parents=True, exist_ok=True)
     count = worker_count()
     feeders = feeder_count()
-    print(f"Đọc từng video một, bằng {count} tiến trình. Video còn lại nằm trong hàng chờ.", flush=True)
+    if feeders == 1:
+        print(f"Đọc từng video một, bằng {count} tiến trình. Video còn lại nằm trong hàng chờ.", flush=True)
+    else:
+        print(f"Đọc {feeders} video cùng lúc, bằng {count} tiến trình.", flush=True)
     stop = threading.Event()
     broken = threading.Event()
     last_sweep = 0.0
