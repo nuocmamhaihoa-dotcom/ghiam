@@ -202,20 +202,43 @@ def scan_paths(
             save_layout(data_dir, merged)
             if on_progress is not None:
                 on_progress(f"Đã lưu bố cục máy «{merged.device}» ({merged.samples} mẫu)")
-        from control_plane.vision_sidecar import attach_vision
-
-        ordered = attach_vision(ordered, paths)
+        ordered = _attach_optional_vision(ordered, paths)
         frames = [obs for _, obs in ordered]
         # Video có mốc thời gian đi cách 3. Ảnh không có thời điểm giữ ghép cũ.
         table = build_table(frames, strict=any(obs.at >= 0 for obs in frames))
-        # Cách 2 chỉ chạy khi cách 3 còn sót. Hàng đã đủ 3 ô không đổi.
-        from control_plane.read_fallback import apply_read_fallbacks
-
-        table = apply_read_fallbacks(table, ordered, on_progress=on_progress)
-        return table, ordered
+        # Cách 2 chỉ điền chỗ còn thiếu. Lỗi ở bước này không được xóa bảng cách 3.
+        return _apply_optional_fallbacks(table, ordered, on_progress), ordered
     finally:
         for folder in temps:
             folder.cleanup()
+
+
+def _attach_optional_vision(
+    ordered: list[tuple[Path, FrameObs]],
+    paths: list[Path],
+) -> list[tuple[Path, FrameObs]]:
+    """Chữ Vision gửi kèm là phần thêm. Thiếu module hoặc file hỏng thì giữ kết quả máy chủ."""
+    try:
+        from control_plane.vision_sidecar import attach_vision
+    except ImportError as exc:
+        print(f"Không có vision_sidecar, giữ kết quả đã đọc: {exc}", flush=True)
+        return ordered
+    try:
+        return attach_vision(ordered, paths)
+    except Exception as exc:
+        print(f"Bỏ qua chữ Vision kèm theo, giữ kết quả đã đọc: {exc}", flush=True)
+        return ordered
+
+
+def _apply_optional_fallbacks(table: Table, ordered: list[tuple[Path, FrameObs]], on_progress: Progress | None) -> Table:
+    """Cách 2 chỉ bổ sung. Nếu bước này lỗi, hàng cách 3 vẫn được lưu."""
+    try:
+        from control_plane.read_fallback import apply_read_fallbacks
+
+        return apply_read_fallbacks(table, ordered, on_progress=on_progress)
+    except Exception as exc:
+        print(f"Cách 2 bỏ qua, giữ hàng đã ghép: {exc}", flush=True)
+        return table
 
 
 def _scan_video(

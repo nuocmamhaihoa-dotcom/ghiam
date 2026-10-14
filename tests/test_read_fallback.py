@@ -179,6 +179,38 @@ class PathExistsTests(unittest.TestCase):
         self.assertEqual(result.unopened[0].phone, "0982117072")
 
 
+class OptionalVisionTests(unittest.TestCase):
+    def test_missing_sidecar_keeps_the_frames_already_read(self) -> None:
+        import sys
+
+        from control_plane.video_scan import _attach_optional_vision
+
+        frames = [(Path("a.jpg"), FrameObs("list", at=1.0))]
+        saved = sys.modules.get("control_plane.vision_sidecar")
+        sys.modules["control_plane.vision_sidecar"] = None
+        try:
+            kept = _attach_optional_vision(frames, [Path("a.mp4")])
+        finally:
+            if saved is None:
+                sys.modules.pop("control_plane.vision_sidecar", None)
+            else:
+                sys.modules["control_plane.vision_sidecar"] = saved
+        self.assertEqual(kept, frames)
+
+    def test_broken_sidecar_does_not_drop_the_read(self) -> None:
+        from unittest.mock import patch
+
+        from control_plane.video_scan import _attach_optional_vision, _apply_optional_fallbacks
+
+        frames = [(Path("a.jpg"), FrameObs("list", at=1.0))]
+        table = Table(rows=[Row("0982117072", "Đặng Thị Tâm", "@dangtam.3")], strict=True)
+        with patch("control_plane.vision_sidecar.attach_vision", side_effect=RuntimeError("hỏng")):
+            self.assertEqual(_attach_optional_vision(frames, [Path("a.mp4")]), frames)
+        with patch("control_plane.read_fallback.apply_read_fallbacks", side_effect=RuntimeError("hỏng")):
+            kept = _apply_optional_fallbacks(table, frames, None)
+        self.assertIs(kept, table)
+
+
 class OcrInputTests(unittest.TestCase):
     def test_tiny_image_is_not_sent_to_tesseract(self) -> None:
         self.assertIsNone(_for_ocr(Image.new("RGB", (2, 40), "white")))
