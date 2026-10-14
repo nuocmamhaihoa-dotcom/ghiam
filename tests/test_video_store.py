@@ -26,7 +26,9 @@ from control_plane.video_store import (
     list_videos,
     merge_close_results,
     queued_bytes,
+    disk_limit_bytes,
     drop_stale_uploads,
+    prune_old_videos,
     recover_dead,
     requeue_running,
     retry,
@@ -373,6 +375,69 @@ class VideoStoreTests(unittest.TestCase):
         self.assertFalse(can_accept(79 * gb, 2 * gb, 80 * gb, 10 * gb))
         self.assertFalse(can_accept(0, 100, 80 * gb, 1 * gb))
         self.assertEqual(queued_bytes(self.db), 0)
+        self.assertEqual(disk_limit_bytes(1000, 80), 800)
+        self.assertEqual(disk_limit_bytes(1000, 99), 900)
+        self.assertEqual(disk_limit_bytes(1000, 1), 100)
+
+    def _finish_kept(self, name: str, sha: str, created_at: str, payload: bytes, phone: str) -> tuple[int, Path]:
+        video_id = self._add(name, sha, size=len(payload))
+        path = Path(self._tmp.name) / f"{video_id}.mp4"
+        path.write_bytes(payload)
+        claim(self.db, 7)
+        finish(self.db, video_id, Table(rows=[Row(phone, name, "@id")]))
+        with connect(self.db) as conn:
+            conn.execute("UPDATE videos SET created_at = ? WHERE id = ?", (created_at, video_id))
+        return video_id, path
+
+    def test_old_videos_are_deleted_when_the_disk_passes_the_limit(self) -> None:
+        old_id, old_path = self._finish_kept("cu.mp4", "old", "2020-01-01T00:00:00+00:00", b"a" * 100, "0900000001")
+        new_id, new_path = self._finish_kept("moi.mp4", "new", "2026-01-01T00:00:00+00:00", b"b" * 100, "0900000002")
+        waiting = self._add("dang-doc.mp4", "run", size=100)
+        claim(self.db, 9)
+
+        def measure():
+            return type("Usage", (), {"used": 900, "total": 1000, "free": 100})()
+
+        removed = prune_old_videos(self.db, Path(self._tmp.name), percent=80, protect_newest=True, measure=measure)
+        self.assertEqual(removed, 1)
+        self.assertFalse(old_path.exists())
+        self.assertTrue(new_path.exists())
+        self.assertTrue((Path(self._tmp.name) / f"{waiting}.mp4").exists())
+        with connect(self.db) as conn:
+            old = conn.execute("SELECT path, status FROM videos WHERE id = ?", (old_id,)).fetchone()
+            newest = conn.execute("SELECT path FROM videos WHERE id = ?", (new_id,)).fetchone()
+        self.assertEqual(old["path"], "")
+        self.assertEqual(old["status"], "done")
+        self.assertEqual(newest["path"], str(new_path))
+        saved = {item["phone"]: item["name"] for item in search_results(self.db, limit=10)}
+        self.assertEqual(saved["0900000001"], "cu.mp4")
+        self.assertEqual(saved["0900000002"], "moi.mp4")
+
+    def test_a_new_upload_may_replace_every_finished_video_when_that_makes_room(self) -> None:
+        _old_id, old_path = self._finish_kept("cu.mp4", "old", "2020-01-01T00:00:00+00:00", b"a" * 100, "0900000001")
+        _new_id, new_path = self._finish_kept("moi.mp4", "new", "2026-01-01T00:00:00+00:00", b"b" * 100, "0900000002")
+
+        def measure():
+            return type("Usage", (), {"used": 950, "total": 1000, "free": 50})()
+
+        removed = prune_old_videos(self.db, Path(self._tmp.name), percent=80, protect_newest=False, measure=measure)
+        self.assertEqual(removed, 2)
+        self.assertFalse(old_path.exists())
+        self.assertFalse(new_path.exists())
+
+    def test_finished_videos_stay_when_deleting_them_still_leaves_the_disk_full(self) -> None:
+        _old_id, old_path = self._finish_kept("cu.mp4", "old", "2020-01-01T00:00:00+00:00", b"a" * 40, "0900000001")
+
+        def measure():
+            return type("Usage", (), {"used": 950, "total": 1000, "free": 50})()
+
+        removed = prune_old_videos(self.db, Path(self._tmp.name), percent=80, protect_newest=False, measure=measure)
+        self.assertEqual(removed, 0)
+        self.assertTrue(old_path.exists())
+
+    def test_done_videos_kept_on_disk_count_toward_stored_bytes(self) -> None:
+        self._finish_kept("giu.mp4", "kept", "2026-01-01T00:00:00+00:00", b"a" * 80, "0900000001")
+        self.assertEqual(queued_bytes(self.db), 80)
 
 
 class BackupGzipTests(unittest.TestCase):

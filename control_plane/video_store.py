@@ -8,6 +8,7 @@ Một dòng khoảng vài trăm byte. Một trăm triệu dòng nằm trong vài
 from __future__ import annotations
 
 import os
+import shutil
 import sqlite3
 import time
 from collections import defaultdict
@@ -152,12 +153,13 @@ def _ensure_video_count_columns(conn: sqlite3.Connection) -> None:
 
 
 def queued_bytes(db_path: Path) -> int:
-    """Dung lượng video còn nằm trên đĩa, kể cả video lỗi được giữ lại để bấm Đọc lại."""
+    """Dung lượng video còn file trên đĩa: đang tải, đang chờ, đang đọc, đã xong và lỗi."""
     with connect(db_path) as conn:
         row = conn.execute(
             """
             SELECT COALESCE(SUM(size_bytes), 0) AS n FROM videos
-            WHERE status IN ('uploading', 'queued', 'running') OR (status = 'error' AND path != '')
+            WHERE status IN ('uploading', 'queued', 'running')
+               OR (status IN ('done', 'error') AND path != '')
             """
         ).fetchone()
     return int(row["n"])
@@ -167,6 +169,92 @@ def can_accept(used_bytes: int, new_bytes: int, limit_bytes: int, free_bytes: in
     if new_bytes > limit_bytes or used_bytes + new_bytes > limit_bytes:
         return False
     return free_bytes > new_bytes + (2 * 1024 * 1024 * 1024)
+
+
+def disk_limit_bytes(total_bytes: int, percent: int) -> int:
+    """Phần dung lượng ổ đĩa được dùng cho video. Luôn chừa ít nhất 10% cho hệ thống."""
+    bounded = min(90, max(10, percent))
+    return total_bytes * bounded // 100
+
+
+def _path_inside(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root)
+    except (ValueError, OSError):
+        return False
+    return True
+
+
+def prune_old_videos(
+    db_path: Path,
+    video_dir: Path,
+    *,
+    percent: int = 80,
+    protect_newest: bool = True,
+    measure=None,
+) -> int:
+    """Xóa file video cũ nhất khi ổ đĩa vượt mức phần trăm.
+
+    Video đang tải, đang chờ và đang đọc không bị xóa. Dòng kết quả vẫn giữ.
+    Lần tải video mới truyền protect_newest=False vì file đang tải mới hơn mọi file đã xong.
+    Nếu xóa hết video cũ vẫn không đủ chỗ thì không xóa gì: lần tải bị từ chối, video cũ còn nguyên.
+    """
+    root = video_dir.resolve()
+    read_disk = measure or (lambda: shutil.disk_usage(root))
+    usage = read_disk()
+    limit = disk_limit_bytes(int(usage.total), percent)
+    if int(usage.used) <= limit:
+        return 0
+    with connect(db_path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        rows = conn.execute(
+            """
+            SELECT id, path, size_bytes, created_at FROM videos
+            WHERE status IN ('done', 'error') AND path != ''
+            ORDER BY created_at ASC, id ASC
+            """
+        ).fetchall()
+        if protect_newest and rows:
+            newest = max(rows, key=lambda row: (str(row["created_at"]), int(row["id"])))
+            rows = [row for row in rows if int(row["id"]) != int(newest["id"])]
+        candidates: list[tuple[int, str, int]] = []
+        for row in rows:
+            path = Path(str(row["path"]))
+            if not _path_inside(path, root):
+                continue
+            try:
+                size = path.stat().st_size
+            except OSError:
+                size = int(row["size_bytes"])
+            if size < 0:
+                size = 0
+            candidates.append((int(row["id"]), str(path), size))
+        freeable = sum(size for _, _, size in candidates)
+        if int(usage.used) - freeable > limit:
+            conn.execute("COMMIT")
+            return 0
+        removed: list[str] = []
+        used = int(usage.used)
+        for video_id, path, size in candidates:
+            if used <= limit:
+                break
+            cur = conn.execute(
+                """
+                UPDATE videos SET path = ''
+                WHERE id = ? AND status IN ('done', 'error') AND path = ?
+                """,
+                (video_id, path),
+            )
+            if cur.rowcount == 1:
+                removed.append(path)
+                used -= size
+        conn.execute("COMMIT")
+    for path in removed:
+        try:
+            Path(path).unlink(missing_ok=True)
+        except OSError:
+            continue
+    return len(removed)
 
 
 def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str) -> dict[str, object]:

@@ -33,6 +33,7 @@ from control_plane.video_store import (
     finish,
     init_db,
     merge_close_results,
+    prune_old_videos,
     requeue,
     requeue_running,
     touch_heartbeat,
@@ -65,6 +66,19 @@ def _drop_old_parts(folder: Path) -> None:
             continue
 
 
+def keep_newest_videos(db_path: Path) -> None:
+    """Giữ video mới. Khi ổ đĩa vượt mức, xóa video cũ đã đọc xong. Không đụng video đang đọc."""
+    try:
+        prune_old_videos(
+            db_path,
+            settings.video_dir,
+            percent=settings.video_disk_percent,
+            protect_newest=True,
+        )
+    except OSError as exc:
+        print(f"Chưa dọn được video cũ: {exc}", flush=True)
+
+
 def heartbeat_path() -> Path:
     return settings.data_dir / "video-worker.heartbeat"
 
@@ -83,8 +97,9 @@ def run_job(db_path: Path, job: dict[str, object], scan=scan_paths) -> None:
         message = str(exc) or "Không đọc được video."
         fail(db_path, video_id, message)
         print(f"Video {video_id} lỗi sau {time.monotonic() - started:.0f} giây: {message[:300]}", flush=True)
+        keep_newest_videos(db_path)
         return
-    path.unlink(missing_ok=True)
+    keep_newest_videos(db_path)
     print(
         f"Video {video_id} xong trong {time.monotonic() - started:.0f} giây, {len(frames)} khung: "
         f"{len(table.rows)} hàng đủ, {len(table.review)} cần xem, {len(table.unopened)} chưa mở hồ sơ.",
@@ -150,6 +165,7 @@ def main() -> None:
                 last_sweep = now
                 drop_stale_uploads(db_path)
                 _drop_old_parts(settings.video_dir)
+                keep_newest_videos(db_path)
                 backfill_video_counts(db_path)
                 confirm_open_profiles(db_path)
             for index, thread in enumerate(threads):
