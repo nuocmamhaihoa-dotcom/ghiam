@@ -435,6 +435,24 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(removed, 0)
         self.assertTrue(old_path.exists())
 
+    def test_a_missing_file_is_not_counted_as_freed_disk(self) -> None:
+        ghost_id, ghost_path = self._finish_kept("ma.mp4", "ghost", "2020-01-01T00:00:00+00:00", b"a" * 500, "0900000001")
+        ghost_path.unlink()
+        _real_id, real_path = self._finish_kept("that.mp4", "real", "2021-01-01T00:00:00+00:00", b"b" * 100, "0900000002")
+        _newest_id, newest_path = self._finish_kept("moi.mp4", "new", "2026-01-01T00:00:00+00:00", b"c" * 100, "0900000003")
+
+        def measure():
+            return type("Usage", (), {"used": 900, "total": 1000, "free": 100})()
+
+        removed = prune_old_videos(self.db, Path(self._tmp.name), percent=80, protect_newest=True, measure=measure)
+        self.assertEqual(removed, 1)
+        self.assertFalse(real_path.exists())
+        self.assertTrue(newest_path.exists())
+        with connect(self.db) as conn:
+            ghost = conn.execute("SELECT path FROM videos WHERE id = ?", (ghost_id,)).fetchone()
+        self.assertEqual(ghost["path"], "")
+        self.assertEqual(search_results(self.db, "0900000001")[0]["name"], "ma.mp4")
+
     def test_done_videos_kept_on_disk_count_toward_stored_bytes(self) -> None:
         self._finish_kept("giu.mp4", "kept", "2026-01-01T00:00:00+00:00", b"a" * 80, "0900000001")
         self.assertEqual(queued_bytes(self.db), 80)

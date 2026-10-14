@@ -197,7 +197,8 @@ def prune_old_videos(
 
     Video đang tải, đang chờ và đang đọc không bị xóa. Dòng kết quả vẫn giữ.
     Lần tải video mới truyền protect_newest=False vì file đang tải mới hơn mọi file đã xong.
-    Nếu xóa hết video cũ vẫn không đủ chỗ thì không xóa gì: lần tải bị từ chối, video cũ còn nguyên.
+    Nếu xóa hết video cũ vẫn không đủ chỗ thì giữ nguyên file đó: lần tải bị từ chối.
+    Đường dẫn trỏ tới file đã mất được gỡ, và không được tính là dung lượng vừa giải phóng.
     """
     root = video_dir.resolve()
     read_disk = measure or (lambda: shutil.disk_usage(root))
@@ -225,19 +226,24 @@ def prune_old_videos(
             try:
                 size = path.stat().st_size
             except OSError:
-                size = int(row["size_bytes"])
+                # File đã mất từ trước. Gỡ đường dẫn, nhưng không tính là đã giải phóng đĩa.
+                size = 0
             if size < 0:
                 size = 0
             candidates.append((int(row["id"]), str(path), size))
         freeable = sum(size for _, _, size in candidates)
-        if int(usage.used) - freeable > limit:
-            conn.execute("COMMIT")
-            return 0
-        removed: list[str] = []
         used = int(usage.used)
-        for video_id, path, size in candidates:
-            if used <= limit:
-                break
+        # Đường dẫn mồ côi luôn gỡ được. File thật chỉ xóa khi xóa hết nhóm đó thì đĩa xuống dưới mức.
+        chosen = [item for item in candidates if item[2] == 0]
+        if used - freeable <= limit:
+            projected = used
+            for item in candidates:
+                if item[2] == 0 or projected <= limit:
+                    continue
+                chosen.append(item)
+                projected -= item[2]
+        removed: list[str] = []
+        for video_id, path, _size in chosen:
             cur = conn.execute(
                 """
                 UPDATE videos SET path = ''
@@ -245,9 +251,8 @@ def prune_old_videos(
                 """,
                 (video_id, path),
             )
-            if cur.rowcount == 1:
+            if cur.rowcount == 1 and _size > 0:
                 removed.append(path)
-                used -= size
         conn.execute("COMMIT")
     for path in removed:
         try:
