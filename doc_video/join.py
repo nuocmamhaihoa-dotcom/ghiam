@@ -20,10 +20,8 @@ from dataclasses import dataclass, field, replace
 from difflib import SequenceMatcher
 
 from doc_video.frame import FrameRead
-from doc_video.text import find_handle, handle_matches_name, name_key, vote_chars
+from doc_video.text import find_handle, handle_matches_name, lookalike_handles, name_key, vote_chars
 
-# Các ký tự bộ đọc hay nhầm với nhau trong @id.
-_LOOKALIKE = [set("l1i"), set("o0"), set("qg9"), set("s5"), set("b6"), set("d4"), set("z2"), set("b8")]
 # Hai lần đọc @id trong cùng một lượt mở hồ sơ giống nhau ít nhất chừng này.
 _SAME_VISIT = 0.6
 
@@ -143,16 +141,6 @@ def _vote_visits(frames: list[FrameRead]) -> list[FrameRead]:
     return out
 
 
-def _lookalike(left: str, right: str) -> bool:
-    """Hai @id chỉ khác nhau ở một chỗ, và chỗ đó là cặp ký tự hay đọc nhầm (l với 1, q với g, _ với __)."""
-    if left.replace("__", "_") == right.replace("__", "_") and left != right:
-        return True
-    if len(left) != len(right):
-        return False
-    diffs = [(a, b) for a, b in zip(left, right) if a != b]
-    return len(diffs) == 1 and any(diffs[0][0] in group and diffs[0][1] in group for group in _LOOKALIKE)
-
-
 def _merge_handle_misreads(frames: list[FrameRead]) -> list[FrameRead]:
     """@id đọc nhầm một ký tự dễ lẫn, cùng tên hồ sơ, gộp vào @id đọc được nhiều lần hơn."""
     counts: Counter = Counter()
@@ -166,7 +154,7 @@ def _merge_handle_misreads(frames: list[FrameRead]) -> list[FrameRead]:
         for strong in sorted(counts, key=lambda handle: -counts[handle]):
             if strong == weak or strong in mapping or counts[strong] <= counts[weak]:
                 continue
-            if not _lookalike(weak, strong):
+            if not lookalike_handles(weak, strong):
                 continue
             weak_name = names[weak].most_common(1)[0][0]
             strong_name = names[strong].most_common(1)[0][0]
@@ -187,6 +175,20 @@ def _merge_handle_misreads(frames: list[FrameRead]) -> list[FrameRead]:
     return [replace(frame, handle=target(frame.handle)) if frame.handle in mapping else frame for frame in frames]
 
 
+def _recent_tap(tap: tuple[str, int, float], index: int, at: float, visible: tuple[str, ...]) -> bool:
+    """Nền xám của dòng bấm tắt ngay khi nhấc ngón tay, nên khung cuối trước hồ sơ thường không còn thấy.
+
+    Nhận dòng bấm trong khoảng 3 giây (hoặc 6 khung với ảnh không có giờ) trước hồ sơ, nếu dòng
+    đó vẫn còn trên màn danh bạ ngay trước hồ sơ, tức là chưa cuộn đi nơi khác.
+    """
+    phone, tap_index, tap_at = tap
+    if phone not in visible:
+        return False
+    if at >= 0 and tap_at >= 0:
+        return at - tap_at <= 3.0
+    return index - tap_index <= 6
+
+
 def build(frames: list[FrameRead]) -> Result:
     frames = _merge_handle_misreads(_vote_visits(frames))
     phones: dict[str, _Seen] = {}
@@ -194,12 +196,13 @@ def build(frames: list[FrameRead]) -> Result:
     frames_with: dict[str, set[int]] = {}
     visits: list[_Visit] = []
     visible: tuple[str, ...] = ()
-    last_tap = ""
+    # Dòng vừa bấm thấy gần nhất kể từ lần mở hồ sơ trước: (số, vị trí khung, giây).
+    tap: tuple[str, int, float] | None = None
     order = 0
     for index, frame in enumerate(frames):
         if frame.kind == "list":
-            # Chỉ khung danh bạ cuối cùng trước hồ sơ cho biết dòng vừa bấm.
-            last_tap = frame.tapped
+            if frame.tapped:
+                tap = (frame.tapped, index, frame.at)
             ordered: list[str] = []
             for contact in frame.contacts:
                 seen = phones.get(contact.phone)
@@ -224,9 +227,9 @@ def build(frames: list[FrameRead]) -> Result:
             seen.near.update(visible)
             if not visits or visits[-1].handle != frame.handle:
                 visits.append(_Visit(frame.handle, visible))
-                if last_tap:
-                    seen.taps[last_tap] += 1
-            last_tap = ""
+                if tap is not None and _recent_tap(tap, index, frame.at, visible):
+                    seen.taps[tap[0]] += 1
+            tap = None
     merged = _merge_misreads(phones, frames_with)
     for seen in handles.values():
         if merged and seen.taps:
@@ -269,6 +272,7 @@ def _pair(phones: dict[str, _Seen], handles: dict[str, _Seen], visits: list[_Vis
             _add(result, phones, handles, chosen[0], handle, used_phones, used_handles)
 
     _pair_tapped(result, phones, handles, used_phones, used_handles)
+    _pair_contained(result, phones, handles, used_phones, used_handles)
     _pair_opened_screen(result, phones, handles, visits, used_phones, used_handles)
 
     left_phones = [phone for phone in phones if phone not in used_phones]
@@ -315,6 +319,38 @@ def _pair_tapped(
     for handle, phone in claims.items():
         if claimed[phone] == 1 and phone not in used_phones:
             _add(result, phones, handles, phone, handle, used_phones, used_handles)
+
+
+def _contains(left: str, right: str) -> bool:
+    """Tên này chứa trọn tên kia (Lê Trang Phan Thiết trong Lê Trang Phan Thiết II), phần chung đủ dài."""
+    short, long = (left, right) if len(left) <= len(right) else (right, left)
+    return len(short) >= 6 and len(short) >= 0.6 * len(long) and short in long
+
+
+def _pair_contained(
+    result: Result,
+    phones: dict[str, _Seen],
+    handles: dict[str, _Seen],
+    used_phones: set[str],
+    used_handles: set[str],
+) -> None:
+    """Ghép khi tên hồ sơ và tên danh bạ chứa nhau, số đó đang hiện quanh lúc mở hồ sơ, và cả hai phía chỉ có một cặp."""
+    options: dict[str, list[str]] = {}
+    for handle, seen in handles.items():
+        if handle in used_handles:
+            continue
+        key = name_key(seen.name())
+        if not key:
+            continue
+        options[handle] = [
+            phone
+            for phone in seen.near
+            if phone in phones and phone not in used_phones and _contains(key, name_key(phones[phone].name()))
+        ]
+    claimed = Counter(phone for found in options.values() for phone in found)
+    for handle, found in options.items():
+        if len(found) == 1 and claimed[found[0]] == 1 and found[0] not in used_phones:
+            _add(result, phones, handles, found[0], handle, used_phones, used_handles)
 
 
 def _pair_opened_screen(

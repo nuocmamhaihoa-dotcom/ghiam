@@ -133,6 +133,22 @@ def handle_from_viet(text: str) -> str:
     return find_handle("@" + body)
 
 
+# Các ký tự bộ đọc hay nhầm với nhau trong @id.
+_LOOKALIKE = [set("l1i"), set("o0"), set("qg9"), set("s5"), set("b6"), set("d4"), set("z2"), set("b8")]
+
+
+def lookalike_handles(left: str, right: str) -> bool:
+    """Hai @id chỉ khác nhau ở một chỗ, và chỗ đó là cặp ký tự hay đọc nhầm (l với i, q với g, _ với __)."""
+    if left == right:
+        return False
+    if left.replace("__", "_") == right.replace("__", "_"):
+        return True
+    if len(left) != len(right):
+        return False
+    diffs = [(a, b) for a, b in zip(left, right) if a != b]
+    return len(diffs) == 1 and any(diffs[0][0] in group and diffs[0][1] in group for group in _LOOKALIKE)
+
+
 def fix_underscores(handle: str, strokes: list[tuple[float, float]]) -> str:
     """Sửa số gạch dưới của @id theo các nét ngang đo trên ảnh (xem frame._underscore_strokes).
 

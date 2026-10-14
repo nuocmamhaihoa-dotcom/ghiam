@@ -116,15 +116,28 @@ class JoinTests(unittest.TestCase):
         self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0908031961", "@thuvan99")])
         self.assertEqual(result.unopened, [("0919313090", "Truc")])
 
-    def test_similar_name_without_a_matching_handle_is_not_attached(self) -> None:
+    def test_profile_name_cut_short_joins_the_number_on_screen(self) -> None:
         result = build(
             [
                 listing(("0919200084", "Phương Anh"), ("0900000002", "Lan")),
                 profile("Phương An", "@anhphonglacuatao"),
             ]
         )
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0919200084", "@anhphonglacuatao")])
+
+    def test_short_name_inside_a_longer_one_is_not_attached(self) -> None:
+        result = build([listing(("0900000001", "Kim Linh"), ("0900000002", "Lan")), profile("Linh", "@linh234_50")])
         self.assertEqual(result.rows, [])
-        self.assertEqual([phone for phone, _ in result.unopened], ["0919200084", "0900000002"])
+
+    def test_similar_name_off_screen_is_not_attached(self) -> None:
+        result = build(
+            [
+                listing(("0919200084", "Phương Anh"), ("0900000002", "Lan")),
+                listing(("0900000005", "Cuong"), ("0900000006", "Dung")),
+                profile("Phương An", "@anhphonglacuatao"),
+            ]
+        )
+        self.assertEqual(result.rows, [])
 
     def test_opening_every_row_on_a_screen_joins_in_order(self) -> None:
         screen = (("0900000001", "Nhà gỗ"), ("0900000002", "Quốc Thanh"), ("0900000003", "Kim Hoa"))
@@ -237,6 +250,38 @@ class JoinTests(unittest.TestCase):
             ]
         )
         self.assertEqual(result.rows, [])
+
+    def test_a_tap_a_moment_before_the_profile_still_counts(self) -> None:
+        screen = [Contact("0900000001", "Nhà gỗ"), Contact("0900000002", "Quốc Thanh"), Contact("0900000003", "Kim Hoa")]
+        result = build(
+            [
+                FrameRead("list", screen, at=10.0, tapped="0900000002"),
+                FrameRead("list", screen, at=10.5),
+                FrameRead("list", screen, at=11.0),
+                FrameRead("profile", profile_name="TV", handle="@televisionnn", at=11.5),
+            ]
+        )
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0900000002", "@televisionnn")])
+
+    def test_an_old_tap_is_not_used(self) -> None:
+        screen = [Contact("0900000001", "Nhà gỗ"), Contact("0900000002", "Quốc Thanh"), Contact("0900000003", "Kim Hoa")]
+        result = build(
+            [
+                FrameRead("list", screen, at=10.0, tapped="0900000002"),
+                FrameRead("list", screen, at=20.0),
+                FrameRead("profile", profile_name="TV", handle="@televisionnn", at=20.5),
+            ]
+        )
+        self.assertEqual(result.rows, [])
+
+    def test_profile_name_inside_the_contact_name_joins(self) -> None:
+        result = build(
+            [
+                listing(("0919285619", "Lê Trang Phan Thiết II"), ("0919337222", "Phan Thiết")),
+                profile("Lê Trang Phan Thiết", "@thuy.trang07688"),
+            ]
+        )
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0919285619", "@thuy.trang07688")])
 
     def test_a_tap_seen_before_scrolling_away_is_not_used(self) -> None:
         result = build(
