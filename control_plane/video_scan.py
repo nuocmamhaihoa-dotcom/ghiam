@@ -34,7 +34,7 @@ from control_plane.screen_layout import (
     save_layout,
 )
 from control_plane.screen_read import read_image, read_image_aggressive, read_tap
-from control_plane.screen_table import FrameObs, Table, build_table
+from control_plane.screen_table import FrameObs, Table, pair_by_same_name
 
 Progress = Callable[[str], None]
 
@@ -204,10 +204,8 @@ def scan_paths(
                 on_progress(f"Đã lưu bố cục máy «{merged.device}» ({merged.samples} mẫu)")
         ordered = _attach_optional_vision(ordered, paths)
         frames = [obs for _, obs in ordered]
-        # Video có mốc thời gian đi cách 3. Ảnh không có thời điểm giữ ghép cũ.
-        table = build_table(frames, strict=any(obs.at >= 0 for obs in frames))
-        # Cách 2 chỉ điền chỗ còn thiếu. Lỗi ở bước này không được xóa bảng cách 3.
-        return _apply_optional_fallbacks(table, ordered, on_progress), ordered
+        # Cùng tên khách thì một hàng: số, tên, @. Không ghép theo thời gian hay độ giống.
+        return pair_by_same_name(frames), ordered
     finally:
         for folder in temps:
             folder.cleanup()
@@ -1067,7 +1065,7 @@ def _refill_missing_fields(
     frames = [obs for _file, obs in observations]
     if not any(obs.at >= 0 for obs in frames):
         return observations
-    table = build_table(frames, strict=True)
+    table = pair_by_same_name(frames)
     anchors = incomplete_anchors(frames, table)
     if not anchors:
         return observations

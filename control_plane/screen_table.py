@@ -1,13 +1,12 @@
 """Ghép số, tên và username từ các khung hình danh bạ và hồ sơ.
 
-Quét danh bạ lấy số + tên. Đọc hồ sơ lấy tên + @. Ghép khi danh bạ đứng ngay
-trước hồ sơ và hai tên là cùng một khách. Trong cùng một video, tên giống từ
-90% thì ghép đúng một số với đúng một @, và ghi mọi cách viết gần giống vào
-cùng ô tên. Hai số hoặc hai @ thì không đoán. Không ghép sang video khác.
+Bảng video dùng pair_by_same_name: danh bạ có số và tên, hồ sơ có tên và @
+ngay dưới tên. Cùng tên khách thì một hàng ngang: số điện thoại, tên khách, @.
+Không ghép theo chấm bấm, thời gian, tên giống 90% hay vì @ chứa tên.
+Nhiều số hoặc nhiều @ cùng một tên thì ghép theo thứ tự xuất hiện, mỗi @ chỉ một số.
+Không ghép sang video khác.
 
-Cách 3 (strict=True) chỉ ghi hàng khi lần bấm — chấm giữa, hoặc dòng đang
-chọn — có số và tên, và tên hồ sơ khớp tên đó. @ là dòng ngay dưới tên.
-Không ghép 90% và không ghép vì @ chứa tên. Số và @ còn thiếu để cách 2 quét thêm.
+build_table giữ cách ghép cũ để các bài kiểm tra trước còn chạy. Video mới không gọi nó.
 """
 
 from __future__ import annotations
@@ -1906,3 +1905,216 @@ def _emit_alike_rest(
         if username in emitted_users:
             continue
         table.review.append(Review("", "", user_name.get(username, name), username, "đã mở hồ sơ nhưng chưa thấy số"))
+
+
+def _name_has_marks(name: str) -> bool:
+    """Tên còn dấu. Bản bỏ dấu của OCR không được nhập vào hai tên dấu khác nhau."""
+    text = name_key(name)
+    return bool(text) and fold_marks(text) != text
+
+
+def _same_name_cluster(name: str, marked_by_compact: dict[str, set[str]]) -> str:
+    """Khóa cùng tên. Truc và Trúc là một. Thu Vân và Thu Văn là hai."""
+    compact = _compact(name)
+    if not compact:
+        return ""
+    if _name_has_marks(name):
+        return "m:" + name_key(name)
+    marked = marked_by_compact.get(compact, set())
+    if len(marked) == 1:
+        return "m:" + next(iter(marked))
+    return "u:" + compact
+
+
+@dataclass
+class _NamedPhone:
+    phone: str
+    names: _Tally
+    at: float
+    seq: int
+    phone_shot: bytes = b""
+    name_shot: bytes = b""
+
+
+@dataclass
+class _NamedUser:
+    username: str
+    names: _Tally
+    at: float
+    seq: int
+    confidence: float = -1.0
+    name_shot: bytes = b""
+    user_shot: bytes = b""
+    variants: list[str] = field(default_factory=list)
+
+
+def _seen_order(at: float, seq: int) -> tuple[float, int]:
+    """Ảnh không có thời điểm thì giữ thứ tự khung. Cùng giây thì giữ thứ tự từ trên xuống."""
+    return (at if at >= 0 else float(seq), seq)
+
+
+def _collapse_same_handles(users: list[_NamedUser], name: str) -> list[_NamedUser]:
+    """@ đọc lệch của một hồ sơ chỉ còn một id. Hai id khác nhau thì giữ cả hai."""
+    kept: list[_NamedUser] = []
+    for user in users:
+        for index, prev in enumerate(kept):
+            if not _handles_are_same(prev.username, user.username):
+                continue
+            chosen = _prefer_handle([prev.username, user.username], name or prev.names.best())
+            confidence = prev.confidence
+            if user.confidence >= 0:
+                confidence = user.confidence if confidence < 0 else max(confidence, user.confidence)
+            prev.username = chosen
+            prev.confidence = confidence
+            if not prev.name_shot:
+                prev.name_shot = user.name_shot
+            if not prev.user_shot:
+                prev.user_shot = user.user_shot
+            kept[index] = prev
+            break
+        else:
+            kept.append(user)
+    return kept
+
+
+def pair_by_same_name(frames: list[FrameObs]) -> Table:
+    """Ghép số ở danh bạ với @ ở hồ sơ khi cùng tên khách.
+
+    Mỗi hàng đủ có ba ô: số điện thoại, tên khách, id. Tên giống nhau mới ghép.
+    Không nhìn chấm bấm, không giới hạn số giây, không ghép tên gần giống,
+    không ghép vì id chứa tên. Hai số cùng tên và một id thì chỉ số xuất hiện
+    trước nhận id đó. Số hoặc id dư để riêng, không sao chép.
+    """
+    phones: dict[str, _NamedPhone] = {}
+    nameless: dict[str, _NamedPhone] = {}
+    users: dict[str, _NamedUser] = {}
+    seq = 0
+    ordered = [
+        frame
+        for _index, frame in sorted(
+            enumerate(frames),
+            key=lambda item: (item[1].at if item[1].at >= 0 else float(item[0]), item[0]),
+        )
+    ]
+    for frame in ordered:
+        for hit in frame.contacts:
+            phone = normalize_phone(hit.phone)
+            if not phone:
+                continue
+            name = clean_name(hit.name)
+            if is_profile_name(name):
+                slot = phones.get(phone)
+                if slot is None:
+                    slot = _NamedPhone(phone, _Tally(), frame.at, seq, hit.phone_shot, hit.name_shot)
+                    phones[phone] = slot
+                    seq += 1
+                slot.names.add(name)
+                if not slot.phone_shot and hit.phone_shot:
+                    slot.phone_shot = hit.phone_shot
+                if not slot.name_shot and hit.name_shot:
+                    slot.name_shot = hit.name_shot
+                nameless.pop(phone, None)
+            elif phone not in phones and phone not in nameless:
+                nameless[phone] = _NamedPhone(phone, _Tally(), frame.at, seq, hit.phone_shot, hit.name_shot)
+                seq += 1
+        shown, handle = profile_fields(frame.profile_name, frame.profile_username)
+        if not shown or not handle:
+            continue
+        key = handle.casefold()
+        slot_user = users.get(key)
+        if slot_user is None:
+            slot_user = _NamedUser(
+                handle,
+                _Tally(),
+                frame.at,
+                seq,
+                frame.handle_confidence,
+                frame.name_shot,
+                frame.user_shot,
+                [handle],
+            )
+            users[key] = slot_user
+            seq += 1
+        else:
+            slot_user.variants.append(handle)
+            if frame.handle_confidence >= 0:
+                if slot_user.confidence < 0:
+                    slot_user.confidence = frame.handle_confidence
+                else:
+                    slot_user.confidence = max(slot_user.confidence, frame.handle_confidence)
+            if not slot_user.name_shot:
+                slot_user.name_shot = frame.name_shot
+            if not slot_user.user_shot:
+                slot_user.user_shot = frame.user_shot
+        slot_user.names.add(shown)
+
+    for user in users.values():
+        user.username = _prefer_handle(user.variants, user.names.best()) or user.username
+
+    marked_by_compact: dict[str, set[str]] = {}
+    named_rows = list(phones.values()) + list(users.values())
+    for item in named_rows:
+        best = item.names.best()
+        if not _name_has_marks(best):
+            continue
+        marked_by_compact.setdefault(_compact(best), set()).add(name_key(best))
+
+    groups: dict[str, tuple[list[_NamedPhone], list[_NamedUser]]] = {}
+    for phone in phones.values():
+        cluster = _same_name_cluster(phone.names.best(), marked_by_compact)
+        if not cluster:
+            continue
+        groups.setdefault(cluster, ([], []))[0].append(phone)
+    for user in users.values():
+        cluster = _same_name_cluster(user.names.best(), marked_by_compact)
+        if not cluster:
+            continue
+        groups.setdefault(cluster, ([], []))[1].append(user)
+
+    table = Table(strict=True)
+    paired_phones: set[str] = set()
+    for _cluster, (group_phones, group_users) in groups.items():
+        group_phones.sort(key=lambda item: _seen_order(item.at, item.seq))
+        group_users.sort(key=lambda item: _seen_order(item.at, item.seq))
+        sample = group_phones[0].names.best() if group_phones else group_users[0].names.best()
+        collapsed = _collapse_same_handles(group_users, sample)
+        count = min(len(group_phones), len(collapsed))
+        for index in range(count):
+            phone = group_phones[index]
+            user = collapsed[index]
+            table.rows.append(
+                Row(
+                    phone.phone,
+                    phone.names.best(),
+                    user.username,
+                    user.confidence,
+                    phone_shot=phone.phone_shot,
+                    name_shot=phone.name_shot or user.name_shot,
+                    user_shot=user.user_shot,
+                )
+            )
+            paired_phones.add(phone.phone)
+        for phone in group_phones[count:]:
+            table.unopened.append(Unopened(phone.phone, phone.names.best(), phone.phone_shot, phone.name_shot))
+            paired_phones.add(phone.phone)
+        for user in collapsed[count:]:
+            table.review.append(
+                Review(
+                    "",
+                    "",
+                    user.names.best(),
+                    user.username,
+                    "đã mở hồ sơ nhưng chưa thấy số",
+                    name_shot=user.name_shot,
+                    user_shot=user.user_shot,
+                )
+            )
+    for phone in nameless.values():
+        if phone.phone in paired_phones or phone.phone in phones:
+            continue
+        table.review.append(
+            Review(phone.phone, "", "", "", "có số trong danh bạ nhưng chưa đọc được tên", phone_shot=phone.phone_shot)
+        )
+    table.rows.sort(key=lambda row: next(item.seq for item in phones.values() if item.phone == row.phone))
+    table.unopened.sort(key=lambda item: phones[item.phone].seq if item.phone in phones else 10**9)
+    return table
