@@ -67,6 +67,7 @@
 
   <section>
     <h2>Hàng đợi</h2>
+    <p class="note">Cột Đủ 3 ô hiện sau khi đọc xong: số kết quả có đủ số điện thoại, tên và id, trên tổng số điện thoại trong video.</p>
     <div id="queue"></div>
   </section>
 
@@ -103,6 +104,13 @@
 
   function stat(value, label) {
     return "<div class='stat'><b>" + value + "</b><span>" + label + "</span></div>";
+  }
+
+  function countText(item) {
+    if (item.status !== "done" || item.phone_count == null) return "";
+    if (item.phone_count === 0) return "0 số";
+    var full = item.full_count == null ? 0 : item.full_count;
+    return full + "/" + item.phone_count;
   }
 
   function statusText(status) {
@@ -150,11 +158,11 @@
       box.innerHTML = "<p class='note'>Chưa có video.</p>";
       return;
     }
-    var html = "<table><tr><th>Video</th><th>Trạng thái</th></tr>";
+    var html = "<table><tr><th>Video</th><th>Đủ 3 ô</th><th>Trạng thái</th></tr>";
     items.forEach(function (item) {
       var extra = item.error ? "<div class='warn'>" + escapeHtml(item.error) + "</div>" : "";
       var retry = item.status === "error" ? " <button class='ghost' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
-      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + statusText(item.status) + retry + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + countText(item) + "</td><td>" + statusText(item.status) + retry + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-retry]").forEach(function (button) {
