@@ -48,13 +48,14 @@
     .phones button span { font-weight: 550; font-size: 0.86rem; color: var(--muted); }
     .phones button.on span { color: #d6e8fa; }
     .phonebar { display: flex; justify-content: space-between; gap: 0.7rem; align-items: center; }
-    #file { display: none; }
+    /* iPhone hủy sự kiện change nếu input bị display:none và khung chọn ảnh mở lâu (vài chục video). */
+    #file { position: fixed; top: -9999px; left: -9999px; width: 48px; height: 48px; }
   </style>
 </head>
 <body>
 <main>
   <h1>Đọc video danh bạ</h1>
-  <p class="lead">Nhiều điện thoại mở trang này cùng lúc. Mỗi máy chọn một tên, rồi chọn nhiều video. Trang của máy đó xếp hàng và tải lần lượt. Video đã lên máy chủ thì được đọc từng video một, kể cả khi tắt trang.</p>
+  <p class="lead">Nhiều điện thoại mở trang này cùng lúc. Mỗi máy chọn một tên, rồi chọn bao nhiêu video cũng được. Trang xếp hết vào danh sách tải và tải lần lượt. Video đã vào hàng chờ thì được đọc từng video một, kể cả khi tắt trang.</p>
 
   <section>
     <h2>Điện thoại này</h2>
@@ -69,6 +70,8 @@
       <p class="note">hoặc</p>
       <button class="file" type="button" id="pick">Chọn nhiều video</button>
       <input id="file" type="file" accept="video/*,image/*" multiple />
+      <p class="note">Không giới hạn số video. Chọn một lần vài chục video, hoặc chọn thêm nhiều lần — video mới nối vào danh sách, không xóa video đã chọn.</p>
+      <p class="note">Trên iPhone, trong khung chọn ảnh bấm định dạng ở góc dưới và chọn Hiện tại, rồi chọn hết. Máy khỏi chuyển đổi từng video trước khi đưa vào danh sách.</p>
       <p class="note">Video được chia nhỏ. Mạng đứt thì tải nối tiếp phần còn lại, không gửi lại từ đầu.</p>
     </div>
     <div id="localQueue"></div>
@@ -89,7 +92,7 @@
 
   <section>
     <h2>Hàng đợi</h2>
-    <p class="note">Cột Điện thoại là máy đã tải video đó. Cột Đủ 3 ô hiện sau khi đọc xong: số kết quả có đủ số điện thoại, tên và id, trên tổng số điện thoại trong video. Video mới được giữ trên máy chủ. Khi ổ đĩa đầy 80%, video cũ nhất tự xóa để còn chỗ. Kết quả đã đọc vẫn giữ. Video còn trên máy chủ có nút Đọc lại để đọc lại bằng bộ đọc mới nhất.</p>
+    <p class="note">Hàng đợi hiện mọi video, không cắt bớt. Cột Điện thoại là máy đã tải video đó. Cột Đủ 3 ô hiện sau khi đọc xong: số kết quả có đủ số điện thoại, tên và id, trên tổng số điện thoại trong video. Video mới được giữ trên máy chủ. Khi ổ đĩa đầy 80%, video cũ nhất tự xóa để còn chỗ. Kết quả đã đọc vẫn giữ. Video còn trên máy chủ có nút Đọc lại để đọc lại bằng bộ đọc mới nhất.</p>
     <div id="queue"></div>
   </section>
 
@@ -176,14 +179,21 @@
     phoneItems = phones.items || [];
     renderPhoneBoard(phones.day || "");
     renderThisPhone();
-    var queuePath = "/v1/videos?limit=100";
-    if (phoneFilter !== null) queuePath += "&device=" + encodeURIComponent(phoneFilter);
+    var queuePath = "/v1/videos";
+    if (phoneFilter !== null) queuePath += "?device=" + encodeURIComponent(phoneFilter);
     var queueResponse = await api(queuePath);
     if (queueResponse.ok) renderQueue((await queueResponse.json()).items || []);
     if (!stillUploading()) loadResults();
   }
 
+  var queueSig = null;
+
   function renderQueue(items) {
+    var sig = items.map(function (item) {
+      return item.id + ":" + item.status + ":" + (item.error || "") + ":" + (item.device || "") + ":" + countText(item) + ":" + (item.has_file ? 1 : 0) + ":" + item.name;
+    }).join("|");
+    if (sig === queueSig) return;
+    queueSig = sig;
     var box = document.getElementById("queue");
     if (!items.length) {
       box.innerHTML = "<p class='note'>Chưa có video.</p>";
@@ -624,19 +634,35 @@
     return { ok: false, status: last.status || 0, body: { detail: "Tải chưa đủ file. Bấm Tải lại để nối tiếp." } };
   }
 
+  function statusLabel(job) {
+    if (job.state === "upload") return "Đang tải " + job.percent + "%";
+    if (job.state === "queued") return "Đã vào hàng chờ";
+    if (job.state === "dup") return "Đã có sẵn";
+    if (job.state === "fail") return "Chưa lên được";
+    return "Chờ tải";
+  }
+
+  function paintProgress(index) {
+    var row = document.querySelector("#localQueue tr[data-row='" + index + "']");
+    var job = jobs[index];
+    if (!row || !job) { renderLocal(); return; }
+    var status = row.querySelector(".job-status");
+    var detail = row.querySelector(".job-detail");
+    if (status) status.textContent = statusLabel(job);
+    if (detail) {
+      detail.textContent = job.detail || "";
+      detail.hidden = !job.detail;
+    }
+  }
+
   function renderLocal() {
     var box = document.getElementById("localQueue");
     if (!jobs.length) { box.innerHTML = ""; updateNote(); return; }
     var html = "<table><tr><th>Video đang tải lên</th><th>Trạng thái</th></tr>";
     jobs.forEach(function (job, index) {
-      var text = "Chờ tải";
-      if (job.state === "upload") text = "Đang tải " + job.percent + "%";
-      if (job.state === "queued") text = "Đã vào hàng chờ";
-      if (job.state === "dup") text = "Đã có sẵn";
-      if (job.state === "fail") text = "Chưa lên được";
-      var extra = job.detail ? "<div class='note'>" + escapeHtml(job.detail) + "</div>" : "";
       var retry = job.state === "fail" ? " <button class='ghost' type='button' data-again='" + index + "'>Tải lại</button>" : "";
-      html += "<tr><td>" + escapeHtml(job.file.name) + extra + "</td><td>" + text + retry + "</td></tr>";
+      var detailHidden = job.detail ? "" : " hidden";
+      html += "<tr data-row='" + index + "'><td>" + escapeHtml(job.file.name) + "<div class='note job-detail'" + detailHidden + ">" + escapeHtml(job.detail) + "</div></td><td><span class='job-status'>" + statusLabel(job) + "</span>" + retry + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-again]").forEach(function (button) {
@@ -681,14 +707,15 @@
         job.state = "upload";
         job.detail = "";
         renderLocal();
+        var jobIndex = jobs.indexOf(job);
         var result = await uploadChunked(job.file, function (percent) {
           if (percent === job.percent) return;
           job.percent = percent;
-          renderLocal();
+          paintProgress(jobIndex);
         }, function (detail) {
           if (detail === job.detail) return;
           job.detail = detail;
-          renderLocal();
+          paintProgress(jobIndex);
         });
         if (result.ok) {
           job.state = result.body.duplicate ? "dup" : "queued";
@@ -734,8 +761,65 @@
     if (document.visibilityState === "visible" && stillUploading()) keepAwake(true);
   });
 
-  document.getElementById("pick").addEventListener("click", function () { document.getElementById("file").click(); });
-  document.getElementById("file").addEventListener("change", function (event) { addFiles(event.target.files); event.target.value = ""; });
+  var fileInput = document.getElementById("file");
+  var pickerOpen = false;
+  var pickerWatch = false;
+
+  function takePickedFiles() {
+    var list = fileInput.files;
+    if (!list || !list.length) return 0;
+    var files = [];
+    for (var i = 0; i < list.length; i += 1) files.push(list[i]);
+    fileInput.value = "";
+    addFiles(files);
+    return files.length;
+  }
+
+  function catchPicker(attempt) {
+    if (!pickerOpen && !(fileInput.files && fileInput.files.length)) {
+      pickerWatch = false;
+      return;
+    }
+    if (takePickedFiles()) {
+      pickerOpen = false;
+      pickerWatch = false;
+      return;
+    }
+    if (!pickerOpen) {
+      pickerWatch = false;
+      return;
+    }
+    if (attempt < 16) {
+      setTimeout(function () { catchPicker(attempt + 1); }, 500);
+      return;
+    }
+    pickerOpen = false;
+    pickerWatch = false;
+    if (!stillUploading()) keepAwake(false);
+  }
+
+  function watchPicker() {
+    if (pickerWatch) return;
+    pickerWatch = true;
+    setTimeout(function () { catchPicker(0); }, 0);
+  }
+
+  document.getElementById("pick").addEventListener("click", function () {
+    pickerOpen = true;
+    keepAwake(true);
+    fileInput.click();
+  });
+  fileInput.addEventListener("change", function () {
+    if (takePickedFiles()) {
+      pickerOpen = false;
+      return;
+    }
+    if (pickerOpen) watchPicker();
+  });
+  window.addEventListener("focus", function () { if (pickerOpen) watchPicker(); });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible" && pickerOpen) watchPicker();
+  });
   var drop = document.getElementById("drop");
   drop.addEventListener("dragover", function (event) { event.preventDefault(); drop.classList.add("over"); });
   drop.addEventListener("dragleave", function () { drop.classList.remove("over"); });
