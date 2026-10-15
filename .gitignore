@@ -21,6 +21,7 @@ test-results/
 *.log
 control_data/
 tessdata_best/
+models/
 ios/**/xcuserdata/
 ios/**/*.xcuserstate
 ios/**/DerivedData/

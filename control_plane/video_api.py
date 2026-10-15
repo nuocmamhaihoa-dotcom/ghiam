@@ -21,12 +21,12 @@ from control_plane.video_scan import IMAGE_SUFFIXES, VIDEO_SUFFIXES
 from control_plane.video_store import (
     abort_upload,
     begin_upload,
-    can_accept,
     commit_upload,
+    disk_limit_bytes,
     init_db,
     iter_backup,
     list_videos,
-    queued_bytes,
+    prune_old_videos,
     reader_alive,
     retry,
     search_results,
@@ -47,8 +47,9 @@ def _auth(authorization: str | None) -> None:
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
-def _limit_bytes() -> int:
-    return settings.video_disk_gb * 1024 * 1024 * 1024
+def _disk_snapshot() -> tuple[int, int, int]:
+    usage = shutil.disk_usage(settings.video_dir)
+    return usage.used, usage.free, disk_limit_bytes(usage.total, settings.video_disk_percent)
 
 
 def _ticket_key() -> bytes:
@@ -77,8 +78,9 @@ def video_stats(authorization: str | None = Header(default=None)) -> dict[str, o
     body = stats(settings.video_db_path)
     body["workers"] = worker_count()
     body["reader_alive"] = reader_alive(settings.data_dir / "video-worker.heartbeat")
-    body["disk_used_bytes"] = queued_bytes(settings.video_db_path)
-    body["disk_limit_bytes"] = _limit_bytes()
+    used, _free, limit = _disk_snapshot()
+    body["disk_used_bytes"] = used
+    body["disk_limit_bytes"] = limit
     return body
 
 
@@ -111,7 +113,7 @@ async def upload_video(
     tmp = settings.video_dir / f"up-{secrets.token_hex(8)}{suffix}"
     hasher = hashlib.sha256()
     size = 0
-    limit = settings.max_upload_mb * 1024 * 1024
+    upload_limit = settings.max_upload_mb * 1024 * 1024
     created: dict[str, object] | None = None
     final: Path | None = None
     try:
@@ -121,13 +123,27 @@ async def upload_video(
                 if not chunk:
                     break
                 size += len(chunk)
-                if size > limit:
+                if size > upload_limit:
                     raise HTTPException(status_code=413, detail="Video quá lớn.")
                 await run_in_threadpool(_write_chunk, handle, hasher, chunk)
-        free = shutil.disk_usage(settings.video_dir).free
-        used = await run_in_threadpool(queued_bytes, settings.video_db_path)
-        if not can_accept(used, size, _limit_bytes(), free):
-            raise HTTPException(status_code=507, detail="Hàng đợi đã đầy. Đợi bớt video rồi thêm tiếp.")
+        # File mới đã nằm trên đĩa. Xóa video cũ đã đọc xong cho đến khi ổ đĩa còn dưới mức cho phép.
+        await run_in_threadpool(
+            lambda: prune_old_videos(
+                settings.video_db_path,
+                settings.video_dir,
+                percent=settings.video_disk_percent,
+                protect_newest=False,
+            )
+        )
+        used, free, limit = _disk_snapshot()
+        if used > limit or free <= 2 * 1024 * 1024 * 1024:
+            raise HTTPException(
+                status_code=507,
+                detail=(
+                    f"Ổ đĩa đã tới {settings.video_disk_percent}%."
+                    " Video đang đọc chưa xóa được. Đợi đọc xong rồi tải tiếp."
+                ),
+            )
         created = await run_in_threadpool(
             lambda: begin_upload(settings.video_db_path, name=original, size_bytes=size, sha256=hasher.hexdigest())
         )

@@ -26,7 +26,9 @@ from control_plane.video_store import (
     list_videos,
     merge_close_results,
     queued_bytes,
+    disk_limit_bytes,
     drop_stale_uploads,
+    prune_old_videos,
     recover_dead,
     requeue_running,
     retry,
@@ -367,12 +369,152 @@ class VideoStoreTests(unittest.TestCase):
         fail(self.db, video_id, "hỏng lần nữa")
         self.assertFalse(retry(self.db, video_id))
 
+    def test_finished_video_kept_on_disk_can_be_read_again(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        claim(self.db, 4)
+        finish(self.db, video_id, Table(unopened=[Unopened("0919313090", "Truc")]))
+        item = list_videos(self.db)[0]
+        self.assertTrue(item["has_file"])
+        self.assertNotIn("path", item)
+        self.assertTrue(retry(self.db, video_id))
+        self.assertEqual(stats(self.db)["queued"], 1)
+        self.assertIsNone(list_videos(self.db)[0]["phone_count"])
+        claim(self.db, 4)
+        finish(self.db, video_id, Table(rows=[Row("0919313090", "Truc", "@truc31798")]))
+        self.assertEqual(search_results(self.db, "0919313090")[0]["bucket"], "Đã lưu")
+        Path(self._tmp.name, f"{video_id}.mp4").unlink()
+        self.assertFalse(list_videos(self.db)[0]["has_file"])
+        self.assertFalse(retry(self.db, video_id))
+
+    def test_reading_a_video_again_replaces_what_that_video_left_before(self) -> None:
+        other = self._add("khac.mp4", "other")
+        claim(self.db, 4)
+        finish(self.db, other, Table(rows=[Row("0900000009", "Lan", "@lan_dung")]))
+        video_id = self._add("a.mp4", "a")
+        claim(self.db, 4)
+        finish(
+            self.db,
+            video_id,
+            Table(
+                rows=[Row("0900000002", "Hoa", "@hoa_cu"), Row("0900000009", "Lan", "@lan_sai")],
+                unopened=[Unopened("0900000001", "Truc")],
+                review=[Review("", "", "CA", "@ff", "đã mở hồ sơ nhưng không thấy số cùng tên")],
+            ),
+        )
+        self.assertTrue(retry(self.db, video_id))
+        claim(self.db, 4)
+        finish(
+            self.db,
+            video_id,
+            Table(rows=[Row("0900000001", "Truc", "@truc31798"), Row("0900000002", "Hoa", "@hoa_moi")]),
+        )
+        found = {item["phone"] or item["username"]: item for item in search_results(self.db, limit=20)}
+        self.assertNotIn("@ff", found)
+        self.assertEqual(found["0900000001"]["username"], "@truc31798")
+        self.assertEqual(found["0900000002"]["username"], "@hoa_moi")
+        self.assertEqual(found["0900000009"]["username"], "@lan_dung")
+        self.assertEqual(stats(self.db)["review"], 0)
+
+    def test_orphan_profile_with_a_lookalike_handle_is_not_added(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        claim(self.db, 4)
+        finish(self.db, video_id, Table(rows=[Row("0917129188", "Phan Hưng Thanh", "@dy8b4fvimkx4")]))
+        second = self._add("b.mp4", "b")
+        claim(self.db, 4)
+        finish(
+            self.db,
+            second,
+            Table(review=[Review("", "", "Phan Hưng Thar", "@dy8b4fvlmkx4", "đã mở hồ sơ nhưng không thấy số cùng tên")]),
+        )
+        self.assertEqual(stats(self.db)["review"], 0)
+
     def test_disk_limit(self) -> None:
         gb = 1024 * 1024 * 1024
         self.assertTrue(can_accept(0, 100, 80 * gb, 10 * gb))
         self.assertFalse(can_accept(79 * gb, 2 * gb, 80 * gb, 10 * gb))
         self.assertFalse(can_accept(0, 100, 80 * gb, 1 * gb))
         self.assertEqual(queued_bytes(self.db), 0)
+        self.assertEqual(disk_limit_bytes(1000, 80), 800)
+        self.assertEqual(disk_limit_bytes(1000, 99), 900)
+        self.assertEqual(disk_limit_bytes(1000, 1), 100)
+
+    def _finish_kept(self, name: str, sha: str, created_at: str, payload: bytes, phone: str) -> tuple[int, Path]:
+        video_id = self._add(name, sha, size=len(payload))
+        path = Path(self._tmp.name) / f"{video_id}.mp4"
+        path.write_bytes(payload)
+        claim(self.db, 7)
+        finish(self.db, video_id, Table(rows=[Row(phone, name, "@id")]))
+        with connect(self.db) as conn:
+            conn.execute("UPDATE videos SET created_at = ? WHERE id = ?", (created_at, video_id))
+        return video_id, path
+
+    def test_old_videos_are_deleted_when_the_disk_passes_the_limit(self) -> None:
+        old_id, old_path = self._finish_kept("cu.mp4", "old", "2020-01-01T00:00:00+00:00", b"a" * 100, "0900000001")
+        new_id, new_path = self._finish_kept("moi.mp4", "new", "2026-01-01T00:00:00+00:00", b"b" * 100, "0900000002")
+        waiting = self._add("dang-doc.mp4", "run", size=100)
+        claim(self.db, 9)
+
+        def measure():
+            return type("Usage", (), {"used": 900, "total": 1000, "free": 100})()
+
+        removed = prune_old_videos(self.db, Path(self._tmp.name), percent=80, protect_newest=True, measure=measure)
+        self.assertEqual(removed, 1)
+        self.assertFalse(old_path.exists())
+        self.assertTrue(new_path.exists())
+        self.assertTrue((Path(self._tmp.name) / f"{waiting}.mp4").exists())
+        with connect(self.db) as conn:
+            old = conn.execute("SELECT path, status FROM videos WHERE id = ?", (old_id,)).fetchone()
+            newest = conn.execute("SELECT path FROM videos WHERE id = ?", (new_id,)).fetchone()
+        self.assertEqual(old["path"], "")
+        self.assertEqual(old["status"], "done")
+        self.assertEqual(newest["path"], str(new_path))
+        saved = {item["phone"]: item["name"] for item in search_results(self.db, limit=10)}
+        self.assertEqual(saved["0900000001"], "cu.mp4")
+        self.assertEqual(saved["0900000002"], "moi.mp4")
+
+    def test_a_new_upload_may_replace_every_finished_video_when_that_makes_room(self) -> None:
+        _old_id, old_path = self._finish_kept("cu.mp4", "old", "2020-01-01T00:00:00+00:00", b"a" * 100, "0900000001")
+        _new_id, new_path = self._finish_kept("moi.mp4", "new", "2026-01-01T00:00:00+00:00", b"b" * 100, "0900000002")
+
+        def measure():
+            return type("Usage", (), {"used": 950, "total": 1000, "free": 50})()
+
+        removed = prune_old_videos(self.db, Path(self._tmp.name), percent=80, protect_newest=False, measure=measure)
+        self.assertEqual(removed, 2)
+        self.assertFalse(old_path.exists())
+        self.assertFalse(new_path.exists())
+
+    def test_finished_videos_stay_when_deleting_them_still_leaves_the_disk_full(self) -> None:
+        _old_id, old_path = self._finish_kept("cu.mp4", "old", "2020-01-01T00:00:00+00:00", b"a" * 40, "0900000001")
+
+        def measure():
+            return type("Usage", (), {"used": 950, "total": 1000, "free": 50})()
+
+        removed = prune_old_videos(self.db, Path(self._tmp.name), percent=80, protect_newest=False, measure=measure)
+        self.assertEqual(removed, 0)
+        self.assertTrue(old_path.exists())
+
+    def test_a_missing_file_is_not_counted_as_freed_disk(self) -> None:
+        ghost_id, ghost_path = self._finish_kept("ma.mp4", "ghost", "2020-01-01T00:00:00+00:00", b"a" * 500, "0900000001")
+        ghost_path.unlink()
+        _real_id, real_path = self._finish_kept("that.mp4", "real", "2021-01-01T00:00:00+00:00", b"b" * 100, "0900000002")
+        _newest_id, newest_path = self._finish_kept("moi.mp4", "new", "2026-01-01T00:00:00+00:00", b"c" * 100, "0900000003")
+
+        def measure():
+            return type("Usage", (), {"used": 900, "total": 1000, "free": 100})()
+
+        removed = prune_old_videos(self.db, Path(self._tmp.name), percent=80, protect_newest=True, measure=measure)
+        self.assertEqual(removed, 1)
+        self.assertFalse(real_path.exists())
+        self.assertTrue(newest_path.exists())
+        with connect(self.db) as conn:
+            ghost = conn.execute("SELECT path FROM videos WHERE id = ?", (ghost_id,)).fetchone()
+        self.assertEqual(ghost["path"], "")
+        self.assertEqual(search_results(self.db, "0900000001")[0]["name"], "ma.mp4")
+
+    def test_done_videos_kept_on_disk_count_toward_stored_bytes(self) -> None:
+        self._finish_kept("giu.mp4", "kept", "2026-01-01T00:00:00+00:00", b"a" * 80, "0900000001")
+        self.assertEqual(queued_bytes(self.db), 80)
 
 
 class BackupGzipTests(unittest.TestCase):

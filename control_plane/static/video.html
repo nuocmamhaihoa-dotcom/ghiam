@@ -67,7 +67,7 @@
 
   <section>
     <h2>Hàng đợi</h2>
-    <p class="note">Cột Đủ 3 ô hiện sau khi đọc xong: số kết quả có đủ số điện thoại, tên và id, trên tổng số điện thoại trong video.</p>
+    <p class="note">Cột Đủ 3 ô hiện sau khi đọc xong: số kết quả có đủ số điện thoại, tên và id, trên tổng số điện thoại trong video. Video mới được giữ trên máy chủ. Khi ổ đĩa đầy 80%, video cũ nhất tự xóa để còn chỗ. Kết quả đã đọc vẫn giữ. Video còn trên máy chủ có nút Đọc lại để đọc lại bằng bộ đọc mới nhất.</p>
     <div id="queue"></div>
   </section>
 
@@ -161,7 +161,8 @@
     var html = "<table><tr><th>Video</th><th>Đủ 3 ô</th><th>Trạng thái</th></tr>";
     items.forEach(function (item) {
       var extra = item.error ? "<div class='warn'>" + escapeHtml(item.error) + "</div>" : "";
-      var retry = item.status === "error" ? " <button class='ghost' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
+      var canReread = (item.status === "error" || item.status === "done") && item.has_file;
+      var retry = canReread ? " <button class='ghost' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
       html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + countText(item) + "</td><td>" + statusText(item.status) + retry + "</td></tr>";
     });
     box.innerHTML = html + "</table>";

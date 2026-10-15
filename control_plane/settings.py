@@ -28,7 +28,8 @@ class ServerSettings:
         self.max_upload_mb = int(os.environ.get("CONTROL_MAX_UPLOAD_MB", "4096"))
         self.video_db_path = Path(os.environ.get("CONTROL_VIDEO_DB", self.data_dir / "video.db"))
         self.video_dir = Path(os.environ.get("CONTROL_VIDEO_DIR", self.data_dir / "videos"))
-        self.video_disk_gb = int(os.environ.get("CONTROL_VIDEO_DISK_GB", "80"))
+        # Giữ video mới cho đến khi ổ đĩa đầy bấy nhiêu phần trăm. Video cũ hơn bị xóa để còn chỗ.
+        self.video_disk_percent = int(os.environ.get("CONTROL_VIDEO_DISK_PERCENT", "80"))
         self.workers = int(os.environ.get("CONTROL_UVICORN_WORKERS", "2"))
         self.limit_concurrency = int(os.environ.get("CONTROL_LIMIT_CONCURRENCY", "200"))
         self.backlog = int(os.environ.get("CONTROL_BACKLOG", "2048"))

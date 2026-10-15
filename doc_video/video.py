@@ -1,4 +1,12 @@
-"""Tách khung hình từ video, bỏ khung trùng, đọc song song nhiều khung."""
+"""Tách khung hình từ video, bỏ khung trùng, đọc song song nhiều khung.
+
+Đọc hai bước. Bước quét chạy trên mọi khung: loại màn hình, vị trí dòng, số
+điện thoại. Mỗi người hiện trên cả chục khung khi cuộn danh bạ, nên bước đọc
+kỹ tên và @id chỉ chạy trên vài khung rõ nhất của mỗi người: dòng không bị
+vòng tròn chạm màn hình đè, rải đều theo thời gian để mỗi lần đọc thấy một
+ảnh hơi khác. Nhanh hơn nhiều so với đọc kỹ mọi khung, và bỏ phiếu giữa các
+lần đọc vẫn sửa được lỗi của từng lần.
+"""
 
 from __future__ import annotations
 
@@ -7,27 +15,49 @@ import shutil
 import subprocess
 import tempfile
 from collections.abc import Callable
-from concurrent.futures import Future, ProcessPoolExecutor
+from concurrent.futures import BrokenExecutor, Future, ProcessPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
+from difflib import SequenceMatcher
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
-from doc_video.frame import FrameRead, read_frame
+from doc_video.frame import Contact, FrameRead, Layout, read_layout, row_at, scan_frame
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mkv", ".avi", ".webm"}
 # Hai hồ sơ khác nhau gần như cùng một màn hình trắng, nên chỉ bỏ khung gần như y hệt.
 SAME_FRAME = 0.6
+# Số khung đọc kỹ cho mỗi số điện thoại, và cho mỗi lần mở hồ sơ. Mỗi lần đọc
+# kỹ @id đã gồm sáu lần đọc ở nhiều cỡ rồi bỏ phiếu, nên hồ sơ cần ít khung hơn.
+READS_PER_PERSON = 3
+READS_PER_PROFILE = 2
 
 
-def _read_file(path: str, at: float) -> FrameRead:
+def _scan_file(path: str, at: float) -> Layout:
     try:
         with Image.open(path) as image:
-            return read_frame(image.convert("RGB"), at)
+            return scan_frame(image.convert("RGB"), at)
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         print(f"Bỏ khung {Path(path).name}: {exc}", flush=True)
-        return FrameRead(at=at)
+        return Layout(at=at)
+
+
+def _read_file(path: str, layout: Layout, rows: list[int] | None) -> FrameRead:
+    try:
+        with Image.open(path) as image:
+            return read_layout(image.convert("RGB"), layout, rows)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        print(f"Bỏ khung {Path(path).name}: {exc}", flush=True)
+        return _unread(layout)
+
+
+def _unread(layout: Layout) -> FrameRead:
+    """Khung không đọc kỹ: danh bạ vẫn có số điện thoại, tên để trống; hồ sơ không có @id."""
+    if layout.kind == "list":
+        return FrameRead("list", [Contact(row.phone, "") for row in layout.rows], at=layout.at, tapped=layout.tapped)
+    return FrameRead(layout.kind, at=layout.at)
 
 
 def extract_frames(video: Path, folder: Path, fps: float) -> list[tuple[Path, float]]:
@@ -63,19 +93,121 @@ def drop_repeats(frames: list[tuple[Path, float]]) -> list[tuple[Path, float]]:
     return kept
 
 
+def _spread(items: list, count: int) -> list:
+    """count phần tử rải đều trong danh sách, giữ thứ tự."""
+    if len(items) <= count:
+        return list(items)
+    step = (len(items) - 1) / (count - 1) if count > 1 else 0
+    return [items[round(index * step)] for index in range(count)]
+
+
+def _profile_runs(layouts: list[Layout]) -> list[list[int]]:
+    """Các khung của từng lần mở hồ sơ. Hết lượt khi quay lại danh bạ, hoặc @id thấy lúc quét khác hẳn."""
+    runs: list[list[int]] = []
+    run: list[int] = []
+    for index, layout in enumerate(layouts):
+        if layout.kind == "list":
+            if run:
+                runs.append(run)
+            run = []
+            continue
+        if layout.kind != "profile":
+            continue
+        if run:
+            last = layouts[run[-1]].handle_hint
+            hint = layout.handle_hint
+            if last and hint and SequenceMatcher(None, last, hint, autojunk=False).ratio() < 0.6:
+                runs.append(run)
+                run = []
+        run.append(index)
+    if run:
+        runs.append(run)
+    return runs
+
+
+def _same_scroll(left: Layout, right: Layout) -> bool:
+    """Hai khung danh bạ ở cùng vị trí cuộn: ít nhất hai số nằm đúng cùng độ cao."""
+    pitch = left.row_pitch or right.row_pitch
+    if pitch <= 0:
+        return False
+    tops = {row.phone: row.top for row in left.rows}
+    same = [row for row in right.rows if row.phone in tops and abs(tops[row.phone] - row.top) <= 0.15 * pitch]
+    return len(same) >= 2
+
+
+def resolve_taps(layouts: list[Layout], reach: int = 4) -> None:
+    """Vòng tròn chạm đè lên chữ nên dòng bị bấm biến mất khỏi chính khung đó.
+
+    Tìm số ở đúng độ cao vòng tròn trên khung danh bạ gần nhất có cùng vị trí cuộn.
+    """
+    for index, layout in enumerate(layouts):
+        if layout.kind != "list" or layout.tapped or layout.tap_y < 0:
+            continue
+        neighbours = sorted(
+            (other for other in range(max(0, index - reach), min(len(layouts), index + reach + 1)) if other != index),
+            key=lambda other: abs(other - index),
+        )
+        for other in neighbours:
+            candidate = layouts[other]
+            if candidate.kind != "list" or not _same_scroll(layout, candidate):
+                continue
+            phone = row_at(candidate.rows, layout.tap_y, layout.row_pitch or candidate.row_pitch)
+            if phone:
+                layout.tapped = phone
+                break
+
+
+def plan_reads(
+    layouts: list[Layout], per_person: int = READS_PER_PERSON, per_profile: int = READS_PER_PROFILE
+) -> dict[int, list[int] | None]:
+    """Khung nào cần đọc kỹ. Giá trị là các dòng danh bạ cần đọc tên, hoặc None với khung hồ sơ."""
+    by_phone: dict[str, list[tuple[int, int, bool]]] = {}
+    for frame_index, layout in enumerate(layouts):
+        if layout.kind != "list":
+            continue
+        for row_index, row in enumerate(layout.rows):
+            by_phone.setdefault(row.phone, []).append((frame_index, row_index, row.clear))
+    plan: dict[int, list[int] | None] = {}
+    for seen in by_phone.values():
+        clear = [item for item in seen if item[2]]
+        for frame_index, row_index, _ in _spread(clear or seen, per_person):
+            rows = plan.setdefault(frame_index, [])
+            if rows is not None and row_index not in rows:
+                rows.append(row_index)
+    for run in _profile_runs(layouts):
+        # Ưu tiên khung mà lần quét đã thấy @id (hồ sơ đã tải xong, không còn trượt vào), rồi tới
+        # khung không bị vòng tròn chạm đè. Khung đầu thường là lúc hồ sơ đang trượt vào màn hình.
+        loaded = [index for index in run if layouts[index].handle_hint]
+        neat = [index for index in loaded if layouts[index].clear]
+        pool = neat if len(neat) >= per_profile else loaded if len(loaded) >= per_profile else run
+        if pool is run and len(pool) > per_profile:
+            pool = pool[1:]
+        # Lượt dài bất thường có thể là hai hồ sơ liền nhau mà lần quét không tách được.
+        count = max(per_profile, len(pool) // 4)
+        for index in _spread(pool, count):
+            plan[index] = None
+    for rows in plan.values():
+        if rows is not None:
+            rows.sort()
+    return plan
+
+
 def read_inputs(
     paths: list[Path],
     fps: float = 2.0,
     workers: int | None = None,
     submit: Callable[..., Future] | None = None,
     work_dir: Path | None = None,
+    task_timeout: float | None = None,
 ) -> list[FrameRead]:
     """Đọc ảnh và video theo đúng thứ tự đưa vào. Thứ tự này dùng để biết hồ sơ mở sau danh bạ nào.
 
     submit là executor.submit của một nhóm tiến trình có sẵn; không có thì tự mở nhóm riêng.
+    task_timeout: chờ một khung lâu hơn chừng này giây thì coi nhóm tiến trình đã hỏng (BrokenExecutor).
     """
     jobs: list[tuple[str, float]] = []
     temps: list[tempfile.TemporaryDirectory[str]] = []
+    pool: ProcessPoolExecutor | None = None
     try:
         for path in paths:
             suffix = path.suffix.lower()
@@ -88,19 +220,36 @@ def read_inputs(
                 jobs.extend((str(frame), at) for frame, at in frames)
             else:
                 raise RuntimeError(f"Không đọc được {path.name}: cần ảnh hoặc video.")
-        if submit is not None:
-            futures = [submit(_read_file, path, at) for path, at in jobs]
-            try:
-                return [future.result() for future in futures]
-            except BaseException:
-                for future in futures:
-                    future.cancel()
-                raise
-        workers = workers or max(1, (os.cpu_count() or 2) - 1)
-        if workers == 1 or len(jobs) <= 1:
-            return [_read_file(path, at) for path, at in jobs]
-        with ProcessPoolExecutor(max_workers=workers) as pool:
-            return list(pool.map(_read_file, [path for path, _ in jobs], [at for _, at in jobs], chunksize=1))
+        if submit is None:
+            workers = workers or max(1, (os.cpu_count() or 2) - 1)
+            if workers > 1 and len(jobs) > 1:
+                pool = ProcessPoolExecutor(max_workers=workers)
+                submit = pool.submit
+        layouts = _run(submit, [(_scan_file, path, at) for path, at in jobs], task_timeout)
+        resolve_taps(layouts)
+        plan = plan_reads(layouts)
+        order = sorted(plan)
+        reads = _run(submit, [(_read_file, jobs[index][0], layouts[index], plan[index]) for index in order], task_timeout)
+        done = dict(zip(order, reads))
+        return [done[index] if index in done else _unread(layout) for index, layout in enumerate(layouts)]
     finally:
+        if pool is not None:
+            pool.shutdown(cancel_futures=True)
         for folder in temps:
             folder.cleanup()
+
+
+def _run(submit: Callable[..., Future] | None, calls: list[tuple], timeout: float | None = None) -> list:
+    if submit is None:
+        return [call[0](*call[1:]) for call in calls]
+    futures = [submit(*call) for call in calls]
+    try:
+        return [future.result(timeout=timeout) for future in futures]
+    except FutureTimeout as exc:
+        for future in futures:
+            future.cancel()
+        raise BrokenExecutor(f"Một khung không đọc xong sau {timeout:.0f} giây.") from exc
+    except BaseException:
+        for future in futures:
+            future.cancel()
+        raise

@@ -6,9 +6,23 @@ import shutil
 import unittest
 from pathlib import Path
 
-from doc_video.frame import Contact, FrameRead
+from doc_video.frame import Contact, FrameRead, Layout, ListRow, _list_pairs
 from doc_video.join import build
-from doc_video.text import find_handle, handle_matches_name, looks_like_phone, merge_name, name_key, normalize_phone
+from doc_video.ocr import TextLine
+from doc_video.video import plan_reads, resolve_taps
+from doc_video.text import (
+    clean_name,
+    find_handle,
+    fix_underscores,
+    handle_from_read,
+    handle_from_viet,
+    handle_matches_name,
+    is_name,
+    looks_like_phone,
+    name_key,
+    normalize_phone,
+    vote_chars,
+)
 
 
 def listing(*pairs: tuple[str, str]) -> FrameRead:
@@ -37,14 +51,91 @@ class TextTests(unittest.TestCase):
         self.assertTrue(handle_matches_name("@thoa.6736599813370", "Thoa 6736599813370"))
         self.assertFalse(handle_matches_name("@anhphonglacuatao2", "Phương Anh"))
         self.assertFalse(handle_matches_name("@linh234_50", "Kim Linh"))
+        self.assertFalse(handle_matches_name("@user06867539", "user606720361"))
+        self.assertFalse(handle_matches_name("@user54308927", "user6289208064852"))
+        self.assertTrue(handle_matches_name("@user6289208064852", "user6289208064852"))
 
-    def test_merge_keeps_marks_and_fixes_case_and_digits(self) -> None:
-        self.assertEqual(merge_name(["TrUC"], "Truc"), "Truc")
-        self.assertEqual(merge_name(["TrUcC"], "Truc"), "Truc")
-        self.assertEqual(merge_name(["Thoa ó756599815570"], "Thoa 6736599813370"), "Thoa 6736599813370")
-        self.assertEqual(merge_name(["Phước Lê"], "Phudc Le"), "Phước Lê")
-        self.assertEqual(merge_name(["LêLee"], "LELee"), "LêLee")
-        self.assertEqual(merge_name(["Hồng Mến"], "Hong Men"), "Hồng Mến")
+    def test_handles_are_lowercase_like_tiktok(self) -> None:
+        self.assertEqual(find_handle("@User_Abc.12"), "@user_abc.12")
+        self.assertEqual(find_handle("@31776814785"), "@31776814785")
+        self.assertEqual(find_handle("@0749"), "")
+        self.assertEqual(handle_from_read("(@thanhson190ó"), "@thanhson1906")
+        self.assertEqual(handle_from_read("@I.th.li078"), "@l.th.li078")
+        self.assertEqual(handle_from_read("@hng.In6732"), "@hng.ln6732")
+        self.assertEqual(handle_from_read("@mSg6vpbq6"), "@m5g6vpbq6")
+        self.assertEqual(handle_from_read("@xB2k"), "@x82k")
+        self.assertEqual(handle_from_viet("Oquocnguyet81792"), "@quocnguyet81792")
+        self.assertEqual(handle_from_viet("Qhuong.tv"), "@huong.tv")
+        self.assertEqual(handle_from_viet("0090fy5xr"), "@090fy5xr")
+        self.assertEqual(handle_from_viet("@Om5g6vpbqó"), "@m5g6vpbq6")
+
+    def test_names_keep_special_characters_except_bar(self) -> None:
+        self.assertEqual(clean_name("Huyền Phương (Cà)"), "Huyền Phương (Cà)")
+        self.assertEqual(clean_name("Lan & Hoa"), "Lan & Hoa")
+        self.assertEqual(clean_name("Thắm | Shop"), "Thắm Shop")
+        self.assertTrue(is_name("Ý"))
+        self.assertFalse(is_name("A"))
+
+    def test_vote_keeps_what_most_readers_agree_on(self) -> None:
+        reads = [("Hữu Nhung", 1.5), ("Hữ Nhung", 1.0), ("Hữu Nhung", 1.0), ("Huu Nhung", 0.7)]
+        self.assertEqual(vote_chars(reads), "Hữu Nhung")
+        reads = [("Ngô Lan", 1.5), ("Ng6 Lan", 1.0), ("Ngô Lan", 1.0), ("Ngo Lan", 0.7)]
+        self.assertEqual(vote_chars(reads), "Ngô Lan")
+        reads = [("Ngô Lan", 1.5), ("Ngõ Lan", 1.0), ("Ngõ Lan", 1.0), ("Ngo Lan", 0.7)]
+        self.assertEqual(vote_chars(reads), "Ngô Lan")
+        reads = [("Hải Yến", 1.5), ("Hài Yến", 1.0), ("Hài Yến", 1.0), ("Hai Yen", 0.7)]
+        self.assertEqual(vote_chars(reads), "Hải Yến")
+        reads = [("Định Khánh Hải", 1.5), ("Đình Khánh Hải", 1.0), ("Đỉnh Khánh Hải", 1.0), ("Dinh Khanh Hai", 0.7)]
+        self.assertEqual(vote_chars(reads), "Đinh Khánh Hải")
+        reads = [("nhungphuong 8712", 1.5), ("nhungphuong8712", 1.0), ("nhungphuong8712", 1.0), ("nhungphuong8712", 0.7)]
+        self.assertEqual(vote_chars(reads), "nhungphuong8712")
+        reads = [("_thoa.xuan_", 0.7), ("thoa.xuan", 1.5), ("_thoa.xuan_", 1.0), ("_thoa.xuan_", 1.0)]
+        self.assertEqual(vote_chars(reads), "_thoa.xuan_")
+
+    def test_list_pairs_merges_split_pieces_of_a_name_row(self) -> None:
+        lines = [
+            TextLine("0813663062", 273, 1817, 502, 1844, 27),
+            TextLine("|", 274, 1861, 276, 1891, 30),
+            TextLine("Trinh", 330, 1863, 413, 1889, 26),
+        ]
+        pairs = _list_pairs(lines)
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual((pairs[0][1].x0, pairs[0][1].x1), (273, 413))
+        self.assertTrue(is_name(clean_name(pairs[0][1].text)))
+
+    def test_underscore_strokes_fix_double_and_leading_underscores(self) -> None:
+        # Nét ở vị trí 0 là chân chữ @, không phải gạch dưới.
+        self.assertEqual(fix_underscores("@tam_400", [(0.4, 0.9), (4.5, 1.5)]), "@tam__400")
+        self.assertEqual(fix_underscores("@tam_400", [(0.4, 0.9), (4.1, 0.72), (5.0, 0.72)]), "@tam__400")
+        self.assertEqual(fix_underscores("@tam_400", [(0.4, 0.9), (4.5, 0.8)]), "@tam_400")
+        self.assertEqual(fix_underscores("@vantuyet._", [(0.3, 0.9), (1.6, 0.8), (10.2, 0.8)]), "@_vantuyet._")
+        self.assertEqual(fix_underscores("@ydieu", [(0.3, 0.9), (1.5, 0.8)]), "@ydieu")
+        self.assertEqual(fix_underscores("@lan", []), "@lan")
+
+    def test_vote_on_handles_is_exact(self) -> None:
+        reads = [("tamphuongca14899", 1), ("tamphuongcal4899", 1), ("tamphuongca14899", 1)]
+        self.assertEqual(vote_chars(reads, loose=False), "tamphuongca14899")
+        reads = [
+            ("sunr0o971xra", 1.0, 0.6),
+            ("sunr0o971xra", 1.0, 0.6),
+            ("sunr0o971xra", 1.0, 0.6),
+            ("sunr00971xra", 1.0, 1.0),
+            ("sunr00971xra", 1.0, 1.0),
+            ("sunr0o0971xra", 1.0, 1.0),
+            ("sunr00971xra", 1.0, 1.0),
+        ]
+        self.assertEqual(vote_chars(reads, loose=False), "sunr0o971xra")
+        reads = [
+            ("umrv96cp5ws", 1.0, 0.6),
+            ("umrv96cp5ws", 1.0, 0.6),
+            ("umrv96cp5ws", 1.0, 0.6),
+            ("iumrv96cp5ws", 1.0, 1.0),
+            ("iumrv96cp5ws", 1.0, 1.0),
+            ("lumrvo6cp5ws", 1.0, 1.0),
+            ("lumrv96cp5ws", 1.0, 1.0),
+        ]
+        self.assertEqual(len(vote_chars(reads, loose=False)), 12)
+        self.assertEqual(vote_chars([], loose=False), "")
 
 
 class JoinTests(unittest.TestCase):
@@ -74,15 +165,67 @@ class JoinTests(unittest.TestCase):
         self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0908031961", "@thuvan99")])
         self.assertEqual(result.unopened, [("0919313090", "Truc")])
 
-    def test_similar_name_without_a_matching_handle_is_not_attached(self) -> None:
+    def test_profile_name_cut_short_joins_the_number_on_screen(self) -> None:
         result = build(
             [
                 listing(("0919200084", "Phương Anh"), ("0900000002", "Lan")),
                 profile("Phương An", "@anhphonglacuatao"),
             ]
         )
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0919200084", "@anhphonglacuatao")])
+
+    def test_name_read_one_letter_off_joins_the_number_on_screen(self) -> None:
+        result = build(
+            [
+                listing(("0919325515", "LêLee"), ("0919225515", "Đức Khánh"), ("0900000003", "Mai")),
+                profile("LêlLee", "@llee6745"),
+            ]
+        )
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0919325515", "@llee6745")])
+
+    def test_profile_joins_the_only_emoji_named_number_on_screen(self) -> None:
+        result = build(
+            [
+                FrameRead("list", [Contact("0919253108", ""), Contact("0900000002", "Lan"), Contact("0900000003", "Mai")]),
+                profile("AK", "@user520413055142"),
+                FrameRead("list", [Contact("0919253108", ""), Contact("0900000002", "Lan"), Contact("0900000003", "Mai")]),
+                profile("Lan", "@lan"),
+            ]
+        )
+        self.assertIn(("0919253108", "@user520413055142"), [(row.phone, row.handle) for row in result.rows])
+
+    def test_two_emoji_named_numbers_on_screen_are_not_guessed(self) -> None:
+        result = build(
+            [
+                FrameRead("list", [Contact("0919253108", ""), Contact("0919208000", ""), Contact("0900000003", "Mai")]),
+                profile("AK", "@user520413055142"),
+            ]
+        )
         self.assertEqual(result.rows, [])
-        self.assertEqual([phone for phone, _ in result.unopened], ["0919200084", "0900000002"])
+
+    def test_similar_name_on_another_screen_is_not_attached(self) -> None:
+        result = build(
+            [
+                listing(("0919325515", "LêLee"), ("0900000002", "Lan")),
+                listing(("0900000005", "Cuong"), ("0900000006", "Dung"), ("0900000007", "Hoa")),
+                profile("LêlLee", "@llee6745"),
+            ]
+        )
+        self.assertEqual(result.rows, [])
+
+    def test_short_name_inside_a_longer_one_is_not_attached(self) -> None:
+        result = build([listing(("0900000001", "Kim Linh"), ("0900000002", "Lan")), profile("Linh", "@linh234_50")])
+        self.assertEqual(result.rows, [])
+
+    def test_similar_name_off_screen_is_not_attached(self) -> None:
+        result = build(
+            [
+                listing(("0919200084", "Phương Anh"), ("0900000002", "Lan")),
+                listing(("0900000005", "Cuong"), ("0900000006", "Dung")),
+                profile("Phương An", "@anhphonglacuatao"),
+            ]
+        )
+        self.assertEqual(result.rows, [])
 
     def test_opening_every_row_on_a_screen_joins_in_order(self) -> None:
         screen = (("0900000001", "Nhà gỗ"), ("0900000002", "Quốc Thanh"), ("0900000003", "Kim Hoa"))
@@ -172,11 +315,223 @@ class JoinTests(unittest.TestCase):
         self.assertEqual([r.phone for r in result.rows], ["0919313090"])
         self.assertNotIn("0919313080", [phone for phone, _ in result.unopened])
 
+    def test_the_tapped_row_joins_a_profile_with_another_name(self) -> None:
+        screen = (("0900000001", "Nhà gỗ"), ("0900000002", "Quốc Thanh"), ("0900000003", "Kim Hoa"))
+        result = build(
+            [
+                FrameRead("list", [Contact(p, n) for p, n in screen], tapped="0900000002"),
+                profile("TV", "@televisionnn"),
+                FrameRead("list", [Contact(p, n) for p, n in screen]),
+            ]
+        )
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0900000002", "@televisionnn")])
+        self.assertEqual(len(result.unopened), 2)
+
+    def test_two_profiles_claiming_one_tapped_row_are_not_joined(self) -> None:
+        screen = (("0900000001", "Nhà gỗ"), ("0900000002", "Quốc Thanh"), ("0900000003", "Kim Hoa"))
+        result = build(
+            [
+                FrameRead("list", [Contact(p, n) for p, n in screen], tapped="0900000002"),
+                profile("TV", "@televisionnn"),
+                FrameRead("list", [Contact(p, n) for p, n in screen], tapped="0900000002"),
+                profile("Wood", "@woodhouse"),
+            ]
+        )
+        self.assertEqual(result.rows, [])
+
+    def test_a_tap_a_moment_before_the_profile_still_counts(self) -> None:
+        screen = [Contact("0900000001", "Nhà gỗ"), Contact("0900000002", "Quốc Thanh"), Contact("0900000003", "Kim Hoa")]
+        result = build(
+            [
+                FrameRead("list", screen, at=10.0, tapped="0900000002"),
+                FrameRead("list", screen, at=10.5),
+                FrameRead("list", screen, at=11.0),
+                FrameRead("profile", profile_name="TV", handle="@televisionnn", at=11.5),
+            ]
+        )
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0900000002", "@televisionnn")])
+
+    def test_an_old_tap_is_not_used(self) -> None:
+        screen = [Contact("0900000001", "Nhà gỗ"), Contact("0900000002", "Quốc Thanh"), Contact("0900000003", "Kim Hoa")]
+        result = build(
+            [
+                FrameRead("list", screen, at=10.0, tapped="0900000002"),
+                FrameRead("list", screen, at=20.0),
+                FrameRead("profile", profile_name="TV", handle="@televisionnn", at=20.5),
+            ]
+        )
+        self.assertEqual(result.rows, [])
+
+    def test_profile_name_inside_the_contact_name_joins(self) -> None:
+        result = build(
+            [
+                listing(("0919285619", "Lê Trang Phan Thiết II"), ("0919337222", "Phan Thiết")),
+                profile("Lê Trang Phan Thiết", "@thuy.trang07688"),
+            ]
+        )
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0919285619", "@thuy.trang07688")])
+
+    def test_a_tap_seen_before_scrolling_away_is_not_used(self) -> None:
+        result = build(
+            [
+                FrameRead("list", [Contact("0900000001", "An"), Contact("0900000002", "Binh")], tapped="0900000001"),
+                FrameRead("list", [Contact("0900000005", "Cuong"), Contact("0900000006", "Dung")]),
+                profile("Biệt danh", "@xyzxyz"),
+            ]
+        )
+        self.assertNotIn("0900000001", [row.phone for row in result.rows])
+
+    def test_misread_handle_frames_of_one_visit_count_as_one_profile(self) -> None:
+        screen = (("0900000001", "Nhà gỗ"), ("0900000002", "Quốc Thanh"))
+        result = build(
+            [
+                listing(*screen),
+                profile("Wood", "@woodhouse1"),
+                profile("Wood", "@woodhousel"),
+                profile("Wood", "@woodhouse1"),
+                listing(*screen),
+                profile("TV", "@televisionnn"),
+            ]
+        )
+        self.assertEqual(
+            [(row.phone, row.handle) for row in result.rows],
+            [("0900000001", "@woodhouse1"), ("0900000002", "@televisionnn")],
+        )
+        self.assertEqual(result.review, [])
+
+    def test_lookalike_handle_from_another_visit_merges_into_the_common_one(self) -> None:
+        result = build(
+            [
+                listing(("0900000001", "Lan")),
+                profile("Lan", "@lan_shop"),
+                profile("Lan", "@lan_shop"),
+                listing(("0900000001", "Lan")),
+                profile("Lan", "@lan__shop"),
+            ]
+        )
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0900000001", "@lan_shop")])
+        self.assertEqual(result.review, [])
+
+    def test_different_people_with_lookalike_handles_stay_apart(self) -> None:
+        result = build(
+            [
+                listing(("0900000001", "Lan"), ("0900000002", "Linh")),
+                profile("Lan", "@lan1"),
+                profile("Lan", "@lan1"),
+                listing(("0900000001", "Lan"), ("0900000002", "Linh")),
+                profile("Linh", "@lanl"),
+            ]
+        )
+        self.assertEqual(
+            {(row.phone, row.handle) for row in result.rows},
+            {("0900000001", "@lan1"), ("0900000002", "@lanl")},
+        )
+
+    def test_name_read_differently_on_each_frame_is_voted_by_character(self) -> None:
+        frames = [
+            listing(("0908035416", "Hữ Nhung")),
+            listing(("0908035416", "Hữu Nhưng")),
+            listing(("0908035416", "Hữu Nhung")),
+            profile("Hữu Nhung", "@huunhung"),
+        ]
+        self.assertEqual(build(frames).rows[0].name, "Hữu Nhung")
+
+    def test_number_misread_at_two_lookalike_digits_merges(self) -> None:
+        frames = [listing(("0913327358", "A Hải"), ("0913363956", "Vựa Mực")) for _ in range(4)]
+        frames.append(listing(("0915527558", "A Hải"), ("0913273681", "huythuc82")))
+        frames.append(profile("A Hải", "@a.hi572"))
+        result = build(frames)
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0913327358", "@a.hi572")])
+        self.assertNotIn("0915527558", [phone for phone, _ in result.unopened])
+
+    def test_rare_lookalike_misread_merges_even_with_a_misread_name(self) -> None:
+        frames = [listing(("0913326577", "dy5bpm8kp8fh"), ("0913258209", "mmm")) for _ in range(8)]
+        frames += [listing(("0915526577", "Uy IVI"), ("0913330677", "yamate")) for _ in range(2)]
+        result = build(frames)
+        phones = [phone for phone, _ in result.unopened]
+        self.assertIn("0913326577", phones)
+        self.assertNotIn("0915526577", phones)
+
+    def test_often_seen_number_with_another_name_is_not_merged(self) -> None:
+        frames = [listing(("0913326577", "Lan"), ("0913258209", "mmm")) for _ in range(8)]
+        frames += [listing(("0915526577", "Hoa"), ("0913330677", "yamate")) for _ in range(6)]
+        result = build(frames)
+        phones = [phone for phone, _ in result.unopened]
+        self.assertIn("0915526577", phones)
+
+    def test_two_real_numbers_with_one_name_are_not_merged(self) -> None:
+        frames = [listing(("0913327358", "Lan"), ("0915527558", "Lan"))]
+        frames.append(profile("Lan", "@lan"))
+        result = build(frames)
+        self.assertEqual({item.reason for item in result.review}, {"nhiều số cùng tên"})
+
+    def test_misread_number_merged_away_does_not_break_order_joining(self) -> None:
+        screen = [("0915288126", "An"), ("0900000002", "Binh")]
+        frames = [listing(*screen) for _ in range(3)]
+        frames.append(listing(("0915288128", "An"), ("0900000002", "Binh")))
+        frames.append(profile("Biệt danh", "@xyzxyz"))
+        frames.append(listing(("0915288128", "An"), ("0900000002", "Binh")))
+        frames.append(profile("Tên khác", "@abcabc"))
+        result = build(frames)
+        self.assertEqual({row.phone for row in result.rows}, {"0915288126", "0900000002"})
+
     def test_most_frequent_name_wins(self) -> None:
         frames = [listing(("0908035416", "thovahanh"), ("0908031961", "Thu Vân")) for _ in range(3)]
         frames.append(listing(("0908035416", "Am _ Â 2m ls")))
         frames.append(profile("thovahanh", "@thova"))
         self.assertEqual(build(frames).rows[0].name, "thovahanh")
+
+
+def list_layout(phones: list[str], tap_y: float = -1.0, clear: bool = True) -> Layout:
+    line = TextLine("x", 0, 0, 10, 10)
+    rows = [ListRow(phone, line, clear, 100 + 230 * index) for index, phone in enumerate(phones)]
+    return Layout("list", rows=rows, tap_y=tap_y, row_pitch=230.0)
+
+
+class PoolTests(unittest.TestCase):
+    def test_a_frame_that_never_finishes_breaks_the_run_instead_of_hanging(self) -> None:
+        import time
+        from concurrent.futures import BrokenExecutor, ThreadPoolExecutor
+
+        from doc_video.video import _run
+
+        with ThreadPoolExecutor(1) as pool:
+            with self.assertRaises(BrokenExecutor):
+                _run(pool.submit, [(time.sleep, 0.5)], timeout=0.05)
+
+
+class PlanTests(unittest.TestCase):
+    def test_each_number_is_read_in_at_most_three_clear_frames(self) -> None:
+        layouts = [list_layout(["0900000001", "0900000002"]) for _ in range(10)]
+        layouts[0] = list_layout(["0900000001", "0900000002"], clear=False)
+        plan = plan_reads(layouts)
+        reads = [index for index, rows in plan.items() if rows and 0 in rows]
+        self.assertEqual(len(reads), 3)
+        self.assertNotIn(0, reads)
+
+    def test_each_profile_visit_is_read_in_two_frames(self) -> None:
+        layouts = [list_layout(["0900000001", "0900000002"])]
+        layouts += [Layout("profile", handle_line=TextLine("@a", 0, 0, 10, 10), handle_hint="@abc") for _ in range(4)]
+        layouts += [list_layout(["0900000001", "0900000002"])]
+        plan = plan_reads(layouts)
+        self.assertEqual(sorted(index for index, rows in plan.items() if rows is None), [1, 4])
+
+    def test_profile_frames_that_show_the_handle_are_read_first(self) -> None:
+        line = TextLine("@a", 0, 0, 10, 10)
+        layouts = [list_layout(["0900000001", "0900000002"])]
+        layouts.append(Layout("profile", handle_line=line, handle_hint=""))
+        layouts += [Layout("profile", handle_line=line, handle_hint="@thanhson1906", clear=False) for _ in range(3)]
+        layouts += [list_layout(["0900000001", "0900000002"])]
+        plan = plan_reads(layouts)
+        self.assertEqual(sorted(index for index, rows in plan.items() if rows is None), [2, 4])
+
+    def test_a_tap_that_erased_its_row_is_found_on_the_next_frame(self) -> None:
+        phones = ["0900000001", "0900000002", "0900000003"]
+        tapped = list_layout(["0900000001", "0900000003"], tap_y=100 + 230 + 60)
+        tapped.rows[1] = ListRow("0900000003", tapped.rows[1].name_line, True, 100 + 460)
+        layouts = [tapped, Layout("profile"), list_layout(phones)]
+        resolve_taps(layouts)
+        self.assertEqual(layouts[0].tapped, "0900000002")
 
 
 ASSETS = Path("/home/ubuntu/.cursor/projects/workspace/assets")

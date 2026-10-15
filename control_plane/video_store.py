@@ -8,6 +8,7 @@ Một dòng khoảng vài trăm byte. Một trăm triệu dòng nằm trong vài
 from __future__ import annotations
 
 import os
+import shutil
 import sqlite3
 import time
 from collections import defaultdict
@@ -16,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
-from doc_video.text import handle_matches_name
+from doc_video.text import handle_matches_name, lookalike_handles
 
 from control_plane.screen_table import Review, Table, joined_name, pair_close_names
 
@@ -152,12 +153,13 @@ def _ensure_video_count_columns(conn: sqlite3.Connection) -> None:
 
 
 def queued_bytes(db_path: Path) -> int:
-    """Dung lượng video còn nằm trên đĩa, kể cả video lỗi được giữ lại để bấm Đọc lại."""
+    """Dung lượng video còn file trên đĩa: đang tải, đang chờ, đang đọc, đã xong và lỗi."""
     with connect(db_path) as conn:
         row = conn.execute(
             """
             SELECT COALESCE(SUM(size_bytes), 0) AS n FROM videos
-            WHERE status IN ('uploading', 'queued', 'running') OR (status = 'error' AND path != '')
+            WHERE status IN ('uploading', 'queued', 'running')
+               OR (status IN ('done', 'error') AND path != '')
             """
         ).fetchone()
     return int(row["n"])
@@ -167,6 +169,97 @@ def can_accept(used_bytes: int, new_bytes: int, limit_bytes: int, free_bytes: in
     if new_bytes > limit_bytes or used_bytes + new_bytes > limit_bytes:
         return False
     return free_bytes > new_bytes + (2 * 1024 * 1024 * 1024)
+
+
+def disk_limit_bytes(total_bytes: int, percent: int) -> int:
+    """Phần dung lượng ổ đĩa được dùng cho video. Luôn chừa ít nhất 10% cho hệ thống."""
+    bounded = min(90, max(10, percent))
+    return total_bytes * bounded // 100
+
+
+def _path_inside(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root)
+    except (ValueError, OSError):
+        return False
+    return True
+
+
+def prune_old_videos(
+    db_path: Path,
+    video_dir: Path,
+    *,
+    percent: int = 80,
+    protect_newest: bool = True,
+    measure=None,
+) -> int:
+    """Xóa file video cũ nhất khi ổ đĩa vượt mức phần trăm.
+
+    Video đang tải, đang chờ và đang đọc không bị xóa. Dòng kết quả vẫn giữ.
+    Lần tải video mới truyền protect_newest=False vì file đang tải mới hơn mọi file đã xong.
+    Nếu xóa hết video cũ vẫn không đủ chỗ thì giữ nguyên file đó: lần tải bị từ chối.
+    Đường dẫn trỏ tới file đã mất được gỡ, và không được tính là dung lượng vừa giải phóng.
+    """
+    root = video_dir.resolve()
+    read_disk = measure or (lambda: shutil.disk_usage(root))
+    usage = read_disk()
+    limit = disk_limit_bytes(int(usage.total), percent)
+    if int(usage.used) <= limit:
+        return 0
+    with connect(db_path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        rows = conn.execute(
+            """
+            SELECT id, path, size_bytes, created_at FROM videos
+            WHERE status IN ('done', 'error') AND path != ''
+            ORDER BY created_at ASC, id ASC
+            """
+        ).fetchall()
+        if protect_newest and rows:
+            newest = max(rows, key=lambda row: (str(row["created_at"]), int(row["id"])))
+            rows = [row for row in rows if int(row["id"]) != int(newest["id"])]
+        candidates: list[tuple[int, str, int]] = []
+        for row in rows:
+            path = Path(str(row["path"]))
+            if not _path_inside(path, root):
+                continue
+            try:
+                size = path.stat().st_size
+            except OSError:
+                # File đã mất từ trước. Gỡ đường dẫn, nhưng không tính là đã giải phóng đĩa.
+                size = 0
+            if size < 0:
+                size = 0
+            candidates.append((int(row["id"]), str(path), size))
+        freeable = sum(size for _, _, size in candidates)
+        used = int(usage.used)
+        # Đường dẫn mồ côi luôn gỡ được. File thật chỉ xóa khi xóa hết nhóm đó thì đĩa xuống dưới mức.
+        chosen = [item for item in candidates if item[2] == 0]
+        if used - freeable <= limit:
+            projected = used
+            for item in candidates:
+                if item[2] == 0 or projected <= limit:
+                    continue
+                chosen.append(item)
+                projected -= item[2]
+        removed: list[str] = []
+        for video_id, path, _size in chosen:
+            cur = conn.execute(
+                """
+                UPDATE videos SET path = ''
+                WHERE id = ? AND status IN ('done', 'error') AND path = ?
+                """,
+                (video_id, path),
+            )
+            if cur.rowcount == 1 and _size > 0:
+                removed.append(path)
+        conn.execute("COMMIT")
+    for path in removed:
+        try:
+            Path(path).unlink(missing_ok=True)
+        except OSError:
+            continue
+    return len(removed)
 
 
 def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str) -> dict[str, object]:
@@ -255,14 +348,20 @@ def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
         rows = conn.execute(
             """
             SELECT id, name, size_bytes, status, error, created_at, started_at, finished_at,
-                   phone_count, full_count
+                   phone_count, full_count, path
             FROM videos
             ORDER BY id DESC
             LIMIT ?
             """,
             (limit,),
         ).fetchall()
-    return [dict(row) for row in rows]
+    items = []
+    for row in rows:
+        item = dict(row)
+        path = str(item.pop("path") or "")
+        item["has_file"] = bool(path) and Path(path).is_file()
+        items.append(item)
+    return items
 
 
 def stats(db_path: Path) -> dict[str, int]:
@@ -367,9 +466,17 @@ def video_counts(table: Table) -> tuple[int, int]:
 
 
 def finish(db_path: Path, video_id: int, table: Table) -> None:
+    """Ghi kết quả một lần đọc video.
+
+    Đọc lại một video thì bỏ các dòng cần xem và chưa mở hồ sơ mà chính video đó
+    để lại từ lần đọc trước, rồi ghi kết quả mới; nếu không, dòng sai của bộ đọc
+    cũ nằm lại mãi. Dòng đã lưu của video đó được thay bằng dòng đã lưu mới.
+    Dòng do video khác tạo ra không bị đụng tới.
+    """
     phones, full = video_counts(table)
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
+        conn.execute("DELETE FROM results WHERE video_id = ? AND bucket != ?", (video_id, BUCKET_OK))
         for row in table.rows:
             _put(conn, row.phone, row.name, row.username, BUCKET_OK, "", video_id, upgrade=True)
         for item in table.unopened:
@@ -511,12 +618,22 @@ def fail(db_path: Path, video_id: int, message: str) -> None:
 
 
 def retry(db_path: Path, video_id: int) -> bool:
+    """Đưa video lỗi hoặc đã đọc xong về hàng chờ, nếu file còn trên máy chủ.
+
+    Đọc lại dùng bộ đọc hiện tại. Kết quả mới chỉ nâng dòng cần xem hoặc chưa
+    mở hồ sơ lên đã lưu; dòng đã lưu đủ ba ô không bị ghi đè.
+    """
     with connect(db_path) as conn:
         row = conn.execute("SELECT path, status FROM videos WHERE id = ?", (video_id,)).fetchone()
-        if row is None or row["status"] != "error" or not row["path"] or not Path(row["path"]).exists():
+        if row is None or row["status"] not in ("error", "done") or not row["path"] or not Path(row["path"]).exists():
             return False
         cur = conn.execute(
-            "UPDATE videos SET status = 'queued', error = '', finished_at = NULL, pid = NULL WHERE id = ? AND status = 'error'",
+            """
+            UPDATE videos
+            SET status = 'queued', error = '', finished_at = NULL, pid = NULL,
+                phone_count = NULL, full_count = NULL
+            WHERE id = ? AND status IN ('error', 'done')
+            """,
             (video_id,),
         )
         return cur.rowcount == 1
@@ -667,7 +784,7 @@ def _put(
     if not phone:
         return
     existing = conn.execute(
-        "SELECT id, bucket, username FROM results WHERE phone = ? AND phone != ''",
+        "SELECT id, bucket, username, video_id FROM results WHERE phone = ? AND phone != ''",
         (phone,),
     ).fetchone()
     if existing is None:
@@ -682,9 +799,10 @@ def _put(
         return
     if not upgrade:
         return
-    if int(existing["bucket"]) == BUCKET_OK and existing["username"]:
-        return
     if bucket != BUCKET_OK:
+        return
+    same_video = int(existing["video_id"]) == video_id
+    if int(existing["bucket"]) == BUCKET_OK and existing["username"] and not same_video:
         return
     conn.execute(
         "UPDATE results SET name = ?, username = ?, bucket = ?, reason = '', video_id = ? WHERE id = ?",
@@ -735,11 +853,12 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
         return
     if not item.username:
         return
-    existing = conn.execute(
-        "SELECT id FROM results WHERE username = ? AND username != '' LIMIT 1",
-        (item.username,),
-    ).fetchone()
-    if existing is not None:
+    nearby = conn.execute(
+        "SELECT username FROM results WHERE username != '' AND length(username) BETWEEN ? AND ?",
+        (len(item.username) - 1, len(item.username) + 1),
+    ).fetchall()
+    # Đã có @id này, hoặc @id chỉ khác một ký tự dễ đọc nhầm (l với i, _ với __): không thêm dòng mồ côi.
+    if any(row["username"] == item.username or lookalike_handles(row["username"], item.username) for row in nearby):
         return
     conn.execute(
         """

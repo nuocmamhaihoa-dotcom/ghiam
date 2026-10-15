@@ -46,6 +46,20 @@ for lang in eng vie; do
     fi
   fi
 done
+# VietOCR đọc dấu tiếng Việt chuẩn hơn. Không cài được thì bộ đọc chỉ dùng tesseract.
+if uv pip install torch --index-url https://download.pytorch.org/whl/cpu && uv pip install vietocr; then
+  mkdir -p "$APP_DIR/models"
+  if [[ ! -s "$APP_DIR/models/vgg_transformer.pth" ]]; then
+    if curl -fsSL -m 600 -o "$APP_DIR/models/vgg_transformer.pth.part" "https://vocr.vn/data/vietocr/vgg_transformer.pth"; then
+      mv "$APP_DIR/models/vgg_transformer.pth.part" "$APP_DIR/models/vgg_transformer.pth"
+    else
+      rm -f "$APP_DIR/models/vgg_transformer.pth.part"
+      echo "Không tải được trọng số VietOCR. Bộ đọc sẽ chỉ dùng tesseract."
+    fi
+  fi
+else
+  echo "Không cài được VietOCR. Bộ đọc sẽ chỉ dùng tesseract."
+fi
 
 mkdir -p "$APP_DIR/control_data/packages" "$APP_DIR/control_data/sync" "$APP_DIR/logs"
 
@@ -77,7 +91,7 @@ CONTROL_PACKAGES_DIR=$APP_DIR/control_data/packages
 CONTROL_DB=$APP_DIR/control_data/server.db
 CONTROL_PROXIES_FILE=$APP_DIR/control_data/proxies_static.txt
 CONTROL_MAX_UPLOAD_MB=4096
-CONTROL_VIDEO_DISK_GB=80
+CONTROL_VIDEO_DISK_PERCENT=80
 CONTROL_UVICORN_WORKERS=1
 CONTROL_LIMIT_CONCURRENCY=200
 CONTROL_BACKLOG=2048
