@@ -296,6 +296,14 @@ def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
     ]
     if len(pairs) >= 2:
         pairs = sorted(pairs + _phones_without_name(lines, pairs, screen.height), key=lambda pair: pair[0].y0)
+        # Dòng trên cùng trượt dưới thanh tiêu đề bị che nửa trên chữ số (3 thành 5). Bỏ dòng số
+        # nằm sát dưới chữ "Danh bạ"; các khung khác thấy dòng đó đủ.
+        title = next(
+            (line for line in lines if line.y0 < 0.15 * screen.height and "danh ba" in fold(line.text).casefold()),
+            None,
+        )
+        if title is not None:
+            pairs = [pair for pair in pairs if pair[0].y0 >= title.y1 + 0.9 * title.h]
         phones = _read_phones(screen, pairs)
         rows = [
             ListRow(

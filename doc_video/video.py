@@ -175,13 +175,16 @@ def plan_reads(
             if rows is not None and row_index not in rows:
                 rows.append(row_index)
     for run in _profile_runs(layouts):
-        clear = [index for index in run if layouts[index].clear] or run
-        # Khung đầu thường là lúc hồ sơ đang trượt vào màn hình.
-        if len(clear) > per_profile:
-            clear = clear[1:]
+        # Ưu tiên khung mà lần quét đã thấy @id (hồ sơ đã tải xong, không còn trượt vào), rồi tới
+        # khung không bị vòng tròn chạm đè. Khung đầu thường là lúc hồ sơ đang trượt vào màn hình.
+        loaded = [index for index in run if layouts[index].handle_hint]
+        neat = [index for index in loaded if layouts[index].clear]
+        pool = neat if len(neat) >= per_profile else loaded if len(loaded) >= per_profile else run
+        if pool is run and len(pool) > per_profile:
+            pool = pool[1:]
         # Lượt dài bất thường có thể là hai hồ sơ liền nhau mà lần quét không tách được.
-        count = max(per_profile, len(clear) // 4)
-        for index in _spread(clear, count):
+        count = max(per_profile, len(pool) // 4)
+        for index in _spread(pool, count):
             plan[index] = None
     for rows in plan.values():
         if rows is not None:
