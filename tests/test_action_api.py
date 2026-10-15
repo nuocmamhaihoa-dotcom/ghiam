@@ -167,6 +167,8 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Hôm nay theo điện thoại", response.text)
         self.assertIn("Hiện mọi dòng đã quét. Dòng mới nhất ở trên.", response.text)
         self.assertIn("Không giới hạn số video", response.text)
+        self.assertIn("Nhiều danh sách trên một máy cũng tải lên cùng lúc.", response.text)
+        self.assertIn("Vài video lên máy chủ cùng lúc.", response.text)
         self.assertIn("top: -9999px", response.text)
         self.assertNotIn("/v1/videos?limit=", response.text)
         self.assertNotIn("#file { display: none", response.text)
