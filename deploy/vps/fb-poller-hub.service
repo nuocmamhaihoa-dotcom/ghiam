@@ -11,6 +11,7 @@ EnvironmentFile=/opt/fb-poller/control_data/server.env
 ExecStart=/opt/fb-poller/.venv/bin/python -m control_plane
 Restart=always
 RestartSec=3
+TimeoutStopSec=40
 LimitNOFILE=65535
 
 [Install]

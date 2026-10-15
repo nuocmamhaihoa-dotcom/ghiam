@@ -219,6 +219,80 @@ class ActionApiTests(unittest.TestCase):
         self.assertGreaterEqual(mine["uploaded"], 1)
         self.assertEqual(mine["errors"], 0)
 
+    def _chunk(
+        self,
+        upload_id: str,
+        name: str,
+        payload: bytes,
+        offset: int,
+        total: int,
+        device: str = "Máy 1",
+    ):
+        return self.client.post(
+            "/v1/videos/chunks",
+            headers=self.headers,
+            data={
+                "upload_id": upload_id,
+                "name": name,
+                "size": str(total),
+                "offset": str(offset),
+                "device": device,
+            },
+            files={"file": ("chunk", payload, "application/octet-stream")},
+        )
+
+    def test_chunked_upload_resumes_and_ignores_a_lost_response(self) -> None:
+        upload_id = "a1" * 16
+        payload = b"hello world"
+        denied = self.client.post(
+            "/v1/videos/chunks",
+            data={"upload_id": upload_id, "name": "clip.mp4", "size": "11", "offset": "0", "device": "Máy 1"},
+            files={"file": ("chunk", b"hello", "application/octet-stream")},
+        )
+        self.assertEqual(denied.status_code, 401)
+        first = self._chunk(upload_id, "clip.mp4", b"hello", 0, len(payload), device="  Máy 1  ")
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(first.json()["received"], 5)
+        self.assertFalse(first.json()["complete"])
+        # Mảnh đã ghi gửi lại thì không nhân đôi byte.
+        again = self._chunk(upload_id, "clip.mp4", b"hello", 0, len(payload))
+        self.assertEqual(again.status_code, 200, again.text)
+        self.assertEqual(again.json()["received"], 5)
+        gap = self._chunk(upload_id, "clip.mp4", b"!", 8, len(payload))
+        self.assertEqual(gap.status_code, 409, gap.text)
+        self.assertEqual(gap.json()["received"], 5)
+        status = self.client.get(f"/v1/videos/chunks/{upload_id}", headers=self.headers)
+        self.assertEqual(status.status_code, 200, status.text)
+        self.assertEqual(status.json()["received"], 5)
+        done = self._chunk(upload_id, "clip.mp4", b" world", 5, len(payload))
+        self.assertEqual(done.status_code, 200, done.text)
+        body = done.json()
+        self.assertTrue(body["complete"])
+        self.assertEqual(body["status"], "queued")
+        self.assertEqual(body["device"], "Máy 1")
+        self.assertFalse(body["duplicate"])
+        stored = settings.video_dir / f"{body['id']}.mp4"
+        self.assertEqual(stored.read_bytes(), payload)
+        # Phản hồi chốt file bị mất. Hỏi lại thì vẫn nhận đúng kết quả, không gửi lại cả file.
+        replay = self.client.get(f"/v1/videos/chunks/{upload_id}", headers=self.headers)
+        self.assertEqual(replay.status_code, 200, replay.text)
+        self.assertEqual(replay.json()["id"], body["id"])
+        self.assertTrue(replay.json()["duplicate"] or replay.json()["complete"])
+        other = "b2" * 16
+        duplicate = self._chunk(other, "clip-copy.mp4", payload, 0, len(payload))
+        self.assertEqual(duplicate.status_code, 200, duplicate.text)
+        self.assertTrue(duplicate.json()["duplicate"])
+        self.assertEqual(duplicate.json()["id"], body["id"])
+
+    def test_chunk_rejects_a_bad_file_and_a_foreign_upload_id(self) -> None:
+        upload_id = "c3" * 16
+        bad = self._chunk(upload_id, "notes.txt", b"abc", 0, 3)
+        self.assertEqual(bad.status_code, 400, bad.text)
+        missing = self.client.get("/v1/videos/chunks/not-a-real-id", headers=self.headers)
+        self.assertEqual(missing.status_code, 400, missing.text)
+        huge = self._chunk(upload_id, "big.mp4", b"ab", 0, settings.max_upload_mb * 1024 * 1024 + 1)
+        self.assertEqual(huge.status_code, 413, huge.text)
+
     def test_same_video_after_it_is_read_is_read_again(self) -> None:
         from control_plane.video_store import connect
 

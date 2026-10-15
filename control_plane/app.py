@@ -71,6 +71,8 @@ if STATIC_DIR.is_dir():
 class LimitUploadSizeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
         cl = request.headers.get("content-length")
+        if cl and request.url.path == "/v1/videos/chunks" and int(cl) > 9 * 1024 * 1024:
+            return JSONResponse({"detail": "Mảnh quá lớn."}, status_code=413)
         if cl and int(cl) > settings.max_upload_mb * 1024 * 1024:
             return JSONResponse({"detail": "upload too large"}, status_code=413)
         return await call_next(request)

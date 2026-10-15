@@ -13,14 +13,23 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from fastapi import APIRouter, File, Form, Header, HTTPException, Query, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from control_plane.settings import derive_secret, settings
+from control_plane.upload_parts import (
+    UploadRejected,
+    check_upload_id,
+    lookup_part,
+    release_finish,
+    save_done,
+    write_part,
+)
 from control_plane.video_scan import IMAGE_SUFFIXES, VIDEO_SUFFIXES
 from control_plane.video_store import (
     abort_upload,
     begin_upload,
+    clean_device,
     commit_upload,
     device_day,
     disk_limit_bytes,
@@ -105,6 +114,79 @@ def _write_chunk(handle: BinaryIO, hasher: Any, chunk: bytes) -> None:
     handle.write(chunk)
 
 
+def _hash_file(path: Path) -> str:
+    hasher = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            block = handle.read(1024 * 1024)
+            if not block:
+                break
+            hasher.update(block)
+    return hasher.hexdigest()
+
+
+def _reject(error: UploadRejected) -> JSONResponse:
+    body: dict[str, object] = {"detail": error.detail}
+    if error.received is not None:
+        body["received"] = error.received
+    if error.restart:
+        body["restart"] = True
+    return JSONResponse(body, status_code=error.status)
+
+
+async def _publish_file(src: Path, original: str, size: int, digest: str, device: str) -> dict[str, object]:
+    """Đưa file đã nằm đủ trên đĩa vào hàng chờ. File nguồn được chuyển đi, không copy thêm một bản."""
+    await run_in_threadpool(
+        lambda: prune_old_videos(
+            settings.video_db_path,
+            settings.video_dir,
+            percent=settings.video_disk_percent,
+            protect_newest=False,
+        )
+    )
+    used, free, limit = _disk_snapshot()
+    if used > limit or free <= 2 * 1024 * 1024 * 1024:
+        raise HTTPException(
+            status_code=507,
+            detail=(
+                f"Ổ đĩa đã tới {settings.video_disk_percent}%."
+                " Video đang đọc chưa xóa được. Đợi đọc xong rồi tải tiếp."
+            ),
+        )
+    created: dict[str, object] | None = None
+    final: Path | None = None
+    try:
+        created = await run_in_threadpool(
+            lambda: begin_upload(
+                settings.video_db_path,
+                name=original,
+                size_bytes=size,
+                sha256=digest,
+                device=device,
+            )
+        )
+        if created["duplicate"]:
+            await run_in_threadpool(lambda: src.unlink(missing_ok=True))
+            return created
+        video_id = int(created["id"])
+        final = settings.video_dir / f"{video_id}{Path(original).suffix.lower()}"
+        await run_in_threadpool(lambda: os.replace(src, final))
+        old_path = str(created.pop("old_path", "") or "")
+        if old_path and old_path != str(final):
+            await run_in_threadpool(lambda: Path(old_path).unlink(missing_ok=True))
+        await run_in_threadpool(commit_upload, settings.video_db_path, video_id, str(final))
+        created["status"] = "queued"
+        return created
+    except Exception:
+        if created is not None and not created.get("duplicate"):
+            await run_in_threadpool(
+                abort_upload, settings.video_db_path, int(created["id"]), bool(created.get("reopened"))
+            )
+        if final is not None and final.is_file() and src != final:
+            await run_in_threadpool(lambda: final.unlink(missing_ok=True))
+        raise
+
+
 @router.post("/v1/videos")
 async def upload_video(
     file: UploadFile = File(...),
@@ -123,8 +205,6 @@ async def upload_video(
     hasher = hashlib.sha256()
     size = 0
     upload_limit = settings.max_upload_mb * 1024 * 1024
-    created: dict[str, object] | None = None
-    final: Path | None = None
     try:
         with tmp.open("wb") as handle:
             while True:
@@ -135,55 +215,88 @@ async def upload_video(
                 if size > upload_limit:
                     raise HTTPException(status_code=413, detail="Video quá lớn.")
                 await run_in_threadpool(_write_chunk, handle, hasher, chunk)
-        # File mới đã nằm trên đĩa. Xóa video cũ đã đọc xong cho đến khi ổ đĩa còn dưới mức cho phép.
-        await run_in_threadpool(
-            lambda: prune_old_videos(
-                settings.video_db_path,
-                settings.video_dir,
-                percent=settings.video_disk_percent,
-                protect_newest=False,
-            )
-        )
-        used, free, limit = _disk_snapshot()
-        if used > limit or free <= 2 * 1024 * 1024 * 1024:
-            raise HTTPException(
-                status_code=507,
-                detail=(
-                    f"Ổ đĩa đã tới {settings.video_disk_percent}%."
-                    " Video đang đọc chưa xóa được. Đợi đọc xong rồi tải tiếp."
-                ),
-            )
-        created = await run_in_threadpool(
-            lambda: begin_upload(
-                settings.video_db_path,
-                name=original,
-                size_bytes=size,
-                sha256=hasher.hexdigest(),
-                device=device,
-            )
-        )
-        if created["duplicate"]:
-            return created
-        video_id = int(created["id"])
-        final = settings.video_dir / f"{video_id}{suffix}"
-        os.replace(tmp, final)
-        old_path = str(created.pop("old_path", "") or "")
-        if old_path and old_path != str(final):
-            Path(old_path).unlink(missing_ok=True)
-        await run_in_threadpool(commit_upload, settings.video_db_path, video_id, str(final))
-        created["status"] = "queued"
-        return created
-    except Exception:
-        if created is not None and not created.get("duplicate"):
-            await run_in_threadpool(
-                abort_upload, settings.video_db_path, int(created["id"]), bool(created.get("reopened"))
-            )
-        if final is not None:
-            final.unlink(missing_ok=True)
-        raise
+        return await _publish_file(tmp, original, size, hasher.hexdigest(), device)
     finally:
         tmp.unlink(missing_ok=True)
         await file.close()
+
+
+@router.get("/v1/videos/chunks/{upload_id}")
+async def chunk_status(upload_id: str, authorization: str | None = Header(default=None)) -> JSONResponse:
+    """Số byte đã nằm trên đĩa. Trình duyệt hỏi trước khi gửi tiếp, để không gửi lại phần đã lên."""
+    _auth(authorization)
+    try:
+        checked = check_upload_id(upload_id)
+    except UploadRejected as error:
+        return _reject(error)
+    found = await run_in_threadpool(lookup_part, settings.video_dir, checked)
+    if found is None:
+        return JSONResponse({"detail": "Chưa có phần nào.", "received": 0}, status_code=404)
+    return JSONResponse(found)
+
+
+@router.post("/v1/videos/chunks")
+async def upload_chunk(
+    upload_id: str = Form(...),
+    name: str = Form(...),
+    size: int = Form(...),
+    offset: int = Form(...),
+    device: str = Form(""),
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+) -> JSONResponse:
+    """Nhận một mảnh. Đủ file thì đưa vào hàng chờ. Đứt mạng thì mảnh sau nối vào byte đã có."""
+    _auth(authorization)
+    await run_in_threadpool(init_db, settings.video_db_path)
+    settings.ensure_dirs()
+    phone = clean_device(device)
+    try:
+        checked = check_upload_id(upload_id)
+        data = await file.read(8 * 1024 * 1024 + 1)
+        outcome = await run_in_threadpool(
+            lambda: write_part(
+                settings.video_dir,
+                upload_id=checked,
+                name=name,
+                size=size,
+                device=phone,
+                offset=offset,
+                data=data,
+                max_bytes=settings.max_upload_mb * 1024 * 1024,
+            )
+        )
+    except UploadRejected as error:
+        return _reject(error)
+    finally:
+        await file.close()
+    saved = outcome.get("saved")
+    if isinstance(saved, dict):
+        return JSONResponse(saved)
+    if not outcome.get("complete"):
+        return JSONResponse(
+            {
+                "received": outcome.get("received", 0),
+                "size": outcome.get("size", size),
+                "complete": False,
+                "pending": bool(outcome.get("pending")),
+            }
+        )
+    try:
+        digest = await run_in_threadpool(_hash_file, Path(str(outcome["path"])))
+        created = await _publish_file(
+            Path(str(outcome["path"])),
+            str(outcome.get("name") or name),
+            int(outcome["size"]),
+            digest,
+            str(outcome.get("device") or device),
+        )
+    except Exception:
+        await run_in_threadpool(release_finish, settings.video_dir, checked)
+        raise
+    created["received"] = int(outcome["size"])
+    created["complete"] = True
+    await run_in_threadpool(save_done, settings.video_dir, checked, created)
+    return JSONResponse(created)
 
 
 @router.post("/v1/videos/{video_id}/retry")
