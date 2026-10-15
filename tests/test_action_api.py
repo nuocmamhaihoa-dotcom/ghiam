@@ -156,6 +156,8 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Thêm video", response.text)
         self.assertIn("Tải bản sao lưu về PC", response.text)
         self.assertIn("Thống kê", response.text)
+        self.assertIn("Điện thoại này", response.text)
+        self.assertIn("Hôm nay theo điện thoại", response.text)
         self.assertIn('var serverToken = "%s";' % settings.page_token, response.text)
         self.assertNotIn("test-token", response.text)
         self.assertNotIn("__CONTROL_TOKEN__", response.text)
@@ -192,6 +194,24 @@ class ActionApiTests(unittest.TestCase):
         self.assertFalse(ticket_ok(f"{int(expiry) + 3600}-{signature}", 1000.0))
         self.assertFalse(ticket_ok("garbage", 1000.0))
         self.assertEqual(self.client.get(f"/v1/backup/{expiry}-{'0' * 32}").status_code, 404)
+
+    def test_upload_keeps_the_phone_name(self) -> None:
+        uploaded = self.client.post(
+            "/v1/videos",
+            headers=self.headers,
+            data={"device": "  Máy 1  "},
+            files={"file": ("may.mp4", b"from-phone-1", "video/mp4")},
+        )
+        self.assertEqual(uploaded.status_code, 200, uploaded.text)
+        self.assertEqual(uploaded.json()["device"], "Máy 1")
+        listed = self.client.get("/v1/videos", headers=self.headers, params={"device": "Máy 1"})
+        self.assertEqual(listed.status_code, 200)
+        self.assertIn("may.mp4", [item["name"] for item in listed.json()["items"]])
+        phones = self.client.get("/v1/videos/stats", headers=self.headers).json()["phones"]
+        self.assertIn("Máy 1", phones["known"])
+        mine = next(item for item in phones["items"] if item["device"] == "Máy 1")
+        self.assertGreaterEqual(mine["uploaded"], 1)
+        self.assertEqual(mine["errors"], 0)
 
     def test_same_video_after_it_is_read_is_read_again(self) -> None:
         from control_plane.video_store import connect

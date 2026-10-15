@@ -16,9 +16,11 @@ from control_plane.video_store import (
     begin_upload,
     can_accept,
     claim,
+    clean_device,
     commit_upload,
     confirm_open_profiles,
     connect,
+    device_day,
     fail,
     finish,
     init_db,
@@ -279,6 +281,70 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(backfill_video_counts(path), 1)
         listed = list_videos(path)[0]
         self.assertEqual((listed["phone_count"], listed["full_count"]), (0, 0))
+        self.assertEqual(listed["device"], "")
+
+    def test_phone_name_stays_with_the_video_and_the_day_is_vietnam_time(self) -> None:
+        from datetime import datetime, timezone
+
+        self.assertEqual(clean_device("  Máy   1 \n"), "Máy 1")
+        self.assertEqual(len(clean_device("x" * 80)), 40)
+        now = datetime(2026, 10, 14, 18, 0, tzinfo=timezone.utc)
+        yesterday = "2026-10-14T16:30:00+00:00"
+        today = "2026-10-14T17:30:00+00:00"
+        arrived = begin_upload(self.db, name="hom-nay.mp4", size_bytes=10, sha256="today", device="  Máy 1 ")
+        self.assertEqual(arrived["device"], "Máy 1")
+        commit_upload(self.db, int(arrived["id"]), str(Path(self._tmp.name) / "hom-nay.mp4"))
+        late_error = self._add("loi.mp4", "err-phone")
+        other = begin_upload(self.db, name="may-2.mp4", size_bytes=10, sha256="phone-2", device="Máy 2")
+        commit_upload(self.db, int(other["id"]), str(Path(self._tmp.name) / "may-2.mp4"))
+        claim(self.db, 4)
+        finish(self.db, int(other["id"]), Table())
+        still = begin_upload(self.db, name="dang.mp4", size_bytes=10, sha256="still", device="Máy 2")
+        with connect(self.db) as conn:
+            conn.execute("UPDATE videos SET created_at = ? WHERE id = ?", (today, arrived["id"]))
+            conn.execute(
+                "UPDATE videos SET device = ?, created_at = ?, finished_at = ?, status = 'error' WHERE id = ?",
+                ("Máy 1", yesterday, today, late_error),
+            )
+            conn.execute(
+                "UPDATE videos SET created_at = ?, finished_at = ? WHERE id = ?",
+                (today, today, other["id"]),
+            )
+            conn.execute("UPDATE videos SET created_at = ? WHERE id = ?", (today, still["id"]))
+        report = device_day(self.db, now)
+        self.assertEqual(report["day"], "2026-10-15")
+        by_phone = {item["device"]: item for item in report["items"]}
+        self.assertEqual(by_phone["Máy 1"]["uploaded"], 1)
+        self.assertEqual(by_phone["Máy 1"]["errors"], 1)
+        self.assertEqual(by_phone["Máy 1"]["waiting"], 1)
+        self.assertEqual((by_phone["Máy 2"]["uploaded"], by_phone["Máy 2"]["done"], by_phone["Máy 2"]["errors"]), (1, 1, 0))
+        self.assertEqual(by_phone["Máy 2"]["waiting"], 1)
+        self.assertEqual(
+            {item["name"] for item in list_videos(self.db, device="Máy 1")},
+            {"hom-nay.mp4", "loi.mp4"},
+        )
+        self.assertEqual(
+            {item["name"] for item in list_videos(self.db, device="Máy 2")},
+            {"may-2.mp4", "dang.mp4"},
+        )
+
+    def test_a_queued_file_keeps_the_phone_that_uploaded_it_first(self) -> None:
+        first = begin_upload(self.db, name="a.mp4", size_bytes=10, sha256="same-phone", device="Máy 1")
+        commit_upload(self.db, int(first["id"]), str(Path(self._tmp.name) / "a.mp4"))
+        again = begin_upload(self.db, name="a.mp4", size_bytes=10, sha256="same-phone", device="Máy 2")
+        self.assertTrue(again["duplicate"])
+        self.assertEqual(again["device"], "Máy 1")
+        claim(self.db, 4)
+        finish(self.db, int(first["id"]), Table())
+        reread = begin_upload(self.db, name="a.mp4", size_bytes=10, sha256="same-phone", device="Máy 2")
+        self.assertEqual(reread["device"], "Máy 2")
+        self.assertEqual(list_videos(self.db)[0]["device"], "Máy 2")
+        kept = begin_upload(self.db, name="a.mp4", size_bytes=10, sha256="same-phone")
+        self.assertTrue(kept["duplicate"])
+        abort_upload(self.db, int(reread["id"]), reopened=True)
+        blank = begin_upload(self.db, name="a.mp4", size_bytes=10, sha256="same-phone")
+        self.assertFalse(blank["duplicate"])
+        self.assertEqual(blank["device"], "Máy 2")
 
     def test_review_rows_with_a_matching_handle_become_saved(self) -> None:
         video_id = self._add("a.mp4", "a")

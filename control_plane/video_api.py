@@ -12,7 +12,7 @@ import zlib
 from pathlib import Path
 from typing import Any, BinaryIO
 
-from fastapi import APIRouter, File, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
@@ -22,6 +22,7 @@ from control_plane.video_store import (
     abort_upload,
     begin_upload,
     commit_upload,
+    device_day,
     disk_limit_bytes,
     init_db,
     iter_backup,
@@ -81,14 +82,21 @@ def video_stats(authorization: str | None = Header(default=None)) -> dict[str, o
     used, _free, limit = _disk_snapshot()
     body["disk_used_bytes"] = used
     body["disk_limit_bytes"] = limit
+    body["phones"] = device_day(settings.video_db_path)
     return body
 
 
 @router.get("/v1/videos")
-def videos(authorization: str | None = Header(default=None), limit: int = Query(default=40, ge=1, le=200)) -> dict[str, object]:
+def videos(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=40, ge=1, le=200),
+    device: str | None = Query(default=None),
+) -> dict[str, object]:
+    """device có mặt thì chỉ video của điện thoại đó. Bỏ tham số để xem mọi máy."""
     _auth(authorization)
     init_db(settings.video_db_path)
-    items = list_videos(settings.video_db_path, limit)
+    chosen = None if device is None else device
+    items = list_videos(settings.video_db_path, limit, chosen)
     return {"count": len(items), "items": items}
 
 
@@ -100,6 +108,7 @@ def _write_chunk(handle: BinaryIO, hasher: Any, chunk: bytes) -> None:
 @router.post("/v1/videos")
 async def upload_video(
     file: UploadFile = File(...),
+    device: str = Form(""),
     authorization: str | None = Header(default=None),
 ) -> dict[str, object]:
     """Ghi đĩa và cơ sở dữ liệu chạy ngoài vòng sự kiện, để một video lớn không làm đứng trang của máy khác."""
@@ -145,7 +154,13 @@ async def upload_video(
                 ),
             )
         created = await run_in_threadpool(
-            lambda: begin_upload(settings.video_db_path, name=original, size_bytes=size, sha256=hasher.hexdigest())
+            lambda: begin_upload(
+                settings.video_db_path,
+                name=original,
+                size_bytes=size,
+                sha256=hasher.hexdigest(),
+                device=device,
+            )
         )
         if created["duplicate"]:
             return created
