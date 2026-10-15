@@ -486,10 +486,14 @@ def _pair_opened_screen(
 ) -> None:
     """Cuộn danh bạ và mở từng dòng từ trên xuống thì ghép theo thứ tự.
 
-    Hai màn kề nhau còn chung phần lớn số thì là cùng một lượt cuộn. Chỉ ghép
-    khi số hồ sơ trong lượt đó bằng số điện thoại, nghĩa là đã mở hết.
+    Hai màn kề nhau còn chung phần lớn số thì là cùng một lượt cuộn. Đã mở hết
+    thì dòng nào ghép được bằng tên giữ nguyên chỗ của nó; các dòng còn lại,
+    tên TikTok khác tên danh bạ, ghép đúng chỗ trống đó. Mở thiếu một dòng thì
+    không dồn các dòng còn lại, trừ khi chỉ còn đúng một số và một hồ sơ.
     """
     for shown, opened in _scroll_groups(visits):
+        if _pair_aligned_open(result, phones, handles, shown, opened, used_phones, used_handles):
+            continue
         pending = [
             handle
             for handle in opened
@@ -501,6 +505,47 @@ def _pair_opened_screen(
                 _add(result, phones, handles, phone, handle, used_phones, used_handles)
         elif len(pending) == 1 and len(left) == 1:
             _add(result, phones, handles, left[0], pending[0], used_phones, used_handles)
+
+
+def _pair_aligned_open(
+    result: Result,
+    phones: dict[str, _Seen],
+    handles: dict[str, _Seen],
+    shown: list[str],
+    opened: list[str],
+    used_phones: set[str],
+    used_handles: set[str],
+) -> bool:
+    """Ghép các chỗ còn trống khi đã mở hết dòng và các dòng đã ghép vẫn đúng chỗ.
+
+    Tên hồ sơ trùng tên một số khác trên cùng màn thì không dồn phần còn lại,
+    vì thứ tự đã lệch.
+    """
+    if not shown or len(shown) != len(opened):
+        return False
+    paired = {row.phone: row.handle for row in result.rows}
+    taken = {row.handle for row in result.rows}
+    free: list[tuple[str, str]] = []
+    visible = tuple(shown)
+    for phone, handle in zip(shown, opened):
+        got = paired.get(phone)
+        if got == handle:
+            continue
+        if (
+            got is None
+            and phone in phones
+            and handle in handles
+            and phone not in used_phones
+            and handle not in taken
+            and handle not in used_handles
+            and not _named_elsewhere(handle, visible, phones, handles, used_phones)
+        ):
+            free.append((phone, handle))
+            continue
+        return False
+    for phone, handle in free:
+        _add(result, phones, handles, phone, handle, used_phones, used_handles)
+    return True
 
 
 def _scroll_groups(visits: list[_Visit]) -> list[tuple[list[str], list[str]]]:

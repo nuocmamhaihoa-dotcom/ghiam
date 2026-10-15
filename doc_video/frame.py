@@ -354,7 +354,8 @@ def read_layout(image: Image.Image, layout: Layout, rows: list[int] | None = Non
         return FrameRead("list", contacts, at=layout.at, tapped=layout.tapped)
     if layout.kind == "profile" and layout.handle_line is not None:
         name, handle = _read_profile(phone_screen(image), layout.name_line, layout.handle_line, layout.name_readable)
-        if handle:
+        # Giữ tên dù chưa ra @id. @id lúc quét được điền sau nếu lần đọc kỹ trượt hết.
+        if handle or name:
             return FrameRead("profile", profile_name=name, handle=handle, at=layout.at)
     return FrameRead(at=layout.at)
 
