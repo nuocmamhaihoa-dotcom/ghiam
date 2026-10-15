@@ -799,46 +799,69 @@ def merge_close_results(db_path: Path) -> int:
     return merged
 
 
-def search_results(db_path: Path, query: str = "", limit: int = 50) -> list[dict[str, object]]:
-    """Tìm theo đầu số hoặc đầu username. Tìm theo khoảng trên chỉ mục, không quét cả bảng."""
+def _result_filter(query: str) -> tuple[str, list[object]]:
+    """Lọc theo đầu số hoặc đầu username. Chuỗi rỗng là mọi dòng."""
     text = "".join(query.split())
     if text.startswith("+84"):
         text = "0" + text[3:]
+    if text.isdigit():
+        return "WHERE phone >= ? AND phone < ? AND phone != ''", [text, text + ":"]
+    if text:
+        handle = text if text.startswith("@") else "@" + text
+        return "WHERE username >= ? AND username < ? AND username != ''", [handle, handle + "\U0010ffff"]
+    return "", []
+
+
+def result_page(
+    db_path: Path,
+    query: str = "",
+    limit: int = 50,
+    before: int = 0,
+    after: int = 0,
+) -> dict[str, object]:
+    """Một trang kết quả, dòng mới nhất (id lớn hơn) ở trên.
+
+    before lấy các dòng cũ hơn id đó. after lấy các dòng mới hơn id đó.
+    Nếu cả hai cùng có thì after thắng. before trong kết quả là id dòng cuối
+    khi trang đầy và đang đi xuống, để lấy trang kế. 0 nghĩa là hết trang.
+    """
+    where, params = _result_filter(query)
+    page_size = max(1, min(int(limit), 1000))
+    cursor_sql = ""
+    cursor_params: list[object] = []
+    if after > 0:
+        cursor_sql = (" AND " if where else " WHERE ") + "id > ?"
+        cursor_params = [int(after)]
+    elif before > 0:
+        cursor_sql = (" AND " if where else " WHERE ") + "id < ?"
+        cursor_params = [int(before)]
     with connect(db_path) as conn:
-        if text.isdigit():
-            rows = conn.execute(
-                """
-                SELECT id, phone, name, username, bucket, reason
-                FROM results
-                WHERE phone >= ? AND phone < ? AND phone != ''
-                ORDER BY phone
-                LIMIT ?
-                """,
-                (text, text + ":", limit),
-            ).fetchall()
-        elif text:
-            handle = text if text.startswith("@") else "@" + text
-            rows = conn.execute(
-                """
-                SELECT id, phone, name, username, bucket, reason
-                FROM results
-                WHERE username >= ? AND username < ? AND username != ''
-                ORDER BY username
-                LIMIT ?
-                """,
-                (handle, handle + "\U0010ffff", limit),
-            ).fetchall()
+        if where:
+            total = int(conn.execute(f"SELECT COUNT(*) AS n FROM results {where}", params).fetchone()["n"])
         else:
-            rows = conn.execute(
-                """
-                SELECT id, phone, name, username, bucket, reason
-                FROM results
-                ORDER BY id DESC
-                LIMIT ?
-                """,
-                (limit,),
-            ).fetchall()
-    return [_public_result(row) for row in rows]
+            total = int(conn.execute("SELECT COALESCE(SUM(n), 0) AS n FROM result_counts").fetchone()["n"])
+        rows = conn.execute(
+            f"""
+            SELECT id, phone, name, username, bucket, reason
+            FROM results
+            {where}{cursor_sql}
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            [*params, *cursor_params, page_size],
+        ).fetchall()
+    items = [_public_result(row) for row in rows]
+    next_before = 0
+    if after <= 0 and len(items) == page_size:
+        next_before = int(items[-1]["id"])
+    return {"items": items, "total": total, "before": next_before}
+
+
+def search_results(db_path: Path, query: str = "", limit: int = 50) -> list[dict[str, object]]:
+    """Tìm theo đầu số hoặc đầu username. Dòng mới nhất ở trên."""
+    page = result_page(db_path, query, limit)
+    items = page["items"]
+    return list(items) if isinstance(items, list) else []
 
 
 def iter_backup(db_path: Path) -> Iterator[str]:

@@ -29,8 +29,8 @@ from control_plane.video_store import (
     list_videos,
     prune_old_videos,
     reader_alive,
+    result_page,
     retry,
-    search_results,
     stats,
     worker_count,
 )
@@ -198,12 +198,16 @@ def retry_video(video_id: int, authorization: str | None = Header(default=None))
 def results(
     authorization: str | None = Header(default=None),
     q: str = "",
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=500, ge=1, le=1000),
+    before: int = Query(default=0, ge=0),
+    after: int = Query(default=0, ge=0),
 ) -> dict[str, object]:
     _auth(authorization)
     init_db(settings.video_db_path)
-    items = search_results(settings.video_db_path, q, limit)
-    return {"count": len(items), "items": items}
+    page = result_page(settings.video_db_path, q, limit, before, after)
+    items = page["items"]
+    page["count"] = len(items) if isinstance(items, list) else 0
+    return page
 
 
 @router.post("/v1/backup/ticket")
