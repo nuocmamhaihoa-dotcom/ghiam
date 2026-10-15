@@ -238,9 +238,19 @@ def build(frames: list[FrameRead]) -> Result:
                     seen.taps[tap[0]] += 1
             tap = None
     merged = _merge_misreads(phones, frames_with)
-    for seen in handles.values():
-        if merged and seen.taps:
-            seen.taps = Counter({merged.get(phone, phone): hits for phone, hits in seen.taps.items()})
+    if merged:
+        # Số đọc nhầm đã gộp vào số đúng: mọi chỗ còn nhắc tới số nhầm phải đổi theo, nếu
+        # không bước ghép theo thứ tự tra một số không còn tồn tại.
+        def fix(phone: str) -> str:
+            return merged.get(phone, phone)
+
+        def fix_all(items: tuple[str, ...]) -> tuple[str, ...]:
+            return tuple(dict.fromkeys(fix(phone) for phone in items))
+
+        for seen in handles.values():
+            seen.taps = Counter({fix(phone): hits for phone, hits in seen.taps.items()})
+            seen.near = {fix(phone) for phone in seen.near}
+        visits = [_Visit(visit.handle, fix_all(visit.visible)) for visit in visits]
     return _pair(phones, handles, visits)
 
 
@@ -281,6 +291,8 @@ def _pair(phones: dict[str, _Seen], handles: dict[str, _Seen], visits: list[_Vis
     _pair_tapped(result, phones, handles, used_phones, used_handles)
     _pair_contained(result, phones, handles, used_phones, used_handles)
     _pair_opened_screen(result, phones, handles, visits, used_phones, used_handles)
+    _pair_similar_on_screen(result, phones, handles, visits, used_phones, used_handles)
+    _pair_unnamed_on_screen(result, phones, handles, visits, used_phones, used_handles)
 
     left_phones = [phone for phone in phones if phone not in used_phones]
     left_handles = [handle for handle in handles if handle not in used_handles]
@@ -358,6 +370,84 @@ def _pair_contained(
     for handle, found in options.items():
         if len(found) == 1 and claimed[found[0]] == 1 and found[0] not in used_phones:
             _add(result, phones, handles, found[0], handle, used_phones, used_handles)
+
+
+def _pair_similar_on_screen(
+    result: Result,
+    phones: dict[str, _Seen],
+    handles: dict[str, _Seen],
+    visits: list[_Visit],
+    used_phones: set[str],
+    used_handles: set[str],
+) -> None:
+    """Tên đọc lệch một hai chữ (LêlLee với LêLee, Sade_s với Sads): ghép khi số đó nằm trên màn danh bạ
+    ngay trước lúc mở hồ sơ, và cả hai phía chỉ có đúng một cặp gần giống.
+
+    Không xét số ở màn khác: so tên gần giống trên cả danh bạ từng gắn nhầm người.
+    """
+    shown: dict[str, set[str]] = {}
+    for visit in visits:
+        shown.setdefault(visit.handle, set()).update(visit.visible)
+    options: dict[str, list[str]] = {}
+    for handle, seen in handles.items():
+        if handle in used_handles:
+            continue
+        key = name_key(seen.name())
+        if len(key) < 3:
+            continue
+        options[handle] = [
+            phone
+            for phone in shown.get(handle, ())
+            if phone in phones
+            and phone not in used_phones
+            and _similar(key, name_key(phones[phone].name()))
+        ]
+    claimed = Counter(phone for found in options.values() for phone in found)
+    for handle, found in options.items():
+        if len(found) == 1 and claimed[found[0]] == 1 and found[0] not in used_phones:
+            _add(result, phones, handles, found[0], handle, used_phones, used_handles)
+
+
+def _pair_unnamed_on_screen(
+    result: Result,
+    phones: dict[str, _Seen],
+    handles: dict[str, _Seen],
+    visits: list[_Visit],
+    used_phones: set[str],
+    used_handles: set[str],
+) -> None:
+    """Tên danh bạ chỉ gồm biểu tượng nên không đọc được. Hồ sơ còn lại ghép với số đó khi trên màn
+    danh bạ ngay trước lúc mở chỉ có đúng một số chưa ghép không đọc được tên, tên hồ sơ không gần
+    với số chưa ghép nào khác trên màn đó, và số đó không được hồ sơ nào khác nhắm tới.
+    """
+    shown: dict[str, set[str]] = {}
+    for visit in visits:
+        shown.setdefault(visit.handle, set()).update(visit.visible)
+    options: dict[str, str] = {}
+    for handle, seen in handles.items():
+        if handle in used_handles:
+            continue
+        free = [phone for phone in shown.get(handle, ()) if phone in phones and phone not in used_phones]
+        unnamed = [phone for phone in free if not name_key(phones[phone].name())]
+        key = name_key(seen.name())
+        lookalike = [
+            phone
+            for phone in free
+            if key and name_key(phones[phone].name())
+            and SequenceMatcher(None, key, name_key(phones[phone].name()), autojunk=False).ratio() >= 0.5
+        ]
+        if len(unnamed) == 1 and not lookalike:
+            options[handle] = unnamed[0]
+    claimed = Counter(options.values())
+    for handle, phone in options.items():
+        if claimed[phone] == 1 and phone not in used_phones:
+            _add(result, phones, handles, phone, handle, used_phones, used_handles)
+
+
+def _similar(left: str, right: str) -> bool:
+    if len(left) < 3 or len(right) < 3:
+        return False
+    return SequenceMatcher(None, left, right, autojunk=False).ratio() >= 0.75
 
 
 def _pair_opened_screen(

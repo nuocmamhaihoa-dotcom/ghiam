@@ -15,6 +15,7 @@ from doc_video.text import (
     clean_name,
     find_handle,
     fix_underscores,
+    handle_from_read,
     handle_from_viet,
     handle_matches_name,
     looks_like_phone,
@@ -56,6 +57,9 @@ class TextTests(unittest.TestCase):
 
     def test_handles_are_lowercase_like_tiktok(self) -> None:
         self.assertEqual(find_handle("@User_Abc.12"), "@user_abc.12")
+        self.assertEqual(find_handle("@31776814785"), "@31776814785")
+        self.assertEqual(find_handle("@0749"), "")
+        self.assertEqual(handle_from_read("(@thanhson190ó"), "@thanhson1906")
         self.assertEqual(handle_from_viet("Oquocnguyet81792"), "@quocnguyet81792")
         self.assertEqual(handle_from_viet("Qhuong.tv"), "@huong.tv")
         self.assertEqual(handle_from_viet("0090fy5xr"), "@090fy5xr")
@@ -124,6 +128,45 @@ class JoinTests(unittest.TestCase):
             ]
         )
         self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0919200084", "@anhphonglacuatao")])
+
+    def test_name_read_one_letter_off_joins_the_number_on_screen(self) -> None:
+        result = build(
+            [
+                listing(("0919325515", "LêLee"), ("0919225515", "Đức Khánh"), ("0900000003", "Mai")),
+                profile("LêlLee", "@llee6745"),
+            ]
+        )
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0919325515", "@llee6745")])
+
+    def test_profile_joins_the_only_emoji_named_number_on_screen(self) -> None:
+        result = build(
+            [
+                FrameRead("list", [Contact("0919253108", ""), Contact("0900000002", "Lan"), Contact("0900000003", "Mai")]),
+                profile("AK", "@user520413055142"),
+                FrameRead("list", [Contact("0919253108", ""), Contact("0900000002", "Lan"), Contact("0900000003", "Mai")]),
+                profile("Lan", "@lan"),
+            ]
+        )
+        self.assertIn(("0919253108", "@user520413055142"), [(row.phone, row.handle) for row in result.rows])
+
+    def test_two_emoji_named_numbers_on_screen_are_not_guessed(self) -> None:
+        result = build(
+            [
+                FrameRead("list", [Contact("0919253108", ""), Contact("0919208000", ""), Contact("0900000003", "Mai")]),
+                profile("AK", "@user520413055142"),
+            ]
+        )
+        self.assertEqual(result.rows, [])
+
+    def test_similar_name_on_another_screen_is_not_attached(self) -> None:
+        result = build(
+            [
+                listing(("0919325515", "LêLee"), ("0900000002", "Lan")),
+                listing(("0900000005", "Cuong"), ("0900000006", "Dung"), ("0900000007", "Hoa")),
+                profile("LêlLee", "@llee6745"),
+            ]
+        )
+        self.assertEqual(result.rows, [])
 
     def test_short_name_inside_a_longer_one_is_not_attached(self) -> None:
         result = build([listing(("0900000001", "Kim Linh"), ("0900000002", "Lan")), profile("Linh", "@linh234_50")])
@@ -347,6 +390,16 @@ class JoinTests(unittest.TestCase):
             profile("Hữu Nhung", "@huunhung"),
         ]
         self.assertEqual(build(frames).rows[0].name, "Hữu Nhung")
+
+    def test_misread_number_merged_away_does_not_break_order_joining(self) -> None:
+        screen = [("0915288126", "An"), ("0900000002", "Binh")]
+        frames = [listing(*screen) for _ in range(3)]
+        frames.append(listing(("0915288128", "An"), ("0900000002", "Binh")))
+        frames.append(profile("Biệt danh", "@xyzxyz"))
+        frames.append(listing(("0915288128", "An"), ("0900000002", "Binh")))
+        frames.append(profile("Tên khác", "@abcabc"))
+        result = build(frames)
+        self.assertEqual({row.phone for row in result.rows}, {"0915288126", "0900000002"})
 
     def test_most_frequent_name_wins(self) -> None:
         frames = [listing(("0908035416", "thovahanh"), ("0908031961", "Thu Vân")) for _ in range(3)]
