@@ -296,7 +296,7 @@ class JoinTests(unittest.TestCase):
         self.assertEqual(result.unopened, [])
         self.assertEqual(result.review, [])
 
-    def test_a_profile_name_of_another_row_does_not_shift_the_rest(self) -> None:
+    def test_a_full_screen_keeps_open_order_when_a_profile_name_matches_another_row(self) -> None:
         screen = (("0900000001", "Lan"), ("0900000002", "Hoa"), ("0900000003", "Mai"))
         result = build(
             [
@@ -308,6 +308,16 @@ class JoinTests(unittest.TestCase):
                 profile("TikTok Hai", "@khac.hai"),
             ]
         )
+        self.assertEqual(
+            [(row.phone, row.handle) for row in result.rows],
+            [("0900000001", "@cua.lan"), ("0900000002", "@khac.mot"), ("0900000003", "@khac.hai")],
+        )
+        self.assertEqual(result.unopened, [])
+        self.assertEqual(result.review, [])
+
+    def test_a_partial_screen_keeps_the_name_match_and_leaves_the_rest(self) -> None:
+        screen = (("0900000001", "Lan"), ("0900000002", "Hoa"), ("0900000003", "Mai"))
+        result = build([listing(*screen), profile("Hoa", "@cua.lan")])
         self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0900000002", "@cua.lan")])
         self.assertEqual(sorted(phone for phone, _ in result.unopened), ["0900000001", "0900000003"])
 
@@ -741,6 +751,20 @@ class SidePairTests(unittest.TestCase):
     def test_an_at_id_on_the_right_is_not_the_profile_pair(self) -> None:
         right = TextLine("@khac999", 700, 300, 980, 340, 36)
         self.assertEqual(select_left_profile([right], HEIGHT, WIDTH), (None, None))
+
+    def test_a_blank_name_on_the_first_pass_is_filled_without_moving_the_row(self) -> None:
+        screen = [Contact("0900000001", ""), Contact("0900000002", "")]
+        frames = [
+            FrameRead("list", screen, side_contacts=[Contact("0900000001", "Lan", False)]),
+            FrameRead("profile", profile_name="", handle="@mot", side_profile_name="Lan", side_handle="@mot"),
+            FrameRead("list", screen),
+            FrameRead("profile", profile_name="", handle="@hai"),
+        ]
+        result = add_side_rows(build(frames), frames)
+        self.assertEqual(
+            [(row.phone, row.name, row.handle) for row in result.rows],
+            [("0900000001", "Lan", "@mot"), ("0900000002", "", "@hai")],
+        )
 
     def test_the_same_name_adds_one_row_of_three_cells(self) -> None:
         result = Result(

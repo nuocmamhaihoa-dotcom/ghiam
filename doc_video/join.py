@@ -1,16 +1,23 @@
 """Gom kết quả mọi khung hình rồi ghép số điện thoại với @id.
 
-Tên trên danh bạ là tên trong máy, tên trên hồ sơ là tên TikTok. Hai tên này
-thường khác nhau dù người dùng đã mở đúng hồ sơ. Ghép theo ba cách chắc chắn,
-không đoán tên gần giống:
+Hướng 1 chạy trước, vì đây là cách cho tỷ lệ đủ ba ô cao nhất: một màn danh bạ
+được mở hết từng dòng từ trên xuống, hồ sơ hiện rõ. Dòng thứ nhất ứng với hồ sơ
+mở đầu tiên. Hàng hướng 1 đã ghép thì không bị hướng sau sửa.
+
+Số, tên hoặc @id còn thiếu mới đi tiếp các hướng sau, mỗi hướng chỉ thêm vào
+chỗ còn trống:
 
 1. Cùng tên, và tên đó chỉ có một số với một @id. Nhiều số cùng tên thì lấy
    số đang hiện trên danh bạ ngay trước hồ sơ, nếu chỉ còn một số như vậy.
 2. @id trùng với tên danh bạ (TikTok tạo @id từ tên đó).
 3. Dòng vừa bấm: khung danh bạ ngay trước hồ sơ có vòng tròn chạm màn hình
    nằm trên đúng một dòng. Các lần mở cùng hồ sơ phải chỉ cùng một dòng.
-4. Một màn danh bạ được mở lần lượt hết từng dòng, từ trên xuống: dòng thứ
-   nhất ứng với hồ sơ mở đầu tiên. Mở thiếu một dòng thì không ghép theo thứ tự.
+4. Tên chứa nhau, tên lệch nhẹ ngay trên màn đó, hoặc đúng một số trống tên.
+5. Cặp số và tên mà bước quét chính bỏ sót, và bốn dãy ký tự cùng tên. Hai
+   hướng này không sửa hàng đã có.
+
+Mở thiếu một dòng thì không ghép theo thứ tự, trừ khi chỉ còn đúng một số và
+một hồ sơ.
 """
 
 from __future__ import annotations
@@ -306,40 +313,14 @@ def build(frames: list[FrameRead]) -> Result:
 
 def _pair(phones: dict[str, _Seen], handles: dict[str, _Seen], visits: list[_Visit]) -> Result:
     result = Result()
-    by_key_phone: dict[str, list[str]] = {}
-    by_key_handle: dict[str, list[str]] = {}
-    for phone, seen in phones.items():
-        key = name_key(seen.name())
-        if key:
-            by_key_phone.setdefault(key, []).append(phone)
-    for handle, seen in handles.items():
-        key = name_key(seen.name())
-        if key:
-            by_key_handle.setdefault(key, []).append(handle)
-
     used_phones: set[str] = set()
     used_handles: set[str] = set()
-    for key, handle_list in by_key_handle.items():
-        phone_list = by_key_phone.get(key, [])
-        if len(phone_list) == 1 and len(handle_list) == 1:
-            _add(result, phones, handles, phone_list[0], handle_list[0], used_phones, used_handles)
-            continue
-        for handle in handle_list:
-            nearby = [phone for phone in phone_list if phone in handles[handle].near and phone not in used_phones]
-            if len(nearby) == 1:
-                _add(result, phones, handles, nearby[0], handle, used_phones, used_handles)
-
-    for handle in handles:
-        if handle in used_handles:
-            continue
-        agreed = [phone for phone in phones if phone not in used_phones and handle_matches_name(handle, phones[phone].name())]
-        on_screen = [phone for phone in agreed if phone in handles[handle].near]
-        chosen = on_screen if len(on_screen) == 1 else agreed if len(agreed) == 1 else []
-        if len(chosen) == 1:
-            _add(result, phones, handles, chosen[0], handle, used_phones, used_handles)
-
+    # Hướng 1. Màn mở hết từ trên xuống được ghép trước. Hàng này không bị sửa.
+    _pair_opened_screen(result, phones, handles, visits, used_phones, used_handles)
+    _pair_same_name(result, phones, handles, used_phones, used_handles)
     _pair_tapped(result, phones, handles, used_phones, used_handles)
     _pair_contained(result, phones, handles, used_phones, used_handles)
+    # Chỗ hướng 1 chưa ghép, sau khi các hướng theo tên đã lấy phần của chúng.
     _pair_opened_screen(result, phones, handles, visits, used_phones, used_handles)
     _pair_similar_on_screen(result, phones, handles, visits, used_phones, used_handles)
     _pair_unnamed_on_screen(result, phones, handles, visits, used_phones, used_handles)
@@ -363,6 +344,57 @@ def _pair(phones: dict[str, _Seen], handles: dict[str, _Seen], visits: list[_Vis
     result.rows.sort(key=lambda row: phones[row.phone].first)
     result.unopened.sort(key=lambda item: phones[item[0]].first)
     return result
+
+
+def _pair_same_name(
+    result: Result,
+    phones: dict[str, _Seen],
+    handles: dict[str, _Seen],
+    used_phones: set[str],
+    used_handles: set[str],
+) -> None:
+    """Ghép tên trùng hoặc @id sinh từ tên. Bỏ qua số và @id hướng 1 đã lấy."""
+    by_key_phone: dict[str, list[str]] = {}
+    by_key_handle: dict[str, list[str]] = {}
+    for phone, seen in phones.items():
+        key = name_key(seen.name())
+        if key:
+            by_key_phone.setdefault(key, []).append(phone)
+    for handle, seen in handles.items():
+        key = name_key(seen.name())
+        if key:
+            by_key_handle.setdefault(key, []).append(handle)
+
+    for key, handle_list in by_key_handle.items():
+        phone_list = by_key_phone.get(key, [])
+        if len(phone_list) == 1 and len(handle_list) == 1:
+            phone, handle = phone_list[0], handle_list[0]
+            if phone not in used_phones and handle not in used_handles:
+                _add(result, phones, handles, phone, handle, used_phones, used_handles)
+            continue
+        for handle in handle_list:
+            if handle in used_handles:
+                continue
+            nearby = [
+                phone
+                for phone in phone_list
+                if phone in handles[handle].near and phone not in used_phones
+            ]
+            if len(nearby) == 1:
+                _add(result, phones, handles, nearby[0], handle, used_phones, used_handles)
+
+    for handle in handles:
+        if handle in used_handles:
+            continue
+        agreed = [
+            phone
+            for phone in phones
+            if phone not in used_phones and handle_matches_name(handle, phones[phone].name())
+        ]
+        on_screen = [phone for phone in agreed if phone in handles[handle].near]
+        chosen = on_screen if len(on_screen) == 1 else agreed if len(agreed) == 1 else []
+        if len(chosen) == 1:
+            _add(result, phones, handles, chosen[0], handle, used_phones, used_handles)
 
 
 def _pair_tapped(
@@ -508,12 +540,12 @@ def _pair_opened_screen(
     used_phones: set[str],
     used_handles: set[str],
 ) -> None:
-    """Cuộn danh bạ và mở từng dòng từ trên xuống thì ghép theo thứ tự.
+    """Hướng 1: cuộn danh bạ và mở từng dòng từ trên xuống thì ghép theo thứ tự.
 
     Hai màn kề nhau còn chung phần lớn số thì là cùng một lượt cuộn. Đã mở hết
-    thì dòng nào ghép được bằng tên giữ nguyên chỗ của nó; các dòng còn lại,
-    tên TikTok khác tên danh bạ, ghép đúng chỗ trống đó. Mở thiếu một dòng thì
-    không dồn các dòng còn lại, trừ khi chỉ còn đúng một số và một hồ sơ.
+    thì ghép đúng chỗ, kể cả khi tên TikTok khác tên danh bạ. Hàng đã có không
+    bị đổi. Mở thiếu một dòng thì không dồn các dòng còn lại, trừ khi chỉ còn
+    đúng một số và một hồ sơ.
     """
     for shown, opened in _scroll_groups(visits):
         if _pair_aligned_open(result, phones, handles, shown, opened, used_phones, used_handles):
@@ -633,8 +665,9 @@ def _voted_name(names: Counter[str]) -> str:
 def add_side_rows(result: Result, frames: list[FrameRead]) -> Result:
     """Thêm hàng ba ô khi tên cột phải trùng tên bên trái, mỗi bên chỉ đúng một cặp.
 
-    Hướng bổ sung, chạy sau build. Không sửa hàng đã ghép. Số đang ở bảng cần xem
-    không bị kéo sang. @id đã ghép với số khác cũng không bị lấy.
+    Hướng bổ sung, chạy sau hướng 1. Tên còn trống trên hàng đã ghép được điền từ
+    đúng số hoặc đúng @id đó. Số và @id của hàng đã có không đổi. Số đang ở bảng
+    cần xem không bị kéo sang. @id đã ghép với số khác cũng không bị lấy.
     """
     phone_names: dict[str, Counter[str]] = {}
     phone_order: dict[str, int] = {}
@@ -671,6 +704,12 @@ def add_side_rows(result: Result, frames: list[FrameRead]) -> Result:
         if key:
             by_handle.setdefault(key, []).append(handle)
 
+    result.rows = [
+        _with_name(row, phone_name.get(row.phone, ""), handle_name.get(row.handle, ""))
+        if not row.name
+        else row
+        for row in result.rows
+    ]
     saved_phones = {row.phone for row in result.rows}
     saved_handles = {row.handle for row in result.rows}
     blocked_phones = {item.phone for item in result.review if item.phone}
@@ -704,6 +743,14 @@ def add_side_rows(result: Result, frames: list[FrameRead]) -> Result:
     result.unopened = [item for item in result.unopened if item[0] not in added_phones]
     result.review = [item for item in result.review if item.phone not in added_phones and item.handle not in added_handles]
     return result
+
+
+def _with_name(row: Row, list_name: str, profile_name: str) -> Row:
+    """Điền tên còn trống. Không đổi số điện thoại và @id của hàng đã ghép."""
+    name = list_name if _marks(list_name) > _marks(profile_name) else profile_name
+    if not name:
+        name = list_name or profile_name
+    return Row(row.phone, name, row.handle) if name else row
 
 
 def _add(
