@@ -76,6 +76,11 @@ class FrameRead:
     side_contacts: list[Contact] = field(default_factory=list)
     side_profile_name: str = ""
     side_handle: str = ""
+    # Luồng đọc toàn bộ: tên và @id đọc kỹ trên các khung luồng chính chưa đọc.
+    # Không đưa vào contacts, nên thứ tự mở hồ sơ và các hàng đã ghép không đổi.
+    full_contacts: list[Contact] = field(default_factory=list)
+    full_profile_name: str = ""
+    full_handle: str = ""
 
 
 @dataclass(frozen=True)

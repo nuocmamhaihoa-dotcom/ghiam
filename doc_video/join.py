@@ -18,6 +18,8 @@ chỗ còn trống:
    số và @id còn trống. Chữ thuần vẫn là tên, không biến thành @id.
 6. Cặp số và tên mà bước quét chính bỏ sót, và bốn dãy ký tự cùng tên. Hai
    hướng này không sửa hàng đã có.
+7. Luồng đọc toàn bộ: tên đọc kỹ trên mọi khung còn lại. Chỉ ghép khi tên
+   danh bạ và tên hồ sơ trùng, mỗi bên một cặp. Hàng đã có không đổi.
 
 Mở thiếu một dòng thì không ghép theo thứ tự, trừ khi chỉ còn đúng một số và
 một hồ sơ.
@@ -781,6 +783,100 @@ def add_side_rows(result: Result, frames: list[FrameRead]) -> Result:
     result.unopened = [item for item in result.unopened if item[0] not in added_phones]
     result.review = [item for item in result.review if item.phone not in added_phones and item.handle not in added_handles]
     return result
+
+
+def add_full_name_rows(result: Result, frames: list[FrameRead]) -> Result:
+    """Ghép số với @id khi luồng đọc toàn bộ thấy cùng một tên.
+
+    Luồng này đọc kỹ những khung luồng chính chưa đọc. Chỉ thêm cặp còn trống,
+    và chỉ khi đúng một số với đúng một @id mang tên đó. Số và @id đã ghép
+    giữ nguyên. Tên còn trống trên hàng đã có được điền từ đúng số hoặc đúng @id.
+    """
+    phone_names: dict[str, Counter[str]] = {}
+    phone_order: dict[str, int] = {}
+    handle_names: dict[str, Counter[str]] = {}
+    handle_order: dict[str, int] = {}
+    seen = 0
+    for frame in frames:
+        for contact in frame.full_contacts:
+            if not contact.phone or not contact.name:
+                continue
+            phone_names.setdefault(contact.phone, Counter())[contact.name] += 1
+            phone_order.setdefault(contact.phone, seen)
+            seen += 1
+        if not frame.full_handle.startswith("@") or not frame.full_profile_name:
+            continue
+        handle_names.setdefault(frame.full_handle, Counter())[frame.full_profile_name] += 1
+        handle_order.setdefault(frame.full_handle, seen)
+        seen += 1
+    _merge_full_handles(handle_names, handle_order)
+
+    phone_name = {phone: _voted_name(names) for phone, names in phone_names.items()}
+    handle_name = {handle: _voted_name(names) for handle, names in handle_names.items()}
+    by_phone: dict[str, list[str]] = {}
+    by_handle: dict[str, list[str]] = {}
+    for phone, name in phone_name.items():
+        key = name_key(name)
+        if len(key) >= 2:
+            by_phone.setdefault(key, []).append(phone)
+    for handle, name in handle_name.items():
+        key = name_key(name)
+        if len(key) >= 2:
+            by_handle.setdefault(key, []).append(handle)
+
+    result.rows = [
+        _with_name(row, phone_name.get(row.phone, ""), handle_name.get(row.handle, ""))
+        if not row.name
+        else row
+        for row in result.rows
+    ]
+    saved_phones = {row.phone for row in result.rows}
+    saved_handles = {row.handle for row in result.rows}
+    added: list[Row] = []
+    for key, handles in by_handle.items():
+        phones = by_phone.get(key, [])
+        if len(phones) != 1 or len(handles) != 1:
+            continue
+        phone, handle = phones[0], handles[0]
+        if phone in saved_phones or handle in saved_handles:
+            continue
+        list_name = phone_name[phone]
+        profile_name = handle_name[handle]
+        name = list_name if _marks(list_name) > _marks(profile_name) else profile_name
+        added.append(Row(phone, name, handle))
+        saved_phones.add(phone)
+        saved_handles.add(handle)
+    if added:
+        added.sort(key=lambda row: phone_order.get(row.phone, 0))
+        result.rows.extend(added)
+        added_phones = {row.phone for row in added}
+        added_handles = {row.handle for row in added}
+        result.unopened = [item for item in result.unopened if item[0] not in added_phones]
+        result.review = [
+            item for item in result.review if item.phone not in added_phones and item.handle not in added_handles
+        ]
+    return result
+
+
+def _merge_full_handles(names: dict[str, Counter[str]], order: dict[str, int]) -> None:
+    """@id đọc lệch một ký tự dễ lẫn, cùng tên, gộp vào @id thấy nhiều hơn."""
+    counts = {handle: sum(seen.values()) for handle, seen in names.items()}
+    for weak in sorted(list(names), key=lambda handle: counts.get(handle, 0)):
+        if weak not in names:
+            continue
+        for strong in sorted(names, key=lambda handle: -counts.get(handle, 0)):
+            if strong == weak or strong not in names or counts.get(strong, 0) < counts.get(weak, 0):
+                continue
+            if not lookalike_handles(weak, strong):
+                continue
+            weak_name = name_key(_voted_name(names[weak]))
+            strong_name = name_key(_voted_name(names[strong]))
+            if weak_name and strong_name and weak_name != strong_name:
+                continue
+            names[strong].update(names.pop(weak))
+            order.pop(weak, None)
+            counts[strong] = counts.get(strong, 0) + counts.pop(weak, 0)
+            break
 
 
 def _with_name(row: Row, list_name: str, profile_name: str) -> Row:
