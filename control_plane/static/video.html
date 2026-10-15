@@ -55,7 +55,7 @@
 <body>
 <main>
   <h1>Đọc video danh bạ</h1>
-  <p class="lead">Nhiều điện thoại mở trang này cùng lúc. Mỗi máy chọn một tên, rồi chọn bao nhiêu video cũng được. Trang xếp hết vào danh sách tải và tải lần lượt. Video đã vào hàng chờ thì được đọc từng video một, kể cả khi tắt trang.</p>
+  <p class="lead">Nhiều điện thoại mở trang này cùng lúc. Mỗi máy chọn một tên, rồi chọn bao nhiêu video cũng được. Nhiều danh sách trên một máy cũng tải lên cùng lúc. Video đã vào hàng chờ thì máy chủ đọc từng video một, kể cả khi tắt trang.</p>
 
   <section>
     <h2>Điện thoại này</h2>
@@ -70,7 +70,8 @@
       <p class="note">hoặc</p>
       <button class="file" type="button" id="pick">Chọn nhiều video</button>
       <input id="file" type="file" accept="video/*,image/*" multiple />
-      <p class="note">Không giới hạn số video. Chọn một lần vài chục video, hoặc chọn thêm nhiều lần — video mới nối vào danh sách, không xóa video đã chọn.</p>
+      <p class="note">Không giới hạn số video. Chọn một lần vài chục video, hoặc chọn thêm danh sách khác trong lúc danh sách trước đang tải. Video mới nối vào, không xóa video đã chọn.</p>
+      <p class="note">Vài video lên máy chủ cùng lúc. Video đã lên thì nằm trong hàng chờ, máy chủ đọc lần lượt.</p>
       <p class="note">Trên iPhone, trong khung chọn ảnh bấm định dạng ở góc dưới và chọn Hiện tại, rồi chọn hết. Máy khỏi chuyển đổi từng video trước khi đưa vào danh sách.</p>
       <p class="note">Video được chia nhỏ. Mạng đứt thì tải nối tiếp phần còn lại, không gửi lại từ đầu.</p>
     </div>
@@ -92,7 +93,7 @@
 
   <section>
     <h2>Hàng đợi</h2>
-    <p class="note">Hàng đợi hiện mọi video, không cắt bớt. Cột Điện thoại là máy đã tải video đó. Cột Đủ 3 ô hiện sau khi đọc xong: số kết quả có đủ số điện thoại, tên và id, trên tổng số điện thoại trong video. Video mới được giữ trên máy chủ. Khi ổ đĩa đầy 80%, video cũ nhất tự xóa để còn chỗ. Kết quả đã đọc vẫn giữ. Video còn trên máy chủ có nút Đọc lại để đọc lại bằng bộ đọc mới nhất.</p>
+    <p class="note">Hàng đợi hiện mọi video, không cắt bớt. Nhiều danh sách tải cùng lúc đều vào đây và chờ đến lượt đọc. Cột Điện thoại là máy đã tải video đó. Cột Đủ 3 ô hiện sau khi đọc xong: số kết quả có đủ số điện thoại, tên và id, trên tổng số điện thoại trong video. Video mới được giữ trên máy chủ. Khi ổ đĩa đầy 80%, video cũ nhất tự xóa để còn chỗ. Kết quả đã đọc vẫn giữ. Video còn trên máy chủ có nút Đọc lại để đọc lại bằng bộ đọc mới nhất.</p>
     <div id="queue"></div>
   </section>
 
@@ -183,7 +184,7 @@
     if (phoneFilter !== null) queuePath += "?device=" + encodeURIComponent(phoneFilter);
     var queueResponse = await api(queuePath);
     if (queueResponse.ok) renderQueue((await queueResponse.json()).items || []);
-    if (!stillUploading()) loadResults();
+    if (!sendingNow()) loadResults();
   }
 
   var queueSig = null;
@@ -328,7 +329,11 @@
   }
 
   var jobs = [];
-  var pumping = false;
+  var activeSlots = 0;
+  var diskFull = false;
+  var nextBatch = 1;
+  var batchCursor = 0;
+  var UPLOAD_AT_ONCE = 3;
   var wake = null;
   var PHONE_KEY = "ghiam-phone";
   var thisPhone = "";
@@ -424,8 +429,13 @@
 
   function sleep(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
 
-  function stillUploading() {
-    return jobs.some(function (job) { return job.state === "wait" || job.state === "upload"; });
+  function sendingNow() {
+    return jobs.some(function (job) { return job.state === "upload"; });
+  }
+
+  function pageMustStayOpen() {
+    if (sendingNow()) return true;
+    return !diskFull && jobs.some(function (job) { return job.state === "wait"; });
   }
 
   function keepAwake(on) {
@@ -655,6 +665,15 @@
     }
   }
 
+  function listTitle(job) {
+    var ids = [];
+    for (var i = 0; i < jobs.length; i += 1) {
+      if (ids.indexOf(jobs[i].batch) === -1) ids.push(jobs[i].batch);
+    }
+    if (ids.length < 2) return "";
+    return "Danh sách " + (ids.indexOf(job.batch) + 1);
+  }
+
   function renderLocal() {
     var box = document.getElementById("localQueue");
     if (!jobs.length) { box.innerHTML = ""; updateNote(); return; }
@@ -662,80 +681,119 @@
     jobs.forEach(function (job, index) {
       var retry = job.state === "fail" ? " <button class='ghost' type='button' data-again='" + index + "'>Tải lại</button>" : "";
       var detailHidden = job.detail ? "" : " hidden";
-      html += "<tr data-row='" + index + "'><td>" + escapeHtml(job.file.name) + "<div class='note job-detail'" + detailHidden + ">" + escapeHtml(job.detail) + "</div></td><td><span class='job-status'>" + statusLabel(job) + "</span>" + retry + "</td></tr>";
+      var title = listTitle(job);
+      var titleHtml = title ? "<div class='note'>" + escapeHtml(title) + "</div>" : "";
+      html += "<tr data-row='" + index + "'><td>" + titleHtml + escapeHtml(job.file.name) + "<div class='note job-detail'" + detailHidden + ">" + escapeHtml(job.detail) + "</div></td><td><span class='job-status'>" + statusLabel(job) + "</span>" + retry + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-again]").forEach(function (button) {
       button.addEventListener("click", function () {
         var job = jobs[Number(button.getAttribute("data-again"))];
+        diskFull = false;
         job.state = "wait";
         job.detail = "";
         job.percent = 0;
-        renderLocal();
         pump();
       });
     });
     updateNote();
   }
 
+  function listsStillSending() {
+    var ids = [];
+    jobs.forEach(function (job) {
+      if ((job.state === "wait" || job.state === "upload") && ids.indexOf(job.batch) === -1) ids.push(job.batch);
+    });
+    return ids.length;
+  }
+
   function updateNote() {
     var note = document.getElementById("uploadNote");
-    var waiting = jobs.filter(function (job) { return job.state === "wait" || job.state === "upload"; }).length;
+    var sending = jobs.filter(function (job) { return job.state === "upload"; }).length;
+    var lined = jobs.filter(function (job) { return job.state === "wait"; }).length;
     var queued = jobs.filter(function (job) { return job.state === "queued" || job.state === "dup"; }).length;
     var failed = jobs.filter(function (job) { return job.state === "fail"; }).length;
     if (!jobs.length) { note.textContent = ""; return; }
-    if (waiting) {
-      note.textContent = "Đang tải " + waiting + " video. Mạng đứt thì nối tiếp phần còn lại, không gửi lại từ đầu. Giữ trang mở đến khi tất cả hiện Đã vào hàng chờ.";
-      note.className = "note";
+    if (sending || lined) {
+      var text = "Đang gửi " + sending + " video cùng lúc";
+      var lists = listsStillSending();
+      if (lists > 1) text += " từ " + lists + " danh sách";
+      text += ".";
+      if (lined) text += " Còn " + lined + " video chờ lượt tải.";
+      if (diskFull) text += " Ổ đĩa máy chủ đã đầy. Video đã vào hàng chờ vẫn được đọc. Bấm Tải lại khi có chỗ.";
+      else text += " Video đã lên máy chủ vào hàng chờ, máy chủ đọc lần lượt. Mạng đứt thì nối tiếp phần còn lại. Giữ trang mở đến khi tất cả hiện Đã vào hàng chờ.";
+      note.textContent = text;
+      note.className = diskFull ? "note warn" : "note";
       return;
     }
-    var text = "Đã đưa " + queued + " video vào hàng chờ. Bạn có thể tắt trang hoặc dùng phần mềm khác, máy chủ đọc tiếp từng video.";
-    if (failed) text += " Còn " + failed + " video chưa lên được, bấm Tải lại.";
-    note.textContent = text;
+    var doneText = "Đã đưa " + queued + " video vào hàng chờ. Bạn có thể tắt trang hoặc dùng phần mềm khác, máy chủ đọc tiếp từng video.";
+    if (failed) doneText += " Còn " + failed + " video chưa lên được, bấm Tải lại.";
+    note.textContent = doneText;
     note.className = failed ? "note warn" : "note ok";
   }
 
-  async function pump() {
-    if (pumping) return;
-    pumping = true;
-    keepAwake(true);
-    try {
-      while (true) {
-        var job = null;
-        for (var i = 0; i < jobs.length; i += 1) if (jobs[i].state === "wait") { job = jobs[i]; break; }
+  function takeNextJob() {
+    var batches = [];
+    for (var i = 0; i < jobs.length; i += 1) {
+      if (jobs[i].state !== "wait") continue;
+      if (batches.indexOf(jobs[i].batch) === -1) batches.push(jobs[i].batch);
+    }
+    if (!batches.length) return null;
+    var batch = batches[batchCursor % batches.length];
+    batchCursor += 1;
+    for (var n = 0; n < jobs.length; n += 1) {
+      if (jobs[n].state === "wait" && jobs[n].batch === batch) return jobs[n];
+    }
+    return null;
+  }
+
+  function runJob(job) {
+    var jobIndex = jobs.indexOf(job);
+    uploadChunked(job.file, function (percent) {
+      if (percent === job.percent) return;
+      job.percent = percent;
+      paintProgress(jobIndex);
+    }, function (detail) {
+      if (detail === job.detail) return;
+      job.detail = detail;
+      paintProgress(jobIndex);
+    }).then(function (result) {
+      if (result.ok) {
+        job.state = result.body.duplicate ? "dup" : "queued";
+        job.detail = "";
+        if (result.body.duplicate && result.body.device && result.body.device !== thisPhone) {
+          job.detail = "File này đã có, tải từ " + result.body.device + ".";
+        }
+        refresh();
+        return;
+      }
+      job.state = "fail";
+      job.detail = result.body.detail || (result.status === 0 ? "Mất kết nối. Bấm Tải lại để nối tiếp phần đã lên." : "Lỗi " + result.status);
+      if (result.status === 507) diskFull = true;
+    }).catch(function () {
+      job.state = "fail";
+      job.detail = "Mất kết nối. Bấm Tải lại để nối tiếp phần đã lên.";
+    }).then(function () {
+      activeSlots -= 1;
+      if (activeSlots < 0) activeSlots = 0;
+      pump();
+    });
+  }
+
+  function pump() {
+    if (!diskFull) {
+      keepAwake(true);
+      while (activeSlots < UPLOAD_AT_ONCE) {
+        var job = takeNextJob();
         if (!job) break;
         job.state = "upload";
         job.detail = "";
-        renderLocal();
-        var jobIndex = jobs.indexOf(job);
-        var result = await uploadChunked(job.file, function (percent) {
-          if (percent === job.percent) return;
-          job.percent = percent;
-          paintProgress(jobIndex);
-        }, function (detail) {
-          if (detail === job.detail) return;
-          job.detail = detail;
-          paintProgress(jobIndex);
-        });
-        if (result.ok) {
-          job.state = result.body.duplicate ? "dup" : "queued";
-          job.detail = "";
-          if (result.body.duplicate && result.body.device && result.body.device !== thisPhone) {
-            job.detail = "File này đã có, tải từ " + result.body.device + ".";
-          }
-          refresh();
-        } else {
-          job.state = "fail";
-          job.detail = result.body.detail || (result.status === 0 ? "Mất kết nối. Bấm Tải lại để nối tiếp phần đã lên." : "Lỗi " + result.status);
-          if (result.status === 507) break;
-        }
-        renderLocal();
+        activeSlots += 1;
+        runJob(job);
       }
-    } finally {
-      pumping = false;
-      if (!stillUploading()) keepAwake(false);
-      renderLocal();
     }
+    renderLocal();
+    if (!sendingNow()) keepAwake(false);
   }
 
   function addFiles(fileList) {
@@ -747,18 +805,21 @@
       note.className = "note warn";
       return;
     }
-    files.forEach(function (file) { jobs.push({ file: file, state: "wait", percent: 0, detail: "" }); });
-    renderLocal();
+    var batch = nextBatch;
+    nextBatch += 1;
+    files.forEach(function (file) {
+      jobs.push({ file: file, state: "wait", percent: 0, detail: "", batch: batch });
+    });
     pump();
   }
 
   window.addEventListener("beforeunload", function (event) {
-    if (!stillUploading()) return;
+    if (!pageMustStayOpen()) return;
     event.preventDefault();
     event.returnValue = "";
   });
   document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible" && stillUploading()) keepAwake(true);
+    if (document.visibilityState === "visible" && sendingNow()) keepAwake(true);
   });
 
   var fileInput = document.getElementById("file");
@@ -795,7 +856,7 @@
     }
     pickerOpen = false;
     pickerWatch = false;
-    if (!stillUploading()) keepAwake(false);
+    if (!pageMustStayOpen()) keepAwake(false);
   }
 
   function watchPicker() {
