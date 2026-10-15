@@ -13,7 +13,7 @@ from http.server import ThreadingHTTPServer
 
 from ads_library.meta_client import InputError, MetaApiError, lookup, redact
 from ads_library.page_ref import PageRefError, parse_page_ref
-from ads_library.server import STATIC_DIR, AdsLibraryHandler, search_request
+from ads_library.server import STATIC_DIR, AdsLibraryHandler, search_request, site_path
 
 
 class PageRefTests(unittest.TestCase):
@@ -186,6 +186,14 @@ class StaticTests(unittest.TestCase):
         self.assertIn("keyword,", script)
 
 
+class PathTests(unittest.TestCase):
+    def test_odd_browser_paths_point_at_the_home_page(self) -> None:
+        self.assertEqual(site_path("/**%5C"), "/**\\")
+        self.assertEqual(site_path("/index.html"), "/")
+        self.assertEqual(site_path("http://103.200.20.245/"), "/")
+        self.assertEqual(site_path("/api/ready?x=1"), "/api/ready")
+
+
 class ServerTests(unittest.TestCase):
     def test_search_request_maps_errors(self) -> None:
         with self.assertRaises(PageRefError):
@@ -231,6 +239,13 @@ class ServerTests(unittest.TestCase):
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/") as page:
                 html = page.read().decode()
             self.assertIn("Thư viện quảng cáo Fanpage", html)
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/**%5C") as odd:
+                odd_html = odd.read().decode()
+            self.assertIn("Từ khóa", odd_html)
+            missing = urllib.request.Request(f"http://127.0.0.1:{port}/api/khong-co")
+            with self.assertRaises(urllib.error.HTTPError) as missing_caught:
+                urllib.request.urlopen(missing)
+            self.assertEqual(missing_caught.exception.code, 404)
         finally:
             server.shutdown()
             thread.join(timeout=3)

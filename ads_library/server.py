@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import unquote, urlparse
 from urllib.request import Request, urlopen
 
 from ads_library.meta_client import InputError, MetaApiError, lookup, redact
@@ -24,6 +25,20 @@ _FILES = {
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/style.css": ("style.css", "text/css; charset=utf-8"),
 }
+
+
+def site_path(raw: str) -> str:
+    path = raw.split("?", 1)[0]
+    if path.startswith(("http://", "https://")):
+        path = urlparse(path).path or "/"
+    path = unquote(path)
+    if not path.startswith("/"):
+        path = "/" + path
+    if path != "/" and path.endswith("/"):
+        path = path.rstrip("/")
+    if path == "/index.html":
+        return "/"
+    return path
 
 
 def urllib_fetch(url: str, timeout: float) -> tuple[int, str]:
@@ -91,14 +106,29 @@ class AdsLibraryHandler(BaseHTTPRequestHandler):
     def _json(self, status: int, payload: dict[str, Any]) -> None:
         self._bytes(status, json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
 
+    def _redirect_home(self) -> None:
+        self.send_response(302)
+        self.send_header("Location", "/")
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
     def do_GET(self) -> None:  # noqa: N802
-        path = self.path.split("?", 1)[0]
+        path = site_path(self.path)
+        if path == "/favicon.ico":
+            self.send_response(204)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if path == "/api/ready":
             self._json(200, {"configured": bool(os.environ.get("META_ACCESS_TOKEN", "").strip())})
             return
         item = _FILES.get(path)
         if item is None:
-            self._json(404, {"error": "Không có trang này."})
+            if path.startswith("/api/"):
+                self._json(404, {"error": "Không có trang này."})
+                return
+            self._redirect_home()
             return
         name, content_type = item
         file_path = STATIC_DIR / name
@@ -108,7 +138,7 @@ class AdsLibraryHandler(BaseHTTPRequestHandler):
         self._bytes(200, file_path.read_bytes(), content_type)
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path.split("?", 1)[0] != "/api/search":
+        if site_path(self.path) != "/api/search":
             self._json(404, {"error": "Không có trang này."})
             return
         length = int(self.headers.get("Content-Length") or "0")
