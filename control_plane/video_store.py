@@ -13,9 +13,10 @@ import sqlite3
 import time
 from collections import defaultdict
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
+from zoneinfo import ZoneInfo
 
 from doc_video.text import handle_matches_name, lookalike_handles
 
@@ -29,6 +30,30 @@ BUCKET_LABEL = {BUCKET_OK: "Đã lưu", BUCKET_REVIEW: "Cần xem", BUCKET_UNOPE
 
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+
+
+def clean_device(raw: str) -> str:
+    """Tên điện thoại gắn trên video: ngắn, một dòng, đúng chữ người dùng chọn."""
+    text = " ".join(str(raw or "").split())
+    text = "".join(ch for ch in text if ch.isprintable())
+    return text[:40]
+
+
+def vn_day_bounds(now: datetime | None = None) -> tuple[str, str, str]:
+    """Ngày theo giờ Việt Nam và hai mốc UTC để so với created_at, finished_at."""
+    moment = now or datetime.now(timezone.utc)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    start_local = moment.astimezone(VN_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+    end_local = start_local + timedelta(days=1)
+    return (
+        start_local.date().isoformat(),
+        start_local.astimezone(timezone.utc).isoformat(),
+        end_local.astimezone(timezone.utc).isoformat(),
+    )
 
 
 def worker_count() -> int:
@@ -96,7 +121,8 @@ def init_db(db_path: Path) -> None:
               started_at TEXT,
               finished_at TEXT,
               phone_count INTEGER,
-              full_count INTEGER
+              full_count INTEGER,
+              device TEXT NOT NULL DEFAULT ''
             );
             CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_sha ON videos(sha256);
             CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status, id);
@@ -136,6 +162,7 @@ def init_db(db_path: Path) -> None:
             """
         )
         _ensure_video_count_columns(conn)
+        _ensure_video_device_column(conn)
     _READY.add(key)
 
 
@@ -150,6 +177,13 @@ def _ensure_video_count_columns(conn: sqlite3.Connection) -> None:
         except sqlite3.OperationalError as exc:
             if "duplicate column" not in str(exc).lower():
                 raise
+
+
+def _ensure_video_device_column(conn: sqlite3.Connection) -> None:
+    columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(videos)")}
+    if "device" not in columns:
+        conn.execute("ALTER TABLE videos ADD COLUMN device TEXT NOT NULL DEFAULT ''")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_device ON videos(device, created_at)")
 
 
 def queued_bytes(db_path: Path) -> int:
@@ -262,27 +296,38 @@ def prune_old_videos(
     return len(removed)
 
 
-def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str) -> dict[str, object]:
-    """Cùng một file đang chờ hoặc đang đọc thì bỏ qua. Đã đọc xong hoặc lỗi thì đọc lại bằng bộ đọc hiện tại."""
+def begin_upload(
+    db_path: Path, *, name: str, size_bytes: int, sha256: str, device: str = ""
+) -> dict[str, object]:
+    """Cùng một file đang chờ hoặc đang đọc thì bỏ qua. Đã đọc xong hoặc lỗi thì đọc lại bằng bộ đọc hiện tại.
+
+    device là tên điện thoại người dùng đã chọn trên trang tải. File đang chờ giữ tên máy đã tải trước.
+    Tải lại file đã xong thì gắn máy đang tải lần này; tải lại mà không gửi tên thì giữ tên cũ.
+    """
+    device = clean_device(device)
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
-        existing = conn.execute("SELECT id, status, name, path FROM videos WHERE sha256 = ?", (sha256,)).fetchone()
+        existing = conn.execute(
+            "SELECT id, status, name, path, device FROM videos WHERE sha256 = ?", (sha256,)
+        ).fetchone()
         if existing and existing["status"] in ("done", "error"):
+            kept = device or str(existing["device"] or "")
             conn.execute(
                 """
                 UPDATE videos
                 SET name = ?, size_bytes = ?, path = '', status = 'uploading', error = '',
                     pid = NULL, started_at = NULL, finished_at = NULL, created_at = ?,
-                    phone_count = NULL, full_count = NULL
+                    phone_count = NULL, full_count = NULL, device = ?
                 WHERE id = ?
                 """,
-                (name, size_bytes, utcnow(), existing["id"]),
+                (name, size_bytes, utcnow(), kept, existing["id"]),
             )
             conn.execute("COMMIT")
             return {
                 "id": int(existing["id"]),
                 "status": "uploading",
                 "name": name,
+                "device": kept,
                 "duplicate": False,
                 "reopened": True,
                 "old_path": existing["path"],
@@ -293,17 +338,24 @@ def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str) -> d
                 "id": int(existing["id"]),
                 "status": existing["status"],
                 "name": existing["name"],
+                "device": str(existing["device"] or ""),
                 "duplicate": True,
             }
         cur = conn.execute(
             """
-            INSERT INTO videos (name, size_bytes, sha256, path, status, created_at)
-            VALUES (?, ?, ?, '', 'uploading', ?)
+            INSERT INTO videos (name, size_bytes, sha256, path, status, created_at, device)
+            VALUES (?, ?, ?, '', 'uploading', ?, ?)
             """,
-            (name, size_bytes, sha256, utcnow()),
+            (name, size_bytes, sha256, utcnow(), device),
         )
         conn.execute("COMMIT")
-        return {"id": int(cur.lastrowid), "status": "uploading", "name": name, "duplicate": False}
+        return {
+            "id": int(cur.lastrowid),
+            "status": "uploading",
+            "name": name,
+            "device": device,
+            "duplicate": False,
+        }
 
 
 def commit_upload(db_path: Path, video_id: int, path: str) -> None:
@@ -343,18 +395,21 @@ def abort_upload(db_path: Path, video_id: int, reopened: bool = False) -> None:
         conn.execute("DELETE FROM videos WHERE id = ? AND status = 'uploading'", (video_id,))
 
 
-def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
+def list_videos(db_path: Path, limit: int = 40, device: str | None = None) -> list[dict[str, object]]:
+    """device=None là mọi máy. Chuỗi rỗng là các video tải trước khi có tên điện thoại."""
+    sql = """
+        SELECT id, name, size_bytes, status, error, created_at, started_at, finished_at,
+               phone_count, full_count, path, device
+        FROM videos
+    """
+    params: list[object] = []
+    if device is not None:
+        sql += " WHERE device = ?"
+        params.append(device)
+    sql += " ORDER BY id DESC LIMIT ?"
+    params.append(limit)
     with connect(db_path) as conn:
-        rows = conn.execute(
-            """
-            SELECT id, name, size_bytes, status, error, created_at, started_at, finished_at,
-                   phone_count, full_count, path
-            FROM videos
-            ORDER BY id DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
+        rows = conn.execute(sql, params).fetchall()
     items = []
     for row in rows:
         item = dict(row)
@@ -381,6 +436,53 @@ def stats(db_path: Path) -> dict[str, int]:
     counts.update(buckets)
     counts["results"] = buckets["saved"] + buckets["review"] + buckets["unopened"]
     return counts
+
+
+def device_day(db_path: Path, now: datetime | None = None) -> dict[str, object]:
+    """Số video mỗi điện thoại đã tải lên trong ngày hôm nay, và số video lỗi trong ngày đó.
+
+    Ngày tính theo giờ Việt Nam. Đã tải là file đã vào hàng chờ hôm nay, kể cả đang đọc hoặc đã xong.
+    Lỗi là video đọc hỏng hoặc tải lại bị đứt trong ngày, dù file đó lên từ hôm trước.
+    Video đang tải dở chưa tính là đã tải.
+    """
+    day, start, end = vn_day_bounds(now)
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT device,
+              COALESCE(SUM(CASE
+                WHEN status != 'uploading' AND created_at >= ? AND created_at < ? THEN 1 ELSE 0 END), 0) AS uploaded,
+              COALESCE(SUM(CASE
+                WHEN status = 'error' AND (
+                  (finished_at >= ? AND finished_at < ?)
+                  OR ((finished_at IS NULL OR finished_at = '') AND created_at >= ? AND created_at < ?)
+                ) THEN 1 ELSE 0 END), 0) AS errors,
+              COALESCE(SUM(CASE
+                WHEN status = 'done' AND finished_at >= ? AND finished_at < ? THEN 1 ELSE 0 END), 0) AS done,
+              COALESCE(SUM(CASE
+                WHEN status IN ('queued', 'running', 'uploading') THEN 1 ELSE 0 END), 0) AS waiting
+            FROM videos
+            GROUP BY device
+            ORDER BY uploaded DESC, waiting DESC, device ASC
+            """,
+            (start, end, start, end, start, end, start, end),
+        ).fetchall()
+    items = []
+    known: list[str] = []
+    for row in rows:
+        device = str(row["device"] or "")
+        item = {
+            "device": device,
+            "uploaded": int(row["uploaded"]),
+            "errors": int(row["errors"]),
+            "done": int(row["done"]),
+            "waiting": int(row["waiting"]),
+        }
+        if device:
+            known.append(device)
+        if device or item["uploaded"] or item["errors"] or item["done"] or item["waiting"]:
+            items.append(item)
+    return {"day": day, "known": known, "items": items}
 
 
 def claim(db_path: Path, pid: int) -> dict[str, object] | None:

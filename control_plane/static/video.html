@@ -39,13 +39,28 @@
     .note { color: var(--muted); margin-top: 0.55rem; }
     .warn { color: #8a2b2b; font-weight: 650; }
     .ok { color: #0d6b3a; }
+    .phones { display: flex; gap: 0.45rem; flex-wrap: wrap; margin-top: 0.55rem; }
+    .phones button {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 0.12rem;
+      background: #eef1f4; color: var(--ink); min-width: 9.5rem; text-align: left;
+    }
+    .phones button.on { background: var(--blue); color: #fff; }
+    .phones button span { font-weight: 550; font-size: 0.86rem; color: var(--muted); }
+    .phones button.on span { color: #d6e8fa; }
+    .phonebar { display: flex; justify-content: space-between; gap: 0.7rem; align-items: center; }
     #file { display: none; }
   </style>
 </head>
 <body>
 <main>
   <h1>Đọc video danh bạ</h1>
-  <p class="lead">Chọn nhiều video một lần. Trang tải lần lượt từng video lên máy chủ. Video đã lên thì vào hàng chờ và được đọc từng video một, kể cả khi bạn tắt trang này.</p>
+  <p class="lead">Nhiều điện thoại mở trang này cùng lúc. Mỗi máy chọn một tên, rồi chọn nhiều video. Trang của máy đó xếp hàng và tải lần lượt. Video đã lên máy chủ thì được đọc từng video một, kể cả khi tắt trang.</p>
+
+  <section>
+    <h2>Điện thoại này</h2>
+    <p class="note">Chọn tên một lần. Mọi video tải từ máy này mang tên đó. Xóa dữ liệu trình duyệt thì chọn lại đúng tên cũ để số liệu vẫn vào máy đó.</p>
+    <div id="thisPhone"></div>
+  </section>
 
   <section>
     <h2>Thêm video</h2>
@@ -66,8 +81,14 @@
   </section>
 
   <section>
+    <h2>Hôm nay theo điện thoại</h2>
+    <p id="phoneDay" class="note">Bấm một máy để xem đúng video của máy đó trong hàng đợi.</p>
+    <div id="phoneBoard"></div>
+  </section>
+
+  <section>
     <h2>Hàng đợi</h2>
-    <p class="note">Cột Đủ 3 ô hiện sau khi đọc xong: số kết quả có đủ số điện thoại, tên và id, trên tổng số điện thoại trong video. Video mới được giữ trên máy chủ. Khi ổ đĩa đầy 80%, video cũ nhất tự xóa để còn chỗ. Kết quả đã đọc vẫn giữ. Video còn trên máy chủ có nút Đọc lại để đọc lại bằng bộ đọc mới nhất.</p>
+    <p class="note">Cột Điện thoại là máy đã tải video đó. Cột Đủ 3 ô hiện sau khi đọc xong: số kết quả có đủ số điện thoại, tên và id, trên tổng số điện thoại trong video. Video mới được giữ trên máy chủ. Khi ổ đĩa đầy 80%, video cũ nhất tự xóa để còn chỗ. Kết quả đã đọc vẫn giữ. Video còn trên máy chủ có nút Đọc lại để đọc lại bằng bộ đọc mới nhất.</p>
     <div id="queue"></div>
   </section>
 
@@ -147,7 +168,14 @@
       reader.textContent = "Bộ đọc đang chạy. Video mới sẽ được đọc lần lượt, video còn lại chờ đến lượt.";
       reader.className = "note ok";
     }
-    var queueResponse = await api("/v1/videos?limit=100");
+    var phones = body.phones || { day: "", known: [], items: [] };
+    knownPhones = phones.known || [];
+    phoneItems = phones.items || [];
+    renderPhoneBoard(phones.day || "");
+    renderThisPhone();
+    var queuePath = "/v1/videos?limit=100";
+    if (phoneFilter !== null) queuePath += "&device=" + encodeURIComponent(phoneFilter);
+    var queueResponse = await api(queuePath);
     if (queueResponse.ok) renderQueue((await queueResponse.json()).items || []);
     loadResults();
   }
@@ -158,12 +186,13 @@
       box.innerHTML = "<p class='note'>Chưa có video.</p>";
       return;
     }
-    var html = "<table><tr><th>Video</th><th>Đủ 3 ô</th><th>Trạng thái</th></tr>";
+    var html = "<table><tr><th>Video</th><th>Điện thoại</th><th>Đủ 3 ô</th><th>Trạng thái</th></tr>";
     items.forEach(function (item) {
       var extra = item.error ? "<div class='warn'>" + escapeHtml(item.error) + "</div>" : "";
       var canReread = (item.status === "error" || item.status === "done") && item.has_file;
       var retry = canReread ? " <button class='ghost' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
-      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + countText(item) + "</td><td>" + statusText(item.status) + retry + "</td></tr>";
+      var phone = item.device ? escapeHtml(item.device) : "<span class='note'>Chưa gắn máy</span>";
+      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + phone + "</td><td>" + countText(item) + "</td><td>" + statusText(item.status) + retry + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-retry]").forEach(function (button) {
@@ -204,6 +233,97 @@
   var jobs = [];
   var pumping = false;
   var wake = null;
+  var PHONE_KEY = "ghiam-phone";
+  var thisPhone = "";
+  var phoneFilter = null;
+  var knownPhones = [];
+  var phoneItems = [];
+  try { thisPhone = localStorage.getItem(PHONE_KEY) || ""; } catch (error) { thisPhone = ""; }
+
+  function phoneLabel(name) { return name ? name : "Chưa gắn máy"; }
+
+  function choosePhone(name) {
+    var cleaned = String(name || "").replace(/\s+/g, " ").trim().slice(0, 40);
+    if (!cleaned) return;
+    thisPhone = cleaned;
+    try { localStorage.setItem(PHONE_KEY, thisPhone); } catch (error) {}
+    renderThisPhone();
+  }
+
+  function renderThisPhone() {
+    var box = document.getElementById("thisPhone");
+    if (thisPhone) {
+      var mine = null;
+      phoneItems.forEach(function (item) { if (item.device === thisPhone) mine = item; });
+      var uploaded = mine ? mine.uploaded : 0;
+      var errors = mine ? mine.errors : 0;
+      var stamp = thisPhone + "|" + uploaded + "|" + errors;
+      if (box.getAttribute("data-stamp") === stamp) return;
+      box.setAttribute("data-stamp", stamp);
+      box.setAttribute("data-mode", "chosen");
+      box.innerHTML = "<div class='phonebar'><div><b>" + escapeHtml(thisPhone) + "</b>"
+        + "<div class='note'>Hôm nay máy này đã tải " + uploaded + " video, lỗi " + errors + ".</div></div>"
+        + "<button class='ghost' type='button' id='changePhone'>Đổi</button></div>";
+      document.getElementById("changePhone").addEventListener("click", function () {
+        thisPhone = "";
+        try { localStorage.removeItem(PHONE_KEY); } catch (error) {}
+        renderThisPhone();
+      });
+      return;
+    }
+    if (document.activeElement && document.activeElement.id === "newPhone") return;
+    var knownKey = knownPhones.join("\n");
+    if (box.getAttribute("data-mode") === "pick" && box.getAttribute("data-known") === knownKey) return;
+    box.setAttribute("data-mode", "pick");
+    box.setAttribute("data-stamp", "");
+    box.setAttribute("data-known", knownKey);
+    var html = "<p>Bấm một tên đã có, hoặc gõ tên mới rồi bấm Dùng tên này.</p><div class='phones'>";
+    knownPhones.forEach(function (name) {
+      html += "<button type='button' data-use='" + escapeHtml(name) + "'>" + escapeHtml(name) + "</button>";
+    });
+    html += "</div><div class='row' style='margin-top:0.7rem'>"
+      + "<input id='newPhone' type='text' maxlength='40' placeholder='Tên mới, ví dụ Máy 1' />"
+      + "<button class='primary' type='button' id='savePhone'>Dùng tên này</button></div>";
+    box.innerHTML = html;
+    box.querySelectorAll("[data-use]").forEach(function (button) {
+      button.addEventListener("click", function () { choosePhone(button.getAttribute("data-use") || ""); });
+    });
+    document.getElementById("savePhone").addEventListener("click", function () {
+      choosePhone(document.getElementById("newPhone").value);
+    });
+    document.getElementById("newPhone").addEventListener("keydown", function (event) {
+      if (event.key === "Enter") choosePhone(event.target.value);
+    });
+  }
+
+  function renderPhoneBoard(day) {
+    var box = document.getElementById("phoneBoard");
+    var note = document.getElementById("phoneDay");
+    var parts = String(day || "").split("-");
+    var shown = parts.length === 3 ? parts[2] + "/" + parts[1] : "";
+    var looking = phoneFilter === null ? "mọi điện thoại" : phoneLabel(phoneFilter);
+    note.textContent = (shown ? "Ngày " + shown + ". " : "") + "Bấm một máy để lọc hàng đợi. Đang xem " + looking + ".";
+    var html = "<div class='phones'><button type='button' data-all='1' class='" + (phoneFilter === null ? "on" : "") + "'>Tất cả<span>mọi máy</span></button>";
+    if (!phoneItems.length) {
+      box.innerHTML = html + "</div><p class='note'>Hôm nay chưa có video nào.</p>";
+    } else {
+      phoneItems.forEach(function (item) {
+        var on = phoneFilter !== null && phoneFilter === item.device;
+        html += "<button type='button' data-phone='" + escapeHtml(item.device) + "' class='" + (on ? "on" : "") + "'>"
+          + escapeHtml(phoneLabel(item.device))
+          + "<span>" + item.uploaded + " đã tải · " + item.errors + " lỗi</span>"
+          + "<span>" + item.done + " đọc xong · " + item.waiting + " đang chờ</span></button>";
+      });
+      box.innerHTML = html + "</div>";
+    }
+    box.querySelectorAll("button").forEach(function (button) {
+      if (!button.hasAttribute("data-all") && !button.hasAttribute("data-phone")) return;
+      button.addEventListener("click", function () {
+        phoneFilter = button.hasAttribute("data-all") ? null : (button.getAttribute("data-phone") || "");
+        refresh();
+      });
+    });
+  }
 
   function sleep(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
 
@@ -252,6 +372,7 @@
       xhr.ontimeout = function () { finish({ ok: false, status: 0, body: {} }); };
       var form = new FormData();
       form.append("file", file, file.name);
+      form.append("device", thisPhone);
       arm();
       xhr.send(form);
     });
@@ -328,6 +449,9 @@
         if (result.ok) {
           job.state = result.body.duplicate ? "dup" : "queued";
           job.detail = "";
+          if (result.body.duplicate && result.body.device && result.body.device !== thisPhone) {
+            job.detail = "File này đã có, tải từ " + result.body.device + ".";
+          }
           refresh();
         } else {
           job.state = "fail";
@@ -346,6 +470,12 @@
   function addFiles(fileList) {
     var files = Array.prototype.slice.call(fileList || []);
     if (!files.length) return;
+    if (!thisPhone) {
+      var note = document.getElementById("uploadNote");
+      note.textContent = "Chọn tên điện thoại ở trên trước khi tải video.";
+      note.className = "note warn";
+      return;
+    }
     files.forEach(function (file) { jobs.push({ file: file, state: "wait", percent: 0, detail: "" }); });
     renderLocal();
     pump();
@@ -386,6 +516,7 @@
     window.location.href = body.url;
   });
 
+  renderThisPhone();
   refresh();
   setInterval(refresh, 4000);
 </script>
