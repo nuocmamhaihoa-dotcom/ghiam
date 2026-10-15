@@ -25,6 +25,7 @@ import numpy as np
 from PIL import Image, ImageOps
 
 from doc_video import ocr, viet
+from doc_video.side import screen_title, select_left_profile, select_right_pairs
 from doc_video.text import (
     SCREEN_WORDS,
     clean_name,
@@ -71,6 +72,10 @@ class FrameRead:
     at: float = -1.0
     # Danh bạ: số điện thoại của dòng đang có vòng tròn chạm màn hình, tức dòng vừa được bấm.
     tapped: str = ""
+    # Hướng bổ sung, không đưa vào contacts: cặp cột phải (số, tên) và cặp bên trái (tên, @id).
+    side_contacts: list[Contact] = field(default_factory=list)
+    side_profile_name: str = ""
+    side_handle: str = ""
 
 
 @dataclass(frozen=True)
@@ -103,6 +108,10 @@ class Layout:
     # Độ cao tâm vòng tròn chạm màn hình trên vùng danh bạ, -1 nếu không có hoặc có nhiều vòng.
     tap_y: float = -1.0
     row_pitch: float = 0.0
+    # Ô chữ của hướng bổ sung. Không nằm trong rows, nên thứ tự dòng và dấu chạm không đổi.
+    side_pairs: list[tuple[ocr.TextLine, ocr.TextLine]] = field(default_factory=list)
+    side_name_line: ocr.TextLine | None = None
+    side_handle_line: ocr.TextLine | None = None
 
 
 def _window_sum(mask: np.ndarray, radius: int) -> np.ndarray:
@@ -427,13 +436,15 @@ def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
             tapped = ""
         rows.extend(_supplement_rows(screen, touched, emoji, pairs, geometric, rows, title))
         rows.sort(key=lambda row: row.top)
-        return Layout("list", rows=rows, at=at, tapped=tapped, tap_y=tap_y, row_pitch=pitch)
+        layout = Layout("list", rows=rows, at=at, tapped=tapped, tap_y=tap_y, row_pitch=pitch)
+        _attach_side(layout, lines, screen, geometric)
+        return layout
     profile = _profile_lines(lines, screen.height)
     if profile is not None:
         name_line, handle_line = profile
         lines_to_check = [handle_line] + ([name_line] if name_line is not None else [])
         name_area = name_line or _band_line(screen, handle_line)
-        return Layout(
+        layout = Layout(
             "profile",
             name_line=name_line,
             handle_line=handle_line,
@@ -442,7 +453,94 @@ def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
             name_readable=not _only_emoji(emoji, name_area),
             at=at,
         )
-    return Layout(at=at)
+        _attach_side(layout, lines, screen, geometric)
+        return layout
+    layout = Layout(at=at)
+    _attach_side(layout, lines, screen, geometric)
+    return layout
+
+
+def _attach_side(
+    layout: Layout,
+    lines: list[ocr.TextLine],
+    screen: Image.Image,
+    geometric: list[tuple[ocr.TextLine, ocr.TextLine]],
+) -> None:
+    """Gắn ô bốn dãy ký tự. Không thêm vào rows."""
+    title = screen_title(lines, screen.height)
+    if layout.kind == "list":
+        layout.side_pairs = select_right_pairs(geometric, screen.width, title)
+        return
+    if layout.kind == "profile":
+        layout.side_name_line, layout.side_handle_line = select_left_profile(lines, screen.height, screen.width)
+        return
+    right = select_right_pairs(geometric, screen.width, title)
+    # Màn chưa đủ hai tên để thành danh bạ: chỉ nhận khi có từ hai cặp cột phải, kẻo một số
+    # tình cờ trên màn khác bị kéo vào.
+    if len(right) >= 2:
+        layout.side_pairs = right
+    layout.side_name_line, layout.side_handle_line = select_left_profile(lines, screen.height, screen.width)
+
+
+def _same_box(left: ocr.TextLine, right: ocr.TextLine) -> bool:
+    return abs(left.x0 - right.x0) <= 4 and abs(left.y0 - right.y0) <= 4 and abs(left.x1 - right.x1) <= 8
+
+
+def fill_side(image: Image.Image, layout: Layout, frame: FrameRead) -> None:
+    """Đọc kỹ bốn dãy ký tự vào frame.side_*. Không đổi contacts, tên hồ sơ hay @id của hướng cũ.
+
+    Cặp đã có tên ở lần đọc kỹ thì dùng lại tên đó. Cặp cột phải mà hướng cũ bỏ sót thì đọc lại ô.
+    """
+    screen = phone_screen(image)
+    known = {contact.phone: contact.name for contact in frame.contacts}
+    side: list[Contact] = []
+    seen: set[str] = set()
+    pending: list[tuple[ocr.TextLine, ocr.TextLine, str]] = []
+    for phone_line, name_line in layout.side_pairs:
+        primary = next((row.phone for row in layout.rows if row.top == phone_line.y0), "")
+        if primary and known.get(primary):
+            if primary not in seen:
+                seen.add(primary)
+                side.append(Contact(primary, known[primary], False))
+            continue
+        if primary and primary in seen:
+            continue
+        pending.append((phone_line, name_line, primary))
+    if pending:
+        read_phones = _read_phones(screen, [(phone_line, name_line) for phone_line, name_line, _ in pending])
+        name_lines = [name_line for _, name_line, _ in pending]
+        read_names = _read_names(
+            [_crop(screen, line, NAME_SMALL) for line in name_lines],
+            [_crop(screen, line) for line in name_lines],
+        )
+        for (phone_line, name_line, primary), read_phone, raw_name in zip(pending, read_phones, read_names):
+            phone = primary or read_phone or normalize_phone(phone_line.text)
+            if not phone or phone in seen:
+                continue
+            name = raw_name if is_name(raw_name) else ""
+            if not name:
+                rough = clean_name(name_line.text)
+                name = rough if is_name(rough) else ""
+            if not name:
+                continue
+            seen.add(phone)
+            side.append(Contact(phone, name, False))
+    frame.side_contacts = side
+    handle_line = layout.side_handle_line
+    if handle_line is None:
+        return
+    if (
+        layout.handle_line is not None
+        and frame.handle
+        and _same_box(layout.handle_line, handle_line)
+    ):
+        frame.side_profile_name = frame.profile_name
+        frame.side_handle = frame.handle
+        return
+    name, handle = _read_profile(screen, layout.side_name_line, handle_line, True)
+    if handle:
+        frame.side_profile_name = name
+        frame.side_handle = handle
 
 
 def read_layout(image: Image.Image, layout: Layout, rows: list[int] | None = None) -> FrameRead:
