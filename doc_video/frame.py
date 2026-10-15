@@ -321,7 +321,7 @@ def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
             "profile",
             name_line=name_line,
             handle_line=handle_line,
-            handle_hint=find_handle(handle_line.text),
+            handle_hint=handle_from_read(handle_line.text),
             clear=not _covered(touched, *lines_to_check),
             name_readable=not _only_emoji(emoji, name_area),
             at=at,
@@ -394,10 +394,15 @@ def _profile_lines(lines: list[ocr.TextLine], height: int) -> tuple[ocr.TextLine
     dòng không thấy dấu @ thì dựa vào hàng Đã follow / Follower / Thích: @id
     là dòng chữ ngay trên hàng số đếm.
     """
-    for index, line in enumerate(lines):
-        if line.y0 < 0.05 * height or line.y0 > 0.62 * height or not _looks_like_handle_line(line.text):
-            continue
-        return _name_above(lines, index), line
+    candidates = [
+        index
+        for index, line in enumerate(lines)
+        if 0.05 * height <= line.y0 <= 0.62 * height and _looks_like_handle_line(line.text)
+    ]
+    # Tên hồ sơ cũng có thể chứa @ (Hải@12345123456). Dòng @id thật bắt đầu bằng @.
+    starts = [index for index in candidates if "@" in "".join(lines[index].text.split())[:2]]
+    for index in starts or candidates:
+        return _name_above(lines, index), lines[index]
     index = _handle_above_stats(lines, height)
     if index is not None:
         return _name_above(lines, index), lines[index]
@@ -499,7 +504,7 @@ def _read_handle(screen: Image.Image, line: ocr.TextLine) -> str:
     Bộ tiếng Việt đọc chữ cái trong @id tốt, nhưng hay đọc 3 thành 5; chữ số
     của nó được tin ít hơn chữ số của bộ tiếng Anh.
     """
-    reads: list[tuple[str, float, float]] = [(find_handle(line.text), 1.0, VIE_DIGIT_WEIGHT)]
+    reads: list[tuple[str, float, float]] = [(handle_from_read(line.text), 1.0, VIE_DIGIT_WEIGHT)]
     for target, lang, whitelist, best in (
         (28, "vie", "", False),
         (46, "vie", "", False),

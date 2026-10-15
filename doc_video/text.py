@@ -114,14 +114,21 @@ def find_handle(text: str) -> str:
     if not match:
         return ""
     handle = match.group(1).rstrip(".").lower()
-    if len(handle) < 2 or handle.startswith(".") or not any(ch.isalpha() for ch in handle):
+    if len(handle) < 2 or handle.startswith("."):
+        return ""
+    # @id toàn chữ số có thật (@31776814785). Chuỗi số ngắn sau @ thường là giờ hoặc rác (@0749).
+    if not any(ch.isalpha() for ch in handle) and len(handle) < 6:
         return ""
     return "@" + handle
 
 
+# Bộ đọc tiếng Việt đọc số 6 thành ó trong @id (@thanhson190ó). @id chỉ có chữ không dấu.
+_HANDLE_LOOKALIKE = str.maketrans({"ó": "6", "ò": "6", "Ó": "6", "Ò": "6"})
+
+
 def handle_from_read(text: str) -> str:
     """@id từ một lần đọc riêng dòng @id. Bộ đọc hay bỏ mất dấu @ ở đầu."""
-    text = str(text or "").strip()
+    text = str(text or "").strip().translate(_HANDLE_LOOKALIKE)
     return find_handle(text if "@" in text else "@" + text)
 
 
