@@ -17,6 +17,7 @@ dependencies = [
   "greenlet>=3.1.0",
   "pillow>=10.0.0",
   "numpy>=1.26.0",
+  "openpyxl>=3.1.0",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +26,7 @@ control = [
   "uvicorn[standard]>=0.32.0",
   "python-multipart>=0.0.12",
   "httptools>=0.6.0",
+  "openpyxl>=3.1.0",
 ]
 
 [project.scripts]

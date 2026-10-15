@@ -46,6 +46,8 @@ from control_plane.settings import ROOT, settings
 from control_plane.video_api import router as video_router
 from control_plane.video_store import init_db as init_video_db
 from control_plane.video_store import merge_close_results
+from control_plane.warehouse_api import router as warehouse_router
+from control_plane.warehouse_store import init_warehouse
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -57,6 +59,7 @@ app = FastAPI(
     openapi_url=None,
 )
 app.include_router(video_router)
+app.include_router(warehouse_router)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CORSMiddleware,
@@ -106,6 +109,7 @@ def _remember_hub(kind: str, summary: str, detail: str | None = None, actor: str
 async def _startup() -> None:
     settings.ensure_dirs()
     db.init_db(settings.db_path)
+    init_warehouse(settings.db_path)
     init_video_db(settings.video_db_path)
     merge_close_results(settings.video_db_path)
     # Import proxy list into DB immediately; live/die loop runs in background
@@ -216,6 +220,12 @@ def iphone_app() -> HTMLResponse:
 def delivery_page() -> HTMLResponse:
     """Đường truyền tải: mở app trên iPhone hoặc tải gói zip."""
     return _html("tai.html")
+
+
+@app.get("/kho", response_class=HTMLResponse)
+def warehouse_page() -> HTMLResponse:
+    """Kho tổng: nạp Excel nhiều form, tra cứu, xuất."""
+    return _html("kho.html")
 
 
 @app.get("/v1/delivery")

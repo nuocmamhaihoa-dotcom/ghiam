@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kho tổng</title>
+  <style>
+    :root { color-scheme: light; --ink: #17202a; --muted: #5c6770; --line: #e4e7ec; --bg: #f4f6f8; --card: #fff; --blue: #0b6bcb; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.45 "Segoe UI", system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+    main { max-width: 1080px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+    h1 { font-size: 1.7rem; margin: 0 0 0.25rem; }
+    h2 { font-size: 1.15rem; margin: 0 0 0.7rem; }
+    p { margin: 0; }
+    .lead { color: var(--muted); margin-bottom: 1rem; }
+    nav { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 0 0 1rem; }
+    nav a { color: var(--blue); font-weight: 650; text-decoration: none; }
+    section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem; margin: 0 0 0.8rem; }
+    label { display: block; font-weight: 650; margin: 0 0 0.35rem; }
+    input[type="text"], input[type="search"], select {
+      width: 100%; font: inherit; padding: 0.7rem 0.75rem; border: 1px solid #cfd5dc; border-radius: 10px; background: #fff;
+    }
+    .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    button, .file {
+      font: inherit; font-weight: 700; border: 0; border-radius: 10px; min-height: 46px; padding: 0 1rem; cursor: pointer;
+    }
+    button.primary, .file { background: var(--blue); color: #fff; }
+    button.ghost { background: #eef1f4; color: var(--ink); }
+    button:disabled { opacity: 0.55; cursor: default; }
+    .drop {
+      margin-top: 0.7rem; padding: 1.1rem; border: 1.5px dashed #b7c0ca; border-radius: 12px; background: #fbfcfd; text-align: center;
+    }
+    .drop.over { background: #e8f2fc; border-color: var(--blue); }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.55rem; }
+    .stat { background: #f7f9fb; border-radius: 10px; padding: 0.7rem 0.75rem; }
+    .stat b { display: block; font-size: 1.35rem; }
+    .stat span { color: var(--muted); font-size: 0.92rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 0.45rem 0.3rem; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 0.95rem; }
+    th { color: var(--muted); font-weight: 650; }
+    .note { color: var(--muted); margin-top: 0.55rem; }
+    .warn { color: #8a2b2b; font-weight: 650; }
+    .ok { color: #0d6b3a; }
+    .map { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.55rem; margin: 0.7rem 0; }
+    .map label { font-size: 0.92rem; }
+    details { margin-top: 0.4rem; }
+    details p, details li { color: var(--muted); }
+    details ul { margin: 0.3rem 0 0.6rem; padding-left: 1.15rem; }
+    #file { display: none; }
+    .scroll { overflow: auto; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Kho tổng</h1>
+  <p class="lead">Video nạp ở trang đọc video. File Excel nạp ở đây: mỗi lần, trước khi ghi, bạn chọn cột nào là tên khách, số điện thoại, địa chỉ khách, UID Facebook và ID TikTok.</p>
+  <nav>
+    <a href="/">Đọc video</a>
+    <a href="/danhba/">Danh bạ</a>
+  </nav>
+
+  <section>
+    <h2>Thống kê</h2>
+    <div class="stats" id="stats"></div>
+    <p id="copyNote" class="note"></p>
+  </section>
+
+  <section>
+    <h2>Nạp file</h2>
+    <p class="note">Kéo nhiều file Excel cùng lúc. Mỗi file vẫn hỏi cột trước khi ghi. Số điện thoại được đưa về 10 số: 0084, 84 và đầu 11 số cũ đổi sang đầu số hiện tại.</p>
+    <div class="drop" id="drop">
+      <p>Kéo nhiều file vào đây</p>
+      <p class="note">hoặc</p>
+      <button class="file" type="button" id="pick">Chọn nhiều Excel / CSV</button>
+      <input id="file" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" multiple />
+    </div>
+    <p id="uploadNote" class="note"></p>
+    <div id="preview" hidden>
+      <h2>Hỏi lại trước khi nạp</h2>
+      <div class="row" id="fileQueue"></div>
+      <p id="previewMeta" class="note"></p>
+      <p class="note">Chọn cột cho từng trường. Cùng một cột không được gán hai trường. Bấm Nạp sẽ hỏi lại lần nữa.</p>
+      <div class="map" id="askBox"></div>
+      <p class="note">Vài dòng đầu của file, đúng như trong Excel:</p>
+      <div class="scroll">
+        <table>
+          <thead id="rawHead"></thead>
+          <tbody id="rawRows"></tbody>
+        </table>
+      </div>
+      <label for="source">Nguồn / ghi chú lô</label>
+      <input id="source" type="text" maxlength="80" placeholder="Ví dụ: form đại lý tháng 10" />
+      <div class="row" style="margin-top:0.7rem">
+        <button class="primary" type="button" id="commit">Nạp tất cả</button>
+        <button class="ghost" type="button" id="cancel">Bỏ file này</button>
+      </div>
+      <p id="commitNote" class="note"></p>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr><th>Tên</th><th>Số điện thoại</th><th>Địa chỉ</th><th>UID Facebook</th><th>ID TikTok</th><th>Xử lý</th></tr>
+          </thead>
+          <tbody id="sampleRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Tra cứu</h2>
+    <div class="row">
+      <input id="query" type="search" placeholder="Tên, số điện thoại, địa chỉ, UID Facebook hoặc @TikTok" />
+      <button class="primary" type="button" id="search">Tìm</button>
+      <button class="ghost" type="button" id="exportBtn">Xuất CSV</button>
+    </div>
+    <p id="searchNote" class="note"></p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Tên</th><th>Tên thêm</th><th>Số điện thoại</th><th>Số thêm</th><th>Địa chỉ</th><th>Địa chỉ thêm</th><th>UID Facebook</th><th>UID thêm</th><th>ID TikTok</th><th>TikTok thêm</th></tr>
+        </thead>
+        <tbody id="rows">
+          <tr><td colspan="10">Chưa có dữ liệu.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:0.7rem"><button class="ghost" type="button" id="more" hidden>Tải thêm</button></p>
+  </section>
+
+  <section>
+    <h2>Nguyên tắc nhận ô — đề xuất để bạn chọn</h2>
+    <p>Đang dùng <b>dấu hiệu khóa trên từng ô, giữ nguyên hàng ngang</b>. Ô đã có trong kho không bị ghi đè.</p>
+    <details open>
+      <summary>Dấu hiệu khóa — đang dùng</summary>
+      <ul>
+        <li>Số điện thoại: về đúng 10 số đầu Việt Nam. 0084 và 84 được bỏ mã quốc gia. Đầu 11 số cũ (016x, 012x, 0186, 0188, 0199) đổi sang đầu hiện tại tương ứng.</li>
+        <li>UID Facebook: cả ô là dãy số 5–20 chữ số liền, hoặc link facebook.com / fb.com có id số. Không bắt đầu như số di động Việt (03, 05, 07, 08, 09, +84). Không nhận tên hiển thị.</li>
+        <li>ID TikTok: ô bắt đầu bằng @, hoặc link tiktok.com/@tên. Mã khách không có @ thì bỏ qua.</li>
+        <li>Địa chỉ: có tên tỉnh/thành, huyện hoặc xã (đơn vị cũ và mới, có dấu hoặc không dấu); hoặc trên 8 chữ và trên 28 ký tự. Số nhà/số đường tối đa 4 chữ số liền nhau.</li>
+        <li>Tên: chữ, tối đa 6 từ. Không lấy tên tỉnh/huyện/xã đứng một mình làm tên người.</li>
+        <li>Một dòng file tạo đúng một dòng kho. Cột đổi chỗ thì các ô của dòng đó vẫn nằm cùng hàng.</li>
+      </ul>
+    </details>
+    <details open>
+      <summary>1. Trùng ô độc nhất rồi bổ sung hàng — đang dùng</summary>
+      <ul>
+        <li>Gom mọi ô độc nhất: UID Facebook, số điện thoại, @TikTok, tên đủ hai chữ, địa chỉ dài.</li>
+        <li>Cùng một khách thì giữ nguyên ô chính. Ô trống được điền. Giá trị khác được thêm vào ô thêm của đúng trường đó, trên cùng một hàng.</li>
+        <li>Hai ô trỏ hai người, hoặc tên/địa chỉ trùng nhiều người, thì bỏ qua cả hàng.</li>
+        <li>Cùng tên nhưng khác số điện thoại, UID hoặc @TikTok thì giữ hai người, không gộp.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>2. Ghép mờ tên / một phần địa chỉ</summary>
+      <ul>
+        <li>Bắt được nhiều hơn. Dễ dính “Nguyễn Văn A” hoặc “Hà Nội” vào người sai. Không dùng để tự nạp.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>3. Chỉ số điện thoại / UID Facebook / @TikTok</summary>
+      <ul>
+        <li>An toàn nhưng bỏ sót file chỉ có tên + địa chỉ của người đã có trong kho.</li>
+      </ul>
+    </details>
+    <details open>
+      <summary>4. Nhận dạng từng ô, giữ nguyên hàng ngang — đang dùng</summary>
+      <ul>
+        <li>Mỗi dòng file là một dòng kho. Ô số điện thoại, UID Facebook, @TikTok, địa chỉ, tên được nhận dù cột lệch.</li>
+        <li>Tiêu đề vẫn dùng khi có. Ô không khớp tiêu đề thì chỉ nhận khi đúng dấu hiệu khóa.</li>
+        <li>Mỗi lần nạp file, bạn chọn lại cột cho tên khách, số điện thoại, địa chỉ khách, UID Facebook và ID TikTok. Máy không tự ghi theo form cũ.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>5. LLM đọc từng dòng</summary>
+      <ul>
+        <li>Linh hoạt form scan. Chậm, tốn tiền, cùng file có thể ra kết quả khác. Không hợp lô lớn.</li>
+      </ul>
+    </details>
+  </section>
+</main>
+<script>
+  var serverToken = __CONTROL_TOKEN__;
+  var preview = null;
+  var queue = [];
+  var active = 0;
+  var afterId = 0;
+
+  function token() { return serverToken; }
+
+  async function api(path, options) {
+    var headers = options && options.headers ? Object.assign({}, options.headers) : {};
+    if (token()) headers.Authorization = "Bearer " + token();
+    return fetch(path, Object.assign({}, options || {}, { headers: headers }));
+  }
+
+  function esc(value) {
+    return String(value ?? "").replace(/[&<>"']/g, function (ch) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch];
+    });
+  }
+
+  function stat(value, label) {
+    return "<div class='stat'><b>" + value + "</b><span>" + label + "</span></div>";
+  }
+
+  function matchLabel(kind) {
+    if (kind === "uid") return "Ghép theo UID Facebook";
+    if (kind === "phone") return "Ghép theo SĐT";
+    if (kind === "id") return "Ghép theo @TikTok";
+    if (kind === "name") return "Ghép theo tên";
+    if (kind === "address") return "Ghép theo địa chỉ";
+    if (kind === "ambiguous" || kind === "conflict") return "Trùng nhiều người — bỏ qua";
+    return "Thêm mới";
+  }
+
+  function fieldOptions(selected) {
+    var fields = [
+      ["", "Bỏ qua"],
+      ["name", "Tên"],
+      ["phone", "Số điện thoại"],
+      ["address", "Địa chỉ"],
+      ["uid", "UID Facebook"],
+      ["id", "ID TikTok"]
+    ];
+    return fields.map(function (item) {
+      return "<option value='" + item[0] + "'" + (item[0] === selected ? " selected" : "") + ">" + item[1] + "</option>";
+    }).join("");
+  }
+
+  async function refreshStats() {
+    var response = await api("/v1/kho/stats");
+    if (!response.ok) return;
+    var body = await response.json();
+    document.getElementById("stats").innerHTML =
+      stat(body.contacts, "Dòng trong kho") +
+      stat(body.phones, "Có số điện thoại") +
+      stat(body.uids, "Có UID Facebook") +
+      stat(body.batches, "Lô đã nạp") +
+      stat(body.reviewed || 0, "Cần xem");
+    var copies = (body.copies) || {};
+    var copyNote = document.getElementById("copyNote");
+    if (copies.live && copies.mirror && copies.journal) {
+      copyNote.textContent = "Ba bản lưu đang đủ: kho đang dùng, bản gương, sổ ghi. Mất một bản vẫn dựng lại được từ bản còn lại.";
+      copyNote.className = "note ok";
+    } else {
+      copyNote.textContent = "Chưa đủ ba bản lưu.";
+      copyNote.className = "note warn";
+    }
+  }
+
+  var ASK_FIELDS = [
+    ["name", "Tên khách"],
+    ["phone", "Số điện thoại"],
+    ["address", "Địa chỉ khách"],
+    ["uid", "UID Facebook"],
+    ["id", "ID TikTok"]
+  ];
+
+  function currentMapping() {
+    var mapping = {};
+    var seen = {};
+    var clash = false;
+    document.querySelectorAll("#askBox select").forEach(function (select) {
+      if (select.value === "") return;
+      var index = Number(select.value);
+      var field = select.getAttribute("data-field");
+      if (seen[index]) clash = true;
+      seen[index] = field;
+      mapping[field] = index;
+    });
+    return { mapping: mapping, clash: clash };
+  }
+
+  function columnLabel(col, grid) {
+    var sample = "";
+    (grid || []).some(function (row) {
+      var cell = row[col.index] || "";
+      if (String(cell).trim()) {
+        sample = String(cell).trim();
+        return true;
+      }
+      return false;
+    });
+    if (sample.length > 32) sample = sample.slice(0, 32) + "…";
+    var title = "Cột " + col.letter + (col.header ? " · " + col.header : "");
+    return sample ? title + " · " + sample : title;
+  }
+
+  function renderChosen() {
+    var picked = currentMapping();
+    var grid = (preview && preview.sheet && preview.sheet.grid) || [];
+    var note = document.getElementById("commitNote");
+    if (picked.clash) {
+      note.textContent = "Hai trường đang cùng một cột. Hãy chọn lại.";
+      note.className = "note warn";
+    } else if (!Object.keys(picked.mapping).length) {
+      note.textContent = "Chọn ít nhất một cột trước khi nạp.";
+      note.className = "note warn";
+    } else if (note.textContent.indexOf("Đã đọc") !== 0) {
+      note.textContent = "";
+      note.className = "note";
+    }
+    var sample = document.getElementById("sampleRows");
+    if (!grid.length) {
+      sample.innerHTML = "<tr><td colspan='6'>Không đọc được dòng dữ liệu.</td></tr>";
+      return;
+    }
+    sample.innerHTML = grid.map(function (row) {
+      var cells = ASK_FIELDS.map(function (item) {
+        var index = picked.mapping[item[0]];
+        var text = index === undefined ? "" : (row[index] || "");
+        return "<td>" + esc(text) + "</td>";
+      }).join("");
+      return "<tr>" + cells + "<td>Chờ bạn xác nhận</td></tr>";
+    }).join("");
+    document.getElementById("commit").disabled = picked.clash || !Object.keys(picked.mapping).length;
+  }
+
+  function saveActive() {
+    if (!queue[active]) return;
+    queue[active].picked = currentMapping();
+  }
+
+  function renderQueue() {
+    var box = document.getElementById("fileQueue");
+    box.innerHTML = queue.map(function (item, index) {
+      var mark = index === active ? " primary" : " ghost";
+      return "<button class='" + mark + "' type='button' data-file='" + index + "'>" +
+        (index + 1) + ". " + esc(item.filename) + "</button>";
+    }).join("");
+    box.querySelectorAll("[data-file]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        saveActive();
+        active = Number(button.getAttribute("data-file"));
+        renderPreview(queue[active]);
+      });
+    });
+    var commit = document.getElementById("commit");
+    commit.textContent = queue.length > 1 ? "Nạp " + queue.length + " file" : "Nạp vào kho";
+  }
+
+  function renderPreview(body) {
+    preview = body;
+    renderQueue();
+    var sheet = body.sheet;
+    document.getElementById("preview").hidden = false;
+    var hint = sheet.reusedTemplate ? " Gợi ý lấy từ lần nạp trước, vẫn phải xác nhận lại." : " Gợi ý theo tiêu đề và dữ liệu, vẫn phải xác nhận lại.";
+    document.getElementById("previewMeta").textContent =
+      body.filename + " · " + sheet.rowCount + " dòng." + hint +
+      (sheet.warnings && sheet.warnings.length ? " " + sheet.warnings.join(" ") : "");
+    var grid = sheet.grid || [];
+    var columns = sheet.columns || [];
+    var chosen = (body.picked && body.picked.mapping) || sheet.mapping || {};
+    var byField = {};
+    Object.keys(chosen).forEach(function (field) { byField[field] = chosen[field]; });
+    document.getElementById("askBox").innerHTML = ASK_FIELDS.map(function (item) {
+      var options = "<option value=''>Không có cột này</option>" + columns.map(function (col) {
+        var selected = byField[item[0]] === col.index ? " selected" : "";
+        return "<option value='" + col.index + "'" + selected + ">" + esc(columnLabel(col, grid)) + "</option>";
+      }).join("");
+      return "<div><label for='ask-" + item[0] + "'>" + item[1] + " ở cột nào?</label>" +
+        "<select id='ask-" + item[0] + "' data-field='" + item[0] + "'>" + options + "</select></div>";
+    }).join("");
+    document.querySelectorAll("#askBox select").forEach(function (select) {
+      select.addEventListener("change", function () {
+        saveActive();
+        renderChosen();
+      });
+    });
+    document.getElementById("rawHead").innerHTML = "<tr>" + columns.map(function (col) {
+      return "<th>Cột " + esc(col.letter) + (col.header ? "<div>" + esc(col.header) + "</div>" : "") + "</th>";
+    }).join("") + "</tr>";
+    document.getElementById("rawRows").innerHTML = grid.map(function (row) {
+      return "<tr>" + columns.map(function (col) {
+        return "<td>" + esc(row[col.index] || "") + "</td>";
+      }).join("") + "</tr>";
+    }).join("") || "<tr><td>File không có dòng dữ liệu.</td></tr>";
+    document.getElementById("commitNote").textContent = "";
+    renderChosen();
+  }
+
+  async function uploadFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList || []).filter(Boolean);
+    if (!files.length) return;
+    var note = document.getElementById("uploadNote");
+    var failed = [];
+    for (var i = 0; i < files.length; i += 1) {
+      var file = files[i];
+      note.textContent = "Đang đọc " + (i + 1) + "/" + files.length + ": " + file.name;
+      note.className = "note";
+      var data = new FormData();
+      data.append("file", file, file.name);
+      var response = await api("/v1/kho/preview", { method: "POST", body: data });
+      if (!response.ok) {
+        var err = await response.json().catch(function () { return { detail: "Không đọc được file" }; });
+        failed.push(file.name + " (" + (err.detail || "không đọc được") + ")");
+        continue;
+      }
+      var loaded = await response.json();
+      loaded.picked = { mapping: Object.assign({}, (loaded.sheet && loaded.sheet.mapping) || {}), clash: false };
+      queue.push(loaded);
+    }
+    if (!queue.length) {
+      note.textContent = failed.join("; ");
+      note.className = "note warn";
+      return;
+    }
+    active = queue.length - 1;
+    var done = "Đã nhận " + queue.length + " file. Kiểm tra cột từng file rồi bấm nạp.";
+    if (failed.length) done += " Không đọc được: " + failed.join(", ") + ".";
+    note.textContent = done;
+    note.className = failed.length ? "note warn" : "note ok";
+    renderPreview(queue[active]);
+  }
+
+  function renderRows(items, append) {
+    var tbody = document.getElementById("rows");
+    if (!append) tbody.innerHTML = "";
+    if (!items.length && !append) {
+      tbody.innerHTML = "<tr><td colspan='10'>Không có dòng khớp.</td></tr>";
+      return;
+    }
+    items.forEach(function (row) {
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + esc(row.name) + "</td><td>" + esc(row.nameExtra) + "</td><td>" + esc(row.phone) +
+        "</td><td>" + esc(row.phoneExtra) + "</td><td>" + esc(row.address) + "</td><td>" + esc(row.addressExtra) +
+        "</td><td>" + esc(row.uid) + "</td><td>" + esc(row.uidExtra) + "</td><td>" + esc(row.externalId) +
+        "</td><td>" + esc(row.idExtra) + "</td>";
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function search(reset) {
+    if (reset) afterId = 0;
+    var q = document.getElementById("query").value.trim();
+    var response = await api("/v1/kho?limit=50&after=" + afterId + "&q=" + encodeURIComponent(q));
+    if (!response.ok) return;
+    var body = await response.json();
+    renderRows(body.items || [], afterId > 0);
+    afterId = body.next || 0;
+    document.getElementById("more").hidden = !afterId;
+    document.getElementById("searchNote").textContent = body.count + " dòng trong kho.";
+  }
+
+  document.getElementById("pick").onclick = function () { document.getElementById("file").click(); };
+  document.getElementById("file").onchange = function (event) {
+    uploadFiles(event.target.files);
+    event.target.value = "";
+  };
+  var drop = document.getElementById("drop");
+  drop.addEventListener("dragover", function (event) { event.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", function () { drop.classList.remove("over"); });
+  drop.addEventListener("drop", function (event) {
+    event.preventDefault();
+    drop.classList.remove("over");
+    uploadFiles(event.dataTransfer.files);
+  });
+  function mappingLines(item) {
+    var picked = item.picked || { mapping: item.sheet.mapping || {}, clash: false };
+    var columns = item.sheet.columns || [];
+    return ASK_FIELDS.map(function (field) {
+      var index = picked.mapping[field[0]];
+      if (index === undefined) return field[1] + ": không nạp";
+      var col = columns.filter(function (itemCol) { return itemCol.index === index; })[0];
+      return field[1] + ": cột " + (col ? col.letter : index) + (col && col.header ? " (" + col.header + ")" : "");
+    });
+  }
+
+  document.getElementById("cancel").onclick = function () {
+    preview = null;
+    queue = [];
+    active = 0;
+    document.getElementById("preview").hidden = true;
+    document.getElementById("uploadNote").textContent = "";
+    document.getElementById("fileQueue").innerHTML = "";
+  };
+  document.getElementById("commit").onclick = async function () {
+    if (!queue.length) return;
+    saveActive();
+    var note = document.getElementById("commitNote");
+    for (var i = 0; i < queue.length; i += 1) {
+      var picked = queue[i].picked || currentMapping();
+      if (i === active) picked = queue[i].picked;
+      if (!picked || picked.clash || !Object.keys(picked.mapping || {}).length) {
+        active = i;
+        renderPreview(queue[active]);
+        note.textContent = "File " + queue[i].filename + " chưa chọn cột xong.";
+        note.className = "note warn";
+        return;
+      }
+    }
+    var lines = queue.map(function (item) {
+      return item.filename + "\n" + mappingLines(item).join("\n");
+    }).join("\n\n");
+    if (!window.confirm("Nạp " + queue.length + " file với các cột sau?\n\n" + lines)) return;
+    var source = document.getElementById("source").value.trim();
+    var inserted = 0;
+    var updated = 0;
+    var reviewed = 0;
+    var skipped = 0;
+    var read = 0;
+    for (var n = 0; n < queue.length; n += 1) {
+      var item = queue[n];
+      note.textContent = "Đang nạp " + (n + 1) + "/" + queue.length + ": " + item.filename;
+      note.className = "note";
+      var columns = item.sheet.columns || [];
+      var response = await api("/v1/kho/commit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: item.token,
+          sheet: item.chosen,
+          mapping: item.picked.mapping,
+          source: source,
+          fingerprint: item.sheet.fingerprint || "",
+          headers: columns.map(function (col) { return col.header || ""; }),
+          headerRow: item.sheet.headerRow || 0,
+          hasHeader: item.sheet.method !== "shape" && item.sheet.method !== "empty"
+        })
+      });
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        note.textContent = item.filename + ": " + (body.detail || "Nạp thất bại");
+        note.className = "note warn";
+        return;
+      }
+      inserted += body.inserted || 0;
+      updated += body.updated || 0;
+      reviewed += body.reviewed || 0;
+      skipped += body.skipped || 0;
+      read += body.read || 0;
+    }
+    note.textContent = "Đã nạp " + queue.length + " file, đọc " + read + " dòng: +" + inserted +
+      " mới, " + updated + " bổ sung cùng hàng, " + reviewed + " để riêng vì trùng hai khách, " +
+      skipped + " trùng hoàn toàn.";
+    note.className = "note ok";
+    await refreshStats();
+    await search(true);
+  };
+  document.getElementById("search").onclick = function () { search(true); };
+  document.getElementById("query").addEventListener("keydown", function (event) {
+    if (event.key === "Enter") search(true);
+  });
+  document.getElementById("more").onclick = function () { search(false); };
+  document.getElementById("exportBtn").onclick = async function () {
+    var q = document.getElementById("query").value.trim();
+    var response = await api("/v1/kho/export?q=" + encodeURIComponent(q));
+    if (!response.ok) return;
+    var blob = await response.blob();
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = "kho-tong.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  refreshStats();
+  search(true);
+</script>
+</body>
+</html>
