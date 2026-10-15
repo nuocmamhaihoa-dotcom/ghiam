@@ -28,9 +28,9 @@ from control_plane.vn_places import (
 
 FIELDS = ("name", "phone", "address", "uid", "id")
 FIELD_LABELS = {
-    "name": "Tên",
+    "name": "Tên khách",
     "phone": "Số điện thoại",
-    "address": "Địa chỉ",
+    "address": "Địa chỉ khách",
     "uid": "UID Facebook",
     "id": "ID TikTok",
 }
@@ -77,7 +77,7 @@ _STREET_WORDS = (
 def fold(text: str) -> str:
     raw = unicodedata.normalize("NFD", str(text or ""))
     stripped = "".join(ch for ch in raw if unicodedata.category(ch) != "Mn")
-    folded = _PUNCT.sub(" ", stripped.casefold())
+    folded = _PUNCT.sub(" ", stripped.casefold()).replace("đ", "d")
     return _SPACES.sub(" ", folded).strip()
 
 
@@ -378,6 +378,32 @@ def address_key(address: str) -> str:
     return fold(normalize_address(address))
 
 
+def column_value(field_name: str, raw: str) -> str:
+    """Giá trị của đúng cột người dùng đã chỉ. Không lấy ô cột khác."""
+    text = cell_text(raw).strip()
+    if field_name not in FIELDS or not text:
+        return ""
+    if field_name == "phone":
+        return normalize_phone(text)
+    if field_name == "uid":
+        return normalize_uid(text)
+    if field_name == "id":
+        found = normalize_tiktok(text)
+        if found:
+            return found
+        handle = text[1:] if text.startswith("@") else text
+        handle = handle.split("?")[0].split("/")[0].split("#")[0]
+        if _TIKTOK_HANDLE.match(handle) and not normalize_phone(text) and not handle.isdigit():
+            return "@" + handle.casefold()
+        return ""
+    if field_name == "address":
+        return normalize_address(text)
+    named = normalize_name(text)
+    if named and not normalize_tiktok(text) and not normalize_uid(text):
+        return named
+    return ""
+
+
 def normalize_field(field_name: str, raw: str) -> str:
     if field_name == "phone":
         return normalize_phone(raw)
@@ -498,6 +524,7 @@ class DetectedSheet:
     mapping: dict[str, int]
     columns: list[ColumnGuess]
     sample: list[dict[str, str]]
+    grid: list[list[str]]
     row_count: int
     confidence: float
     warnings: list[str]
@@ -648,6 +675,7 @@ def detect_table(
             mapping={},
             columns=[],
             sample=[],
+            grid=[],
             row_count=0,
             confidence=0.0,
             warnings=["Trang tính trống"],
@@ -703,6 +731,7 @@ def detect_table(
         mapping=mapping,
         columns=columns,
         sample=records[:SAMPLE_LIMIT],
+        grid=[[cell_text(cell) for cell in row] for row in nonempty[:8]],
         row_count=len(records),
         confidence=confidence,
         warnings=warnings,
@@ -735,10 +764,28 @@ def classify_cell(text: str) -> list[tuple[str, float]]:
     return scored
 
 
-def record_from_row(row: list[object], mapping: dict[str, int] | None = None) -> dict[str, str]:
-    """Một hàng nhập → một hàng kho. Map cột nếu khớp; ô còn lại nhận dạng theo dấu hiệu."""
+def record_from_row(
+    row: list[object],
+    mapping: dict[str, int] | None = None,
+    *,
+    strict: bool = False,
+) -> dict[str, str]:
+    """Một hàng nhập → một hàng kho.
+
+    strict: người dùng đã chỉ cột. Chỉ lấy đúng các cột đó, không mượn ô khác.
+    """
     mapping = mapping or {}
     record = {name: "" for name in FIELDS}
+    if strict:
+        used: set[int] = set()
+        for field_name, index in mapping.items():
+            if field_name not in FIELDS or index < 0 or index >= len(row) or index in used:
+                continue
+            value = column_value(field_name, cell_text(row[index]))
+            if value:
+                record[field_name] = value
+                used.add(index)
+        return record
     used: set[int] = set()
     for field_name, index in mapping.items():
         if field_name not in FIELDS or index < 0 or index >= len(row) or index in used:
@@ -795,13 +842,18 @@ def record_from_row(row: list[object], mapping: dict[str, int] | None = None) ->
     return record
 
 
-def apply_mapping(rows: list[list[object]], mapping: dict[str, int] | None = None) -> list[dict[str, str]]:
+def apply_mapping(
+    rows: list[list[object]],
+    mapping: dict[str, int] | None = None,
+    *,
+    strict: bool = False,
+) -> list[dict[str, str]]:
     records: list[dict[str, str]] = []
     for row in rows:
-        record = record_from_row(row, mapping)
+        record = record_from_row(row, mapping, strict=strict)
         if not any(record.values()):
             continue
-        if not record["name"] and not record["phone"] and not record["uid"] and not record["id"]:
+        if not strict and not record["name"] and not record["phone"] and not record["uid"] and not record["id"]:
             continue
         records.append(record)
     return records
@@ -860,6 +912,7 @@ def sheet_to_dict(sheet: DetectedSheet) -> dict[str, Any]:
             for col in sheet.columns
         ],
         "sample": sheet.sample,
+        "grid": sheet.grid,
         "rowCount": sheet.row_count,
         "confidence": sheet.confidence,
         "warnings": sheet.warnings,
@@ -877,6 +930,8 @@ def records_from_bytes(
     mapping: dict[str, int],
     header_row: int | None = None,
     has_header: bool | None = None,
+    *,
+    strict: bool = True,
 ) -> list[dict[str, str]]:
     suffix = Path(filename).suffix.lower()
     if suffix in {".xlsx", ".xlsm"}:
@@ -892,4 +947,4 @@ def records_from_bytes(
     width = max((len(row) for row in rows), default=0)
     padded = [list(row) + [""] * (width - len(row)) for row in rows[start:]]
     nonempty = [row for row in padded if any(cell_text(item) for item in row)]
-    return apply_mapping(nonempty, mapping)
+    return apply_mapping(nonempty, mapping, strict=strict)

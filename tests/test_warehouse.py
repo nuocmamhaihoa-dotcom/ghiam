@@ -12,6 +12,7 @@ from openpyxl import Workbook
 from control_plane.warehouse import (
     apply_mapping,
     classify_cell,
+    column_value,
     detect_table,
     normalize_id,
     normalize_phone,
@@ -487,3 +488,32 @@ class ApplyTests(unittest.TestCase):
             record_from_row(["KH001"]),
             {"name": "", "phone": "", "address": "", "uid": "", "id": ""},
         )
+
+    def test_confirmed_columns_do_not_borrow(self) -> None:
+        row = ["@NguyenVanNam", "0901234567", "100012345678901", "Nguyễn Văn Nam", "12 Đường Láng, Đống Đa, Hà Nội"]
+        chosen = record_from_row(
+            row,
+            {"name": 3, "phone": 1, "address": 4, "uid": 2, "id": 0},
+            strict=True,
+        )
+        self.assertEqual(chosen["name"], "Nguyễn Văn Nam")
+        self.assertEqual(chosen["phone"], "0901234567")
+        self.assertEqual(chosen["id"], "@nguyenvannam")
+        self.assertEqual(chosen["uid"], "100012345678901")
+        only_phone = record_from_row(row, {"phone": 1}, strict=True)
+        self.assertEqual(only_phone["phone"], "0901234567")
+        self.assertEqual(only_phone["name"], "")
+        self.assertEqual(only_phone["uid"], "")
+        self.assertEqual(column_value("id", "hoanglan"), "@hoanglan")
+        self.assertEqual(column_value("phone", "Nguyễn Văn Nam"), "")
+
+    def test_preview_keeps_raw_grid(self) -> None:
+        payload = xlsx_bytes(
+            [
+                ["Tên khách", "SĐT", "Địa chỉ khách"],
+                ["Lan", "0901234567", "12 Đường Láng, Hà Nội"],
+            ]
+        )
+        sheet = preview_bytes(payload, "khach.xlsx").sheets[0]
+        self.assertEqual(sheet.grid[0][0], "Lan")
+        self.assertEqual(sheet.mapping["phone"], 1)

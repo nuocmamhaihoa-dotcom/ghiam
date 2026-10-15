@@ -57,7 +57,8 @@ class WarehouseApiTests(unittest.TestCase):
         page = self.client.get("/kho")
         self.assertEqual(page.status_code, 200)
         self.assertIn("Kho tổng", page.text)
-        self.assertIn("100 triệu", page.text)
+        self.assertIn("Hỏi lại trước khi nạp", page.text)
+        self.assertIn("ở cột nào?", page.text)
 
         preview = self.client.post(
             "/v1/kho/preview",

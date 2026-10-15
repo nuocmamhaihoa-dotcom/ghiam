@@ -53,7 +53,7 @@
 <body>
 <main>
   <h1>Kho tổng</h1>
-  <p class="lead">Mỗi dòng Excel là một dòng kho: tên, số điện thoại, địa chỉ, UID Facebook, ID TikTok. Cột lệch vẫn chia theo dấu hiệu của từng ô. Kho tra cứu theo chỉ mục, không tải hết vào RAM, chịu được tới khoảng 100 triệu dòng.</p>
+  <p class="lead">Video nạp ở trang đọc video. File Excel nạp ở đây: mỗi lần, trước khi ghi, bạn chọn cột nào là tên khách, số điện thoại, địa chỉ khách, UID Facebook và ID TikTok.</p>
   <nav>
     <a href="/">Đọc video</a>
     <a href="/danhba/">Danh bạ</a>
@@ -66,7 +66,7 @@
 
   <section>
     <h2>Nạp file</h2>
-    <p class="note">Nhận .xlsx, .csv, .tsv, .txt. Excel tối đa khoảng 1 triệu dòng/file — nạp nhiều file để đủ 100 triệu. ID TikTok phải có @ ở đầu. UID Facebook là dãy số không giống đầu số di động Việt. Ô không đủ dấu hiệu thì để trống.</p>
+    <p class="note">Nhận .xlsx, .csv, .tsv, .txt. Máy chỉ gợi ý cột. Bạn xác nhận lại mỗi lần nạp. Ô không đúng dạng của trường đã chọn thì để trống, không lấy ô cột khác.</p>
     <div class="drop" id="drop">
       <p>Kéo file vào đây</p>
       <p class="note">hoặc</p>
@@ -75,8 +75,17 @@
     </div>
     <p id="uploadNote" class="note"></p>
     <div id="preview" hidden>
+      <h2>Hỏi lại trước khi nạp</h2>
       <p id="previewMeta" class="note"></p>
-      <div class="map" id="mapBox"></div>
+      <p class="note">Chọn cột cho từng trường. Cùng một cột không được gán hai trường. Bấm Nạp sẽ hỏi lại lần nữa.</p>
+      <div class="map" id="askBox"></div>
+      <p class="note">Vài dòng đầu của file, đúng như trong Excel:</p>
+      <div class="scroll">
+        <table>
+          <thead id="rawHead"></thead>
+          <tbody id="rawRows"></tbody>
+        </table>
+      </div>
       <label for="source">Nguồn / ghi chú lô</label>
       <input id="source" type="text" maxlength="80" placeholder="Ví dụ: form đại lý tháng 10" />
       <div class="row" style="margin-top:0.7rem">
@@ -156,7 +165,7 @@
       <ul>
         <li>Mỗi dòng file là một dòng kho. Ô số điện thoại, UID Facebook, @TikTok, địa chỉ, tên được nhận dù cột lệch.</li>
         <li>Tiêu đề vẫn dùng khi có. Ô không khớp tiêu đề thì chỉ nhận khi đúng dấu hiệu khóa.</li>
-        <li>Kho ghép và tìm theo chỉ mục số điện thoại / UID / TikTok / tên / địa chỉ, ghi từng lô 8.000 dòng, xuất CSV theo luồng. Không tải 100 triệu dòng vào RAM.</li>
+        <li>Mỗi lần nạp file, bạn chọn lại cột cho tên khách, số điện thoại, địa chỉ khách, UID Facebook và ID TikTok. Máy không tự ghi theo form cũ.</li>
       </ul>
     </details>
     <details>
@@ -225,42 +234,107 @@
       stat(body.batches, "Lô đã nạp");
   }
 
+  var ASK_FIELDS = [
+    ["name", "Tên khách"],
+    ["phone", "Số điện thoại"],
+    ["address", "Địa chỉ khách"],
+    ["uid", "UID Facebook"],
+    ["id", "ID TikTok"]
+  ];
+
   function currentMapping() {
     var mapping = {};
-    document.querySelectorAll("#mapBox select").forEach(function (select) {
-      if (select.value) mapping[select.value] = Number(select.getAttribute("data-index"));
+    var seen = {};
+    var clash = false;
+    document.querySelectorAll("#askBox select").forEach(function (select) {
+      if (select.value === "") return;
+      var index = Number(select.value);
+      var field = select.getAttribute("data-field");
+      if (seen[index]) clash = true;
+      seen[index] = field;
+      mapping[field] = index;
     });
-    return mapping;
+    return { mapping: mapping, clash: clash };
+  }
+
+  function columnLabel(col, grid) {
+    var sample = "";
+    (grid || []).some(function (row) {
+      var cell = row[col.index] || "";
+      if (String(cell).trim()) {
+        sample = String(cell).trim();
+        return true;
+      }
+      return false;
+    });
+    if (sample.length > 32) sample = sample.slice(0, 32) + "…";
+    var title = "Cột " + col.letter + (col.header ? " · " + col.header : "");
+    return sample ? title + " · " + sample : title;
+  }
+
+  function renderChosen() {
+    var picked = currentMapping();
+    var grid = (preview && preview.sheet && preview.sheet.grid) || [];
+    var note = document.getElementById("commitNote");
+    if (picked.clash) {
+      note.textContent = "Hai trường đang cùng một cột. Hãy chọn lại.";
+      note.className = "note warn";
+    } else if (!Object.keys(picked.mapping).length) {
+      note.textContent = "Chọn ít nhất một cột trước khi nạp.";
+      note.className = "note warn";
+    } else if (note.textContent.indexOf("Đã đọc") !== 0) {
+      note.textContent = "";
+      note.className = "note";
+    }
+    var sample = document.getElementById("sampleRows");
+    if (!grid.length) {
+      sample.innerHTML = "<tr><td colspan='6'>Không đọc được dòng dữ liệu.</td></tr>";
+      return;
+    }
+    sample.innerHTML = grid.map(function (row) {
+      var cells = ASK_FIELDS.map(function (item) {
+        var index = picked.mapping[item[0]];
+        var text = index === undefined ? "" : (row[index] || "");
+        return "<td>" + esc(text) + "</td>";
+      }).join("");
+      return "<tr>" + cells + "<td>Chờ bạn xác nhận</td></tr>";
+    }).join("");
+    document.getElementById("commit").disabled = picked.clash || !Object.keys(picked.mapping).length;
   }
 
   function renderPreview(body) {
     preview = body;
     var sheet = body.sheet;
     document.getElementById("preview").hidden = false;
-    var method = sheet.reusedTemplate ? " nhớ form cũ" : (sheet.method === "header" ? " theo tiêu đề" : " theo dữ liệu");
+    var hint = sheet.reusedTemplate ? " Gợi ý lấy từ lần nạp trước, vẫn phải xác nhận lại." : " Gợi ý theo tiêu đề và dữ liệu, vẫn phải xác nhận lại.";
     document.getElementById("previewMeta").textContent =
-      body.filename + " · " + sheet.rowCount + " dòng · độ chắc " +
-      Math.round((sheet.confidence || 0) * 100) + "%" + method +
-      (sheet.warnings && sheet.warnings.length ? " · " + sheet.warnings.join(" ") : "");
-    var box = document.getElementById("mapBox");
-    box.innerHTML = (sheet.columns || []).map(function (col) {
-      if (!col.header && !col.field && (col.shapeScores && Math.max.apply(null, Object.values(col.shapeScores)) < 0.15)) {
-        return "";
-      }
-      return "<div><label>Cột " + esc(col.letter) + (col.header ? " · " + esc(col.header) : "") +
-        (col.confidence ? " (" + Math.round(col.confidence * 100) + "%)" : "") +
-        "</label><select data-index='" + col.index + "'>" + fieldOptions(col.field || "") + "</select></div>";
+      body.filename + " · " + sheet.rowCount + " dòng." + hint +
+      (sheet.warnings && sheet.warnings.length ? " " + sheet.warnings.join(" ") : "");
+    var grid = sheet.grid || [];
+    var columns = sheet.columns || [];
+    var byField = {};
+    Object.keys(sheet.mapping || {}).forEach(function (field) { byField[field] = sheet.mapping[field]; });
+    document.getElementById("askBox").innerHTML = ASK_FIELDS.map(function (item) {
+      var options = "<option value=''>Không có cột này</option>" + columns.map(function (col) {
+        var selected = byField[item[0]] === col.index ? " selected" : "";
+        return "<option value='" + col.index + "'" + selected + ">" + esc(columnLabel(col, grid)) + "</option>";
+      }).join("");
+      return "<div><label for='ask-" + item[0] + "'>" + item[1] + " ở cột nào?</label>" +
+        "<select id='ask-" + item[0] + "' data-field='" + item[0] + "'>" + options + "</select></div>";
     }).join("");
-    var sample = document.getElementById("sampleRows");
-    if (!sheet.sample || !sheet.sample.length) {
-      sample.innerHTML = "<tr><td colspan='6'>Không đọc được dòng dữ liệu.</td></tr>";
-      return;
-    }
-    sample.innerHTML = sheet.sample.map(function (row) {
-      return "<tr><td>" + esc(row.name) + "</td><td>" + esc(row.phone) + "</td><td>" + esc(row.address) +
-        "</td><td>" + esc(row.uid) + "</td><td>" + esc(row.id) + "</td><td>" +
-        esc(matchLabel(row.match)) + "</td></tr>";
-    }).join("");
+    document.querySelectorAll("#askBox select").forEach(function (select) {
+      select.addEventListener("change", renderChosen);
+    });
+    document.getElementById("rawHead").innerHTML = "<tr>" + columns.map(function (col) {
+      return "<th>Cột " + esc(col.letter) + (col.header ? "<div>" + esc(col.header) + "</div>" : "") + "</th>";
+    }).join("") + "</tr>";
+    document.getElementById("rawRows").innerHTML = grid.map(function (row) {
+      return "<tr>" + columns.map(function (col) {
+        return "<td>" + esc(row[col.index] || "") + "</td>";
+      }).join("") + "</tr>";
+    }).join("") || "<tr><td>File không có dòng dữ liệu.</td></tr>";
+    document.getElementById("commitNote").textContent = "";
+    renderChosen();
   }
 
   async function uploadFile(file) {
@@ -329,11 +403,24 @@
   };
   document.getElementById("commit").onclick = async function () {
     if (!preview) return;
+    var picked = currentMapping();
     var note = document.getElementById("commitNote");
+    if (picked.clash || !Object.keys(picked.mapping).length) {
+      renderChosen();
+      return;
+    }
+    var columns = preview.sheet.columns || [];
+    var lines = ASK_FIELDS.map(function (item) {
+      var index = picked.mapping[item[0]];
+      if (index === undefined) return item[1] + ": không nạp";
+      var col = columns.filter(function (itemCol) { return itemCol.index === index; })[0];
+      return item[1] + ": cột " + (col ? col.letter : index) + (col && col.header ? " (" + col.header + ")" : "");
+    });
+    if (!window.confirm("Nạp file này với các cột sau?\n\n" + lines.join("\n"))) return;
     note.textContent = "Đang nạp…";
     note.className = "note";
-    var mapping = currentMapping();
-    var headers = (preview.sheet.columns || []).map(function (col) { return col.header || ""; });
+    var mapping = picked.mapping;
+    var headers = columns.map(function (col) { return col.header || ""; });
     var response = await api("/v1/kho/commit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
