@@ -26,6 +26,7 @@ from PIL import Image, ImageOps
 
 from doc_video import ocr, viet
 from doc_video.text import (
+    SCREEN_WORDS,
     clean_name,
     find_handle,
     fix_underscores,
@@ -54,6 +55,9 @@ LOOSE_HANDLE = re.compile(r"@[^A-Za-z0-9._]?[A-Za-z0-9._]{3,24}")
 class Contact:
     phone: str
     name: str
+    # False với cặp bổ sung (số và tên ngay dưới số mà bước quét chính bỏ sót).
+    # Có mặt để ghép theo tên, không chen vào thứ tự các dòng đã quét.
+    in_order: bool = True
 
 
 @dataclass
@@ -79,6 +83,8 @@ class ListRow:
     top: int = 0
     # False khi tên chỉ gồm biểu tượng cảm xúc: không đọc, để tên trống thay vì chữ rác.
     readable: bool = True
+    # False với cặp bổ sung: không dùng cho thứ tự mở dòng và dấu chạm.
+    in_order: bool = True
 
 
 @dataclass
@@ -259,6 +265,8 @@ def _highlighted_row(screen: Image.Image, rows: list[ListRow], pitch: float) -> 
 def row_at(rows: list[ListRow], y: float, pitch: float) -> str:
     """Số điện thoại của dòng chứa độ cao y (dòng chiếm từ trên dòng số một chút tới hết dòng tên)."""
     for row in rows:
+        if not row.in_order:
+            continue
         if row.top - 0.25 * pitch <= y < row.top + 0.75 * pitch:
             return row.phone
     return ""
@@ -285,17 +293,110 @@ def _phones_without_name(
     return extra
 
 
+def _title_margin(title: ocr.TextLine) -> float:
+    return title.y1 + 0.9 * title.h
+
+
+def _name_box_usable(phone_line: ocr.TextLine, name_line: ocr.TextLine) -> bool:
+    """Ô ngay dưới số có thể là tên khách: không phải nút trên màn hình, và đủ rộng để chứa tên."""
+    folded = " ".join(fold(clean_name(name_line.text)).casefold().split())
+    if folded in SCREEN_WORDS or looks_like_phone(name_line.text):
+        return False
+    if is_name(clean_name(name_line.text)):
+        return True
+    return name_line.x1 - name_line.x0 >= 2 * max(name_line.text_h, phone_line.text_h)
+
+
+def _supplement_pairs(
+    kept: list[tuple[ocr.TextLine, ocr.TextLine]],
+    geometric: list[tuple[ocr.TextLine, ocr.TextLine]],
+    accepted: set[str],
+    title: ocr.TextLine | None,
+) -> list[tuple[ocr.TextLine, ocr.TextLine, str]]:
+    """Cặp số và tên ngay bên dưới mà bước quét chính đã bỏ.
+
+    Giữ lại khi tên đọc thô chưa thành tên (ô vẫn đủ rộng, bước đọc kỹ sẽ đọc lại),
+    hoặc khi dòng số nằm sát dưới tiêu đề nhưng chính dòng đó đã là đủ 10 số.
+    Số trả về khác rỗng thì dùng đúng số đó, không đọc lại ô dễ bị cắt nửa chữ.
+    Dòng đè lên chữ "Danh bạ" vẫn bỏ: nửa trên chữ số không còn trên ảnh.
+    """
+    kept_ids = {id(phone_line) for phone_line, _ in kept}
+    margin = _title_margin(title) if title is not None else None
+    found: list[tuple[ocr.TextLine, ocr.TextLine, str]] = []
+    seen = set(accepted)
+    for phone_line, name_line in geometric:
+        if id(phone_line) in kept_ids or not _name_box_usable(phone_line, name_line):
+            continue
+        if title is not None and phone_line.y0 < title.y1:
+            continue
+        under_title = margin is not None and phone_line.y0 < margin
+        line_phone = normalize_phone(phone_line.text)
+        if under_title:
+            if not line_phone or line_phone in seen:
+                continue
+            seen.add(line_phone)
+            found.append((phone_line, name_line, line_phone))
+            continue
+        if is_name(clean_name(name_line.text)):
+            continue
+        if line_phone and line_phone in seen:
+            continue
+        if line_phone:
+            seen.add(line_phone)
+        found.append((phone_line, name_line, ""))
+    return found
+
+
+def _supplement_rows(
+    screen: Image.Image,
+    touched: np.ndarray,
+    emoji: np.ndarray,
+    kept: list[tuple[ocr.TextLine, ocr.TextLine]],
+    geometric: list[tuple[ocr.TextLine, ocr.TextLine]],
+    rows: list[ListRow],
+    title: ocr.TextLine | None,
+) -> list[ListRow]:
+    """Đọc các cặp bổ sung. Số đã chắc trên dòng thì không đọc lại."""
+    accepted = {row.phone for row in rows}
+    extra = _supplement_pairs(kept, geometric, accepted, title)
+    if not extra:
+        return []
+    pending = [(phone_line, name_line) for phone_line, name_line, forced in extra if not forced]
+    read = _read_phones(screen, pending) if pending else []
+    read_at = 0
+    added: list[ListRow] = []
+    for phone_line, name_line, forced in extra:
+        if forced:
+            phone = forced
+        else:
+            phone = read[read_at] or normalize_phone(phone_line.text)
+            read_at += 1
+        if not phone or phone in accepted:
+            continue
+        accepted.add(phone)
+        added.append(
+            ListRow(
+                phone,
+                name_line,
+                not _covered(touched, phone_line, name_line),
+                phone_line.y0,
+                bool(name_line.text) and not _only_emoji(emoji, name_line),
+                in_order=False,
+            )
+        )
+    return added
+
+
 def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
     """Bước quét: loại màn hình, vị trí các dòng, số điện thoại. Không đọc kỹ tên và @id."""
     screen, touched, emoji = _prepare(image)
     lines = ocr.find_lines(screen)
-    pairs = [
-        pair
-        for pair in _list_pairs(lines, screen)
-        if pair[1].y1 + pair[1].h < screen.height and is_name(clean_name(pair[1].text))
+    geometric = [
+        pair for pair in _list_pairs(lines, screen) if pair[1].y1 + pair[1].h < screen.height
     ]
-    if len(pairs) >= 2:
-        pairs = sorted(pairs + _phones_without_name(lines, pairs, screen.height), key=lambda pair: pair[0].y0)
+    named = [pair for pair in geometric if is_name(clean_name(pair[1].text))]
+    if len(named) >= 2:
+        pairs = sorted(named + _phones_without_name(lines, named, screen.height), key=lambda pair: pair[0].y0)
         # Dòng trên cùng trượt dưới thanh tiêu đề bị che nửa trên chữ số (3 thành 5). Bỏ dòng số
         # nằm sát dưới chữ "Danh bạ"; các khung khác thấy dòng đó đủ.
         title = next(
@@ -303,7 +404,7 @@ def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
             None,
         )
         if title is not None:
-            pairs = [pair for pair in pairs if pair[0].y0 >= title.y1 + 0.9 * title.h]
+            pairs = [pair for pair in pairs if pair[0].y0 >= _title_margin(title)]
         phones = _read_phones(screen, pairs)
         rows = [
             ListRow(
@@ -316,9 +417,16 @@ def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
             for phone, (phone_line, name_line) in zip(phones, pairs)
             if phone
         ]
-        pitch = _row_pitch(pairs)
-        tap_y = _tap_center(touched, pairs, pitch)
-        tapped = _highlighted_row(screen, rows, pitch) or (row_at(rows, tap_y, pitch) if tap_y >= 0 else "")
+        if pairs:
+            pitch = _row_pitch(pairs)
+            tap_y = _tap_center(touched, pairs, pitch)
+            tapped = _highlighted_row(screen, rows, pitch) or (row_at(rows, tap_y, pitch) if tap_y >= 0 else "")
+        else:
+            pitch = 0.0
+            tap_y = -1.0
+            tapped = ""
+        rows.extend(_supplement_rows(screen, touched, emoji, pairs, geometric, rows, title))
+        rows.sort(key=lambda row: row.top)
         return Layout("list", rows=rows, at=at, tapped=tapped, tap_y=tap_y, row_pitch=pitch)
     profile = _profile_lines(lines, screen.height)
     if profile is not None:
@@ -350,7 +458,7 @@ def read_layout(image: Image.Image, layout: Layout, rows: list[int] | None = Non
             lines = [layout.rows[index].name_line for index in chosen]
             read = _read_names([_crop(screen, line, NAME_SMALL) for line in lines], [_crop(screen, line) for line in lines])
             names = {index: name for index, name in zip(chosen, read) if is_name(name)}
-        contacts = [Contact(row.phone, names.get(index, "")) for index, row in enumerate(layout.rows)]
+        contacts = [Contact(row.phone, names.get(index, ""), row.in_order) for index, row in enumerate(layout.rows)]
         return FrameRead("list", contacts, at=layout.at, tapped=layout.tapped)
     if layout.kind == "profile" and layout.handle_line is not None:
         name, handle = _read_profile(phone_screen(image), layout.name_line, layout.handle_line, layout.name_readable)

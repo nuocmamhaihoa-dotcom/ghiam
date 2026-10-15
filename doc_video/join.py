@@ -102,6 +102,25 @@ def _lookalike_only(strong: str, weak: str) -> bool:
     return bool(diffs) and all(any(a in group and b in group for group in _DIGIT_LOOKALIKE) for a, b in diffs)
 
 
+def _drop_shadow_duplicates(
+    phones: dict[str, _Seen], ordered: set[str], frames_with: dict[str, set[int]]
+) -> None:
+    """Cặp bổ sung chỉ thêm số đang thiếu.
+
+    Trùng tên một số đã có trong thứ tự dòng thì bỏ, để không biến một cặp đã
+    ghép chắc thành nhiều số cùng tên.
+    """
+    taken = {name_key(phones[phone].name()) for phone in ordered if phone in phones}
+    taken.discard("")
+    for phone in list(phones):
+        if phone in ordered:
+            continue
+        key = name_key(phones[phone].name())
+        if key and key in taken:
+            del phones[phone]
+            frames_with.pop(phone, None)
+
+
 def _merge_misreads(phones: dict[str, _Seen], frames_with: dict[str, set[int]]) -> dict[str, str]:
     """Số lệch vài chữ số so với số đọc được nhiều hơn, chưa từng cùng hiện trên một khung: là đọc nhầm.
 
@@ -225,6 +244,7 @@ def build(frames: list[FrameRead]) -> Result:
     phones: dict[str, _Seen] = {}
     handles: dict[str, _Seen] = {}
     frames_with: dict[str, set[int]] = {}
+    ordered_phones: set[str] = set()
     visits: list[_Visit] = []
     visible: tuple[str, ...] = ()
     # Dòng vừa bấm thấy gần nhất kể từ lần mở hồ sơ trước: (số, vị trí khung, giây).
@@ -246,8 +266,11 @@ def build(frames: list[FrameRead]) -> Result:
                     seen.names[contact.name] += 1
                 seen.count += 1
                 frames_with.setdefault(contact.phone, set()).add(index)
-                if contact.phone not in ordered:
+                # Cặp bổ sung không chen vào thứ tự dòng. Thứ tự mở hồ sơ giữ nguyên.
+                if contact.in_order and contact.phone not in ordered:
                     ordered.append(contact.phone)
+                if contact.in_order:
+                    ordered_phones.add(contact.phone)
             visible = tuple(ordered)
         elif frame.kind == "profile" and frame.handle:
             seen = handles.get(frame.handle)
@@ -263,6 +286,7 @@ def build(frames: list[FrameRead]) -> Result:
                 if tap is not None and _recent_tap(tap, index, frame.at, visible, last_list):
                     seen.taps[tap[0]] += 1
             tap = None
+    _drop_shadow_duplicates(phones, ordered_phones, frames_with)
     merged = _merge_misreads(phones, frames_with)
     if merged:
         # Số đọc nhầm đã gộp vào số đúng: mọi chỗ còn nhắc tới số nhầm phải đổi theo, nếu

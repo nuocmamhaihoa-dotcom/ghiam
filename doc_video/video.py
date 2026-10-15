@@ -80,7 +80,12 @@ def _fill_missing_profile_handles(layouts: list[Layout], done: dict[int, FrameRe
 def _unread(layout: Layout) -> FrameRead:
     """Khung không đọc kỹ: danh bạ vẫn có số điện thoại, tên để trống; hồ sơ không có @id."""
     if layout.kind == "list":
-        return FrameRead("list", [Contact(row.phone, "") for row in layout.rows], at=layout.at, tapped=layout.tapped)
+        return FrameRead(
+            "list",
+            [Contact(row.phone, "", row.in_order) for row in layout.rows],
+            at=layout.at,
+            tapped=layout.tapped,
+        )
     return FrameRead(layout.kind, at=layout.at)
 
 
@@ -154,8 +159,12 @@ def _same_scroll(left: Layout, right: Layout) -> bool:
     pitch = left.row_pitch or right.row_pitch
     if pitch <= 0:
         return False
-    tops = {row.phone: row.top for row in left.rows}
-    same = [row for row in right.rows if row.phone in tops and abs(tops[row.phone] - row.top) <= 0.15 * pitch]
+    tops = {row.phone: row.top for row in left.rows if row.in_order}
+    same = [
+        row
+        for row in right.rows
+        if row.in_order and row.phone in tops and abs(tops[row.phone] - row.top) <= 0.15 * pitch
+    ]
     return len(same) >= 2
 
 
