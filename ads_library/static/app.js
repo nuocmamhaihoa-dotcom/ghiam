@@ -67,18 +67,31 @@ function renderCard(ad) {
   return card;
 }
 
-function renderResults(page, ads) {
+function renderResults(page, ads, keyword) {
   const cards = document.createDocumentFragment();
   for (const ad of ads) cards.append(renderCard(ad));
   $("results").replaceChildren(cards);
   $("count").textContent = String(ads.length);
-  $("page-name").textContent = page?.name || "—";
+  if (page?.name && keyword) {
+    $("subject-label").textContent = "Fanpage + từ khóa";
+    $("page-name").textContent = `${page.name} · ${keyword}`;
+  } else if (page?.name) {
+    $("subject-label").textContent = "Fanpage";
+    $("page-name").textContent = page.name;
+  } else if (keyword) {
+    $("subject-label").textContent = "Từ khóa";
+    $("page-name").textContent = keyword;
+  } else {
+    $("subject-label").textContent = "Phạm vi";
+    $("page-name").textContent = "—";
+  }
 
   const body = $("table-body");
   body.replaceChildren();
   ads.forEach((ad, index) => {
     const row = document.createElement("tr");
     text(row, "td", "", String(index + 1));
+    text(row, "td", "", ad.page_name || page?.name || "—");
     const idCell = text(row, "td", "", "");
     externalLink(idCell, String(ad.id || ""), libraryUrl(String(ad.id || "")));
     if (!idCell.childNodes.length) idCell.textContent = String(ad.id || "");
@@ -124,14 +137,25 @@ $("form").addEventListener("submit", async (event) => {
   const button = $("go");
   button.disabled = true;
   button.textContent = "Đang tìm...";
+  const keyword = $("keyword").value.trim();
+  const url = $("fanpage").value.trim();
+  if (!keyword && !url) {
+    setStatus("Nhập từ khóa hoặc link Fanpage.");
+    button.disabled = false;
+    button.textContent = "Tìm quảng cáo";
+    controller = null;
+    return;
+  }
   setStatus("Đang hỏi Meta Ad Library API.");
-  renderResults(null, []);
+  renderResults(null, [], "");
   try {
     const response = await fetch("/api/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        url: $("fanpage").value.trim(),
+        url,
+        keyword,
+        match: $("match").value,
         country: $("country").value,
         status: $("status").value,
         limit: 50,
@@ -143,14 +167,15 @@ $("form").addEventListener("submit", async (event) => {
       setStatus(data.error || "Không tìm được quảng cáo.");
       return;
     }
-    renderResults(data.page, data.ads || []);
+    renderResults(data.page, data.ads || [], data.keyword || "");
+    const scope = [data.page?.name, data.keyword].filter(Boolean).join(" · ") || "bộ lọc này";
     setStatus(
       data.count
-        ? `Đã tải ${data.count} quảng cáo của ${data.page?.name || "Fanpage"}.`
-        : "Không thấy quảng cáo khớp bộ lọc. Token có thể chỉ xem được quảng cáo chính trị, hoặc Fanpage không chạy quảng cáo ở quốc gia này.",
+        ? `Đã tải ${data.count} quảng cáo: ${scope}.`
+        : "Không thấy quảng cáo khớp bộ lọc. Token có thể chỉ xem được quảng cáo chính trị, hoặc không có quảng cáo ở quốc gia này.",
     );
   } catch (error) {
-    if (error.name !== "AbortError") setStatus("Không kết nối được máy chủ cục bộ.");
+    if (error.name !== "AbortError") setStatus("Không kết nối được máy chủ.");
   } finally {
     button.disabled = false;
     button.textContent = "Tìm quảng cáo";

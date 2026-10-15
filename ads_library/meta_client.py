@@ -34,12 +34,18 @@ _FIELDS = ",".join(
 _TOKEN_IN_TEXT = re.compile(r"(access_token=)[^&\s\"']+", re.IGNORECASE)
 _COUNTRY = re.compile(r"^[A-Z]{2}$")
 _STATUSES = {"ACTIVE", "INACTIVE", "ALL"}
+_MATCHES = {"any": "KEYWORD_UNORDERED", "exact": "KEYWORD_EXACT_PHRASE"}
+_KEYWORD_LIMIT = 100
 
 Fetch = Callable[[str, float], tuple[int, str]]
 
 
 class MetaApiError(Exception):
     """Meta từ chối hoặc trả về dữ liệu không đọc được."""
+
+
+class InputError(MetaApiError):
+    """Người dùng gửi bộ lọc không hợp lệ. Chưa gọi Meta."""
 
 
 @dataclass(frozen=True)
@@ -51,7 +57,8 @@ class PageInfo:
 
 @dataclass(frozen=True)
 class SearchResult:
-    page: PageInfo
+    page: PageInfo | None
+    keyword: str
     ads: list[dict[str, Any]]
 
 
@@ -114,9 +121,20 @@ def resolve_page(ref: PageRef, token: str, fetch: Fetch, timeout: float = 20) ->
     return _page_from_payload(payload)
 
 
+def normalize_keyword(raw: str) -> str:
+    text = " ".join(raw.split())
+    if any(ord(char) < 32 for char in text):
+        raise InputError("Từ khóa chứa ký tự không hợp lệ.")
+    if len(text) > _KEYWORD_LIMIT:
+        raise InputError("Từ khóa tối đa 100 ký tự.")
+    return text
+
+
 def search_ads(
-    page: PageInfo,
     *,
+    page_id: str | None,
+    keyword: str,
+    match: str,
     country: str,
     status: str,
     limit: int,
@@ -124,20 +142,22 @@ def search_ads(
     fetch: Fetch,
     timeout: float = 20,
 ) -> list[dict[str, Any]]:
-    validate_filters(country, status, limit)
+    validate_filters(country, status, limit, keyword=keyword, match=match, has_page=bool(page_id))
+    params = {
+        "access_token": token,
+        "ad_reached_countries": json.dumps([country]),
+        "ad_active_status": status,
+        "ad_type": "ALL",
+        "fields": _FIELDS,
+        "limit": str(min(25, limit)),
+    }
+    if page_id:
+        params["search_page_ids"] = page_id
+    if keyword:
+        params["search_terms"] = keyword
+        params["search_type"] = _MATCHES[match]
     ads: list[dict[str, Any]] = []
-    url: str | None = _graph_url(
-        "ads_archive",
-        {
-            "access_token": token,
-            "search_page_ids": page.id,
-            "ad_reached_countries": json.dumps([country]),
-            "ad_active_status": status,
-            "ad_type": "ALL",
-            "fields": _FIELDS,
-            "limit": str(min(25, limit)),
-        },
-    )
+    url: str | None = _graph_url("ads_archive", params)
     while url and len(ads) < limit:
         payload = _read_json(url, fetch, timeout, token)
         batch = payload.get("data")
@@ -149,19 +169,51 @@ def search_ads(
     return ads[:limit]
 
 
-def validate_filters(country: str, status: str, limit: int) -> None:
+def validate_filters(
+    country: str,
+    status: str,
+    limit: int,
+    *,
+    keyword: str = "",
+    match: str = "any",
+    has_page: bool = True,
+) -> None:
     if not _COUNTRY.fullmatch(country):
-        raise MetaApiError("Mã quốc gia phải là hai chữ cái, ví dụ VN.")
+        raise InputError("Mã quốc gia phải là hai chữ cái, ví dụ VN.")
     if status not in _STATUSES:
-        raise MetaApiError("Trạng thái quảng cáo không hợp lệ.")
+        raise InputError("Trạng thái quảng cáo không hợp lệ.")
     if limit < 1 or limit > 100:
-        raise MetaApiError("Số quảng cáo phải từ 1 đến 100.")
+        raise InputError("Số quảng cáo phải từ 1 đến 100.")
+    if keyword and match not in _MATCHES:
+        raise InputError("Cách khớp từ khóa không hợp lệ.")
+    if not has_page and not keyword:
+        raise InputError("Nhập từ khóa hoặc link Fanpage.")
 
 
-def lookup(ref: PageRef, *, country: str, status: str, limit: int, token: str, fetch: Fetch) -> SearchResult:
+def lookup(
+    ref: PageRef | None = None,
+    *,
+    keyword: str = "",
+    match: str = "any",
+    country: str,
+    status: str,
+    limit: int,
+    token: str,
+    fetch: Fetch,
+) -> SearchResult:
+    text = normalize_keyword(keyword)
+    validate_filters(country, status, limit, keyword=text, match=match, has_page=ref is not None)
     if not token.strip():
         raise MetaApiError("Chưa cấu hình META_ACCESS_TOKEN.")
-    validate_filters(country, status, limit)
-    page = resolve_page(ref, token, fetch)
-    ads = search_ads(page, country=country, status=status, limit=limit, token=token, fetch=fetch)
-    return SearchResult(page=page, ads=ads)
+    page = resolve_page(ref, token, fetch) if ref is not None else None
+    ads = search_ads(
+        page_id=page.id if page else None,
+        keyword=text,
+        match=match,
+        country=country,
+        status=status,
+        limit=limit,
+        token=token,
+        fetch=fetch,
+    )
+    return SearchResult(page=page, keyword=text, ads=ads)

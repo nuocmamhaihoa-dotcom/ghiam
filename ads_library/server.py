@@ -14,7 +14,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from ads_library.meta_client import MetaApiError, lookup, redact
+from ads_library.meta_client import InputError, MetaApiError, lookup, redact
 from ads_library.page_ref import PageRefError, parse_page_ref
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -37,31 +37,39 @@ def urllib_fetch(url: str, timeout: float) -> tuple[int, str]:
         raise MetaApiError("Không kết nối được tới Meta. Kiểm tra mạng.") from exc
 
 
+def _text(body: dict[str, Any], key: str) -> str:
+    value = body.get(key)
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise InputError("Bộ lọc không hợp lệ.")
+    return value
+
+
 def search_request(body: dict[str, Any], token: str) -> dict[str, Any]:
-    url = body.get("url")
-    if not isinstance(url, str):
-        raise PageRefError("Nhập link Fanpage.")
-    country = body.get("country") or "VN"
-    status = body.get("status") or "ACTIVE"
+    url = _text(body, "url").strip()
+    keyword = _text(body, "keyword")
+    match = _text(body, "match") or "any"
+    country = _text(body, "country") or "VN"
+    status = _text(body, "status") or "ACTIVE"
     limit = body.get("limit") if body.get("limit") is not None else 50
-    if not isinstance(country, str) or not isinstance(status, str):
-        raise MetaApiError("Bộ lọc không hợp lệ.")
     if isinstance(limit, bool) or not isinstance(limit, int):
-        raise MetaApiError("Số quảng cáo phải từ 1 đến 100.")
-    ref = parse_page_ref(url)
+        raise InputError("Số quảng cáo phải từ 1 đến 100.")
+    ref = parse_page_ref(url) if url else None
     result = lookup(
         ref,
+        keyword=keyword,
+        match=match,
         country=country.upper(),
         status=status.upper(),
         limit=limit,
         token=token,
         fetch=urllib_fetch,
     )
-    return {
-        "page": {"id": result.page.id, "name": result.page.name, "link": result.page.link},
-        "ads": result.ads,
-        "count": len(result.ads),
-    }
+    page = None
+    if result.page is not None:
+        page = {"id": result.page.id, "name": result.page.name, "link": result.page.link}
+    return {"page": page, "keyword": result.keyword, "ads": result.ads, "count": len(result.ads)}
 
 
 class AdsLibraryHandler(BaseHTTPRequestHandler):
@@ -119,7 +127,7 @@ class AdsLibraryHandler(BaseHTTPRequestHandler):
         token = os.environ.get("META_ACCESS_TOKEN", "")
         try:
             self._json(200, search_request(body, token))
-        except PageRefError as exc:
+        except (PageRefError, InputError) as exc:
             self._json(400, {"error": str(exc)})
         except MetaApiError as exc:
             status = 503 if "META_ACCESS_TOKEN" in str(exc) else 502

@@ -8,9 +8,10 @@ import unittest
 import urllib.error
 import urllib.request
 from html.parser import HTMLParser
+from urllib.parse import parse_qs, urlparse
 from http.server import ThreadingHTTPServer
 
-from ads_library.meta_client import MetaApiError, lookup, redact
+from ads_library.meta_client import InputError, MetaApiError, lookup, redact
 from ads_library.page_ref import PageRefError, parse_page_ref
 from ads_library.server import STATIC_DIR, AdsLibraryHandler, search_request
 
@@ -98,6 +99,66 @@ class MetaClientTests(unittest.TestCase):
                 fetch=fetch,
             )
 
+    def test_keyword_only_skips_page_lookup(self) -> None:
+        calls: list[str] = []
+
+        def fetch(url: str, timeout: float) -> tuple[int, str]:
+            del timeout
+            calls.append(url)
+            return 200, json.dumps({"data": [{"id": "7", "page_name": "Shop", "ad_creative_bodies": ["nước mắm"]}]})
+
+        result = lookup(
+            keyword="nước mắm, giấm",
+            match="any",
+            country="VN",
+            status="ACTIVE",
+            limit=10,
+            token="test-token",
+            fetch=fetch,
+        )
+        self.assertIsNone(result.page)
+        self.assertEqual(result.keyword, "nước mắm, giấm")
+        self.assertEqual(len(calls), 1)
+        params = parse_qs(urlparse(calls[0]).query)
+        self.assertEqual(params["search_terms"], ["nước mắm, giấm"])
+        self.assertEqual(params["search_type"], ["KEYWORD_UNORDERED"])
+        self.assertNotIn("search_page_ids", params)
+
+    def test_exact_keyword_stays_on_one_page(self) -> None:
+        calls: list[str] = []
+
+        def fetch(url: str, timeout: float) -> tuple[int, str]:
+            del timeout
+            calls.append(url)
+            if "/ads_archive?" in url:
+                return 200, json.dumps({"data": []})
+            return 200, json.dumps({"id": "555", "name": "Shop", "link": "https://www.facebook.com/555"})
+
+        result = lookup(
+            parse_page_ref("https://facebook.com/555555"),
+            keyword="  nước   mắm ",
+            match="exact",
+            country="VN",
+            status="ACTIVE",
+            limit=5,
+            token="test-token",
+            fetch=fetch,
+        )
+        self.assertEqual(result.page.id if result.page else "", "555")
+        self.assertEqual(result.keyword, "nước mắm")
+        params = parse_qs(urlparse(calls[1]).query)
+        self.assertEqual(params["search_page_ids"], ["555"])
+        self.assertEqual(params["search_terms"], ["nước mắm"])
+        self.assertEqual(params["search_type"], ["KEYWORD_EXACT_PHRASE"])
+
+    def test_blank_query_does_not_call_meta(self) -> None:
+        def fetch(url: str, timeout: float) -> tuple[int, str]:
+            del url, timeout
+            raise AssertionError("không được gọi mạng khi thiếu từ khóa và Fanpage")
+
+        with self.assertRaises(InputError):
+            lookup(country="VN", status="ACTIVE", limit=10, token="test-token", fetch=fetch)
+
 
 class _IdCollector(HTMLParser):
     def __init__(self) -> None:
@@ -119,8 +180,10 @@ class StaticTests(unittest.TestCase):
         self.assertEqual(len(parser.ids), len(set(parser.ids)))
         self.assertIn("message", parser.ids)
         self.assertIn("status", parser.ids)
+        self.assertIn("keyword", parser.ids)
         self.assertIn('$("message").textContent', script)
         self.assertIn('status: $("status").value', script)
+        self.assertIn("keyword,", script)
 
 
 class ServerTests(unittest.TestCase):
@@ -129,6 +192,10 @@ class ServerTests(unittest.TestCase):
             search_request({"url": "https://example.com/a"}, "token")
         with self.assertRaises(MetaApiError):
             search_request({"url": "https://facebook.com/shop", "limit": True}, "token")
+        with self.assertRaises(InputError):
+            search_request({"url": " ", "keyword": " "}, "token")
+        with self.assertRaisesRegex(MetaApiError, "META_ACCESS_TOKEN"):
+            search_request({"keyword": "nước mắm"}, "")
 
     def test_http_ready_and_rejected_url(self) -> None:
         server = ThreadingHTTPServer(("127.0.0.1", 0), AdsLibraryHandler)
@@ -150,6 +217,17 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(caught.exception.code, 400)
             body = json.loads(caught.exception.read().decode())
             self.assertIn("Facebook", body["error"])
+            empty = urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/search",
+                data=json.dumps({"url": "", "keyword": ""}).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as empty_caught:
+                urllib.request.urlopen(empty)
+            self.assertEqual(empty_caught.exception.code, 400)
+            empty_body = json.loads(empty_caught.exception.read().decode())
+            self.assertIn("từ khóa", empty_body["error"])
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/") as page:
                 html = page.read().decode()
             self.assertIn("Thư viện quảng cáo Fanpage", html)
