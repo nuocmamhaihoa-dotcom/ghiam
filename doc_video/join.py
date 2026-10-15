@@ -80,10 +80,34 @@ def _marks(name: str) -> int:
     return sum(1 for ch in name if ord(ch) > 127)
 
 
-def _merge_misreads(phones: dict[str, _Seen], frames_with: dict[str, set[int]]) -> dict[str, str]:
-    """Số lệch đúng một chữ số so với số đọc được nhiều hơn, cùng tên, chưa từng cùng hiện trên một khung: là đọc nhầm.
+# Chữ số bộ đọc hay nhầm với nhau khi chữ bị cắt hoặc mờ.
+_DIGIT_LOOKALIKE = [set("35"), set("68"), set("17"), set("08"), set("56"), set("89"), set("38")]
 
-    Trả về số đọc nhầm và số đúng tương ứng.
+
+def _misread_digits(strong: str, weak: str) -> bool:
+    """Lệch đúng một chữ số bất kỳ, hoặc lệch tới ba chữ số mà mọi chỗ lệch là cặp dễ nhầm.
+
+    Chữ số bị che nửa trên thì mọi số 3 trong dòng cùng thành 5 (0913327358 với 0915527558).
+    """
+    if len(strong) != len(weak):
+        return False
+    diffs = [(a, b) for a, b in zip(strong, weak) if a != b]
+    if len(diffs) == 1:
+        return True
+    return 2 <= len(diffs) <= 3 and all(any(a in group and b in group for group in _DIGIT_LOOKALIKE) for a, b in diffs)
+
+
+def _lookalike_only(strong: str, weak: str) -> bool:
+    diffs = [(a, b) for a, b in zip(strong, weak) if a != b]
+    return bool(diffs) and all(any(a in group and b in group for group in _DIGIT_LOOKALIKE) for a, b in diffs)
+
+
+def _merge_misreads(phones: dict[str, _Seen], frames_with: dict[str, set[int]]) -> dict[str, str]:
+    """Số lệch vài chữ số so với số đọc được nhiều hơn, chưa từng cùng hiện trên một khung: là đọc nhầm.
+
+    Cần cùng tên. Riêng số chỉ lệch ở các chữ số dễ nhầm (3 với 5…) mà hiếm khi thấy (tối đa
+    3 khung) trong khi số kia thấy nhiều gấp ba trở lên thì gộp dù tên đọc ra khác: tên trên
+    vài khung đó cũng hay đọc sai. Trả về số đọc nhầm và số đúng tương ứng.
     """
     merged: dict[str, str] = {}
     for weak in sorted(phones, key=lambda phone: phones[phone].count):
@@ -92,11 +116,13 @@ def _merge_misreads(phones: dict[str, _Seen], frames_with: dict[str, set[int]]) 
         for strong, seen in sorted(phones.items(), key=lambda item: -item[1].count):
             if strong == weak or seen.count <= phones[weak].count:
                 continue
-            if sum(a != b for a, b in zip(strong, weak)) != 1:
+            if not _misread_digits(strong, weak):
                 continue
             if frames_with[strong] & frames_with[weak]:
                 continue
-            if name_key(seen.name()) != name_key(phones[weak].name()):
+            same_name = name_key(seen.name()) == name_key(phones[weak].name())
+            rare = phones[weak].count <= 3 and seen.count >= 3 * phones[weak].count and _lookalike_only(strong, weak)
+            if not same_name and not rare:
                 continue
             seen.names.update(phones[weak].names)
             seen.count += phones[weak].count

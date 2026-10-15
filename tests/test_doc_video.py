@@ -391,6 +391,35 @@ class JoinTests(unittest.TestCase):
         ]
         self.assertEqual(build(frames).rows[0].name, "Hữu Nhung")
 
+    def test_number_misread_at_two_lookalike_digits_merges(self) -> None:
+        frames = [listing(("0913327358", "A Hải"), ("0913363956", "Vựa Mực")) for _ in range(4)]
+        frames.append(listing(("0915527558", "A Hải"), ("0913273681", "huythuc82")))
+        frames.append(profile("A Hải", "@a.hi572"))
+        result = build(frames)
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0913327358", "@a.hi572")])
+        self.assertNotIn("0915527558", [phone for phone, _ in result.unopened])
+
+    def test_rare_lookalike_misread_merges_even_with_a_misread_name(self) -> None:
+        frames = [listing(("0913326577", "dy5bpm8kp8fh"), ("0913258209", "mmm")) for _ in range(8)]
+        frames += [listing(("0915526577", "Uy IVI"), ("0913330677", "yamate")) for _ in range(2)]
+        result = build(frames)
+        phones = [phone for phone, _ in result.unopened]
+        self.assertIn("0913326577", phones)
+        self.assertNotIn("0915526577", phones)
+
+    def test_often_seen_number_with_another_name_is_not_merged(self) -> None:
+        frames = [listing(("0913326577", "Lan"), ("0913258209", "mmm")) for _ in range(8)]
+        frames += [listing(("0915526577", "Hoa"), ("0913330677", "yamate")) for _ in range(6)]
+        result = build(frames)
+        phones = [phone for phone, _ in result.unopened]
+        self.assertIn("0915526577", phones)
+
+    def test_two_real_numbers_with_one_name_are_not_merged(self) -> None:
+        frames = [listing(("0913327358", "Lan"), ("0915527558", "Lan"))]
+        frames.append(profile("Lan", "@lan"))
+        result = build(frames)
+        self.assertEqual({item.reason for item in result.review}, {"nhiều số cùng tên"})
+
     def test_misread_number_merged_away_does_not_break_order_joining(self) -> None:
         screen = [("0915288126", "An"), ("0900000002", "Binh")]
         frames = [listing(*screen) for _ in range(3)]
@@ -438,6 +467,15 @@ class PlanTests(unittest.TestCase):
     def test_each_profile_visit_is_read_in_two_frames(self) -> None:
         layouts = [list_layout(["0900000001", "0900000002"])]
         layouts += [Layout("profile", handle_line=TextLine("@a", 0, 0, 10, 10), handle_hint="@abc") for _ in range(4)]
+        layouts += [list_layout(["0900000001", "0900000002"])]
+        plan = plan_reads(layouts)
+        self.assertEqual(sorted(index for index, rows in plan.items() if rows is None), [1, 4])
+
+    def test_profile_frames_that_show_the_handle_are_read_first(self) -> None:
+        line = TextLine("@a", 0, 0, 10, 10)
+        layouts = [list_layout(["0900000001", "0900000002"])]
+        layouts.append(Layout("profile", handle_line=line, handle_hint=""))
+        layouts += [Layout("profile", handle_line=line, handle_hint="@thanhson1906", clear=False) for _ in range(3)]
         layouts += [list_layout(["0900000001", "0900000002"])]
         plan = plan_reads(layouts)
         self.assertEqual(sorted(index for index, rows in plan.items() if rows is None), [2, 4])
