@@ -232,21 +232,129 @@ def _row_pitch(pairs: list[tuple[ocr.TextLine, ocr.TextLine]]) -> float:
     return float(gaps[len(gaps) // 2]) if gaps else 0.0
 
 
+def _touch_blobs(mask: np.ndarray) -> list[tuple[float, float, int, int, int]]:
+    """Mỗi mảng liền của vòng tròn: tâm x, tâm y, diện tích, rộng, cao.
+
+    Nút Back, ảnh đại diện và vòng chạm thật cùng là hình tròn xám. Tách từng
+    mảng để bỏ những cái nằm ở cột trái, giữ vòng nằm trên dòng vừa bấm.
+    """
+    if not mask.any():
+        return []
+    padded = np.pad(mask.astype(np.uint8), ((0, 0), (1, 1)))
+    diff = np.diff(padded.astype(np.int8), axis=1)
+    ys, starts = np.nonzero(diff == 1)
+    _, ends = np.nonzero(diff == -1)
+    count = int(ys.size)
+    if count == 0 or ends.size != count:
+        return []
+    parent = list(range(count))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    def union(left: int, right: int) -> None:
+        left, right = find(left), find(right)
+        if left != right:
+            parent[right] = left
+
+    by_row: dict[int, list[int]] = {}
+    for index, y in enumerate(ys.tolist()):
+        by_row.setdefault(int(y), []).append(index)
+    previous: list[int] = []
+    previous_y = -2
+    for y in sorted(by_row):
+        current = by_row[y]
+        if previous and y == previous_y + 1:
+            probe = 0
+            for index in current:
+                while probe < len(previous) and ends[previous[probe]] <= starts[index]:
+                    probe += 1
+                overlap = probe
+                while overlap < len(previous) and starts[previous[overlap]] < ends[index]:
+                    union(index, previous[overlap])
+                    overlap += 1
+        previous = current
+        previous_y = y
+
+    boxes: dict[int, list[int]] = {}
+    for index in range(count):
+        root = find(index)
+        y = int(ys[index])
+        x0 = int(starts[index])
+        x1 = int(ends[index])
+        box = boxes.get(root)
+        area = x1 - x0
+        if box is None:
+            boxes[root] = [x0, y, x1, y + 1, area, area * (x0 + x1) / 2, area * (y + 0.5)]
+            continue
+        box[0] = min(box[0], x0)
+        box[1] = min(box[1], y)
+        box[2] = max(box[2], x1)
+        box[3] = max(box[3], y + 1)
+        box[4] += area
+        box[5] += area * (x0 + x1) / 2
+        box[6] += area * (y + 0.5)
+    blobs = []
+    for x0, y0, x1, y1, area, moment_x, moment_y in boxes.values():
+        if area <= 0:
+            continue
+        blobs.append((moment_x / area, moment_y / area, area, x1 - x0, y1 - y0))
+    return blobs
+
+
+def _tap_cluster(blobs: list[tuple[float, float, int]], width: int, pitch: float) -> float:
+    """Độ cao một cụm vòng tròn. Vòng bị nút Follow cắn có thể tách thành hai mảnh kề nhau."""
+    groups: list[list[tuple[float, float, int]]] = []
+    for blob in blobs:
+        placed = False
+        for group in groups:
+            if all(abs(blob[0] - other[0]) <= 0.18 * width and abs(blob[1] - other[1]) <= 0.55 * pitch for other in group):
+                group.append(blob)
+                placed = True
+                break
+        if not placed:
+            groups.append([blob])
+    if len(groups) != 1:
+        return -1.0
+    group = groups[0]
+    weight = sum(blob[2] for blob in group)
+    return sum(blob[1] * blob[2] for blob in group) / weight if weight else -1.0
+
+
 def _tap_center(touched: np.ndarray, pairs: list[tuple[ocr.TextLine, ocr.TextLine]], pitch: float) -> float:
-    """Độ cao tâm vòng tròn chạm duy nhất nằm trong vùng các dòng danh bạ, -1 nếu không có hoặc có nhiều."""
+    """Độ cao vòng tròn chạm nằm trên danh bạ.
+
+    Nút Back góc trên trái và ảnh đại diện xám cũng là hình tròn. Bỏ cột trái.
+    Còn một vòng, hoặc một vòng bên cột Follow khi còn vòng khác ở giữa, thì
+    lấy vòng đó. Nhiều vòng không tách được thì trả -1, để khỏi gán nhầm dòng.
+    """
     if not touched.any() or pitch <= 0:
         return -1.0
+    height, width = touched.shape
     low = min(phone_line.y0 for phone_line, _ in pairs) - pitch
     high = max(name_line.y1 for _, name_line in pairs) + pitch
-    rows = np.flatnonzero(touched.any(axis=1))
-    runs: list[tuple[int, int]] = []
-    for y in rows:
-        if runs and y <= runs[-1][1] + 1:
-            runs[-1] = (runs[-1][0], int(y))
-        else:
-            runs.append((int(y), int(y)))
-    centers = [(a + b) / 2 for a, b in runs if low <= (a + b) / 2 <= high]
-    return centers[0] if len(centers) == 1 else -1.0
+    minimum = max(200, int(0.0015 * width * width))
+    kept: list[tuple[float, float, int]] = []
+    for cx, cy, area, wide, tall in _touch_blobs(touched):
+        if not low <= cy <= high or area < minimum or wide < 1 or tall < 1:
+            continue
+        if wide > 3 * tall or tall > 3 * wide:
+            continue
+        if cx < 0.20 * width:
+            continue
+        if cy < 0.12 * height and cx < 0.40 * width:
+            continue
+        kept.append((cx, cy, area))
+    if not kept:
+        return -1.0
+    single = _tap_cluster(kept, width, pitch)
+    if single >= 0:
+        return single
+    right = [blob for blob in kept if blob[0] >= 0.60 * width]
+    return _tap_cluster(right, width, pitch)
 
 
 def _highlighted_row(screen: Image.Image, rows: list[ListRow], pitch: float) -> str:
