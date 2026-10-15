@@ -62,6 +62,7 @@
   <section>
     <h2>Thống kê</h2>
     <div class="stats" id="stats"></div>
+    <p id="copyNote" class="note"></p>
   </section>
 
   <section>
@@ -115,10 +116,10 @@
     <div class="scroll">
       <table>
         <thead>
-          <tr><th>Tên</th><th>Số điện thoại</th><th>Địa chỉ</th><th>UID Facebook</th><th>ID TikTok</th></tr>
+          <tr><th>Tên</th><th>Tên thêm</th><th>Số điện thoại</th><th>Số thêm</th><th>Địa chỉ</th><th>Địa chỉ thêm</th><th>UID Facebook</th><th>UID thêm</th><th>ID TikTok</th><th>TikTok thêm</th></tr>
         </thead>
         <tbody id="rows">
-          <tr><td colspan="5">Chưa có dữ liệu.</td></tr>
+          <tr><td colspan="10">Chưa có dữ liệu.</td></tr>
         </tbody>
       </table>
     </div>
@@ -143,7 +144,7 @@
       <summary>1. Trùng ô độc nhất rồi bổ sung hàng — đang dùng</summary>
       <ul>
         <li>Gom mọi ô độc nhất: UID Facebook, số điện thoại, @TikTok, tên đủ hai chữ, địa chỉ dài.</li>
-        <li>Cùng một người thì điền các ô trống của hàng đó. Ô đã có không bị ghi đè.</li>
+        <li>Cùng một khách thì giữ nguyên ô chính. Ô trống được điền. Giá trị khác được thêm vào ô thêm của đúng trường đó, trên cùng một hàng.</li>
         <li>Hai ô trỏ hai người, hoặc tên/địa chỉ trùng nhiều người, thì bỏ qua cả hàng.</li>
         <li>Cùng tên nhưng khác số điện thoại, UID hoặc @TikTok thì giữ hai người, không gộp.</li>
       </ul>
@@ -231,7 +232,17 @@
       stat(body.contacts, "Dòng trong kho") +
       stat(body.phones, "Có số điện thoại") +
       stat(body.uids, "Có UID Facebook") +
-      stat(body.batches, "Lô đã nạp");
+      stat(body.batches, "Lô đã nạp") +
+      stat(body.reviewed || 0, "Cần xem");
+    var copies = (body.copies) || {};
+    var copyNote = document.getElementById("copyNote");
+    if (copies.live && copies.mirror && copies.journal) {
+      copyNote.textContent = "Ba bản lưu đang đủ: kho đang dùng, bản gương, sổ ghi. Mất một bản vẫn dựng lại được từ bản còn lại.";
+      copyNote.className = "note ok";
+    } else {
+      copyNote.textContent = "Chưa đủ ba bản lưu.";
+      copyNote.className = "note warn";
+    }
   }
 
   var ASK_FIELDS = [
@@ -359,13 +370,15 @@
     var tbody = document.getElementById("rows");
     if (!append) tbody.innerHTML = "";
     if (!items.length && !append) {
-      tbody.innerHTML = "<tr><td colspan='5'>Không có dòng khớp.</td></tr>";
+      tbody.innerHTML = "<tr><td colspan='10'>Không có dòng khớp.</td></tr>";
       return;
     }
     items.forEach(function (row) {
       var tr = document.createElement("tr");
-      tr.innerHTML = "<td>" + esc(row.name) + "</td><td>" + esc(row.phone) + "</td><td>" + esc(row.address) +
-        "</td><td>" + esc(row.uid) + "</td><td>" + esc(row.externalId) + "</td>";
+      tr.innerHTML = "<td>" + esc(row.name) + "</td><td>" + esc(row.nameExtra) + "</td><td>" + esc(row.phone) +
+        "</td><td>" + esc(row.phoneExtra) + "</td><td>" + esc(row.address) + "</td><td>" + esc(row.addressExtra) +
+        "</td><td>" + esc(row.uid) + "</td><td>" + esc(row.uidExtra) + "</td><td>" + esc(row.externalId) +
+        "</td><td>" + esc(row.idExtra) + "</td>";
       tbody.appendChild(tr);
     });
   }
@@ -442,7 +455,8 @@
       return;
     }
     note.textContent = "Đã đọc " + body.read + " dòng: +" + body.inserted + " mới, " +
-      body.updated + " bổ sung ô trống, " + body.skipped + " bỏ qua.";
+      body.updated + " bổ sung cùng hàng, " + (body.reviewed || 0) + " để riêng vì trùng hai khách, " +
+      body.skipped + " trùng hoàn toàn.";
     note.className = "note ok";
     await refreshStats();
     await search(true);

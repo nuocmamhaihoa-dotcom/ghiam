@@ -32,6 +32,7 @@ from control_plane.warehouse_store import (
     preview_matches,
     save_template,
     search_contacts,
+    rebuild_from_journal,
     upsert_records,
     warehouse_stats,
 )
@@ -252,6 +253,7 @@ class StoreTests(unittest.TestCase):
         found = search_contacts(self.db, "0901234567", limit=10, after=0)
         row = found["items"][0]
         self.assertEqual(row["name"], "Lan")
+        self.assertEqual(row["nameExtra"], "Lan khác")
         self.assertEqual(row["address"], "1 Đường Láng, Hà Nội")
         self.assertEqual(row["uid"], "6000111222333")
         stats = warehouse_stats(self.db)
@@ -317,12 +319,12 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(bao["name"], "Phạm Quốc Bảo")
         self.assertEqual(bao["externalId"], "PQB")
 
-    def test_ambiguous_name_skips_and_conflict_skips(self) -> None:
+    def test_same_name_adds_phone_and_cross_match_is_kept(self) -> None:
         seeded = upsert_records(
             self.db,
             [
-                {"name": "Nguyễn Văn A", "phone": "0901111001", "address": "", "uid": "", "id": "A1"},
-                {"name": "Nguyễn Văn A", "phone": "0901111002", "address": "", "uid": "", "id": "A2"},
+                {"name": "Nguyễn Văn A", "phone": "0901111001", "address": "", "uid": "", "id": "@a1"},
+                {"name": "Nguyễn Văn A", "phone": "0901111002", "address": "", "uid": "", "id": "@a2"},
                 {"name": "Trần B", "phone": "", "address": "", "uid": "111122223333444", "id": ""},
                 {"name": "Lê C", "phone": "0903333001", "address": "", "uid": "", "id": ""},
             ],
@@ -331,7 +333,8 @@ class StoreTests(unittest.TestCase):
             mapping={"name": 0},
             at="2026-03-01T00:00:00+00:00",
         )
-        self.assertEqual(seeded["inserted"], 4)
+        self.assertEqual(seeded["inserted"], 3)
+        self.assertEqual(seeded["updated"], 1)
         result = upsert_records(
             self.db,
             [
@@ -355,14 +358,18 @@ class StoreTests(unittest.TestCase):
             mapping={"name": 0},
             at="2026-03-02T00:00:00+00:00",
         )
-        self.assertEqual(result["updated"], 0)
+        self.assertEqual(result["updated"], 1)
         self.assertEqual(result["inserted"], 0)
-        self.assertEqual(result["skipped"], 2)
+        self.assertEqual(result["reviewed"], 1)
+        self.assertEqual(result["skipped"], 0)
+        row = search_contacts(self.db, "0909999000", limit=10, after=0)["items"][0]
+        self.assertEqual(row["phone"], "0901111001")
+        self.assertIn("0901111002", row["phoneExtra"])
+        self.assertIn("0909999000", row["phoneExtra"])
+        self.assertEqual(row["address"], "1 Phố Huế, Hà Nội")
+        self.assertEqual(search_contacts(self.db, "0903333001", limit=10, after=0)["items"][0]["name"], "Lê C")
+        self.assertEqual(search_contacts(self.db, "111122223333444", limit=10, after=0)["items"][0]["name"], "Trần B")
         with session(self.db) as conn:
-            self.assertEqual(
-                find_match(conn, {"name": "Nguyễn Văn A", "phone": "", "uid": "", "id": "", "address": ""})[1],
-                "ambiguous",
-            )
             conflict = find_match(
                 conn,
                 {
@@ -375,11 +382,97 @@ class StoreTests(unittest.TestCase):
                 },
             )
             self.assertEqual(conflict, (None, "conflict"))
-        previewed = preview_matches(
+
+    def test_same_person_keeps_old_and_adds_new_values(self) -> None:
+        upsert_records(
             self.db,
-            [{"name": "Nguyễn Văn A", "phone": "", "address": "", "uid": "", "id": ""}],
+            [
+                {
+                    "name": "Hoàng Lan",
+                    "phone": "0901234567",
+                    "address": "12 Đường Láng, Hà Nội",
+                    "uid": "",
+                    "id": "@lan",
+                }
+            ],
+            filename="lan-1.xlsx",
+            source="1",
+            mapping={"name": 0},
+            at="2026-05-01T00:00:00+00:00",
         )
-        self.assertEqual(previewed[0]["match"], "ambiguous")
+        result = upsert_records(
+            self.db,
+            [
+                {
+                    "name": "Lan",
+                    "phone": "",
+                    "address": "12 Đường Láng, Hà Nội",
+                    "uid": "100012345678901",
+                    "id": "@lan2",
+                }
+            ],
+            filename="lan-2.xlsx",
+            source="2",
+            mapping={"name": 0},
+            at="2026-05-02T00:00:00+00:00",
+        )
+        self.assertEqual(result["updated"], 1)
+        self.assertEqual(result["inserted"], 0)
+        row = search_contacts(self.db, "100012345678901", limit=10, after=0)["items"][0]
+        self.assertEqual(row["name"], "Hoàng Lan")
+        self.assertEqual(row["nameExtra"], "Lan")
+        self.assertEqual(row["phone"], "0901234567")
+        self.assertEqual(row["address"], "12 Đường Láng, Hà Nội")
+        self.assertEqual(row["addressExtra"], "")
+        self.assertEqual(row["uid"], "100012345678901")
+        self.assertEqual(row["externalId"], "@lan")
+        self.assertEqual(row["idExtra"], "@lan2")
+        again = upsert_records(
+            self.db,
+            [
+                {
+                    "name": "Hoàng Lan",
+                    "phone": "0919999000",
+                    "address": "7 Lê Duẩn, Quận 1, TP.HCM",
+                    "uid": "100012345678901",
+                    "id": "@lan",
+                }
+            ],
+            filename="lan-3.xlsx",
+            source="3",
+            mapping={"name": 0},
+            at="2026-05-03T00:00:00+00:00",
+        )
+        self.assertEqual(again["updated"], 1)
+        row = search_contacts(self.db, "0919999000", limit=10, after=0)["items"][0]
+        self.assertEqual(row["phone"], "0901234567")
+        self.assertEqual(row["phoneExtra"], "0919999000")
+        self.assertEqual(row["address"], "12 Đường Láng, Hà Nội")
+        self.assertEqual(row["addressExtra"], "7 Lê Duẩn, Quận 1, TP.HCM")
+        self.assertEqual(search_contacts(self.db, "", limit=10, after=0)["count"], 1)
+
+    def test_three_copies_and_journal_rebuild(self) -> None:
+        upsert_records(
+            self.db,
+            [{"name": "Minh An", "phone": "0907777666", "address": "", "uid": "555566667777888", "id": "@minhan"}],
+            filename="minh.xlsx",
+            source="minh",
+            mapping={"name": 0},
+            at="2026-06-01T00:00:00+00:00",
+        )
+        stats = warehouse_stats(self.db)
+        self.assertTrue(stats["copies"]["live"])
+        self.assertTrue(stats["copies"]["mirror"])
+        self.assertTrue(stats["copies"]["journal"])
+        self.assertEqual(stats["copies"]["journalLag"], 0)
+        journal = self.db.parent / f"{self.db.name}.copies" / "journal.jsonl"
+        rebuilt = self.tmp / "rebuilt.db"
+        applied = rebuild_from_journal(rebuilt, journal)
+        self.assertGreaterEqual(applied, 1)
+        found = search_contacts(rebuilt, "0907777666", limit=10, after=0)
+        self.assertEqual(found["items"][0]["name"], "Minh An")
+        self.assertEqual(found["items"][0]["uid"], "555566667777888")
+        self.assertEqual(found["items"][0]["externalId"], "@minhan")
 
     def test_same_file_duplicate_phone_fills(self) -> None:
         result = upsert_records(
