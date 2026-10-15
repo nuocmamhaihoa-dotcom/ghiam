@@ -383,6 +383,10 @@ def _list_pairs(lines: list[ocr.TextLine]) -> list[tuple[ocr.TextLine, ocr.TextL
                 continue
             if looks_like_phone(below.text):
                 break
+            # Gạch dưới đầu tên (_hieu.phuong_) nằm thẳng mép trái với dòng số nhưng
+            # bước dò dòng hay bỏ sót; lấy mép trái của dòng số để cắt đủ gạch đầu.
+            if below.x0 > line.x0:
+                below = ocr.TextLine(below.text, line.x0, below.y0, below.x1, below.y1, below.word_h)
             pairs.append((line, below))
             break
     return pairs
@@ -394,6 +398,36 @@ def _looks_like_handle_line(text: str) -> bool:
     return bool(find_handle(compact) or LOOSE_HANDLE.search(compact))
 
 
+def _merge_handle_fragments(lines: list[ocr.TextLine]) -> list[ocr.TextLine]:
+    """Gộp các mảnh của cùng một dòng @id bị tách ngang (do dấu @, gạch dưới hoặc vòng chạm)."""
+    merged = list(lines)
+    for index, line in enumerate(lines):
+        compact = "".join(line.text.split())
+        if not ("@" in compact or "®" in compact or _looks_like_handle_line(compact)):
+            continue
+        pieces = [
+            other
+            for other in lines
+            if other.h <= 1.6 * line.h
+            and abs((other.y0 + other.y1) - (line.y0 + line.y1)) <= 1.2 * line.h
+            and other.x0 >= line.x0 - 20
+            and other.x1 <= line.x0 + 480
+            and sum(ch in "@®._" or ch.isalnum() for ch in "".join(other.text.split()))
+            >= 0.7 * max(1, len("".join(other.text.split())))
+        ]
+        if len(pieces) > 1:
+            pieces.sort(key=lambda item: item.x0)
+            merged[index] = ocr.TextLine(
+                "".join(item.text.strip() for item in pieces),
+                min(item.x0 for item in pieces),
+                min(item.y0 for item in pieces),
+                max(item.x1 for item in pieces),
+                max(item.y1 for item in pieces),
+                max(item.text_h for item in pieces),
+            )
+    return merged
+
+
 def _profile_lines(lines: list[ocr.TextLine], height: int) -> tuple[ocr.TextLine | None, ocr.TextLine] | None:
     """Dòng @id ở phần trên màn hình và dòng tên ngay trên nó.
 
@@ -402,6 +436,8 @@ def _profile_lines(lines: list[ocr.TextLine], height: int) -> tuple[ocr.TextLine
     dòng không thấy dấu @ thì dựa vào hàng Đã follow / Follower / Thích: @id
     là dòng chữ ngay trên hàng số đếm.
     """
+    lines = _merge_handle_fragments(lines)
+    stats_handle = _handle_above_stats(lines, height)
     candidates = [
         index
         for index, line in enumerate(lines)
@@ -410,10 +446,20 @@ def _profile_lines(lines: list[ocr.TextLine], height: int) -> tuple[ocr.TextLine
     # Tên hồ sơ cũng có thể chứa @ (Hải@12345123456). Dòng @id thật bắt đầu bằng @.
     starts = [index for index in candidates if "@" in "".join(lines[index].text.split())[:2]]
     for index in starts or candidates:
-        return _name_above(lines, index), lines[index]
-    index = _handle_above_stats(lines, height)
-    if index is not None:
-        return _name_above(lines, index), lines[index]
+        line = lines[index]
+        # Khi vòng chạm làm mất dấu @ hoặc cắt ngắn dòng @id, nới ô dòng theo hàng Follower bên dưới.
+        if (
+            (index not in starts or line.x1 - line.x0 < 4.5 * line.h)
+            and stats_handle is not None
+            and abs(line.y0 - stats_handle.y0) <= 1.5 * max(line.h, stats_handle.h)
+        ):
+            line = stats_handle
+        return _name_above(lines, index), line
+    if stats_handle is not None:
+        above = [index for index, item in enumerate(lines) if item.y1 <= stats_handle.y0 + 0.3 * stats_handle.h]
+        anchor = max(above, key=lambda i: lines[i].y0) if above else len(lines)
+        lines_with_handle = lines[:anchor] + [stats_handle]
+        return _name_above(lines_with_handle, len(lines_with_handle) - 1), stats_handle
     return None
 
 
@@ -431,25 +477,54 @@ def _name_above(lines: list[ocr.TextLine], index: int) -> ocr.TextLine | None:
     return None
 
 
-def _handle_above_stats(lines: list[ocr.TextLine], height: int) -> int | None:
-    """Vị trí dòng @id khi chỉ nhận ra được hàng Follower và Thích của màn hồ sơ."""
-    labels = [line for line in lines if "follower" in fold(line.text).casefold() and line.y0 < 0.7 * height]
-    for label in labels:
+def _handle_above_stats(lines: list[ocr.TextLine], height: int) -> ocr.TextLine | None:
+    """Ô dòng @id ước lượng từ hàng Follower và Thích của màn hồ sơ."""
+    anchors = [
+        line
+        for line in lines
+        if line.y0 < 0.75 * height
+        and any(tag in fold(line.text).casefold() for tag in ("follower", "thich", "foll", "da follow"))
+    ]
+    for anchor in anchors:
         row = [
             line
             for line in lines
-            if abs(line.y0 - label.y0) < label.h and fold(line.text).casefold().strip() in ("thich", "da follow", "follower")
+            if abs(line.y0 - anchor.y0) <= 1.2 * max(line.h, anchor.h)
+            and any(tag in fold(line.text).casefold() for tag in ("follower", "thich", "foll", "da follow"))
         ]
-        if len(row) < 2:
+        numbers = [
+            item
+            for item in lines
+            if anchor.y0 - 3.6 * anchor.h <= item.y0 < anchor.y0 - 0.5 * anchor.h
+            and sum(ch.isdigit() for ch in item.text) >= max(1, len("".join(item.text.split())))
+        ]
+        if len(row) < 2 and len(numbers) < 2:
             continue
-        above = [index for index, line in enumerate(lines) if line.y1 <= label.y0 and line.y0 > label.y0 - 8 * label.h]
-        for index in sorted(above, key=lambda i: -lines[i].y0):
-            text = "".join(lines[index].text.split())
-            if not text or text.isdigit() or abs(lines[index].x0 - label.x0) > 3 * label.h:
-                continue
-            if " " in lines[index].text.strip() or sum(ch.isalnum() for ch in text) < 3:
-                return None
-            return index
+        left = min((item.x0 for item in row + numbers if item.x0 < 240), default=58)
+        stat_top = min((item.y0 for item in numbers), default=int(anchor.y0 - 2.2 * anchor.h))
+        h_est = max(28, anchor.text_h, max((item.text_h for item in numbers), default=28))
+        band_top = int(stat_top - 3.2 * h_est)
+        band_bottom = int(stat_top - 0.5 * h_est)
+        pieces = [
+            item
+            for item in lines
+            if band_top <= item.y0 <= band_bottom
+            and item.h <= 1.8 * h_est
+            and left - 2 * h_est <= item.x0 <= left + 14 * h_est
+            and not fold(item.text).casefold().strip().startswith("follow")
+        ]
+        if pieces:
+            pieces.sort(key=lambda item: item.x0)
+            y1 = max(item.y1 for item in pieces)
+            h = max(h_est, max(item.text_h for item in pieces))
+            x0 = min(58, left, min(item.x0 for item in pieces))
+            x1 = max(max(item.x1 for item in pieces), x0 + 13 * h)
+            text = "".join(item.text.strip() for item in pieces)
+            return ocr.TextLine(text, max(0, x0), max(0, y1 - h), x1, y1, h)
+        y1 = int(stat_top - 1.1 * h_est)
+        y0 = max(0, y1 - h_est)
+        x0 = min(58, left)
+        return ocr.TextLine("", max(0, x0), y0, x0 + int(14 * h_est), y1, h_est)
     return None
 
 
@@ -469,8 +544,19 @@ def _fit(piece: Image.Image, text_height: int, target: int) -> Image.Image:
 
 
 def _crop(screen: Image.Image, line: ocr.TextLine, target: int = NAME_LARGE) -> Image.Image:
-    pad = max(6, line.text_h // 3)
-    piece = screen.crop((max(0, line.x0 - pad), max(0, line.y0 - pad), min(screen.width, line.x1 + pad), min(screen.height, line.y1 + pad)))
+    # Gạch dưới ở cuối tên/@id (_hieu.phuong_, @_lantv._) hay bị bước dò dòng
+    # bỏ sót; nới bên phải nửa chiều cao chữ để không cắt cụt gạch dưới thành dấu chấm.
+    pad_left = max(6, line.text_h // 3)
+    pad_right = max(12, line.text_h // 2)
+    pad_y = max(6, line.text_h // 3)
+    piece = screen.crop(
+        (
+            max(0, line.x0 - pad_left),
+            max(0, line.y0 - pad_y),
+            min(screen.width, line.x1 + pad_right),
+            min(screen.height, line.y1 + pad_y),
+        )
+    )
     return _fit(piece, line.text_h, target)
 
 
@@ -528,7 +614,93 @@ def _read_handle(screen: Image.Image, line: ocr.TextLine) -> str:
     handle = find_handle("@" + vote_chars(bodies, loose=False)) if bodies else ""
     if not handle:
         return ""
-    return find_handle(fix_underscores(handle, _underscore_strokes(screen, line, len(handle))))
+    if not handle.endswith("_") and sum(h.endswith("._") for h, _, _ in reads) >= 3:
+        handle = handle.rstrip(".") + "._"
+    handle = find_handle(fix_underscores(handle, _underscore_strokes(screen, line, len(handle))))
+    return _fix_handle_lookalikes(screen, line, handle, reads) if handle else ""
+
+
+def _fix_handle_lookalikes(
+    screen: Image.Image,
+    line: ocr.TextLine,
+    handle: str,
+    reads: list[tuple[str, float, float]],
+) -> str:
+    """Phân biệt 0 với o và 1 với l, i trong @id bằng chiều cao và bề rộng nét chữ trên ảnh.
+
+    Trong phông chữ TikTok, số 0 cao bằng chữ số và chữ có nét cao (1..9, b, d, f, h, k, l, t),
+    còn chữ o thấp bằng các chữ thường không nét cao (a, c, e, m, n, r, s, u, v, w, x, z).
+    Chữ i có khe hở giữa dấu chấm và thân; số 1 có mỏ đầu nên rộng hơn hẳn chữ l (nét thẳng mảnh).
+    """
+    pad = max(4, line.text_h // 4)
+    box = (
+        max(0, line.x0 - pad),
+        max(0, line.y0 - pad),
+        min(screen.width, line.x1 + pad),
+        min(screen.height, line.y1 + pad),
+    )
+    pixels = np.asarray(screen.crop(box)).astype(np.int16)
+    if pixels.size == 0:
+        return handle
+    background = float(np.percentile(pixels, 90))
+    ink = float(np.percentile(pixels, 2))
+    if background - ink < 40:
+        return handle
+    dark = pixels < (background + ink) / 2
+    cols = np.flatnonzero(dark.any(axis=0))
+    if cols.size == 0:
+        return handle
+    runs: list[tuple[int, int]] = []
+    for col in cols:
+        if runs and int(col) - runs[-1][1] <= 1:
+            runs[-1] = (runs[-1][0], int(col))
+        else:
+            runs.append((int(col), int(col)))
+    runs = [(c0, c1) for c0, c1 in runs if c1 - c0 + 1 >= 2]
+    if len(runs) != len(handle):
+        return handle
+    glyphs: list[tuple[int, int, int, int, bool]] = []
+    for c0, c1 in runs:
+        rows = np.flatnonzero(dark[:, c0 : c1 + 1].any(axis=1))
+        y0, y1 = int(rows[0]), int(rows[-1])
+        has_gap = any(int(b) - int(a) > 2 for a, b in zip(rows, rows[1:]))
+        glyphs.append((y0, y1, y1 - y0 + 1, c1 - c0 + 1, has_gap))
+    if any(glyphs[i][2] < 10 for i, ch in enumerate(handle) if ch not in "._1li"):
+        return handle
+    out = list(handle)
+    tall_chars = set("123456789bdfhklt")
+    short_chars = set("aceimnrsuvwxz")
+    tall_tops = [glyphs[i][0] for i, ch in enumerate(out) if i > 0 and ch in tall_chars]
+    short_tops = [glyphs[i][0] for i, ch in enumerate(out) if i > 0 and ch in short_chars]
+    tall_hs = [glyphs[i][2] for i, ch in enumerate(out) if i > 0 and ch in tall_chars]
+    short_hs = [glyphs[i][2] for i, ch in enumerate(out) if i > 0 and ch in short_chars]
+    if tall_tops and short_tops:
+        t_top, s_top = float(np.median(tall_tops)), float(np.median(short_tops))
+        t_h, s_h = float(np.median(tall_hs)), float(np.median(short_hs))
+        if s_top - t_top >= 4.0 and t_h - s_h >= 4.0:
+            mid_top = (t_top + s_top) / 2.0
+            mid_h = (t_h + s_h) / 2.0
+            for i in range(1, len(out)):
+                if out[i] == "o" and glyphs[i][0] < mid_top and glyphs[i][2] >= mid_h:
+                    out[i] = "0"
+                elif out[i] == "0" and glyphs[i][0] > mid_top and glyphs[i][2] < mid_h:
+                    out[i] = "o"
+    for i in range(1, len(out)):
+        if out[i] not in "1li":
+            continue
+        pos_chars = {h[i] for h, _, _ in reads if len(h) == len(out) and h[i] in "1li"}
+        if i == 1:
+            pos_chars |= {h[1] for h, _, _ in reads if len(h) >= 2 and h[1] in "1li"}
+        if len(pos_chars) < 2 and i != 1:
+            continue
+        _, _, h_i, w_i, gap_i = glyphs[i]
+        if gap_i:
+            out[i] = "i"
+        elif w_i >= max(8, round(0.30 * h_i)):
+            out[i] = "1"
+        elif w_i <= max(6, round(0.22 * h_i)):
+            out[i] = "l"
+    return find_handle("".join(out)) or handle
 
 
 def _underscore_strokes(screen: Image.Image, line: ocr.TextLine, chars: int) -> list[tuple[float, float]]:
@@ -590,8 +762,7 @@ def _read_profile(
     else:
         band = _band_line(screen, handle_line)
         if band is not None:
-            piece = screen.crop((band.x0, band.y0, band.x1, band.y1))
-            candidates.append(_read_names([_fit(piece, band.h, NAME_SMALL)], [_fit(piece, band.h, NAME_LARGE)])[0])
+            candidates.append(_read_names([_crop(screen, band, NAME_SMALL)], [_crop(screen, band)])[0])
     for raw in candidates:
         name = clean_name(raw)
         if is_name(name):
@@ -601,10 +772,18 @@ def _read_profile(
 
 def _band_line(screen: Image.Image, line: ocr.TextLine) -> ocr.TextLine | None:
     """Ô dải chữ ngay trên @id, dùng khi lần dò dòng không tách được tên."""
-    top = max(0, int(line.y0 - 2.2 * line.h))
-    bottom = min(screen.height, int(line.y0 - 0.15 * line.h))
-    left = max(0, line.x0 - line.h)
-    right = min(screen.width, max(line.x1, line.x0 + 6 * line.h))
+    top = max(0, int(line.y0 - 3.6 * line.h))
+    bottom = min(screen.height, int(line.y0 - 0.8 * line.h))
+    left = max(0, line.x0 - line.h // 2)
+    right = min(int(0.68 * screen.width), max(line.x1, line.x0 + 10 * line.h))
     if bottom - top < 8 or right - left < 8:
         return None
-    return ocr.TextLine("", left, top, right, bottom)
+    pixels = np.asarray(screen.crop((left, top, right, bottom)))
+    dark = pixels < 180
+    rows = np.flatnonzero(dark.any(axis=1))
+    cols = np.flatnonzero(dark.any(axis=0))
+    if rows.size >= 8 and cols.size >= 8:
+        y0, y1 = top + int(rows[0]), top + int(rows[-1]) + 1
+        x0, x1 = left + int(cols[0]), left + int(cols[-1]) + 1
+        return ocr.TextLine("", x0, y0, x1, y1, max(16, y1 - y0))
+    return ocr.TextLine("", left, top, right, bottom, max(16, int(1.6 * line.text_h)))

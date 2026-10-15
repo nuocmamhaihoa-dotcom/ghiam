@@ -60,9 +60,14 @@ class TextTests(unittest.TestCase):
         self.assertEqual(find_handle("@31776814785"), "@31776814785")
         self.assertEqual(find_handle("@0749"), "")
         self.assertEqual(handle_from_read("(@thanhson190ó"), "@thanhson1906")
+        self.assertEqual(handle_from_read("@I.th.li078"), "@l.th.li078")
+        self.assertEqual(handle_from_read("@hng.In6732"), "@hng.ln6732")
+        self.assertEqual(handle_from_read("@mSg6vpbq6"), "@m5g6vpbq6")
+        self.assertEqual(handle_from_read("@xB2k"), "@x82k")
         self.assertEqual(handle_from_viet("Oquocnguyet81792"), "@quocnguyet81792")
         self.assertEqual(handle_from_viet("Qhuong.tv"), "@huong.tv")
         self.assertEqual(handle_from_viet("0090fy5xr"), "@090fy5xr")
+        self.assertEqual(handle_from_viet("@Om5g6vpbqó"), "@m5g6vpbq6")
 
     def test_names_keep_special_characters_except_bar(self) -> None:
         self.assertEqual(clean_name("Huyền Phương (Cà)"), "Huyền Phương (Cà)")
@@ -82,6 +87,7 @@ class TextTests(unittest.TestCase):
     def test_underscore_strokes_fix_double_and_leading_underscores(self) -> None:
         # Nét ở vị trí 0 là chân chữ @, không phải gạch dưới.
         self.assertEqual(fix_underscores("@tam_400", [(0.4, 0.9), (4.5, 1.5)]), "@tam__400")
+        self.assertEqual(fix_underscores("@tam_400", [(0.4, 0.9), (4.1, 0.72), (5.0, 0.72)]), "@tam__400")
         self.assertEqual(fix_underscores("@tam_400", [(0.4, 0.9), (4.5, 0.8)]), "@tam_400")
         self.assertEqual(fix_underscores("@vantuyet._", [(0.3, 0.9), (1.6, 0.8), (10.2, 0.8)]), "@_vantuyet._")
         self.assertEqual(fix_underscores("@ydieu", [(0.3, 0.9), (1.5, 0.8)]), "@ydieu")
@@ -90,6 +96,26 @@ class TextTests(unittest.TestCase):
     def test_vote_on_handles_is_exact(self) -> None:
         reads = [("tamphuongca14899", 1), ("tamphuongcal4899", 1), ("tamphuongca14899", 1)]
         self.assertEqual(vote_chars(reads, loose=False), "tamphuongca14899")
+        reads = [
+            ("sunr0o971xra", 1.0, 0.6),
+            ("sunr0o971xra", 1.0, 0.6),
+            ("sunr0o971xra", 1.0, 0.6),
+            ("sunr00971xra", 1.0, 1.0),
+            ("sunr00971xra", 1.0, 1.0),
+            ("sunr0o0971xra", 1.0, 1.0),
+            ("sunr00971xra", 1.0, 1.0),
+        ]
+        self.assertEqual(vote_chars(reads, loose=False), "sunr0o971xra")
+        reads = [
+            ("umrv96cp5ws", 1.0, 0.6),
+            ("umrv96cp5ws", 1.0, 0.6),
+            ("umrv96cp5ws", 1.0, 0.6),
+            ("iumrv96cp5ws", 1.0, 1.0),
+            ("iumrv96cp5ws", 1.0, 1.0),
+            ("lumrvo6cp5ws", 1.0, 1.0),
+            ("lumrv96cp5ws", 1.0, 1.0),
+        ]
+        self.assertEqual(len(vote_chars(reads, loose=False)), 12)
         self.assertEqual(vote_chars([], loose=False), "")
 
 

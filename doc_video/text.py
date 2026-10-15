@@ -122,8 +122,10 @@ def find_handle(text: str) -> str:
     return "@" + handle
 
 
-# Bộ đọc tiếng Việt đọc số 6 thành ó trong @id (@thanhson190ó). @id chỉ có chữ không dấu.
-_HANDLE_LOOKALIKE = str.maketrans({"ó": "6", "ò": "6", "Ó": "6", "Ò": "6"})
+# Bộ đọc tiếng Việt đọc số 6 thành ó trong @id (@thanhson190ó).
+# Dòng @id trên màn hình luôn là chữ thường; khi bộ đọc trả chữ hoa I, S, B
+# (cao hết cỡ chữ) thì trên ảnh đó là l, 5, 8 chứ không phải chữ thường i, s, b.
+_HANDLE_LOOKALIKE = str.maketrans({"ó": "6", "ò": "6", "Ó": "6", "Ò": "6", "I": "l", "O": "0", "S": "5", "B": "8"})
 
 
 def handle_from_read(text: str) -> str:
@@ -137,7 +139,7 @@ def handle_from_viet(text: str) -> str:
     body = "".join(str(text or "").split()).lstrip("@")
     if len(body) > 1 and body[0] in "OQ0o":
         body = body[1:]
-    return find_handle("@" + body)
+    return find_handle("@" + body.translate(_HANDLE_LOOKALIKE))
 
 
 # Các ký tự bộ đọc hay nhầm với nhau trong @id.
@@ -169,7 +171,7 @@ def fix_underscores(handle: str, strokes: list[tuple[float, float]]) -> str:
     groups = [(match.start(), match.end() - match.start()) for match in re.finditer("_+", handle)]
     for start, size in reversed(groups):
         near = [length for begin, length in strokes if start - 1.0 <= begin <= start + 1.2]
-        if size == 1 and near and max(near) >= 1.3:
+        if size == 1 and sum(near) >= 1.3:
             out = out[:start] + "__" + out[start + 1 :]
     first = out[1:2]
     if first != "_" and first not in "gjpqy" and len(out) > 2:
@@ -204,9 +206,14 @@ def vote_chars(reads: list[tuple[str, float]] | list[tuple[str, float, float]], 
         return fold(text).casefold() if loose else text
 
     keys = [key(text) for text, _, _ in present]
+    total = sum(weight for _, weight, _ in present)
+    len_support = Counter()
+    for (text, weight, _), text_key in zip(present, keys):
+        len_support[len(text_key)] += weight
     pivot_index = max(
         range(len(present)),
         key=lambda i: (
+            len_support[len(keys[i])] >= total / 2,
             sum(
                 weight * SequenceMatcher(None, keys[i], keys[j], autojunk=False).ratio()
                 for j, (_, weight, _) in enumerate(present)
@@ -216,7 +223,6 @@ def vote_chars(reads: list[tuple[str, float]] | list[tuple[str, float, float]], 
         ),
     )
     pivot = present[pivot_index][0]
-    total = sum(weight for _, weight, _ in present)
     slots: list[Counter] = [Counter() for _ in pivot]
     digit_slots: list[Counter] = [Counter() for _ in pivot]
     gaps: list[Counter] = [Counter() for _ in range(len(pivot) + 1)]
@@ -245,14 +251,18 @@ def vote_chars(reads: list[tuple[str, float]] | list[tuple[str, float, float]], 
     for index in range(len(pivot) + 1):
         if gaps[index]:
             piece, support = max(gaps[index].items(), key=lambda item: item[1])
-            if support > total / 2:
+            if support > total / 2 or (index == 0 and sum(gaps[index].values()) > total / 2):
                 out.append(piece)
         if index < len(pivot):
             counts = slots[index]
-            if all(char.isdigit() for char in counts):
-                counts = digit_slots[index]
-            choice, _ = max(counts.items(), key=lambda item: (item[1], item[0] == pivot[index]))
-            out.append(choice)
+            if counts.get("", 0.0) > total / 2:
+                continue
+            present_counts = {ch: w for ch, w in counts.items() if ch}
+            if present_counts and all(char.isdigit() for char in present_counts):
+                present_counts = {ch: w for ch, w in digit_slots[index].items() if ch}
+            if present_counts:
+                choice, _ = max(present_counts.items(), key=lambda item: (item[1], item[0] == pivot[index]))
+                out.append(choice)
     return "".join(out)
 
 
