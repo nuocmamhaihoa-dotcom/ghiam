@@ -395,8 +395,11 @@ def abort_upload(db_path: Path, video_id: int, reopened: bool = False) -> None:
         conn.execute("DELETE FROM videos WHERE id = ? AND status = 'uploading'", (video_id,))
 
 
-def list_videos(db_path: Path, limit: int = 40, device: str | None = None) -> list[dict[str, object]]:
-    """device=None là mọi máy. Chuỗi rỗng là các video tải trước khi có tên điện thoại."""
+def list_videos(db_path: Path, limit: int | None = None, device: str | None = None) -> list[dict[str, object]]:
+    """Mọi video, mới nhất trước. limit=None là không cắt. device=None là mọi máy.
+
+    Chuỗi device rỗng là các video tải trước khi có tên điện thoại.
+    """
     sql = """
         SELECT id, name, size_bytes, status, error, created_at, started_at, finished_at,
                phone_count, full_count, path, device
@@ -406,8 +409,10 @@ def list_videos(db_path: Path, limit: int = 40, device: str | None = None) -> li
     if device is not None:
         sql += " WHERE device = ?"
         params.append(device)
-    sql += " ORDER BY id DESC LIMIT ?"
-    params.append(limit)
+    sql += " ORDER BY id DESC"
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(limit)
     with connect(db_path) as conn:
         rows = conn.execute(sql, params).fetchall()
     items = []

@@ -120,6 +120,13 @@ class ActionApiTests(unittest.TestCase):
         )
         self.assertEqual(empty.status_code, 400)
 
+    def test_video_queue_has_no_count_cap(self) -> None:
+        wide = self.client.get("/v1/videos", headers=self.headers, params={"limit": 500})
+        self.assertEqual(wide.status_code, 200, wide.text)
+        opened = self.client.get("/v1/videos", headers=self.headers)
+        self.assertEqual(opened.status_code, 200, opened.text)
+        self.assertEqual(opened.json()["count"], len(opened.json()["items"]))
+
     def test_upload_lists_and_backup_ticket(self) -> None:
         denied = self.client.post("/v1/videos", files={"file": ("a.mp4", b"fake-video", "video/mp4")})
         self.assertEqual(denied.status_code, 401)
@@ -159,6 +166,10 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Điện thoại này", response.text)
         self.assertIn("Hôm nay theo điện thoại", response.text)
         self.assertIn("Hiện mọi dòng đã quét. Dòng mới nhất ở trên.", response.text)
+        self.assertIn("Không giới hạn số video", response.text)
+        self.assertIn("top: -9999px", response.text)
+        self.assertNotIn("/v1/videos?limit=", response.text)
+        self.assertNotIn("#file { display: none", response.text)
         self.assertIn('var serverToken = "%s";' % settings.page_token, response.text)
         self.assertNotIn("test-token", response.text)
         self.assertNotIn("__CONTROL_TOKEN__", response.text)

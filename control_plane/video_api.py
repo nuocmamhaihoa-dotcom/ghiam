@@ -98,10 +98,10 @@ def video_stats(authorization: str | None = Header(default=None)) -> dict[str, o
 @router.get("/v1/videos")
 def videos(
     authorization: str | None = Header(default=None),
-    limit: int = Query(default=40, ge=1, le=200),
+    limit: int | None = Query(default=None, ge=1),
     device: str | None = Query(default=None),
 ) -> dict[str, object]:
-    """device có mặt thì chỉ video của điện thoại đó. Bỏ tham số để xem mọi máy."""
+    """Không truyền limit thì trả hết video, mới nhất trước. device có mặt thì chỉ máy đó."""
     _auth(authorization)
     init_db(settings.video_db_path)
     chosen = None if device is None else device

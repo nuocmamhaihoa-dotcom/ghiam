@@ -67,6 +67,20 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(stats(self.db)["uploading"], 1)
         self.assertEqual(list_videos(self.db)[0]["id"], fresh["id"])
 
+    def test_video_list_is_not_capped(self) -> None:
+        with connect(self.db) as conn:
+            conn.executemany(
+                """
+                INSERT INTO videos (name, size_bytes, sha256, status, created_at)
+                VALUES (?, 1, ?, 'queued', '2026-10-15T00:00:00+00:00')
+                """,
+                [(f"{index}.mp4", f"sha-{index}") for index in range(250)],
+            )
+        listed = list_videos(self.db)
+        self.assertEqual(len(listed), 250)
+        self.assertEqual(listed[0]["name"], "249.mp4")
+        self.assertEqual([item["name"] for item in list_videos(self.db, 3)], ["249.mp4", "248.mp4", "247.mp4"])
+
     def test_same_file_is_not_queued_twice(self) -> None:
         first = self._add("a.mp4", "abc")
         again = begin_upload(self.db, name="a-copy.mp4", size_bytes=10, sha256="abc")
