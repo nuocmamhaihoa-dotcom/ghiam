@@ -291,7 +291,7 @@ def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
     lines = ocr.find_lines(screen)
     pairs = [
         pair
-        for pair in _list_pairs(lines)
+        for pair in _list_pairs(lines, screen)
         if pair[1].y1 + pair[1].h < screen.height and is_name(clean_name(pair[1].text))
     ]
     if len(pairs) >= 2:
@@ -368,27 +368,45 @@ def read_frame(image: Image.Image, at: float = -1.0) -> FrameRead:
     return read
 
 
-def _list_pairs(lines: list[ocr.TextLine]) -> list[tuple[ocr.TextLine, ocr.TextLine]]:
+def _list_pairs(lines: list[ocr.TextLine], screen: Image.Image | None = None) -> list[tuple[ocr.TextLine, ocr.TextLine]]:
     """Mỗi dòng số đi với dòng chữ ngay bên dưới, thẳng mép trái."""
+    pixels = np.asarray(screen) if screen is not None else None
     pairs = []
     for index, line in enumerate(lines):
         if not looks_like_phone(line.text):
             continue
+        row: list[ocr.TextLine] = []
         for below in lines[index + 1 :]:
             if below.y0 > line.y1 + 1.8 * line.h:
                 break
             if below.y0 < line.y1 - 0.3 * line.h:
                 continue
-            if abs(below.x0 - line.x0) > 1.5 * line.h:
-                continue
             if looks_like_phone(below.text):
                 break
-            # Gạch dưới đầu tên (_hieu.phuong_) nằm thẳng mép trái với dòng số nhưng
-            # bước dò dòng hay bỏ sót; lấy mép trái của dòng số để cắt đủ gạch đầu.
-            if below.x0 > line.x0:
-                below = ocr.TextLine(below.text, line.x0, below.y0, below.x1, below.y1, below.word_h)
-            pairs.append((line, below))
-            break
+            if row and abs((below.y0 + below.y1) - (row[0].y0 + row[0].y1)) > 1.2 * max(below.h, row[0].h):
+                continue
+            if not row and abs(below.x0 - line.x0) > 2.2 * line.h:
+                continue
+            if below.x0 < line.x0 - 0.5 * line.h or below.x1 > line.x0 + 16 * line.h:
+                continue
+            row.append(below)
+        if not row:
+            continue
+        # Gạch dưới đầu tên (_hieu.phuong_) nằm thẳng mép trái với dòng số nhưng bước dò dòng
+        # hay bỏ sót; nới cả mép phải khi chữ cuối cách xa (như "Ý" trong "Hồ Hữu Ý") bị bỏ sót.
+        row.sort(key=lambda item: item.x0)
+        x0 = min(line.x0, min(item.x0 for item in row))
+        y0 = min(item.y0 for item in row)
+        x1 = max(item.x1 for item in row)
+        y1 = max(item.y1 for item in row)
+        text_h = max(item.text_h for item in row)
+        if pixels is not None:
+            band = pixels[max(0, y0 - 4) : min(pixels.shape[0], y1 + 4), x0 : min(pixels.shape[1], x1 + 2 * text_h)]
+            dark_cols = np.flatnonzero((band < 180).any(axis=0))
+            if dark_cols.size:
+                x1 = max(x1, x0 + int(dark_cols[-1]) + 1)
+        text = " ".join(item.text.strip() for item in row if item.text.strip())
+        pairs.append((line, ocr.TextLine(text, x0, y0, x1, y1, text_h)))
     return pairs
 
 
@@ -472,7 +490,7 @@ def _name_above(lines: list[ocr.TextLine], index: int) -> ocr.TextLine | None:
             continue
         if abs(above.x0 - line.x0) > 4 * line.h:
             continue
-        if is_name(above.text):
+        if above.h >= 0.7 * line.h and is_name(above.text):
             return above
     return None
 
@@ -598,6 +616,10 @@ def _read_handle(screen: Image.Image, line: ocr.TextLine) -> str:
     Bộ tiếng Việt đọc chữ cái trong @id tốt, nhưng hay đọc 3 thành 5; chữ số
     của nó được tin ít hơn chữ số của bộ tiếng Anh.
     """
+    # @id TikTok không kết thúc bằng dấu chấm; khi lần dò dòng dừng ở dấu chấm cuối
+    # (@_tamshop.) thì ngay sau đó có thể còn gạch dưới bị cắt sót.
+    if line.text.rstrip().endswith("."):
+        line = ocr.TextLine(line.text, line.x0, line.y0, line.x1 + line.text_h // 2, line.y1, line.text_h)
     reads: list[tuple[str, float, float]] = [(handle_from_read(line.text), 1.0, VIE_DIGIT_WEIGHT)]
     for target, lang, whitelist, best in (
         (28, "vie", "", False),
@@ -681,6 +703,10 @@ def _fix_handle_lookalikes(
             mid_top = (t_top + s_top) / 2.0
             mid_h = (t_h + s_h) / 2.0
             for i in range(1, len(out)):
+                if out[i] not in "0o":
+                    continue
+                if len({h[i] for h, _, _ in reads if len(h) == len(out) and h[i] in "0o"}) < 2:
+                    continue
                 if out[i] == "o" and glyphs[i][0] < mid_top and glyphs[i][2] >= mid_h:
                     out[i] = "0"
                 elif out[i] == "0" and glyphs[i][0] > mid_top and glyphs[i][2] < mid_h:
@@ -772,7 +798,7 @@ def _read_profile(
 
 def _band_line(screen: Image.Image, line: ocr.TextLine) -> ocr.TextLine | None:
     """Ô dải chữ ngay trên @id, dùng khi lần dò dòng không tách được tên."""
-    top = max(0, int(line.y0 - 3.6 * line.h))
+    top = max(0, int(line.y0 - 4.0 * line.h))
     bottom = min(screen.height, int(line.y0 - 0.8 * line.h))
     left = max(0, line.x0 - line.h // 2)
     right = min(int(0.68 * screen.width), max(line.x1, line.x0 + 10 * line.h))

@@ -41,6 +41,9 @@ def clean_name(text: str) -> str:
 
 
 def is_name(text: str) -> bool:
+    stripped = str(text or "").strip()
+    if len(stripped) == 1 and stripped.isalpha() and ord(stripped) > 127:
+        return True
     folded = " ".join(fold(text).casefold().split())
     if folded in SCREEN_WORDS:
         return False
@@ -260,6 +263,17 @@ def vote_chars(reads: list[tuple[str, float]] | list[tuple[str, float, float]], 
             present_counts = {ch: w for ch, w in counts.items() if ch}
             if present_counts and all(char.isdigit() for char in present_counts):
                 present_counts = {ch: w for ch, w in digit_slots[index].items() if ch}
+            elif loose and len(present_counts) > 1:
+                for mark_char, grave_char in (("ả", "à"), ("Ả", "À")):
+                    if present_counts.get(mark_char, 0.0) >= 1.0 and grave_char in present_counts:
+                        present_counts[mark_char] += 1.6
+                for hat_char, tilde_char in (("ô", "õ"), ("Ô", "Õ")):
+                    if present_counts.get(hat_char, 0.0) >= 1.5 and tilde_char in present_counts:
+                        present_counts[hat_char] += 0.6
+                if len(present_counts) >= 4 and max(present_counts.values()) < total / 2:
+                    for ch in list(present_counts):
+                        if fold(ch) == ch:
+                            present_counts[ch] += total
             if present_counts:
                 choice, _ = max(present_counts.items(), key=lambda item: (item[1], item[0] == pivot[index]))
                 out.append(choice)

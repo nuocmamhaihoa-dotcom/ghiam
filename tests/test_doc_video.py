@@ -6,10 +6,9 @@ import shutil
 import unittest
 from pathlib import Path
 
-from doc_video.frame import Contact, FrameRead
+from doc_video.frame import Contact, FrameRead, Layout, ListRow, _list_pairs
 from doc_video.join import build
 from doc_video.ocr import TextLine
-from doc_video.frame import Layout, ListRow
 from doc_video.video import plan_reads, resolve_taps
 from doc_video.text import (
     clean_name,
@@ -18,6 +17,7 @@ from doc_video.text import (
     handle_from_read,
     handle_from_viet,
     handle_matches_name,
+    is_name,
     looks_like_phone,
     name_key,
     normalize_phone,
@@ -73,16 +73,35 @@ class TextTests(unittest.TestCase):
         self.assertEqual(clean_name("Huyền Phương (Cà)"), "Huyền Phương (Cà)")
         self.assertEqual(clean_name("Lan & Hoa"), "Lan & Hoa")
         self.assertEqual(clean_name("Thắm | Shop"), "Thắm Shop")
+        self.assertTrue(is_name("Ý"))
+        self.assertFalse(is_name("A"))
 
     def test_vote_keeps_what_most_readers_agree_on(self) -> None:
         reads = [("Hữu Nhung", 1.5), ("Hữ Nhung", 1.0), ("Hữu Nhung", 1.0), ("Huu Nhung", 0.7)]
         self.assertEqual(vote_chars(reads), "Hữu Nhung")
         reads = [("Ngô Lan", 1.5), ("Ng6 Lan", 1.0), ("Ngô Lan", 1.0), ("Ngo Lan", 0.7)]
         self.assertEqual(vote_chars(reads), "Ngô Lan")
+        reads = [("Ngô Lan", 1.5), ("Ngõ Lan", 1.0), ("Ngõ Lan", 1.0), ("Ngo Lan", 0.7)]
+        self.assertEqual(vote_chars(reads), "Ngô Lan")
+        reads = [("Hải Yến", 1.5), ("Hài Yến", 1.0), ("Hài Yến", 1.0), ("Hai Yen", 0.7)]
+        self.assertEqual(vote_chars(reads), "Hải Yến")
+        reads = [("Định Khánh Hải", 1.5), ("Đình Khánh Hải", 1.0), ("Đỉnh Khánh Hải", 1.0), ("Dinh Khanh Hai", 0.7)]
+        self.assertEqual(vote_chars(reads), "Đinh Khánh Hải")
         reads = [("nhungphuong 8712", 1.5), ("nhungphuong8712", 1.0), ("nhungphuong8712", 1.0), ("nhungphuong8712", 0.7)]
         self.assertEqual(vote_chars(reads), "nhungphuong8712")
         reads = [("_thoa.xuan_", 0.7), ("thoa.xuan", 1.5), ("_thoa.xuan_", 1.0), ("_thoa.xuan_", 1.0)]
         self.assertEqual(vote_chars(reads), "_thoa.xuan_")
+
+    def test_list_pairs_merges_split_pieces_of_a_name_row(self) -> None:
+        lines = [
+            TextLine("0813663062", 273, 1817, 502, 1844, 27),
+            TextLine("|", 274, 1861, 276, 1891, 30),
+            TextLine("Trinh", 330, 1863, 413, 1889, 26),
+        ]
+        pairs = _list_pairs(lines)
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual((pairs[0][1].x0, pairs[0][1].x1), (273, 413))
+        self.assertTrue(is_name(clean_name(pairs[0][1].text)))
 
     def test_underscore_strokes_fix_double_and_leading_underscores(self) -> None:
         # Nét ở vị trí 0 là chân chữ @, không phải gạch dưới.
