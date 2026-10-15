@@ -7,9 +7,10 @@ import unittest
 from pathlib import Path
 
 from doc_video.frame import Contact, FrameRead, Layout, ListRow, _list_pairs, _supplement_pairs, row_at
-from doc_video.join import build
+from doc_video.join import Result, Review, Row, add_side_rows, build
 from doc_video.ocr import TextLine
-from doc_video.video import plan_reads, resolve_taps
+from doc_video.side import select_left_profile, select_right_pairs
+from doc_video.video import plan_reads, resolve_taps, side_frames
 from doc_video.text import (
     clean_name,
     find_handle,
@@ -698,6 +699,148 @@ class PlanTests(unittest.TestCase):
         ]
         self.assertEqual(row_at(rows, 120, 230), "")
         self.assertEqual(row_at(rows, 350, 230), "0900000002")
+
+
+WIDTH = 1000
+HEIGHT = 2000
+
+
+def _right_pair(x: int, y: int, phone: str = "0900000001", name: str = "Lan") -> tuple[TextLine, TextLine]:
+    return (
+        TextLine(phone, x, y, x + 300, y + 40, 40),
+        TextLine(name, x, y + 50, x + 200, y + 90, 40),
+    )
+
+
+class SidePairTests(unittest.TestCase):
+    def test_the_right_column_keeps_the_phone_above_the_name(self) -> None:
+        self.assertEqual(len(select_right_pairs([_right_pair(200, 400)], WIDTH, None)), 1)
+
+    def test_the_avatar_column_is_not_the_contact_pair(self) -> None:
+        self.assertEqual(select_right_pairs([_right_pair(20, 400)], WIDTH, None), [])
+
+    def test_a_number_hidden_under_the_title_stays_out_of_the_side_pairs(self) -> None:
+        title = TextLine("Danh bạ", 200, 10, 500, 80, 40)
+        self.assertEqual(select_right_pairs([_right_pair(200, 40)], WIDTH, title), [])
+        self.assertEqual(len(select_right_pairs([_right_pair(200, 120)], WIDTH, title)), 1)
+
+    def test_a_follow_button_under_the_phone_is_not_a_name(self) -> None:
+        phone = TextLine("0900000001", 200, 400, 500, 440, 40)
+        follow = TextLine("Follow", 200, 450, 320, 490, 40)
+        self.assertEqual(select_right_pairs([(phone, follow)], WIDTH, None), [])
+
+    def test_the_left_at_id_is_kept_and_one_on_the_right_is_not(self) -> None:
+        name = TextLine("Lan", 40, 300, 200, 350, 40)
+        handle = TextLine("@lan123", 40, 360, 280, 400, 36)
+        right = TextLine("@khac999", 700, 200, 980, 240, 36)
+        got_name, got_handle = select_left_profile([right, name, handle], HEIGHT, WIDTH)
+        self.assertIsNotNone(got_handle)
+        self.assertEqual(got_handle.text if got_handle is not None else "", "@lan123")
+        self.assertEqual(got_name.text if got_name is not None else "", "Lan")
+
+    def test_an_at_id_on_the_right_is_not_the_profile_pair(self) -> None:
+        right = TextLine("@khac999", 700, 300, 980, 340, 36)
+        self.assertEqual(select_left_profile([right], HEIGHT, WIDTH), (None, None))
+
+    def test_the_same_name_adds_one_row_of_three_cells(self) -> None:
+        result = Result(
+            unopened=[("0900000009", "Lan")],
+            review=[Review("", "", "Lan", "@lan123", "đã mở hồ sơ nhưng không thấy số cùng tên")],
+        )
+        frames = [
+            FrameRead("list", side_contacts=[Contact("0900000009", "Lan", False)]),
+            FrameRead("profile", side_profile_name="Lan", side_handle="@lan123"),
+        ]
+        add_side_rows(result, frames)
+        self.assertEqual(result.rows, [Row("0900000009", "Lan", "@lan123")])
+        self.assertEqual(result.unopened, [])
+        self.assertEqual(result.review, [])
+
+    def test_a_row_already_saved_stays_as_it_is(self) -> None:
+        result = Result(rows=[Row("0900000001", "Lan", "@lan123")])
+        frames = [
+            FrameRead("list", side_contacts=[Contact("0900000001", "Lan", False)]),
+            FrameRead("profile", side_profile_name="Lan", side_handle="@lan123"),
+        ]
+        add_side_rows(result, frames)
+        self.assertEqual(result.rows, [Row("0900000001", "Lan", "@lan123")])
+
+    def test_different_names_are_not_joined(self) -> None:
+        result = Result(unopened=[("0900000009", "Lan")])
+        frames = [
+            FrameRead("list", side_contacts=[Contact("0900000009", "Lan", False)]),
+            FrameRead("profile", side_profile_name="Hoa", side_handle="@hoa"),
+        ]
+        add_side_rows(result, frames)
+        self.assertEqual(result.rows, [])
+        self.assertEqual(result.unopened, [("0900000009", "Lan")])
+
+    def test_two_phones_with_one_name_are_not_guessed(self) -> None:
+        result = Result(unopened=[("0900000001", "Lan"), ("0900000002", "Lan")])
+        frames = [
+            FrameRead(
+                "list",
+                side_contacts=[Contact("0900000001", "Lan", False), Contact("0900000002", "Lan", False)],
+            ),
+            FrameRead("profile", side_profile_name="Lan", side_handle="@lan"),
+        ]
+        add_side_rows(result, frames)
+        self.assertEqual(result.rows, [])
+        self.assertEqual(result.unopened, [("0900000001", "Lan"), ("0900000002", "Lan")])
+
+    def test_a_handle_already_saved_with_another_phone_is_not_taken(self) -> None:
+        result = Result(rows=[Row("0900000001", "Khac", "@lan")], unopened=[("0900000009", "Lan")])
+        frames = [
+            FrameRead("list", side_contacts=[Contact("0900000009", "Lan", False)]),
+            FrameRead("profile", side_profile_name="Lan", side_handle="@lan"),
+        ]
+        add_side_rows(result, frames)
+        self.assertEqual(result.rows, [Row("0900000001", "Khac", "@lan")])
+        self.assertEqual(result.unopened, [("0900000009", "Lan")])
+
+    def test_many_numbers_sharing_a_name_block_the_new_row(self) -> None:
+        result = Result(
+            review=[Review("0900000001", "Lan", "Lan", "@lan", "nhiều số cùng tên")],
+            unopened=[("0900000009", "Lan")],
+        )
+        frames = [
+            FrameRead("list", side_contacts=[Contact("0900000009", "Lan", False)]),
+            FrameRead("profile", side_profile_name="Lan", side_handle="@lan"),
+        ]
+        add_side_rows(result, frames)
+        self.assertEqual(result.rows, [])
+        self.assertEqual(result.unopened, [("0900000009", "Lan")])
+
+    def test_marks_do_not_block_the_side_join(self) -> None:
+        result = Result()
+        frames = [
+            FrameRead("list", side_contacts=[Contact("0900000009", "Trúc", False)]),
+            FrameRead("profile", side_profile_name="TRUC", side_handle="@truc"),
+        ]
+        add_side_rows(result, frames)
+        self.assertEqual([(row.phone, row.name, row.handle) for row in result.rows], [("0900000009", "Trúc", "@truc")])
+
+    def test_side_fields_do_not_change_the_old_join(self) -> None:
+        frames = [
+            FrameRead(
+                "list",
+                [Contact("0900000001", "Hoa"), Contact("0900000002", "Minh")],
+                side_contacts=[Contact("0900000009", "Lan", False)],
+            ),
+            FrameRead("profile", profile_name="Lan", handle="@lan", side_profile_name="Lan", side_handle="@lan"),
+        ]
+        result = build(frames)
+        self.assertEqual(result.rows, [])
+        self.assertEqual([phone for phone, _name in result.unopened], ["0900000001", "0900000002"])
+        add_side_rows(result, frames)
+        self.assertEqual(result.rows, [Row("0900000009", "Lan", "@lan")])
+        self.assertEqual([phone for phone, _name in result.unopened], ["0900000001", "0900000002"])
+        self.assertFalse(any(item.handle == "@lan" for item in result.review))
+
+    def test_side_reads_use_only_a_few_frames(self) -> None:
+        phone, name = _right_pair(200, 400)
+        layouts = [Layout("list", side_pairs=[(phone, name)]) for _ in range(10)]
+        self.assertEqual(len(side_frames(layouts, {})), 3)
 
 
 ASSETS = Path("/home/ubuntu/.cursor/projects/workspace/assets")

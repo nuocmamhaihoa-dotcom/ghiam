@@ -12,7 +12,7 @@ import csv
 import sys
 from pathlib import Path
 
-from doc_video.join import Result, build
+from doc_video.join import Result, add_side_rows, build
 from doc_video.ocr import check_tesseract
 from doc_video.video import read_inputs
 
@@ -63,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{where} danh bạ: " + "; ".join(f"{c.phone} {c.name}" for c in frame.contacts))
             elif frame.kind == "profile":
                 print(f"{where} hồ sơ: {frame.profile_name} {frame.handle}")
-    result = build(frames)
+    result = add_side_rows(build(frames), frames)
     print(f"Bảng kết quả: {len(result.rows)} hàng")
     for row in result.rows:
         print(f"  {row.phone} | {row.name} | {row.handle}")

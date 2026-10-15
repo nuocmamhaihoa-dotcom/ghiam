@@ -24,7 +24,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from doc_video.frame import Contact, FrameRead, Layout, read_layout, row_at, scan_frame
+from doc_video.frame import Contact, FrameRead, Layout, fill_side, read_layout, row_at, scan_frame
+from doc_video.text import digits_of, find_handle, normalize_phone
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mkv", ".avi", ".webm"}
@@ -45,10 +46,20 @@ def _scan_file(path: str, at: float) -> Layout:
         return Layout(at=at)
 
 
-def _read_file(path: str, layout: Layout, rows: list[int] | None) -> FrameRead:
+def _read_file(
+    path: str, layout: Layout, rows: list[int] | None, primary: bool = True, with_side: bool = False
+) -> FrameRead:
     try:
         with Image.open(path) as image:
-            return read_layout(image.convert("RGB"), layout, rows)
+            rgb = image.convert("RGB")
+            frame = read_layout(rgb, layout, rows) if primary else _unread(layout)
+            if with_side and (layout.side_pairs or layout.side_handle_line is not None):
+                try:
+                    fill_side(rgb, layout, frame)
+                except (OSError, ValueError, subprocess.SubprocessError) as exc:
+                    # Hướng bổ sung lỗi thì giữ kết quả hướng cũ của khung này.
+                    print(f"Bỏ đọc bốn dãy ký tự ở khung {Path(path).name}: {exc}", flush=True)
+            return frame
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         print(f"Bỏ khung {Path(path).name}: {exc}", flush=True)
         return _unread(layout)
@@ -190,6 +201,60 @@ def resolve_taps(layouts: list[Layout], reach: int = 4) -> None:
                 break
 
 
+def _side_key(phone_line) -> str:
+    return normalize_phone(phone_line.text) or digits_of(phone_line.text) or f"y{phone_line.y0}"
+
+
+def _row_is_planned(layout: Layout, plan_rows: list[int] | None, phone_line) -> bool:
+    if not plan_rows:
+        return False
+    rough = normalize_phone(phone_line.text)
+    for row_index in plan_rows:
+        if row_index >= len(layout.rows):
+            continue
+        row = layout.rows[row_index]
+        if row.top == phone_line.y0 or (rough and row.phone == rough):
+            return True
+    return False
+
+
+def side_frames(layouts: list[Layout], plan: dict[int, list[int] | None]) -> set[int]:
+    """Vài khung để đọc kỹ bốn dãy ký tự. Không thêm khung vào bước đọc tên của hướng cũ."""
+    chosen: set[int] = set()
+    groups: dict[str, list[int]] = {}
+    lines: dict[str, list] = {}
+    for index, layout in enumerate(layouts):
+        for phone_line, _name_line in layout.side_pairs:
+            key = _side_key(phone_line)
+            groups.setdefault(key, []).append(index)
+            lines.setdefault(key, []).append(phone_line)
+    for key, indexes in groups.items():
+        sample = lines[key]
+        named = [
+            index
+            for index, phone_line in zip(indexes, sample)
+            if _row_is_planned(layouts[index], plan.get(index), phone_line)
+        ]
+        preferred = named or [index for index in indexes if index in plan] or indexes
+        chosen.update(_spread(preferred, READS_PER_PERSON))
+    for run in _profile_runs(layouts):
+        if not any(layouts[index].side_handle_line is not None for index in run):
+            continue
+        preferred = [index for index in run if index in plan and layouts[index].side_handle_line is not None]
+        pool = preferred or [index for index in run if layouts[index].side_handle_line is not None]
+        chosen.update(_spread(pool, READS_PER_PROFILE))
+    loose: dict[str, list[int]] = {}
+    for index, layout in enumerate(layouts):
+        if layout.kind == "profile" or layout.side_handle_line is None:
+            continue
+        hint = find_handle(layout.side_handle_line.text)
+        if hint:
+            loose.setdefault(hint, []).append(index)
+    for indexes in loose.values():
+        chosen.update(_spread(indexes, READS_PER_PROFILE))
+    return chosen
+
+
 def plan_reads(
     layouts: list[Layout], per_person: int = READS_PER_PERSON, per_profile: int = READS_PER_PROFILE
 ) -> dict[int, list[int] | None]:
@@ -261,8 +326,16 @@ def read_inputs(
         layouts = _run(submit, [(_scan_file, path, at) for path, at in jobs], task_timeout)
         resolve_taps(layouts)
         plan = plan_reads(layouts)
-        order = sorted(plan)
-        reads = _run(submit, [(_read_file, jobs[index][0], layouts[index], plan[index]) for index in order], task_timeout)
+        side_at = side_frames(layouts, plan)
+        order = sorted(set(plan) | side_at)
+        reads = _run(
+            submit,
+            [
+                (_read_file, jobs[index][0], layouts[index], plan.get(index), index in plan, index in side_at)
+                for index in order
+            ],
+            task_timeout,
+        )
         done = dict(zip(order, reads))
         _fill_missing_profile_handles(layouts, done)
         return [done[index] if index in done else _unread(layout) for index, layout in enumerate(layouts)]

@@ -621,6 +621,91 @@ def _named_elsewhere(
     )
 
 
+def _voted_name(names: Counter[str]) -> str:
+    if not names:
+        return ""
+    if len(names) == 1:
+        return next(iter(names))
+    voted = " ".join(vote_chars(list(names.items()), loose=True).split())
+    return voted or names.most_common(1)[0][0]
+
+
+def add_side_rows(result: Result, frames: list[FrameRead]) -> Result:
+    """Thêm hàng ba ô khi tên cột phải trùng tên bên trái, mỗi bên chỉ đúng một cặp.
+
+    Hướng bổ sung, chạy sau build. Không sửa hàng đã ghép. Số đang ở bảng cần xem
+    không bị kéo sang. @id đã ghép với số khác cũng không bị lấy.
+    """
+    phone_names: dict[str, Counter[str]] = {}
+    phone_order: dict[str, int] = {}
+    handle_names: dict[str, Counter[str]] = {}
+    handle_order: dict[str, int] = {}
+    seen = 0
+    for frame in frames:
+        for contact in frame.side_contacts:
+            if not contact.phone:
+                continue
+            phone_names.setdefault(contact.phone, Counter())
+            if contact.name:
+                phone_names[contact.phone][contact.name] += 1
+            phone_order.setdefault(contact.phone, seen)
+            seen += 1
+        if not frame.side_handle.startswith("@"):
+            continue
+        handle_names.setdefault(frame.side_handle, Counter())
+        if frame.side_profile_name:
+            handle_names[frame.side_handle][frame.side_profile_name] += 1
+        handle_order.setdefault(frame.side_handle, seen)
+        seen += 1
+
+    phone_name = {phone: _voted_name(names) for phone, names in phone_names.items()}
+    handle_name = {handle: _voted_name(names) for handle, names in handle_names.items()}
+    by_phone: dict[str, list[str]] = {}
+    by_handle: dict[str, list[str]] = {}
+    for phone, name in phone_name.items():
+        key = name_key(name)
+        if key:
+            by_phone.setdefault(key, []).append(phone)
+    for handle, name in handle_name.items():
+        key = name_key(name)
+        if key:
+            by_handle.setdefault(key, []).append(handle)
+
+    saved_phones = {row.phone for row in result.rows}
+    saved_handles = {row.handle for row in result.rows}
+    blocked_phones = {item.phone for item in result.review if item.phone}
+    blocked_keys = {
+        key
+        for item in result.review
+        if item.reason == "nhiều số cùng tên"
+        for key in (name_key(item.list_name), name_key(item.profile_name))
+        if key
+    }
+    added: list[Row] = []
+    for key, handles in by_handle.items():
+        phones = by_phone.get(key, [])
+        if key in blocked_keys or len(phones) != 1 or len(handles) != 1:
+            continue
+        phone, handle = phones[0], handles[0]
+        if phone in saved_phones or phone in blocked_phones or handle in saved_handles:
+            continue
+        list_name = phone_name[phone]
+        profile_name = handle_name[handle]
+        name = list_name if _marks(list_name) > _marks(profile_name) else profile_name
+        added.append(Row(phone, name, handle))
+        saved_phones.add(phone)
+        saved_handles.add(handle)
+    if not added:
+        return result
+    added.sort(key=lambda row: phone_order[row.phone])
+    result.rows.extend(added)
+    added_phones = {row.phone for row in added}
+    added_handles = {row.handle for row in added}
+    result.unopened = [item for item in result.unopened if item[0] not in added_phones]
+    result.review = [item for item in result.review if item.phone not in added_phones and item.handle not in added_handles]
+    return result
+
+
 def _add(
     result: Result,
     phones: dict[str, _Seen],
