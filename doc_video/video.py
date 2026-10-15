@@ -14,6 +14,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from collections import Counter
 from collections.abc import Callable
 from concurrent.futures import BrokenExecutor, Future, ProcessPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
@@ -51,6 +52,29 @@ def _read_file(path: str, layout: Layout, rows: list[int] | None) -> FrameRead:
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         print(f"Bỏ khung {Path(path).name}: {exc}", flush=True)
         return _unread(layout)
+
+
+def _fill_missing_profile_handles(layouts: list[Layout], done: dict[int, FrameRead]) -> None:
+    """Lần đọc kỹ không ra @id thì dùng @id đã thấy lúc quét, để lần mở hồ sơ không mất.
+
+    Chỉ điền khi cả lượt mở không có @id nào. Không lấy @id lúc quét đè lên @id đã đọc kỹ.
+    """
+    for run in _profile_runs(layouts):
+        if any(done[index].handle for index in run if index in done):
+            continue
+        hints = [layouts[index].handle_hint for index in run if layouts[index].handle_hint]
+        if not hints:
+            continue
+        hint = Counter(hints).most_common(1)[0][0]
+        named = [index for index in run if index in done and done[index].profile_name]
+        target = named[0] if named else next((index for index in run if index in done), None)
+        if target is None:
+            target = next(index for index in run if layouts[index].handle_hint)
+            done[target] = FrameRead("profile", handle=hint, at=layouts[target].at)
+            continue
+        frame = done[target]
+        frame.kind = "profile"
+        frame.handle = hint
 
 
 def _unread(layout: Layout) -> FrameRead:
@@ -231,6 +255,7 @@ def read_inputs(
         order = sorted(plan)
         reads = _run(submit, [(_read_file, jobs[index][0], layouts[index], plan[index]) for index in order], task_timeout)
         done = dict(zip(order, reads))
+        _fill_missing_profile_handles(layouts, done)
         return [done[index] if index in done else _unread(layout) for index, layout in enumerate(layouts)]
     finally:
         if pool is not None:

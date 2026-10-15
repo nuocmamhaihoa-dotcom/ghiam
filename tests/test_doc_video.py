@@ -227,6 +227,52 @@ class JoinTests(unittest.TestCase):
         )
         self.assertEqual(result.rows, [])
 
+    def test_rows_left_after_a_name_match_still_join_in_order(self) -> None:
+        screen = (
+            ("0900000001", "Nha Go"),
+            ("0900000002", "Quoc Thanh"),
+            ("0900000003", "Kim Hoa"),
+            ("0900000004", "Mai Lan"),
+        )
+        result = build(
+            [
+                listing(*screen),
+                profile("Nha Go", "@nhago"),
+                listing(*screen),
+                profile("Ten TikTok", "@televisionnn"),
+                listing(*screen),
+                profile("Ten Khac", "@shopvinh"),
+                listing(*screen),
+                profile("Mai Lan", "@mailan"),
+            ]
+        )
+        self.assertEqual(
+            [(row.phone, row.handle) for row in result.rows],
+            [
+                ("0900000001", "@nhago"),
+                ("0900000002", "@televisionnn"),
+                ("0900000003", "@shopvinh"),
+                ("0900000004", "@mailan"),
+            ],
+        )
+        self.assertEqual(result.unopened, [])
+        self.assertEqual(result.review, [])
+
+    def test_a_profile_name_of_another_row_does_not_shift_the_rest(self) -> None:
+        screen = (("0900000001", "Lan"), ("0900000002", "Hoa"), ("0900000003", "Mai"))
+        result = build(
+            [
+                listing(*screen),
+                profile("Hoa", "@cua.lan"),
+                listing(*screen),
+                profile("TikTok", "@khac.mot"),
+                listing(*screen),
+                profile("TikTok Hai", "@khac.hai"),
+            ]
+        )
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0900000002", "@cua.lan")])
+        self.assertEqual(sorted(phone for phone, _ in result.unopened), ["0900000001", "0900000003"])
+
     def test_opening_every_row_on_a_screen_joins_in_order(self) -> None:
         screen = (("0900000001", "Nhà gỗ"), ("0900000002", "Quốc Thanh"), ("0900000003", "Kim Hoa"))
         result = build(
@@ -486,6 +532,38 @@ def list_layout(phones: list[str], tap_y: float = -1.0, clear: bool = True) -> L
     line = TextLine("x", 0, 0, 10, 10)
     rows = [ListRow(phone, line, clear, 100 + 230 * index) for index, phone in enumerate(phones)]
     return Layout("list", rows=rows, tap_y=tap_y, row_pitch=230.0)
+
+
+class ProfileHintTests(unittest.TestCase):
+    def test_a_missed_handle_keeps_the_one_seen_while_scanning(self) -> None:
+        from doc_video.video import _fill_missing_profile_handles
+
+        layouts = [
+            Layout("list", at=0),
+            Layout("profile", handle_hint="@nhago", at=1),
+            Layout("profile", handle_hint="@nhago", at=2),
+        ]
+        done = {
+            1: FrameRead("other", at=1),
+            2: FrameRead("profile", profile_name="Nha Go", handle="", at=2),
+        }
+        _fill_missing_profile_handles(layouts, done)
+        self.assertEqual(done[2].kind, "profile")
+        self.assertEqual(done[2].handle, "@nhago")
+        self.assertEqual(done[2].profile_name, "Nha Go")
+        self.assertEqual(done[1].handle, "")
+
+    def test_a_careful_handle_is_not_replaced_by_the_scan_hint(self) -> None:
+        from doc_video.video import _fill_missing_profile_handles
+
+        layouts = [
+            Layout("profile", handle_hint="@khac", at=1),
+            Layout("profile", handle_hint="@khac", at=2),
+        ]
+        done = {1: FrameRead("profile", profile_name="Nha", handle="@nhago", at=1)}
+        _fill_missing_profile_handles(layouts, done)
+        self.assertEqual(done[1].handle, "@nhago")
+        self.assertNotIn(2, done)
 
 
 class PoolTests(unittest.TestCase):
