@@ -6,6 +6,9 @@ kỹ tên và @id chỉ chạy trên vài khung rõ nhất của mỗi người:
 vòng tròn chạm màn hình đè, rải đều theo thời gian để mỗi lần đọc thấy một
 ảnh hơi khác. Nhanh hơn nhiều so với đọc kỹ mọi khung, và bỏ phiếu giữa các
 lần đọc vẫn sửa được lỗi của từng lần.
+
+Luồng riêng chạy sau đó: đọc kỹ tên và @id trên mọi khung còn lại. Kết quả
+nằm ở full_contacts và full_handle, không sửa tên hay @id của luồng chính.
 """
 
 from __future__ import annotations
@@ -86,6 +89,44 @@ def _fill_missing_profile_handles(layouts: list[Layout], done: dict[int, FrameRe
         frame = done[target]
         frame.kind = "profile"
         frame.handle = hint
+
+
+def _read_full_file(path: str, layout: Layout, rows: list[int] | None) -> FrameRead:
+    """Đọc kỹ phần luồng chính chưa đọc. Lỗi một khung thì bỏ khung đó, không làm hỏng luồng chính."""
+    try:
+        with Image.open(path) as image:
+            read = read_layout(image.convert("RGB"), layout, rows)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        print(f"Bỏ luồng đọc toàn bộ ở khung {Path(path).name}: {exc}", flush=True)
+        return FrameRead(at=layout.at)
+    frame = FrameRead(at=layout.at)
+    if layout.kind == "list":
+        wanted = set(rows or [])
+        frame.full_contacts = [
+            Contact(contact.phone, contact.name, False)
+            for index, contact in enumerate(read.contacts)
+            if index in wanted and contact.name
+        ]
+        return frame
+    if read.handle:
+        frame.full_handle = read.handle
+        frame.full_profile_name = read.profile_name
+    return frame
+
+
+def _keep_primary_names(frame: FrameRead) -> None:
+    """Gộp lần đọc kỹ của luồng chính vào luồng toàn bộ để bỏ phiếu trên hết video.
+
+    Không sửa contacts, tên hồ sơ hay @id của luồng chính.
+    """
+    seen = {contact.phone for contact in frame.full_contacts}
+    for contact in frame.contacts:
+        if contact.name and contact.phone not in seen:
+            frame.full_contacts.append(Contact(contact.phone, contact.name, False))
+            seen.add(contact.phone)
+    if frame.handle.startswith("@") and not frame.full_handle:
+        frame.full_handle = frame.handle
+        frame.full_profile_name = frame.profile_name
 
 
 def _unread(layout: Layout) -> FrameRead:
@@ -255,6 +296,48 @@ def side_frames(layouts: list[Layout], plan: dict[int, list[int] | None]) -> set
     return chosen
 
 
+def plan_full_reads(
+    layouts: list[Layout], plan: dict[int, list[int] | None]
+) -> dict[int, list[int] | None]:
+    """Mọi dòng còn đọc được mà luồng chính chưa đọc kỹ.
+
+    Danh bạ: các dòng tên chưa nằm trong plan. Hồ sơ: các khung của lượt mở
+    chưa được đọc kỹ. Ưu tiên khung không bị vòng tròn chạm đè. Giá trị None
+    là đọc cả hồ sơ.
+    """
+    full: dict[int, list[int] | None] = {}
+    by_phone: dict[str, list[tuple[int, int, bool]]] = {}
+    for frame_index, layout in enumerate(layouts):
+        if layout.kind != "list":
+            continue
+        planned = plan.get(frame_index)
+        planned_rows = set(planned) if planned else set()
+        for row_index, row in enumerate(layout.rows):
+            if not row.readable or row_index in planned_rows:
+                continue
+            by_phone.setdefault(row.phone, []).append((frame_index, row_index, row.clear))
+    for seen in by_phone.values():
+        clear = [item for item in seen if item[2]]
+        for frame_index, row_index, _ in clear or seen:
+            rows = full.setdefault(frame_index, [])
+            if rows is not None and row_index not in rows:
+                rows.append(row_index)
+    for run in _profile_runs(layouts):
+        already = {index for index in run if index in plan and plan[index] is None}
+        rest = [
+            index
+            for index in run
+            if index not in already and layouts[index].handle_line is not None
+        ]
+        clear = [index for index in rest if layouts[index].clear and layouts[index].name_readable]
+        for index in clear or rest:
+            full[index] = None
+    for rows in full.values():
+        if rows is not None:
+            rows.sort()
+    return full
+
+
 def plan_reads(
     layouts: list[Layout], per_person: int = READS_PER_PERSON, per_profile: int = READS_PER_PROFILE
 ) -> dict[int, list[int] | None]:
@@ -338,7 +421,30 @@ def read_inputs(
         )
         done = dict(zip(order, reads))
         _fill_missing_profile_handles(layouts, done)
-        return [done[index] if index in done else _unread(layout) for index, layout in enumerate(layouts)]
+        full_plan = plan_full_reads(layouts, plan)
+        if full_plan:
+            full_order = sorted(full_plan)
+            full_reads = _run(
+                submit,
+                [(_read_full_file, jobs[index][0], layouts[index], full_plan[index]) for index in full_order],
+                task_timeout,
+            )
+            for index, extra in zip(full_order, full_reads):
+                frame = done.get(index)
+                if frame is None:
+                    frame = _unread(layouts[index])
+                    done[index] = frame
+                frame.full_contacts.extend(extra.full_contacts)
+                if extra.full_handle:
+                    frame.full_handle = extra.full_handle
+                    frame.full_profile_name = extra.full_profile_name
+        for index, layout in enumerate(layouts):
+            frame = done.get(index)
+            if frame is None:
+                frame = _unread(layout)
+                done[index] = frame
+            _keep_primary_names(frame)
+        return [done[index] for index in range(len(layouts))]
     finally:
         if pool is not None:
             pool.shutdown(cancel_futures=True)

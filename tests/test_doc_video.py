@@ -9,10 +9,10 @@ from pathlib import Path
 import numpy as np
 
 from doc_video.frame import Contact, FrameRead, Layout, ListRow, _list_pairs, _supplement_pairs, _tap_center, row_at
-from doc_video.join import Result, Review, Row, add_side_rows, build
+from doc_video.join import Result, Review, Row, add_full_name_rows, add_side_rows, build
 from doc_video.ocr import TextLine
 from doc_video.side import select_left_profile, select_right_pairs
-from doc_video.video import plan_reads, resolve_taps, side_frames
+from doc_video.video import plan_full_reads, plan_reads, resolve_taps, side_frames
 from doc_video.text import (
     clean_name,
     find_handle,
@@ -795,6 +795,26 @@ class PlanTests(unittest.TestCase):
             [("0900000001", "@mot"), ("0900000002", "@hai")],
         )
 
+    def test_the_full_read_covers_rows_the_first_pass_skipped(self) -> None:
+        layouts = [list_layout(["0900000001", "0900000002"])]
+        full = plan_full_reads(layouts, {0: [0]})
+        self.assertEqual(full, {0: [1]})
+
+    def test_the_full_read_covers_profile_frames_the_first_pass_skipped(self) -> None:
+        line = TextLine("@a", 0, 0, 10, 10)
+        layouts = [list_layout(["0900000001"])]
+        layouts += [
+            Layout("profile", handle_line=line, handle_hint="@abc", clear=True, name_readable=True) for _ in range(4)
+        ]
+        layouts += [list_layout(["0900000001"])]
+        plan = plan_reads(layouts)
+        full = plan_full_reads(layouts, plan)
+        planned = {index for index, rows in plan.items() if rows is None}
+        extra = {index for index, rows in full.items() if rows is None}
+        self.assertEqual(len(planned), 2)
+        self.assertTrue(planned.isdisjoint(extra))
+        self.assertEqual(len(planned | extra), 4)
+
     def test_a_tap_does_not_land_on_an_extra_pair(self) -> None:
         line = TextLine("x", 0, 0, 10, 10)
         rows = [
@@ -814,6 +834,78 @@ def _right_pair(x: int, y: int, phone: str = "0900000001", name: str = "Lan") ->
         TextLine(phone, x, y, x + 300, y + 40, 40),
         TextLine(name, x, y + 50, x + 200, y + 90, 40),
     )
+
+
+class FullNameStreamTests(unittest.TestCase):
+    def test_the_same_name_across_the_whole_video_joins_one_pair(self) -> None:
+        frames = [
+            FrameRead(
+                "list",
+                [Contact("0900000001", "")],
+                full_contacts=[Contact("0900000001", "Lan", False)],
+            ),
+            FrameRead("profile", full_profile_name="Lan", full_handle="@lan.shop"),
+        ]
+        result = add_full_name_rows(build(frames), frames)
+        self.assertEqual(result.rows, [Row("0900000001", "Lan", "@lan.shop")])
+        self.assertEqual(result.unopened, [])
+
+    def test_a_saved_row_keeps_its_phone_and_id(self) -> None:
+        screen = (("0900000001", "Lan"), ("0900000002", "Hoa"))
+        frames = [
+            listing(*screen),
+            profile("Khác", "@mot"),
+            listing(*screen),
+            profile("Khác nữa", "@hai"),
+        ]
+        frames[0].full_contacts = [Contact("0900000001", "Lan", False)]
+        frames[1].full_profile_name = "Lan"
+        frames[1].full_handle = "@khac"
+        result = add_full_name_rows(build(frames), frames)
+        self.assertEqual(
+            [(row.phone, row.handle) for row in result.rows],
+            [("0900000001", "@mot"), ("0900000002", "@hai")],
+        )
+
+    def test_two_phones_with_the_same_full_name_stay_apart(self) -> None:
+        result = Result(unopened=[("0900000001", ""), ("0900000002", "")])
+        frames = [
+            FrameRead(
+                full_contacts=[
+                    Contact("0900000001", "Lan", False),
+                    Contact("0900000002", "Lan", False),
+                ]
+            ),
+            FrameRead(full_profile_name="Lan", full_handle="@lan"),
+        ]
+        add_full_name_rows(result, frames)
+        self.assertEqual(result.rows, [])
+        self.assertEqual([phone for phone, _ in result.unopened], ["0900000001", "0900000002"])
+
+    def test_different_full_names_are_not_joined(self) -> None:
+        result = Result(unopened=[("0900000001", "Lan")])
+        frames = [
+            FrameRead(full_contacts=[Contact("0900000001", "Lan", False)]),
+            FrameRead(full_profile_name="Hoa", full_handle="@hoa"),
+        ]
+        add_full_name_rows(result, frames)
+        self.assertEqual(result.rows, [])
+
+    def test_a_blank_name_is_filled_without_moving_the_pair(self) -> None:
+        result = Result(rows=[Row("0900000001", "", "@lan")])
+        frames = [FrameRead(full_contacts=[Contact("0900000001", "Lan", False)])]
+        add_full_name_rows(result, frames)
+        self.assertEqual(result.rows, [Row("0900000001", "Lan", "@lan")])
+
+    def test_lookalike_ids_of_the_same_name_count_as_one(self) -> None:
+        frames = [
+            FrameRead(full_contacts=[Contact("0900000001", "Lan", False)]),
+            FrameRead(full_profile_name="Lan", full_handle="@lan_shop"),
+            FrameRead(full_profile_name="Lan", full_handle="@lan_shop"),
+            FrameRead(full_profile_name="Lan", full_handle="@lan__shop"),
+        ]
+        result = add_full_name_rows(Result(unopened=[("0900000001", "")]), frames)
+        self.assertEqual(result.rows, [Row("0900000001", "Lan", "@lan_shop")])
 
 
 class SidePairTests(unittest.TestCase):
