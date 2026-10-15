@@ -32,7 +32,8 @@ from control_plane.warehouse_store import (
     preview_matches,
     save_template,
     search_contacts,
-    rebuild_from_journal,
+    restore_snapshot,
+    snapshot_to_file,
     upsert_records,
     warehouse_stats,
 )
@@ -461,26 +462,105 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(row["addressExtra"], "7 Lê Duẩn, Quận 1, TP.HCM")
         self.assertEqual(search_contacts(self.db, "", limit=10, after=0)["count"], 1)
 
-    def test_three_copies_and_journal_rebuild(self) -> None:
+    def test_snapshot_restore_keeps_every_field(self) -> None:
+        import sqlite3
+
         upsert_records(
             self.db,
-            [{"name": "Minh An", "phone": "0907777666", "address": "", "uid": "555566667777888", "id": "@minhan"}],
+            [{"name": "Minh An", "phone": "0907777666", "address": "12 Đường Láng, Hà Nội", "uid": "555566667777888", "id": "@minhan"}],
             filename="minh.xlsx",
             source="minh",
             mapping={"name": 0},
             at="2026-06-01T00:00:00+00:00",
         )
+        upsert_records(
+            self.db,
+            [{"name": "Minh Khác", "phone": "0918888777", "address": "", "uid": "", "id": ""}],
+            filename="minh-2.xlsx",
+            source="minh",
+            mapping={"name": 0},
+            at="2026-06-02T00:00:00+00:00",
+        )
         stats = warehouse_stats(self.db)
-        self.assertTrue(stats["copies"]["live"])
-        self.assertTrue(stats["copies"]["mirror"])
-        self.assertTrue(stats["copies"]["journal"])
-        self.assertEqual(stats["copies"]["journalLag"], 0)
-        journal = self.db.parent / f"{self.db.name}.copies" / "journal.jsonl"
-        rebuilt = self.tmp / "rebuilt.db"
-        applied = rebuild_from_journal(rebuilt, journal)
-        self.assertGreaterEqual(applied, 1)
-        found = search_contacts(rebuilt, "0907777666", limit=10, after=0)
+        self.assertEqual(stats["storage"], "one")
+        self.assertNotIn("copies", stats)
+        self.assertFalse((self.db.parent / f"{self.db.name}.copies").exists())
+        snap = self.tmp / "kho-tong.db"
+        snapshot_to_file(self.db, snap)
+        restored = self.tmp / "restored.db"
+        shutil_copy = snap.read_bytes()
+        incoming = self.tmp / "incoming.db"
+        incoming.write_bytes(shutil_copy)
+        restore_snapshot(restored, incoming)
+        found = search_contacts(restored, "0907777666", limit=10, after=0)
         self.assertEqual(found["items"][0]["name"], "Minh An")
+        self.assertEqual(found["items"][0]["phone"], "0907777666")
+        self.assertEqual(found["items"][0]["address"], "12 Đường Láng, Hà Nội")
+        self.assertEqual(found["items"][0]["uid"], "555566667777888")
+        self.assertEqual(found["items"][0]["externalId"], "@minhan")
+        self.assertEqual(search_contacts(restored, "", limit=10, after=0)["count"], 2)
+        self.assertFalse(incoming.exists())
+        with sqlite3.connect(self.db) as conn:
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(warehouse_contacts)")}
+        self.assertNotIn("name_key", columns)
+        self.assertNotIn("phone_key", columns)
+
+    def test_legacy_schema_migrates_without_losing_fields(self) -> None:
+        import sqlite3
+
+        legacy = self.tmp / "legacy.db"
+        conn = sqlite3.connect(legacy)
+        conn.executescript(
+            """
+            CREATE TABLE warehouse_contacts (
+              row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL DEFAULT '',
+              name_key TEXT NOT NULL DEFAULT '',
+              phone TEXT NOT NULL DEFAULT '',
+              phone_key TEXT NOT NULL DEFAULT '',
+              address TEXT NOT NULL DEFAULT '',
+              address_key TEXT NOT NULL DEFAULT '',
+              uid TEXT NOT NULL DEFAULT '',
+              external_id TEXT NOT NULL DEFAULT '',
+              source TEXT NOT NULL DEFAULT '',
+              batch_id INTEGER,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              name_extra TEXT NOT NULL DEFAULT '',
+              phone_extra TEXT NOT NULL DEFAULT '',
+              address_extra TEXT NOT NULL DEFAULT '',
+              uid_extra TEXT NOT NULL DEFAULT '',
+              id_extra TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE warehouse_changes (
+              change_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              op TEXT NOT NULL,
+              at TEXT NOT NULL,
+              payload_json TEXT NOT NULL
+            );
+            INSERT INTO warehouse_contacts(
+              name, name_key, phone, phone_key, address, address_key, uid, external_id,
+              source, created_at, updated_at, phone_extra
+            ) VALUES(
+              'Minh An', 'minh an', '0907777666', '0907777666', '12 Đường Láng, Hà Nội',
+              '12 duong lang ha noi', '555566667777888', '@minhan', 'minh',
+              '2026-06-01T00:00:00+00:00', '2026-06-01T00:00:00+00:00', '0918888777'
+            );
+            """
+        )
+        conn.commit()
+        conn.close()
+        copies = legacy.parent / f"{legacy.name}.copies"
+        copies.mkdir()
+        (copies / "journal.jsonl").write_text("x\n", encoding="utf-8")
+        init_warehouse(legacy)
+        self.assertFalse(copies.exists())
+        found = search_contacts(legacy, "0918888777", limit=10, after=0)
+        self.assertEqual(found["count"], 1)
+        self.assertEqual(found["items"][0]["name"], "Minh An")
+        self.assertEqual(found["items"][0]["phone"], "0907777666")
+        self.assertEqual(found["items"][0]["phoneExtra"], "0918888777")
+        self.assertEqual(found["items"][0]["address"], "12 Đường Láng, Hà Nội")
         self.assertEqual(found["items"][0]["uid"], "555566667777888")
         self.assertEqual(found["items"][0]["externalId"], "@minhan")
 

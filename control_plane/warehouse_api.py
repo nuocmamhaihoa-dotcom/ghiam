@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import json
 import os
@@ -12,12 +13,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from control_plane import db
-from control_plane.settings import settings
+from control_plane.settings import derive_secret, settings
 from control_plane.warehouse import (
     FIELDS,
     preview_bytes,
@@ -28,7 +30,9 @@ from control_plane.warehouse_store import (
     export_csv_rows,
     init_warehouse,
     list_templates,
+    open_snapshot,
     preview_matches,
+    restore_snapshot,
     save_template,
     search_contacts,
     upsert_records,
@@ -38,6 +42,25 @@ from control_plane.warehouse_store import (
 router = APIRouter()
 UPLOAD_TTL_SEC = 2 * 60 * 60
 MAX_WAREHOUSE_MB = 200
+TICKET_SECONDS = 600
+
+
+def _ticket_key() -> bytes:
+    return derive_secret(settings.token or "no-token", "kho-file-ticket").encode("utf-8")
+
+
+def _make_ticket(now: float) -> str:
+    expiry = str(int(now) + TICKET_SECONDS)
+    signature = hmac.new(_ticket_key(), expiry.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+    return f"{expiry}-{signature}"
+
+
+def _ticket_ok(ticket: str, now: float) -> bool:
+    expiry, _, signature = ticket.partition("-")
+    if not expiry.isdigit() or int(expiry) < now:
+        return False
+    expected = hmac.new(_ticket_key(), expiry.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+    return hmac.compare_digest(signature, expected)
 
 
 def _auth(authorization: str | None) -> None:
@@ -230,3 +253,62 @@ def kho_commit(
     except Exception:
         pass
     return {**result, "read": len(records), "filename": filename}
+
+
+@router.post("/v1/kho/file-ticket")
+def kho_file_ticket(authorization: str | None = Header(default=None)) -> dict[str, str]:
+    _auth(authorization)
+    init_warehouse(settings.db_path)
+    return {"url": f"/v1/kho/file/{_make_ticket(time.time())}"}
+
+
+@router.get("/v1/kho/file/{ticket}")
+def kho_file(ticket: str) -> StreamingResponse:
+    if not _ticket_ok(ticket, time.time()):
+        raise HTTPException(status_code=404, detail="Liên kết tải đã hết hạn. Bấm tải lại.")
+    init_warehouse(settings.db_path)
+    return StreamingResponse(
+        open_snapshot(settings.db_path),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": 'attachment; filename="kho-tong.db"'},
+    )
+
+
+@router.post("/v1/kho/restore")
+async def kho_restore(
+    request: Request,
+    authorization: str | None = Header(default=None),
+    file: UploadFile = File(...),
+) -> dict[str, Any]:
+    _auth(authorization)
+    init_warehouse(settings.db_path)
+    declared = request.headers.get("content-length")
+    free = shutil.disk_usage(settings.db_path.parent).free
+    if declared and declared.isdigit() and int(declared) > free - 64 * 1024 * 1024:
+        raise HTTPException(
+            status_code=507,
+            detail="Đĩa không còn chỗ để nhận bản lưu. Hãy giải phóng bớt rồi nạp lại.",
+        )
+    incoming = settings.db_path.with_name(settings.db_path.name + ".incoming")
+    written = 0
+    try:
+        with incoming.open("wb") as handle:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > free - 64 * 1024 * 1024:
+                    raise HTTPException(
+                        status_code=507,
+                        detail="Đĩa không còn chỗ để nhận bản lưu. Hãy giải phóng bớt rồi nạp lại.",
+                    )
+                handle.write(chunk)
+        if written < 100:
+            raise HTTPException(status_code=400, detail="File không phải bản lưu kho.")
+        return await run_in_threadpool(restore_snapshot, settings.db_path, incoming)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        if incoming.exists():
+            incoming.unlink(missing_ok=True)
