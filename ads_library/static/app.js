@@ -123,7 +123,7 @@ async function showSetup() {
     if (!data.configured) {
       const note = $("setup");
       note.hidden = false;
-      note.textContent = "Máy chủ chưa có META_ACCESS_TOKEN. Đặt biến này bằng token Ad Library API rồi chạy lại.";
+      note.textContent = "Máy chủ chưa được Meta cấp quyền đọc thư viện quảng cáo, nên bấm Tìm sẽ chưa ra danh sách.";
     }
   } catch {
     setStatus("Không đọc được trạng thái máy chủ.");
@@ -164,7 +164,12 @@ $("form").addEventListener("submit", async (event) => {
     });
     const data = await response.json();
     if (!response.ok) {
-      setStatus(data.error || "Không tìm được quảng cáo.");
+      const error = data.error || "Không tìm được quảng cáo.";
+      setStatus(
+        error.includes("META_ACCESS_TOKEN")
+          ? "Máy chủ chưa được Meta cấp quyền đọc thư viện quảng cáo, nên chưa có danh sách."
+          : error,
+      );
       return;
     }
     renderResults(data.page, data.ads || [], data.keyword || "");

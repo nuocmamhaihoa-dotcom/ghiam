@@ -11,50 +11,55 @@
     <div class="logo" aria-hidden="true">A</div>
     <div>
       <strong>Thư viện quảng cáo Fanpage</strong>
-      <small>Xem quảng cáo công khai qua Meta Ad Library API</small>
+      <small>Nhập từ khóa để xem quảng cáo đang chạy</small>
     </div>
   </header>
   <main>
     <section class="search">
       <h1>Tìm quảng cáo</h1>
       <form id="form">
-        <div class="field wide">
-          <label for="keyword">Từ khóa</label>
-          <input id="keyword" type="search" maxlength="100" autocomplete="off" placeholder="nước mắm, giấm">
+        <div class="bar">
+          <label class="sr" for="keyword">Từ khóa</label>
+          <input id="keyword" type="search" maxlength="100" autocomplete="off" autofocus placeholder="nước mắm">
+          <button id="go" type="submit">Tìm</button>
         </div>
-        <div class="field">
-          <label for="match">Cách khớp</label>
-          <select id="match">
-            <option value="any" selected>Có các từ</option>
-            <option value="exact">Đúng cụm từ</option>
-          </select>
-        </div>
-        <div class="field wide">
-          <label for="fanpage">Link Fanpage</label>
-          <input id="fanpage" type="url" placeholder="không bắt buộc">
-        </div>
-        <div class="field">
-          <label for="country">Quốc gia</label>
-          <select id="country">
-            <option value="VN" selected>Việt Nam</option>
-            <option value="US">Hoa Kỳ</option>
-            <option value="GB">Anh</option>
-            <option value="SG">Singapore</option>
-            <option value="TH">Thái Lan</option>
-            <option value="JP">Nhật Bản</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="status">Trạng thái</label>
-          <select id="status">
-            <option value="ACTIVE" selected>Đang chạy</option>
-            <option value="INACTIVE">Đã dừng</option>
-            <option value="ALL">Tất cả</option>
-          </select>
-        </div>
-        <button id="go" type="submit">Tìm quảng cáo</button>
+        <details class="filters">
+          <summary>Bộ lọc thêm</summary>
+          <div class="filter-grid">
+            <div class="field">
+              <label for="match">Cách khớp</label>
+              <select id="match">
+                <option value="any" selected>Có các từ</option>
+                <option value="exact">Đúng cụm từ</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="country">Quốc gia</label>
+              <select id="country">
+                <option value="VN" selected>Việt Nam</option>
+                <option value="US">Hoa Kỳ</option>
+                <option value="GB">Anh</option>
+                <option value="SG">Singapore</option>
+                <option value="TH">Thái Lan</option>
+                <option value="JP">Nhật Bản</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="status">Trạng thái</label>
+              <select id="status">
+                <option value="ACTIVE" selected>Đang chạy</option>
+                <option value="INACTIVE">Đã dừng</option>
+                <option value="ALL">Tất cả</option>
+              </select>
+            </div>
+            <div class="field wide">
+              <label for="fanpage">Link Fanpage, nếu muốn giới hạn một trang</label>
+              <input id="fanpage" type="url" placeholder="để trống nếu chỉ tìm từ khóa">
+            </div>
+          </div>
+        </details>
       </form>
-      <p id="message" role="status">Nhập từ khóa, link Fanpage, hoặc cả hai. Dấu phẩy nghĩa là hoặc.</p>
+      <p id="message" role="status">Nhập từ khóa rồi bấm Tìm. Dấu phẩy nghĩa là hoặc.</p>
       <p id="setup" class="note" hidden></p>
     </section>
     <section class="stats" aria-live="polite">

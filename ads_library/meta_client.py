@@ -204,7 +204,7 @@ def lookup(
     text = normalize_keyword(keyword)
     validate_filters(country, status, limit, keyword=text, match=match, has_page=ref is not None)
     if not token.strip():
-        raise MetaApiError("Chưa cấu hình META_ACCESS_TOKEN.")
+        raise MetaApiError("Chưa cấu hình META_ACCESS_TOKEN. Máy chủ chưa được Meta cấp quyền đọc thư viện quảng cáo.")
     page = resolve_page(ref, token, fetch) if ref is not None else None
     ads = search_ads(
         page_id=page.id if page else None,
