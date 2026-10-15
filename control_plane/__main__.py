@@ -21,6 +21,8 @@ def main() -> None:
         "limit_concurrency": settings.limit_concurrency,
         "backlog": settings.backlog,
         "timeout_keep_alive": settings.timeout_keep_alive,
+        # Một mảnh tải chỉ vài MB. Đừng giữ tiến trình hàng phút vì một kết nối đang đóng.
+        "timeout_graceful_shutdown": 20,
         "proxy_headers": True,
         "access_log": True,
     }

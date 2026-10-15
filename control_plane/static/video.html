@@ -69,6 +69,7 @@
       <p class="note">hoặc</p>
       <button class="file" type="button" id="pick">Chọn nhiều video</button>
       <input id="file" type="file" accept="video/*,image/*" multiple />
+      <p class="note">Video được chia nhỏ. Mạng đứt thì tải nối tiếp phần còn lại, không gửi lại từ đầu.</p>
     </div>
     <div id="localQueue"></div>
     <p id="uploadNote" class="note"></p>
@@ -179,7 +180,7 @@
     if (phoneFilter !== null) queuePath += "&device=" + encodeURIComponent(phoneFilter);
     var queueResponse = await api(queuePath);
     if (queueResponse.ok) renderQueue((await queueResponse.json()).items || []);
-    loadResults();
+    if (!stillUploading()) loadResults();
   }
 
   function renderQueue(items) {
@@ -426,11 +427,50 @@
     if (wake) { wake.release().catch(function () {}); wake = null; }
   }
 
-  function uploadOne(file, onProgress) {
+  var CHUNK_BYTES = 4 * 1024 * 1024;
+
+  function freshUploadId() {
+    var bytes = new Uint8Array(16);
+    if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(bytes);
+    else {
+      for (var i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    var id = "";
+    for (var n = 0; n < bytes.length; n += 1) id += ("0" + bytes[n].toString(16)).slice(-2);
+    return id;
+  }
+
+  function uploadKey(file) {
+    return "ghiam-up:" + file.name + ":" + file.size + ":" + file.lastModified;
+  }
+
+  function uploadIdFor(file) {
+    var key = uploadKey(file);
+    try {
+      var saved = sessionStorage.getItem(key);
+      if (saved && /^[0-9a-f]{32}$/.test(saved)) return saved;
+      var created = freshUploadId();
+      sessionStorage.setItem(key, created);
+      return created;
+    } catch (error) {
+      return freshUploadId();
+    }
+  }
+
+  function rememberUpload(file, id) {
+    try { sessionStorage.setItem(uploadKey(file), id); } catch (error) { return; }
+  }
+
+  function forgetUpload(file) {
+    try { sessionStorage.removeItem(uploadKey(file)); } catch (error) { return; }
+  }
+
+  function postChunk(file, id, offset, onSent) {
     return new Promise(function (resolve) {
       var xhr = new XMLHttpRequest();
       var timer = null;
       var settled = false;
+      var end = Math.min(file.size, offset + CHUNK_BYTES);
       function finish(result) {
         if (settled) return;
         settled = true;
@@ -439,14 +479,17 @@
       }
       function arm() {
         clearTimeout(timer);
-        timer = setTimeout(function () { xhr.abort(); }, 90000);
+        timer = setTimeout(function () { xhr.abort(); }, 45000);
       }
-      xhr.open("POST", "/v1/videos");
+      xhr.open("POST", "/v1/videos/chunks");
       if (token()) xhr.setRequestHeader("Authorization", "Bearer " + token());
       xhr.upload.onloadstart = arm;
       xhr.upload.onprogress = function (event) {
         arm();
-        if (event.lengthComputable) onProgress(Math.floor((event.loaded * 100) / event.total));
+        if (!event.lengthComputable) return;
+        var sent = offset + event.loaded;
+        if (sent > file.size) sent = file.size;
+        onSent(sent);
       };
       xhr.onload = function () {
         var body = {};
@@ -457,11 +500,128 @@
       xhr.onabort = function () { finish({ ok: false, status: 0, body: {} }); };
       xhr.ontimeout = function () { finish({ ok: false, status: 0, body: {} }); };
       var form = new FormData();
-      form.append("file", file, file.name);
+      form.append("upload_id", id);
+      form.append("name", file.name);
+      form.append("size", String(file.size));
+      form.append("offset", String(offset));
       form.append("device", thisPhone);
+      form.append("file", file.slice(offset, end), "chunk");
       arm();
       xhr.send(form);
     });
+  }
+
+  async function probeUpload(id) {
+    try {
+      var response = await api("/v1/videos/chunks/" + id);
+      if (response.status === 404) return { received: 0, complete: false };
+      if (!response.ok) return null;
+      return response.json();
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function hardUploadStatus(status) {
+    return status === 400 || status === 401 || status === 413 || status === 422 || status === 507;
+  }
+
+  function resumeOffset(file, received) {
+    var value = received;
+    if (value < 0) value = 0;
+    // Đủ byte nhưng chưa vào hàng chờ: gửi lại mảnh cuối để máy chủ chốt file.
+    if (file.size > 0 && value >= file.size) return Math.max(0, file.size - CHUNK_BYTES);
+    return value;
+  }
+
+  async function uploadChunked(file, onProgress, onDetail) {
+    var id = uploadIdFor(file);
+    var offset = 0;
+    onDetail("Đang nối với máy chủ...");
+    var known = await probeUpload(id);
+    if (known && known.complete && (known.id || known.duplicate)) {
+      onProgress(100);
+      forgetUpload(file);
+      return { ok: true, status: 200, body: known };
+    }
+    if (known && typeof known.received === "number" && known.received > 0) {
+      offset = resumeOffset(file, known.received);
+    }
+    onProgress(file.size ? Math.floor((offset * 100) / file.size) : 0);
+    onDetail("");
+    var fails = 0;
+    var last = { ok: false, status: 0, body: {} };
+    while (offset < file.size) {
+      var result = await postChunk(file, id, offset, function (sent) {
+        onProgress(file.size ? Math.floor((sent * 100) / file.size) : 0);
+      });
+      last = result;
+      if (result.ok && result.body.pending) {
+        await sleep(700);
+        continue;
+      }
+      if (result.ok && (result.body.complete || result.body.status === "queued" || result.body.duplicate)) {
+        onProgress(100);
+        onDetail("");
+        forgetUpload(file);
+        return result;
+      }
+      if (result.ok && typeof result.body.received === "number" && result.body.received > offset) {
+        fails = 0;
+        offset = resumeOffset(file, result.body.received);
+        onProgress(file.size ? Math.min(99, Math.floor((result.body.received * 100) / file.size)) : 0);
+        onDetail("");
+        continue;
+      }
+      if (result.status === 409 && result.body.restart) {
+        forgetUpload(file);
+        id = freshUploadId();
+        rememberUpload(file, id);
+        offset = 0;
+        fails = 0;
+        onDetail("");
+        continue;
+      }
+      if (result.status === 409 && typeof result.body.received === "number") {
+        offset = resumeOffset(file, result.body.received);
+        fails = 0;
+        onProgress(file.size ? Math.floor((Math.min(result.body.received, file.size) * 100) / file.size) : 0);
+        onDetail("");
+        continue;
+      }
+      if (hardUploadStatus(result.status)) return result;
+      var again = await probeUpload(id);
+      if (again && again.complete && (again.id || again.duplicate)) {
+        onProgress(100);
+        onDetail("");
+        forgetUpload(file);
+        return { ok: true, status: 200, body: again };
+      }
+      if (again && again.pending) {
+        await sleep(700);
+        continue;
+      }
+      if (again && typeof again.received === "number" && again.received > offset) {
+        offset = resumeOffset(file, again.received);
+        fails = 0;
+        onProgress(file.size ? Math.floor((Math.min(again.received, file.size) * 100) / file.size) : 0);
+        onDetail("");
+        continue;
+      }
+      fails += 1;
+      if (fails >= 40) {
+        return {
+          ok: false,
+          status: last.status || 0,
+          body: { detail: "Mất kết nối sau nhiều lần. Bấm Tải lại để nối tiếp phần đã lên." }
+        };
+      }
+      var percent = file.size ? Math.floor((offset * 100) / file.size) : 0;
+      onProgress(percent);
+      onDetail("Mạng vừa đứt ở " + percent + "%. Đang nối tiếp, lần " + fails + ".");
+      await sleep(Math.min(8000, 400 * fails));
+    }
+    return { ok: false, status: last.status || 0, body: { detail: "Tải chưa đủ file. Bấm Tải lại để nối tiếp." } };
   }
 
   function renderLocal() {
@@ -499,7 +659,7 @@
     var failed = jobs.filter(function (job) { return job.state === "fail"; }).length;
     if (!jobs.length) { note.textContent = ""; return; }
     if (waiting) {
-      note.textContent = "Đang tải " + waiting + " video. Giữ trang này mở đến khi tất cả hiện Đã vào hàng chờ. Video đã vào hàng chờ thì tắt trang vẫn được đọc.";
+      note.textContent = "Đang tải " + waiting + " video. Mạng đứt thì nối tiếp phần còn lại, không gửi lại từ đầu. Giữ trang mở đến khi tất cả hiện Đã vào hàng chờ.";
       note.className = "note";
       return;
     }
@@ -519,19 +679,17 @@
         for (var i = 0; i < jobs.length; i += 1) if (jobs[i].state === "wait") { job = jobs[i]; break; }
         if (!job) break;
         job.state = "upload";
-        job.percent = 0;
         job.detail = "";
         renderLocal();
-        var result = { ok: false, status: 0, body: {} };
-        for (var attempt = 1; attempt <= 4; attempt += 1) {
-          result = await uploadOne(job.file, function (percent) { job.percent = percent; renderLocal(); });
-          if (result.ok || result.status === 400 || result.status === 401 || result.status === 413 || result.status === 507) break;
-          if (attempt < 4) {
-            job.detail = "Mất kết nối, tự thử lại lần " + (attempt + 1) + "/4.";
-            renderLocal();
-            await sleep(2000 * attempt);
-          }
-        }
+        var result = await uploadChunked(job.file, function (percent) {
+          if (percent === job.percent) return;
+          job.percent = percent;
+          renderLocal();
+        }, function (detail) {
+          if (detail === job.detail) return;
+          job.detail = detail;
+          renderLocal();
+        });
         if (result.ok) {
           job.state = result.body.duplicate ? "dup" : "queued";
           job.detail = "";
@@ -541,7 +699,7 @@
           refresh();
         } else {
           job.state = "fail";
-          job.detail = result.body.detail || (result.status === 0 ? "Mất kết nối sau 4 lần thử." : "Lỗi " + result.status);
+          job.detail = result.body.detail || (result.status === 0 ? "Mất kết nối. Bấm Tải lại để nối tiếp phần đã lên." : "Lỗi " + result.status);
           if (result.status === 507) break;
         }
         renderLocal();
