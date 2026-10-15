@@ -240,12 +240,54 @@ def header_score(text: str) -> dict[str, float]:
     return scores
 
 
+# Đầu số di động 11 số trước 15/9/2018 → đầu số 10 số hiện tại.
+_OLD_MOBILE = {
+    "162": "32",
+    "163": "33",
+    "164": "34",
+    "165": "35",
+    "166": "36",
+    "167": "37",
+    "168": "38",
+    "169": "39",
+    "120": "70",
+    "121": "79",
+    "122": "77",
+    "126": "76",
+    "128": "78",
+    "123": "83",
+    "124": "84",
+    "125": "85",
+    "127": "81",
+    "129": "82",
+    "186": "56",
+    "188": "58",
+    "199": "59",
+}
+
+
+def _mobile_10(body: str) -> str:
+    """body là phần trong nước, có thể còn số 0 đầu. Trả về đúng 10 số hoặc rỗng."""
+    if body.startswith("0"):
+        body = body[1:]
+    if len(body) == 10 and body[:3] in _OLD_MOBILE:
+        return "0" + _OLD_MOBILE[body[:3]] + body[3:]
+    if len(body) == 9 and body[0] in _VN_MOBILE_NSN:
+        return "0" + body
+    return ""
+
+
 def _vn_mobile(digits: str) -> str:
-    if digits.startswith("84") and len(digits) == 11:
-        return "0" + digits[2:]
-    if len(digits) == 9 and digits[0] in _VN_MOBILE_NSN:
-        return "0" + digits
-    if len(digits) == 10 and digits.startswith(("02", "03", "05", "07", "08", "09")):
+    candidates = [digits]
+    if digits.startswith("0084"):
+        candidates.insert(0, digits[4:])
+    elif digits.startswith("84"):
+        candidates.insert(0, digits[2:])
+    for item in candidates:
+        got = _mobile_10(item)
+        if got:
+            return got
+    if len(digits) == 10 and digits.startswith("02"):
         return digits
     if len(digits) == 11 and digits.startswith("02"):
         return digits
@@ -276,7 +318,7 @@ def _digits_are_facebook_uid(digits: str) -> bool:
 
 
 def normalize_phone(raw: str) -> str:
-    """Chỉ nhận số Việt / +quốc tế. Số 12–20 chữ số để dành cho UID."""
+    """Số di động Việt về đúng 10 số. 0084, 84 và đầu 11 số cũ đổi sang đầu hiện tại."""
     text = cell_text(raw)
     if text.lower().startswith("tel:"):
         text = text[4:].strip()

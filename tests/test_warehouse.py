@@ -55,7 +55,17 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(normalize_phone("0901234567"), "0901234567")
         self.assertEqual(normalize_phone("901234567"), "0901234567")
         self.assertEqual(normalize_phone("+84 901 234 567"), "0901234567")
+        self.assertEqual(normalize_phone("0084901234567"), "0901234567")
+        self.assertEqual(normalize_phone("840901234567"), "0901234567")
         self.assertEqual(normalize_phone(901234567), "0901234567")
+        self.assertEqual(normalize_phone("01691234567"), "0391234567")
+        self.assertEqual(normalize_phone("841691234567"), "0391234567")
+        self.assertEqual(normalize_phone("008401691234567"), "0391234567")
+        self.assertEqual(normalize_phone("01234567890"), "0834567890")
+        self.assertEqual(normalize_phone("01281234567"), "0781234567")
+        self.assertEqual(normalize_phone("01861234567"), "0561234567")
+        self.assertEqual(normalize_phone("01991234567"), "0591234567")
+        self.assertEqual(normalize_uid("01691234567"), "")
 
     def test_uid_not_phone(self) -> None:
         self.assertEqual(normalize_uid("100012345678901"), "100012345678901")

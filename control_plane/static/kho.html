@@ -67,16 +67,17 @@
 
   <section>
     <h2>Nạp file</h2>
-    <p class="note">Nhận .xlsx, .csv, .tsv, .txt. Máy chỉ gợi ý cột. Bạn xác nhận lại mỗi lần nạp. Ô không đúng dạng của trường đã chọn thì để trống, không lấy ô cột khác.</p>
+    <p class="note">Kéo nhiều file Excel cùng lúc. Mỗi file vẫn hỏi cột trước khi ghi. Số điện thoại được đưa về 10 số: 0084, 84 và đầu 11 số cũ đổi sang đầu số hiện tại.</p>
     <div class="drop" id="drop">
-      <p>Kéo file vào đây</p>
+      <p>Kéo nhiều file vào đây</p>
       <p class="note">hoặc</p>
-      <button class="file" type="button" id="pick">Chọn Excel / CSV</button>
-      <input id="file" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" />
+      <button class="file" type="button" id="pick">Chọn nhiều Excel / CSV</button>
+      <input id="file" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" multiple />
     </div>
     <p id="uploadNote" class="note"></p>
     <div id="preview" hidden>
       <h2>Hỏi lại trước khi nạp</h2>
+      <div class="row" id="fileQueue"></div>
       <p id="previewMeta" class="note"></p>
       <p class="note">Chọn cột cho từng trường. Cùng một cột không được gán hai trường. Bấm Nạp sẽ hỏi lại lần nữa.</p>
       <div class="map" id="askBox"></div>
@@ -90,7 +91,7 @@
       <label for="source">Nguồn / ghi chú lô</label>
       <input id="source" type="text" maxlength="80" placeholder="Ví dụ: form đại lý tháng 10" />
       <div class="row" style="margin-top:0.7rem">
-        <button class="primary" type="button" id="commit">Nạp vào kho</button>
+        <button class="primary" type="button" id="commit">Nạp tất cả</button>
         <button class="ghost" type="button" id="cancel">Bỏ file này</button>
       </div>
       <p id="commitNote" class="note"></p>
@@ -132,7 +133,7 @@
     <details open>
       <summary>Dấu hiệu khóa — đang dùng</summary>
       <ul>
-        <li>Số điện thoại: số di động Việt 03, 05, 07, 08, 09 hoặc +84. Số dài hơn không phải điện thoại.</li>
+        <li>Số điện thoại: về đúng 10 số đầu Việt Nam. 0084 và 84 được bỏ mã quốc gia. Đầu 11 số cũ (016x, 012x, 0186, 0188, 0199) đổi sang đầu hiện tại tương ứng.</li>
         <li>UID Facebook: cả ô là dãy số 5–20 chữ số liền, hoặc link facebook.com / fb.com có id số. Không bắt đầu như số di động Việt (03, 05, 07, 08, 09, +84). Không nhận tên hiển thị.</li>
         <li>ID TikTok: ô bắt đầu bằng @, hoặc link tiktok.com/@tên. Mã khách không có @ thì bỏ qua.</li>
         <li>Địa chỉ: có tên tỉnh/thành, huyện hoặc xã (đơn vị cũ và mới, có dấu hoặc không dấu); hoặc trên 8 chữ và trên 28 ký tự. Số nhà/số đường tối đa 4 chữ số liền nhau.</li>
@@ -180,6 +181,8 @@
 <script>
   var serverToken = __CONTROL_TOKEN__;
   var preview = null;
+  var queue = [];
+  var active = 0;
   var afterId = 0;
 
   function token() { return serverToken; }
@@ -313,8 +316,32 @@
     document.getElementById("commit").disabled = picked.clash || !Object.keys(picked.mapping).length;
   }
 
+  function saveActive() {
+    if (!queue[active]) return;
+    queue[active].picked = currentMapping();
+  }
+
+  function renderQueue() {
+    var box = document.getElementById("fileQueue");
+    box.innerHTML = queue.map(function (item, index) {
+      var mark = index === active ? " primary" : " ghost";
+      return "<button class='" + mark + "' type='button' data-file='" + index + "'>" +
+        (index + 1) + ". " + esc(item.filename) + "</button>";
+    }).join("");
+    box.querySelectorAll("[data-file]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        saveActive();
+        active = Number(button.getAttribute("data-file"));
+        renderPreview(queue[active]);
+      });
+    });
+    var commit = document.getElementById("commit");
+    commit.textContent = queue.length > 1 ? "Nạp " + queue.length + " file" : "Nạp vào kho";
+  }
+
   function renderPreview(body) {
     preview = body;
+    renderQueue();
     var sheet = body.sheet;
     document.getElementById("preview").hidden = false;
     var hint = sheet.reusedTemplate ? " Gợi ý lấy từ lần nạp trước, vẫn phải xác nhận lại." : " Gợi ý theo tiêu đề và dữ liệu, vẫn phải xác nhận lại.";
@@ -323,8 +350,9 @@
       (sheet.warnings && sheet.warnings.length ? " " + sheet.warnings.join(" ") : "");
     var grid = sheet.grid || [];
     var columns = sheet.columns || [];
+    var chosen = (body.picked && body.picked.mapping) || sheet.mapping || {};
     var byField = {};
-    Object.keys(sheet.mapping || {}).forEach(function (field) { byField[field] = sheet.mapping[field]; });
+    Object.keys(chosen).forEach(function (field) { byField[field] = chosen[field]; });
     document.getElementById("askBox").innerHTML = ASK_FIELDS.map(function (item) {
       var options = "<option value=''>Không có cột này</option>" + columns.map(function (col) {
         var selected = byField[item[0]] === col.index ? " selected" : "";
@@ -334,7 +362,10 @@
         "<select id='ask-" + item[0] + "' data-field='" + item[0] + "'>" + options + "</select></div>";
     }).join("");
     document.querySelectorAll("#askBox select").forEach(function (select) {
-      select.addEventListener("change", renderChosen);
+      select.addEventListener("change", function () {
+        saveActive();
+        renderChosen();
+      });
     });
     document.getElementById("rawHead").innerHTML = "<tr>" + columns.map(function (col) {
       return "<th>Cột " + esc(col.letter) + (col.header ? "<div>" + esc(col.header) + "</div>" : "") + "</th>";
@@ -348,22 +379,38 @@
     renderChosen();
   }
 
-  async function uploadFile(file) {
+  async function uploadFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList || []).filter(Boolean);
+    if (!files.length) return;
     var note = document.getElementById("uploadNote");
-    note.textContent = "Đang đọc " + file.name + "…";
-    note.className = "note";
-    var data = new FormData();
-    data.append("file", file, file.name);
-    var response = await api("/v1/kho/preview", { method: "POST", body: data });
-    if (!response.ok) {
-      var err = await response.json().catch(function () { return { detail: "Không đọc được file" }; });
-      note.textContent = err.detail || "Không đọc được file";
+    var failed = [];
+    for (var i = 0; i < files.length; i += 1) {
+      var file = files[i];
+      note.textContent = "Đang đọc " + (i + 1) + "/" + files.length + ": " + file.name;
+      note.className = "note";
+      var data = new FormData();
+      data.append("file", file, file.name);
+      var response = await api("/v1/kho/preview", { method: "POST", body: data });
+      if (!response.ok) {
+        var err = await response.json().catch(function () { return { detail: "Không đọc được file" }; });
+        failed.push(file.name + " (" + (err.detail || "không đọc được") + ")");
+        continue;
+      }
+      var loaded = await response.json();
+      loaded.picked = { mapping: Object.assign({}, (loaded.sheet && loaded.sheet.mapping) || {}), clash: false };
+      queue.push(loaded);
+    }
+    if (!queue.length) {
+      note.textContent = failed.join("; ");
       note.className = "note warn";
       return;
     }
-    note.textContent = "Đã nhận file. Kiểm tra cột rồi bấm Nạp vào kho.";
-    note.className = "note ok";
-    renderPreview(await response.json());
+    active = queue.length - 1;
+    var done = "Đã nhận " + queue.length + " file. Kiểm tra cột từng file rồi bấm nạp.";
+    if (failed.length) done += " Không đọc được: " + failed.join(", ") + ".";
+    note.textContent = done;
+    note.className = failed.length ? "note warn" : "note ok";
+    renderPreview(queue[active]);
   }
 
   function renderRows(items, append) {
@@ -397,8 +444,8 @@
 
   document.getElementById("pick").onclick = function () { document.getElementById("file").click(); };
   document.getElementById("file").onchange = function (event) {
-    var file = event.target.files && event.target.files[0];
-    if (file) uploadFile(file);
+    uploadFiles(event.target.files);
+    event.target.value = "";
   };
   var drop = document.getElementById("drop");
   drop.addEventListener("dragover", function (event) { event.preventDefault(); drop.classList.add("over"); });
@@ -406,57 +453,86 @@
   drop.addEventListener("drop", function (event) {
     event.preventDefault();
     drop.classList.remove("over");
-    var file = event.dataTransfer.files && event.dataTransfer.files[0];
-    if (file) uploadFile(file);
+    uploadFiles(event.dataTransfer.files);
   });
+  function mappingLines(item) {
+    var picked = item.picked || { mapping: item.sheet.mapping || {}, clash: false };
+    var columns = item.sheet.columns || [];
+    return ASK_FIELDS.map(function (field) {
+      var index = picked.mapping[field[0]];
+      if (index === undefined) return field[1] + ": không nạp";
+      var col = columns.filter(function (itemCol) { return itemCol.index === index; })[0];
+      return field[1] + ": cột " + (col ? col.letter : index) + (col && col.header ? " (" + col.header + ")" : "");
+    });
+  }
+
   document.getElementById("cancel").onclick = function () {
     preview = null;
+    queue = [];
+    active = 0;
     document.getElementById("preview").hidden = true;
     document.getElementById("uploadNote").textContent = "";
+    document.getElementById("fileQueue").innerHTML = "";
   };
   document.getElementById("commit").onclick = async function () {
-    if (!preview) return;
-    var picked = currentMapping();
+    if (!queue.length) return;
+    saveActive();
     var note = document.getElementById("commitNote");
-    if (picked.clash || !Object.keys(picked.mapping).length) {
-      renderChosen();
-      return;
+    for (var i = 0; i < queue.length; i += 1) {
+      var picked = queue[i].picked || currentMapping();
+      if (i === active) picked = queue[i].picked;
+      if (!picked || picked.clash || !Object.keys(picked.mapping || {}).length) {
+        active = i;
+        renderPreview(queue[active]);
+        note.textContent = "File " + queue[i].filename + " chưa chọn cột xong.";
+        note.className = "note warn";
+        return;
+      }
     }
-    var columns = preview.sheet.columns || [];
-    var lines = ASK_FIELDS.map(function (item) {
-      var index = picked.mapping[item[0]];
-      if (index === undefined) return item[1] + ": không nạp";
-      var col = columns.filter(function (itemCol) { return itemCol.index === index; })[0];
-      return item[1] + ": cột " + (col ? col.letter : index) + (col && col.header ? " (" + col.header + ")" : "");
-    });
-    if (!window.confirm("Nạp file này với các cột sau?\n\n" + lines.join("\n"))) return;
-    note.textContent = "Đang nạp…";
-    note.className = "note";
-    var mapping = picked.mapping;
-    var headers = columns.map(function (col) { return col.header || ""; });
-    var response = await api("/v1/kho/commit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        token: preview.token,
-        sheet: preview.chosen,
-        mapping: mapping,
-        source: document.getElementById("source").value.trim(),
-        fingerprint: preview.sheet.fingerprint || "",
-        headers: headers,
-        headerRow: preview.sheet.headerRow || 0,
-        hasHeader: preview.sheet.method !== "shape" && preview.sheet.method !== "empty"
-      })
-    });
-    var body = await response.json().catch(function () { return {}; });
-    if (!response.ok) {
-      note.textContent = body.detail || "Nạp thất bại";
-      note.className = "note warn";
-      return;
+    var lines = queue.map(function (item) {
+      return item.filename + "\n" + mappingLines(item).join("\n");
+    }).join("\n\n");
+    if (!window.confirm("Nạp " + queue.length + " file với các cột sau?\n\n" + lines)) return;
+    var source = document.getElementById("source").value.trim();
+    var inserted = 0;
+    var updated = 0;
+    var reviewed = 0;
+    var skipped = 0;
+    var read = 0;
+    for (var n = 0; n < queue.length; n += 1) {
+      var item = queue[n];
+      note.textContent = "Đang nạp " + (n + 1) + "/" + queue.length + ": " + item.filename;
+      note.className = "note";
+      var columns = item.sheet.columns || [];
+      var response = await api("/v1/kho/commit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: item.token,
+          sheet: item.chosen,
+          mapping: item.picked.mapping,
+          source: source,
+          fingerprint: item.sheet.fingerprint || "",
+          headers: columns.map(function (col) { return col.header || ""; }),
+          headerRow: item.sheet.headerRow || 0,
+          hasHeader: item.sheet.method !== "shape" && item.sheet.method !== "empty"
+        })
+      });
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        note.textContent = item.filename + ": " + (body.detail || "Nạp thất bại");
+        note.className = "note warn";
+        return;
+      }
+      inserted += body.inserted || 0;
+      updated += body.updated || 0;
+      reviewed += body.reviewed || 0;
+      skipped += body.skipped || 0;
+      read += body.read || 0;
     }
-    note.textContent = "Đã đọc " + body.read + " dòng: +" + body.inserted + " mới, " +
-      body.updated + " bổ sung cùng hàng, " + (body.reviewed || 0) + " để riêng vì trùng hai khách, " +
-      body.skipped + " trùng hoàn toàn.";
+    note.textContent = "Đã nạp " + queue.length + " file, đọc " + read + " dòng: +" + inserted +
+      " mới, " + updated + " bổ sung cùng hàng, " + reviewed + " để riêng vì trùng hai khách, " +
+      skipped + " trùng hoàn toàn.";
     note.className = "note ok";
     await refreshStats();
     await search(true);
