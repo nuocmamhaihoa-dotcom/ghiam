@@ -11,9 +11,12 @@ chỗ còn trống:
    số đang hiện trên danh bạ ngay trước hồ sơ, nếu chỉ còn một số như vậy.
 2. @id trùng với tên danh bạ (TikTok tạo @id từ tên đó).
 3. Dòng vừa bấm: khung danh bạ ngay trước hồ sơ có vòng tròn chạm màn hình
-   nằm trên đúng một dòng. Các lần mở cùng hồ sơ phải chỉ cùng một dòng.
+   nằm trên đúng một dòng. Nút Back và ảnh đại diện không tính là vòng chạm.
+   Các lần mở cùng hồ sơ phải chỉ cùng một dòng.
 4. Tên chứa nhau, tên lệch nhẹ ngay trên màn đó, hoặc đúng một số trống tên.
-5. Cặp số và tên mà bước quét chính bỏ sót, và bốn dãy ký tự cùng tên. Hai
+5. Dòng dưới số đã in sẵn @id (user kèm số, hoặc token có chữ số). Chỉ điền
+   số và @id còn trống. Chữ thuần vẫn là tên, không biến thành @id.
+6. Cặp số và tên mà bước quét chính bỏ sót, và bốn dãy ký tự cùng tên. Hai
    hướng này không sửa hàng đã có.
 
 Mở thiếu một dòng thì không ghép theo thứ tự, trừ khi chỉ còn đúng một số và
@@ -27,7 +30,7 @@ from dataclasses import dataclass, field, replace
 from difflib import SequenceMatcher
 
 from doc_video.frame import FrameRead
-from doc_video.text import find_handle, handle_matches_name, lookalike_handles, name_key, vote_chars
+from doc_video.text import find_handle, handle_matches_name, lookalike_handles, name_key, subtitle_handle, vote_chars
 
 # Hai lần đọc @id trong cùng một lượt mở hồ sơ giống nhau ít nhất chừng này.
 _SAME_VISIT = 0.6
@@ -324,6 +327,7 @@ def _pair(phones: dict[str, _Seen], handles: dict[str, _Seen], visits: list[_Vis
     _pair_opened_screen(result, phones, handles, visits, used_phones, used_handles)
     _pair_similar_on_screen(result, phones, handles, visits, used_phones, used_handles)
     _pair_unnamed_on_screen(result, phones, handles, visits, used_phones, used_handles)
+    _pair_printed_username(result, phones, handles, used_phones, used_handles)
 
     left_phones = [phone for phone in phones if phone not in used_phones]
     left_handles = [handle for handle in handles if handle not in used_handles]
@@ -344,6 +348,40 @@ def _pair(phones: dict[str, _Seen], handles: dict[str, _Seen], visits: list[_Vis
     result.rows.sort(key=lambda row: phones[row.phone].first)
     result.unopened.sort(key=lambda item: phones[item[0]].first)
     return result
+
+
+def _pair_printed_username(
+    result: Result,
+    phones: dict[str, _Seen],
+    handles: dict[str, _Seen],
+    used_phones: set[str],
+    used_handles: set[str],
+) -> None:
+    """Số còn trống mà dòng dưới số đã là @id thì lấy @id đó.
+
+    Không đổi hàng đã ghép. @id đã thuộc số khác thì bỏ qua. Hai số cùng in một
+    @id thì không gán, vì không biết số nào đúng.
+    """
+    claims: dict[str, list[str]] = {}
+    for phone, seen in phones.items():
+        if phone in used_phones:
+            continue
+        handle = subtitle_handle(seen.name())
+        if not handle or handle in used_handles:
+            continue
+        claims.setdefault(handle, []).append(phone)
+    for handle, found in claims.items():
+        if len(found) != 1 or handle in used_handles:
+            continue
+        phone = found[0]
+        if phone in used_phones:
+            continue
+        if handle in handles:
+            _add(result, phones, handles, phone, handle, used_phones, used_handles)
+            continue
+        used_phones.add(phone)
+        used_handles.add(handle)
+        result.rows.append(Row(phone, phones[phone].name(), handle))
 
 
 def _pair_same_name(

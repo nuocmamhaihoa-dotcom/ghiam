@@ -15,6 +15,8 @@ MOBILE_PREFIXES = frozenset(
 # Chữ cái mà bộ đọc hay nhầm với chữ số khi đứng trong một dãy số.
 DIGIT_LOOKALIKE = str.maketrans({"ó": "6", "ò": "6", "Ó": "6", "O": "0", "o": "0", "l": "1", "I": "1", "|": "1", "S": "5"})
 HANDLE_RE = re.compile(r"@([A-Za-z0-9._]{2,24})")
+# Cả dòng phụ dưới số điện thoại, không có khoảng trắng: đúng dạng @id TikTok.
+_HANDLE_TOKEN = re.compile(r"^[A-Za-z0-9._]{2,24}$")
 SCREEN_WORDS = {"follow", "follower", "thich", "tin nhan", "da follow", "danh ba", "thong bao he thong"}
 # Phần chữ của tên và @id mặc định TikTok đặt sẵn. Giống nhau ở phần này không phải bằng chứng cùng người.
 GENERIC_NAMES = frozenset({"user", "tiktok", "tiktoker"})
@@ -109,6 +111,28 @@ def _same_text(left: str, right: str) -> bool:
     if short not in long:
         return False
     return len(short) >= 6 or len(short) >= 0.72 * len(long)
+
+
+def subtitle_handle(name: str) -> str:
+    """@id đã in sẵn ở dòng dưới số, khi dòng đó không thể là tên người.
+
+    Nhận khi cả dòng là @id (kể cả @660), dạng user kèm số, hoặc một token
+    đúng bộ ký tự @id và có chữ số (camtruong1954). Chữ thuần (Kem, Hong,
+    teehairsalon) vẫn là tên. Dòng nhiều từ cũng là tên (Lan 2).
+    """
+    text = " ".join(str(name or "").split())
+    if not text or looks_like_phone(text):
+        return ""
+    if text.startswith("@"):
+        body = text[1:].rstrip(".").lower()
+        if _HANDLE_TOKEN.match(body) and not body.startswith("."):
+            return "@" + body
+        return ""
+    if " " in text or not _HANDLE_TOKEN.match(text):
+        return ""
+    if not any(ch.isdigit() for ch in text) or not any(ch.isalpha() for ch in text):
+        return ""
+    return find_handle("@" + text)
 
 
 def find_handle(text: str) -> str:
