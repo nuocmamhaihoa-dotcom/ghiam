@@ -29,6 +29,7 @@ control = [
 
 [project.scripts]
 fb-poller = "fb_poller.cli.main:app"
+ads-library = "ads_library.server:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -36,7 +37,8 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["fb_poller*", "control_plane*"]
+include = ["fb_poller*", "control_plane*", "ads_library*"]
 
 [tool.setuptools.package-data]
 control_plane = ["static/*"]
+ads_library = ["static/*"]
