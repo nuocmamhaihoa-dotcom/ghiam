@@ -6,7 +6,7 @@ import shutil
 import unittest
 from pathlib import Path
 
-from doc_video.frame import Contact, FrameRead, Layout, ListRow, _list_pairs
+from doc_video.frame import Contact, FrameRead, Layout, ListRow, _list_pairs, _supplement_pairs, row_at
 from doc_video.join import build
 from doc_video.ocr import TextLine
 from doc_video.video import plan_reads, resolve_taps
@@ -102,6 +102,43 @@ class TextTests(unittest.TestCase):
         self.assertEqual(len(pairs), 1)
         self.assertEqual((pairs[0][1].x0, pairs[0][1].x1), (273, 413))
         self.assertTrue(is_name(clean_name(pairs[0][1].text)))
+
+    def test_a_wide_name_box_under_the_phone_is_kept_when_the_rough_text_is_not_a_name(self) -> None:
+        phone = TextLine("0912345678", 80, 400, 360, 440, 28)
+        name = TextLine("x", 80, 450, 280, 490, 28)
+        kept_phone = TextLine("0900000001", 80, 520, 360, 560, 28)
+        kept_name = TextLine("Lan", 80, 570, 200, 610, 28)
+        found = _supplement_pairs([(kept_phone, kept_name)], [(phone, name), (kept_phone, kept_name)], set(), None)
+        self.assertEqual([(item[0].text, item[2]) for item in found], [("0912345678", "")])
+
+    def test_a_complete_number_just_under_the_title_is_kept(self) -> None:
+        title = TextLine("Danh bạ", 40, 20, 220, 70, 36)
+        phone = TextLine("0987654321", 80, 80, 360, 116, 28)
+        name = TextLine("Mai", 80, 124, 180, 160, 28)
+        found = _supplement_pairs([], [(phone, name)], set(), title)
+        self.assertEqual([(item[0].text, item[2]) for item in found], [("0987654321", "0987654321")])
+
+    def test_a_number_hidden_under_the_title_stays_out(self) -> None:
+        title = TextLine("Danh bạ", 40, 20, 220, 90, 40)
+        phone = TextLine("0987654321", 80, 70, 360, 106, 28)
+        name = TextLine("Mai", 80, 114, 180, 150, 28)
+        self.assertEqual(_supplement_pairs([], [(phone, name)], set(), title), [])
+
+    def test_a_button_or_a_thin_mark_under_the_phone_is_not_a_name(self) -> None:
+        follow = TextLine("0912345678", 80, 400, 360, 440, 28)
+        follow_name = TextLine("Follow", 80, 450, 240, 490, 28)
+        mark = TextLine("0900000002", 80, 520, 360, 560, 28)
+        mark_name = TextLine("|", 80, 570, 84, 600, 28)
+        self.assertEqual(
+            _supplement_pairs([], [(follow, follow_name), (mark, mark_name)], set(), None),
+            [],
+        )
+
+    def test_a_number_already_scanned_is_not_added_again(self) -> None:
+        phone = TextLine("0912345678", 80, 80, 360, 116, 28)
+        name = TextLine("Mai", 80, 124, 180, 160, 28)
+        title = TextLine("Danh bạ", 40, 20, 220, 70, 36)
+        self.assertEqual(_supplement_pairs([], [(phone, name)], {"0912345678"}, title), [])
 
     def test_underscore_strokes_fix_double_and_leading_underscores(self) -> None:
         # Nét ở vị trí 0 là chân chữ @, không phải gạch dưới.
@@ -272,6 +309,48 @@ class JoinTests(unittest.TestCase):
         )
         self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0900000002", "@cua.lan")])
         self.assertEqual(sorted(phone for phone, _ in result.unopened), ["0900000001", "0900000003"])
+
+    def test_an_extra_pair_joins_by_name_and_leaves_the_row_order_alone(self) -> None:
+        screen = [
+            Contact("0900000001", "Nhà gỗ"),
+            Contact("0900000002", "Quốc Thanh"),
+            Contact("0900000003", "Kim Hoa"),
+            Contact("0912345678", "Truc", False),
+        ]
+        result = build(
+            [
+                FrameRead("list", screen),
+                profile("Wood", "@woodhouse"),
+                FrameRead("list", screen),
+                profile("TV", "@televisionnn"),
+                FrameRead("list", screen),
+                profile("Vinh", "@shopvinh"),
+                FrameRead("list", screen),
+                profile("Truc", "@truc31798"),
+            ]
+        )
+        self.assertEqual(
+            [(row.phone, row.handle) for row in result.rows],
+            [
+                ("0900000001", "@woodhouse"),
+                ("0900000002", "@televisionnn"),
+                ("0900000003", "@shopvinh"),
+                ("0912345678", "@truc31798"),
+            ],
+        )
+        self.assertEqual(result.unopened, [])
+        self.assertEqual(result.review, [])
+
+    def test_an_extra_pair_with_a_name_already_in_order_is_ignored(self) -> None:
+        screen = [
+            Contact("0900000001", "Lan"),
+            Contact("0900000002", "Hoa"),
+            Contact("0911111111", "Lan", False),
+        ]
+        result = build([FrameRead("list", screen), profile("Lan", "@lan")])
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0900000001", "@lan")])
+        self.assertEqual(result.unopened, [("0900000002", "Hoa")])
+        self.assertEqual(result.review, [])
 
     def test_opening_every_row_on_a_screen_joins_in_order(self) -> None:
         screen = (("0900000001", "Nhà gỗ"), ("0900000002", "Quốc Thanh"), ("0900000003", "Kim Hoa"))
@@ -610,6 +689,15 @@ class PlanTests(unittest.TestCase):
         layouts = [tapped, Layout("profile"), list_layout(phones)]
         resolve_taps(layouts)
         self.assertEqual(layouts[0].tapped, "0900000002")
+
+    def test_a_tap_does_not_land_on_an_extra_pair(self) -> None:
+        line = TextLine("x", 0, 0, 10, 10)
+        rows = [
+            ListRow("0912345678", line, True, 100, in_order=False),
+            ListRow("0900000002", line, True, 330),
+        ]
+        self.assertEqual(row_at(rows, 120, 230), "")
+        self.assertEqual(row_at(rows, 350, 230), "0900000002")
 
 
 ASSETS = Path("/home/ubuntu/.cursor/projects/workspace/assets")
