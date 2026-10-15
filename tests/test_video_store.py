@@ -33,6 +33,7 @@ from control_plane.video_store import (
     prune_old_videos,
     recover_dead,
     requeue_running,
+    result_page,
     retry,
     search_results,
     stats,
@@ -207,6 +208,30 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual([item["phone"] for item in search_results(self.db, "dangtam")], ["0982117072"])
         self.assertEqual([item["phone"] for item in search_results(self.db, "@khac")], ["0332001753"])
         self.assertEqual(search_results(self.db, "0999"), [])
+
+    def test_result_page_lists_every_row_newest_first(self) -> None:
+        first = self._add("a.mp4", "a")
+        finish(self.db, first, Table(rows=[Row("0900000001", "Mot", "@mot")]))
+        second = self._add("b.mp4", "b")
+        finish(self.db, second, Table(rows=[Row("0900000002", "Hai", "@hai")]))
+        third = self._add("c.mp4", "c")
+        finish(self.db, third, Table(rows=[Row("0900000003", "Ba", "@ba")]))
+        page = result_page(self.db, limit=2)
+        self.assertEqual([item["phone"] for item in page["items"]], ["0900000003", "0900000002"])
+        self.assertEqual(page["total"], 3)
+        self.assertGreater(int(page["before"]), 0)
+        older = result_page(self.db, limit=2, before=int(page["before"]))
+        self.assertEqual([item["phone"] for item in older["items"]], ["0900000001"])
+        self.assertEqual(older["before"], 0)
+        self.assertEqual(older["total"], 3)
+        newest_id = int(page["items"][0]["id"])
+        newer = result_page(self.db, limit=2, after=newest_id)
+        self.assertEqual(newer["items"], [])
+        self.assertEqual(newer["before"], 0)
+        prefix = result_page(self.db, "0900", limit=2)
+        self.assertEqual([item["phone"] for item in prefix["items"]], ["0900000003", "0900000002"])
+        self.assertEqual(prefix["total"], 3)
+        self.assertEqual([item["phone"] for item in search_results(self.db, limit=10)], ["0900000003", "0900000002", "0900000001"])
 
     def test_finished_video_counts_phones_and_complete_rows(self) -> None:
         video_id = self._add("a.mp4", "a")

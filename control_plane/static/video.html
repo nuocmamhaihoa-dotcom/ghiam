@@ -94,7 +94,9 @@
 
   <section>
     <h2>Kết quả đã lưu</h2>
+    <p class="note">Hiện mọi dòng đã quét. Dòng mới nhất ở trên.</p>
     <input id="query" type="search" placeholder="Gõ đầu số điện thoại hoặc @username" />
+    <p id="resultCount" class="note"></p>
     <div id="results"></div>
   </section>
 
@@ -204,24 +206,108 @@
   }
 
   var resultsAsked = 0;
+  var RESULT_PAGE = 500;
+  var RESULT_CAP = 20000;
+  var resultCache = null;
+
+  function resultSig(items, total, capped) {
+    if (!items.length) return "0:" + total + ":" + (capped ? 1 : 0);
+    var first = items[0];
+    var last = items[items.length - 1];
+    return items.length + ":" + first.id + ":" + last.id + ":" + first.phone + ":" + first.name + ":" + first.username + ":" + first.bucket + ":" + first.reason + ":" + total + ":" + (capped ? 1 : 0);
+  }
+
+  async function fetchResultPage(q, extra) {
+    var path = "/v1/results?limit=" + RESULT_PAGE + "&q=" + encodeURIComponent(q);
+    if (extra) path += "&" + extra;
+    var response = await api(path);
+    if (!response.ok) return null;
+    return response.json();
+  }
+
+  function paintResults(items, total, capped) {
+    var box = document.getElementById("results");
+    var note = document.getElementById("resultCount");
+    var sig = resultSig(items, total, capped);
+    if (box.getAttribute("data-sig") === sig) return;
+    box.setAttribute("data-sig", sig);
+    if (!items.length) {
+      note.textContent = "0 kết quả.";
+      box.innerHTML = "<p class='note'>Chưa có dòng nào.</p>";
+      return;
+    }
+    note.textContent = capped
+      ? "Đang hiện " + items.length + " / " + total + ". Mới nhất ở trên."
+      : total + " kết quả. Mới nhất ở trên.";
+    var html = "<table><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Loại</th></tr>";
+    items.forEach(function (item) {
+      var reason = item.reason ? "<div class='note'>" + escapeHtml(item.reason) + "</div>" : "";
+      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(item.bucket) + reason + "</td></tr>";
+    });
+    box.innerHTML = html + "</table>";
+  }
+
+  async function loadAllResults(q, asked) {
+    var items = [];
+    var total = 0;
+    var before = 0;
+    var full = false;
+    var guard = 0;
+    while (guard < 50) {
+      guard += 1;
+      var page = await fetchResultPage(q, before ? "before=" + before : "");
+      if (asked !== resultsAsked || !page) return null;
+      var pageItems = page.items || [];
+      items = items.concat(pageItems);
+      total = page.total != null ? page.total : items.length;
+      before = page.before || 0;
+      if (!before || !pageItems.length || items.length >= RESULT_CAP || (total > 0 && items.length >= total)) {
+        full = total > 0 ? items.length >= total : !before;
+        break;
+      }
+    }
+    if (items.length > RESULT_CAP) items = items.slice(0, RESULT_CAP);
+    return { items: items, total: total, full: full };
+  }
 
   async function loadResults() {
     var asked = ++resultsAsked;
     var q = document.getElementById("query").value.trim();
-    var response = await api("/v1/results?q=" + encodeURIComponent(q));
-    var box = document.getElementById("results");
-    if (!response.ok) return;
-    var items = (await response.json()).items || [];
-    if (asked !== resultsAsked) return;
-    if (!items.length) {
-      box.innerHTML = "<p class='note'>Chưa có dòng nào.</p>";
-      return;
+    var now = Date.now();
+    var cached = resultCache;
+    var canDelta = cached && cached.q === q && cached.complete && cached.maxId > 0 && (now - cached.at) < 60000;
+    if (canDelta) {
+      var newer = await fetchResultPage(q, "after=" + cached.maxId);
+      if (asked !== resultsAsked || !newer) return;
+      var total = newer.total != null ? newer.total : cached.total;
+      if (total >= cached.items.length) {
+        var items = (newer.items || []).concat(cached.items);
+        if (items.length > RESULT_CAP) items = items.slice(0, RESULT_CAP);
+        resultCache = {
+          q: q,
+          at: cached.at,
+          maxId: items.length ? items[0].id : cached.maxId,
+          items: items,
+          total: total,
+          complete: true,
+          full: cached.full && items.length >= total
+        };
+        paintResults(items, total, items.length < total);
+        return;
+      }
     }
-    var html = "<table><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Loại</th></tr>";
-    items.forEach(function (item) {
-      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(item.bucket) + "</td></tr>";
-    });
-    box.innerHTML = html + "</table>";
+    var loaded = await loadAllResults(q, asked);
+    if (!loaded || asked !== resultsAsked) return;
+    resultCache = {
+      q: q,
+      at: now,
+      maxId: loaded.items.length ? loaded.items[0].id : 0,
+      items: loaded.items,
+      total: loaded.total,
+      complete: true,
+      full: loaded.full
+    };
+    paintResults(loaded.items, loaded.total, loaded.items.length < loaded.total);
   }
 
   function escapeHtml(value) {
