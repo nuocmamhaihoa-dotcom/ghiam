@@ -1,4 +1,8 @@
-"""Kho tổng: lưu, ghép trùng, tìm, xuất — tra cứu theo chỉ mục, không tải cả bảng vào RAM."""
+"""Kho tổng: một file SQLite dùng để tra cứu trực tiếp.
+
+VPS chỉ giữ bản đang mở. Tải file đó về máy, và nạp lại đúng file khi cần.
+Năm trường và các ô thêm được giữ nguyên từng ký tự.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +10,10 @@ import csv
 import io
 import json
 import os
+import shutil
 import sqlite3
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -15,195 +22,304 @@ from control_plane.warehouse import FIELDS, address_key, id_key, name_key, phone
 
 FLUSH_EVERY = 8_000
 EXPORT_PAGE = 8_000
-_LOOKUP_COLS = {
-    "uid": "uid",
-    "phone": "phone_key",
-    "id": "external_id",
-    "name": "name_key",
-    "address": "address_key",
+_LOCK = threading.RLock()
+_UNIQUE_KINDS = {"phone", "uid", "id"}
+_LOOKUP_TABLE = {
+    "phone": "wh_phone",
+    "uid": "wh_uid",
+    "id": "wh_id",
+    "name": "wh_name",
+    "address": "wh_address",
 }
+_CONTACT_COLUMNS = (
+    "row_id, name, name_extra, phone, phone_extra, address, address_extra, "
+    "uid, uid_extra, external_id, id_extra, source, updated_at"
+)
 
 
-def init_warehouse(db_path: Path) -> None:
+@contextmanager
+def _db(db_path: Path) -> Iterator[sqlite3.Connection]:
     with session(db_path) as conn:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS warehouse_contacts (
-              row_id INTEGER PRIMARY KEY AUTOINCREMENT,
-              name TEXT NOT NULL DEFAULT '',
-              name_key TEXT NOT NULL DEFAULT '',
-              phone TEXT NOT NULL DEFAULT '',
-              phone_key TEXT NOT NULL DEFAULT '',
-              address TEXT NOT NULL DEFAULT '',
-              address_key TEXT NOT NULL DEFAULT '',
-              uid TEXT NOT NULL DEFAULT '',
-              external_id TEXT NOT NULL DEFAULT '',
-              source TEXT NOT NULL DEFAULT '',
-              batch_id INTEGER,
-              created_at TEXT NOT NULL,
-              updated_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS warehouse_batches (
-              batch_id INTEGER PRIMARY KEY AUTOINCREMENT,
-              at TEXT NOT NULL,
-              filename TEXT NOT NULL,
-              source TEXT NOT NULL DEFAULT '',
-              inserted INTEGER NOT NULL DEFAULT 0,
-              updated INTEGER NOT NULL DEFAULT 0,
-              skipped INTEGER NOT NULL DEFAULT 0,
-              mapping_json TEXT NOT NULL DEFAULT '{}'
-            );
-            CREATE TABLE IF NOT EXISTS warehouse_templates (
-              fingerprint TEXT PRIMARY KEY,
-              headers_json TEXT NOT NULL,
-              mapping_json TEXT NOT NULL,
-              used_count INTEGER NOT NULL DEFAULT 1,
-              updated_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS warehouse_meta (
-              k TEXT PRIMARY KEY,
-              n INTEGER NOT NULL DEFAULT 0
-            );
-            CREATE TABLE IF NOT EXISTS warehouse_aliases (
-              row_id INTEGER NOT NULL,
-              kind TEXT NOT NULL,
-              value TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS warehouse_review (
-              review_id INTEGER PRIMARY KEY AUTOINCREMENT,
-              at TEXT NOT NULL,
-              reason TEXT NOT NULL,
-              batch_id INTEGER,
-              payload_json TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS warehouse_changes (
-              change_id INTEGER PRIMARY KEY AUTOINCREMENT,
-              op TEXT NOT NULL,
-              at TEXT NOT NULL,
-              payload_json TEXT NOT NULL
-            );
-            """
-        )
-        columns = {row[1] for row in conn.execute("PRAGMA table_info(warehouse_contacts)")}
-        for extra in ("name_extra", "phone_extra", "address_extra", "uid_extra", "id_extra"):
-            if extra not in columns:
-                conn.execute(f"ALTER TABLE warehouse_contacts ADD COLUMN {extra} TEXT NOT NULL DEFAULT ''")
-        batch_columns = {row[1] for row in conn.execute("PRAGMA table_info(warehouse_batches)")}
-        if "reviewed" not in batch_columns:
-            conn.execute("ALTER TABLE warehouse_batches ADD COLUMN reviewed INTEGER NOT NULL DEFAULT 0")
-        if "name_key" not in columns:
-            conn.execute("ALTER TABLE warehouse_contacts ADD COLUMN name_key TEXT NOT NULL DEFAULT ''")
-        if "address_key" not in columns:
-            conn.execute("ALTER TABLE warehouse_contacts ADD COLUMN address_key TEXT NOT NULL DEFAULT ''")
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_wh_phone ON warehouse_contacts(phone_key) WHERE phone_key != ''"
-        )
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_wh_uid ON warehouse_contacts(uid) WHERE uid != ''")
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_wh_ext ON warehouse_contacts(external_id) WHERE external_id != ''"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_wh_name_key ON warehouse_contacts(name_key) WHERE name_key != ''"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_wh_addr_key ON warehouse_contacts(address_key) WHERE address_key != ''"
-        )
-        _try_unique(conn, "idx_wh_phone_uniq", "phone_key")
-        _try_unique(conn, "idx_wh_uid_uniq", "uid")
-        _try_unique(conn, "idx_wh_ext_uniq", "external_id")
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_wh_alias ON warehouse_aliases(kind, value)"
-        )
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_wh_alias_row ON warehouse_aliases(row_id)")
-        conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_alias_phone ON warehouse_aliases(value) WHERE kind='phone'"
-        )
-        conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_alias_uid ON warehouse_aliases(value) WHERE kind='uid'"
-        )
-        conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_alias_id ON warehouse_aliases(value) WHERE kind='id'"
-        )
-        _seed_meta_rows(conn)
-        _install_count_triggers(conn)
-        _backfill_keys(conn)
-        _backfill_aliases(conn)
-        _ensure_meta(conn)
-        _persist_copies(db_path, conn)
+        conn.execute("PRAGMA synchronous=FULL")
+        yield conn
 
 
-def _try_unique(conn: sqlite3.Connection, name: str, column: str) -> None:
-    if column not in {"phone_key", "uid", "external_id"}:
+def _cell(value: str | None) -> str | None:
+    if not value:
+        return None
+    return value
+
+
+def _sidecars(db_path: Path) -> list[Path]:
+    return [Path(str(db_path) + "-wal"), Path(str(db_path) + "-shm")]
+
+
+def _drop_sidecars(db_path: Path) -> None:
+    for path in _sidecars(db_path):
+        if path.is_file():
+            path.unlink()
+
+
+def _checkpoint(db_path: Path) -> None:
+    if not db_path.is_file():
         return
+    conn = sqlite3.connect(str(db_path))
     try:
-        conn.execute(
-            f"CREATE UNIQUE INDEX IF NOT EXISTS {name} ON warehouse_contacts({column}) WHERE {column} != ''"
-        )
-    except sqlite3.IntegrityError:
-        pass
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    finally:
+        conn.close()
 
 
-def _backfill_keys(conn: sqlite3.Connection) -> None:
-    ready = conn.execute("SELECT n FROM warehouse_meta WHERE k='keys_ready'").fetchone()
-    if ready and int(ready["n"]) == 1:
-        return
+def _copies_dir(db_path: Path) -> Path:
+    return db_path.parent / f"{db_path.name}.copies"
+
+
+def _retire_copies(db_path: Path) -> None:
+    folder = _copies_dir(db_path)
+    if folder.is_dir():
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def _create_lean(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS warehouse_contacts (
+          row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT,
+          name_extra TEXT,
+          phone TEXT,
+          phone_extra TEXT,
+          address TEXT,
+          address_extra TEXT,
+          uid TEXT,
+          uid_extra TEXT,
+          external_id TEXT,
+          id_extra TEXT,
+          source TEXT,
+          batch_id INTEGER,
+          updated_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS warehouse_batches (
+          batch_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          at TEXT NOT NULL,
+          filename TEXT NOT NULL,
+          source TEXT NOT NULL DEFAULT '',
+          inserted INTEGER NOT NULL DEFAULT 0,
+          updated INTEGER NOT NULL DEFAULT 0,
+          skipped INTEGER NOT NULL DEFAULT 0,
+          reviewed INTEGER NOT NULL DEFAULT 0,
+          mapping_json TEXT NOT NULL DEFAULT '{}'
+        );
+        CREATE TABLE IF NOT EXISTS warehouse_templates (
+          fingerprint TEXT PRIMARY KEY,
+          headers_json TEXT NOT NULL,
+          mapping_json TEXT NOT NULL,
+          used_count INTEGER NOT NULL DEFAULT 1,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS warehouse_meta (
+          k TEXT PRIMARY KEY,
+          n INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS warehouse_review (
+          review_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          at TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          batch_id INTEGER,
+          payload_json TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS wh_phone (
+          value TEXT PRIMARY KEY,
+          row_id INTEGER NOT NULL
+        ) WITHOUT ROWID;
+        CREATE TABLE IF NOT EXISTS wh_uid (
+          value TEXT PRIMARY KEY,
+          row_id INTEGER NOT NULL
+        ) WITHOUT ROWID;
+        CREATE TABLE IF NOT EXISTS wh_id (
+          value TEXT PRIMARY KEY,
+          row_id INTEGER NOT NULL
+        ) WITHOUT ROWID;
+        CREATE TABLE IF NOT EXISTS wh_name (
+          value TEXT NOT NULL,
+          row_id INTEGER NOT NULL,
+          PRIMARY KEY(value, row_id)
+        ) WITHOUT ROWID;
+        CREATE TABLE IF NOT EXISTS wh_address (
+          value TEXT NOT NULL,
+          row_id INTEGER NOT NULL,
+          PRIMARY KEY(value, row_id)
+        ) WITHOUT ROWID;
+        """
+    )
+
+
+def _column_names(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def _is_lean(conn: sqlite3.Connection) -> bool:
+    columns = _column_names(conn, "warehouse_contacts")
+    if not columns or "name_key" in columns or "created_at" in columns or "phone_key" in columns:
+        return False
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='wh_phone'"
+    ).fetchone()
+    return row is not None
+
+
+def _copy_legacy_contacts(conn: sqlite3.Connection) -> None:
+    columns = _column_names(conn, "warehouse_contacts")
+    last = 0
     while True:
         rows = conn.execute(
-            """
-            SELECT row_id, name, address FROM warehouse_contacts
-            WHERE (name != '' AND name_key = '') OR (address != '' AND address_key = '')
-            LIMIT 5000
-            """
+            "SELECT * FROM warehouse_contacts WHERE row_id>? ORDER BY row_id LIMIT 2000",
+            (last,),
         ).fetchall()
         if not rows:
             break
         for row in rows:
+            last = int(row["row_id"])
+
+            def take(name: str) -> str | None:
+                if name not in columns:
+                    return None
+                return _cell(row[name] or "")
+
+            stamp = None
+            if "updated_at" in columns and row["updated_at"]:
+                stamp = row["updated_at"]
+            elif "created_at" in columns and row["created_at"]:
+                stamp = row["created_at"]
             conn.execute(
-                "UPDATE warehouse_contacts SET name_key=?, address_key=? WHERE row_id=?",
-                (name_key(row["name"]), address_key(row["address"]), row["row_id"]),
+                """
+                INSERT INTO warehouse_contacts_lean(
+                  row_id, name, name_extra, phone, phone_extra, address, address_extra,
+                  uid, uid_extra, external_id, id_extra, source, batch_id, updated_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    last,
+                    take("name"),
+                    take("name_extra"),
+                    take("phone"),
+                    take("phone_extra"),
+                    take("address"),
+                    take("address_extra"),
+                    take("uid"),
+                    take("uid_extra"),
+                    take("external_id"),
+                    take("id_extra"),
+                    take("source"),
+                    row["batch_id"] if "batch_id" in columns else None,
+                    stamp,
+                ),
             )
         conn.commit()
+
+
+def _ensure_schema(conn: sqlite3.Connection) -> bool:
+    exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='warehouse_contacts'"
+    ).fetchone()
+    if exists is None:
+        _create_lean(conn)
+        return False
+    if _is_lean(conn):
+        _create_lean(conn)
+        return False
+    conn.executescript(
+        """
+        DROP TRIGGER IF EXISTS wh_contacts_insert;
+        DROP TRIGGER IF EXISTS wh_contacts_delete;
+        DROP TRIGGER IF EXISTS wh_contacts_keys;
+        DROP TRIGGER IF EXISTS wh_contacts_phone;
+        CREATE TABLE warehouse_contacts_lean (
+          row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT,
+          name_extra TEXT,
+          phone TEXT,
+          phone_extra TEXT,
+          address TEXT,
+          address_extra TEXT,
+          uid TEXT,
+          uid_extra TEXT,
+          external_id TEXT,
+          id_extra TEXT,
+          source TEXT,
+          batch_id INTEGER,
+          updated_at TEXT
+        );
+        """
+    )
+    _copy_legacy_contacts(conn)
+    conn.execute("DROP TABLE warehouse_contacts")
+    conn.execute("ALTER TABLE warehouse_contacts_lean RENAME TO warehouse_contacts")
+    maximum = int(conn.execute("SELECT COALESCE(MAX(row_id), 0) AS n FROM warehouse_contacts").fetchone()["n"])
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'").fetchone():
+        conn.execute("DELETE FROM sqlite_sequence WHERE name IN ('warehouse_contacts', 'warehouse_contacts_lean')")
+        conn.execute("INSERT INTO sqlite_sequence(name, seq) VALUES('warehouse_contacts', ?)", (maximum,))
+    conn.execute("DROP TABLE IF EXISTS warehouse_aliases")
+    conn.execute("DROP TABLE IF EXISTS warehouse_changes")
+    _create_lean(conn)
+    _backfill_lookups(conn)
+    _ensure_batch_column(conn)
     conn.execute(
-        "INSERT INTO warehouse_meta(k, n) VALUES('keys_ready', 1) ON CONFLICT(k) DO UPDATE SET n=1"
+        "INSERT INTO warehouse_meta(k, n) VALUES('counts_ready', 0) ON CONFLICT(k) DO UPDATE SET n=0"
+    )
+    return True
+
+
+def _ensure_batch_column(conn: sqlite3.Connection) -> None:
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "warehouse_batches" not in tables:
+        return
+    if "reviewed" not in _column_names(conn, "warehouse_batches"):
+        conn.execute("ALTER TABLE warehouse_batches ADD COLUMN reviewed INTEGER NOT NULL DEFAULT 0")
+
+
+def _install_count_triggers(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        DROP TRIGGER IF EXISTS wh_contacts_insert;
+        DROP TRIGGER IF EXISTS wh_contacts_delete;
+        DROP TRIGGER IF EXISTS wh_contacts_keys;
+        DROP TRIGGER IF EXISTS wh_contacts_phone;
+        DROP TRIGGER IF EXISTS wh_batches_insert;
+        DROP TRIGGER IF EXISTS wh_batches_delete;
+        CREATE TRIGGER wh_contacts_insert AFTER INSERT ON warehouse_contacts BEGIN
+          UPDATE warehouse_meta SET n = n + 1 WHERE k = 'contacts';
+          UPDATE warehouse_meta SET n = n + CASE WHEN NEW.phone IS NOT NULL AND NEW.phone != '' THEN 1 ELSE 0 END WHERE k = 'phones';
+          UPDATE warehouse_meta SET n = n + CASE WHEN NEW.uid IS NOT NULL AND NEW.uid != '' THEN 1 ELSE 0 END WHERE k = 'uids';
+        END;
+        CREATE TRIGGER wh_contacts_delete AFTER DELETE ON warehouse_contacts BEGIN
+          UPDATE warehouse_meta SET n = n - 1 WHERE k = 'contacts';
+          UPDATE warehouse_meta SET n = n - CASE WHEN OLD.phone IS NOT NULL AND OLD.phone != '' THEN 1 ELSE 0 END WHERE k = 'phones';
+          UPDATE warehouse_meta SET n = n - CASE WHEN OLD.uid IS NOT NULL AND OLD.uid != '' THEN 1 ELSE 0 END WHERE k = 'uids';
+        END;
+        CREATE TRIGGER wh_contacts_phone AFTER UPDATE OF phone, uid ON warehouse_contacts BEGIN
+          UPDATE warehouse_meta SET n = n
+            + CASE WHEN NEW.phone IS NOT NULL AND NEW.phone != '' THEN 1 ELSE 0 END
+            - CASE WHEN OLD.phone IS NOT NULL AND OLD.phone != '' THEN 1 ELSE 0 END
+            WHERE k = 'phones';
+          UPDATE warehouse_meta SET n = n
+            + CASE WHEN NEW.uid IS NOT NULL AND NEW.uid != '' THEN 1 ELSE 0 END
+            - CASE WHEN OLD.uid IS NOT NULL AND OLD.uid != '' THEN 1 ELSE 0 END
+            WHERE k = 'uids';
+        END;
+        CREATE TRIGGER wh_batches_insert AFTER INSERT ON warehouse_batches BEGIN
+          UPDATE warehouse_meta SET n = n + 1 WHERE k = 'batches';
+        END;
+        CREATE TRIGGER wh_batches_delete AFTER DELETE ON warehouse_batches BEGIN
+          UPDATE warehouse_meta SET n = n - 1 WHERE k = 'batches';
+        END;
+        """
     )
 
 
 def _seed_meta_rows(conn: sqlite3.Connection) -> None:
     for key in ("contacts", "phones", "uids", "batches"):
         conn.execute("INSERT OR IGNORE INTO warehouse_meta(k, n) VALUES(?, 0)", (key,))
-
-
-def _install_count_triggers(conn: sqlite3.Connection) -> None:
-    conn.executescript(
-        """
-        CREATE TRIGGER IF NOT EXISTS wh_contacts_insert AFTER INSERT ON warehouse_contacts BEGIN
-          UPDATE warehouse_meta SET n = n + 1 WHERE k = 'contacts';
-          UPDATE warehouse_meta SET n = n + CASE WHEN NEW.phone_key != '' THEN 1 ELSE 0 END WHERE k = 'phones';
-          UPDATE warehouse_meta SET n = n + CASE WHEN NEW.uid != '' THEN 1 ELSE 0 END WHERE k = 'uids';
-        END;
-        CREATE TRIGGER IF NOT EXISTS wh_contacts_delete AFTER DELETE ON warehouse_contacts BEGIN
-          UPDATE warehouse_meta SET n = n - 1 WHERE k = 'contacts';
-          UPDATE warehouse_meta SET n = n - CASE WHEN OLD.phone_key != '' THEN 1 ELSE 0 END WHERE k = 'phones';
-          UPDATE warehouse_meta SET n = n - CASE WHEN OLD.uid != '' THEN 1 ELSE 0 END WHERE k = 'uids';
-        END;
-        CREATE TRIGGER IF NOT EXISTS wh_contacts_keys AFTER UPDATE OF phone_key, uid ON warehouse_contacts BEGIN
-          UPDATE warehouse_meta SET n = n
-            + CASE WHEN NEW.phone_key != '' THEN 1 ELSE 0 END
-            - CASE WHEN OLD.phone_key != '' THEN 1 ELSE 0 END
-            WHERE k = 'phones';
-          UPDATE warehouse_meta SET n = n
-            + CASE WHEN NEW.uid != '' THEN 1 ELSE 0 END
-            - CASE WHEN OLD.uid != '' THEN 1 ELSE 0 END
-            WHERE k = 'uids';
-        END;
-        CREATE TRIGGER IF NOT EXISTS wh_batches_insert AFTER INSERT ON warehouse_batches BEGIN
-          UPDATE warehouse_meta SET n = n + 1 WHERE k = 'batches';
-        END;
-        CREATE TRIGGER IF NOT EXISTS wh_batches_delete AFTER DELETE ON warehouse_batches BEGIN
-          UPDATE warehouse_meta SET n = n - 1 WHERE k = 'batches';
-        END;
-        """
-    )
 
 
 def _ensure_meta(conn: sqlite3.Connection) -> None:
@@ -213,9 +329,15 @@ def _ensure_meta(conn: sqlite3.Connection) -> None:
         return
     total = int(conn.execute("SELECT COUNT(*) AS n FROM warehouse_contacts").fetchone()["n"])
     phones = int(
-        conn.execute("SELECT COUNT(*) AS n FROM warehouse_contacts WHERE phone_key != ''").fetchone()["n"]
+        conn.execute(
+            "SELECT COUNT(*) AS n FROM warehouse_contacts WHERE phone IS NOT NULL AND phone != ''"
+        ).fetchone()["n"]
     )
-    uids = int(conn.execute("SELECT COUNT(*) AS n FROM warehouse_contacts WHERE uid != ''").fetchone()["n"])
+    uids = int(
+        conn.execute(
+            "SELECT COUNT(*) AS n FROM warehouse_contacts WHERE uid IS NOT NULL AND uid != ''"
+        ).fetchone()["n"]
+    )
     batches = int(conn.execute("SELECT COUNT(*) AS n FROM warehouse_batches").fetchone()["n"])
     for key, value in (("contacts", total), ("phones", phones), ("uids", uids), ("batches", batches)):
         conn.execute("UPDATE warehouse_meta SET n=? WHERE k=?", (value, key))
@@ -229,9 +351,28 @@ def _meta_get(conn: sqlite3.Connection, key: str) -> int:
     return int(row["n"]) if row else 0
 
 
+def init_warehouse(db_path: Path) -> None:
+    with _LOCK:
+        migrated = False
+        with _db(db_path) as conn:
+            migrated = _ensure_schema(conn)
+            _ensure_batch_column(conn)
+            _install_count_triggers(conn)
+            _seed_meta_rows(conn)
+            _ensure_meta(conn)
+        if migrated and db_path.is_file() and db_path.stat().st_size < 200 * 1024 * 1024:
+            conn = sqlite3.connect(str(db_path))
+            try:
+                conn.execute("VACUUM")
+            finally:
+                conn.close()
+        _retire_copies(db_path)
+
+
 def list_templates(db_path: Path) -> dict[str, dict[str, int]]:
-    with session(db_path) as conn:
-        rows = conn.execute("SELECT fingerprint, mapping_json FROM warehouse_templates").fetchall()
+    with _LOCK:
+        with _db(db_path) as conn:
+            rows = conn.execute("SELECT fingerprint, mapping_json FROM warehouse_templates").fetchall()
     out: dict[str, dict[str, int]] = {}
     for row in rows:
         raw = json.loads(row["mapping_json"] or "{}")
@@ -249,25 +390,26 @@ def save_template(
 ) -> None:
     if not fingerprint or not mapping:
         return
-    with session(db_path) as conn:
-        conn.execute(
-            """
-            INSERT INTO warehouse_templates(fingerprint, headers_json, mapping_json, used_count, updated_at)
-            VALUES(?,?,?,?,?)
-            ON CONFLICT(fingerprint) DO UPDATE SET
-              headers_json=excluded.headers_json,
-              mapping_json=excluded.mapping_json,
-              used_count=warehouse_templates.used_count + 1,
-              updated_at=excluded.updated_at
-            """,
-            (
-                fingerprint,
-                json.dumps(headers, ensure_ascii=False),
-                json.dumps(mapping, ensure_ascii=False),
-                1,
-                updated_at,
-            ),
-        )
+    with _LOCK:
+        with _db(db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO warehouse_templates(fingerprint, headers_json, mapping_json, used_count, updated_at)
+                VALUES(?,?,?,?,?)
+                ON CONFLICT(fingerprint) DO UPDATE SET
+                  headers_json=excluded.headers_json,
+                  mapping_json=excluded.mapping_json,
+                  used_count=warehouse_templates.used_count + 1,
+                  updated_at=excluded.updated_at
+                """,
+                (
+                    fingerprint,
+                    json.dumps(headers, ensure_ascii=False),
+                    json.dumps(mapping, ensure_ascii=False),
+                    1,
+                    updated_at,
+                ),
+            )
 
 
 def _blank_row() -> dict[str, str]:
@@ -289,30 +431,24 @@ def _parts(text: str) -> list[str]:
     return [part.strip() for part in (text or "").split("\n") if part.strip()]
 
 
-def _row_payload(row: sqlite3.Row | dict[str, str]) -> dict[str, str]:
-    keys = row.keys() if hasattr(row, "keys") else row
+def _get_row(conn: sqlite3.Connection, row_id: int) -> dict[str, str] | None:
+    row = conn.execute(
+        f"SELECT {_CONTACT_COLUMNS} FROM warehouse_contacts WHERE row_id=?",
+        (row_id,),
+    ).fetchone()
+    if row is None:
+        return None
     payload = _blank_row()
-    payload.update(
-        {
-            "row_id": str(row["row_id"]),
-            "name": row["name"] or "",
-            "name_key": row["name_key"] if "name_key" in keys else name_key(row["name"] or ""),
-            "phone": row["phone"] or "",
-            "phone_key": row["phone_key"] or "",
-            "address": row["address"] or "",
-            "address_key": row["address_key"] if "address_key" in keys else address_key(row["address"] or ""),
-            "uid": row["uid"] or "",
-            "external_id": row["external_id"] or "",
-            "source": row["source"] or "",
-        }
-    )
-    for extra in ("name_extra", "phone_extra", "address_extra", "uid_extra", "id_extra"):
-        if extra in keys:
-            payload[extra] = row[extra] or ""
+    payload["row_id"] = str(row["row_id"])
+    payload["source"] = row["source"] or ""
+    for key in _blank_row():
+        payload[key] = row[key] or ""
     return payload
 
 
-def _alias_values(row: dict[str, str]) -> list[tuple[str, str]]:
+def _alias_values(row: dict[str, str] | None) -> list[tuple[str, str]]:
+    if not row:
+        return []
     pairs: list[tuple[str, str]] = []
 
     def add(kind: str, value: str) -> None:
@@ -331,28 +467,39 @@ def _alias_values(row: dict[str, str]) -> list[tuple[str, str]]:
     add("uid", row.get("uid") or "")
     for part in _parts(row.get("uid_extra") or ""):
         add("uid", part)
-    add("id", id_key(row.get("external_id") or ""))
+    add("id", id_key(row.get("external_id") or row.get("id") or ""))
     for part in _parts(row.get("id_extra") or ""):
         add("id", id_key(part))
     return pairs
 
 
-def _replace_aliases(conn: sqlite3.Connection, row_id: int, row: dict[str, str]) -> None:
-    conn.execute("DELETE FROM warehouse_aliases WHERE row_id=?", (row_id,))
-    conn.executemany(
-        "INSERT INTO warehouse_aliases(row_id, kind, value) VALUES(?,?,?)",
-        [(row_id, kind, value) for kind, value in _alias_values(row)],
-    )
+def _replace_lookups(
+    conn: sqlite3.Connection,
+    row_id: int,
+    new_row: dict[str, str],
+    old_row: dict[str, str] | None,
+) -> None:
+    old_pairs = set(_alias_values(old_row))
+    new_pairs = set(_alias_values(new_row))
+    for kind, value in old_pairs - new_pairs:
+        conn.execute(
+            f"DELETE FROM {_LOOKUP_TABLE[kind]} WHERE value=? AND row_id=?",
+            (value, row_id),
+        )
+    for kind, value in new_pairs - old_pairs:
+        conn.execute(
+            f"INSERT INTO {_LOOKUP_TABLE[kind]}(value, row_id) VALUES(?,?)",
+            (value, row_id),
+        )
 
 
-def _backfill_aliases(conn: sqlite3.Connection) -> None:
-    ready = conn.execute("SELECT n FROM warehouse_meta WHERE k='aliases_ready'").fetchone()
-    if ready and int(ready["n"]) == 1:
-        return
+def _backfill_lookups(conn: sqlite3.Connection) -> None:
+    for table in _LOOKUP_TABLE.values():
+        conn.execute(f"DELETE FROM {table}")
     last = 0
     while True:
         rows = conn.execute(
-            "SELECT row_id FROM warehouse_contacts WHERE row_id>? ORDER BY row_id LIMIT 2000",
+            f"SELECT {_CONTACT_COLUMNS} FROM warehouse_contacts WHERE row_id>? ORDER BY row_id LIMIT 2000",
             (last,),
         ).fetchall()
         if not rows:
@@ -360,39 +507,19 @@ def _backfill_aliases(conn: sqlite3.Connection) -> None:
         for item in rows:
             last = int(item["row_id"])
             stored = _get_row(conn, last)
-            if stored and _alias_values(stored):
-                _replace_aliases(conn, last, stored)
+            if stored:
+                _replace_lookups(conn, last, stored, None)
         conn.commit()
-    conn.execute(
-        "INSERT INTO warehouse_meta(k, n) VALUES('aliases_ready', 1) ON CONFLICT(k) DO UPDATE SET n=1"
-    )
 
 
 def _id_hits(conn: sqlite3.Connection, kind: str, value: str) -> list[int]:
-    if kind not in _LOOKUP_COLS or not value:
+    if kind not in _LOOKUP_TABLE or not value:
         return []
     rows = conn.execute(
-        "SELECT row_id FROM warehouse_aliases WHERE kind=? AND value=? LIMIT 3",
-        (kind, value),
-    ).fetchall()
-    if rows:
-        return [int(row["row_id"]) for row in rows]
-    column = _LOOKUP_COLS[kind]
-    legacy = conn.execute(
-        f"SELECT row_id FROM warehouse_contacts WHERE {column} = ? LIMIT 3",
+        f"SELECT row_id FROM {_LOOKUP_TABLE[kind]} WHERE value=? LIMIT 3",
         (value,),
     ).fetchall()
-    return [int(row["row_id"]) for row in legacy]
-
-
-def _get_row(conn: sqlite3.Connection, row_id: int) -> dict[str, str] | None:
-    row = conn.execute(
-        "SELECT row_id, name, name_extra, name_key, phone, phone_extra, phone_key, "
-        "address, address_extra, address_key, uid, uid_extra, external_id, id_extra, source "
-        "FROM warehouse_contacts WHERE row_id=?",
-        (row_id,),
-    ).fetchone()
-    return _row_payload(row) if row else None
+    return [int(row["row_id"]) for row in rows]
 
 
 def find_match(conn: sqlite3.Connection, record: dict[str, str]) -> tuple[int | None, str]:
@@ -445,20 +572,21 @@ def _merge_field(primary: str, extra: str, incoming: str, key_of) -> tuple[str, 
 
 def preview_matches(db_path: Path, records: list[dict[str, str]]) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
-    with session(db_path) as conn:
-        for record in records:
-            row_id, reason = find_match(
-                conn, {**record, "phone_key": phone_key(record.get("phone") or "")}
-            )
-            item = dict(record)
-            if row_id:
-                item["match"] = reason
-                item["matchId"] = str(row_id)
-            elif reason in {"ambiguous", "conflict"}:
-                item["match"] = reason
-            else:
-                item["match"] = "new"
-            out.append(item)
+    with _LOCK:
+        with _db(db_path) as conn:
+            for record in records:
+                row_id, reason = find_match(
+                    conn, {**record, "phone_key": phone_key(record.get("phone") or "")}
+                )
+                item = dict(record)
+                if row_id:
+                    item["match"] = reason
+                    item["matchId"] = str(row_id)
+                elif reason in {"ambiguous", "conflict"}:
+                    item["match"] = reason
+                else:
+                    item["match"] = "new"
+                out.append(item)
     return out
 
 
@@ -496,43 +624,41 @@ def _apply_incoming(existing: dict[str, str], incoming: dict[str, str]) -> tuple
     return merged, changed
 
 
-def _write_contact(conn: sqlite3.Connection, row_id: int, row: dict[str, str], at: str, batch_id: int, source: str) -> None:
+def _write_contact(
+    conn: sqlite3.Connection,
+    row_id: int,
+    row: dict[str, str],
+    at: str,
+    batch_id: int,
+    source: str,
+    old: dict[str, str] | None,
+) -> None:
     conn.execute(
         """
         UPDATE warehouse_contacts
-        SET name=?, name_extra=?, name_key=?, phone=?, phone_extra=?, phone_key=?,
-            address=?, address_extra=?, address_key=?, uid=?, uid_extra=?,
+        SET name=?, name_extra=?, phone=?, phone_extra=?,
+            address=?, address_extra=?, uid=?, uid_extra=?,
             external_id=?, id_extra=?, source=?, batch_id=?, updated_at=?
         WHERE row_id=?
         """,
         (
-            row["name"],
-            row["name_extra"],
-            row["name_key"],
-            row["phone"],
-            row["phone_extra"],
-            row["phone_key"],
-            row["address"],
-            row["address_extra"],
-            row["address_key"],
-            row["uid"],
-            row["uid_extra"],
-            row["external_id"],
-            row["id_extra"],
-            source or row.get("source") or "",
-            batch_id,
+            _cell(row["name"]),
+            _cell(row["name_extra"]),
+            _cell(row["phone"]),
+            _cell(row["phone_extra"]),
+            _cell(row["address"]),
+            _cell(row["address_extra"]),
+            _cell(row["uid"]),
+            _cell(row["uid_extra"]),
+            _cell(row["external_id"]),
+            _cell(row["id_extra"]),
+            _cell(source or row.get("source") or ""),
+            batch_id or None,
             at,
             row_id,
         ),
     )
-    _replace_aliases(conn, row_id, row)
-
-
-def _log_change(conn: sqlite3.Connection, op: str, at: str, payload: dict[str, Any]) -> None:
-    conn.execute(
-        "INSERT INTO warehouse_changes(op, at, payload_json) VALUES(?,?,?)",
-        (op, at, json.dumps(payload, ensure_ascii=False)),
-    )
+    _replace_lookups(conn, row_id, row, old)
 
 
 def upsert_records(
@@ -548,91 +674,82 @@ def upsert_records(
     updated = 0
     skipped = 0
     reviewed = 0
-    with session(db_path) as conn:
-        conn.execute(
-            """
-            INSERT INTO warehouse_batches(at, filename, source, inserted, updated, skipped, reviewed, mapping_json)
-            VALUES(?,?,?,?,?,?,?,?)
-            """,
-            (at, filename, source, 0, 0, 0, 0, json.dumps(mapping, ensure_ascii=False)),
-        )
-        batch_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
-        done = 0
-        for record in records:
-            incoming = _incoming_fields(record)
-            existing_id, reason = find_match(conn, incoming)
-            if reason == "conflict":
-                payload = {**incoming, "reason": "conflict", "batchId": batch_id, "source": source}
-                conn.execute(
-                    "INSERT INTO warehouse_review(at, reason, batch_id, payload_json) VALUES(?,?,?,?)",
-                    (at, "conflict", batch_id, json.dumps(payload, ensure_ascii=False)),
-                )
-                _log_change(conn, "review", at, payload)
-                reviewed += 1
-            elif existing_id:
-                existing = _get_row(conn, existing_id)
-                if existing is None:
-                    skipped += 1
-                else:
-                    merged, changed = _apply_incoming(existing, incoming)
-                    if not changed:
+    with _LOCK:
+        with _db(db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO warehouse_batches(at, filename, source, inserted, updated, skipped, reviewed, mapping_json)
+                VALUES(?,?,?,?,?,?,?,?)
+                """,
+                (at, filename, source, 0, 0, 0, 0, json.dumps(mapping, ensure_ascii=False)),
+            )
+            batch_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+            done = 0
+            for record in records:
+                incoming = _incoming_fields(record)
+                existing_id, reason = find_match(conn, incoming)
+                if reason == "conflict":
+                    payload = {**incoming, "reason": "conflict", "batchId": batch_id, "source": source}
+                    conn.execute(
+                        "INSERT INTO warehouse_review(at, reason, batch_id, payload_json) VALUES(?,?,?,?)",
+                        (at, "conflict", batch_id, json.dumps(payload, ensure_ascii=False)),
+                    )
+                    reviewed += 1
+                elif existing_id:
+                    existing = _get_row(conn, existing_id)
+                    if existing is None:
                         skipped += 1
                     else:
-                        _write_contact(conn, existing_id, merged, at, batch_id, source or existing["source"])
-                        stored = _get_row(conn, existing_id)
-                        _log_change(conn, "update", at, stored or merged)
-                        updated += 1
-            else:
-                blank = _blank_row()
-                merged, _changed = _apply_incoming(blank, incoming)
-                if not any(merged[name] for name in ("name", "phone", "address", "uid", "external_id")):
-                    skipped += 1
+                        merged, changed = _apply_incoming(existing, incoming)
+                        if not changed:
+                            skipped += 1
+                        else:
+                            _write_contact(conn, existing_id, merged, at, batch_id, source or existing["source"], existing)
+                            updated += 1
                 else:
-                    conn.execute(
-                        """
-                        INSERT INTO warehouse_contacts(
-                          name, name_extra, name_key, phone, phone_extra, phone_key,
-                          address, address_extra, address_key, uid, uid_extra, external_id, id_extra,
-                          source, batch_id, created_at, updated_at
-                        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                        """,
-                        (
-                            merged["name"],
-                            merged["name_extra"],
-                            merged["name_key"],
-                            merged["phone"],
-                            merged["phone_extra"],
-                            merged["phone_key"],
-                            merged["address"],
-                            merged["address_extra"],
-                            merged["address_key"],
-                            merged["uid"],
-                            merged["uid_extra"],
-                            merged["external_id"],
-                            merged["id_extra"],
-                            source,
-                            batch_id,
-                            at,
-                            at,
-                        ),
-                    )
-                    row_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
-                    _replace_aliases(conn, row_id, merged)
-                    stored = _get_row(conn, row_id)
-                    _log_change(conn, "insert", at, stored or {**merged, "row_id": str(row_id)})
-                    inserted += 1
-            done += 1
-            if done % FLUSH_EVERY == 0:
-                _persist_copies(db_path, conn)
-        conn.execute(
-            """
-            UPDATE warehouse_batches
-            SET inserted=?, updated=?, skipped=?, reviewed=?
-            WHERE batch_id=?
-            """,
-            (inserted, updated, skipped, reviewed, batch_id),
-        )
-    _persist_copies(db_path, None)
+                    blank = _blank_row()
+                    merged, _changed = _apply_incoming(blank, incoming)
+                    if not any(merged[name] for name in ("name", "phone", "address", "uid", "external_id")):
+                        skipped += 1
+                    else:
+                        conn.execute(
+                            """
+                            INSERT INTO warehouse_contacts(
+                              name, name_extra, phone, phone_extra,
+                              address, address_extra, uid, uid_extra, external_id, id_extra,
+                              source, batch_id, updated_at
+                            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                            """,
+                            (
+                                _cell(merged["name"]),
+                                _cell(merged["name_extra"]),
+                                _cell(merged["phone"]),
+                                _cell(merged["phone_extra"]),
+                                _cell(merged["address"]),
+                                _cell(merged["address_extra"]),
+                                _cell(merged["uid"]),
+                                _cell(merged["uid_extra"]),
+                                _cell(merged["external_id"]),
+                                _cell(merged["id_extra"]),
+                                _cell(source),
+                                batch_id,
+                                at,
+                            ),
+                        )
+                        row_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+                        _replace_lookups(conn, row_id, merged, None)
+                        inserted += 1
+                done += 1
+                if done % FLUSH_EVERY == 0:
+                    conn.commit()
+            conn.execute(
+                """
+                UPDATE warehouse_batches
+                SET inserted=?, updated=?, skipped=?, reviewed=?
+                WHERE batch_id=?
+                """,
+                (inserted, updated, skipped, reviewed, batch_id),
+            )
     return {
         "inserted": inserted,
         "updated": updated,
@@ -653,36 +770,35 @@ def _search_clause(query: str) -> tuple[str, list[object]]:
     clauses: list[str] = []
     params: list[object] = []
     if key:
-        clauses.append("(phone_key = ? OR phone_extra LIKE ? OR row_id IN (SELECT row_id FROM warehouse_aliases WHERE kind='phone' AND value=?))")
-        params.extend([key, f"%{key}%", key])
+        clauses.append(
+            "(row_id IN (SELECT row_id FROM wh_phone WHERE value=?) OR phone_extra LIKE ?)"
+        )
+        params.extend([key, f"%{key}%"])
     digits = "".join(ch for ch in q if ch.isdigit())
     if 5 <= len(digits) <= 20:
-        clauses.append("(uid = ? OR uid_extra LIKE ?)")
+        clauses.append("(row_id IN (SELECT row_id FROM wh_uid WHERE value=?) OR uid_extra LIKE ?)")
         params.extend([digits, f"%{digits}%"])
     if ext.startswith("@") or (ext and ext != q and ext != key):
-        clauses.append("(external_id = ? OR id_extra LIKE ?)")
+        clauses.append("(row_id IN (SELECT row_id FROM wh_id WHERE value=?) OR id_extra LIKE ?)")
         params.extend([ext, f"%{ext}%"])
     elif q.startswith("@"):
-        clauses.append("(external_id = ? OR id_extra LIKE ?)")
-        params.extend([q.casefold(), f"%{q.casefold()}%"])
+        folded = q.casefold()
+        clauses.append("(row_id IN (SELECT row_id FROM wh_id WHERE value=?) OR id_extra LIKE ?)")
+        params.extend([folded, f"%{folded}%"])
     if person:
-        clauses.append("(name_key = ? OR name_key LIKE ? OR name_extra LIKE ? OR row_id IN (SELECT row_id FROM warehouse_aliases WHERE kind='name' AND (value=? OR value LIKE ?)))")
-        params.extend([person, person + "%", f"%{q}%", person, person + "%"])
+        clauses.append(
+            "(row_id IN (SELECT row_id FROM wh_name WHERE value=? OR value LIKE ?) OR name_extra LIKE ?)"
+        )
+        params.extend([person, person + "%", f"%{q}%"])
     if place:
-        clauses.append("(address_key = ? OR address_extra LIKE ? OR row_id IN (SELECT row_id FROM warehouse_aliases WHERE kind='address' AND value=?))")
-        params.extend([place, f"%{q}%", place])
-        if len(place) >= 4:
-            clauses.append("address_key LIKE ?")
-            params.append(place + "%")
+        clauses.append(
+            "(row_id IN (SELECT row_id FROM wh_address WHERE value=? OR value LIKE ?) OR address_extra LIKE ?)"
+        )
+        like = place + "%" if len(place) >= 4 else place
+        params.extend([place, like, f"%{q}%"])
     if not clauses:
         return " AND 0", []
     return " AND (" + " OR ".join(clauses) + ")", params
-
-
-_CONTACT_COLUMNS = (
-    "row_id, name, name_extra, phone, phone_extra, address, address_extra, "
-    "uid, uid_extra, external_id, id_extra, source, updated_at"
-)
 
 
 def _fetch_page(
@@ -700,6 +816,24 @@ def _fetch_page(
     return conn.execute(sql, [after, *extra_params, limit]).fetchall()
 
 
+def _item(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["row_id"],
+        "name": row["name"] or "",
+        "nameExtra": row["name_extra"] or "",
+        "phone": row["phone"] or "",
+        "phoneExtra": row["phone_extra"] or "",
+        "address": row["address"] or "",
+        "addressExtra": row["address_extra"] or "",
+        "uid": row["uid"] or "",
+        "uidExtra": row["uid_extra"] or "",
+        "externalId": row["external_id"] or "",
+        "idExtra": row["id_extra"] or "",
+        "source": row["source"] or "",
+        "updatedAt": row["updated_at"] or "",
+    }
+
+
 def search_contacts(
     db_path: Path,
     query: str,
@@ -707,27 +841,11 @@ def search_contacts(
     limit: int,
     after: int,
 ) -> dict[str, Any]:
-    with session(db_path) as conn:
-        rows = _fetch_page(conn, query, limit=limit + 1, after=after)
-        total = _meta_get(conn, "contacts")
-    items = [
-        {
-            "id": row["row_id"],
-            "name": row["name"],
-            "nameExtra": row["name_extra"],
-            "phone": row["phone"],
-            "phoneExtra": row["phone_extra"],
-            "address": row["address"],
-            "addressExtra": row["address_extra"],
-            "uid": row["uid"],
-            "uidExtra": row["uid_extra"],
-            "externalId": row["external_id"],
-            "idExtra": row["id_extra"],
-            "source": row["source"],
-            "updatedAt": row["updated_at"],
-        }
-        for row in rows[:limit]
-    ]
+    with _LOCK:
+        with _db(db_path) as conn:
+            rows = _fetch_page(conn, query, limit=limit + 1, after=after)
+            total = _meta_get(conn, "contacts")
+    items = [_item(row) for row in rows[:limit]]
     nxt = int(rows[limit]["row_id"]) if len(rows) > limit else 0
     return {"count": total, "items": items, "next": nxt}
 
@@ -752,197 +870,155 @@ def export_csv_rows(db_path: Path, query: str) -> Iterator[bytes]:
     )
     yield buf.getvalue().encode("utf-8")
     after = 0
-    with session(db_path) as conn:
-        while True:
-            rows = _fetch_page(conn, query, limit=EXPORT_PAGE, after=after)
-            if not rows:
-                break
-            buf = io.StringIO()
-            writer = csv.writer(buf)
-            for row in rows:
-                writer.writerow(
-                    [
-                        row["name"],
-                        row["name_extra"],
-                        row["phone"],
-                        row["phone_extra"],
-                        row["address"],
-                        row["address_extra"],
-                        row["uid"],
-                        row["uid_extra"],
-                        row["external_id"],
-                        row["id_extra"],
-                    ]
-                )
-            yield buf.getvalue().encode("utf-8")
-            after = int(rows[-1]["row_id"])
+    with _LOCK:
+        with _db(db_path) as conn:
+            while True:
+                rows = _fetch_page(conn, query, limit=EXPORT_PAGE, after=after)
+                if not rows:
+                    break
+                buf = io.StringIO()
+                writer = csv.writer(buf)
+                for row in rows:
+                    writer.writerow(
+                        [
+                            row["name"] or "",
+                            row["name_extra"] or "",
+                            row["phone"] or "",
+                            row["phone_extra"] or "",
+                            row["address"] or "",
+                            row["address_extra"] or "",
+                            row["uid"] or "",
+                            row["uid_extra"] or "",
+                            row["external_id"] or "",
+                            row["id_extra"] or "",
+                        ]
+                    )
+                yield buf.getvalue().encode("utf-8")
+                after = int(rows[-1]["row_id"])
 
 
 def export_csv(db_path: Path, query: str) -> bytes:
     return b"".join(export_csv_rows(db_path, query))
 
 
-def _copy_paths(db_path: Path) -> tuple[Path, Path, Path]:
-    folder = db_path.parent / f"{db_path.name}.copies"
-    return folder / "mirror.db", folder / "journal.jsonl", folder / "journal.pos"
-
-
-def _journal_watermark(journal: Path) -> int:
-    if not journal.is_file():
-        return 0
-    last = 0
-    with journal.open("rb") as handle:
-        handle.seek(0, os.SEEK_END)
-        size = handle.tell()
-        handle.seek(max(0, size - 65536))
-        tail = handle.read().decode("utf-8", errors="ignore")
-    for line in tail.splitlines():
-        try:
-            last = int(json.loads(line).get("changeId") or last)
-        except (json.JSONDecodeError, TypeError, ValueError):
-            continue
-    return last
-
-
-def _export_journal(db_path: Path, conn: sqlite3.Connection) -> None:
-    _mirror, journal, pos = _copy_paths(db_path)
-    journal.parent.mkdir(parents=True, exist_ok=True)
-    watermark = _journal_watermark(journal)
-    rows = conn.execute(
-        "SELECT change_id, op, at, payload_json FROM warehouse_changes WHERE change_id>? ORDER BY change_id",
-        (watermark,),
-    ).fetchall()
-    if not rows and journal.is_file():
-        return
-    with journal.open("a", encoding="utf-8") as handle:
-        for row in rows:
-            payload = json.loads(row["payload_json"] or "{}")
-            line = {
-                "changeId": int(row["change_id"]),
-                "op": row["op"],
-                "at": row["at"],
-                "payload": payload,
-            }
-            handle.write(json.dumps(line, ensure_ascii=False) + "\n")
-        handle.flush()
-        os.fsync(handle.fileno())
-    if rows:
-        pos.write_text(str(int(rows[-1]["change_id"])), encoding="utf-8")
-    elif not pos.is_file():
-        pos.write_text("0", encoding="utf-8")
-
-
-def _backup_mirror(db_path: Path, conn: sqlite3.Connection) -> None:
-    mirror, _journal, _pos = _copy_paths(db_path)
-    mirror.parent.mkdir(parents=True, exist_ok=True)
-    dest = sqlite3.connect(str(mirror))
-    try:
-        conn.backup(dest)
-    finally:
-        dest.close()
-
-
-def _persist_copies(db_path: Path, conn: sqlite3.Connection | None = None) -> None:
-    if conn is not None:
-        conn.commit()
-        _export_journal(db_path, conn)
-        _backup_mirror(db_path, conn)
-        return
-    with session(db_path) as owned:
-        _export_journal(db_path, owned)
-        _backup_mirror(db_path, owned)
-
-
-def copy_status(db_path: Path) -> dict[str, Any]:
-    mirror, journal, _pos = _copy_paths(db_path)
-    with session(db_path) as conn:
-        last = conn.execute("SELECT COALESCE(MAX(change_id), 0) AS n FROM warehouse_changes").fetchone()
-        reviewed = conn.execute("SELECT COUNT(*) AS n FROM warehouse_review").fetchone()
-    last_change = int(last["n"]) if last else 0
-    exported = _journal_watermark(journal)
-    return {
-        "live": db_path.is_file() and db_path.stat().st_size > 0,
-        "mirror": mirror.is_file() and mirror.stat().st_size > 0,
-        "journal": journal.is_file() and exported >= last_change,
-        "journalLag": max(0, last_change - exported),
-        "reviewed": int(reviewed["n"]) if reviewed else 0,
-    }
-
-
-def rebuild_from_journal(target: Path, journal: Path) -> int:
-    """Dựng lại kho từ sổ ghi. Ghi vào file target, không đụng sổ nguồn."""
-    applied = 0
-    if target.exists():
-        target.unlink()
-    init_warehouse(target)
-    with session(target) as conn:
-        with journal.open(encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    item = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                op = item.get("op")
-                payload = item.get("payload") or {}
-                at = str(item.get("at") or "")
-                if op == "insert":
-                    row_id = int(payload.get("row_id") or 0)
-                    conn.execute(
-                        """
-                        INSERT OR REPLACE INTO warehouse_contacts(
-                          row_id, name, name_extra, name_key, phone, phone_extra, phone_key,
-                          address, address_extra, address_key, uid, uid_extra, external_id, id_extra,
-                          source, batch_id, created_at, updated_at
-                        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                        """,
-                        (
-                            row_id,
-                            payload.get("name") or "",
-                            payload.get("name_extra") or "",
-                            payload.get("name_key") or name_key(payload.get("name") or ""),
-                            payload.get("phone") or "",
-                            payload.get("phone_extra") or "",
-                            payload.get("phone_key") or phone_key(payload.get("phone") or ""),
-                            payload.get("address") or "",
-                            payload.get("address_extra") or "",
-                            payload.get("address_key") or address_key(payload.get("address") or ""),
-                            payload.get("uid") or "",
-                            payload.get("uid_extra") or "",
-                            payload.get("external_id") or "",
-                            payload.get("id_extra") or "",
-                            payload.get("source") or "",
-                            None,
-                            at,
-                            at,
-                        ),
-                    )
-                    _replace_aliases(conn, row_id, payload)
-                    applied += 1
-                elif op == "update":
-                    row_id = int(payload.get("row_id") or 0)
-                    _write_contact(conn, row_id, {**_blank_row(), **payload}, at, 0, payload.get("source") or "")
-                    applied += 1
-                elif op == "review":
-                    conn.execute(
-                        "INSERT INTO warehouse_review(at, reason, batch_id, payload_json) VALUES(?,?,?,?)",
-                        (at, payload.get("reason") or "conflict", payload.get("batchId"), json.dumps(payload, ensure_ascii=False)),
-                    )
-                    applied += 1
-    return applied
+def _storage_bytes(db_path: Path) -> int:
+    total = 0
+    for path in (db_path, *_sidecars(db_path)):
+        if path.is_file():
+            total += path.stat().st_size
+    return total
 
 
 def warehouse_stats(db_path: Path) -> dict[str, Any]:
-    with session(db_path) as conn:
-        _ensure_meta(conn)
-        counts = {
-            "contacts": _meta_get(conn, "contacts"),
-            "phones": _meta_get(conn, "phones"),
-            "uids": _meta_get(conn, "uids"),
-            "batches": _meta_get(conn, "batches"),
-        }
-    counts["copies"] = copy_status(db_path)
-    counts["reviewed"] = int(counts["copies"]["reviewed"])
+    with _LOCK:
+        with _db(db_path) as conn:
+            _ensure_meta(conn)
+            counts = {
+                "contacts": _meta_get(conn, "contacts"),
+                "phones": _meta_get(conn, "phones"),
+                "uids": _meta_get(conn, "uids"),
+                "batches": _meta_get(conn, "batches"),
+            }
+            reviewed = conn.execute("SELECT COUNT(*) AS n FROM warehouse_review").fetchone()
+    usage = shutil.disk_usage(db_path.parent if db_path.parent.is_dir() else Path("."))
+    counts["reviewed"] = int(reviewed["n"]) if reviewed else 0
+    counts["bytes"] = _storage_bytes(db_path)
+    counts["diskFree"] = usage.free
+    counts["diskTotal"] = usage.total
+    counts["storage"] = "one"
     return counts
+
+
+def open_snapshot(db_path: Path) -> Iterator[bytes]:
+    """Chốt WAL rồi đọc đúng file kho. Không tạo bản thứ hai trên đĩa."""
+
+    def chunks() -> Iterator[bytes]:
+        _LOCK.acquire()
+        handle = None
+        try:
+            _checkpoint(db_path)
+            handle = db_path.open("rb")
+            while True:
+                blob = handle.read(1024 * 1024)
+                if not blob:
+                    break
+                yield blob
+        finally:
+            if handle is not None:
+                handle.close()
+            _LOCK.release()
+
+    return chunks()
+
+
+def snapshot_to_file(db_path: Path, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        dest.unlink()
+    with _LOCK:
+        with _db(db_path) as conn:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            target = sqlite3.connect(str(dest))
+            try:
+                conn.backup(target)
+            finally:
+                target.close()
+
+
+def _validate_snapshot(path: Path) -> None:
+    if not path.is_file() or path.stat().st_size < 100:
+        raise ValueError("File không phải bản lưu kho.")
+    with path.open("rb") as handle:
+        header = handle.read(16)
+    if header != b"SQLite format 3\x00":
+        raise ValueError("File không phải bản lưu kho.")
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        check = conn.execute("PRAGMA quick_check").fetchone()
+        if not check or str(check[0]).lower() != "ok":
+            raise ValueError("Bản lưu không nguyên vẹn.")
+        row = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='warehouse_contacts'"
+        ).fetchone()
+        if row is None:
+            raise ValueError("File này không phải kho tổng.")
+    except sqlite3.DatabaseError as exc:
+        raise ValueError("Bản lưu không đọc được.") from exc
+    finally:
+        conn.close()
+
+
+def restore_snapshot(db_path: Path, incoming: Path) -> dict[str, Any]:
+    """Thay kho đang dùng bằng file đã tải. Dữ liệu trong file được giữ nguyên."""
+    _validate_snapshot(incoming)
+    with _LOCK:
+        _validate_snapshot(incoming)
+        previous = db_path.with_name(db_path.name + ".previous")
+        if previous.exists():
+            previous.unlink()
+        if db_path.exists():
+            _checkpoint(db_path)
+            _drop_sidecars(db_path)
+            os.replace(db_path, previous)
+        try:
+            os.replace(incoming, db_path)
+            _drop_sidecars(db_path)
+            with _db(db_path) as conn:
+                _ensure_schema(conn)
+                _install_count_triggers(conn)
+                _seed_meta_rows(conn)
+                conn.execute(
+                    "INSERT INTO warehouse_meta(k, n) VALUES('counts_ready', 0) ON CONFLICT(k) DO UPDATE SET n=0"
+                )
+                _ensure_meta(conn)
+        except Exception:
+            if previous.exists():
+                if db_path.exists():
+                    db_path.unlink()
+                os.replace(previous, db_path)
+                _drop_sidecars(db_path)
+            raise
+        if previous.exists():
+            previous.unlink()
+        _retire_copies(db_path)
+    return warehouse_stats(db_path)

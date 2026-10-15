@@ -53,7 +53,7 @@
 <body>
 <main>
   <h1>Kho tổng</h1>
-  <p class="lead">Video nạp ở trang đọc video. File Excel nạp ở đây: mỗi lần, trước khi ghi, bạn chọn cột nào là tên khách, số điện thoại, địa chỉ khách, UID Facebook và ID TikTok.</p>
+    <p class="lead">Video nạp ở trang đọc video. File Excel nạp ở đây: mỗi lần, trước khi ghi, bạn chọn cột nào là tên khách, số điện thoại, địa chỉ khách, UID Facebook và ID TikTok. Kho trên VPS là một bản, tra cứu trực tiếp.</p>
   <nav>
     <a href="/">Đọc video</a>
     <a href="/danhba/">Danh bạ</a>
@@ -63,6 +63,17 @@
     <h2>Thống kê</h2>
     <div class="stats" id="stats"></div>
     <p id="copyNote" class="note"></p>
+  </section>
+
+  <section>
+    <h2>Bản lưu</h2>
+    <p class="note">Một file trên VPS. Tải file đó về máy tính để giữ. Khi cần, nạp lại đúng file này lên VPS: kho trở lại đủ từng ký tự như lúc tải, và tra cứu được ngay.</p>
+    <div class="row">
+      <button class="primary" type="button" id="downloadDb">Tải bản lưu về máy</button>
+      <button class="ghost" type="button" id="pickDb">Nạp bản lưu lên VPS</button>
+      <input id="dbFile" type="file" accept=".db,application/vnd.sqlite3,application/octet-stream" hidden />
+    </div>
+    <p id="fileNote" class="note"></p>
   </section>
 
   <section>
@@ -237,15 +248,18 @@
       stat(body.uids, "Có UID Facebook") +
       stat(body.batches, "Lô đã nạp") +
       stat(body.reviewed || 0, "Cần xem");
-    var copies = (body.copies) || {};
     var copyNote = document.getElementById("copyNote");
-    if (copies.live && copies.mirror && copies.journal) {
-      copyNote.textContent = "Ba bản lưu đang đủ: kho đang dùng, bản gương, sổ ghi. Mất một bản vẫn dựng lại được từ bản còn lại.";
-      copyNote.className = "note ok";
-    } else {
-      copyNote.textContent = "Chưa đủ ba bản lưu.";
-      copyNote.className = "note warn";
-    }
+    copyNote.textContent = "Một bản lưu trên VPS, dùng để tra cứu trực tiếp. Dung lượng " +
+      formatBytes(body.bytes || 0) + ". Đĩa còn " + formatBytes(body.diskFree || 0) + ".";
+    copyNote.className = "note ok";
+  }
+
+  function formatBytes(value) {
+    var n = Number(value) || 0;
+    if (n < 1024) return n + " B";
+    if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+    if (n < 1073741824) return (n / 1048576).toFixed(1) + " MB";
+    return (n / 1073741824).toFixed(2) + " GB";
   }
 
   var ASK_FIELDS = [
@@ -542,6 +556,46 @@
     if (event.key === "Enter") search(true);
   });
   document.getElementById("more").onclick = function () { search(false); };
+  document.getElementById("downloadDb").onclick = async function () {
+    var note = document.getElementById("fileNote");
+    note.textContent = "Đang chuẩn bị bản lưu…";
+    note.className = "note";
+    var response = await api("/v1/kho/file-ticket", { method: "POST" });
+    var body = await response.json().catch(function () { return {}; });
+    if (!response.ok) {
+      note.textContent = body.detail || "Không tạo được liên kết tải.";
+      note.className = "note warn";
+      return;
+    }
+    window.location = body.url;
+    note.textContent = "Đang tải bản lưu về máy. Giữ file này. Nạp lại đúng file khi cần khôi phục kho.";
+    note.className = "note ok";
+  };
+  document.getElementById("pickDb").onclick = function () {
+    document.getElementById("dbFile").click();
+  };
+  document.getElementById("dbFile").onchange = async function () {
+    var file = this.files && this.files[0];
+    this.value = "";
+    if (!file) return;
+    var note = document.getElementById("fileNote");
+    if (!window.confirm("Nạp file này sẽ thay toàn bộ kho trên VPS bằng đúng nội dung trong file. Tiếp tục?")) return;
+    note.textContent = "Đang nạp bản lưu…";
+    note.className = "note";
+    var data = new FormData();
+    data.append("file", file, file.name);
+    var response = await api("/v1/kho/restore", { method: "POST", body: data });
+    var body = await response.json().catch(function () { return {}; });
+    if (!response.ok) {
+      note.textContent = body.detail || "Nạp bản lưu thất bại. Kho trên VPS chưa đổi.";
+      note.className = "note warn";
+      return;
+    }
+    note.textContent = "Đã nạp bản lưu. Kho đang có " + (body.contacts || 0) + " dòng, tra cứu được ngay.";
+    note.className = "note ok";
+    await refreshStats();
+    await search(true);
+  };
   document.getElementById("exportBtn").onclick = async function () {
     var q = document.getElementById("query").value.trim();
     var response = await api("/v1/kho/export?q=" + encodeURIComponent(q));

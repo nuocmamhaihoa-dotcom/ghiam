@@ -45,6 +45,13 @@ def _xlsx() -> bytes:
 
 class WarehouseApiTests(unittest.TestCase):
     def setUp(self) -> None:
+        for path in (
+            settings.db_path,
+            Path(str(settings.db_path) + "-wal"),
+            Path(str(settings.db_path) + "-shm"),
+        ):
+            if path.exists():
+                path.unlink()
         init_warehouse(settings.db_path)
         self._client_cm = TestClient(app)
         self.client = self._client_cm.__enter__()
@@ -59,6 +66,8 @@ class WarehouseApiTests(unittest.TestCase):
         self.assertIn("Kho tổng", page.text)
         self.assertIn("Hỏi lại trước khi nạp", page.text)
         self.assertIn("ở cột nào?", page.text)
+        self.assertIn("Tải bản lưu về máy", page.text)
+        self.assertIn("Nạp bản lưu lên VPS", page.text)
 
         preview = self.client.post(
             "/v1/kho/preview",
@@ -133,6 +142,50 @@ class WarehouseApiTests(unittest.TestCase):
         self.assertEqual(sample["match"], "phone")
         self.assertEqual(sample["phone"], "0933000111")
         self.assertEqual(sample["address"], "99 Cầu Giấy, Hà Nội")
+
+    def test_download_and_restore_snapshot(self) -> None:
+        preview = self.client.post(
+            "/v1/kho/preview",
+            headers=self.headers,
+            files={"file": ("khach.xlsx", _xlsx(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        body = preview.json()
+        committed = self.client.post(
+            "/v1/kho/commit",
+            headers=self.headers,
+            json={
+                "token": body["token"],
+                "sheet": body["chosen"],
+                "mapping": body["sheet"]["mapping"],
+                "headerRow": body["sheet"]["headerRow"],
+                "hasHeader": True,
+            },
+        )
+        self.assertEqual(committed.status_code, 200, committed.text)
+        ticket = self.client.post("/v1/kho/file-ticket", headers=self.headers)
+        self.assertEqual(ticket.status_code, 200, ticket.text)
+        downloaded = self.client.get(ticket.json()["url"])
+        self.assertEqual(downloaded.status_code, 200, downloaded.text)
+        self.assertTrue(downloaded.content.startswith(b"SQLite format 3\x00"))
+        restored = self.client.post(
+            "/v1/kho/restore",
+            headers=self.headers,
+            files={"file": ("kho-tong.db", downloaded.content, "application/octet-stream")},
+        )
+        self.assertEqual(restored.status_code, 200, restored.text)
+        self.assertGreaterEqual(restored.json()["contacts"], 2)
+        found = self.client.get("/v1/kho", headers=self.headers, params={"q": "0933000111"})
+        self.assertEqual(found.status_code, 200)
+        self.assertEqual(found.json()["items"][0]["name"], "Vũ K")
+        self.assertEqual(found.json()["items"][0]["externalId"], "@vuk")
+        rejected = self.client.post(
+            "/v1/kho/restore",
+            headers=self.headers,
+            files={"file": ("kho-tong.db", b"not a database", "application/octet-stream")},
+        )
+        self.assertEqual(rejected.status_code, 400)
+        still = self.client.get("/v1/kho", headers=self.headers, params={"q": "@vuk"})
+        self.assertEqual(still.json()["items"][0]["phone"], "0933000111")
 
     def test_preview_requires_token(self) -> None:
         response = self.client.post(
