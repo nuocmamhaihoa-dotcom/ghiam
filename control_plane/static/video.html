@@ -98,6 +98,17 @@
   </section>
 
   <section>
+    <h2>Kiểm lại dòng đủ 3 ô</h2>
+    <p>Bấm <b>Bắt đầu</b> để đọc lại mọi video còn file, chỉ để đối chiếu các dòng đã đủ số điện thoại, tên và id. Hai lần đọc ra cùng một bộ ba ô thì ghi <b>Khớp</b>. Lệch thì giữ nguyên bộ ba đã lưu và hiện lần đọc sau. Không xóa dòng chỉ vì lần đọc sau không thấy lại.</p>
+    <p class="note">Bấm <b>Kết thúc</b> để dừng các video chưa bắt đầu kiểm. Video đang đọc vẫn kiểm nốt. Video mới tải lên được đọc trước hàng kiểm.</p>
+    <p class="row" style="margin-top:0.8rem">
+      <button id="checkStart" class="primary" type="button">Bắt đầu</button>
+      <button id="checkStop" class="ghost" type="button">Kết thúc</button>
+    </p>
+    <p id="checkNote" class="note"></p>
+  </section>
+
+  <section>
     <h2>Kết quả đã lưu</h2>
     <p class="note">Hiện mọi dòng đã quét. Dòng mới nhất ở trên. Cột Đọc bởi ghi video nào do PC nào đọc, video nào do VPS đọc.</p>
     <input id="query" type="search" placeholder="Gõ đầu số điện thoại hoặc @username" />
@@ -151,14 +162,22 @@
     return full + "/" + item.phone_count;
   }
 
-  function statusText(status) {
-    if (status === "queued") return "Đang chờ";
-    if (status === "running") return "Đang đọc";
+  function statusText(item) {
+    var status = item && item.status ? item.status : item;
+    var checking = item && Number(item.check_pass) === 1;
+    if (status === "queued") return checking ? "Chờ kiểm" : "Đang chờ";
+    if (status === "running") return checking ? "Đang kiểm" : "Đang đọc";
     if (status === "done") return "Xong";
     if (status === "error") return "Lỗi";
     if (status === "uploading") return "Đang tải lên";
-    if (status === "pc") return "PC đang đọc";
+    if (status === "pc") return checking ? "PC đang kiểm" : "PC đang đọc";
     return status;
+  }
+
+  function checkLabel(item) {
+    if (item.checked === "ok") return "Khớp";
+    if (item.checked === "diff") return "Lệch";
+    return "";
   }
 
   function readerLabel(item) {
@@ -187,7 +206,9 @@
       stat(body.running, "Máy chủ đang đọc") +
       stat(body.pc || 0, "PC đang đọc") +
       stat(body.done, "Video đã xong") +
-      stat(body.error, "Video lỗi");
+      stat(body.error, "Video lỗi") +
+      stat(body.matched || 0, "Khớp 2 lần") +
+      stat(body.differed || 0, "Đọc lại lệch");
     var reader = document.getElementById("reader");
     if (!body.reader_alive) {
       reader.textContent = body.queued > 0
@@ -196,7 +217,8 @@
       reader.className = "note warn";
     } else if (body.running > 0 || body.queued > 0 || (body.pc || 0) > 0) {
       var pcNote = (body.pc || 0) > 0 ? " PC đang đọc " + body.pc + " video." : "";
-      reader.textContent = "Máy chủ đang đọc " + body.running + " video. " + body.queued + " video nằm trong hàng chờ." + pcNote + " Tắt trang, việc đọc vẫn tiếp tục.";
+      var checkNote = (body.checking || 0) > 0 ? " Đang kiểm " + body.checking + " video." : "";
+      reader.textContent = "Máy chủ đang đọc " + body.running + " video. " + body.queued + " video nằm trong hàng chờ." + pcNote + checkNote + " Tắt trang, việc đọc vẫn tiếp tục.";
       reader.className = "note ok";
     } else {
       reader.textContent = "Bộ đọc đang chạy. Video mới sẽ được đọc lần lượt, video còn lại chờ đến lượt.";
@@ -218,7 +240,7 @@
 
   function renderQueue(items) {
     var sig = items.map(function (item) {
-      return item.id + ":" + item.status + ":" + (item.error || "") + ":" + (item.device || "") + ":" + (item.helper || "") + ":" + countText(item) + ":" + (item.has_file ? 1 : 0) + ":" + item.name;
+      return item.id + ":" + item.status + ":" + (item.check_pass || 0) + ":" + (item.error || "") + ":" + (item.device || "") + ":" + (item.helper || "") + ":" + countText(item) + ":" + (item.has_file ? 1 : 0) + ":" + item.name;
     }).join("|");
     if (sig === queueSig) return;
     queueSig = sig;
@@ -233,7 +255,7 @@
       var canReread = (item.status === "error" || item.status === "done") && item.has_file;
       var retry = canReread ? " <button class='ghost' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
       var phone = item.device ? escapeHtml(item.device) : "<span class='note'>Chưa gắn máy</span>";
-      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + phone + "</td><td>" + countText(item) + "</td><td>" + escapeHtml(readerLabel(item)) + "</td><td>" + statusText(item.status) + retry + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + phone + "</td><td>" + countText(item) + "</td><td>" + escapeHtml(readerLabel(item)) + "</td><td>" + statusText(item) + retry + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-retry]").forEach(function (button) {
@@ -253,7 +275,7 @@
     if (!items.length) return "0:" + total + ":" + (capped ? 1 : 0);
     var first = items[0];
     var last = items[items.length - 1];
-    var readers = items.map(function (item) { return (item.video_id || 0) + ":" + (item.helper || ""); }).join(",");
+    var readers = items.map(function (item) { return (item.video_id || 0) + ":" + (item.helper || "") + ":" + (item.checked || ""); }).join(",");
     return items.length + ":" + first.id + ":" + last.id + ":" + first.phone + ":" + first.name + ":" + first.username + ":" + first.bucket + ":" + first.reason + ":" + readers + ":" + total + ":" + (capped ? 1 : 0);
   }
 
@@ -279,10 +301,10 @@
     note.textContent = capped
       ? "Đang hiện " + items.length + " / " + total + ". Mới nhất ở trên."
       : total + " kết quả. Mới nhất ở trên.";
-    var html = "<table><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Loại</th><th>Đọc bởi</th></tr>";
+    var html = "<table><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Loại</th><th>Đọc bởi</th><th>Kiểm</th></tr>";
     items.forEach(function (item) {
       var reason = item.reason ? "<div class='note'>" + escapeHtml(item.reason) + "</div>" : "";
-      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(item.bucket) + reason + "</td><td>" + escapeHtml(resultReader(item)) + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(item.bucket) + reason + "</td><td>" + escapeHtml(resultReader(item)) + "</td><td>" + escapeHtml(checkLabel(item)) + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
   }
@@ -916,6 +938,44 @@
     event.preventDefault();
     drop.classList.remove("over");
     addFiles(event.dataTransfer.files);
+  });
+  document.getElementById("checkStart").addEventListener("click", async function () {
+    var note = document.getElementById("checkNote");
+    var button = document.getElementById("checkStart");
+    button.disabled = true;
+    note.textContent = "Đang xếp các video đủ 3 ô vào hàng kiểm...";
+    note.className = "note";
+    var response = await api("/v1/results/check/start", { method: "POST" });
+    button.disabled = false;
+    if (!response.ok) {
+      note.textContent = "Chưa bắt đầu được. Thử lại sau vài giây.";
+      note.className = "note warn";
+      return;
+    }
+    var body = await response.json();
+    var missing = body.missing ? " " + body.missing + " video không còn file nên không kiểm lại được." : "";
+    note.textContent = "Đã đưa " + body.videos + " video vào hàng kiểm, " + body.rows + " dòng đủ 3 ô." + missing;
+    note.className = "note ok";
+    refresh();
+  });
+  document.getElementById("checkStop").addEventListener("click", async function () {
+    var note = document.getElementById("checkNote");
+    var button = document.getElementById("checkStop");
+    button.disabled = true;
+    note.textContent = "Đang dừng các video chưa kiểm...";
+    note.className = "note";
+    var response = await api("/v1/results/check/stop", { method: "POST" });
+    button.disabled = false;
+    if (!response.ok) {
+      note.textContent = "Chưa dừng được. Thử lại sau vài giây.";
+      note.className = "note warn";
+      return;
+    }
+    var body = await response.json();
+    var reading = body.reading ? " Còn " + body.reading + " video đang kiểm, video đó vẫn chạy nốt." : "";
+    note.textContent = "Đã dừng " + body.stopped + " video chưa bắt đầu kiểm." + reading;
+    note.className = "note ok";
+    refresh();
   });
   document.getElementById("query").addEventListener("input", loadResults);
   document.getElementById("pcDownload").addEventListener("click", async function () {
