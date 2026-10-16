@@ -318,6 +318,20 @@ def plan_reads(
     return plan
 
 
+def _reporter(progress: Callable[[str, int, int], None] | None, stage: str) -> Callable[[int, int], None] | None:
+    """Báo tiến độ ra ngoài. Lỗi ở chỗ báo không được làm hỏng lần đọc."""
+    if progress is None:
+        return None
+
+    def report(done: int, total: int) -> None:
+        try:
+            progress(stage, done, total)
+        except Exception:
+            pass
+
+    return report
+
+
 def read_inputs(
     paths: list[Path],
     fps: float = 2.0,
@@ -325,21 +339,26 @@ def read_inputs(
     submit: Callable[..., Future] | None = None,
     work_dir: Path | None = None,
     task_timeout: float | None = None,
+    progress: Callable[[str, int, int], None] | None = None,
 ) -> list[FrameRead]:
     """Đọc ảnh và video theo đúng thứ tự đưa vào. Thứ tự này dùng để biết hồ sơ mở sau danh bạ nào.
 
     submit là executor.submit của một nhóm tiến trình có sẵn; không có thì tự mở nhóm riêng.
     task_timeout: chờ một khung lâu hơn chừng này giây thì coi nhóm tiến trình đã hỏng (BrokenExecutor).
+    progress(bước, đã xong, tổng) chỉ để hiện tiến độ: extract, scan rồi read. Không đổi kết quả đọc.
     """
     jobs: list[tuple[str, float]] = []
     temps: list[tempfile.TemporaryDirectory[str]] = []
     pool: ProcessPoolExecutor | None = None
+    extracting = _reporter(progress, "extract")
     try:
         for path in paths:
             suffix = path.suffix.lower()
             if suffix in IMAGE_SUFFIXES:
                 jobs.append((str(path), -1.0))
             elif suffix in VIDEO_SUFFIXES:
+                if extracting is not None:
+                    extracting(0, 0)
                 folder = tempfile.TemporaryDirectory(prefix="docvideo-frames-", dir=work_dir)
                 temps.append(folder)
                 frames = drop_repeats(extract_frames(path, Path(folder.name), fps))
@@ -351,11 +370,16 @@ def read_inputs(
             if workers > 1 and len(jobs) > 1:
                 pool = ProcessPoolExecutor(max_workers=workers)
                 submit = pool.submit
-        layouts = _run(submit, [(_scan_file, path, at) for path, at in jobs], task_timeout)
+        layouts = _run(submit, [(_scan_file, path, at) for path, at in jobs], task_timeout, _reporter(progress, "scan"))
         resolve_taps(layouts)
         plan = plan_reads(layouts)
         order = sorted(plan)
-        reads = _run(submit, [(_read_file, jobs[index][0], layouts[index], plan[index]) for index in order], task_timeout)
+        reads = _run(
+            submit,
+            [(_read_file, jobs[index][0], layouts[index], plan[index]) for index in order],
+            task_timeout,
+            _reporter(progress, "read"),
+        )
         done = dict(zip(order, reads))
         return [done[index] if index in done else _unread(layout) for index, layout in enumerate(layouts)]
     finally:
@@ -371,12 +395,30 @@ def read_inputs(
                 pass
 
 
-def _run(submit: Callable[..., Future] | None, calls: list[tuple], timeout: float | None = None) -> list:
+def _run(
+    submit: Callable[..., Future] | None,
+    calls: list[tuple],
+    timeout: float | None = None,
+    on_done: Callable[[int, int], None] | None = None,
+) -> list:
+    total = len(calls)
+    if on_done is not None:
+        on_done(0, total)
     if submit is None:
-        return [call[0](*call[1:]) for call in calls]
+        results = []
+        for call in calls:
+            results.append(call[0](*call[1:]))
+            if on_done is not None:
+                on_done(len(results), total)
+        return results
     futures = [submit(*call) for call in calls]
     try:
-        return [future.result(timeout=timeout) for future in futures]
+        collected = []
+        for future in futures:
+            collected.append(future.result(timeout=timeout))
+            if on_done is not None:
+                on_done(len(collected), total)
+        return collected
     except FutureTimeout as exc:
         for future in futures:
             future.cancel()

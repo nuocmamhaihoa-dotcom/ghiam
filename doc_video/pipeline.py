@@ -20,7 +20,10 @@ def read_video(
     paths: list[Path],
     submit=None,
     work_dir: Path | None = None,
+    progress=None,
 ) -> tuple[Result, list[FrameRead]]:
-    """Đọc video hoặc ảnh và ghép bảng số, tên, id."""
-    frames = read_inputs(paths, submit=submit, work_dir=work_dir, task_timeout=FRAME_TIMEOUT_SECONDS)
+    """Đọc video hoặc ảnh và ghép bảng số, tên, id. progress chỉ để hiện tiến độ, không đổi kết quả."""
+    frames = read_inputs(
+        paths, submit=submit, work_dir=work_dir, task_timeout=FRAME_TIMEOUT_SECONDS, progress=progress
+    )
     return build(frames), frames
