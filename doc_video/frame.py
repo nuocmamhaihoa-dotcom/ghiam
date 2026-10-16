@@ -25,9 +25,7 @@ import numpy as np
 from PIL import Image, ImageOps
 
 from doc_video import ocr, viet
-from doc_video.side import screen_title, select_left_profile, select_right_pairs
 from doc_video.text import (
-    SCREEN_WORDS,
     clean_name,
     find_handle,
     fix_underscores,
@@ -56,9 +54,6 @@ LOOSE_HANDLE = re.compile(r"@[^A-Za-z0-9._]?[A-Za-z0-9._]{3,24}")
 class Contact:
     phone: str
     name: str
-    # False với cặp bổ sung (số và tên ngay dưới số mà bước quét chính bỏ sót).
-    # Có mặt để ghép theo tên, không chen vào thứ tự các dòng đã quét.
-    in_order: bool = True
 
 
 @dataclass
@@ -72,15 +67,6 @@ class FrameRead:
     at: float = -1.0
     # Danh bạ: số điện thoại của dòng đang có vòng tròn chạm màn hình, tức dòng vừa được bấm.
     tapped: str = ""
-    # Hướng bổ sung, không đưa vào contacts: cặp cột phải (số, tên) và cặp bên trái (tên, @id).
-    side_contacts: list[Contact] = field(default_factory=list)
-    side_profile_name: str = ""
-    side_handle: str = ""
-    # Luồng đọc toàn bộ: tên và @id đọc kỹ trên các khung luồng chính chưa đọc.
-    # Không đưa vào contacts, nên thứ tự mở hồ sơ và các hàng đã ghép không đổi.
-    full_contacts: list[Contact] = field(default_factory=list)
-    full_profile_name: str = ""
-    full_handle: str = ""
 
 
 @dataclass(frozen=True)
@@ -93,8 +79,6 @@ class ListRow:
     top: int = 0
     # False khi tên chỉ gồm biểu tượng cảm xúc: không đọc, để tên trống thay vì chữ rác.
     readable: bool = True
-    # False với cặp bổ sung: không dùng cho thứ tự mở dòng và dấu chạm.
-    in_order: bool = True
 
 
 @dataclass
@@ -113,10 +97,6 @@ class Layout:
     # Độ cao tâm vòng tròn chạm màn hình trên vùng danh bạ, -1 nếu không có hoặc có nhiều vòng.
     tap_y: float = -1.0
     row_pitch: float = 0.0
-    # Ô chữ của hướng bổ sung. Không nằm trong rows, nên thứ tự dòng và dấu chạm không đổi.
-    side_pairs: list[tuple[ocr.TextLine, ocr.TextLine]] = field(default_factory=list)
-    side_name_line: ocr.TextLine | None = None
-    side_handle_line: ocr.TextLine | None = None
 
 
 def _window_sum(mask: np.ndarray, radius: int) -> np.ndarray:
@@ -237,129 +217,21 @@ def _row_pitch(pairs: list[tuple[ocr.TextLine, ocr.TextLine]]) -> float:
     return float(gaps[len(gaps) // 2]) if gaps else 0.0
 
 
-def _touch_blobs(mask: np.ndarray) -> list[tuple[float, float, int, int, int]]:
-    """Mỗi mảng liền của vòng tròn: tâm x, tâm y, diện tích, rộng, cao.
-
-    Nút Back, ảnh đại diện và vòng chạm thật cùng là hình tròn xám. Tách từng
-    mảng để bỏ những cái nằm ở cột trái, giữ vòng nằm trên dòng vừa bấm.
-    """
-    if not mask.any():
-        return []
-    padded = np.pad(mask.astype(np.uint8), ((0, 0), (1, 1)))
-    diff = np.diff(padded.astype(np.int8), axis=1)
-    ys, starts = np.nonzero(diff == 1)
-    _, ends = np.nonzero(diff == -1)
-    count = int(ys.size)
-    if count == 0 or ends.size != count:
-        return []
-    parent = list(range(count))
-
-    def find(index: int) -> int:
-        while parent[index] != index:
-            parent[index] = parent[parent[index]]
-            index = parent[index]
-        return index
-
-    def union(left: int, right: int) -> None:
-        left, right = find(left), find(right)
-        if left != right:
-            parent[right] = left
-
-    by_row: dict[int, list[int]] = {}
-    for index, y in enumerate(ys.tolist()):
-        by_row.setdefault(int(y), []).append(index)
-    previous: list[int] = []
-    previous_y = -2
-    for y in sorted(by_row):
-        current = by_row[y]
-        if previous and y == previous_y + 1:
-            probe = 0
-            for index in current:
-                while probe < len(previous) and ends[previous[probe]] <= starts[index]:
-                    probe += 1
-                overlap = probe
-                while overlap < len(previous) and starts[previous[overlap]] < ends[index]:
-                    union(index, previous[overlap])
-                    overlap += 1
-        previous = current
-        previous_y = y
-
-    boxes: dict[int, list[int]] = {}
-    for index in range(count):
-        root = find(index)
-        y = int(ys[index])
-        x0 = int(starts[index])
-        x1 = int(ends[index])
-        box = boxes.get(root)
-        area = x1 - x0
-        if box is None:
-            boxes[root] = [x0, y, x1, y + 1, area, area * (x0 + x1) / 2, area * (y + 0.5)]
-            continue
-        box[0] = min(box[0], x0)
-        box[1] = min(box[1], y)
-        box[2] = max(box[2], x1)
-        box[3] = max(box[3], y + 1)
-        box[4] += area
-        box[5] += area * (x0 + x1) / 2
-        box[6] += area * (y + 0.5)
-    blobs = []
-    for x0, y0, x1, y1, area, moment_x, moment_y in boxes.values():
-        if area <= 0:
-            continue
-        blobs.append((moment_x / area, moment_y / area, area, x1 - x0, y1 - y0))
-    return blobs
-
-
-def _tap_cluster(blobs: list[tuple[float, float, int]], width: int, pitch: float) -> float:
-    """Độ cao một cụm vòng tròn. Vòng bị nút Follow cắn có thể tách thành hai mảnh kề nhau."""
-    groups: list[list[tuple[float, float, int]]] = []
-    for blob in blobs:
-        placed = False
-        for group in groups:
-            if all(abs(blob[0] - other[0]) <= 0.18 * width and abs(blob[1] - other[1]) <= 0.55 * pitch for other in group):
-                group.append(blob)
-                placed = True
-                break
-        if not placed:
-            groups.append([blob])
-    if len(groups) != 1:
-        return -1.0
-    group = groups[0]
-    weight = sum(blob[2] for blob in group)
-    return sum(blob[1] * blob[2] for blob in group) / weight if weight else -1.0
-
-
 def _tap_center(touched: np.ndarray, pairs: list[tuple[ocr.TextLine, ocr.TextLine]], pitch: float) -> float:
-    """Độ cao vòng tròn chạm nằm trên danh bạ.
-
-    Nút Back góc trên trái và ảnh đại diện xám cũng là hình tròn. Bỏ cột trái.
-    Còn một vòng, hoặc một vòng bên cột Follow khi còn vòng khác ở giữa, thì
-    lấy vòng đó. Nhiều vòng không tách được thì trả -1, để khỏi gán nhầm dòng.
-    """
+    """Độ cao tâm vòng tròn chạm duy nhất nằm trong vùng các dòng danh bạ, -1 nếu không có hoặc có nhiều."""
     if not touched.any() or pitch <= 0:
         return -1.0
-    height, width = touched.shape
     low = min(phone_line.y0 for phone_line, _ in pairs) - pitch
     high = max(name_line.y1 for _, name_line in pairs) + pitch
-    minimum = max(200, int(0.0015 * width * width))
-    kept: list[tuple[float, float, int]] = []
-    for cx, cy, area, wide, tall in _touch_blobs(touched):
-        if not low <= cy <= high or area < minimum or wide < 1 or tall < 1:
-            continue
-        if wide > 3 * tall or tall > 3 * wide:
-            continue
-        if cx < 0.20 * width:
-            continue
-        if cy < 0.12 * height and cx < 0.40 * width:
-            continue
-        kept.append((cx, cy, area))
-    if not kept:
-        return -1.0
-    single = _tap_cluster(kept, width, pitch)
-    if single >= 0:
-        return single
-    right = [blob for blob in kept if blob[0] >= 0.60 * width]
-    return _tap_cluster(right, width, pitch)
+    rows = np.flatnonzero(touched.any(axis=1))
+    runs: list[tuple[int, int]] = []
+    for y in rows:
+        if runs and y <= runs[-1][1] + 1:
+            runs[-1] = (runs[-1][0], int(y))
+        else:
+            runs.append((int(y), int(y)))
+    centers = [(a + b) / 2 for a, b in runs if low <= (a + b) / 2 <= high]
+    return centers[0] if len(centers) == 1 else -1.0
 
 
 def _highlighted_row(screen: Image.Image, rows: list[ListRow], pitch: float) -> str:
@@ -387,8 +259,6 @@ def _highlighted_row(screen: Image.Image, rows: list[ListRow], pitch: float) -> 
 def row_at(rows: list[ListRow], y: float, pitch: float) -> str:
     """Số điện thoại của dòng chứa độ cao y (dòng chiếm từ trên dòng số một chút tới hết dòng tên)."""
     for row in rows:
-        if not row.in_order:
-            continue
         if row.top - 0.25 * pitch <= y < row.top + 0.75 * pitch:
             return row.phone
     return ""
@@ -415,110 +285,17 @@ def _phones_without_name(
     return extra
 
 
-def _title_margin(title: ocr.TextLine) -> float:
-    return title.y1 + 0.9 * title.h
-
-
-def _name_box_usable(phone_line: ocr.TextLine, name_line: ocr.TextLine) -> bool:
-    """Ô ngay dưới số có thể là tên khách: không phải nút trên màn hình, và đủ rộng để chứa tên."""
-    folded = " ".join(fold(clean_name(name_line.text)).casefold().split())
-    if folded in SCREEN_WORDS or looks_like_phone(name_line.text):
-        return False
-    if is_name(clean_name(name_line.text)):
-        return True
-    return name_line.x1 - name_line.x0 >= 2 * max(name_line.text_h, phone_line.text_h)
-
-
-def _supplement_pairs(
-    kept: list[tuple[ocr.TextLine, ocr.TextLine]],
-    geometric: list[tuple[ocr.TextLine, ocr.TextLine]],
-    accepted: set[str],
-    title: ocr.TextLine | None,
-) -> list[tuple[ocr.TextLine, ocr.TextLine, str]]:
-    """Cặp số và tên ngay bên dưới mà bước quét chính đã bỏ.
-
-    Giữ lại khi tên đọc thô chưa thành tên (ô vẫn đủ rộng, bước đọc kỹ sẽ đọc lại),
-    hoặc khi dòng số nằm sát dưới tiêu đề nhưng chính dòng đó đã là đủ 10 số.
-    Số trả về khác rỗng thì dùng đúng số đó, không đọc lại ô dễ bị cắt nửa chữ.
-    Dòng đè lên chữ "Danh bạ" vẫn bỏ: nửa trên chữ số không còn trên ảnh.
-    """
-    kept_ids = {id(phone_line) for phone_line, _ in kept}
-    margin = _title_margin(title) if title is not None else None
-    found: list[tuple[ocr.TextLine, ocr.TextLine, str]] = []
-    seen = set(accepted)
-    for phone_line, name_line in geometric:
-        if id(phone_line) in kept_ids or not _name_box_usable(phone_line, name_line):
-            continue
-        if title is not None and phone_line.y0 < title.y1:
-            continue
-        under_title = margin is not None and phone_line.y0 < margin
-        line_phone = normalize_phone(phone_line.text)
-        if under_title:
-            if not line_phone or line_phone in seen:
-                continue
-            seen.add(line_phone)
-            found.append((phone_line, name_line, line_phone))
-            continue
-        if is_name(clean_name(name_line.text)):
-            continue
-        if line_phone and line_phone in seen:
-            continue
-        if line_phone:
-            seen.add(line_phone)
-        found.append((phone_line, name_line, ""))
-    return found
-
-
-def _supplement_rows(
-    screen: Image.Image,
-    touched: np.ndarray,
-    emoji: np.ndarray,
-    kept: list[tuple[ocr.TextLine, ocr.TextLine]],
-    geometric: list[tuple[ocr.TextLine, ocr.TextLine]],
-    rows: list[ListRow],
-    title: ocr.TextLine | None,
-) -> list[ListRow]:
-    """Đọc các cặp bổ sung. Số đã chắc trên dòng thì không đọc lại."""
-    accepted = {row.phone for row in rows}
-    extra = _supplement_pairs(kept, geometric, accepted, title)
-    if not extra:
-        return []
-    pending = [(phone_line, name_line) for phone_line, name_line, forced in extra if not forced]
-    read = _read_phones(screen, pending) if pending else []
-    read_at = 0
-    added: list[ListRow] = []
-    for phone_line, name_line, forced in extra:
-        if forced:
-            phone = forced
-        else:
-            phone = read[read_at] or normalize_phone(phone_line.text)
-            read_at += 1
-        if not phone or phone in accepted:
-            continue
-        accepted.add(phone)
-        added.append(
-            ListRow(
-                phone,
-                name_line,
-                not _covered(touched, phone_line, name_line),
-                phone_line.y0,
-                bool(name_line.text) and not _only_emoji(emoji, name_line),
-                in_order=False,
-            )
-        )
-    return added
-
-
 def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
     """Bước quét: loại màn hình, vị trí các dòng, số điện thoại. Không đọc kỹ tên và @id."""
     screen, touched, emoji = _prepare(image)
     lines = ocr.find_lines(screen)
-    geometric = [
-        pair for pair in _list_pairs(lines, screen) if pair[1].y1 + pair[1].h < screen.height
+    pairs = [
+        pair
+        for pair in _list_pairs(lines)
+        if pair[1].y1 + pair[1].h < screen.height and is_name(clean_name(pair[1].text))
     ]
-    named = [pair for pair in geometric if is_name(clean_name(pair[1].text))]
-    if len(named) >= 2:
-        pairs = sorted(named + _phones_without_name(lines, named, screen.height), key=lambda pair: pair[0].y0)
+    if len(pairs) >= 2:
+        pairs = sorted(pairs + _phones_without_name(lines, pairs, screen.height), key=lambda pair: pair[0].y0)
         # Dòng trên cùng trượt dưới thanh tiêu đề bị che nửa trên chữ số (3 thành 5). Bỏ dòng số
         # nằm sát dưới chữ "Danh bạ"; các khung khác thấy dòng đó đủ.
         title = next(
@@ -526,7 +303,7 @@ def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
             None,
         )
         if title is not None:
-            pairs = [pair for pair in pairs if pair[0].y0 >= _title_margin(title)]
+            pairs = [pair for pair in pairs if pair[0].y0 >= title.y1 + 0.9 * title.h]
         phones = _read_phones(screen, pairs)
         rows = [
             ListRow(
@@ -539,25 +316,16 @@ def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
             for phone, (phone_line, name_line) in zip(phones, pairs)
             if phone
         ]
-        if pairs:
-            pitch = _row_pitch(pairs)
-            tap_y = _tap_center(touched, pairs, pitch)
-            tapped = _highlighted_row(screen, rows, pitch) or (row_at(rows, tap_y, pitch) if tap_y >= 0 else "")
-        else:
-            pitch = 0.0
-            tap_y = -1.0
-            tapped = ""
-        rows.extend(_supplement_rows(screen, touched, emoji, pairs, geometric, rows, title))
-        rows.sort(key=lambda row: row.top)
-        layout = Layout("list", rows=rows, at=at, tapped=tapped, tap_y=tap_y, row_pitch=pitch)
-        _attach_side(layout, lines, screen, geometric)
-        return layout
+        pitch = _row_pitch(pairs)
+        tap_y = _tap_center(touched, pairs, pitch)
+        tapped = _highlighted_row(screen, rows, pitch) or (row_at(rows, tap_y, pitch) if tap_y >= 0 else "")
+        return Layout("list", rows=rows, at=at, tapped=tapped, tap_y=tap_y, row_pitch=pitch)
     profile = _profile_lines(lines, screen.height)
     if profile is not None:
         name_line, handle_line = profile
         lines_to_check = [handle_line] + ([name_line] if name_line is not None else [])
         name_area = name_line or _band_line(screen, handle_line)
-        layout = Layout(
+        return Layout(
             "profile",
             name_line=name_line,
             handle_line=handle_line,
@@ -566,220 +334,7 @@ def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
             name_readable=not _only_emoji(emoji, name_area),
             at=at,
         )
-        _attach_side(layout, lines, screen, geometric)
-        return layout
-    layout = Layout(at=at)
-    _attach_side(layout, lines, screen, geometric)
-    promote_unclassified_profile(layout)
-    _remember_gap_handle(layout, lines, screen.height, screen.width)
-    return layout
-
-
-def promote_unclassified_profile(layout: Layout) -> None:
-    """Màn chưa đủ hai dòng danh bạ nhưng có @id hồ sơ ở bên trái thì là hồ sơ.
-
-    Hồ sơ lướt qua một khung hay chưa đủ chữ để nhận ở bước chính, trong khi
-    cột trái đã thấy @id. Danh bạ đã nhận không bị đổi thành hồ sơ.
-    """
-    if layout.kind != "other" or layout.side_handle_line is None or layout.side_pairs:
-        return
-    compact = "".join(layout.side_handle_line.text.split())
-    if not compact.startswith("@"):
-        return
-    hint = handle_from_read(compact)
-    if not hint:
-        return
-    layout.kind = "profile"
-    layout.handle_line = layout.side_handle_line
-    layout.name_line = layout.side_name_line
-    layout.handle_hint = hint
-
-
-def _handle_shaped(text: str) -> bool:
-    """Dòng có hình @id: bắt đầu bằng @, hoặc một cụm vừa có chữ vừa có số.
-
-    Tên thuần và số điện thoại không phải @id.
-    """
-    compact = "".join(str(text or "").split())
-    if not compact or looks_like_phone(compact):
-        return False
-    if _looks_like_handle_line(compact):
-        return True
-    if "@" not in compact and not any(ch.isdigit() for ch in compact):
-        return False
-    return any(ch.isalpha() for ch in compact) and any(ch.isdigit() for ch in compact) and len(compact) >= 4
-
-
-def _gap_handle_candidate(lines: list[ocr.TextLine], height: int, width: int) -> ocr.TextLine | None:
-    """Dòng giống @id ở nửa trên, bên trái. Dùng khi cả màn chưa được nhận là hồ sơ."""
-    limit = int(0.72 * width)
-    found: list[ocr.TextLine] = []
-    for line in _merge_handle_fragments(lines):
-        if not (0.12 * height <= line.y0 <= 0.62 * height):
-            continue
-        if line.x0 >= limit or not _handle_shaped(line.text):
-            continue
-        found.append(line)
-    if not found:
-        return None
-    return min(found, key=lambda line: (line.y0, line.x0))
-
-
-def _remember_gap_handle(layout: Layout, lines: list[ocr.TextLine], height: int, width: int) -> None:
-    """Ghi ô @id thấy được. Chưa đổi loại màn hình; chỉ khoảng ngắn giữa hai danh bạ mới đọc kỹ."""
-    if layout.kind != "other" or layout.handle_line is not None or layout.side_pairs:
-        return
-    line = _gap_handle_candidate(lines, height, width)
-    if line is None:
-        return
-    layout.handle_line = line
-    if layout.name_line is None:
-        merged = _merge_handle_fragments(lines)
-        for index, item in enumerate(merged):
-            if abs(item.y0 - line.y0) <= 2 and abs(item.x0 - line.x0) <= 2:
-                layout.name_line = _name_above(merged, index)
-                break
-
-
-def promote_gap_profiles(layouts: list[Layout]) -> None:
-    """Khoảng ngắn giữa hai danh bạ, chưa có hồ sơ nào, mà đã thấy dòng @id thì đọc như hồ sơ.
-
-    Một lần mở nhanh thường không đủ chữ để bước quét nhận cả màn. Mỗi khoảng
-    chỉ nhận một khung, để không thêm một lần mở giả làm lệch thứ tự.
-    """
-    span: list[int] = []
-    seen_list = False
-
-    def close() -> None:
-        nonlocal span
-        if span and _short_gap(layouts, span) and not any(layouts[index].kind == "profile" for index in span):
-            ready = [index for index in span if _gap_frame_ready(layouts[index])]
-            if ready:
-                best = max(ready, key=lambda index: _gap_rank(layouts[index]))
-                _promote_gap_frame(layouts[best])
-        span = []
-
-    for index, layout in enumerate(layouts):
-        if layout.kind == "list":
-            if seen_list:
-                close()
-            else:
-                span = []
-            seen_list = True
-            continue
-        if seen_list:
-            span.append(index)
-
-
-def _short_gap(layouts: list[Layout], span: list[int]) -> bool:
-    if len(span) > 5:
-        return False
-    start = layouts[span[0]].at
-    end = layouts[span[-1]].at
-    return not (start >= 0 and end >= 0 and end - start > 1.2)
-
-
-def _gap_frame_ready(layout: Layout) -> bool:
-    return layout.kind == "other" and not layout.side_pairs and layout.handle_line is not None and _handle_shaped(layout.handle_line.text)
-
-
-def _gap_rank(layout: Layout) -> tuple[int, int, int]:
-    text = "".join(layout.handle_line.text.split()) if layout.handle_line is not None else ""
-    hint = handle_from_read(text)
-    return (1 if hint else 0, 1 if "@" in text else 0, len(text))
-
-
-def _promote_gap_frame(layout: Layout) -> None:
-    if layout.handle_line is None:
-        return
-    layout.kind = "profile"
-    if not layout.handle_hint:
-        hint = handle_from_read(layout.handle_line.text)
-        if hint:
-            layout.handle_hint = hint
-
-
-def _attach_side(
-    layout: Layout,
-    lines: list[ocr.TextLine],
-    screen: Image.Image,
-    geometric: list[tuple[ocr.TextLine, ocr.TextLine]],
-) -> None:
-    """Gắn ô bốn dãy ký tự. Không thêm vào rows."""
-    title = screen_title(lines, screen.height)
-    if layout.kind == "list":
-        layout.side_pairs = select_right_pairs(geometric, screen.width, title)
-        return
-    if layout.kind == "profile":
-        layout.side_name_line, layout.side_handle_line = select_left_profile(lines, screen.height, screen.width)
-        return
-    right = select_right_pairs(geometric, screen.width, title)
-    # Màn chưa đủ hai tên để thành danh bạ: chỉ nhận khi có từ hai cặp cột phải, kẻo một số
-    # tình cờ trên màn khác bị kéo vào.
-    if len(right) >= 2:
-        layout.side_pairs = right
-    layout.side_name_line, layout.side_handle_line = select_left_profile(lines, screen.height, screen.width)
-
-
-def _same_box(left: ocr.TextLine, right: ocr.TextLine) -> bool:
-    return abs(left.x0 - right.x0) <= 4 and abs(left.y0 - right.y0) <= 4 and abs(left.x1 - right.x1) <= 8
-
-
-def fill_side(image: Image.Image, layout: Layout, frame: FrameRead) -> None:
-    """Đọc kỹ bốn dãy ký tự vào frame.side_*. Không đổi contacts, tên hồ sơ hay @id của hướng cũ.
-
-    Cặp đã có tên ở lần đọc kỹ thì dùng lại tên đó. Cặp cột phải mà hướng cũ bỏ sót thì đọc lại ô.
-    """
-    screen = phone_screen(image)
-    known = {contact.phone: contact.name for contact in frame.contacts}
-    side: list[Contact] = []
-    seen: set[str] = set()
-    pending: list[tuple[ocr.TextLine, ocr.TextLine, str]] = []
-    for phone_line, name_line in layout.side_pairs:
-        primary = next((row.phone for row in layout.rows if row.top == phone_line.y0), "")
-        if primary and known.get(primary):
-            if primary not in seen:
-                seen.add(primary)
-                side.append(Contact(primary, known[primary], False))
-            continue
-        if primary and primary in seen:
-            continue
-        pending.append((phone_line, name_line, primary))
-    if pending:
-        read_phones = _read_phones(screen, [(phone_line, name_line) for phone_line, name_line, _ in pending])
-        name_lines = [name_line for _, name_line, _ in pending]
-        read_names = _read_names(
-            [_crop(screen, line, NAME_SMALL) for line in name_lines],
-            [_crop(screen, line) for line in name_lines],
-        )
-        for (phone_line, name_line, primary), read_phone, raw_name in zip(pending, read_phones, read_names):
-            phone = primary or read_phone or normalize_phone(phone_line.text)
-            if not phone or phone in seen:
-                continue
-            name = raw_name if is_name(raw_name) else ""
-            if not name:
-                rough = clean_name(name_line.text)
-                name = rough if is_name(rough) else ""
-            if not name:
-                continue
-            seen.add(phone)
-            side.append(Contact(phone, name, False))
-    frame.side_contacts = side
-    handle_line = layout.side_handle_line
-    if handle_line is None:
-        return
-    if (
-        layout.handle_line is not None
-        and frame.handle
-        and _same_box(layout.handle_line, handle_line)
-    ):
-        frame.side_profile_name = frame.profile_name
-        frame.side_handle = frame.handle
-        return
-    name, handle = _read_profile(screen, layout.side_name_line, handle_line, True)
-    if handle:
-        frame.side_profile_name = name
-        frame.side_handle = handle
+    return Layout(at=at)
 
 
 def read_layout(image: Image.Image, layout: Layout, rows: list[int] | None = None) -> FrameRead:
@@ -795,12 +350,11 @@ def read_layout(image: Image.Image, layout: Layout, rows: list[int] | None = Non
             lines = [layout.rows[index].name_line for index in chosen]
             read = _read_names([_crop(screen, line, NAME_SMALL) for line in lines], [_crop(screen, line) for line in lines])
             names = {index: name for index, name in zip(chosen, read) if is_name(name)}
-        contacts = [Contact(row.phone, names.get(index, ""), row.in_order) for index, row in enumerate(layout.rows)]
+        contacts = [Contact(row.phone, names.get(index, "")) for index, row in enumerate(layout.rows)]
         return FrameRead("list", contacts, at=layout.at, tapped=layout.tapped)
     if layout.kind == "profile" and layout.handle_line is not None:
         name, handle = _read_profile(phone_screen(image), layout.name_line, layout.handle_line, layout.name_readable)
-        # Giữ tên dù chưa ra @id. @id lúc quét được điền sau nếu lần đọc kỹ trượt hết.
-        if handle or name:
+        if handle:
             return FrameRead("profile", profile_name=name, handle=handle, at=layout.at)
     return FrameRead(at=layout.at)
 
@@ -814,45 +368,23 @@ def read_frame(image: Image.Image, at: float = -1.0) -> FrameRead:
     return read
 
 
-def _list_pairs(lines: list[ocr.TextLine], screen: Image.Image | None = None) -> list[tuple[ocr.TextLine, ocr.TextLine]]:
+def _list_pairs(lines: list[ocr.TextLine]) -> list[tuple[ocr.TextLine, ocr.TextLine]]:
     """Mỗi dòng số đi với dòng chữ ngay bên dưới, thẳng mép trái."""
-    pixels = np.asarray(screen) if screen is not None else None
     pairs = []
     for index, line in enumerate(lines):
         if not looks_like_phone(line.text):
             continue
-        row: list[ocr.TextLine] = []
         for below in lines[index + 1 :]:
             if below.y0 > line.y1 + 1.8 * line.h:
                 break
             if below.y0 < line.y1 - 0.3 * line.h:
                 continue
+            if abs(below.x0 - line.x0) > 1.5 * line.h:
+                continue
             if looks_like_phone(below.text):
                 break
-            if row and abs((below.y0 + below.y1) - (row[0].y0 + row[0].y1)) > 1.2 * max(below.h, row[0].h):
-                continue
-            if not row and abs(below.x0 - line.x0) > 2.2 * line.h:
-                continue
-            if below.x0 < line.x0 - 0.5 * line.h or below.x1 > line.x0 + 16 * line.h:
-                continue
-            row.append(below)
-        if not row:
-            continue
-        # Gạch dưới đầu tên (_hieu.phuong_) nằm thẳng mép trái với dòng số nhưng bước dò dòng
-        # hay bỏ sót; nới cả mép phải khi chữ cuối cách xa (như "Ý" trong "Hồ Hữu Ý") bị bỏ sót.
-        row.sort(key=lambda item: item.x0)
-        x0 = min(line.x0, min(item.x0 for item in row))
-        y0 = min(item.y0 for item in row)
-        x1 = max(item.x1 for item in row)
-        y1 = max(item.y1 for item in row)
-        text_h = max(item.text_h for item in row)
-        if pixels is not None:
-            band = pixels[max(0, y0 - 4) : min(pixels.shape[0], y1 + 4), x0 : min(pixels.shape[1], x1 + 2 * text_h)]
-            dark_cols = np.flatnonzero((band < 180).any(axis=0))
-            if dark_cols.size:
-                x1 = max(x1, x0 + int(dark_cols[-1]) + 1)
-        text = " ".join(item.text.strip() for item in row if item.text.strip())
-        pairs.append((line, ocr.TextLine(text, x0, y0, x1, y1, text_h)))
+            pairs.append((line, below))
+            break
     return pairs
 
 
@@ -860,36 +392,6 @@ def _looks_like_handle_line(text: str) -> bool:
     """Lần dò dòng đôi khi chèn một ký tự lạ ngay sau @ (@†17pbgif6o)."""
     compact = "".join(str(text or "").split())
     return bool(find_handle(compact) or LOOSE_HANDLE.search(compact))
-
-
-def _merge_handle_fragments(lines: list[ocr.TextLine]) -> list[ocr.TextLine]:
-    """Gộp các mảnh của cùng một dòng @id bị tách ngang (do dấu @, gạch dưới hoặc vòng chạm)."""
-    merged = list(lines)
-    for index, line in enumerate(lines):
-        compact = "".join(line.text.split())
-        if not ("@" in compact or "®" in compact or _looks_like_handle_line(compact)):
-            continue
-        pieces = [
-            other
-            for other in lines
-            if other.h <= 1.6 * line.h
-            and abs((other.y0 + other.y1) - (line.y0 + line.y1)) <= 1.2 * line.h
-            and other.x0 >= line.x0 - 20
-            and other.x1 <= line.x0 + 480
-            and sum(ch in "@®._" or ch.isalnum() for ch in "".join(other.text.split()))
-            >= 0.7 * max(1, len("".join(other.text.split())))
-        ]
-        if len(pieces) > 1:
-            pieces.sort(key=lambda item: item.x0)
-            merged[index] = ocr.TextLine(
-                "".join(item.text.strip() for item in pieces),
-                min(item.x0 for item in pieces),
-                min(item.y0 for item in pieces),
-                max(item.x1 for item in pieces),
-                max(item.y1 for item in pieces),
-                max(item.text_h for item in pieces),
-            )
-    return merged
 
 
 def _profile_lines(lines: list[ocr.TextLine], height: int) -> tuple[ocr.TextLine | None, ocr.TextLine] | None:
@@ -900,8 +402,6 @@ def _profile_lines(lines: list[ocr.TextLine], height: int) -> tuple[ocr.TextLine
     dòng không thấy dấu @ thì dựa vào hàng Đã follow / Follower / Thích: @id
     là dòng chữ ngay trên hàng số đếm.
     """
-    lines = _merge_handle_fragments(lines)
-    stats_handle = _handle_above_stats(lines, height)
     candidates = [
         index
         for index, line in enumerate(lines)
@@ -910,20 +410,10 @@ def _profile_lines(lines: list[ocr.TextLine], height: int) -> tuple[ocr.TextLine
     # Tên hồ sơ cũng có thể chứa @ (Hải@12345123456). Dòng @id thật bắt đầu bằng @.
     starts = [index for index in candidates if "@" in "".join(lines[index].text.split())[:2]]
     for index in starts or candidates:
-        line = lines[index]
-        # Khi vòng chạm làm mất dấu @ hoặc cắt ngắn dòng @id, nới ô dòng theo hàng Follower bên dưới.
-        if (
-            (index not in starts or line.x1 - line.x0 < 4.5 * line.h)
-            and stats_handle is not None
-            and abs(line.y0 - stats_handle.y0) <= 1.5 * max(line.h, stats_handle.h)
-        ):
-            line = stats_handle
-        return _name_above(lines, index), line
-    if stats_handle is not None:
-        above = [index for index, item in enumerate(lines) if item.y1 <= stats_handle.y0 + 0.3 * stats_handle.h]
-        anchor = max(above, key=lambda i: lines[i].y0) if above else len(lines)
-        lines_with_handle = lines[:anchor] + [stats_handle]
-        return _name_above(lines_with_handle, len(lines_with_handle) - 1), stats_handle
+        return _name_above(lines, index), lines[index]
+    index = _handle_above_stats(lines, height)
+    if index is not None:
+        return _name_above(lines, index), lines[index]
     return None
 
 
@@ -936,59 +426,30 @@ def _name_above(lines: list[ocr.TextLine], index: int) -> ocr.TextLine | None:
             continue
         if abs(above.x0 - line.x0) > 4 * line.h:
             continue
-        if above.h >= 0.7 * line.h and is_name(above.text):
+        if is_name(above.text):
             return above
     return None
 
 
-def _handle_above_stats(lines: list[ocr.TextLine], height: int) -> ocr.TextLine | None:
-    """Ô dòng @id ước lượng từ hàng Follower và Thích của màn hồ sơ."""
-    anchors = [
-        line
-        for line in lines
-        if line.y0 < 0.75 * height
-        and any(tag in fold(line.text).casefold() for tag in ("follower", "thich", "foll", "da follow"))
-    ]
-    for anchor in anchors:
+def _handle_above_stats(lines: list[ocr.TextLine], height: int) -> int | None:
+    """Vị trí dòng @id khi chỉ nhận ra được hàng Follower và Thích của màn hồ sơ."""
+    labels = [line for line in lines if "follower" in fold(line.text).casefold() and line.y0 < 0.7 * height]
+    for label in labels:
         row = [
             line
             for line in lines
-            if abs(line.y0 - anchor.y0) <= 1.2 * max(line.h, anchor.h)
-            and any(tag in fold(line.text).casefold() for tag in ("follower", "thich", "foll", "da follow"))
+            if abs(line.y0 - label.y0) < label.h and fold(line.text).casefold().strip() in ("thich", "da follow", "follower")
         ]
-        numbers = [
-            item
-            for item in lines
-            if anchor.y0 - 3.6 * anchor.h <= item.y0 < anchor.y0 - 0.5 * anchor.h
-            and sum(ch.isdigit() for ch in item.text) >= max(1, len("".join(item.text.split())))
-        ]
-        if len(row) < 2 and len(numbers) < 2:
+        if len(row) < 2:
             continue
-        left = min((item.x0 for item in row + numbers if item.x0 < 240), default=58)
-        stat_top = min((item.y0 for item in numbers), default=int(anchor.y0 - 2.2 * anchor.h))
-        h_est = max(28, anchor.text_h, max((item.text_h for item in numbers), default=28))
-        band_top = int(stat_top - 3.2 * h_est)
-        band_bottom = int(stat_top - 0.5 * h_est)
-        pieces = [
-            item
-            for item in lines
-            if band_top <= item.y0 <= band_bottom
-            and item.h <= 1.8 * h_est
-            and left - 2 * h_est <= item.x0 <= left + 14 * h_est
-            and not fold(item.text).casefold().strip().startswith("follow")
-        ]
-        if pieces:
-            pieces.sort(key=lambda item: item.x0)
-            y1 = max(item.y1 for item in pieces)
-            h = max(h_est, max(item.text_h for item in pieces))
-            x0 = min(58, left, min(item.x0 for item in pieces))
-            x1 = max(max(item.x1 for item in pieces), x0 + 13 * h)
-            text = "".join(item.text.strip() for item in pieces)
-            return ocr.TextLine(text, max(0, x0), max(0, y1 - h), x1, y1, h)
-        y1 = int(stat_top - 1.1 * h_est)
-        y0 = max(0, y1 - h_est)
-        x0 = min(58, left)
-        return ocr.TextLine("", max(0, x0), y0, x0 + int(14 * h_est), y1, h_est)
+        above = [index for index, line in enumerate(lines) if line.y1 <= label.y0 and line.y0 > label.y0 - 8 * label.h]
+        for index in sorted(above, key=lambda i: -lines[i].y0):
+            text = "".join(lines[index].text.split())
+            if not text or text.isdigit() or abs(lines[index].x0 - label.x0) > 3 * label.h:
+                continue
+            if " " in lines[index].text.strip() or sum(ch.isalnum() for ch in text) < 3:
+                return None
+            return index
     return None
 
 
@@ -1008,19 +469,8 @@ def _fit(piece: Image.Image, text_height: int, target: int) -> Image.Image:
 
 
 def _crop(screen: Image.Image, line: ocr.TextLine, target: int = NAME_LARGE) -> Image.Image:
-    # Gạch dưới ở cuối tên/@id (_hieu.phuong_, @_lantv._) hay bị bước dò dòng
-    # bỏ sót; nới bên phải nửa chiều cao chữ để không cắt cụt gạch dưới thành dấu chấm.
-    pad_left = max(6, line.text_h // 3)
-    pad_right = max(12, line.text_h // 2)
-    pad_y = max(6, line.text_h // 3)
-    piece = screen.crop(
-        (
-            max(0, line.x0 - pad_left),
-            max(0, line.y0 - pad_y),
-            min(screen.width, line.x1 + pad_right),
-            min(screen.height, line.y1 + pad_y),
-        )
-    )
+    pad = max(6, line.text_h // 3)
+    piece = screen.crop((max(0, line.x0 - pad), max(0, line.y0 - pad), min(screen.width, line.x1 + pad), min(screen.height, line.y1 + pad)))
     return _fit(piece, line.text_h, target)
 
 
@@ -1062,10 +512,6 @@ def _read_handle(screen: Image.Image, line: ocr.TextLine) -> str:
     Bộ tiếng Việt đọc chữ cái trong @id tốt, nhưng hay đọc 3 thành 5; chữ số
     của nó được tin ít hơn chữ số của bộ tiếng Anh.
     """
-    # @id TikTok không kết thúc bằng dấu chấm; khi lần dò dòng dừng ở dấu chấm cuối
-    # (@_tamshop.) thì ngay sau đó có thể còn gạch dưới bị cắt sót.
-    if line.text.rstrip().endswith("."):
-        line = ocr.TextLine(line.text, line.x0, line.y0, line.x1 + line.text_h // 2, line.y1, line.text_h)
     reads: list[tuple[str, float, float]] = [(handle_from_read(line.text), 1.0, VIE_DIGIT_WEIGHT)]
     for target, lang, whitelist, best in (
         (28, "vie", "", False),
@@ -1082,97 +528,7 @@ def _read_handle(screen: Image.Image, line: ocr.TextLine) -> str:
     handle = find_handle("@" + vote_chars(bodies, loose=False)) if bodies else ""
     if not handle:
         return ""
-    if not handle.endswith("_") and sum(h.endswith("._") for h, _, _ in reads) >= 3:
-        handle = handle.rstrip(".") + "._"
-    handle = find_handle(fix_underscores(handle, _underscore_strokes(screen, line, len(handle))))
-    return _fix_handle_lookalikes(screen, line, handle, reads) if handle else ""
-
-
-def _fix_handle_lookalikes(
-    screen: Image.Image,
-    line: ocr.TextLine,
-    handle: str,
-    reads: list[tuple[str, float, float]],
-) -> str:
-    """Phân biệt 0 với o và 1 với l, i trong @id bằng chiều cao và bề rộng nét chữ trên ảnh.
-
-    Trong phông chữ TikTok, số 0 cao bằng chữ số và chữ có nét cao (1..9, b, d, f, h, k, l, t),
-    còn chữ o thấp bằng các chữ thường không nét cao (a, c, e, m, n, r, s, u, v, w, x, z).
-    Chữ i có khe hở giữa dấu chấm và thân; số 1 có mỏ đầu nên rộng hơn hẳn chữ l (nét thẳng mảnh).
-    """
-    pad = max(4, line.text_h // 4)
-    box = (
-        max(0, line.x0 - pad),
-        max(0, line.y0 - pad),
-        min(screen.width, line.x1 + pad),
-        min(screen.height, line.y1 + pad),
-    )
-    pixels = np.asarray(screen.crop(box)).astype(np.int16)
-    if pixels.size == 0:
-        return handle
-    background = float(np.percentile(pixels, 90))
-    ink = float(np.percentile(pixels, 2))
-    if background - ink < 40:
-        return handle
-    dark = pixels < (background + ink) / 2
-    cols = np.flatnonzero(dark.any(axis=0))
-    if cols.size == 0:
-        return handle
-    runs: list[tuple[int, int]] = []
-    for col in cols:
-        if runs and int(col) - runs[-1][1] <= 1:
-            runs[-1] = (runs[-1][0], int(col))
-        else:
-            runs.append((int(col), int(col)))
-    runs = [(c0, c1) for c0, c1 in runs if c1 - c0 + 1 >= 2]
-    if len(runs) != len(handle):
-        return handle
-    glyphs: list[tuple[int, int, int, int, bool]] = []
-    for c0, c1 in runs:
-        rows = np.flatnonzero(dark[:, c0 : c1 + 1].any(axis=1))
-        y0, y1 = int(rows[0]), int(rows[-1])
-        has_gap = any(int(b) - int(a) > 2 for a, b in zip(rows, rows[1:]))
-        glyphs.append((y0, y1, y1 - y0 + 1, c1 - c0 + 1, has_gap))
-    if any(glyphs[i][2] < 10 for i, ch in enumerate(handle) if ch not in "._1li"):
-        return handle
-    out = list(handle)
-    tall_chars = set("123456789bdfhklt")
-    short_chars = set("aceimnrsuvwxz")
-    tall_tops = [glyphs[i][0] for i, ch in enumerate(out) if i > 0 and ch in tall_chars]
-    short_tops = [glyphs[i][0] for i, ch in enumerate(out) if i > 0 and ch in short_chars]
-    tall_hs = [glyphs[i][2] for i, ch in enumerate(out) if i > 0 and ch in tall_chars]
-    short_hs = [glyphs[i][2] for i, ch in enumerate(out) if i > 0 and ch in short_chars]
-    if tall_tops and short_tops:
-        t_top, s_top = float(np.median(tall_tops)), float(np.median(short_tops))
-        t_h, s_h = float(np.median(tall_hs)), float(np.median(short_hs))
-        if s_top - t_top >= 4.0 and t_h - s_h >= 4.0:
-            mid_top = (t_top + s_top) / 2.0
-            mid_h = (t_h + s_h) / 2.0
-            for i in range(1, len(out)):
-                if out[i] not in "0o":
-                    continue
-                if len({h[i] for h, _, _ in reads if len(h) == len(out) and h[i] in "0o"}) < 2:
-                    continue
-                if out[i] == "o" and glyphs[i][0] < mid_top and glyphs[i][2] >= mid_h:
-                    out[i] = "0"
-                elif out[i] == "0" and glyphs[i][0] > mid_top and glyphs[i][2] < mid_h:
-                    out[i] = "o"
-    for i in range(1, len(out)):
-        if out[i] not in "1li":
-            continue
-        pos_chars = {h[i] for h, _, _ in reads if len(h) == len(out) and h[i] in "1li"}
-        if i == 1:
-            pos_chars |= {h[1] for h, _, _ in reads if len(h) >= 2 and h[1] in "1li"}
-        if len(pos_chars) < 2 and i != 1:
-            continue
-        _, _, h_i, w_i, gap_i = glyphs[i]
-        if gap_i:
-            out[i] = "i"
-        elif w_i >= max(8, round(0.30 * h_i)):
-            out[i] = "1"
-        elif w_i <= max(6, round(0.22 * h_i)):
-            out[i] = "l"
-    return find_handle("".join(out)) or handle
+    return find_handle(fix_underscores(handle, _underscore_strokes(screen, line, len(handle))))
 
 
 def _underscore_strokes(screen: Image.Image, line: ocr.TextLine, chars: int) -> list[tuple[float, float]]:
@@ -1234,7 +590,8 @@ def _read_profile(
     else:
         band = _band_line(screen, handle_line)
         if band is not None:
-            candidates.append(_read_names([_crop(screen, band, NAME_SMALL)], [_crop(screen, band)])[0])
+            piece = screen.crop((band.x0, band.y0, band.x1, band.y1))
+            candidates.append(_read_names([_fit(piece, band.h, NAME_SMALL)], [_fit(piece, band.h, NAME_LARGE)])[0])
     for raw in candidates:
         name = clean_name(raw)
         if is_name(name):
@@ -1244,18 +601,10 @@ def _read_profile(
 
 def _band_line(screen: Image.Image, line: ocr.TextLine) -> ocr.TextLine | None:
     """Ô dải chữ ngay trên @id, dùng khi lần dò dòng không tách được tên."""
-    top = max(0, int(line.y0 - 4.0 * line.h))
-    bottom = min(screen.height, int(line.y0 - 0.8 * line.h))
-    left = max(0, line.x0 - line.h // 2)
-    right = min(int(0.68 * screen.width), max(line.x1, line.x0 + 10 * line.h))
+    top = max(0, int(line.y0 - 2.2 * line.h))
+    bottom = min(screen.height, int(line.y0 - 0.15 * line.h))
+    left = max(0, line.x0 - line.h)
+    right = min(screen.width, max(line.x1, line.x0 + 6 * line.h))
     if bottom - top < 8 or right - left < 8:
         return None
-    pixels = np.asarray(screen.crop((left, top, right, bottom)))
-    dark = pixels < 180
-    rows = np.flatnonzero(dark.any(axis=1))
-    cols = np.flatnonzero(dark.any(axis=0))
-    if rows.size >= 8 and cols.size >= 8:
-        y0, y1 = top + int(rows[0]), top + int(rows[-1]) + 1
-        x0, x1 = left + int(cols[0]), left + int(cols[-1]) + 1
-        return ocr.TextLine("", x0, y0, x1, y1, max(16, y1 - y0))
-    return ocr.TextLine("", left, top, right, bottom, max(16, int(1.6 * line.text_h)))
+    return ocr.TextLine("", left, top, right, bottom)

@@ -3,31 +3,14 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
-import tempfile
 import unittest
 from pathlib import Path
 
-import numpy as np
-
-from doc_video.frame import (
-    Contact,
-    FrameRead,
-    Layout,
-    ListRow,
-    _gap_handle_candidate,
-    _handle_shaped,
-    _list_pairs,
-    _supplement_pairs,
-    _tap_center,
-    promote_gap_profiles,
-    promote_unclassified_profile,
-    row_at,
-)
-from doc_video.join import Result, Review, Row, add_full_name_rows, add_side_rows, build
+from doc_video.frame import Contact, FrameRead
+from doc_video.join import build
 from doc_video.ocr import TextLine
-from doc_video.side import select_left_profile, select_right_pairs
-from doc_video.video import _kept_indexes, plan_full_reads, plan_reads, resolve_taps, side_frames
+from doc_video.frame import Layout, ListRow
+from doc_video.video import plan_reads, resolve_taps
 from doc_video.text import (
     clean_name,
     find_handle,
@@ -35,8 +18,6 @@ from doc_video.text import (
     handle_from_read,
     handle_from_viet,
     handle_matches_name,
-    is_name,
-    subtitle_handle,
     looks_like_phone,
     name_key,
     normalize_phone,
@@ -79,102 +60,28 @@ class TextTests(unittest.TestCase):
         self.assertEqual(find_handle("@31776814785"), "@31776814785")
         self.assertEqual(find_handle("@0749"), "")
         self.assertEqual(handle_from_read("(@thanhson190ó"), "@thanhson1906")
-        self.assertEqual(handle_from_read("@I.th.li078"), "@l.th.li078")
-        self.assertEqual(handle_from_read("@hng.In6732"), "@hng.ln6732")
-        self.assertEqual(handle_from_read("@mSg6vpbq6"), "@m5g6vpbq6")
-        self.assertEqual(handle_from_read("@xB2k"), "@x82k")
         self.assertEqual(handle_from_viet("Oquocnguyet81792"), "@quocnguyet81792")
         self.assertEqual(handle_from_viet("Qhuong.tv"), "@huong.tv")
         self.assertEqual(handle_from_viet("0090fy5xr"), "@090fy5xr")
-        self.assertEqual(handle_from_viet("@Om5g6vpbqó"), "@m5g6vpbq6")
-
-    def test_a_printed_username_is_an_id_and_a_plain_name_is_not(self) -> None:
-        self.assertEqual(subtitle_handle("user896273910"), "@user896273910")
-        self.assertEqual(subtitle_handle("camtruong1954"), "@camtruong1954")
-        self.assertEqual(subtitle_handle("@660"), "@660")
-        self.assertEqual(subtitle_handle("teehairsalon"), "")
-        self.assertEqual(subtitle_handle("Kem"), "")
-        self.assertEqual(subtitle_handle("Lan 2"), "")
-        self.assertEqual(subtitle_handle("123456"), "")
-        self.assertEqual(subtitle_handle("user89627391ó"), "@user896273916")
-        self.assertEqual(subtitle_handle("camtruong1954!"), "@camtruong1954")
-        self.assertEqual(subtitle_handle("Binh"), "")
 
     def test_names_keep_special_characters_except_bar(self) -> None:
         self.assertEqual(clean_name("Huyền Phương (Cà)"), "Huyền Phương (Cà)")
         self.assertEqual(clean_name("Lan & Hoa"), "Lan & Hoa")
         self.assertEqual(clean_name("Thắm | Shop"), "Thắm Shop")
-        self.assertTrue(is_name("Ý"))
-        self.assertFalse(is_name("A"))
 
     def test_vote_keeps_what_most_readers_agree_on(self) -> None:
         reads = [("Hữu Nhung", 1.5), ("Hữ Nhung", 1.0), ("Hữu Nhung", 1.0), ("Huu Nhung", 0.7)]
         self.assertEqual(vote_chars(reads), "Hữu Nhung")
         reads = [("Ngô Lan", 1.5), ("Ng6 Lan", 1.0), ("Ngô Lan", 1.0), ("Ngo Lan", 0.7)]
         self.assertEqual(vote_chars(reads), "Ngô Lan")
-        reads = [("Ngô Lan", 1.5), ("Ngõ Lan", 1.0), ("Ngõ Lan", 1.0), ("Ngo Lan", 0.7)]
-        self.assertEqual(vote_chars(reads), "Ngô Lan")
-        reads = [("Hải Yến", 1.5), ("Hài Yến", 1.0), ("Hài Yến", 1.0), ("Hai Yen", 0.7)]
-        self.assertEqual(vote_chars(reads), "Hải Yến")
-        reads = [("Định Khánh Hải", 1.5), ("Đình Khánh Hải", 1.0), ("Đỉnh Khánh Hải", 1.0), ("Dinh Khanh Hai", 0.7)]
-        self.assertEqual(vote_chars(reads), "Đinh Khánh Hải")
         reads = [("nhungphuong 8712", 1.5), ("nhungphuong8712", 1.0), ("nhungphuong8712", 1.0), ("nhungphuong8712", 0.7)]
         self.assertEqual(vote_chars(reads), "nhungphuong8712")
         reads = [("_thoa.xuan_", 0.7), ("thoa.xuan", 1.5), ("_thoa.xuan_", 1.0), ("_thoa.xuan_", 1.0)]
         self.assertEqual(vote_chars(reads), "_thoa.xuan_")
 
-    def test_list_pairs_merges_split_pieces_of_a_name_row(self) -> None:
-        lines = [
-            TextLine("0813663062", 273, 1817, 502, 1844, 27),
-            TextLine("|", 274, 1861, 276, 1891, 30),
-            TextLine("Trinh", 330, 1863, 413, 1889, 26),
-        ]
-        pairs = _list_pairs(lines)
-        self.assertEqual(len(pairs), 1)
-        self.assertEqual((pairs[0][1].x0, pairs[0][1].x1), (273, 413))
-        self.assertTrue(is_name(clean_name(pairs[0][1].text)))
-
-    def test_a_wide_name_box_under_the_phone_is_kept_when_the_rough_text_is_not_a_name(self) -> None:
-        phone = TextLine("0912345678", 80, 400, 360, 440, 28)
-        name = TextLine("x", 80, 450, 280, 490, 28)
-        kept_phone = TextLine("0900000001", 80, 520, 360, 560, 28)
-        kept_name = TextLine("Lan", 80, 570, 200, 610, 28)
-        found = _supplement_pairs([(kept_phone, kept_name)], [(phone, name), (kept_phone, kept_name)], set(), None)
-        self.assertEqual([(item[0].text, item[2]) for item in found], [("0912345678", "")])
-
-    def test_a_complete_number_just_under_the_title_is_kept(self) -> None:
-        title = TextLine("Danh bạ", 40, 20, 220, 70, 36)
-        phone = TextLine("0987654321", 80, 80, 360, 116, 28)
-        name = TextLine("Mai", 80, 124, 180, 160, 28)
-        found = _supplement_pairs([], [(phone, name)], set(), title)
-        self.assertEqual([(item[0].text, item[2]) for item in found], [("0987654321", "0987654321")])
-
-    def test_a_number_hidden_under_the_title_stays_out(self) -> None:
-        title = TextLine("Danh bạ", 40, 20, 220, 90, 40)
-        phone = TextLine("0987654321", 80, 70, 360, 106, 28)
-        name = TextLine("Mai", 80, 114, 180, 150, 28)
-        self.assertEqual(_supplement_pairs([], [(phone, name)], set(), title), [])
-
-    def test_a_button_or_a_thin_mark_under_the_phone_is_not_a_name(self) -> None:
-        follow = TextLine("0912345678", 80, 400, 360, 440, 28)
-        follow_name = TextLine("Follow", 80, 450, 240, 490, 28)
-        mark = TextLine("0900000002", 80, 520, 360, 560, 28)
-        mark_name = TextLine("|", 80, 570, 84, 600, 28)
-        self.assertEqual(
-            _supplement_pairs([], [(follow, follow_name), (mark, mark_name)], set(), None),
-            [],
-        )
-
-    def test_a_number_already_scanned_is_not_added_again(self) -> None:
-        phone = TextLine("0912345678", 80, 80, 360, 116, 28)
-        name = TextLine("Mai", 80, 124, 180, 160, 28)
-        title = TextLine("Danh bạ", 40, 20, 220, 70, 36)
-        self.assertEqual(_supplement_pairs([], [(phone, name)], {"0912345678"}, title), [])
-
     def test_underscore_strokes_fix_double_and_leading_underscores(self) -> None:
         # Nét ở vị trí 0 là chân chữ @, không phải gạch dưới.
         self.assertEqual(fix_underscores("@tam_400", [(0.4, 0.9), (4.5, 1.5)]), "@tam__400")
-        self.assertEqual(fix_underscores("@tam_400", [(0.4, 0.9), (4.1, 0.72), (5.0, 0.72)]), "@tam__400")
         self.assertEqual(fix_underscores("@tam_400", [(0.4, 0.9), (4.5, 0.8)]), "@tam_400")
         self.assertEqual(fix_underscores("@vantuyet._", [(0.3, 0.9), (1.6, 0.8), (10.2, 0.8)]), "@_vantuyet._")
         self.assertEqual(fix_underscores("@ydieu", [(0.3, 0.9), (1.5, 0.8)]), "@ydieu")
@@ -183,26 +90,6 @@ class TextTests(unittest.TestCase):
     def test_vote_on_handles_is_exact(self) -> None:
         reads = [("tamphuongca14899", 1), ("tamphuongcal4899", 1), ("tamphuongca14899", 1)]
         self.assertEqual(vote_chars(reads, loose=False), "tamphuongca14899")
-        reads = [
-            ("sunr0o971xra", 1.0, 0.6),
-            ("sunr0o971xra", 1.0, 0.6),
-            ("sunr0o971xra", 1.0, 0.6),
-            ("sunr00971xra", 1.0, 1.0),
-            ("sunr00971xra", 1.0, 1.0),
-            ("sunr0o0971xra", 1.0, 1.0),
-            ("sunr00971xra", 1.0, 1.0),
-        ]
-        self.assertEqual(vote_chars(reads, loose=False), "sunr0o971xra")
-        reads = [
-            ("umrv96cp5ws", 1.0, 0.6),
-            ("umrv96cp5ws", 1.0, 0.6),
-            ("umrv96cp5ws", 1.0, 0.6),
-            ("iumrv96cp5ws", 1.0, 1.0),
-            ("iumrv96cp5ws", 1.0, 1.0),
-            ("lumrvo6cp5ws", 1.0, 1.0),
-            ("lumrv96cp5ws", 1.0, 1.0),
-        ]
-        self.assertEqual(len(vote_chars(reads, loose=False)), 12)
         self.assertEqual(vote_chars([], loose=False), "")
 
 
@@ -295,104 +182,6 @@ class JoinTests(unittest.TestCase):
         )
         self.assertEqual(result.rows, [])
 
-    def test_rows_left_after_a_name_match_still_join_in_order(self) -> None:
-        screen = (
-            ("0900000001", "Nha Go"),
-            ("0900000002", "Quoc Thanh"),
-            ("0900000003", "Kim Hoa"),
-            ("0900000004", "Mai Lan"),
-        )
-        result = build(
-            [
-                listing(*screen),
-                profile("Nha Go", "@nhago"),
-                listing(*screen),
-                profile("Ten TikTok", "@televisionnn"),
-                listing(*screen),
-                profile("Ten Khac", "@shopvinh"),
-                listing(*screen),
-                profile("Mai Lan", "@mailan"),
-            ]
-        )
-        self.assertEqual(
-            [(row.phone, row.handle) for row in result.rows],
-            [
-                ("0900000001", "@nhago"),
-                ("0900000002", "@televisionnn"),
-                ("0900000003", "@shopvinh"),
-                ("0900000004", "@mailan"),
-            ],
-        )
-        self.assertEqual(result.unopened, [])
-        self.assertEqual(result.review, [])
-
-    def test_a_full_screen_keeps_open_order_when_a_profile_name_matches_another_row(self) -> None:
-        screen = (("0900000001", "Lan"), ("0900000002", "Hoa"), ("0900000003", "Mai"))
-        result = build(
-            [
-                listing(*screen),
-                profile("Hoa", "@cua.lan"),
-                listing(*screen),
-                profile("TikTok", "@khac.mot"),
-                listing(*screen),
-                profile("TikTok Hai", "@khac.hai"),
-            ]
-        )
-        self.assertEqual(
-            [(row.phone, row.handle) for row in result.rows],
-            [("0900000001", "@cua.lan"), ("0900000002", "@khac.mot"), ("0900000003", "@khac.hai")],
-        )
-        self.assertEqual(result.unopened, [])
-        self.assertEqual(result.review, [])
-
-    def test_a_partial_screen_keeps_the_name_match_and_leaves_the_rest(self) -> None:
-        screen = (("0900000001", "Lan"), ("0900000002", "Hoa"), ("0900000003", "Mai"))
-        result = build([listing(*screen), profile("Hoa", "@cua.lan")])
-        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0900000002", "@cua.lan")])
-        self.assertEqual(sorted(phone for phone, _ in result.unopened), ["0900000001", "0900000003"])
-
-    def test_an_extra_pair_joins_by_name_and_leaves_the_row_order_alone(self) -> None:
-        screen = [
-            Contact("0900000001", "Nhà gỗ"),
-            Contact("0900000002", "Quốc Thanh"),
-            Contact("0900000003", "Kim Hoa"),
-            Contact("0912345678", "Truc", False),
-        ]
-        result = build(
-            [
-                FrameRead("list", screen),
-                profile("Wood", "@woodhouse"),
-                FrameRead("list", screen),
-                profile("TV", "@televisionnn"),
-                FrameRead("list", screen),
-                profile("Vinh", "@shopvinh"),
-                FrameRead("list", screen),
-                profile("Truc", "@truc31798"),
-            ]
-        )
-        self.assertEqual(
-            [(row.phone, row.handle) for row in result.rows],
-            [
-                ("0900000001", "@woodhouse"),
-                ("0900000002", "@televisionnn"),
-                ("0900000003", "@shopvinh"),
-                ("0912345678", "@truc31798"),
-            ],
-        )
-        self.assertEqual(result.unopened, [])
-        self.assertEqual(result.review, [])
-
-    def test_an_extra_pair_with_a_name_already_in_order_is_ignored(self) -> None:
-        screen = [
-            Contact("0900000001", "Lan"),
-            Contact("0900000002", "Hoa"),
-            Contact("0911111111", "Lan", False),
-        ]
-        result = build([FrameRead("list", screen), profile("Lan", "@lan")])
-        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0900000001", "@lan")])
-        self.assertEqual(result.unopened, [("0900000002", "Hoa")])
-        self.assertEqual(result.review, [])
-
     def test_opening_every_row_on_a_screen_joins_in_order(self) -> None:
         screen = (("0900000001", "Nhà gỗ"), ("0900000002", "Quốc Thanh"), ("0900000003", "Kim Hoa"))
         result = build(
@@ -422,87 +211,6 @@ class JoinTests(unittest.TestCase):
         result = build(frames)
         self.assertEqual([row.phone for row in result.rows], [phone for phone, _ in people])
         self.assertEqual(result.unopened, [])
-
-    def test_taps_pair_the_middle_without_shifting_the_ends(self) -> None:
-        screen = (
-            ("0900000001", "An"),
-            ("0900000002", "Binh"),
-            ("0900000003", "Chi"),
-            ("0900000004", "Dung"),
-            ("0900000005", "Em"),
-        )
-        contacts = [Contact(phone, name) for phone, name in screen]
-        result = build(
-            [
-                FrameRead("list", contacts, tapped="0900000002"),
-                profile("Tên khác", "@bbbbxxxx"),
-                FrameRead("list", contacts),
-                profile("Tên khác", "@ccccxxxx"),
-                FrameRead("list", contacts, tapped="0900000004"),
-                profile("Tên khác", "@ddddxxxx"),
-            ]
-        )
-        self.assertEqual(
-            {(row.phone, row.handle) for row in result.rows},
-            {
-                ("0900000002", "@bbbbxxxx"),
-                ("0900000003", "@ccccxxxx"),
-                ("0900000004", "@ddddxxxx"),
-            },
-        )
-        self.assertEqual([phone for phone, _ in result.unopened], ["0900000001", "0900000005"])
-
-    def test_a_gap_between_taps_is_not_shifted(self) -> None:
-        screen = (
-            ("0900000001", "An"),
-            ("0900000002", "Binh"),
-            ("0900000003", "Chi"),
-            ("0900000004", "Dung"),
-        )
-        contacts = [Contact(phone, name) for phone, name in screen]
-        result = build(
-            [
-                FrameRead("list", contacts, tapped="0900000001"),
-                profile("Tên khác", "@aaaaxxxx"),
-                FrameRead("list", contacts),
-                profile("Tên khác", "@xxxxgiua"),
-                FrameRead("list", contacts, tapped="0900000004"),
-                profile("Tên khác", "@ddddxxxx"),
-            ]
-        )
-        self.assertEqual(
-            {(row.phone, row.handle) for row in result.rows},
-            {("0900000001", "@aaaaxxxx"), ("0900000004", "@ddddxxxx")},
-        )
-        self.assertIn("0900000002", [phone for phone, _ in result.unopened])
-        self.assertIn("0900000003", [phone for phone, _ in result.unopened])
-
-    def test_a_missed_profile_read_still_joins_in_order(self) -> None:
-        screen = (("0900000001", "Nhà gỗ"), ("0900000002", "Quốc Thanh"))
-        result = build(
-            [
-                listing(*screen),
-                FrameRead("other", full_handle="@woodhouse", full_profile_name="Wood"),
-                listing(*screen),
-                FrameRead("other", full_handle="@televisionnn", full_profile_name=""),
-            ]
-        )
-        self.assertEqual(
-            [(row.phone, row.handle) for row in result.rows],
-            [("0900000001", "@woodhouse"), ("0900000002", "@televisionnn")],
-        )
-        self.assertEqual(result.unopened, [])
-
-    def test_a_recovered_handle_does_not_replace_one_already_read(self) -> None:
-        result = build(
-            [
-                listing(("0900000001", "Lan"), ("0900000002", "Hoa")),
-                profile("Lan", "@lan.shop"),
-                FrameRead("other", full_handle="@khacxxxx"),
-            ]
-        )
-        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0900000001", "@lan.shop")])
-        self.assertEqual([phone for phone, _ in result.unopened], ["0900000002"])
 
     def test_one_profile_on_a_full_screen_is_not_guessed(self) -> None:
         result = build(
@@ -688,18 +396,16 @@ class JoinTests(unittest.TestCase):
         frames.append(listing(("0915527558", "A Hải"), ("0913273681", "huythuc82")))
         frames.append(profile("A Hải", "@a.hi572"))
         result = build(frames)
-        self.assertIn(("0913327358", "@a.hi572"), [(row.phone, row.handle) for row in result.rows])
-        self.assertIn(("0913273681", "@huythuc82"), [(row.phone, row.handle) for row in result.rows])
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0913327358", "@a.hi572")])
         self.assertNotIn("0915527558", [phone for phone, _ in result.unopened])
-        self.assertNotIn("0915527558", [row.phone for row in result.rows])
 
     def test_rare_lookalike_misread_merges_even_with_a_misread_name(self) -> None:
         frames = [listing(("0913326577", "dy5bpm8kp8fh"), ("0913258209", "mmm")) for _ in range(8)]
         frames += [listing(("0915526577", "Uy IVI"), ("0913330677", "yamate")) for _ in range(2)]
         result = build(frames)
-        seen = {phone for phone, _ in result.unopened} | {row.phone for row in result.rows}
-        self.assertIn("0913326577", seen)
-        self.assertNotIn("0915526577", seen)
+        phones = [phone for phone, _ in result.unopened]
+        self.assertIn("0913326577", phones)
+        self.assertNotIn("0915526577", phones)
 
     def test_often_seen_number_with_another_name_is_not_merged(self) -> None:
         frames = [listing(("0913326577", "Lan"), ("0913258209", "mmm")) for _ in range(8)]
@@ -731,73 +437,10 @@ class JoinTests(unittest.TestCase):
         self.assertEqual(build(frames).rows[0].name, "thovahanh")
 
 
-def _disc(mask: np.ndarray, cx: int, cy: int, radius: int) -> None:
-    height, width = mask.shape
-    y, x = np.ogrid[:height, :width]
-    mask[(y - cy) ** 2 + (x - cx) ** 2 <= radius * radius] = True
-
-
-def _line_pair(top: int) -> tuple[TextLine, TextLine]:
-    return (TextLine("0900000000", 200, top, 500, top + 40), TextLine("Lan", 200, top + 50, 400, top + 90))
-
-
 def list_layout(phones: list[str], tap_y: float = -1.0, clear: bool = True) -> Layout:
     line = TextLine("x", 0, 0, 10, 10)
     rows = [ListRow(phone, line, clear, 100 + 230 * index) for index, phone in enumerate(phones)]
     return Layout("list", rows=rows, tap_y=tap_y, row_pitch=230.0)
-
-
-class ProfileHintTests(unittest.TestCase):
-    def test_an_unclassified_frame_with_a_left_handle_becomes_a_profile(self) -> None:
-        handle = TextLine("@woodhouse", 40, 400, 280, 440, 32)
-        layout = Layout(side_handle_line=handle, side_name_line=TextLine("Wood", 40, 340, 200, 380, 32))
-        promote_unclassified_profile(layout)
-        self.assertEqual(layout.kind, "profile")
-        self.assertEqual(layout.handle_hint, "@woodhouse")
-        self.assertIs(layout.handle_line, handle)
-
-    def test_a_contact_list_is_not_turned_into_a_profile(self) -> None:
-        layout = Layout(
-            "list",
-            side_handle_line=TextLine("@woodhouse", 40, 400, 280, 440, 32),
-        )
-        promote_unclassified_profile(layout)
-        self.assertEqual(layout.kind, "list")
-
-    def test_a_plain_word_on_the_left_is_not_a_profile(self) -> None:
-        layout = Layout(side_handle_line=TextLine("Kem", 40, 400, 120, 440, 32))
-        promote_unclassified_profile(layout)
-        self.assertEqual(layout.kind, "other")
-
-    def test_a_missed_handle_keeps_the_one_seen_while_scanning(self) -> None:
-        from doc_video.video import _fill_missing_profile_handles
-
-        layouts = [
-            Layout("list", at=0),
-            Layout("profile", handle_hint="@nhago", at=1),
-            Layout("profile", handle_hint="@nhago", at=2),
-        ]
-        done = {
-            1: FrameRead("other", at=1),
-            2: FrameRead("profile", profile_name="Nha Go", handle="", at=2),
-        }
-        _fill_missing_profile_handles(layouts, done)
-        self.assertEqual(done[2].kind, "profile")
-        self.assertEqual(done[2].handle, "@nhago")
-        self.assertEqual(done[2].profile_name, "Nha Go")
-        self.assertEqual(done[1].handle, "")
-
-    def test_a_careful_handle_is_not_replaced_by_the_scan_hint(self) -> None:
-        from doc_video.video import _fill_missing_profile_handles
-
-        layouts = [
-            Layout("profile", handle_hint="@khac", at=1),
-            Layout("profile", handle_hint="@khac", at=2),
-        ]
-        done = {1: FrameRead("profile", profile_name="Nha", handle="@nhago", at=1)}
-        _fill_missing_profile_handles(layouts, done)
-        self.assertEqual(done[1].handle, "@nhago")
-        self.assertNotIn(2, done)
 
 
 class PoolTests(unittest.TestCase):
@@ -844,444 +487,6 @@ class PlanTests(unittest.TestCase):
         layouts = [tapped, Layout("profile"), list_layout(phones)]
         resolve_taps(layouts)
         self.assertEqual(layouts[0].tapped, "0900000002")
-
-    def test_back_button_and_avatar_do_not_hide_the_follow_ripple(self) -> None:
-        mask = np.zeros((2000, 1000), dtype=bool)
-        _disc(mask, 80, 70, 40)
-        _disc(mask, 70, 500, 36)
-        _disc(mask, 880, 520, 48)
-        _disc(mask, 480, 900, 40)
-        pairs = [_line_pair(400), _line_pair(630), _line_pair(860)]
-        self.assertAlmostEqual(_tap_center(mask, pairs, 230), 520, delta=1)
-
-    def test_one_tap_on_the_name_still_counts_when_the_back_button_is_grey(self) -> None:
-        mask = np.zeros((2000, 1000), dtype=bool)
-        _disc(mask, 80, 70, 40)
-        _disc(mask, 420, 650, 46)
-        pairs = [_line_pair(400), _line_pair(630), _line_pair(860)]
-        self.assertAlmostEqual(_tap_center(mask, pairs, 230), 650, delta=1)
-
-    def test_a_bitten_follow_circle_is_still_one_tap(self) -> None:
-        mask = np.zeros((2000, 1000), dtype=bool)
-        _disc(mask, 80, 500, 36)
-        _disc(mask, 860, 520, 50)
-        mask[470:580, 870:940] = False
-        pairs = [_line_pair(400), _line_pair(630), _line_pair(860)]
-        self.assertAlmostEqual(_tap_center(mask, pairs, 230), 520, delta=20)
-
-    def test_two_follow_ripples_are_not_a_tap(self) -> None:
-        mask = np.zeros((2000, 1000), dtype=bool)
-        _disc(mask, 860, 450, 40)
-        _disc(mask, 880, 900, 40)
-        pairs = [_line_pair(400), _line_pair(630), _line_pair(860)]
-        self.assertEqual(_tap_center(mask, pairs, 230), -1)
-
-    def test_a_printed_username_fills_only_the_unopened_phone(self) -> None:
-        result = build(
-            [
-                listing(("0900000001", "Lan"), ("0900000002", "user896273910")),
-                profile("Lan", "@lan.shop"),
-            ]
-        )
-        self.assertEqual(
-            {(row.phone, row.handle) for row in result.rows},
-            {("0900000001", "@lan.shop"), ("0900000002", "@user896273910")},
-        )
-
-    def test_a_plain_name_stays_unopened(self) -> None:
-        result = build([listing(("0900000001", "teehairsalon"), ("0900000002", "Kem"))])
-        self.assertEqual(result.rows, [])
-        self.assertEqual([phone for phone, _ in result.unopened], ["0900000001", "0900000002"])
-
-    def test_a_printed_username_does_not_take_an_id_already_paired(self) -> None:
-        result = build(
-            [
-                listing(("0900000001", "user896273910"), ("0900000002", "Lan")),
-                profile("Lan", "@user896273910"),
-            ]
-        )
-        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0900000002", "@user896273910")])
-        self.assertIn("0900000001", [phone for phone, _ in result.unopened])
-
-    def test_two_phones_printed_with_the_same_username_stay_unopened(self) -> None:
-        result = build([listing(("0900000001", "user111222"), ("0900000002", "user111222"))])
-        self.assertEqual(result.rows, [])
-
-    def test_a_full_screen_order_is_not_rewritten_by_a_printed_username(self) -> None:
-        screen = (("0900000001", "user111222"), ("0900000002", "Lan"))
-        result = build([listing(*screen), profile("Khác", "@mot"), listing(*screen), profile("Khác nữa", "@hai")])
-        self.assertEqual(
-            [(row.phone, row.handle) for row in result.rows],
-            [("0900000001", "@mot"), ("0900000002", "@hai")],
-        )
-
-    def test_the_full_read_covers_rows_the_first_pass_skipped(self) -> None:
-        layouts = [list_layout(["0900000001", "0900000002"])]
-        full = plan_full_reads(layouts, {0: [0]})
-        self.assertEqual(full, {0: [1]})
-
-    def test_the_full_read_covers_profile_frames_the_first_pass_skipped(self) -> None:
-        line = TextLine("@a", 0, 0, 10, 10)
-        layouts = [list_layout(["0900000001"])]
-        layouts += [
-            Layout("profile", handle_line=line, handle_hint="@abc", clear=True, name_readable=True) for _ in range(4)
-        ]
-        layouts += [list_layout(["0900000001"])]
-        plan = plan_reads(layouts)
-        full = plan_full_reads(layouts, plan)
-        planned = {index for index, rows in plan.items() if rows is None}
-        extra = {index for index, rows in full.items() if rows is None}
-        self.assertEqual(len(planned), 2)
-        self.assertTrue(planned.isdisjoint(extra))
-        self.assertEqual(len(planned | extra), 4)
-
-    def test_a_tap_does_not_land_on_an_extra_pair(self) -> None:
-        line = TextLine("x", 0, 0, 10, 10)
-        rows = [
-            ListRow("0912345678", line, True, 100, in_order=False),
-            ListRow("0900000002", line, True, 330),
-        ]
-        self.assertEqual(row_at(rows, 120, 230), "")
-        self.assertEqual(row_at(rows, 350, 230), "0900000002")
-
-
-WIDTH = 1000
-HEIGHT = 2000
-
-
-def _right_pair(x: int, y: int, phone: str = "0900000001", name: str = "Lan") -> tuple[TextLine, TextLine]:
-    return (
-        TextLine(phone, x, y, x + 300, y + 40, 40),
-        TextLine(name, x, y + 50, x + 200, y + 90, 40),
-    )
-
-
-class FullNameStreamTests(unittest.TestCase):
-    def test_the_same_name_across_the_whole_video_joins_one_pair(self) -> None:
-        frames = [
-            FrameRead(
-                "list",
-                [Contact("0900000001", "")],
-                full_contacts=[Contact("0900000001", "Lan", False)],
-            ),
-            FrameRead("profile", full_profile_name="Lan", full_handle="@lan.shop"),
-        ]
-        result = add_full_name_rows(build(frames), frames)
-        self.assertEqual(result.rows, [Row("0900000001", "Lan", "@lan.shop")])
-        self.assertEqual(result.unopened, [])
-
-    def test_a_saved_row_keeps_its_phone_and_id(self) -> None:
-        screen = (("0900000001", "Lan"), ("0900000002", "Hoa"))
-        frames = [
-            listing(*screen),
-            profile("Khác", "@mot"),
-            listing(*screen),
-            profile("Khác nữa", "@hai"),
-        ]
-        frames[0].full_contacts = [Contact("0900000001", "Lan", False)]
-        frames[1].full_profile_name = "Lan"
-        frames[1].full_handle = "@khac"
-        result = add_full_name_rows(build(frames), frames)
-        self.assertEqual(
-            [(row.phone, row.handle) for row in result.rows],
-            [("0900000001", "@mot"), ("0900000002", "@hai")],
-        )
-
-    def test_two_phones_with_the_same_full_name_stay_apart(self) -> None:
-        result = Result(unopened=[("0900000001", ""), ("0900000002", "")])
-        frames = [
-            FrameRead(
-                full_contacts=[
-                    Contact("0900000001", "Lan", False),
-                    Contact("0900000002", "Lan", False),
-                ]
-            ),
-            FrameRead(full_profile_name="Lan", full_handle="@lan"),
-        ]
-        add_full_name_rows(result, frames)
-        self.assertEqual(result.rows, [])
-        self.assertEqual([phone for phone, _ in result.unopened], ["0900000001", "0900000002"])
-
-    def test_different_full_names_are_not_joined(self) -> None:
-        result = Result(unopened=[("0900000001", "Lan")])
-        frames = [
-            FrameRead(full_contacts=[Contact("0900000001", "Lan", False)]),
-            FrameRead(full_profile_name="Hoa", full_handle="@hoa"),
-        ]
-        add_full_name_rows(result, frames)
-        self.assertEqual(result.rows, [])
-
-    def test_a_blank_name_is_filled_without_moving_the_pair(self) -> None:
-        result = Result(rows=[Row("0900000001", "", "@lan")])
-        frames = [FrameRead(full_contacts=[Contact("0900000001", "Lan", False)])]
-        add_full_name_rows(result, frames)
-        self.assertEqual(result.rows, [Row("0900000001", "Lan", "@lan")])
-
-    def test_lookalike_ids_of_the_same_name_count_as_one(self) -> None:
-        frames = [
-            FrameRead(full_contacts=[Contact("0900000001", "Lan", False)]),
-            FrameRead(full_profile_name="Lan", full_handle="@lan_shop"),
-            FrameRead(full_profile_name="Lan", full_handle="@lan_shop"),
-            FrameRead(full_profile_name="Lan", full_handle="@lan__shop"),
-        ]
-        result = add_full_name_rows(Result(unopened=[("0900000001", "")]), frames)
-        self.assertEqual(result.rows, [Row("0900000001", "Lan", "@lan_shop")])
-
-
-class SidePairTests(unittest.TestCase):
-    def test_the_right_column_keeps_the_phone_above_the_name(self) -> None:
-        self.assertEqual(len(select_right_pairs([_right_pair(200, 400)], WIDTH, None)), 1)
-
-    def test_the_avatar_column_is_not_the_contact_pair(self) -> None:
-        self.assertEqual(select_right_pairs([_right_pair(20, 400)], WIDTH, None), [])
-
-    def test_a_number_hidden_under_the_title_stays_out_of_the_side_pairs(self) -> None:
-        title = TextLine("Danh bạ", 200, 10, 500, 80, 40)
-        self.assertEqual(select_right_pairs([_right_pair(200, 40)], WIDTH, title), [])
-        self.assertEqual(len(select_right_pairs([_right_pair(200, 120)], WIDTH, title)), 1)
-
-    def test_a_follow_button_under_the_phone_is_not_a_name(self) -> None:
-        phone = TextLine("0900000001", 200, 400, 500, 440, 40)
-        follow = TextLine("Follow", 200, 450, 320, 490, 40)
-        self.assertEqual(select_right_pairs([(phone, follow)], WIDTH, None), [])
-
-    def test_the_left_at_id_is_kept_and_one_on_the_right_is_not(self) -> None:
-        name = TextLine("Lan", 40, 300, 200, 350, 40)
-        handle = TextLine("@lan123", 40, 360, 280, 400, 36)
-        right = TextLine("@khac999", 700, 200, 980, 240, 36)
-        got_name, got_handle = select_left_profile([right, name, handle], HEIGHT, WIDTH)
-        self.assertIsNotNone(got_handle)
-        self.assertEqual(got_handle.text if got_handle is not None else "", "@lan123")
-        self.assertEqual(got_name.text if got_name is not None else "", "Lan")
-
-    def test_an_at_id_on_the_right_is_not_the_profile_pair(self) -> None:
-        right = TextLine("@khac999", 700, 300, 980, 340, 36)
-        self.assertEqual(select_left_profile([right], HEIGHT, WIDTH), (None, None))
-
-    def test_a_blank_name_on_the_first_pass_is_filled_without_moving_the_row(self) -> None:
-        screen = [Contact("0900000001", ""), Contact("0900000002", "")]
-        frames = [
-            FrameRead("list", screen, side_contacts=[Contact("0900000001", "Lan", False)]),
-            FrameRead("profile", profile_name="", handle="@mot", side_profile_name="Lan", side_handle="@mot"),
-            FrameRead("list", screen),
-            FrameRead("profile", profile_name="", handle="@hai"),
-        ]
-        result = add_side_rows(build(frames), frames)
-        self.assertEqual(
-            [(row.phone, row.name, row.handle) for row in result.rows],
-            [("0900000001", "Lan", "@mot"), ("0900000002", "", "@hai")],
-        )
-
-    def test_the_same_name_adds_one_row_of_three_cells(self) -> None:
-        result = Result(
-            unopened=[("0900000009", "Lan")],
-            review=[Review("", "", "Lan", "@lan123", "đã mở hồ sơ nhưng không thấy số cùng tên")],
-        )
-        frames = [
-            FrameRead("list", side_contacts=[Contact("0900000009", "Lan", False)]),
-            FrameRead("profile", side_profile_name="Lan", side_handle="@lan123"),
-        ]
-        add_side_rows(result, frames)
-        self.assertEqual(result.rows, [Row("0900000009", "Lan", "@lan123")])
-        self.assertEqual(result.unopened, [])
-        self.assertEqual(result.review, [])
-
-    def test_a_row_already_saved_stays_as_it_is(self) -> None:
-        result = Result(rows=[Row("0900000001", "Lan", "@lan123")])
-        frames = [
-            FrameRead("list", side_contacts=[Contact("0900000001", "Lan", False)]),
-            FrameRead("profile", side_profile_name="Lan", side_handle="@lan123"),
-        ]
-        add_side_rows(result, frames)
-        self.assertEqual(result.rows, [Row("0900000001", "Lan", "@lan123")])
-
-    def test_different_names_are_not_joined(self) -> None:
-        result = Result(unopened=[("0900000009", "Lan")])
-        frames = [
-            FrameRead("list", side_contacts=[Contact("0900000009", "Lan", False)]),
-            FrameRead("profile", side_profile_name="Hoa", side_handle="@hoa"),
-        ]
-        add_side_rows(result, frames)
-        self.assertEqual(result.rows, [])
-        self.assertEqual(result.unopened, [("0900000009", "Lan")])
-
-    def test_two_phones_with_one_name_are_not_guessed(self) -> None:
-        result = Result(unopened=[("0900000001", "Lan"), ("0900000002", "Lan")])
-        frames = [
-            FrameRead(
-                "list",
-                side_contacts=[Contact("0900000001", "Lan", False), Contact("0900000002", "Lan", False)],
-            ),
-            FrameRead("profile", side_profile_name="Lan", side_handle="@lan"),
-        ]
-        add_side_rows(result, frames)
-        self.assertEqual(result.rows, [])
-        self.assertEqual(result.unopened, [("0900000001", "Lan"), ("0900000002", "Lan")])
-
-    def test_a_handle_already_saved_with_another_phone_is_not_taken(self) -> None:
-        result = Result(rows=[Row("0900000001", "Khac", "@lan")], unopened=[("0900000009", "Lan")])
-        frames = [
-            FrameRead("list", side_contacts=[Contact("0900000009", "Lan", False)]),
-            FrameRead("profile", side_profile_name="Lan", side_handle="@lan"),
-        ]
-        add_side_rows(result, frames)
-        self.assertEqual(result.rows, [Row("0900000001", "Khac", "@lan")])
-        self.assertEqual(result.unopened, [("0900000009", "Lan")])
-
-    def test_many_numbers_sharing_a_name_block_the_new_row(self) -> None:
-        result = Result(
-            review=[Review("0900000001", "Lan", "Lan", "@lan", "nhiều số cùng tên")],
-            unopened=[("0900000009", "Lan")],
-        )
-        frames = [
-            FrameRead("list", side_contacts=[Contact("0900000009", "Lan", False)]),
-            FrameRead("profile", side_profile_name="Lan", side_handle="@lan"),
-        ]
-        add_side_rows(result, frames)
-        self.assertEqual(result.rows, [])
-        self.assertEqual(result.unopened, [("0900000009", "Lan")])
-
-    def test_marks_do_not_block_the_side_join(self) -> None:
-        result = Result()
-        frames = [
-            FrameRead("list", side_contacts=[Contact("0900000009", "Trúc", False)]),
-            FrameRead("profile", side_profile_name="TRUC", side_handle="@truc"),
-        ]
-        add_side_rows(result, frames)
-        self.assertEqual([(row.phone, row.name, row.handle) for row in result.rows], [("0900000009", "Trúc", "@truc")])
-
-    def test_side_fields_do_not_change_the_old_join(self) -> None:
-        frames = [
-            FrameRead(
-                "list",
-                [Contact("0900000001", "Hoa"), Contact("0900000002", "Minh")],
-                side_contacts=[Contact("0900000009", "Lan", False)],
-            ),
-            FrameRead("profile", profile_name="Lan", handle="@lan", side_profile_name="Lan", side_handle="@lan"),
-        ]
-        result = build(frames)
-        self.assertEqual(result.rows, [])
-        self.assertEqual([phone for phone, _name in result.unopened], ["0900000001", "0900000002"])
-        add_side_rows(result, frames)
-        self.assertEqual(result.rows, [Row("0900000009", "Lan", "@lan")])
-        self.assertEqual([phone for phone, _name in result.unopened], ["0900000001", "0900000002"])
-        self.assertFalse(any(item.handle == "@lan" for item in result.review))
-
-    def test_side_reads_use_only_a_few_frames(self) -> None:
-        phone, name = _right_pair(200, 400)
-        layouts = [Layout("list", side_pairs=[(phone, name)]) for _ in range(10)]
-        self.assertEqual(len(side_frames(layouts, {})), 3)
-
-
-class ScreenChangeTests(unittest.TestCase):
-    def test_a_still_screen_keeps_one_frame(self) -> None:
-        thumbs = [np.zeros((8, 8), dtype=np.uint8) for _ in range(20)]
-        times = [index * 0.1 for index in range(20)]
-        self.assertEqual(_kept_indexes(thumbs, times, 0.25), [0])
-
-    def test_a_short_flash_is_kept(self) -> None:
-        thumbs = [np.zeros((8, 8), dtype=np.uint8) for _ in range(21)]
-        thumbs[10] = np.full((8, 8), 200, dtype=np.uint8)
-        times = [index * 0.1 for index in range(21)]
-        kept = _kept_indexes(thumbs, times, 0.25)
-        self.assertIn(10, kept)
-
-    def test_a_long_scroll_is_not_collapsed_to_one_frame(self) -> None:
-        thumbs = [np.full((8, 8), (index * 40) % 255, dtype=np.uint8) for index in range(40)]
-        times = [index * 0.1 for index in range(40)]
-        kept = _kept_indexes(thumbs, times, 0.25)
-        self.assertGreater(len(kept), 8)
-        self.assertLess(len(kept), 30)
-
-    def test_a_brief_flash_in_a_video_is_kept(self) -> None:
-        if shutil.which("ffmpeg") is None:
-            self.skipTest("không có ffmpeg")
-        from doc_video.video import extract_changed_frames
-
-        with tempfile.TemporaryDirectory() as tmp:
-            folder = Path(tmp)
-            video = folder / "flash.mp4"
-            subprocess.run(
-                [
-                    "ffmpeg",
-                    "-hide_banner",
-                    "-loglevel",
-                    "error",
-                    "-f",
-                    "lavfi",
-                    "-i",
-                    "color=c=black:s=180x390:d=1",
-                    "-f",
-                    "lavfi",
-                    "-i",
-                    "color=c=white:s=180x390:d=0.25",
-                    "-f",
-                    "lavfi",
-                    "-i",
-                    "color=c=black:s=180x390:d=1",
-                    "-filter_complex",
-                    "[0:v][1:v][2:v]concat=n=3:v=1:a=0",
-                    "-r",
-                    "30",
-                    str(video),
-                ],
-                check=True,
-            )
-            out = folder / "frames"
-            out.mkdir()
-            kept = extract_changed_frames(video, out, 10.0, 0.25)
-            times = [at for _path, at in kept]
-            self.assertTrue(any(0.85 <= at <= 1.45 for at in times))
-            self.assertLess(len(kept), 16)
-
-
-class GapProfileTests(unittest.TestCase):
-    def test_a_handle_between_two_lists_becomes_one_profile(self) -> None:
-        layouts = [
-            Layout("list", at=0.0),
-            Layout("other", at=0.3, handle_line=TextLine("user89627", 40, 400, 280, 440, 32)),
-            Layout("other", at=0.4, handle_line=TextLine("user89627x", 40, 400, 300, 440, 32)),
-            Layout("list", at=0.6),
-        ]
-        promote_gap_profiles(layouts)
-        profiles = [layout for layout in layouts if layout.kind == "profile"]
-        self.assertEqual(len(profiles), 1)
-        self.assertTrue(profiles[0].handle_hint.startswith("@user89627"))
-
-    def test_a_plain_name_between_lists_stays_unclassified(self) -> None:
-        layouts = [
-            Layout("list", at=0.0),
-            Layout("other", at=0.3, handle_line=TextLine("Binh", 40, 400, 160, 440, 32)),
-            Layout("list", at=0.6),
-        ]
-        promote_gap_profiles(layouts)
-        self.assertEqual(layouts[1].kind, "other")
-
-    def test_a_long_gap_is_left_alone(self) -> None:
-        layouts = [Layout("list", at=0.0)]
-        layouts.extend(Layout("other", at=index * 0.3, handle_line=TextLine("user89627", 40, 400, 280, 440, 32)) for index in range(1, 7))
-        layouts.append(Layout("list", at=2.2))
-        promote_gap_profiles(layouts)
-        self.assertTrue(all(layout.kind == "other" for layout in layouts[1:-1]))
-
-    def test_a_gap_that_already_has_a_profile_gains_no_second_visit(self) -> None:
-        layouts = [
-            Layout("list", at=0.0),
-            Layout("profile", at=0.2, handle_hint="@lan.shop"),
-            Layout("other", at=0.3, handle_line=TextLine("khac89627", 40, 400, 280, 440, 32)),
-            Layout("list", at=0.5),
-        ]
-        promote_gap_profiles(layouts)
-        self.assertEqual(layouts[2].kind, "other")
-
-    def test_a_handle_shaped_line_is_remembered_on_an_unclassified_screen(self) -> None:
-        lines = [TextLine("user89627", 40, 400, 280, 440, 32), TextLine("Binh", 40, 200, 140, 240, 32)]
-        found = _gap_handle_candidate(lines, 900, 400)
-        self.assertIsNotNone(found)
-        assert found is not None
-        self.assertEqual(found.text, "user89627")
-        self.assertFalse(_handle_shaped("Binh"))
-        self.assertFalse(_handle_shaped("0901234567"))
 
 
 ASSETS = Path("/home/ubuntu/.cursor/projects/workspace/assets")

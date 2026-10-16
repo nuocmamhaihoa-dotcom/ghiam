@@ -15,8 +15,6 @@ MOBILE_PREFIXES = frozenset(
 # Chữ cái mà bộ đọc hay nhầm với chữ số khi đứng trong một dãy số.
 DIGIT_LOOKALIKE = str.maketrans({"ó": "6", "ò": "6", "Ó": "6", "O": "0", "o": "0", "l": "1", "I": "1", "|": "1", "S": "5"})
 HANDLE_RE = re.compile(r"@([A-Za-z0-9._]{2,24})")
-# Cả dòng phụ dưới số điện thoại, không có khoảng trắng: đúng dạng @id TikTok.
-_HANDLE_TOKEN = re.compile(r"^[A-Za-z0-9._]{2,24}$")
 SCREEN_WORDS = {"follow", "follower", "thich", "tin nhan", "da follow", "danh ba", "thong bao he thong"}
 # Phần chữ của tên và @id mặc định TikTok đặt sẵn. Giống nhau ở phần này không phải bằng chứng cùng người.
 GENERIC_NAMES = frozenset({"user", "tiktok", "tiktoker"})
@@ -43,9 +41,6 @@ def clean_name(text: str) -> str:
 
 
 def is_name(text: str) -> bool:
-    stripped = str(text or "").strip()
-    if len(stripped) == 1 and stripped.isalpha() and ord(stripped) > 127:
-        return True
     folded = " ".join(fold(text).casefold().split())
     if folded in SCREEN_WORDS:
         return False
@@ -113,45 +108,6 @@ def _same_text(left: str, right: str) -> bool:
     return len(short) >= 6 or len(short) >= 0.72 * len(long)
 
 
-def _handle_token(text: str) -> str:
-    """Phần chữ của một @id in dưới số. Bỏ dấu và ký tự rác.
-
-    ó thành 6 chỉ khi dòng đã có chữ số hoặc dấu @. Tên thuần như Binh không
-    bị đổi thành số rồi nhận nhầm là @id.
-    """
-    raw = str(text or "")
-    if "@" in raw or any(ch.isdigit() for ch in raw):
-        raw = raw.translate(_HANDLE_LOOKALIKE)
-    folded = fold(raw)
-    return "".join(ch for ch in folded if ch.isalnum() or ch in "._").rstrip(".").lower()
-
-
-def subtitle_handle(name: str) -> str:
-    """@id đã in sẵn ở dòng dưới số, khi dòng đó không thể là tên người.
-
-    Nhận khi cả dòng là @id (kể cả @660), dạng user kèm số, hoặc một token
-    đúng bộ ký tự @id và có chữ số (camtruong1954). Chữ thuần (Kem, Hong,
-    teehairsalon) vẫn là tên. Dòng nhiều từ cũng là tên (Lan 2).
-    """
-    text = " ".join(str(name or "").split())
-    if not text or looks_like_phone(text) or " " in text:
-        return ""
-    if text.startswith("@"):
-        body = text[1:].rstrip(".").lower()
-        if _HANDLE_TOKEN.match(body) and not body.startswith("."):
-            return "@" + body
-        folded = _handle_token(text[1:])
-        if _HANDLE_TOKEN.match(folded) and not folded.startswith("."):
-            return "@" + folded
-        return ""
-    cleaned = _handle_token(text)
-    if not _HANDLE_TOKEN.match(cleaned):
-        return ""
-    if not any(ch.isdigit() for ch in cleaned) or not any(ch.isalpha() for ch in cleaned):
-        return ""
-    return find_handle("@" + cleaned)
-
-
 def find_handle(text: str) -> str:
     """@id TikTok chỉ có chữ thường, số, dấu chấm, gạch dưới, không kết thúc bằng dấu chấm."""
     match = HANDLE_RE.search("".join(str(text or "").split()))
@@ -166,10 +122,8 @@ def find_handle(text: str) -> str:
     return "@" + handle
 
 
-# Bộ đọc tiếng Việt đọc số 6 thành ó trong @id (@thanhson190ó).
-# Dòng @id trên màn hình luôn là chữ thường; khi bộ đọc trả chữ hoa I, S, B
-# (cao hết cỡ chữ) thì trên ảnh đó là l, 5, 8 chứ không phải chữ thường i, s, b.
-_HANDLE_LOOKALIKE = str.maketrans({"ó": "6", "ò": "6", "Ó": "6", "Ò": "6", "I": "l", "O": "0", "S": "5", "B": "8"})
+# Bộ đọc tiếng Việt đọc số 6 thành ó trong @id (@thanhson190ó). @id chỉ có chữ không dấu.
+_HANDLE_LOOKALIKE = str.maketrans({"ó": "6", "ò": "6", "Ó": "6", "Ò": "6"})
 
 
 def handle_from_read(text: str) -> str:
@@ -183,7 +137,7 @@ def handle_from_viet(text: str) -> str:
     body = "".join(str(text or "").split()).lstrip("@")
     if len(body) > 1 and body[0] in "OQ0o":
         body = body[1:]
-    return find_handle("@" + body.translate(_HANDLE_LOOKALIKE))
+    return find_handle("@" + body)
 
 
 # Các ký tự bộ đọc hay nhầm với nhau trong @id.
@@ -215,7 +169,7 @@ def fix_underscores(handle: str, strokes: list[tuple[float, float]]) -> str:
     groups = [(match.start(), match.end() - match.start()) for match in re.finditer("_+", handle)]
     for start, size in reversed(groups):
         near = [length for begin, length in strokes if start - 1.0 <= begin <= start + 1.2]
-        if size == 1 and sum(near) >= 1.3:
+        if size == 1 and near and max(near) >= 1.3:
             out = out[:start] + "__" + out[start + 1 :]
     first = out[1:2]
     if first != "_" and first not in "gjpqy" and len(out) > 2:
@@ -250,14 +204,9 @@ def vote_chars(reads: list[tuple[str, float]] | list[tuple[str, float, float]], 
         return fold(text).casefold() if loose else text
 
     keys = [key(text) for text, _, _ in present]
-    total = sum(weight for _, weight, _ in present)
-    len_support = Counter()
-    for (text, weight, _), text_key in zip(present, keys):
-        len_support[len(text_key)] += weight
     pivot_index = max(
         range(len(present)),
         key=lambda i: (
-            len_support[len(keys[i])] >= total / 2,
             sum(
                 weight * SequenceMatcher(None, keys[i], keys[j], autojunk=False).ratio()
                 for j, (_, weight, _) in enumerate(present)
@@ -267,6 +216,7 @@ def vote_chars(reads: list[tuple[str, float]] | list[tuple[str, float, float]], 
         ),
     )
     pivot = present[pivot_index][0]
+    total = sum(weight for _, weight, _ in present)
     slots: list[Counter] = [Counter() for _ in pivot]
     digit_slots: list[Counter] = [Counter() for _ in pivot]
     gaps: list[Counter] = [Counter() for _ in range(len(pivot) + 1)]
@@ -295,29 +245,14 @@ def vote_chars(reads: list[tuple[str, float]] | list[tuple[str, float, float]], 
     for index in range(len(pivot) + 1):
         if gaps[index]:
             piece, support = max(gaps[index].items(), key=lambda item: item[1])
-            if support > total / 2 or (index == 0 and sum(gaps[index].values()) > total / 2):
+            if support > total / 2:
                 out.append(piece)
         if index < len(pivot):
             counts = slots[index]
-            if counts.get("", 0.0) > total / 2:
-                continue
-            present_counts = {ch: w for ch, w in counts.items() if ch}
-            if present_counts and all(char.isdigit() for char in present_counts):
-                present_counts = {ch: w for ch, w in digit_slots[index].items() if ch}
-            elif loose and len(present_counts) > 1:
-                for mark_char, grave_char in (("ả", "à"), ("Ả", "À")):
-                    if present_counts.get(mark_char, 0.0) >= 1.0 and grave_char in present_counts:
-                        present_counts[mark_char] += 1.6
-                for hat_char, tilde_char in (("ô", "õ"), ("Ô", "Õ")):
-                    if present_counts.get(hat_char, 0.0) >= 1.5 and tilde_char in present_counts:
-                        present_counts[hat_char] += 0.6
-                if len(present_counts) >= 4 and max(present_counts.values()) < total / 2:
-                    for ch in list(present_counts):
-                        if fold(ch) == ch:
-                            present_counts[ch] += total
-            if present_counts:
-                choice, _ = max(present_counts.items(), key=lambda item: (item[1], item[0] == pivot[index]))
-                out.append(choice)
+            if all(char.isdigit() for char in counts):
+                counts = digit_slots[index]
+            choice, _ = max(counts.items(), key=lambda item: (item[1], item[0] == pivot[index]))
+            out.append(choice)
     return "".join(out)
 
 
