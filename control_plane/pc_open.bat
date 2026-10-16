@@ -124,16 +124,101 @@ function Save-Url([string]$Url, [string]$Dest, [string]$Label) {
 
 function Expand-Zip([string]$Zip, [string]$Dest) {
   New-Item -ItemType Directory -Force -Path $Dest | Out-Null
-  & $tar -xf $Zip -C $Dest
-  if ($LASTEXITCODE -ne 0) {
+  $probe = $null
+  $b0 = -1
+  $b1 = -1
+  try {
+    $probe = [IO.File]::OpenRead($Zip)
+    $b0 = $probe.ReadByte()
+    $b1 = $probe.ReadByte()
+  } finally {
+    if ($probe) { $probe.Dispose() }
+  }
+  if ($b0 -ne 80 -or $b1 -ne 75) {
+    Remove-Item -LiteralPath $Zip -Force -ErrorAction SilentlyContinue
+    throw 'File tải về không phải gói nén.'
+  }
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $unsafe = $false
+  try {
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($Zip)
+  } catch {
     Remove-Item -LiteralPath $Zip -Force -ErrorAction SilentlyContinue
     throw 'Chưa giải nén được file từ máy chủ.'
+  }
+  try {
+    foreach ($entry in $archive.Entries) {
+      $name = $entry.FullName.Replace('\', '/')
+      if ($name.StartsWith('/') -or $name.Contains('../') -or $name.Contains(':')) { $unsafe = $true }
+    }
+  } finally {
+    $archive.Dispose()
+  }
+  if ($unsafe) {
+    Remove-Item -LiteralPath $Zip -Force -ErrorAction SilentlyContinue
+    throw 'Gói nén không an toàn.'
+  }
+  $stage = Join-Path $tmp ('unz-' + [guid]::NewGuid().ToString('n'))
+  New-Item -ItemType Directory -Force -Path $stage | Out-Null
+  $extracted = $false
+  try {
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($Zip, $stage)
+    $extracted = $true
+  } catch {
+    Get-ChildItem -LiteralPath $stage -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  if (-not $extracted) {
+    & $tar -xf $Zip -C $stage
+    if ($LASTEXITCODE -eq 0) {
+      $got = @(Get-ChildItem -LiteralPath $stage -Force -ErrorAction SilentlyContinue)
+      if ($got.Count -gt 0) { $extracted = $true }
+    }
+  }
+  if (-not $extracted) {
+    Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $Zip -Force -ErrorAction SilentlyContinue
+    throw 'Chưa giải nén được file từ máy chủ.'
+  }
+  Get-ChildItem -LiteralPath $stage -Force | ForEach-Object {
+    $target = Join-Path $Dest $_.Name
+    if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+    Move-Item -LiteralPath $_.FullName -Destination $target -Force
+  }
+  Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+function Publish-CrtRoot() {
+  $mark = Join-Path $crtDir 'msvcp140.dll'
+  if (Test-Path -LiteralPath $mark) { return }
+  $found = Get-ChildItem -LiteralPath $crtDir -Recurse -Filter 'msvcp140.dll' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $found) { return }
+  Get-ChildItem -LiteralPath $found.DirectoryName -Filter '*.dll' -File | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $crtDir $_.Name) -Force
   }
 }
 
 function Copy-Crt([string]$Dest) {
   if (-not (Test-Path -LiteralPath $Dest)) { return }
-  Copy-Item -Path (Join-Path $crtDir '*.dll') -Destination $Dest -Force
+  $dlls = @(Get-ChildItem -LiteralPath $crtDir -Filter '*.dll' -File -ErrorAction SilentlyContinue)
+  if ($dlls.Count -lt 1) { return }
+  $seen = @{}
+  $dirs = New-Object System.Collections.Generic.List[string]
+  [void]$dirs.Add($Dest)
+  $seen[$Dest] = $true
+  foreach ($pattern in @('*.dll', '*.pyd')) {
+    Get-ChildItem -LiteralPath $Dest -Recurse -Filter $pattern -File -ErrorAction SilentlyContinue | ForEach-Object {
+      $dir = $_.DirectoryName
+      if ($dir -and -not $seen.ContainsKey($dir)) {
+        $seen[$dir] = $true
+        [void]$dirs.Add($dir)
+      }
+    }
+  }
+  foreach ($dir in $dirs) {
+    foreach ($dll in $dlls) {
+      Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $dir $dll.Name) -Force
+    }
+  }
 }
 
 $script = Join-Path $root 'ghiam-pc.py'
@@ -151,6 +236,7 @@ while ($true) {
   try {
     New-Item -ItemType Directory -Force -Path $tools, $tmp | Out-Null
     Write-Host 'PC đang tự cài phần đọc và nối máy chủ. Cứ để cửa sổ này mở.'
+    Write-Host 'Mỗi PC đang mở sẽ đọc một video đang chờ khác nhau, cùng lúc.'
     Write-Host 'Lần đầu có thể mất một lúc. Không cần gõ địa chỉ, không cần giải nén.'
     Save-Url ($base + '/v1/pc/connector.py') $script 'Đang lấy chương trình nối.'
     if (-not ([IO.File]::ReadAllText($script).Contains('def main'))) {
@@ -163,6 +249,7 @@ while ($true) {
       Save-Url ($base + '/v1/pc/tools/crt.zip') $crtZip 'Đang tải thư viện Windows từ máy chủ.'
       if (Test-Path -LiteralPath $crtDir) { Remove-Item -LiteralPath $crtDir -Recurse -Force }
       Expand-Zip $crtZip $crtDir
+      Publish-CrtRoot
     }
     if (-not (Test-Path -LiteralPath $crtMark)) { throw 'Thư viện Windows tải về không đúng.' }
 
@@ -217,7 +304,9 @@ while ($true) {
     $site = Join-Path $pyDir 'Lib\site-packages'
     Copy-Crt $pyDir
     Copy-Crt (Join-Path $site 'torch')
+    Copy-Crt (Join-Path $site 'torch\lib')
     Copy-Crt (Join-Path $site 'torchvision')
+    Copy-Crt (Join-Path $site 'torchvision\lib')
 
     $runtimeOk = Test-Path -LiteralPath $runtimeMark
     if ($runtimeOk) {
@@ -238,7 +327,9 @@ while ($true) {
       if ($LASTEXITCODE -ne 0) { throw 'Chưa cài được bộ đọc dấu.' }
       Copy-Crt $pyDir
       Copy-Crt (Join-Path $site 'torch')
+      Copy-Crt (Join-Path $site 'torch\lib')
       Copy-Crt (Join-Path $site 'torchvision')
+      Copy-Crt (Join-Path $site 'torchvision\lib')
       & $pyExe -c 'import torch, torchvision, einops, yaml, gdown, vietocr'
       if ($LASTEXITCODE -ne 0) { throw 'Bộ đọc dấu chưa chạy được.' }
       Set-Content -LiteralPath $runtimeMark -Value '1' -Encoding ascii

@@ -23,6 +23,7 @@ from control_plane.pc_connector import (
     clean_pc_name,
     connector_outdated,
     disk_has_headroom,
+    publish_crt_dlls,
     reader_import_path,
     reader_launch_lines,
     restored_template,
@@ -161,7 +162,11 @@ class LinkTests(unittest.TestCase):
         self.assertIn("GetSystemWebProxy", opened)
         self.assertIn("HttpWebRequest", opened)
         self.assertIn("System32\\tar.exe", opened)
+        self.assertIn("System.IO.Compression.ZipFile", opened)
+        self.assertIn("torch\\lib", opened)
+        self.assertIn("torchvision\\lib", opened)
         self.assertIn("Local\\GhiamPC", opened)
+        self.assertNotIn("Global\\GhiamPC", opened)
         self.assertIn("Đang thử lại", opened)
         self.assertIn("--no-index", opened)
         self.assertIn("--no-deps", opened)
@@ -195,6 +200,8 @@ class LinkTests(unittest.TestCase):
         self.assertIn('return "fail"', source)
         self.assertIn("PC chưa sẵn sàng. Cứ để cửa sổ này mở, PC tự thử lại.", source)
         self.assertNotIn("Mở lại file ghiam-pc.bat", source)
+        self.assertIn("def publish_crt_dlls", source)
+        self.assertIn("def _publish_windows_crt", source)
 
 
 class SyncTests(unittest.TestCase):
@@ -213,6 +220,30 @@ class SyncTests(unittest.TestCase):
         self.assertNotEqual(forward, backward)
         self.assertNotEqual(forward, changed)
         self.assertEqual(len(forward), 64)
+
+    def test_crt_dlls_land_beside_native_modules(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            crt = root / "crt"
+            crt.mkdir()
+            (crt / "msvcp140.dll").write_bytes(b"crt-msvcp")
+            (crt / "vcruntime140.dll").write_bytes(b"crt-vcr")
+            (crt / "note.txt").write_bytes(b"skip")
+            site = root / "site"
+            lib = site / "torch" / "lib"
+            lib.mkdir(parents=True)
+            (lib / "c10.dll").write_bytes(b"c10")
+            (site / "torch" / "_C.pyd").write_bytes(b"pyd")
+            (site / "plain.py").write_bytes(b"py")
+            written = publish_crt_dlls(crt, [site / "torch"])
+            self.assertGreaterEqual(written, 4)
+            self.assertEqual((lib / "msvcp140.dll").read_bytes(), b"crt-msvcp")
+            self.assertEqual((lib / "vcruntime140.dll").read_bytes(), b"crt-vcr")
+            self.assertEqual((site / "torch" / "msvcp140.dll").read_bytes(), b"crt-msvcp")
+            self.assertFalse((site / "msvcp140.dll").exists())
+            self.assertFalse((lib / "note.txt").exists())
+            self.assertEqual(publish_crt_dlls(crt, [site / "torch"]), 0)
+            self.assertEqual(publish_crt_dlls(root / "missing", [site / "torch"]), 0)
 
     def test_zip_names_stay_inside_the_folder(self) -> None:
         self.assertTrue(zip_entry_safe("doc_video/frame.py"))

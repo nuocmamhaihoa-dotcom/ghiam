@@ -123,6 +123,89 @@ def zip_entry_safe(name: str) -> bool:
     return ".." not in Path(name).parts
 
 
+def publish_crt_dlls(crt: Path, roots: list[Path]) -> int:
+    """Đặt DLL của Windows cạnh từng file .dll/.pyd. Python 3.8 không tìm DLL ở thư mục python.exe."""
+    try:
+        dlls = [path for path in crt.glob("*.dll") if path.is_file()]
+    except OSError:
+        return 0
+    if not dlls:
+        return 0
+    folders: list[Path] = []
+    seen: set[str] = set()
+
+    def add(folder: Path) -> None:
+        try:
+            resolved = folder.resolve()
+        except OSError:
+            return
+        if not resolved.is_dir():
+            return
+        key = str(resolved).lower()
+        if key in seen:
+            return
+        seen.add(key)
+        folders.append(resolved)
+
+    for root in roots:
+        add(root)
+        try:
+            holders = list(root.rglob("*"))
+        except OSError:
+            continue
+        for holder in holders:
+            if holder.is_file() and holder.suffix.lower() in {".dll", ".pyd"}:
+                add(holder.parent)
+    written = 0
+    for folder in folders:
+        for dll in dlls:
+            dest = folder / dll.name
+            try:
+                if dest.resolve() == dll.resolve():
+                    continue
+                payload = dll.read_bytes()
+                if dest.is_file() and dest.read_bytes() == payload:
+                    continue
+                dest.write_bytes(payload)
+                written += 1
+            except OSError:
+                continue
+    return written
+
+
+_DLL_DIRS_READY = False
+
+
+def _publish_windows_crt() -> None:
+    global _DLL_DIRS_READY
+    if os.name != "nt":
+        return
+    crt = Path(os.environ.get("PUBLIC", r"C:\Users\Public")) / "GhiamPC" / "tools" / "crt"
+    root = Path(sys.executable).resolve().parent
+    site = root / "Lib" / "site-packages"
+    source = crt / "msvcp140.dll"
+    sentinel = site / "torch" / "lib" / "msvcp140.dll"
+    try:
+        placed = source.is_file() and sentinel.is_file() and sentinel.read_bytes() == source.read_bytes()
+    except OSError:
+        placed = False
+    if not placed:
+        publish_crt_dlls(crt, [root, site / "torch", site / "torchvision"])
+    if _DLL_DIRS_READY or not hasattr(os, "add_dll_directory") or not crt.is_dir():
+        return
+    try:
+        os.add_dll_directory(str(crt))
+    except OSError:
+        return
+    lib = site / "torch" / "lib"
+    if lib.is_dir():
+        try:
+            os.add_dll_directory(str(lib))
+        except OSError:
+            return
+    _DLL_DIRS_READY = True
+
+
 def _replace_tree(staging: Path, target: Path) -> None:
     """Đổi thư mục mới vào chỗ cũ. Đổi hỏng thì bản đang dùng vẫn còn."""
     backup = target.with_name(target.name + ".old")
@@ -550,6 +633,7 @@ _RUNTIME_FAIL_AT = 0.0
 def _sync_runtime(info: dict | None, need_model: bool) -> tuple[bool, bool]:
     """Cài bộ thư viện từ máy chủ. PC không nhận video khi máy chủ có bộ dấu mà PC chưa cài được."""
     global _RUNTIME_FAIL_AT
+    _publish_windows_crt()
     if not need_model:
         return True, False
     if not info:
@@ -586,7 +670,12 @@ def _sync_runtime(info: dict | None, need_model: bool) -> tuple[bool, bool]:
     saved = _saved(marker).strip()
     if saved == digest and _diacritics_importable():
         return True, False
-    if not _extract_wheels(archive, folder) or not _install_wheels(folder) or not _diacritics_importable():
+    if not _extract_wheels(archive, folder) or not _install_wheels(folder):
+        _RUNTIME_FAIL_AT = time.monotonic()
+        print("Chưa cài được bộ đọc dấu giống máy chủ. PC chưa nhận video.")
+        return False, False
+    _publish_windows_crt()
+    if not _diacritics_importable():
         _RUNTIME_FAIL_AT = time.monotonic()
         print("Chưa cài được bộ đọc dấu giống máy chủ. PC chưa nhận video.")
         return False, False
