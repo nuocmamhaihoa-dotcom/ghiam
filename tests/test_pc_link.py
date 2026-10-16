@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import unittest
 from unittest.mock import patch
 
@@ -10,6 +11,8 @@ from control_plane.pc_connector import (
     clean_pc_name,
     connector_outdated,
     disk_has_headroom,
+    reader_import_path,
+    reader_launch_lines,
     restored_template,
     text_sha256,
 )
@@ -139,9 +142,18 @@ class LinkTests(unittest.TestCase):
         self.assertNotIn("github.com", opened)
         self.assertNotIn("pypi.org", opened)
         self.assertNotIn("pythonhosted.org", opened)
+        self.assertEqual(reader_import_path("/reader", "/other"), "/reader" + os.pathsep + "/other")
+        self.assertEqual(reader_import_path("/reader", "/reader" + os.pathsep + "/other"), "/reader" + os.pathsep + "/other")
+        existing = ["python312.zip", ".", "Lib\\site-packages", "import site"]
+        added = reader_launch_lines(existing, "/reader")
+        self.assertEqual(added, [*existing, "/reader"])
+        self.assertEqual(reader_launch_lines(added, "/reader"), added)
         source = CONNECTOR_FILE.read_text(encoding="utf-8")
         self.assertIn("socket.gethostname", source)
         self.assertIn('{"name": name}', source)
+        self.assertIn("PYTHONPATH", source)
+        self.assertNotIn('pip", "install"', source)
+        self.assertIn('return "fail"', source)
 
 
 if __name__ == "__main__":

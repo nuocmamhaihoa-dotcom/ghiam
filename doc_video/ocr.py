@@ -68,9 +68,15 @@ def best_dir() -> str | None:
 
 
 def _library():
-    """Thư viện tesseract nạp một lần trong tiến trình. None nếu máy không có."""
+    """Thư viện tesseract nạp một lần trong tiến trình. None nếu máy không có.
+
+    Windows dùng lệnh tesseract. Nạp nhầm file dll làm cả tiến trình đọc tắt giữa chừng.
+    """
     if "lib" in _ENGINE:
         return _ENGINE["lib"]
+    if os.name == "nt":
+        _ENGINE["lib"] = None
+        return None
     name = ctypes.util.find_library("tesseract")
     try:
         lib = ctypes.CDLL(name or "libtesseract.so.5")
@@ -196,7 +202,9 @@ def _run_cli(images: list[Image.Image], lang: str, psm: int, whitelist: str, bes
             image.save(path, compress_level=1, dpi=(300, 300))
             paths.append(str(path))
         listing = Path(folder) / "list.txt"
-        listing.write_text("\n".join(paths) + "\n", encoding="utf-8")
+        # Windows mở danh sách ảnh bằng bảng mã hệ thống, không phải UTF-8.
+        list_encoding = "mbcs" if os.name == "nt" else "utf-8"
+        listing.write_text("\n".join(paths) + "\n", encoding=list_encoding)
         command = ["tesseract", str(listing), "stdout", "-l", lang, "--psm", str(psm)]
         tessdata = best_dir() if best else None
         if tessdata:
@@ -204,7 +212,15 @@ def _run_cli(images: list[Image.Image], lang: str, psm: int, whitelist: str, bes
         if whitelist:
             command += ["-c", f"tessedit_char_whitelist={whitelist}"]
         command += ["-c", "tessedit_create_tsv=1", "-c", "tessedit_create_txt=0"]
-        done = subprocess.run(command, capture_output=True, text=True, timeout=600, env=_ONE_THREAD)
+        done = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=600,
+            env=_ONE_THREAD,
+        )
     for raw in done.stdout.splitlines():
         parts = raw.split("\t")
         if len(parts) < 12 or parts[0] != "5" or not parts[11].strip():
