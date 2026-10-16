@@ -13,7 +13,7 @@ from control_plane.pc_connector import (
     restored_template,
     text_sha256,
 )
-from control_plane.pc_reader import CONNECTOR_FILE, connector_template_sha256
+from control_plane.pc_reader import CONNECTOR_FILE, connector_template_sha256, launcher_text
 from doc_video.video import ffmpeg_thread_count, read_worker_count, within_resource_ceiling
 
 
@@ -111,12 +111,25 @@ class LinkTests(unittest.TestCase):
         self.assertIn("id=\"checkStop\"", page)
         self.assertIn("/v1/results/check/start", page)
         self.assertIn("/v1/results/check/stop", page)
+        self.assertIn("ghiam-pc.bat", page)
+        self.assertIn("Không cần gõ địa chỉ, không cần giải nén.", page)
+        self.assertNotIn("ghiam-pc.zip", page)
 
     def test_pc_name_is_one_short_line(self) -> None:
         self.assertEqual(clean_pc_name("  May\nA  "), "May A")
         self.assertEqual(clean_pc_name(""), "PC")
         self.assertEqual(len(clean_pc_name("x" * 80)), 40)
-        self.assertGreaterEqual(CONNECTOR_VERSION, 3)
+        self.assertGreaterEqual(CONNECTOR_VERSION, 4)
+        opened = launcher_text("http://203.0.113.10:8088", "abc12345tokenvalue")
+        self.assertTrue(opened.startswith("@echo off\r\n"))
+        self.assertIn("http://203.0.113.10:8088", opened)
+        self.assertIn("abc12345tokenvalue", opened)
+        self.assertNotIn("__GHIAM_", opened)
+        self.assertIn("###GHIAM_PS1###", opened)
+        self.assertIn("python-3.12.7-embed-amd64.zip", opened)
+        self.assertIn("/v1/pc/connector.py", opened)
+        self.assertIn("tesseract-ocr-w64-setup-5.4.0.20240606.exe", opened)
+        self.assertIn("ffmpeg-release-essentials.zip", opened)
         source = CONNECTOR_FILE.read_text(encoding="utf-8")
         self.assertIn("socket.gethostname", source)
         self.assertIn('{"name": name}', source)

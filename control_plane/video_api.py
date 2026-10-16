@@ -31,7 +31,7 @@ from control_plane.pc_reader import (
     code_sha256,
     connector_bytes,
     connector_template_sha256,
-    package_zip,
+    launcher_bytes,
     reader_manifest,
     reader_zip,
     table_from_payload,
@@ -519,9 +519,9 @@ def pc_package(ticket: str, request: Request) -> Response:
     if not token:
         raise HTTPException(status_code=404, detail="Chưa có mã trang.")
     return Response(
-        content=package_zip(_public_base(request), token),
-        media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="ghiam-pc.zip"', "Cache-Control": "no-cache"},
+        content=launcher_bytes(_public_base(request), token),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": 'attachment; filename="ghiam-pc.bat"', "Cache-Control": "no-cache"},
     )
 
 

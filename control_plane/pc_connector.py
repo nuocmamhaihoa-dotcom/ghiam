@@ -22,7 +22,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-CONNECTOR_VERSION = 3
+CONNECTOR_VERSION = 4
 # Trần tài nguyên của PC. Máy chủ không đặt biến này nên máy chủ vẫn dùng hết nhân.
 PC_HEADROOM = 0.8
 SERVER = "__GHIAM_SERVER__"
@@ -174,23 +174,30 @@ def _download(path: str, dest: Path, timeout: float = 600) -> None:
         raise
 
 
+def _synced_tessdata() -> Path | None:
+    folder = CACHE / "tessdata"
+    if (folder / "eng.traineddata").is_file() and (folder / "vie.traineddata").is_file():
+        return folder
+    return None
+
+
 def _tools_ok() -> bool:
     ok = True
     if shutil.which("ffmpeg") is None:
-        print("Chưa có ffmpeg.")
-        print("Windows: cài ffmpeg và thêm vào PATH.")
-        print("Ubuntu: sudo apt install ffmpeg")
+        print("Chưa có ffmpeg. Mở lại file ghiam-pc.bat để PC tự cài.")
         ok = False
     if shutil.which("tesseract") is None:
-        print("Chưa có tesseract.")
-        print("Windows: cài Tesseract, thêm vào PATH, gồm gói chữ tiếng Việt (vie) và tiếng Anh (eng).")
-        print("Ubuntu: sudo apt install tesseract-ocr tesseract-ocr-vie tesseract-ocr-eng")
+        print("Chưa có tesseract. Mở lại file ghiam-pc.bat để PC tự cài.")
         ok = False
     else:
-        listed = subprocess.run(["tesseract", "--list-langs"], capture_output=True, text=True).stdout
+        command = ["tesseract"]
+        folder = _synced_tessdata()
+        if folder is not None:
+            command += ["--tessdata-dir", str(folder)]
+        command.append("--list-langs")
+        listed = subprocess.run(command, capture_output=True, text=True).stdout
         if "vie" not in listed or "eng" not in listed:
             print("Tesseract thiếu tiếng Việt hoặc tiếng Anh.")
-            print("Ubuntu: sudo apt install tesseract-ocr-vie tesseract-ocr-eng")
             ok = False
     return ok
 
@@ -520,15 +527,14 @@ def _read_one(job: dict) -> str:
 def main() -> int:
     global _IDLE, _DISK_WAIT, _RAM_WAIT
     if not _configured():
-        print("File này chưa được tải từ trang video. Mở trang máy chủ và bấm Tải chương trình đọc trên PC.")
-        return 1
-    if not _tools_ok() or not _ensure_runtime():
+        print("File này chưa được tải từ trang video. Mở trang máy chủ và bấm Tải bản kết nối PC.")
         return 1
     _limit_pc()
     name = pc_name()
     print("PC đang nối máy chủ. Cứ để cửa sổ này mở. Đóng cửa sổ là PC ngừng đọc.")
     print(f"PC này tên là {name}. Nhiều PC có thể mở cùng lúc, mỗi máy đọc một video đang chờ.")
     print("PC dùng tối đa 80% CPU, RAM và ổ đĩa. 20% còn lại để máy vẫn chạy ổn.")
+    ready = False
     while True:
         try:
             if _update_connector():
@@ -546,6 +552,10 @@ def main() -> int:
             if relaunch:
                 print("Đã có bộ đọc mới. Chạy lại để đọc giống máy chủ.")
                 return _relaunch()
+            if not ready:
+                if not _tools_ok() or not _ensure_runtime():
+                    return 1
+                ready = True
             _maybe_vietocr(CACHE / "weights" / "vgg_transformer.pth")
             _prepare_env()
             if not _disk_ready(512 * 1024 * 1024):
