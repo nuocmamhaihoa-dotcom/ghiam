@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
 import zipfile
 from pathlib import Path
 
-from control_plane.pc_connector import CONNECTOR_VERSION
+from control_plane.pc_connector import CONNECTOR_VERSION, TESSDATA_NAMES, bundle_sha256
 from control_plane.screen_table import Review, Row, Table, Unopened
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +22,7 @@ PC_TOOL_FILES = {
     "wheels.zip": "pillow-numpy-cp312-win.zip",
     "ffmpeg.zip": "ffmpeg-release-essentials.zip",
     "tesseract.exe": "tesseract-ocr-w64-setup-5.4.0.20240606.exe",
+    "runtime.zip": "runtime-cp312-win.zip",
 }
 
 READER_FILES = (
@@ -63,16 +65,25 @@ def _cached_sha(path: Path) -> str | None:
 
 
 def code_sha256() -> str:
-    hasher = hashlib.sha256()
     for relative in READER_FILES:
-        path = ROOT / relative
-        if not path.is_file():
+        if not (ROOT / relative).is_file():
             raise FileNotFoundError(relative)
-        hasher.update(relative.encode("utf-8"))
-        hasher.update(b"\0")
-        hasher.update(path.read_bytes())
-        hasher.update(b"\0")
-    return hasher.hexdigest()
+    return bundle_sha256(ROOT, READER_FILES)
+
+
+def pc_tools_dir() -> Path:
+    raw = os.environ.get("CONTROL_DATA_DIR", "").strip()
+    base = Path(raw) if raw else ROOT / "control_data"
+    return base / "pc-tools"
+
+
+def runtime_info() -> dict[str, object] | None:
+    """Gói thư viện Windows để PC đọc dấu bằng đúng bản máy chủ đang dùng."""
+    path = pc_tools_dir() / PC_TOOL_FILES["runtime.zip"]
+    digest = _cached_sha(path)
+    if digest is None:
+        return None
+    return {"sha256": digest, "bytes": path.stat().st_size}
 
 
 def reader_zip() -> bytes:
@@ -101,11 +112,9 @@ def tessdata_dir() -> Path:
 
 def tessdata_info() -> dict[str, object] | None:
     folder = tessdata_dir()
-    names = ("eng.traineddata", "vie.traineddata")
-    files = [folder / name for name in names]
+    files = [folder / name for name in TESSDATA_NAMES]
     if not all(path.is_file() for path in files):
         return None
-    hasher = hashlib.sha256()
     total = 0
     stamps = []
     for path in files:
@@ -116,12 +125,7 @@ def tessdata_info() -> dict[str, object] | None:
     cached = _FILE_CACHE.get(key)
     if cached is not None and cached[0] == tuple(stamps):
         return {"sha256": cached[1], "bytes": total}
-    for path in files:
-        hasher.update(path.name.encode("utf-8"))
-        hasher.update(b"\0")
-        hasher.update(path.read_bytes())
-        hasher.update(b"\0")
-    digest = hasher.hexdigest()
+    digest = bundle_sha256(folder, TESSDATA_NAMES)
     _FILE_CACHE[key] = (tuple(stamps), digest)
     return {"sha256": digest, "bytes": total}
 
@@ -131,7 +135,7 @@ def tessdata_zip() -> bytes | None:
         return None
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for name in ("eng.traineddata", "vie.traineddata"):
+        for name in TESSDATA_NAMES:
             archive.write(tessdata_dir() / name, name)
     return buffer.getvalue()
 
@@ -144,6 +148,7 @@ def reader_manifest() -> dict[str, object]:
         "version": CONNECTOR_VERSION,
         "weights": weights_info(),
         "tessdata": tessdata_info(),
+        "runtime": runtime_info(),
     }
 
 

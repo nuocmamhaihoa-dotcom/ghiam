@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import os
 import shutil
@@ -685,6 +686,7 @@ class PcReaderApiTests(unittest.TestCase):
         body = manifest.json()
         self.assertEqual(body["entry"], "doc_video.pipeline:read_video")
         self.assertIn("doc_video/pipeline.py", body["files"])
+        self.assertIn("runtime", body)
         package = self.client.get("/v1/pc/reader.zip", headers=self.headers)
         self.assertEqual(package.status_code, 200)
         self.assertEqual(package.headers["x-reader-sha256"], body["sha256"])
@@ -711,6 +713,8 @@ class PcReaderApiTests(unittest.TestCase):
         self.assertIn("/v1/pc/connector.py", body)
         self.assertIn("/v1/pc/tools/python.zip", body)
         self.assertIn("/v1/pc/tools/wheels.zip", body)
+        self.assertIn("/v1/pc/tools/runtime.zip", body)
+        self.assertIn("--no-deps", body)
         self.assertNotIn("python.org", body)
         self.assertNotIn("pypi.org", body)
         script = self.client.get("/v1/pc/connector.py", headers=self.headers)
@@ -740,6 +744,18 @@ class PcReaderApiTests(unittest.TestCase):
         tool = self.client.get("/v1/pc/tools/python.zip", headers=self.headers)
         self.assertEqual(tool.status_code, 200)
         self.assertEqual(tool.content, b"python-zip")
+        runtime_path = tool_dir / "runtime-cp312-win.zip"
+        runtime_path.unlink(missing_ok=True)
+        before_runtime = self.client.get("/v1/pc/reader", headers=self.headers)
+        self.assertIsNone(before_runtime.json()["runtime"])
+        runtime_bytes = b"runtime-zip"
+        runtime_path.write_bytes(runtime_bytes)
+        runtime = self.client.get("/v1/pc/tools/runtime.zip", headers=self.headers)
+        self.assertEqual(runtime.status_code, 200)
+        self.assertEqual(runtime.content, runtime_bytes)
+        again = self.client.get("/v1/pc/reader", headers=self.headers)
+        self.assertEqual(again.json()["runtime"]["bytes"], len(runtime_bytes))
+        self.assertEqual(again.json()["runtime"]["sha256"], hashlib.sha256(runtime_bytes).hexdigest())
         self.assertTrue(_raw_transfer("/v1/pc/tools/python.zip"))
         backup = self.client.post("/v1/backup/ticket", headers=self.headers)
         stolen = self.client.get("/v1/pc/package/" + backup.json()["url"].rsplit("/", 1)[-1])

@@ -102,6 +102,53 @@ def reader_launch_lines(lines: list[str], root: str) -> list[str]:
     return [*lines, root]
 
 
+TESSDATA_NAMES = ("eng.traineddata", "vie.traineddata")
+
+
+def bundle_sha256(root: Path, names: list[str] | tuple[str, ...]) -> str:
+    """Hash đúng thứ tự tên file. Máy chủ và PC dùng cùng cách này để biết bộ đọc đã khớp."""
+    hasher = hashlib.sha256()
+    for relative in names:
+        hasher.update(relative.encode("utf-8"))
+        hasher.update(b"\0")
+        hasher.update((root / relative).read_bytes())
+        hasher.update(b"\0")
+    return hasher.hexdigest()
+
+
+def zip_entry_safe(name: str) -> bool:
+    """Tên trong file nén chỉ là đường tương đối, không nhảy ra ngoài thư mục."""
+    if not name or name.endswith(("/", "\\")) or "\\" in name or name.startswith(("/", "\\")) or ":" in name:
+        return False
+    return ".." not in Path(name).parts
+
+
+def _replace_tree(staging: Path, target: Path) -> None:
+    """Đổi thư mục mới vào chỗ cũ. Đổi hỏng thì bản đang dùng vẫn còn."""
+    backup = target.with_name(target.name + ".old")
+    if backup.exists():
+        shutil.rmtree(backup)
+    moved = False
+    if target.exists():
+        target.rename(backup)
+        moved = True
+    try:
+        staging.rename(target)
+    except Exception:
+        if moved and backup.exists() and not target.exists():
+            backup.rename(target)
+        raise
+    if backup.exists():
+        shutil.rmtree(backup, ignore_errors=True)
+
+
+def adoption(saved: str, digest: str, verified: bool, relaunch_on_change: bool) -> tuple[bool, bool]:
+    """(sẵn sàng đọc, cần chạy lại). Hash chưa khớp thì PC chưa nhận video."""
+    if not digest or not verified:
+        return False, False
+    return True, bool(saved.strip() != digest and relaunch_on_change)
+
+
 def pc_name() -> str:
     """Tên ổn định của PC này. Nhiều máy cùng mở thì mỗi máy một tên."""
     raw = os.environ.get("GHIAM_PC_NAME", "").strip()
@@ -256,22 +303,9 @@ def _importable(module: str) -> bool:
     return True
 
 
-def _maybe_vietocr(weights: Path) -> None:
-    """Không tải torch từ mạng. Thiếu bộ đọc dấu thì PC đọc tiếp bằng tesseract."""
-    if not weights.is_file() or os.environ.get("DOC_VIDEO_VIETOCR", "1").strip() == "0":
-        return
-    if _importable("torch") and _importable("vietocr"):
-        return
-    os.environ["DOC_VIDEO_VIETOCR"] = "0"
-    marker = CACHE / "vietocr.tried"
-    if marker.is_file():
-        return
-    print("Bộ đọc dấu chưa chạy được trên PC này. PC vẫn đọc bằng tesseract.")
-    try:
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text("1", encoding="utf-8")
-    except OSError:
-        return
+def _diacritics_importable() -> bool:
+    """Đủ thư viện thì PC đọc dấu giống máy chủ. Không tải gói từ mạng công cộng."""
+    return all(_importable(name) for name in ("torch", "torchvision", "einops", "yaml", "gdown", "vietocr"))
 
 
 def _relaunch() -> int:
@@ -312,71 +346,254 @@ def _update_connector() -> bool:
     return True
 
 
-def _marker_matches(marker: Path, digest: str) -> bool:
-    return marker.is_file() and marker.read_text(encoding="utf-8").strip() == digest
+def _saved(marker: Path) -> str:
+    try:
+        return marker.read_text(encoding="utf-8") if marker.is_file() else ""
+    except OSError:
+        return ""
 
 
-def _sync_reader(digest: str) -> bool:
-    if not digest:
+def _remember(marker: Path, digest: str) -> bool:
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(digest, encoding="utf-8")
+    except OSError:
         return False
+    return True
+
+
+def _extract_named(archive: Path, target: Path, names: list[str]) -> bool:
+    try:
+        with zipfile.ZipFile(archive) as opened:
+            present = set(opened.namelist())
+            if any(name not in present or not zip_entry_safe(name) for name in names):
+                return False
+            target.mkdir(parents=True, exist_ok=True)
+            for name in names:
+                opened.extract(name, target)
+    except (OSError, zipfile.BadZipFile):
+        return False
+    return True
+
+
+def _sync_reader(digest: str, names: list[str]) -> tuple[bool, bool]:
+    if not digest or not names or any(not zip_entry_safe(name) for name in names):
+        print("Máy chủ chưa đưa đủ bộ đọc. PC chưa nhận video.")
+        return False, False
     marker = CACHE / "reader.sha256"
-    if _marker_matches(marker, digest):
-        return False
-    print("Đang lấy bộ đọc hiện trên máy chủ.")
-    archive_path = CACHE / "reader.zip"
-    _download("/v1/pc/reader.zip", archive_path)
     target = CACHE / "reader"
-    if target.exists():
-        shutil.rmtree(target)
-    target.mkdir(parents=True)
-    with zipfile.ZipFile(archive_path) as archive:
-        for info in archive.infolist():
-            name = info.filename
-            if name.startswith("/") or ".." in Path(name).parts:
-                continue
-            archive.extract(info, target)
-    marker.write_text(digest, encoding="utf-8")
-    archive_path.unlink(missing_ok=True)
-    return _LOADED
+    verified = False
+    try:
+        verified = target.is_dir() and bundle_sha256(target, names) == digest
+    except OSError:
+        verified = False
+    if not verified:
+        print("Đang lấy bộ đọc hiện trên máy chủ.")
+        archive_path = CACHE / "reader.zip"
+        staging = CACHE / "reader-new"
+        try:
+            _download("/v1/pc/reader.zip", archive_path)
+            if staging.exists():
+                shutil.rmtree(staging)
+            verified = _extract_named(archive_path, staging, names) and bundle_sha256(staging, names) == digest
+            if verified:
+                _replace_tree(staging, target)
+        except (urllib.error.URLError, TimeoutError, OSError, zipfile.BadZipFile):
+            verified = False
+        finally:
+            archive_path.unlink(missing_ok=True)
+            if staging.exists():
+                shutil.rmtree(staging, ignore_errors=True)
+    ready, relaunch = adoption(_saved(marker), digest, verified, _LOADED)
+    if not ready:
+        print("Bộ đọc tải về chưa khớp máy chủ. PC chưa nhận video.")
+        return False, False
+    if not _remember(marker, digest):
+        return False, False
+    return ready, relaunch
 
 
-def _sync_weights(info: dict | None) -> bool:
-    weights = CACHE / "weights" / "vgg_transformer.pth"
+def _sync_weights(info: dict | None) -> tuple[bool, bool]:
+    if not info:
+        return True, False
+    digest = str(info.get("sha256") or "")
+    path = CACHE / "weights" / "vgg_transformer.pth"
     marker = CACHE / "weights.sha256"
+    verified = False
+    try:
+        verified = bool(digest) and path.is_file() and _file_sha256(path) == digest
+    except OSError:
+        verified = False
+    if digest and not verified:
+        print("Đang lấy bộ đọc dấu tiếng Việt.")
+        fresh = path.with_name("vgg_transformer.pth.new")
+        try:
+            if not _disk_ready(max(_info_bytes(info), 1) * 2):
+                print("Ổ đĩa PC không còn đủ chỗ cho bộ đọc dấu. PC chờ.")
+                return False, False
+            _download("/v1/pc/weights", fresh, timeout=1800)
+            verified = _file_sha256(fresh) == digest
+            if verified:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                fresh.replace(path)
+        except (urllib.error.URLError, TimeoutError, OSError):
+            verified = False
+        finally:
+            if fresh.exists() and not verified:
+                fresh.unlink(missing_ok=True)
+    ready, relaunch = adoption(_saved(marker), digest, verified, _LOADED)
+    if not ready:
+        print("Bộ đọc dấu chưa khớp máy chủ. PC chưa nhận video.")
+        return False, False
+    if not _remember(marker, digest):
+        return False, False
+    return ready, relaunch
+
+
+def _sync_tessdata(info: dict | None) -> tuple[bool, bool]:
     if not info:
-        return False
+        return True, False
     digest = str(info.get("sha256") or "")
-    if not digest or _marker_matches(marker, digest):
-        return False
-    print("Đang lấy bộ đọc dấu tiếng Việt.")
-    _download("/v1/pc/weights", weights, timeout=1800)
-    marker.write_text(digest, encoding="utf-8")
-    return _LOADED
-
-
-def _sync_tessdata(info: dict | None) -> bool:
     marker = CACHE / "tessdata.sha256"
-    if not info:
-        return False
-    digest = str(info.get("sha256") or "")
-    if not digest or _marker_matches(marker, digest):
-        return False
-    print("Đang lấy bộ chữ của máy chủ.")
-    archive_path = CACHE / "tessdata.zip"
-    _download("/v1/pc/tessdata.zip", archive_path)
     target = CACHE / "tessdata"
-    if target.exists():
-        shutil.rmtree(target)
-    target.mkdir(parents=True)
-    with zipfile.ZipFile(archive_path) as archive:
-        for info_item in archive.infolist():
-            name = info_item.filename
-            if name.startswith("/") or ".." in Path(name).parts:
-                continue
-            archive.extract(info_item, target)
-    marker.write_text(digest, encoding="utf-8")
-    archive_path.unlink(missing_ok=True)
-    return _LOADED
+    verified = False
+    try:
+        verified = bool(digest) and all((target / name).is_file() for name in TESSDATA_NAMES)
+        verified = verified and bundle_sha256(target, TESSDATA_NAMES) == digest
+    except OSError:
+        verified = False
+    if digest and not verified:
+        print("Đang lấy bộ chữ của máy chủ.")
+        archive_path = CACHE / "tessdata.zip"
+        staging = CACHE / "tessdata-new"
+        try:
+            _download("/v1/pc/tessdata.zip", archive_path)
+            if staging.exists():
+                shutil.rmtree(staging)
+            verified = _extract_named(archive_path, staging, list(TESSDATA_NAMES))
+            verified = verified and bundle_sha256(staging, TESSDATA_NAMES) == digest
+            if verified:
+                _replace_tree(staging, target)
+        except (urllib.error.URLError, TimeoutError, OSError, zipfile.BadZipFile):
+            verified = False
+        finally:
+            archive_path.unlink(missing_ok=True)
+            if staging.exists():
+                shutil.rmtree(staging, ignore_errors=True)
+    ready, relaunch = adoption(_saved(marker), digest, verified, _LOADED)
+    if not ready:
+        print("Bộ chữ chưa khớp máy chủ. PC chưa nhận video.")
+        return False, False
+    if not _remember(marker, digest):
+        return False, False
+    return ready, relaunch
+
+
+def _info_bytes(info: dict | None) -> int:
+    if not info:
+        return 0
+    try:
+        return max(0, int(info.get("bytes") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _extract_wheels(archive: Path, target: Path) -> bool:
+    try:
+        with zipfile.ZipFile(archive) as opened:
+            names = [name for name in opened.namelist() if name.endswith(".whl") and zip_entry_safe(name)]
+            if not names:
+                return False
+            if target.exists():
+                shutil.rmtree(target)
+            target.mkdir(parents=True)
+            for name in names:
+                opened.extract(name, target)
+    except (OSError, zipfile.BadZipFile):
+        return False
+    return True
+
+
+def _install_wheels(folder: Path) -> bool:
+    wheels = sorted(str(path) for path in folder.glob("*.whl"))
+    if not wheels:
+        return False
+    command = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--no-index",
+        "--no-deps",
+        "--find-links",
+        str(folder),
+        *wheels,
+    ]
+    try:
+        done = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=900,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return done.returncode == 0
+
+
+_RUNTIME_FAIL_AT = 0.0
+
+
+def _sync_runtime(info: dict | None, need_model: bool) -> tuple[bool, bool]:
+    """Cài bộ thư viện từ máy chủ. PC không nhận video khi máy chủ có bộ dấu mà PC chưa cài được."""
+    global _RUNTIME_FAIL_AT
+    if not need_model:
+        return True, False
+    if not info:
+        print("Máy chủ đọc bằng bộ dấu nhưng chưa phát bộ thư viện cho PC. PC chưa nhận video.")
+        return False, False
+    digest = str(info.get("sha256") or "")
+    marker = CACHE / "runtime.sha256"
+    archive = CACHE / "runtime.zip"
+    folder = CACHE / "runtime"
+    try:
+        cached = bool(digest) and archive.is_file() and _file_sha256(archive) == digest
+    except OSError:
+        cached = False
+    if _saved(marker).strip() == digest and cached and _diacritics_importable():
+        return True, False
+    if _RUNTIME_FAIL_AT and time.monotonic() - _RUNTIME_FAIL_AT < 600:
+        print("Bộ thư viện đọc dấu chưa cài được. PC chờ rồi thử lại.")
+        return False, False
+    if not _disk_ready(max(_info_bytes(info), 1) * 4):
+        print("Ổ đĩa PC không còn đủ chỗ cho bộ đọc dấu. PC chờ.")
+        return False, False
+    print("Đang lấy bộ thư viện đọc dấu của máy chủ.")
+    try:
+        if not cached:
+            _download("/v1/pc/tools/runtime.zip", archive, timeout=1800)
+        verified = _file_sha256(archive) == digest
+    except (urllib.error.URLError, TimeoutError, OSError):
+        verified = False
+    if not verified:
+        archive.unlink(missing_ok=True)
+        _RUNTIME_FAIL_AT = time.monotonic()
+        print("Bộ thư viện đọc dấu tải về không khớp. PC chưa nhận video.")
+        return False, False
+    saved = _saved(marker).strip()
+    if saved == digest and _diacritics_importable():
+        return True, False
+    if not _extract_wheels(archive, folder) or not _install_wheels(folder) or not _diacritics_importable():
+        _RUNTIME_FAIL_AT = time.monotonic()
+        print("Chưa cài được bộ đọc dấu giống máy chủ. PC chưa nhận video.")
+        return False, False
+    if not _remember(marker, digest):
+        return False, False
+    print("Đã cài bộ đọc dấu giống máy chủ. PC chạy lại để đọc giống máy chủ.")
+    return True, True
 
 
 def _windows_temp() -> None:
@@ -641,19 +858,29 @@ def main() -> int:
                 print("Chưa lấy được bộ đọc. Thử lại sau.")
                 time.sleep(10)
                 continue
-            relaunch = _sync_reader(str(manifest.get("sha256") or ""))
+            listed = manifest.get("files")
+            names = [item for item in listed if isinstance(item, str)] if isinstance(listed, list) else []
+            if len(names) != (len(listed) if isinstance(listed, list) else 0):
+                print("Bộ đọc trên máy chủ không đúng. Thử lại sau.")
+                time.sleep(20)
+                continue
+            reader_ready, reader_relaunch = _sync_reader(str(manifest.get("sha256") or ""), names)
             weights = manifest.get("weights") if isinstance(manifest.get("weights"), dict) else None
             tessdata = manifest.get("tessdata") if isinstance(manifest.get("tessdata"), dict) else None
-            relaunch = _sync_weights(weights) or relaunch
-            relaunch = _sync_tessdata(tessdata) or relaunch
-            if relaunch:
-                print("Đã có bộ đọc mới. Chạy lại để đọc giống máy chủ.")
+            runtime = manifest.get("runtime") if isinstance(manifest.get("runtime"), dict) else None
+            weights_ready, weights_relaunch = _sync_weights(weights)
+            tess_ready, tess_relaunch = _sync_tessdata(tessdata)
+            runtime_ready, runtime_relaunch = _sync_runtime(runtime, weights is not None)
+            if not (reader_ready and weights_ready and tess_ready and runtime_ready):
+                time.sleep(30)
+                continue
+            if reader_relaunch or weights_relaunch or tess_relaunch or runtime_relaunch:
+                print("Đã cập nhật bộ đọc cho khớp máy chủ. PC chạy lại.")
                 return _relaunch()
             if not ready:
                 if not _tools_ok() or not _ensure_runtime():
                     return 1
                 ready = True
-            _maybe_vietocr(CACHE / "weights" / "vgg_transformer.pth")
             _prepare_env()
             if not _disk_ready(512 * 1024 * 1024):
                 if not _DISK_WAIT:
