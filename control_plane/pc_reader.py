@@ -14,6 +14,14 @@ ROOT = Path(__file__).resolve().parents[1]
 CONNECTOR_FILE = Path(__file__).with_name("pc_connector.py")
 CONNECTOR_BAT = Path(__file__).with_name("pc_connector.bat")
 LAUNCHER_FILE = Path(__file__).with_name("pc_open.bat")
+# File cài PC tải từ máy chủ, không tải từ mạng ngoài. Tên URL ngắn, tên file trên đĩa là bản đã kiểm.
+PC_TOOL_FILES = {
+    "python.zip": "python-3.12.7-embed-amd64.zip",
+    "get-pip.py": "get-pip.py",
+    "wheels.zip": "pillow-numpy-cp312-win.zip",
+    "ffmpeg.zip": "ffmpeg-release-essentials.zip",
+    "tesseract.exe": "tesseract-ocr-w64-setup-5.4.0.20240606.exe",
+}
 
 READER_FILES = (
     "doc_video/__init__.py",

@@ -24,10 +24,21 @@ try {
 
   function Save-Url([string]$Url, [string]$Dest, [string]$Label) {
     Write-Host $Label
-    & curl.exe -fL --retry 5 --retry-delay 2 -o $Dest $Url
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $Dest)) {
-      throw 'Chưa tải xong. Kiểm tra mạng rồi mở lại file này.'
+    $part = $Dest + '.part'
+    & curl.exe -fL --retry 5 --retry-delay 2 --speed-time 30 --speed-limit 1000 --max-time 900 -H "Authorization: Bearer $token" -o $part $Url
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $part)) {
+      Remove-Item -LiteralPath $part -Force -ErrorAction SilentlyContinue
+      throw 'Chưa tải xong từ máy chủ.'
     }
+    Move-Item -LiteralPath $part -Destination $Dest -Force
+  }
+
+  $base = $server.TrimEnd('/')
+  $script = Join-Path $root 'ghiam-pc.py'
+  Write-Host 'Đang nối máy chủ.'
+  Save-Url ($base + '/v1/pc/connector.py') $script 'Đang lấy chương trình nối.'
+  if (-not ([IO.File]::ReadAllText($script).Contains('def main'))) {
+    throw 'Chương trình nối tải về không đúng.'
   }
 
   $pyDir = Join-Path $tools 'python'
@@ -37,7 +48,7 @@ try {
     New-Item -ItemType Directory -Force -Path $pyDir | Out-Null
     if (-not (Test-Path -LiteralPath $pyExe)) {
       $zip = Join-Path $tools 'python.zip'
-      Save-Url 'https://www.python.org/ftp/python/3.12.7/python-3.12.7-embed-amd64.zip' $zip 'Đang tải Python.'
+      Save-Url ($base + '/v1/pc/tools/python.zip') $zip 'Đang tải Python từ máy chủ.'
       & tar.exe -xf $zip -C $pyDir
       if ($LASTEXITCODE -ne 0) { throw 'Chưa giải nén được Python.' }
     }
@@ -50,10 +61,16 @@ try {
     if ($out -notcontains 'Lib\site-packages') { $out += 'Lib\site-packages' }
     [IO.File]::WriteAllLines($pth.FullName, [string[]]$out)
     $getPip = Join-Path $tools 'get-pip.py'
-    Save-Url 'https://bootstrap.pypa.io/get-pip.py' $getPip 'Đang chuẩn bị thư viện Python.'
+    Save-Url ($base + '/v1/pc/tools/get-pip.py') $getPip 'Đang chuẩn bị thư viện Python.'
     & $pyExe $getPip --no-warn-script-location
     if ($LASTEXITCODE -ne 0) { throw 'Chưa cài được pip.' }
-    & $pyExe -m pip install --disable-pip-version-check pillow numpy
+    $wheels = Join-Path $tools 'wheels.zip'
+    $wheelDir = Join-Path $tools 'wheels'
+    Save-Url ($base + '/v1/pc/tools/wheels.zip') $wheels 'Đang tải thư viện đọc ảnh từ máy chủ.'
+    New-Item -ItemType Directory -Force -Path $wheelDir | Out-Null
+    & tar.exe -xf $wheels -C $wheelDir
+    if ($LASTEXITCODE -ne 0) { throw 'Chưa giải nén được thư viện đọc ảnh.' }
+    & $pyExe -m pip install --disable-pip-version-check --no-index --find-links $wheelDir pillow numpy
     if ($LASTEXITCODE -ne 0) { throw 'Chưa cài được thư viện đọc ảnh.' }
     Set-Content -LiteralPath $ready -Value '1' -Encoding ascii
   }
@@ -63,7 +80,7 @@ try {
   if (-not $ff) {
     New-Item -ItemType Directory -Force -Path $ffRoot | Out-Null
     $zip = Join-Path $tools 'ffmpeg.zip'
-    Save-Url 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip' $zip 'Đang tải ffmpeg.'
+    Save-Url ($base + '/v1/pc/tools/ffmpeg.zip') $zip 'Đang tải ffmpeg từ máy chủ.'
     & tar.exe -xf $zip -C $ffRoot
     if ($LASTEXITCODE -ne 0) { throw 'Chưa giải nén được ffmpeg.' }
     $ff = Get-ChildItem -LiteralPath $ffRoot -Recurse -Filter 'ffmpeg.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -75,7 +92,7 @@ try {
   if (-not (Test-Path -LiteralPath $tessExe)) {
     $setup = Join-Path $tools 'tesseract-setup.exe'
     if (-not (Test-Path -LiteralPath $setup)) {
-      Save-Url 'https://github.com/UB-Mannheim/tesseract/releases/download/v5.4.0.20240606/tesseract-ocr-w64-setup-5.4.0.20240606.exe' $setup 'Đang tải bộ đọc chữ.'
+      Save-Url ($base + '/v1/pc/tools/tesseract.exe') $setup 'Đang tải bộ đọc chữ từ máy chủ.'
     }
     New-Item -ItemType Directory -Force -Path $tessDir | Out-Null
     $target = $tessDir
@@ -84,7 +101,11 @@ try {
       if ($short) { $target = $short }
     } catch {}
     Write-Host 'Nếu Windows hỏi quyền cài, bấm Có. Không cần gõ gì.'
-    Start-Process -FilePath $setup -ArgumentList @('/S', "/D=$target") -Wait
+    $install = Start-Process -FilePath $setup -ArgumentList @('/S', "/D=$target") -PassThru
+    if (-not $install.WaitForExit(180000)) {
+      try { $install.Kill() } catch {}
+      throw 'Bộ đọc chữ cài quá lâu.'
+    }
     if (-not (Test-Path -LiteralPath $tessExe)) {
       $alt = 'C:\Program Files\Tesseract-OCR\tesseract.exe'
       if (Test-Path -LiteralPath $alt) { $tessExe = $alt } else { throw 'Chưa cài được bộ đọc chữ.' }
@@ -92,21 +113,6 @@ try {
   }
 
   $env:Path = (Split-Path -Parent $pyExe) + ';' + (Split-Path -Parent $ff.FullName) + ';' + (Split-Path -Parent $tessExe) + ';' + $env:Path
-  $script = Join-Path $root 'ghiam-pc.py'
-  $part = $script + '.part'
-  Write-Host 'Đang lấy chương trình nối mới nhất.'
-  & curl.exe -fL --retry 5 --retry-delay 2 -H "Authorization: Bearer $token" -o $part ($server.TrimEnd('/') + '/v1/pc/connector.py')
-  if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $part)) {
-    $head = [IO.File]::ReadAllText($part)
-    if ($head.Contains('def main')) {
-      Move-Item -LiteralPath $part -Destination $script -Force
-    } else {
-      Remove-Item -LiteralPath $part -Force -ErrorAction SilentlyContinue
-    }
-  }
-  if (-not (Test-Path -LiteralPath $script)) {
-    throw 'Chưa tải được chương trình nối. Mở lại file này khi mạng ổn.'
-  }
   Set-Location -LiteralPath $root
   while ($true) {
     & $pyExe $script

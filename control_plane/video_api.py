@@ -29,6 +29,7 @@ from control_plane.upload_parts import (
 from control_plane.video_scan import IMAGE_SUFFIXES, VIDEO_SUFFIXES
 from control_plane.pc_reader import (
     code_sha256,
+    PC_TOOL_FILES,
     connector_bytes,
     connector_template_sha256,
     launcher_bytes,
@@ -480,6 +481,23 @@ def pc_tessdata(authorization: str | None = Header(default=None)) -> Response:
     if payload is None:
         raise HTTPException(status_code=404, detail="Máy chủ không có bộ chữ riêng.")
     return Response(content=payload, media_type="application/zip", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/v1/pc/tools/{name}")
+def pc_tool(name: str, authorization: str | None = Header(default=None)) -> FileResponse:
+    _auth(authorization)
+    filename = PC_TOOL_FILES.get(name)
+    if filename is None or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=404, detail="Không có bộ cài này.")
+    path = settings.data_dir / "pc-tools" / filename
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Máy chủ chưa có bộ cài này.")
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        filename=name,
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @router.get("/v1/pc/connector/version")
