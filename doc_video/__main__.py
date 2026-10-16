@@ -42,7 +42,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m doc_video", description="Ghép số điện thoại, tên khách, id từ video danh bạ TikTok.")
     parser.add_argument("inputs", nargs="+", type=Path, help="Video hoặc ảnh, theo đúng thứ tự quay.")
     parser.add_argument("-o", "--output", type=Path, default=Path("ket_qua.csv"), help="File bảng kết quả (CSV mở bằng Excel).")
-    parser.add_argument("--fps", type=float, default=FRAME_FPS, help="Số khung đọc mỗi giây video. Mặc định 4.")
+    parser.add_argument(
+        "--fps",
+        type=float,
+        default=FRAME_FPS,
+        help="Nhịp giữ màn hình đứng yên mỗi giây. Mặc định 4. Lần mở ngắn vẫn được lấy riêng.",
+    )
     parser.add_argument("--workers", type=int, default=None, help="Số tiến trình đọc song song.")
     parser.add_argument("--chi-tiet", action="store_true", help="In những gì đọc được trên từng khung.")
     args = parser.parse_args(argv)

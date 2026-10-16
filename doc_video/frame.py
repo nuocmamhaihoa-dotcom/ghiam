@@ -571,6 +571,7 @@ def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
     layout = Layout(at=at)
     _attach_side(layout, lines, screen, geometric)
     promote_unclassified_profile(layout)
+    _remember_gap_handle(layout, lines, screen.height, screen.width)
     return layout
 
 
@@ -592,6 +593,110 @@ def promote_unclassified_profile(layout: Layout) -> None:
     layout.handle_line = layout.side_handle_line
     layout.name_line = layout.side_name_line
     layout.handle_hint = hint
+
+
+def _handle_shaped(text: str) -> bool:
+    """Dòng có hình @id: bắt đầu bằng @, hoặc một cụm vừa có chữ vừa có số.
+
+    Tên thuần và số điện thoại không phải @id.
+    """
+    compact = "".join(str(text or "").split())
+    if not compact or looks_like_phone(compact):
+        return False
+    if _looks_like_handle_line(compact):
+        return True
+    if "@" not in compact and not any(ch.isdigit() for ch in compact):
+        return False
+    return any(ch.isalpha() for ch in compact) and any(ch.isdigit() for ch in compact) and len(compact) >= 4
+
+
+def _gap_handle_candidate(lines: list[ocr.TextLine], height: int, width: int) -> ocr.TextLine | None:
+    """Dòng giống @id ở nửa trên, bên trái. Dùng khi cả màn chưa được nhận là hồ sơ."""
+    limit = int(0.72 * width)
+    found: list[ocr.TextLine] = []
+    for line in _merge_handle_fragments(lines):
+        if not (0.12 * height <= line.y0 <= 0.62 * height):
+            continue
+        if line.x0 >= limit or not _handle_shaped(line.text):
+            continue
+        found.append(line)
+    if not found:
+        return None
+    return min(found, key=lambda line: (line.y0, line.x0))
+
+
+def _remember_gap_handle(layout: Layout, lines: list[ocr.TextLine], height: int, width: int) -> None:
+    """Ghi ô @id thấy được. Chưa đổi loại màn hình; chỉ khoảng ngắn giữa hai danh bạ mới đọc kỹ."""
+    if layout.kind != "other" or layout.handle_line is not None or layout.side_pairs:
+        return
+    line = _gap_handle_candidate(lines, height, width)
+    if line is None:
+        return
+    layout.handle_line = line
+    if layout.name_line is None:
+        merged = _merge_handle_fragments(lines)
+        for index, item in enumerate(merged):
+            if abs(item.y0 - line.y0) <= 2 and abs(item.x0 - line.x0) <= 2:
+                layout.name_line = _name_above(merged, index)
+                break
+
+
+def promote_gap_profiles(layouts: list[Layout]) -> None:
+    """Khoảng ngắn giữa hai danh bạ, chưa có hồ sơ nào, mà đã thấy dòng @id thì đọc như hồ sơ.
+
+    Một lần mở nhanh thường không đủ chữ để bước quét nhận cả màn. Mỗi khoảng
+    chỉ nhận một khung, để không thêm một lần mở giả làm lệch thứ tự.
+    """
+    span: list[int] = []
+    seen_list = False
+
+    def close() -> None:
+        nonlocal span
+        if span and _short_gap(layouts, span) and not any(layouts[index].kind == "profile" for index in span):
+            ready = [index for index in span if _gap_frame_ready(layouts[index])]
+            if ready:
+                best = max(ready, key=lambda index: _gap_rank(layouts[index]))
+                _promote_gap_frame(layouts[best])
+        span = []
+
+    for index, layout in enumerate(layouts):
+        if layout.kind == "list":
+            if seen_list:
+                close()
+            else:
+                span = []
+            seen_list = True
+            continue
+        if seen_list:
+            span.append(index)
+
+
+def _short_gap(layouts: list[Layout], span: list[int]) -> bool:
+    if len(span) > 5:
+        return False
+    start = layouts[span[0]].at
+    end = layouts[span[-1]].at
+    return not (start >= 0 and end >= 0 and end - start > 1.2)
+
+
+def _gap_frame_ready(layout: Layout) -> bool:
+    return layout.kind == "other" and not layout.side_pairs and layout.handle_line is not None and _handle_shaped(layout.handle_line.text)
+
+
+def _gap_rank(layout: Layout) -> tuple[int, int, int]:
+    text = "".join(layout.handle_line.text.split()) if layout.handle_line is not None else ""
+    hint = handle_from_read(text)
+    return (1 if hint else 0, 1 if "@" in text else 0, len(text))
+
+
+def _promote_gap_frame(layout: Layout) -> None:
+    if layout.handle_line is None:
+        return
+    layout.kind = "profile"
+    if not layout.handle_hint:
+        hint = handle_from_read(layout.handle_line.text)
+        if hint:
+            layout.handle_hint = hint
 
 
 def _attach_side(
