@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import functools
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from control_plane.pc_fleet import (
     clean_schedule,
@@ -31,11 +34,15 @@ from control_plane.video_store import (
     finish,
     init_db,
     list_videos,
+    queue_order,
     record_pc_result,
     release_pc,
     release_stale_pc,
+    report_progress,
+    set_priority,
     touch_pc,
 )
+from control_plane.video_worker import run_job, scan_paths
 
 
 def vn(hour: int, minute: int = 0) -> datetime:
@@ -201,6 +208,83 @@ class FleetTests(unittest.TestCase):
         later = datetime.now(timezone.utc) + timedelta(minutes=10)
         self.assertTrue(forget_pc(self.db, "May-L", now=later))
         self.assertFalse(any(item["name"] == "May-L" for item in list_pcs(self.db)))
+
+
+class QueueOrderTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.db = self.root / "video.db"
+        init_db(self.db)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _add(self, sha: str, device: str) -> int:
+        created = begin_upload(self.db, name=f"{sha}.mp4", size_bytes=5, sha256=sha, device=device)
+        video_id = int(created["id"])
+        path = self.root / f"{video_id}.mp4"
+        path.write_bytes(b"video")
+        commit_upload(self.db, video_id, str(path))
+        return video_id
+
+    def test_phones_take_turns_and_urgent_goes_first(self) -> None:
+        a1, a2, a3 = (self._add(f"a{index}", "May A") for index in range(3))
+        b1 = self._add("b1", "May B")
+        self.assertEqual(queue_order(self.db), [a1, b1, a2, a3])
+        positions = {int(item["id"]): item["position"] for item in list_videos(self.db)}
+        self.assertEqual(positions[b1], 2)
+        self.assertTrue(set_priority(self.db, a3, True))
+        self.assertEqual(queue_order(self.db), [a3, a1, b1, a2])
+        job = claim(self.db, 1)
+        self.assertEqual(job["id"], a3)
+        self.assertFalse(set_priority(self.db, a3, False))
+        self.assertTrue(finish(self.db, a3, Table(rows=[])))
+        done = {int(item["id"]): item for item in list_videos(self.db)}[a3]
+        self.assertEqual((done["priority"], done["position"]), (0, None))
+        pc_job = claim_pc(self.db, "May-PC")
+        assert pc_job is not None
+        self.assertEqual(int(pc_job["id"]), a1)
+
+    def test_new_videos_go_before_the_check_pass(self) -> None:
+        old = self._add("old", "May A")
+        self.assertTrue(finish(self.db, old, Table(rows=[Row("0900000001", "Mot", "@mot")])))
+        with connect(self.db) as conn:
+            conn.execute("UPDATE videos SET status = 'queued', check_pass = 1 WHERE id = ?", (old,))
+        fresh = self._add("fresh", "May A")
+        self.assertEqual(queue_order(self.db), [fresh, old])
+
+    def test_server_progress_is_written_for_running_videos_only(self) -> None:
+        video_id = self._add("progress-vps", "May A")
+        report_progress(self.db, video_id, "scan", 4, 9)
+        self.assertEqual(list_videos(self.db)[0]["progress_done"], 0)
+        claim(self.db, 3)
+        report_progress(self.db, video_id, "scan", 4, 9)
+        report_progress(self.db, video_id, "nonsense", 8, 9)
+        item = list_videos(self.db)[0]
+        self.assertEqual((item["progress_stage"], item["progress_done"], item["progress_total"]), ("scan", 4, 9))
+
+    def test_worker_writes_progress_while_reading(self) -> None:
+        self._add("worker-progress", "May A")
+        job = claim(self.db, 4)
+        seen: list[tuple] = []
+
+        def snapshot() -> None:
+            item = list_videos(self.db)[0]
+            seen.append((item["progress_stage"], item["progress_done"]))
+
+        def fake_read(paths, submit=None, work_dir=None, progress=None):
+            progress("scan", 1, 3)
+            progress("scan", 2, 3)
+            snapshot()
+            progress("read", 3, 3)
+            snapshot()
+            return SimpleNamespace(rows=[], review=[], unopened=[]), []
+
+        with patch("control_plane.video_worker.read_video", side_effect=fake_read):
+            run_job(self.db, job, functools.partial(scan_paths, work_dir=self.root))
+        self.assertEqual(seen, [("scan", 1), ("read", 3)])
+        self.assertEqual(list_videos(self.db)[0]["status"], "done")
 
 
 if __name__ == "__main__":

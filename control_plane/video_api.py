@@ -62,6 +62,7 @@ from control_plane.video_store import (
     device_day,
     disk_limit_bytes,
     finish,
+    get_meta,
     init_db,
     iter_backup,
     list_videos,
@@ -73,6 +74,8 @@ from control_plane.video_store import (
     release_stale_pc,
     result_page,
     retry,
+    set_priority,
+    shrink_totals,
     start_full_check,
     stats,
     stop_full_check,
@@ -242,6 +245,7 @@ def video_stats(authorization: str | None = Header(default=None)) -> dict[str, o
     body["disk_used_bytes"] = used
     body["disk_limit_bytes"] = limit
     body["phones"] = device_day(settings.video_db_path)
+    body["shrink"] = {**shrink_totals(settings.video_db_path), "on": get_meta(settings.video_db_path, "video_shrink", "off") == "on"}
     return body
 
 
@@ -454,6 +458,20 @@ def retry_video(video_id: int, authorization: str | None = Header(default=None))
     _auth(authorization)
     if not retry(settings.video_db_path, video_id):
         raise HTTPException(status_code=404, detail="Không đọc lại được video này.")
+    return {"ok": True}
+
+
+class PriorityBody(BaseModel):
+    urgent: bool = True
+
+
+@router.post("/v1/videos/{video_id}/priority")
+def video_priority(video_id: int, body: PriorityBody, authorization: str | None = Header(default=None)) -> dict[str, bool]:
+    """Đọc gấp: video lên đầu hàng chờ cho cả máy chủ và PC. Đọc xong thì tự bỏ cờ."""
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    if not set_priority(settings.video_db_path, video_id, body.urgent):
+        raise HTTPException(status_code=404, detail="Video này không còn trong hàng chờ.")
     return {"ok": True}
 
 

@@ -101,6 +101,7 @@
   <section>
     <h2>Hàng đợi</h2>
     <p class="note">Hàng đợi hiện mọi video, không cắt bớt. Nhiều danh sách tải cùng lúc đều vào đây và chờ đến lượt đọc. Cột Điện thoại là máy đã tải video đó. Cột Đủ 3 ô hiện sau khi đọc xong: số kết quả có đủ số điện thoại, tên và id, trên tổng số điện thoại trong video. Video mới được giữ trên máy chủ. Khi ổ đĩa đầy 80%, video cũ nhất tự xóa để còn chỗ. Kết quả đã đọc vẫn giữ. Video còn trên máy chủ có nút Đọc lại để đọc lại bằng bộ đọc mới nhất.</p>
+    <p class="note">Thứ tự đọc: video bấm <b>Đọc gấp</b> trước. Còn lại xoay vòng theo điện thoại: mỗi máy lần lượt được đọc một video, nên một máy tải cả chục video không làm video của máy khác phải chờ hết đợt đó.</p>
     <div id="queue"></div>
   </section>
 
@@ -469,7 +470,7 @@
 
   function renderQueue(items) {
     var sig = items.map(function (item) {
-      return item.id + ":" + item.status + ":" + (item.check_pass || 0) + ":" + (item.error || "") + ":" + (item.device || "") + ":" + (item.helper || "") + ":" + countText(item) + ":" + (item.has_file ? 1 : 0) + ":" + item.name + ":" + (item.progress_stage || "") + ":" + (item.progress_done || 0) + ":" + (item.progress_total || 0);
+      return item.id + ":" + item.status + ":" + (item.check_pass || 0) + ":" + (item.error || "") + ":" + (item.device || "") + ":" + (item.helper || "") + ":" + countText(item) + ":" + (item.has_file ? 1 : 0) + ":" + item.name + ":" + (item.progress_stage || "") + ":" + (item.progress_done || 0) + ":" + (item.progress_total || 0) + ":" + (item.priority || 0) + ":" + (item.position || 0);
     }).join("|");
     if (sig === queueSig) return;
     queueSig = sig;
@@ -483,13 +484,29 @@
       var extra = item.error ? "<div class='warn'>" + escapeHtml(item.error) + "</div>" : "";
       var canReread = (item.status === "error" || item.status === "done") && item.has_file;
       var retry = canReread ? " <button class='ghost' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
+      var urgent = "";
+      if (item.status === "queued" && !item.check_pass) {
+        urgent = " <button class='ghost' type='button' data-urgent='" + item.id + "' data-on='" + (item.priority ? 0 : 1) + "'>" + (item.priority ? "Bỏ gấp" : "Đọc gấp") + "</button>";
+      }
+      var place = item.position ? "<div class='small'>" + (item.priority ? "Gấp · " : "") + "thứ " + item.position + " trong hàng chờ</div>" : "";
       var phone = item.device ? escapeHtml(item.device) : "<span class='note'>Chưa gắn máy</span>";
-      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + phone + "</td><td>" + countText(item) + "</td><td>" + escapeHtml(readerLabel(item)) + "</td><td>" + statusText(item) + retry + progressNote(item) + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + phone + "</td><td>" + countText(item) + "</td><td>" + escapeHtml(readerLabel(item)) + "</td><td>" + statusText(item) + retry + urgent + place + progressNote(item) + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-retry]").forEach(function (button) {
       button.addEventListener("click", async function () {
         await api("/v1/videos/" + button.getAttribute("data-retry") + "/retry", { method: "POST" });
+        refresh();
+      });
+    });
+    box.querySelectorAll("[data-urgent]").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        button.disabled = true;
+        await api("/v1/videos/" + button.getAttribute("data-urgent") + "/priority", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urgent: button.getAttribute("data-on") === "1" })
+        });
         refresh();
       });
     });
