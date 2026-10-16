@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -13,16 +15,19 @@ from doc_video.frame import (
     FrameRead,
     Layout,
     ListRow,
+    _gap_handle_candidate,
+    _handle_shaped,
     _list_pairs,
     _supplement_pairs,
     _tap_center,
+    promote_gap_profiles,
     promote_unclassified_profile,
     row_at,
 )
 from doc_video.join import Result, Review, Row, add_full_name_rows, add_side_rows, build
 from doc_video.ocr import TextLine
 from doc_video.side import select_left_profile, select_right_pairs
-from doc_video.video import plan_full_reads, plan_reads, resolve_taps, side_frames
+from doc_video.video import _kept_indexes, plan_full_reads, plan_reads, resolve_taps, side_frames
 from doc_video.text import (
     clean_name,
     find_handle,
@@ -1166,6 +1171,117 @@ class SidePairTests(unittest.TestCase):
         phone, name = _right_pair(200, 400)
         layouts = [Layout("list", side_pairs=[(phone, name)]) for _ in range(10)]
         self.assertEqual(len(side_frames(layouts, {})), 3)
+
+
+class ScreenChangeTests(unittest.TestCase):
+    def test_a_still_screen_keeps_one_frame(self) -> None:
+        thumbs = [np.zeros((8, 8), dtype=np.uint8) for _ in range(20)]
+        times = [index * 0.1 for index in range(20)]
+        self.assertEqual(_kept_indexes(thumbs, times, 0.25), [0])
+
+    def test_a_short_flash_is_kept(self) -> None:
+        thumbs = [np.zeros((8, 8), dtype=np.uint8) for _ in range(21)]
+        thumbs[10] = np.full((8, 8), 200, dtype=np.uint8)
+        times = [index * 0.1 for index in range(21)]
+        kept = _kept_indexes(thumbs, times, 0.25)
+        self.assertIn(10, kept)
+
+    def test_a_long_scroll_is_not_collapsed_to_one_frame(self) -> None:
+        thumbs = [np.full((8, 8), (index * 40) % 255, dtype=np.uint8) for index in range(40)]
+        times = [index * 0.1 for index in range(40)]
+        kept = _kept_indexes(thumbs, times, 0.25)
+        self.assertGreater(len(kept), 8)
+        self.assertLess(len(kept), 30)
+
+    def test_a_brief_flash_in_a_video_is_kept(self) -> None:
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("không có ffmpeg")
+        from doc_video.video import extract_changed_frames
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            video = folder / "flash.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=black:s=180x390:d=1",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=white:s=180x390:d=0.25",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=black:s=180x390:d=1",
+                    "-filter_complex",
+                    "[0:v][1:v][2:v]concat=n=3:v=1:a=0",
+                    "-r",
+                    "30",
+                    str(video),
+                ],
+                check=True,
+            )
+            out = folder / "frames"
+            out.mkdir()
+            kept = extract_changed_frames(video, out, 10.0, 0.25)
+            times = [at for _path, at in kept]
+            self.assertTrue(any(0.85 <= at <= 1.45 for at in times))
+            self.assertLess(len(kept), 16)
+
+
+class GapProfileTests(unittest.TestCase):
+    def test_a_handle_between_two_lists_becomes_one_profile(self) -> None:
+        layouts = [
+            Layout("list", at=0.0),
+            Layout("other", at=0.3, handle_line=TextLine("user89627", 40, 400, 280, 440, 32)),
+            Layout("other", at=0.4, handle_line=TextLine("user89627x", 40, 400, 300, 440, 32)),
+            Layout("list", at=0.6),
+        ]
+        promote_gap_profiles(layouts)
+        profiles = [layout for layout in layouts if layout.kind == "profile"]
+        self.assertEqual(len(profiles), 1)
+        self.assertTrue(profiles[0].handle_hint.startswith("@user89627"))
+
+    def test_a_plain_name_between_lists_stays_unclassified(self) -> None:
+        layouts = [
+            Layout("list", at=0.0),
+            Layout("other", at=0.3, handle_line=TextLine("Binh", 40, 400, 160, 440, 32)),
+            Layout("list", at=0.6),
+        ]
+        promote_gap_profiles(layouts)
+        self.assertEqual(layouts[1].kind, "other")
+
+    def test_a_long_gap_is_left_alone(self) -> None:
+        layouts = [Layout("list", at=0.0)]
+        layouts.extend(Layout("other", at=index * 0.3, handle_line=TextLine("user89627", 40, 400, 280, 440, 32)) for index in range(1, 7))
+        layouts.append(Layout("list", at=2.2))
+        promote_gap_profiles(layouts)
+        self.assertTrue(all(layout.kind == "other" for layout in layouts[1:-1]))
+
+    def test_a_gap_that_already_has_a_profile_gains_no_second_visit(self) -> None:
+        layouts = [
+            Layout("list", at=0.0),
+            Layout("profile", at=0.2, handle_hint="@lan.shop"),
+            Layout("other", at=0.3, handle_line=TextLine("khac89627", 40, 400, 280, 440, 32)),
+            Layout("list", at=0.5),
+        ]
+        promote_gap_profiles(layouts)
+        self.assertEqual(layouts[2].kind, "other")
+
+    def test_a_handle_shaped_line_is_remembered_on_an_unclassified_screen(self) -> None:
+        lines = [TextLine("user89627", 40, 400, 280, 440, 32), TextLine("Binh", 40, 200, 140, 240, 32)]
+        found = _gap_handle_candidate(lines, 900, 400)
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.text, "user89627")
+        self.assertFalse(_handle_shaped("Binh"))
+        self.assertFalse(_handle_shaped("0901234567"))
 
 
 ASSETS = Path("/home/ubuntu/.cursor/projects/workspace/assets")
