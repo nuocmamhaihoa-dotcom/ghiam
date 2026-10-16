@@ -1,5 +1,6 @@
 @echo off
 setlocal EnableExtensions
+title Ghiam PC
 set PYTHONIOENCODING=utf-8
 set PYTHONUTF8=1
 set "GHIAM_ROOT=%PUBLIC%\GhiamPC"
@@ -7,16 +8,13 @@ if not exist "%GHIAM_ROOT%" mkdir "%GHIAM_ROOT%"
 copy /Y "%~f0" "%GHIAM_ROOT%\ghiam-pc.bat" >nul
 set "GHIAM_LAUNCHER=%~f0"
 if exist "%GHIAM_ROOT%\ghiam-pc.bat" set "GHIAM_LAUNCHER=%GHIAM_ROOT%\ghiam-pc.bat"
+echo Dang mo ket noi. Cu de cua so nay mo.
 :run
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$raw = [IO.File]::ReadAllText($env:GHIAM_LAUNCHER, [Text.UTF8Encoding]::new($false)); $mark = '###GHIAM_PS1###'; $i = $raw.IndexOf($mark); if ($i -lt 0) { Write-Host 'File ket noi khong dung.'; exit 1 }; Invoke-Expression $raw.Substring($i + $mark.Length).Trim(); if ($null -eq $LASTEXITCODE) { exit 0 } else { exit $LASTEXITCODE }"
-if "%ERRORLEVEL%"=="0" goto done
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$raw = [IO.File]::ReadAllText($env:GHIAM_LAUNCHER, [Text.UTF8Encoding]::new($false)); $mark = ('#'*3)+'GHIAM_PS1'+('#'*3); $i = $raw.IndexOf($mark); if ($i -lt 0) { Write-Host 'File ket noi khong dung.'; Start-Sleep -Seconds 10; exit 1 }; Invoke-Expression $raw.Substring($i + $mark.Length).Trim(); Write-Host 'Chua xong. Dang thu lai.'; Start-Sleep -Seconds 10; exit 1"
 echo Chua xong. Dang thu lai, cu de cua so nay mo.
-ping -n 11 127.0.0.1 >nul
+timeout /t 10 /nobreak >nul
+if errorlevel 1 ping -n 11 127.0.0.1 >nul
 goto run
-:done
-echo Cua so nay dung. Neu chua co cua so khac dang mo, hay mo lai file.
-ping -n 6 127.0.0.1 >nul
-exit /b 0
 ###GHIAM_PS1###
 $ErrorActionPreference = 'Stop'
 try { chcp 65001 | Out-Null } catch {}
@@ -25,19 +23,23 @@ try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch {}
 $server = '__GHIAM_SERVER__'
 $token = '__GHIAM_TOKEN__'
 if (-not [Environment]::Is64BitOperatingSystem) {
-  Write-Host 'Máy này không phải Windows 64 bit.'
-  exit 1
+  while ($true) {
+    Write-Host 'Máy này không phải Windows 64 bit.'
+    Start-Sleep -Seconds 30
+  }
 }
-$mutex = New-Object System.Threading.Mutex($false, 'Local\GhiamPC')
+$mutex = New-Object System.Threading.Mutex($false, 'Local\GhiamPCOpen')
 $haveWindow = $false
-try {
-  $haveWindow = $mutex.WaitOne(0)
-} catch [System.Threading.AbandonedMutexException] {
-  $haveWindow = $true
-}
-if (-not $haveWindow) {
-  Write-Host 'PC đã có một cửa sổ đang chạy. Cứ để cửa sổ đó mở.'
-  exit 0
+while (-not $haveWindow) {
+  try {
+    $haveWindow = $mutex.WaitOne(0)
+  } catch [System.Threading.AbandonedMutexException] {
+    $haveWindow = $true
+  }
+  if (-not $haveWindow) {
+    Write-Host 'PC đã có một cửa sổ đang chạy. Cứ để cửa sổ đó mở.'
+    Start-Sleep -Seconds 5
+  }
 }
 $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
 if (-not (Test-Path -LiteralPath $tar)) { $tar = 'tar.exe' }
