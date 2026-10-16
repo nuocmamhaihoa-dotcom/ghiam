@@ -23,7 +23,7 @@ from zoneinfo import ZoneInfo
 
 from doc_video.text import handle_matches_name, lookalike_handles
 
-from control_plane.phone_vn import phone_columns
+from control_plane.phone_vn import carrier, phone_columns
 from control_plane.screen_table import Review, Table, joined_name, pair_close_names
 
 BUCKET_OK = 1
@@ -1712,6 +1712,77 @@ def search_results(db_path: Path, query: str = "", limit: int = 50) -> list[dict
     page = result_page(db_path, query, limit)
     items = page["items"]
     return list(items) if isinstance(items, list) else []
+
+
+def missing_videos(db_path: Path) -> list[dict[str, object]]:
+    """Video đã đọc còn số chưa mở hồ sơ. Chỉ trả số đếm, không trả số điện thoại."""
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT v.id, COALESCE(v.device, '') AS device,
+                   COALESCE(v.phone_count, 0) AS phone_count,
+                   COALESCE(v.full_count, 0) AS full_count,
+                   COUNT(r.id) AS unopened
+            FROM videos v
+            JOIN results r ON r.video_id = v.id AND r.bucket = ?
+            WHERE v.status = 'done'
+            GROUP BY v.id
+            ORDER BY v.id DESC
+            """,
+            (BUCKET_UNOPENED,),
+        ).fetchall()
+    return [
+        {
+            "video_id": int(row["id"]),
+            "device": str(row["device"] or ""),
+            "phone_count": int(row["phone_count"] or 0),
+            "full_count": int(row["full_count"] or 0),
+            "unopened": int(row["unopened"] or 0),
+        }
+        for row in rows
+    ]
+
+
+def missing_text(db_path: Path, video_id: int = 0) -> str:
+    """File cho Danh bạ: mỗi dòng là tên, dấu tab, số. video_id 0 là mọi video đã đọc."""
+    sql = """
+        SELECT r.name, r.phone
+        FROM results r
+        JOIN videos v ON v.id = r.video_id
+        WHERE r.bucket = ? AND r.phone != '' AND v.status = 'done'
+    """
+    params: list[object] = [BUCKET_UNOPENED]
+    if video_id > 0:
+        sql += " AND r.video_id = ?"
+        params.append(int(video_id))
+    sql += " ORDER BY r.video_id, r.id"
+    lines: list[str] = []
+    with connect(db_path) as conn:
+        for row in conn.execute(sql, params):
+            phone = " ".join(str(row["phone"] or "").split())
+            name = " ".join(str(row["name"] or "").split()) or phone
+            if phone:
+                lines.append(f"{name}\t{phone}")
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
+def coverage_counts(db_path: Path) -> dict[str, object]:
+    """Đếm dòng theo nhà mạng gốc. Không trả số điện thoại."""
+    labels = {BUCKET_OK: "saved", BUCKET_REVIEW: "review", BUCKET_UNOPENED: "unopened"}
+    totals: dict[str, dict[str, int]] = defaultdict(lambda: {"saved": 0, "review": 0, "unopened": 0})
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT phone, bucket FROM results WHERE phone != ''")
+        for row in rows:
+            name = carrier(str(row["phone"] or "")) or "Chưa rõ"
+            slot = labels.get(int(row["bucket"]), "")
+            if slot:
+                totals[name][slot] += 1
+    carriers = [
+        {"carrier": name, **counts, "total": counts["saved"] + counts["review"] + counts["unopened"]}
+        for name, counts in totals.items()
+    ]
+    carriers.sort(key=lambda item: (-int(item["total"]), str(item["carrier"])))
+    return {"carriers": carriers}
 
 
 def iter_backup(db_path: Path) -> Iterator[str]:

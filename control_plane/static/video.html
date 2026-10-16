@@ -122,6 +122,17 @@
   </section>
 
   <section>
+    <h2>Số chưa mở hồ sơ</h2>
+    <p class="note">Số đã thấy trong video nhưng chưa có @id. Bấm đưa sang Danh bạ để trang Danh bạ nhận đúng các số đó, mỗi dòng một tên và một số. Trang này chỉ hiện số đếm, không hiện từng số.</p>
+    <p id="coverage" class="note"></p>
+    <p class="row" style="margin-top:0.55rem">
+      <button id="missingAll" class="primary" type="button">Đưa mọi số chưa mở sang Danh bạ</button>
+    </p>
+    <p id="missingNote" class="note"></p>
+    <div id="missing"></div>
+  </section>
+
+  <section>
     <h2>Kết quả đã lưu</h2>
     <p class="note">Hiện mọi dòng đã quét. Dòng mới nhất ở trên. Cột Đọc bởi ghi video nào do PC nào đọc, video nào do VPS đọc. Số chuẩn và nhà mạng tính lúc hiện, số đã lưu giữ nguyên.</p>
     <input id="query" type="search" placeholder="Đầu số, tên (không cần dấu), hoặc @username" />
@@ -239,6 +250,13 @@
     if (item.phone_count === 0) return "0 số";
     var full = item.full_count == null ? 0 : item.full_count;
     return full + "/" + item.phone_count;
+  }
+
+  function filmHint(item) {
+    if (item.status !== "done" || !item.phone_count || item.phone_count < 15) return "";
+    var full = item.full_count == null ? 0 : item.full_count;
+    if (full * 2 >= item.phone_count) return "";
+    return "<div class='small'>Ít dòng đủ 3 ô. Quay gần hơn, giữ máy đứng, lướt chậm.</div>";
   }
 
   function statusText(item) {
@@ -527,6 +545,63 @@
     if (!sendingNow()) loadResults();
   }
 
+  var missingSig = "";
+
+  function coverageText(carriers) {
+    if (!carriers || !carriers.length) return "Chưa có số để gom theo nhà mạng.";
+    return carriers.map(function (item) {
+      return item.carrier + " " + item.total + " (chưa mở " + item.unopened + ")";
+    }).join(" · ");
+  }
+
+  async function openMissing(videoId) {
+    var note = document.getElementById("missingNote");
+    note.textContent = "Đang mở Danh bạ với các số chưa mở...";
+    note.className = "note";
+    var response = await api("/v1/results/missing/ticket", { method: "POST" });
+    if (!response.ok) {
+      note.textContent = "Chưa mở được. Thử lại sau vài giây.";
+      note.className = "note warn";
+      return;
+    }
+    var body = await response.json();
+    var path = body.url || "";
+    if (videoId) path += "?video=" + encodeURIComponent(videoId);
+    window.location.href = "/danhba/?people=" + encodeURIComponent(path);
+  }
+
+  async function loadMissing() {
+    var listed = await api("/v1/results/missing");
+    var cover = await api("/v1/results/coverage");
+    if (!listed.ok) return;
+    var body = await listed.json();
+    var carriers = cover.ok ? ((await cover.json()).carriers || []) : [];
+    var note = document.getElementById("coverage");
+    var text = coverageText(carriers);
+    if (note.textContent !== text) note.textContent = text;
+    var items = body.items || [];
+    var sig = (body.unopened || 0) + ":" + items.map(function (item) {
+      return item.video_id + ":" + item.unopened + ":" + (item.device || "");
+    }).join(",");
+    var box = document.getElementById("missing");
+    if (box.getAttribute("data-sig") === sig) return;
+    box.setAttribute("data-sig", sig);
+    missingSig = sig;
+    if (!items.length) {
+      box.innerHTML = "<p class='note'>Không còn số chưa mở hồ sơ.</p>";
+      return;
+    }
+    var html = "<table><tr><th>Video</th><th>Điện thoại</th><th>Chưa mở</th><th></th></tr>";
+    items.forEach(function (item) {
+      var phone = item.device ? escapeHtml(item.device) : "Chưa gắn máy";
+      html += "<tr><td>Video " + item.video_id + "</td><td>" + phone + "</td><td>" + item.unopened + "/" + (item.phone_count || 0) + "</td><td><button class='ghost' type='button' data-missing='" + item.video_id + "'>Đưa số video này</button></td></tr>";
+    });
+    box.innerHTML = html + "</table>";
+    box.querySelectorAll("[data-missing]").forEach(function (button) {
+      button.addEventListener("click", function () { openMissing(button.getAttribute("data-missing")); });
+    });
+  }
+
   var queueSig = null;
 
   function renderQueue(items) {
@@ -551,7 +626,7 @@
       }
       var place = item.position ? "<div class='small'>" + (item.priority ? "Gấp · " : "") + "thứ " + item.position + " trong hàng chờ</div>" : "";
       var phone = item.device ? escapeHtml(item.device) : "<span class='note'>Chưa gắn máy</span>";
-      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + phone + "</td><td>" + countText(item) + "</td><td>" + escapeHtml(readerLabel(item)) + "</td><td>" + statusText(item) + retry + urgent + place + progressNote(item) + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + phone + "</td><td>" + countText(item) + filmHint(item) + "</td><td>" + escapeHtml(readerLabel(item)) + "</td><td>" + statusText(item) + retry + urgent + place + progressNote(item) + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-retry]").forEach(function (button) {
@@ -1359,6 +1434,7 @@
     note.className = "note ok";
     refresh();
   });
+  document.getElementById("missingAll").addEventListener("click", function () { openMissing(""); });
   document.getElementById("query").addEventListener("input", loadResults);
   ["dayFrom", "dayTo", "resultDevice", "resultBucket", "resultChecked"].forEach(function (id) {
     document.getElementById(id).addEventListener("change", loadResults);
@@ -1506,6 +1582,7 @@
   }
 
   async function loadShare() {
+    loadMissing();
     var hook = await api("/v1/webhook");
     if (hook.ok) {
       var body = await hook.json();
