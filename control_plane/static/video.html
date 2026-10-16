@@ -48,6 +48,13 @@
     .phones button span { font-weight: 550; font-size: 0.86rem; color: var(--muted); }
     .phones button.on span { color: #d6e8fa; }
     .phonebar { display: flex; justify-content: space-between; gap: 0.7rem; align-items: center; }
+    h3 { font-size: 1rem; margin: 1.1rem 0 0.35rem; }
+    .bar { height: 6px; background: #e4e7ec; border-radius: 3px; margin-top: 0.3rem; overflow: hidden; }
+    .bar i { display: block; height: 100%; background: var(--blue); }
+    .pcbtns { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.35rem; }
+    .pcbtns button { min-height: 36px; padding: 0 0.7rem; font-size: 0.9rem; }
+    .pcbtns input { width: 8.5rem; padding: 0.4rem 0.5rem; font: inherit; font-size: 0.9rem; border: 1px solid #cfd5dc; border-radius: 8px; }
+    .small { font-size: 0.86rem; color: var(--muted); }
     /* iPhone hủy sự kiện change nếu input bị display:none và khung chọn ảnh mở lâu (vài chục video). */
     #file { position: fixed; top: -9999px; left: -9999px; width: 48px; height: 48px; }
   </style>
@@ -124,6 +131,17 @@
     <p style="margin-top:0.8rem"><button id="pcDownload" class="primary" type="button">Tải bản kết nối PC</button></p>
     <p id="pcNote" class="note"></p>
     <div id="pcLink"></div>
+    <h3>Các PC</h3>
+    <p class="note">Mỗi dòng là một PC đã nối: đang làm gì, tới đâu, đọc nhanh hay chậm. Tạm dừng thì PC đọc xong video đang dở rồi không nhận thêm. Giờ đọc ghi theo giờ Việt Nam, ví dụ <b>22:00-06:00</b>, để trống là đọc mọi lúc. PC hỏng 3 video liền nhau thì tự bị loại, video về hàng chờ.</p>
+    <div id="pcBoard"><p class="note">Chưa có PC nào nối.</p></div>
+    <h3>Mã mời PC</h3>
+    <p class="note">Link mời không hết hạn, dùng được cho nhiều PC. Mỗi mã mời có mã nối riêng, chỉ mở được phần PC cần để đọc, không mở được trang hay kết quả. Thu hồi mã thì mọi PC dùng mã đó ngừng nối.</p>
+    <div class="row" style="margin-top:0.55rem">
+      <input id="inviteLabel" type="text" maxlength="60" placeholder="Ghi chú, ví dụ PC văn phòng" style="flex:1 1 14rem; width:auto" />
+      <button id="inviteMake" class="primary" type="button">Tạo mã mời</button>
+    </div>
+    <p id="inviteNote" class="note"></p>
+    <div id="inviteList"></div>
   </section>
 
   <section>
@@ -194,6 +212,216 @@
     return video + " · " + who;
   }
 
+  function ago(seconds) {
+    if (seconds == null) return "";
+    if (seconds < 90) return Math.round(seconds) + " giây trước";
+    if (seconds < 5400) return Math.round(seconds / 60) + " phút trước";
+    if (seconds < 172800) return Math.round(seconds / 3600) + " giờ trước";
+    return Math.round(seconds / 86400) + " ngày trước";
+  }
+
+  function duration(seconds) {
+    if (seconds == null) return "";
+    if (seconds < 90) return Math.round(seconds) + " giây";
+    return String(Math.round(seconds / 6) / 10).replace(".", ",") + " phút";
+  }
+
+  function stageText(stage, done, total) {
+    var share = total > 0 ? Math.min(100, Math.floor(done * 100 / total)) : null;
+    if (stage === "download") return "đang tải" + (share == null ? "" : " " + share + "%");
+    if (stage === "extract") return "đang tách khung";
+    if (stage === "scan") return "quét khung" + (total ? " " + done + "/" + total : "");
+    if (stage === "read") return "đọc kỹ" + (total ? " " + done + "/" + total : "");
+    if (stage === "send") return "đang gửi kết quả";
+    return "";
+  }
+
+  function progressNote(item) {
+    if (item.status !== "pc" && item.status !== "running") return "";
+    var step = stageText(item.progress_stage, item.progress_done, item.progress_total);
+    return step ? "<div class='small'>" + escapeHtml(step) + "</div>" : "";
+  }
+
+  var pcItems = [];
+  var pcSig = null;
+  var inviteItems = [];
+  var inviteSig = null;
+  var PC_STATES = {
+    setup: "Đang cài hoặc cập nhật bộ đọc",
+    testing: "Đang đọc thử ảnh mẫu",
+    "wait-disk": "Đang chờ: ổ đĩa PC đã dùng quá 80%",
+    "wait-ram": "Đang chờ: RAM PC đã dùng quá 80%"
+  };
+
+  function pcState(pc) {
+    if (pc.excluded) return { text: "Bị loại sau " + pc.fail_limit + " video hỏng liền nhau", warn: true };
+    if (!pc.online) return { text: "Mất kết nối, lần cuối " + ago(pc.seen_seconds), warn: true };
+    if (pc.video) {
+      var video = pc.video;
+      var step = stageText(video.stage, video.done, video.total);
+      var text = (video.check ? "Đang kiểm video " : "Đang đọc video ") + video.id + (step ? ": " + step : "");
+      if (video.seconds != null) text += " · đã " + duration(video.seconds);
+      var bar = video.total > 0 && video.stage !== "send" ? Math.min(100, Math.floor(video.done * 100 / video.total)) : null;
+      return { text: text, bar: bar };
+    }
+    if (pc.paused) return { text: "Tạm dừng" };
+    if (!pc.schedule_open) return { text: "Ngoài giờ đọc (" + pc.schedule + ")" };
+    if (pc.state === "test-failed") return { text: "Đọc thử chưa đúng: " + pc.message, warn: true };
+    return { text: PC_STATES[pc.state] || "Rảnh, chờ video" };
+  }
+
+  function renderPcs(items) {
+    var box = document.getElementById("pcBoard");
+    // Không vẽ lại khi đang gõ giờ đọc, để chữ đang gõ không mất.
+    if (document.activeElement && document.activeElement.tagName === "INPUT" && box.contains(document.activeElement)) return;
+    var sig = JSON.stringify(items);
+    if (sig === pcSig) return;
+    pcSig = sig;
+    pcItems = items;
+    if (!items.length) {
+      box.innerHTML = "<p class='note'>Chưa có PC nào nối.</p>";
+      return;
+    }
+    var html = "<table><tr><th>PC</th><th>Đang làm</th><th>Gần đây</th></tr>";
+    items.forEach(function (pc, index) {
+      var state = pcState(pc);
+      var meta = [];
+      if (pc.version) meta.push("bản " + pc.version);
+      if (pc.invite) meta.push("mã mời: " + pc.invite);
+      if (pc.autostart) meta.push("tự chạy khi bật máy");
+      if (pc.schedule) meta.push("giờ đọc " + pc.schedule);
+      var bar = state.bar == null ? "" : "<div class='bar'><i style='width:" + state.bar + "%'></i></div>";
+      var error = pc.last_error
+        ? "<div class='small'>Lỗi gần nhất " + escapeHtml(ago(pc.last_error_seconds)) + ": " + escapeHtml(pc.last_error) + "</div>"
+        : "";
+      var speed = [];
+      if (pc.avg_download_s != null) speed.push("tải " + duration(pc.avg_download_s));
+      if (pc.avg_read_s != null) speed.push("đọc " + duration(pc.avg_read_s));
+      if (!speed.length && pc.avg_total_s != null) speed.push(duration(pc.avg_total_s) + " mỗi video");
+      var recent = speed.length ? "Trung bình " + speed.join(", ") + " (" + pc.recent + " video gần nhất)" : "Chưa có video xong";
+      var buttons = "<div class='pcbtns'>";
+      buttons += "<button class='ghost' type='button' data-pc='" + index + "' data-act='" + (pc.paused ? "resume" : "pause") + "'>" + (pc.paused ? "Cho đọc tiếp" : "Tạm dừng") + "</button>";
+      if (pc.excluded) buttons += "<button class='primary' type='button' data-pc='" + index + "' data-act='enable'>Cho đọc lại</button>";
+      buttons += "<input type='text' data-schedule='" + index + "' value='" + escapeHtml(pc.schedule) + "' placeholder='Giờ đọc: mọi lúc' />";
+      buttons += "<button class='ghost' type='button' data-pc='" + index + "' data-act='schedule'>Lưu giờ</button>";
+      buttons += "<button class='ghost' type='button' data-pc='" + index + "' data-act='" + (pc.autostart ? "noauto" : "auto") + "'>" + (pc.autostart ? "Tắt tự chạy" : "Tự chạy khi bật máy") + "</button>";
+      if (!pc.online && !pc.video) buttons += "<button class='ghost' type='button' data-pc='" + index + "' data-act='forget'>Bỏ khỏi danh sách</button>";
+      buttons += "</div>";
+      html += "<tr><td><b>" + escapeHtml(pc.name) + "</b><div class='small'>" + escapeHtml(meta.join(" · ")) + "</div></td>"
+        + "<td><span class='" + (state.warn ? "warn" : "") + "'>" + escapeHtml(state.text) + "</span>" + bar + error + buttons + "</td>"
+        + "<td>" + escapeHtml(recent) + "<div class='small'>Hôm nay xong " + pc.done_today + " video. Từ trước tới nay " + pc.ok_count + " xong, " + pc.fail_count + " hỏng.</div></td></tr>";
+    });
+    box.innerHTML = html + "</table>";
+    box.querySelectorAll("[data-act]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        pcAction(Number(button.getAttribute("data-pc")), button.getAttribute("data-act"));
+      });
+    });
+  }
+
+  async function pcAction(index, act) {
+    var pc = pcItems[index];
+    if (!pc) return;
+    var note = document.getElementById("pcNote");
+    var body = { name: pc.name };
+    var done = "";
+    if (act === "pause") { body.paused = true; done = "Đã tạm dừng " + pc.name + ". PC đọc xong video đang dở rồi chờ."; }
+    if (act === "resume") { body.paused = false; done = "Đã cho " + pc.name + " đọc tiếp."; }
+    if (act === "enable") { body.enable = true; done = "Đã cho " + pc.name + " đọc lại."; }
+    if (act === "auto") { body.autostart = true; done = "Đã bật tự chạy cho " + pc.name + ". Trong vòng một phút PC tự thêm lối tắt vào Startup của Windows."; }
+    if (act === "noauto") { body.autostart = false; done = "Đã tắt tự chạy cho " + pc.name + "."; }
+    if (act === "schedule") {
+      var field = document.querySelector("[data-schedule='" + index + "']");
+      body.schedule = field ? field.value : "";
+      done = body.schedule.trim() ? "Đã lưu giờ đọc cho " + pc.name + "." : "Đã cho " + pc.name + " đọc mọi lúc.";
+    }
+    var path = "/v1/pcs/update";
+    if (act === "forget") {
+      if (!window.confirm("Bỏ " + pc.name + " khỏi danh sách? Mở lại kết nối trên PC đó thì PC hiện lại.")) return;
+      body = { name: pc.name };
+      path = "/v1/pcs/forget";
+      done = "Đã bỏ " + pc.name + " khỏi danh sách.";
+    }
+    var response = await api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!response.ok) {
+      var detail = "";
+      try { detail = (await response.json()).detail || ""; } catch (error) { detail = ""; }
+      note.textContent = typeof detail === "string" && detail ? detail : "Chưa đổi được. Thử lại sau vài giây.";
+      note.className = "note warn";
+      return;
+    }
+    note.textContent = done;
+    note.className = "note ok";
+    if (document.activeElement) document.activeElement.blur();
+    pcSig = null;
+    loadPcs();
+  }
+
+  function copyText(text, field, onDone) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(onDone, function () {
+        if (field) { field.select(); document.execCommand("copy"); }
+        onDone();
+      });
+      return;
+    }
+    if (field) { field.select(); document.execCommand("copy"); }
+    onDone();
+  }
+
+  function renderInvites(items) {
+    var box = document.getElementById("inviteList");
+    var sig = JSON.stringify(items);
+    if (sig === inviteSig) return;
+    inviteSig = sig;
+    inviteItems = items;
+    if (!items.length) {
+      box.innerHTML = "<p class='note'>Chưa có mã mời.</p>";
+      return;
+    }
+    var html = "<table><tr><th>Mã mời</th><th>Link</th></tr>";
+    items.forEach(function (item, index) {
+      var when = item.created_at ? new Date(item.created_at).toLocaleString("vi-VN") : "";
+      var info = "Tạo " + when + " · " + item.pcs + " PC" + (item.revoked_at ? " · đã thu hồi" : "");
+      var link = item.revoked_at
+        ? "<span class='note'>Đã thu hồi</span>"
+        : "<input type='url' readonly data-link='" + index + "' value='" + escapeHtml(item.link) + "' />"
+          + "<div class='pcbtns'><button class='ghost' type='button' data-copy='" + index + "'>Sao chép link</button>"
+          + "<button class='ghost' type='button' data-revoke='" + index + "'>Thu hồi</button></div>";
+      html += "<tr><td>" + escapeHtml(item.label || "Không ghi chú") + "<div class='small'>" + escapeHtml(info) + "</div></td><td>" + link + "</td></tr>";
+    });
+    box.innerHTML = html + "</table>";
+    var note = document.getElementById("inviteNote");
+    box.querySelectorAll("[data-copy]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var index = Number(button.getAttribute("data-copy"));
+        copyText(inviteItems[index].link, box.querySelector("[data-link='" + index + "']"), function () {
+          note.textContent = "Đã sao chép link mời. Mở link đó trên PC cần nối rồi bấm mở file ghiam-pc.bat.";
+          note.className = "note ok";
+        });
+      });
+    });
+    box.querySelectorAll("[data-revoke]").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        var item = inviteItems[Number(button.getAttribute("data-revoke"))];
+        if (!window.confirm("Thu hồi mã mời này? Mọi PC đang dùng mã này sẽ ngừng nối.")) return;
+        var response = await api("/v1/pc/invites/" + item.id + "/revoke", { method: "POST" });
+        note.textContent = response.ok ? "Đã thu hồi mã mời. PC dùng mã đó ngừng nối trong vài giây." : "Chưa thu hồi được. Thử lại sau vài giây.";
+        note.className = response.ok ? "note ok" : "note warn";
+        inviteSig = null;
+        loadPcs();
+      });
+    });
+  }
+
+  async function loadPcs() {
+    var response = await api("/v1/pcs");
+    if (!response.ok) return;
+    var body = await response.json();
+    renderPcs(body.items || []);
+    renderInvites(body.invites || []);
+  }
+
   async function refresh() {
     var statsResponse = await api("/v1/videos/stats");
     if (!statsResponse.ok) return;
@@ -233,6 +461,7 @@
     if (phoneFilter !== null) queuePath += "?device=" + encodeURIComponent(phoneFilter);
     var queueResponse = await api(queuePath);
     if (queueResponse.ok) renderQueue((await queueResponse.json()).items || []);
+    loadPcs();
     if (!sendingNow()) loadResults();
   }
 
@@ -240,7 +469,7 @@
 
   function renderQueue(items) {
     var sig = items.map(function (item) {
-      return item.id + ":" + item.status + ":" + (item.check_pass || 0) + ":" + (item.error || "") + ":" + (item.device || "") + ":" + (item.helper || "") + ":" + countText(item) + ":" + (item.has_file ? 1 : 0) + ":" + item.name;
+      return item.id + ":" + item.status + ":" + (item.check_pass || 0) + ":" + (item.error || "") + ":" + (item.device || "") + ":" + (item.helper || "") + ":" + countText(item) + ":" + (item.has_file ? 1 : 0) + ":" + item.name + ":" + (item.progress_stage || "") + ":" + (item.progress_done || 0) + ":" + (item.progress_total || 0);
     }).join("|");
     if (sig === queueSig) return;
     queueSig = sig;
@@ -255,7 +484,7 @@
       var canReread = (item.status === "error" || item.status === "done") && item.has_file;
       var retry = canReread ? " <button class='ghost' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
       var phone = item.device ? escapeHtml(item.device) : "<span class='note'>Chưa gắn máy</span>";
-      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + phone + "</td><td>" + countText(item) + "</td><td>" + escapeHtml(readerLabel(item)) + "</td><td>" + statusText(item) + retry + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + phone + "</td><td>" + countText(item) + "</td><td>" + escapeHtml(readerLabel(item)) + "</td><td>" + statusText(item) + retry + progressNote(item) + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-retry]").forEach(function (button) {
@@ -1023,6 +1252,25 @@
     box.appendChild(document.createElement("br"));
     box.appendChild(copy);
     if (body.url) window.location.href = body.url;
+  });
+  document.getElementById("inviteMake").addEventListener("click", async function () {
+    var note = document.getElementById("inviteNote");
+    var field = document.getElementById("inviteLabel");
+    var response = await api("/v1/pc/invites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: field.value })
+    });
+    if (!response.ok) {
+      note.textContent = "Chưa tạo được mã mời. Thử lại sau vài giây.";
+      note.className = "note warn";
+      return;
+    }
+    field.value = "";
+    note.textContent = "Đã tạo mã mời. Sao chép link bên dưới, mở trên PC cần nối rồi bấm mở file ghiam-pc.bat.";
+    note.className = "note ok";
+    inviteSig = null;
+    loadPcs();
   });
   document.getElementById("backup").addEventListener("click", async function () {
     var note = document.getElementById("backupNote");
