@@ -32,7 +32,9 @@ from control_plane.pc_reader import (
     PC_TOOL_FILES,
     connector_bytes,
     connector_template_sha256,
+    default_tessdata_zip,
     launcher_bytes,
+    open_script_bytes,
     reader_manifest,
     reader_zip,
     table_from_payload,
@@ -481,6 +483,25 @@ def pc_tessdata(authorization: str | None = Header(default=None)) -> Response:
     if payload is None:
         raise HTTPException(status_code=404, detail="Máy chủ không có bộ chữ riêng.")
     return Response(content=payload, media_type="application/zip", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/v1/pc/tessdata-default.zip")
+def pc_tessdata_default(authorization: str | None = Header(default=None)) -> Response:
+    _auth(authorization)
+    payload = default_tessdata_zip()
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Máy chủ không có bộ chữ mặc định.")
+    return Response(content=payload, media_type="application/zip", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/v1/pc/open.ps1")
+def pc_open_script(authorization: str | None = Header(default=None)) -> Response:
+    _auth(authorization)
+    return Response(
+        content=open_script_bytes(),
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @router.get("/v1/pc/tools/{name}")

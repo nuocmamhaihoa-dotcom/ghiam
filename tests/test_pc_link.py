@@ -23,14 +23,14 @@ from control_plane.pc_connector import (
     clean_pc_name,
     connector_outdated,
     disk_has_headroom,
-    publish_crt_dlls,
+    lang_names,
     reader_import_path,
     reader_launch_lines,
     restored_template,
     text_sha256,
     zip_entry_safe,
 )
-from control_plane.pc_reader import CONNECTOR_FILE, connector_template_sha256, launcher_text
+from control_plane.pc_reader import CONNECTOR_FILE, OPEN_SCRIPT, connector_template_sha256, launcher_text
 from doc_video.video import ffmpeg_thread_count, read_worker_count, within_resource_ceiling
 
 
@@ -150,36 +150,47 @@ class LinkTests(unittest.TestCase):
         self.assertNotIn("exit 0", opened)
         self.assertNotIn("exit /b", opened)
         self.assertIn("('#'*3)+'GHIAM_PS1'+('#'*3)", opened)
-        self.assertLess(opened.index("/v1/pc/connector.py"), opened.index("/v1/pc/tools/python.zip"))
-        self.assertIn("/v1/pc/tools/ffmpeg.zip", opened)
-        self.assertIn("/v1/pc/tools/tesseract.zip", opened)
-        self.assertIn("/v1/pc/tools/crt.zip", opened)
-        self.assertIn("/v1/pc/tools/get-pip.py", opened)
-        self.assertIn("/v1/pc/tools/wheels.zip", opened)
-        self.assertIn("/v1/pc/tools/runtime.zip", opened)
+        self.assertIn("/v1/pc/open.ps1", opened)
+        self.assertIn("[scriptblock]::Create", opened)
+        self.assertIn("# GHIAM-OPEN", opened)
         self.assertIn("$env:PUBLIC", opened)
         self.assertIn("%PUBLIC%\\GhiamPC", opened)
         self.assertIn("GetSystemWebProxy", opened)
         self.assertIn("HttpWebRequest", opened)
-        self.assertIn("System32\\tar.exe", opened)
-        self.assertIn("System.IO.Compression.ZipFile", opened)
-        self.assertIn("torch\\lib", opened)
-        self.assertIn("torchvision\\lib", opened)
-        self.assertIn("Local\\GhiamPC", opened)
+        self.assertIn("Local\\GhiamPCWindow", opened)
         self.assertNotIn("Global\\GhiamPC", opened)
         self.assertIn("Đang thử lại", opened)
-        self.assertIn("--no-index", opened)
-        self.assertIn("--no-deps", opened)
         self.assertIn(":run", opened)
-        self.assertNotIn("--max-time", opened)
-        self.assertNotIn("curl.exe", opened)
-        self.assertNotIn("WaitForExit", opened)
-        self.assertNotIn("Program Files\\Tesseract-OCR", opened)
-        self.assertNotIn("python.org", opened)
-        self.assertNotIn("gyan.dev", opened)
-        self.assertNotIn("github.com", opened)
-        self.assertNotIn("pypi.org", opened)
-        self.assertNotIn("pythonhosted.org", opened)
+        self.assertNotIn("/v1/pc/tools/", opened)
+        for text in (opened, OPEN_SCRIPT.read_text(encoding="utf-8")):
+            self.assertNotIn("--max-time", text)
+            self.assertNotIn("curl.exe", text)
+            self.assertNotIn("WaitForExit", text)
+            self.assertNotIn("Program Files\\Tesseract-OCR", text)
+            self.assertNotIn("python.org", text)
+            self.assertNotIn("gyan.dev", text)
+            self.assertNotIn("github.com", text)
+            self.assertNotIn("pypi.org", text)
+            self.assertNotIn("pythonhosted.org", text)
+
+    def test_server_installer_needs_no_outside_network_and_never_closes_the_window(self) -> None:
+        text = OPEN_SCRIPT.read_text(encoding="utf-8")
+        self.assertTrue(text.startswith("# GHIAM-OPEN"))
+        self.assertFalse(text.startswith("\ufeff"))
+        self.assertNotIn("__GHIAM_", text)
+        statements = [line.strip() for line in text.splitlines() if line.strip() and not line.strip().startswith("#")]
+        self.assertFalse([line for line in statements if line == "exit" or line.startswith("exit ")])
+        self.assertLess(text.index("/v1/pc/connector.py"), text.index("/v1/pc/tools/python.zip"))
+        for route in ("crt.zip", "python.zip", "wheels.zip", "ffmpeg.zip", "tesseract.zip"):
+            self.assertIn(f"/v1/pc/tools/{route}", text)
+        self.assertNotIn("/v1/pc/tools/runtime.zip", text)
+        self.assertNotIn("/v1/pc/tools/get-pip.py", text)
+        self.assertIn("pip-*.whl", text)
+        self.assertIn("--no-index", text)
+        self.assertIn("System.IO.Compression.ZipFile", text)
+        self.assertIn("System32\\tar.exe", text)
+        self.assertIn("torch\\lib", text)
+        self.assertIn("return", text)
         self.assertEqual(reader_import_path("/reader", "/other"), "/reader" + os.pathsep + "/other")
         self.assertEqual(reader_import_path("/reader", "/reader" + os.pathsep + "/other"), "/reader" + os.pathsep + "/other")
         existing = ["python312.zip", ".", "Lib\\site-packages", "import site"]
@@ -200,13 +211,28 @@ class LinkTests(unittest.TestCase):
         self.assertIn('return "fail"', source)
         self.assertIn("PC chưa sẵn sàng. Cứ để cửa sổ này mở, PC tự thử lại.", source)
         self.assertNotIn("Mở lại file ghiam-pc.bat", source)
-        self.assertIn("def publish_crt_dlls", source)
-        self.assertIn("def _publish_windows_crt", source)
+        self.assertIn("Local\\\\GhiamPCReader", source)
+        self.assertIn("/v1/pc/tessdata-default.zip", source)
+        self.assertIn("TESSDATA_PREFIX", source)
+
+    def test_windows_relaunch_hands_back_to_the_window(self) -> None:
+        with (
+            patch.object(pc_connector.os, "name", "nt"),
+            patch.object(pc_connector.os, "execv", side_effect=AssertionError("Windows không được execv")),
+        ):
+            self.assertEqual(pc_connector._relaunch(), 2)
+
+    def test_lang_names_skip_the_folder_line(self) -> None:
+        listed = 'List of available languages in "C:\\vie\\eng/" (2):\neng\nvie\n'
+        self.assertEqual(lang_names(listed), {"eng", "vie"})
+        self.assertEqual(lang_names('List of available languages in "/vie/eng/" (0):\n'), set())
+        self.assertEqual(lang_names(""), set())
 
 
 class SyncTests(unittest.TestCase):
     def setUp(self) -> None:
-        pc_connector._RUNTIME_FAIL_AT = 0.0
+        pc_connector._RUNTIME_FAIL = ("", 0.0)
+        pc_connector._RUNTIME_OK = ""
 
     def test_bundle_hash_follows_names_and_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -220,30 +246,6 @@ class SyncTests(unittest.TestCase):
         self.assertNotEqual(forward, backward)
         self.assertNotEqual(forward, changed)
         self.assertEqual(len(forward), 64)
-
-    def test_crt_dlls_land_beside_native_modules(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            crt = root / "crt"
-            crt.mkdir()
-            (crt / "msvcp140.dll").write_bytes(b"crt-msvcp")
-            (crt / "vcruntime140.dll").write_bytes(b"crt-vcr")
-            (crt / "note.txt").write_bytes(b"skip")
-            site = root / "site"
-            lib = site / "torch" / "lib"
-            lib.mkdir(parents=True)
-            (lib / "c10.dll").write_bytes(b"c10")
-            (site / "torch" / "_C.pyd").write_bytes(b"pyd")
-            (site / "plain.py").write_bytes(b"py")
-            written = publish_crt_dlls(crt, [site / "torch"])
-            self.assertGreaterEqual(written, 4)
-            self.assertEqual((lib / "msvcp140.dll").read_bytes(), b"crt-msvcp")
-            self.assertEqual((lib / "vcruntime140.dll").read_bytes(), b"crt-vcr")
-            self.assertEqual((site / "torch" / "msvcp140.dll").read_bytes(), b"crt-msvcp")
-            self.assertFalse((site / "msvcp140.dll").exists())
-            self.assertFalse((lib / "note.txt").exists())
-            self.assertEqual(publish_crt_dlls(crt, [site / "torch"]), 0)
-            self.assertEqual(publish_crt_dlls(root / "missing", [site / "torch"]), 0)
 
     def test_zip_names_stay_inside_the_folder(self) -> None:
         self.assertTrue(zip_entry_safe("doc_video/frame.py"))
@@ -379,10 +381,12 @@ class SyncTests(unittest.TestCase):
             (cache / "runtime.sha256").write_text(digest, encoding="utf-8")
             with (
                 patch("control_plane.pc_connector.CACHE", cache),
-                patch("control_plane.pc_connector._diacritics_importable", return_value=True),
+                patch("control_plane.pc_connector._runtime_problem", return_value="") as probe,
                 patch("control_plane.pc_connector._download", side_effect=AssertionError("không tải lại")),
             ):
                 self.assertEqual(_sync_runtime({"sha256": digest, "bytes": len(payload)}, True), (True, False))
+                self.assertEqual(_sync_runtime({"sha256": digest, "bytes": len(payload)}, True), (True, False))
+                self.assertEqual(probe.call_count, 1)
 
             def bad_download(_path: str, dest: Path, timeout: float = 600) -> None:
                 del timeout
@@ -396,6 +400,113 @@ class SyncTests(unittest.TestCase):
                 ready, relaunch = _sync_runtime({"sha256": "b" * 64, "bytes": 4}, True)
             self.assertEqual((ready, relaunch), (False, False))
             self.assertFalse((cache / "runtime.sha256").read_text(encoding="utf-8") == "b" * 64)
+
+    def test_runtime_that_cannot_load_is_reinstalled_and_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = Path(tmp)
+            payload = b"wheel-zip"
+            digest = hashlib.sha256(payload).hexdigest()
+            (cache / "runtime.zip").write_bytes(payload)
+            (cache / "runtime.sha256").write_text(digest, encoding="utf-8")
+            installs: list[bool] = []
+
+            def install(_folder: Path, force: bool = False) -> bool:
+                installs.append(force)
+                return True
+
+            with (
+                patch("control_plane.pc_connector.CACHE", cache),
+                patch("control_plane.pc_connector._disk_ready", return_value=True),
+                patch("control_plane.pc_connector._extract_wheels", return_value=True),
+                patch("control_plane.pc_connector._install_wheels", install),
+                patch(
+                    "control_plane.pc_connector._runtime_problem",
+                    return_value="ModuleNotFoundError: No module named 'typing_extensions'",
+                ),
+                patch("control_plane.pc_connector._download", side_effect=AssertionError("không tải lại")),
+                patch("builtins.print") as shown,
+            ):
+                self.assertEqual(_sync_runtime({"sha256": digest, "bytes": len(payload)}, True), (False, False))
+                self.assertEqual(_sync_runtime({"sha256": digest, "bytes": len(payload)}, True), (False, False))
+            self.assertEqual(installs, [True])
+            said = " ".join(str(call.args[0]) for call in shown.call_args_list if call.args)
+            self.assertIn("typing_extensions", said)
+
+            with (
+                patch("control_plane.pc_connector.CACHE", cache),
+                patch("control_plane.pc_connector._disk_ready", return_value=True),
+                patch("control_plane.pc_connector._extract_wheels", return_value=True),
+                patch("control_plane.pc_connector._install_wheels", install),
+                patch("control_plane.pc_connector._runtime_problem", return_value=""),
+                patch("control_plane.pc_connector._download", lambda _path, dest, timeout=600: dest.write_bytes(b"new")),
+            ):
+                fresh = hashlib.sha256(b"new").hexdigest()
+                self.assertEqual(_sync_runtime({"sha256": fresh, "bytes": 3}, True), (True, True))
+            self.assertEqual((cache / "runtime.sha256").read_text(encoding="utf-8"), fresh)
+
+    def test_runtime_probe_reports_the_import_error(self) -> None:
+        failed = type("Done", (), {"returncode": 1, "stdout": "", "stderr": "Traceback\nModuleNotFoundError: No module named 'sympy'\n"})()
+        with patch("control_plane.pc_connector.subprocess.run", return_value=failed):
+            self.assertEqual(pc_connector._runtime_problem(), "ModuleNotFoundError: No module named 'sympy'")
+        passed = type("Done", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+        with patch("control_plane.pc_connector.subprocess.run", return_value=passed):
+            self.assertEqual(pc_connector._runtime_problem(), "")
+
+    def test_plain_letters_sync_into_their_own_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = Path(tmp)
+            source = cache / "src"
+            source.mkdir()
+            (source / "eng.traineddata").write_bytes(b"plain-eng")
+            (source / "vie.traineddata").write_bytes(b"plain-vie")
+            digest = bundle_sha256(source, ["eng.traineddata", "vie.traineddata"])
+            routes: list[str] = []
+
+            def fetch(path: str, dest: Path, timeout: float = 600) -> None:
+                del timeout
+                routes.append(path)
+                with zipfile.ZipFile(dest, "w") as archive:
+                    archive.write(source / "eng.traineddata", "eng.traineddata")
+                    archive.write(source / "vie.traineddata", "vie.traineddata")
+
+            with patch("control_plane.pc_connector.CACHE", cache), patch("control_plane.pc_connector._download", fetch):
+                self.assertEqual(pc_connector._sync_plain_letters({"sha256": digest, "bytes": 18}), (True, False))
+            self.assertEqual(routes, ["/v1/pc/tessdata-default.zip"])
+            self.assertEqual((cache / "tessdata-default" / "vie.traineddata").read_bytes(), b"plain-vie")
+            self.assertEqual((cache / "tessdata-default.sha256").read_text(encoding="utf-8"), digest)
+            self.assertFalse((cache / "tessdata").exists())
+            with patch("control_plane.pc_connector.CACHE", cache), patch.dict("os.environ", {}, clear=False):
+                with (
+                    patch("control_plane.pc_connector._limit_pc"),
+                    patch("control_plane.pc_connector._windows_temp"),
+                    patch("control_plane.pc_connector._publish_reader_path"),
+                ):
+                    pc_connector._prepare_env()
+                    self.assertEqual(os.environ["TESSDATA_PREFIX"], str(cache / "tessdata-default"))
+
+    def test_tools_need_the_plain_letters_used_by_the_frame_scan(self) -> None:
+        listed = {
+            (): 'List of available languages in "C:/t/" (1):\neng\n',
+        }
+
+        def run(command, **_kwargs):
+            key = tuple(command[1:-1])
+            return type("Done", (), {"stdout": listed.get(key, 'List (2):\neng\nvie\n')})()
+
+        with (
+            patch("control_plane.pc_connector.shutil.which", return_value="tool"),
+            patch("control_plane.pc_connector.subprocess.run", run),
+            patch("builtins.print") as shown,
+        ):
+            self.assertFalse(pc_connector._tools_ok())
+        said = " ".join(str(call.args[0]) for call in shown.call_args_list if call.args)
+        self.assertIn("bộ chữ mặc định", said)
+        listed[()] = 'List of available languages in "C:/t/" (2):\neng\nvie\n'
+        with (
+            patch("control_plane.pc_connector.shutil.which", return_value="tool"),
+            patch("control_plane.pc_connector.subprocess.run", run),
+        ):
+            self.assertTrue(pc_connector._tools_ok())
 
 
 if __name__ == "__main__":

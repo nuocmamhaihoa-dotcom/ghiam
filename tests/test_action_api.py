@@ -11,6 +11,7 @@ import time
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 _TMP = tempfile.mkdtemp(prefix="fb-actions-")
 os.environ["CONTROL_DATA_DIR"] = _TMP
@@ -24,6 +25,7 @@ Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from control_plane.app import _raw_transfer, app  # noqa: E402
+from control_plane.pc_connector import bundle_sha256  # noqa: E402
 from control_plane.pc_reader import connector_template_sha256  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
 from control_plane.video_api import PC_TICKET, PC_TICKET_SECONDS, ticket_ok  # noqa: E402
@@ -693,6 +695,24 @@ class PcReaderApiTests(unittest.TestCase):
         with zipfile.ZipFile(io.BytesIO(package.content)) as archive:
             self.assertEqual(archive.read("doc_video/pipeline.py"), (Path(__file__).resolve().parents[1] / "doc_video" / "pipeline.py").read_bytes())
 
+    def test_plain_letters_match_the_folder_tesseract_uses_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "eng.traineddata").write_bytes(b"plain-eng")
+            (folder / "vie.traineddata").write_bytes(b"plain-vie")
+            with patch("control_plane.pc_reader.default_tessdata_dir", return_value=folder):
+                self.assertEqual(self.client.get("/v1/pc/tessdata-default.zip").status_code, 401)
+                manifest = self.client.get("/v1/pc/reader", headers=self.headers).json()
+                expected = bundle_sha256(folder, ["eng.traineddata", "vie.traineddata"])
+                self.assertEqual(manifest["tessdata_default"], {"sha256": expected, "bytes": 18})
+                served = self.client.get("/v1/pc/tessdata-default.zip", headers=self.headers)
+                self.assertEqual(served.status_code, 200)
+                with zipfile.ZipFile(io.BytesIO(served.content)) as archive:
+                    self.assertEqual(archive.read("vie.traineddata"), b"plain-vie")
+            with patch("control_plane.pc_reader.default_tessdata_dir", return_value=None):
+                self.assertIsNone(self.client.get("/v1/pc/reader", headers=self.headers).json()["tessdata_default"])
+                self.assertEqual(self.client.get("/v1/pc/tessdata-default.zip", headers=self.headers).status_code, 404)
+
     def test_package_bakes_the_page_and_updates_without_a_new_install(self) -> None:
         ticket = self.client.post("/v1/pc/ticket", headers=self.headers)
         self.assertEqual(ticket.status_code, 200, ticket.text)
@@ -710,16 +730,25 @@ class PcReaderApiTests(unittest.TestCase):
         body = downloaded.content.decode("utf-8")
         self.assertIn(settings.page_token, body)
         self.assertNotIn("__GHIAM_", body)
-        self.assertIn("/v1/pc/connector.py", body)
-        self.assertIn("/v1/pc/tools/python.zip", body)
-        self.assertIn("/v1/pc/tools/wheels.zip", body)
-        self.assertIn("/v1/pc/tools/runtime.zip", body)
-        self.assertIn("/v1/pc/tools/tesseract.zip", body)
-        self.assertIn("/v1/pc/tools/crt.zip", body)
-        self.assertIn("--no-deps", body)
+        self.assertIn("/v1/pc/open.ps1", body)
         self.assertNotIn("WaitForExit", body)
         self.assertNotIn("python.org", body)
         self.assertNotIn("pypi.org", body)
+        self.assertEqual(self.client.get("/v1/pc/open.ps1").status_code, 401)
+        installer = self.client.get("/v1/pc/open.ps1", headers={"Authorization": f"Bearer {settings.page_token}"})
+        self.assertEqual(installer.status_code, 200)
+        self.assertNotIn("content-encoding", installer.headers)
+        steps = installer.content.decode("utf-8")
+        self.assertTrue(steps.startswith("# GHIAM-OPEN"))
+        self.assertNotIn(settings.page_token, steps)
+        self.assertIn("/v1/pc/connector.py", steps)
+        self.assertIn("/v1/pc/tools/python.zip", steps)
+        self.assertIn("/v1/pc/tools/wheels.zip", steps)
+        self.assertIn("/v1/pc/tools/tesseract.zip", steps)
+        self.assertIn("/v1/pc/tools/crt.zip", steps)
+        self.assertIn("/v1/pc/tools/ffmpeg.zip", steps)
+        self.assertTrue(_raw_transfer("/v1/pc/open.ps1"))
+        self.assertTrue(_raw_transfer("/v1/pc/tessdata-default.zip"))
         script = self.client.get("/v1/pc/connector.py", headers=self.headers)
         self.assertEqual(script.status_code, 200)
         program = script.content.decode("utf-8")
