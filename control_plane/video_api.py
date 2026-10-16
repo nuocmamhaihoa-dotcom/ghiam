@@ -30,6 +30,7 @@ from control_plane.video_scan import IMAGE_SUFFIXES, VIDEO_SUFFIXES
 from control_plane.pc_reader import (
     code_sha256,
     connector_bytes,
+    connector_template_sha256,
     package_zip,
     reader_manifest,
     reader_zip,
@@ -454,10 +455,10 @@ def pc_tessdata(authorization: str | None = Header(default=None)) -> Response:
 
 
 @router.get("/v1/pc/connector/version")
-def pc_connector_version(authorization: str | None = Header(default=None)) -> dict[str, int]:
+def pc_connector_version(authorization: str | None = Header(default=None)) -> dict[str, object]:
     _auth(authorization)
     manifest = reader_manifest()
-    return {"version": int(manifest["version"])}
+    return {"version": int(manifest["version"]), "sha256": connector_template_sha256()}
 
 
 @router.get("/v1/pc/connector.py")

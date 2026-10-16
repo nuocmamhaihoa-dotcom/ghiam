@@ -459,7 +459,7 @@
     if (wake) { wake.release().catch(function () {}); wake = null; }
   }
 
-  var CHUNK_BYTES = 4 * 1024 * 1024;
+  var CHUNK_BYTES = 8 * 1024 * 1024;
 
   function freshUploadId() {
     var bytes = new Uint8Array(16);
@@ -511,7 +511,7 @@
       }
       function arm() {
         clearTimeout(timer);
-        timer = setTimeout(function () { xhr.abort(); }, 45000);
+        timer = setTimeout(function () { xhr.abort(); }, 120000);
       }
       xhr.open("POST", "/v1/videos/chunks");
       if (token()) xhr.setRequestHeader("Authorization", "Bearer " + token());

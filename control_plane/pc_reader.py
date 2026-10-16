@@ -138,6 +138,11 @@ def reader_manifest() -> dict[str, object]:
     }
 
 
+def connector_template_sha256() -> str:
+    """Hash file gốc, còn chỗ điền địa chỉ. PC so hash này để biết bản nối đã đổi."""
+    return hashlib.sha256(CONNECTOR_FILE.read_bytes()).hexdigest()
+
+
 def connector_source(server: str, token: str) -> str:
     if not server.startswith(("http://", "https://")) or "\n" in server or "\r" in server:
         raise ValueError("server")

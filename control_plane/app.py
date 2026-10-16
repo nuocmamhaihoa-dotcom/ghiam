@@ -81,6 +81,27 @@ class LimitUploadSizeMiddleware(BaseHTTPMiddleware):
 app.add_middleware(LimitUploadSizeMiddleware)
 
 
+def _raw_transfer(path: str) -> bool:
+    """File đã nén hoặc video lớn. Nén thêm chỉ tốn CPU và không làm đường truyền nhanh hơn."""
+    if path in {"/v1/pc/weights", "/v1/pc/reader.zip", "/v1/pc/tessdata.zip"}:
+        return True
+    if path.startswith("/v1/pc/package/"):
+        return True
+    return path.startswith("/v1/pc/videos/") and path.endswith("/file")
+
+
+class RawTransferMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+        if _raw_transfer(request.url.path):
+            request.scope["headers"] = [
+                (key, value) for key, value in request.scope["headers"] if key.lower() != b"accept-encoding"
+            ]
+        return await call_next(request)
+
+
+app.add_middleware(RawTransferMiddleware)
+
+
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 

@@ -1,14 +1,15 @@
 """Chương trình đọc video trên PC. Tải một lần từ trang video của máy chủ.
 
-Mỗi vòng nó hỏi máy chủ bản đọc hiện tại. Bản đọc đổi thì PC tự lấy file mới
-và đọc giống máy chủ, không cần tải lại chương trình này. Chương trình này
-cũng tự thay khi máy chủ có bản nối mới hơn.
+Mỗi vòng nó hỏi máy chủ bản đọc và bản nối hiện tại. File trên máy chủ đổi
+thì PC tự lấy bản mới, kể cả cách đọc và cách tải, không cần cài lại.
+PC chỉ dùng tối đa 80% CPU, RAM và ổ đĩa. Đường truyền không bị giới hạn tốc độ.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -20,17 +21,71 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-CONNECTOR_VERSION = 1
+CONNECTOR_VERSION = 2
+# Trần tài nguyên của PC. Máy chủ không đặt biến này nên máy chủ vẫn dùng hết nhân.
+PC_HEADROOM = 0.8
 SERVER = "__GHIAM_SERVER__"
 TOKEN = "__GHIAM_TOKEN__"
 
 CACHE = Path(__file__).resolve().parent / "ghiam-pc-data"
 _LOADED = False
 _IDLE = False
+_DISK_WAIT = False
+_RAM_WAIT = False
 
 
 def _configured() -> bool:
     return (SERVER.startswith("http://") or SERVER.startswith("https://")) and len(TOKEN) >= 8
+
+
+def _server_mark() -> str:
+    # Tách chữ để dòng này không bị thay khi điền địa chỉ vào file.
+    return "__" + "GHIAM" + "_SERVER__"
+
+
+def _token_mark() -> str:
+    return "__" + "GHIAM" + "_TOKEN__"
+
+
+def restored_template(text: str, server: str, token: str) -> str:
+    """Đưa file đã điền địa chỉ và mã về dạng gốc để so với file trên máy chủ."""
+    if server:
+        text = text.replace(server, _server_mark(), 1)
+    if token:
+        text = text.replace(token, _token_mark(), 1)
+    return text
+
+
+def text_sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def connector_outdated(local_sha: str, remote_sha: str, remote_version: int, local_version: int = CONNECTOR_VERSION) -> bool:
+    """Đổi nội dung file hoặc tăng số phiên bản thì PC phải lấy bản nối mới."""
+    if remote_sha and local_sha and remote_sha != local_sha:
+        return True
+    return remote_version > local_version
+
+
+def disk_has_headroom(total: int, free: int, extra: int = 0, fraction: float = PC_HEADROOM) -> bool:
+    """Còn đủ chỗ trống sau khi giữ lại phần máy không được đụng, kể cả byte sắp ghi."""
+    if total <= 0:
+        return True
+    reserve = math.ceil(total * (1.0 - fraction))
+    return free - max(0, extra) >= reserve
+
+
+def _local_code_sha() -> str:
+    text = Path(__file__).resolve().read_text(encoding="utf-8")
+    return text_sha256(restored_template(text, SERVER, TOKEN))
+
+
+def _limit_pc() -> None:
+    """PC không dùng quá 80% CPU và RAM. Mỗi tiến trình đọc chỉ một luồng."""
+    os.environ["DOC_VIDEO_CPU_FRACTION"] = str(PC_HEADROOM)
+    os.environ["DOC_VIDEO_RAM_FRACTION"] = str(PC_HEADROOM)
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["OMP_THREAD_LIMIT"] = "1"
 
 
 def _url(path: str) -> str:
@@ -72,12 +127,23 @@ def _file_sha256(path: Path) -> str:
 
 
 def _download(path: str, dest: Path, timeout: float = 600) -> None:
+    """timeout là số giây không có byte mới, không phải thời gian tải cả file.
+
+    Không nén lại file đã nén. Bộ đệm lớn để đường truyền không bị cắt thành mẩu nhỏ.
+    """
     dest.parent.mkdir(parents=True, exist_ok=True)
     temporary = dest.with_suffix(dest.suffix + ".part")
-    request = urllib.request.Request(_url(path), headers={"Authorization": f"Bearer {TOKEN}"})
-    with urllib.request.urlopen(request, timeout=timeout) as response, temporary.open("wb") as handle:
-        shutil.copyfileobj(response, handle)
-    temporary.replace(dest)
+    request = urllib.request.Request(
+        _url(path),
+        headers={"Authorization": f"Bearer {TOKEN}", "Accept-Encoding": "identity"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response, temporary.open("wb") as handle:
+            shutil.copyfileobj(response, handle, length=1024 * 1024)
+        temporary.replace(dest)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def _tools_ok() -> bool:
@@ -158,16 +224,30 @@ def _relaunch() -> int:
 
 
 def _update_connector() -> bool:
-    status, body = _json("GET", "/v1/pc/connector/version")
+    status, body = _json("GET", "/v1/pc/connector/version", timeout=120)
     if status != 200:
         return False
-    remote = int(body.get("version") or 0)
-    if remote <= CONNECTOR_VERSION:
+    remote_version = int(body.get("version") or 0)
+    remote_sha = str(body.get("sha256") or "")
+    if not connector_outdated(_local_code_sha(), remote_sha, remote_version):
         return False
     print("Máy chủ có chương trình nối mới. PC đang tự cập nhật.")
     script = Path(__file__).resolve()
     temporary = script.with_suffix(".py.new")
-    _download("/v1/pc/connector.py", temporary)
+    _download("/v1/pc/connector.py", temporary, timeout=120)
+    try:
+        new_text = temporary.read_text(encoding="utf-8")
+    except OSError:
+        temporary.unlink(missing_ok=True)
+        return False
+    if "def main" not in new_text:
+        temporary.unlink(missing_ok=True)
+        print("Bản nối tải về không đúng. Giữ bản đang chạy.")
+        return False
+    if remote_sha and text_sha256(restored_template(new_text, SERVER, TOKEN)) != remote_sha:
+        temporary.unlink(missing_ok=True)
+        print("Bản nối tải về không khớp. Giữ bản đang chạy.")
+        return False
     temporary.replace(script)
     return True
 
@@ -240,14 +320,13 @@ def _sync_tessdata(info: dict | None) -> bool:
 
 
 def _prepare_env() -> None:
+    _limit_pc()
     weights = CACHE / "weights" / "vgg_transformer.pth"
     if weights.is_file():
         os.environ["DOC_VIDEO_VIETOCR_WEIGHTS"] = str(weights)
     tessdata = CACHE / "tessdata"
     if (tessdata / "eng.traineddata").is_file() and (tessdata / "vie.traineddata").is_file():
         os.environ["DOC_VIDEO_TESSDATA"] = str(tessdata)
-    os.environ.setdefault("OMP_NUM_THREADS", "1")
-    os.environ.setdefault("OMP_THREAD_LIMIT", "1")
 
 
 def _read(video: Path):
@@ -282,7 +361,10 @@ def _payload(result) -> dict:
 
 def _beat(video_id: int, lease: str, stop: threading.Event) -> None:
     while not stop.wait(20):
-        status, _body = _json("POST", f"/v1/pc/videos/{video_id}/heartbeat", {"lease": lease}, timeout=30)
+        try:
+            status, _body = _json("POST", f"/v1/pc/videos/{video_id}/heartbeat", {"lease": lease}, timeout=30)
+        except urllib.error.URLError:
+            continue
         if status == 409:
             stop.set()
             return
@@ -295,7 +377,55 @@ def _release(video_id: int, lease: str) -> None:
         return
 
 
-def _read_one(job: dict) -> None:
+def _disk_ready(extra: int = 0) -> bool:
+    folder = CACHE
+    folder.mkdir(parents=True, exist_ok=True)
+    usage = shutil.disk_usage(folder)
+    return disk_has_headroom(usage.total, usage.free, extra)
+
+
+def _ram_ready() -> bool:
+    """Bộ đọc chỉ có sau khi tải từ máy chủ, nên nhập ở đây chứ không phải đầu file."""
+    global _LOADED
+    root = str(CACHE / "reader")
+    if not Path(root).is_dir():
+        return True
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    try:
+        from doc_video import video as video_mod
+    except ImportError:
+        return True
+    check = getattr(video_mod, "within_resource_ceiling", None)
+    if check is None:
+        return True
+    _LOADED = True
+    try:
+        return bool(check())
+    except (OSError, ValueError):
+        return True
+
+
+def _fetch_video(video_id: int, lease: str, local: Path, expected: str) -> bool:
+    url = f"/v1/pc/videos/{video_id}/file?lease={lease}"
+    for attempt in range(3):
+        try:
+            _download(url, local, timeout=600)
+        except (urllib.error.URLError, TimeoutError, OSError):
+            local.unlink(missing_ok=True)
+            if attempt == 2:
+                raise
+            print(f"Video {video_id} tải dở. Tải lại từ đầu, lần {attempt + 2}.")
+            time.sleep(2)
+            continue
+        if not expected or _file_sha256(local) == expected:
+            return True
+        local.unlink(missing_ok=True)
+        print(f"Video {video_id} tải về không khớp. Tải lại.")
+    return False
+
+
+def _read_one(job: dict) -> str:
     global _IDLE
     _IDLE = False
     video_id = int(job["id"])
@@ -310,21 +440,24 @@ def _read_one(job: dict) -> None:
     started = time.monotonic()
     posted_ok = False
     try:
-        size_mb = max(1, int(job.get("bytes") or 0) // (1024 * 1024))
+        size_bytes = max(0, int(job.get("bytes") or 0))
+        # File tải về cộng khung hình tạm. Giữ 20% ổ đĩa không đụng tới.
+        if not _disk_ready(size_bytes * 2):
+            print(f"Video {video_id} cần nhiều chỗ hơn phần PC còn giữ. Trả máy chủ đọc.")
+            return "disk"
+        size_mb = max(1, size_bytes // (1024 * 1024))
         print(f"Đang tải video {video_id} ({size_mb} MB).")
-        _download(f"/v1/pc/videos/{video_id}/file?lease={lease}", local)
-        digest = _file_sha256(local)
-        if expected and digest != expected:
+        if not _fetch_video(video_id, lease, local, expected):
             print(f"Video {video_id} tải về không khớp. Trả lại hàng chờ.")
-            return
+            return ""
         if stop.is_set():
             print(f"Máy chủ đã nhận lại video {video_id}.")
-            return
+            return ""
         print(f"Đang đọc video {video_id}.")
         result, frames = _read(local)
         if stop.is_set():
             print(f"Máy chủ đã nhận lại video {video_id} trước khi gửi kết quả.")
-            return
+            return ""
         status, body = _json(
             "POST",
             f"/v1/pc/videos/{video_id}/result",
@@ -334,10 +467,10 @@ def _read_one(job: dict) -> None:
         if status == 409:
             print(f"Máy chủ đã nhận lại video {video_id}. Bỏ kết quả lần này.")
             posted_ok = True
-            return
+            return ""
         if status != 200 or not body.get("ok"):
             print(f"Chưa gửi được kết quả video {video_id}. Trả lại hàng chờ.")
-            return
+            return ""
         posted_ok = True
         spent = time.monotonic() - started
         print(
@@ -345,8 +478,10 @@ def _read_one(job: dict) -> None:
             f"{len(result.rows)} hàng đủ, {len(result.review)} cần xem, {len(result.unopened)} chưa mở hồ sơ. "
             "Đã gửi lên máy chủ."
         )
+        return ""
     except Exception as exc:
         print(f"Video {video_id} chưa đọc xong: {exc}. Trả lại hàng chờ.")
+        return ""
     finally:
         stop.set()
         local.unlink(missing_ok=True)
@@ -355,18 +490,20 @@ def _read_one(job: dict) -> None:
 
 
 def main() -> int:
-    global _IDLE
+    global _IDLE, _DISK_WAIT, _RAM_WAIT
     if not _configured():
         print("File này chưa được tải từ trang video. Mở trang máy chủ và bấm Tải chương trình đọc trên PC.")
         return 1
     if not _tools_ok() or not _ensure_runtime():
         return 1
+    _limit_pc()
     print("PC đang nối máy chủ. Cứ để cửa sổ này mở. Đóng cửa sổ là PC ngừng đọc.")
+    print("PC dùng tối đa 80% CPU, RAM và ổ đĩa. 20% còn lại để máy vẫn chạy ổn.")
     while True:
         try:
             if _update_connector():
                 return _relaunch()
-            status, manifest = _json("GET", "/v1/pc/reader")
+            status, manifest = _json("GET", "/v1/pc/reader", timeout=120)
             if status != 200:
                 print("Chưa lấy được bộ đọc. Thử lại sau.")
                 time.sleep(10)
@@ -380,7 +517,22 @@ def main() -> int:
                 print("Đã có bộ đọc mới. Chạy lại để đọc giống máy chủ.")
                 return _relaunch()
             _maybe_vietocr(CACHE / "weights" / "vgg_transformer.pth")
-            status, body = _json("POST", "/v1/pc/claim", {"name": "PC"})
+            _prepare_env()
+            if not _disk_ready(512 * 1024 * 1024):
+                if not _DISK_WAIT:
+                    print("Ổ đĩa PC đã dùng quá 80%. PC chờ, không nhận video cho đến khi còn chỗ.")
+                    _DISK_WAIT = True
+                time.sleep(30)
+                continue
+            _DISK_WAIT = False
+            if not _ram_ready():
+                if not _RAM_WAIT:
+                    print("RAM PC đã dùng quá 80%. PC chờ, không nhận video cho đến khi máy còn chỗ.")
+                    _RAM_WAIT = True
+                time.sleep(30)
+                continue
+            _RAM_WAIT = False
+            status, body = _json("POST", "/v1/pc/claim", {"name": "PC"}, timeout=120)
             if status != 200:
                 print("Chưa nhận được video. Thử lại sau.")
                 time.sleep(10)
@@ -392,7 +544,9 @@ def main() -> int:
                     _IDLE = True
                 time.sleep(5)
                 continue
-            _read_one(job)
+            if _read_one(job) == "disk":
+                # Nhả video trước, rồi chờ máy chủ nhận. Không nhận lại ngay.
+                time.sleep(45)
         except KeyboardInterrupt:
             print("Đã dừng.")
             return 0
