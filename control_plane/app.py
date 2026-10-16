@@ -92,7 +92,7 @@ def _raw_transfer(path: str) -> bool:
         "/v1/pc/launcher.bat",
     }:
         return True
-    if path.startswith(("/v1/pc/package/", "/v1/pc/join/", "/v1/pc/tools/")):
+    if path.startswith(("/v1/pc/package/", "/v1/pc/join/", "/v1/pc/tools/", "/v1/results/export/")):
         return True
     return path.startswith("/v1/pc/videos/") and path.endswith("/file")
 

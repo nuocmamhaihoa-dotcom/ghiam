@@ -954,6 +954,57 @@ class PcReaderApiTests(unittest.TestCase):
         self.assertEqual(gone.status_code, 404)
         self.client.post(f"/v1/pc/videos/{second}/release", headers=self.headers, json={"lease": claimed["video"]["lease"], "reason": "disk"})
 
+    def test_results_filters_export_and_read_only_keys(self) -> None:
+        video_id = self._queue_only("export-api")
+        claimed = self.client.post("/v1/pc/claim", headers=self.headers, json={"name": "PC xuất"}).json()
+        posted = self.client.post(
+            f"/v1/pc/videos/{video_id}/result",
+            headers=self.headers,
+            json={"lease": claimed["video"]["lease"], "rows": [{"phone": "0977000111", "name": "Đặng Thị Xuân", "username": "@xuan_ok"}]},
+        )
+        self.assertEqual(posted.status_code, 200, posted.text)
+        found = self.client.get("/v1/results", headers=self.headers, params={"q": "dang thi xuan"}).json()
+        self.assertEqual([item["phone"] for item in found["items"]], ["0977000111"])
+        self.assertEqual(found["items"][0]["carrier"], "Viettel")
+        by_video = self.client.get("/v1/results", headers=self.headers, params={"video": video_id, "bucket": "saved"}).json()
+        self.assertEqual(by_video["total"], 1)
+        bad = self.client.get("/v1/results", headers=self.headers, params={"day_from": "16/10/2026"})
+        self.assertEqual(bad.status_code, 400)
+        ticket = self.client.post("/v1/results/export/ticket", headers=self.headers).json()
+        self.assertTrue(_raw_transfer(ticket["url"]))
+        excel = self.client.get(ticket["url"], params={"video": video_id})
+        self.assertEqual(excel.status_code, 200)
+        self.assertIn(".xlsx", excel.headers["content-disposition"])
+        with zipfile.ZipFile(io.BytesIO(excel.content)) as archive:
+            sheet = archive.read("xl/worksheets/sheet1.xml").decode("utf-8")
+        self.assertIn("0977000111", sheet)
+        self.assertIn("Đặng Thị Xuân", sheet)
+        self.assertEqual(self.client.get("/v1/results/export/1-abc").status_code, 404)
+        self.assertEqual(self.client.post("/v1/results/export/ticket").status_code, 401)
+        made = self.client.post("/v1/api-keys", headers=self.headers, json={"name": "Kế toán"}).json()
+        key = made["key"]
+        self.assertEqual(self.client.get("/v1/api/results").status_code, 401)
+        api = self.client.get("/v1/api/results", headers={"X-Api-Key": key}, params={"after_id": 0, "limit": 5000}).json()
+        self.assertIn("0977000111", [item["phone"] for item in api["items"]])
+        bearer = self.client.get("/v1/api/stats", headers={"Authorization": f"Bearer {key}"})
+        self.assertEqual(bearer.status_code, 200)
+        self.assertEqual(self.client.get("/v1/results", headers={"Authorization": f"Bearer {key}"}).status_code, 401)
+        self.assertEqual(self.client.get("/v1/pc/reader", headers={"Authorization": f"Bearer {key}"}).status_code, 401)
+        listed = self.client.get("/v1/api-keys", headers=self.headers).json()["items"]
+        self.assertNotIn("key", listed[0])
+        self.assertEqual(self.client.post(f"/v1/api-keys/{made['id']}/revoke", headers=self.headers).status_code, 200)
+        self.assertEqual(self.client.get("/v1/api/stats", headers={"X-Api-Key": key}).status_code, 401)
+
+    def test_webhook_rejects_internal_addresses(self) -> None:
+        saved = self.client.post("/v1/webhook", headers=self.headers, json={"url": "http://127.0.0.1:9/hook"})
+        self.assertEqual(saved.status_code, 400)
+        tried = self.client.post("/v1/webhook/test", headers=self.headers, json={"url": "http://169.254.169.254/x"})
+        self.assertEqual(tried.status_code, 400)
+        cleared = self.client.post("/v1/webhook", headers=self.headers, json={"url": ""})
+        self.assertEqual(cleared.status_code, 200)
+        self.assertEqual(cleared.json()["url"], "")
+        self.assertEqual(self.client.get("/v1/webhook").status_code, 401)
+
     def test_disk_release_from_a_pc_is_not_counted(self) -> None:
         video_id = self._queue_only("disk-api")
         claimed = self.client.post("/v1/pc/claim", headers=self.headers, json={"name": "PC đầy"}).json()

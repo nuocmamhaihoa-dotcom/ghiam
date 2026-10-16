@@ -53,7 +53,22 @@ from control_plane.pc_reader import (
     weights_file,
     weights_info,
 )
+from control_plane.results_out import (
+    api_key_ok,
+    create_api_key,
+    export_xlsx,
+    list_api_keys,
+    revoke_api_key,
+    save_webhook,
+    saved_rows_after,
+    test_webhook,
+    webhook_settings,
+)
 from control_plane.video_store import (
+    BUCKET_OK,
+    BUCKET_REVIEW,
+    BUCKET_UNOPENED,
+    ResultFilter,
     abort_upload,
     begin_upload,
     claim_pc,
@@ -499,6 +514,41 @@ def stop_result_check(authorization: str | None = Header(default=None)) -> dict[
     return outcome
 
 
+_BUCKETS = {"saved": BUCKET_OK, "review": BUCKET_REVIEW, "unopened": BUCKET_UNOPENED}
+
+
+def _filters(
+    q: str = "",
+    day_from: str = "",
+    day_to: str = "",
+    device: str | None = None,
+    video: int = 0,
+    bucket: str = "",
+    checked: str = "",
+) -> ResultFilter:
+    """Bộ lọc từ tham số trên đường dẫn. device có mặt nhưng rỗng là video chưa gắn tên điện thoại."""
+    chosen = ResultFilter(
+        query=q,
+        day_from=day_from.strip(),
+        day_to=day_to.strip(),
+        device=clean_device(device) if device is not None else None,
+        video_id=max(0, int(video or 0)),
+        bucket=_BUCKETS.get(bucket, 0),
+        checked=checked if checked in ("ok", "diff", "none") else "",
+    )
+    try:
+        _check_days(chosen)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Ngày ghi dạng năm-tháng-ngày.") from exc
+    return chosen
+
+
+def _check_days(chosen: ResultFilter) -> None:
+    for day in (chosen.day_from, chosen.day_to):
+        if day:
+            time.strptime(day, "%Y-%m-%d")
+
+
 @router.get("/v1/results")
 def results(
     authorization: str | None = Header(default=None),
@@ -506,13 +556,144 @@ def results(
     limit: int = Query(default=500, ge=1, le=1000),
     before: int = Query(default=0, ge=0),
     after: int = Query(default=0, ge=0),
+    day_from: str = "",
+    day_to: str = "",
+    device: str | None = Query(default=None),
+    video: int = Query(default=0, ge=0),
+    bucket: str = "",
+    checked: str = "",
 ) -> dict[str, object]:
     _auth(authorization)
     init_db(settings.video_db_path)
-    page = result_page(settings.video_db_path, q, limit, before, after)
+    chosen = _filters(q, day_from, day_to, device, video, bucket, checked)
+    page = result_page(settings.video_db_path, q, limit, before, after, filters=chosen)
     items = page["items"]
     page["count"] = len(items) if isinstance(items, list) else 0
     return page
+
+
+EXPORT_TICKET = "export-ticket"
+
+
+@router.post("/v1/results/export/ticket")
+def export_ticket(authorization: str | None = Header(default=None)) -> dict[str, str]:
+    """Vé tải file Excel. Bộ lọc gửi kèm trên đường dẫn tải, vé chỉ cho biết ai được tải."""
+    _auth(authorization)
+    return {"url": f"/v1/results/export/{make_ticket(time.time(), EXPORT_TICKET)}"}
+
+
+@router.get("/v1/results/export/{ticket}")
+def export_download(
+    ticket: str,
+    q: str = "",
+    day_from: str = "",
+    day_to: str = "",
+    device: str | None = Query(default=None),
+    video: int = Query(default=0, ge=0),
+    bucket: str = "",
+    checked: str = "",
+) -> Response:
+    if not ticket_ok(ticket, time.time(), EXPORT_TICKET):
+        raise HTTPException(status_code=404, detail="Liên kết tải đã hết hạn. Bấm tải Excel lại.")
+    init_db(settings.video_db_path)
+    chosen = _filters(q, day_from, day_to, device, video, bucket, checked)
+    payload = export_xlsx(settings.video_db_path, chosen)
+    filename = time.strftime("ket-qua-%Y%m%d-%H%M.xlsx")
+    return Response(
+        content=payload,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "no-store"},
+    )
+
+
+class WebhookBody(BaseModel):
+    url: str = ""
+    include_old: bool = False
+
+
+@router.get("/v1/webhook")
+def webhook_get(authorization: str | None = Header(default=None)) -> dict[str, object]:
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    return webhook_settings(settings.video_db_path)
+
+
+@router.post("/v1/webhook")
+def webhook_save(body: WebhookBody, authorization: str | None = Header(default=None)) -> dict[str, object]:
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    try:
+        save_webhook(settings.video_db_path, body.url, body.include_old)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return webhook_settings(settings.video_db_path)
+
+
+@router.post("/v1/webhook/test")
+def webhook_try(body: WebhookBody, authorization: str | None = Header(default=None)) -> dict[str, bool]:
+    _auth(authorization)
+    try:
+        test_webhook(body.url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=502, detail=f"Địa chỉ không nhận: {str(exc)[:200]}") from exc
+    return {"ok": True}
+
+
+class ApiKeyBody(BaseModel):
+    name: str = ""
+
+
+@router.get("/v1/api-keys")
+def api_keys(authorization: str | None = Header(default=None)) -> dict[str, object]:
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    return {"items": list_api_keys(settings.video_db_path)}
+
+
+@router.post("/v1/api-keys")
+def api_key_create(body: ApiKeyBody, authorization: str | None = Header(default=None)) -> dict[str, object]:
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    return create_api_key(settings.video_db_path, body.name)
+
+
+@router.post("/v1/api-keys/{key_id}/revoke")
+def api_key_revoke(key_id: int, authorization: str | None = Header(default=None)) -> dict[str, bool]:
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    if not revoke_api_key(settings.video_db_path, key_id):
+        raise HTTPException(status_code=404, detail="Khoá không có hoặc đã thu hồi.")
+    return {"ok": True}
+
+
+def _api_key_auth(authorization: str | None, api_key: str | None) -> None:
+    """Khoá API chỉ mở hai đường đọc bên dưới, không mở trang, tải lên hay sao lưu."""
+    key = api_key or (authorization[7:] if authorization and authorization.startswith("Bearer ") else "")
+    init_db(settings.video_db_path)
+    if not key or not api_key_ok(settings.video_db_path, key):
+        raise HTTPException(status_code=401, detail="Khoá API không đúng hoặc đã thu hồi.")
+
+
+@router.get("/v1/api/results")
+def api_results(
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None),
+    after_id: int = Query(default=0, ge=0),
+    limit: int = Query(default=1000, ge=1, le=5000),
+) -> dict[str, object]:
+    """Dòng đã lưu đủ số, tên, @id có id lớn hơn after_id, tăng dần. Gọi lại với next_after_id để lấy tiếp."""
+    _api_key_auth(authorization, x_api_key)
+    items = saved_rows_after(settings.video_db_path, after_id, limit)
+    return {"items": items, "next_after_id": items[-1]["id"] if items else after_id, "done": len(items) < limit}
+
+
+@router.get("/v1/api/stats")
+def api_stats(authorization: str | None = Header(default=None), x_api_key: str | None = Header(default=None)) -> dict[str, object]:
+    _api_key_auth(authorization, x_api_key)
+    body = stats(settings.video_db_path)
+    return {key: body[key] for key in ("saved", "review", "unopened", "queued", "done", "error")}
 
 
 @router.post("/v1/backup/ticket")
