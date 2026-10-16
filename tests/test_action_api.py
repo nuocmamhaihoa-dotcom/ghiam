@@ -21,7 +21,8 @@ Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from control_plane.app import app  # noqa: E402
+from control_plane.app import _raw_transfer, app  # noqa: E402
+from control_plane.pc_reader import connector_template_sha256  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
 from control_plane.video_store import begin_upload, commit_upload, connect, init_db, stats as video_stats  # noqa: E402
 
@@ -699,9 +700,13 @@ class PcReaderApiTests(unittest.TestCase):
         self.assertIn(settings.page_token, script)
         self.assertNotIn("__GHIAM_", script)
         self.assertIn("doc_video.pipeline", script)
+        self.assertIn("DOC_VIDEO_CPU_FRACTION", script)
+        self.assertIn("DOC_VIDEO_RAM_FRACTION", script)
         version = self.client.get("/v1/pc/connector/version", headers=self.headers)
         self.assertEqual(version.status_code, 200)
-        self.assertGreaterEqual(version.json()["version"], 1)
+        self.assertGreaterEqual(version.json()["version"], 2)
+        self.assertEqual(version.json()["sha256"], connector_template_sha256())
+        self.assertEqual(len(version.json()["sha256"]), 64)
         backup = self.client.post("/v1/backup/ticket", headers=self.headers)
         stolen = self.client.get("/v1/pc/package/" + backup.json()["url"].rsplit("/", 1)[-1])
         self.assertEqual(stolen.status_code, 404)
@@ -712,7 +717,8 @@ class PcReaderApiTests(unittest.TestCase):
         self.assertFalse(created["duplicate"])
         video_id = int(created["id"])
         path = settings.video_dir / f"{video_id}.mp4"
-        path.write_bytes(b"video")
+        payload_bytes = b"v" * 800
+        path.write_bytes(payload_bytes)
         commit_upload(settings.video_db_path, video_id, str(path))
         with connect(settings.video_db_path) as conn:
             conn.execute("UPDATE videos SET status = 'done' WHERE status = 'queued' AND id != ?", (video_id,))
@@ -723,11 +729,14 @@ class PcReaderApiTests(unittest.TestCase):
         self.assertEqual(job["id"], video_id)
         downloaded = self.client.get(
             f"/v1/pc/videos/{video_id}/file",
-            headers=self.headers,
+            headers={**self.headers, "Accept-Encoding": "gzip"},
             params={"lease": job["lease"]},
         )
         self.assertEqual(downloaded.status_code, 200)
-        self.assertEqual(downloaded.content, b"video")
+        self.assertEqual(downloaded.content, payload_bytes)
+        self.assertNotIn("gzip", downloaded.headers.get("content-encoding", ""))
+        self.assertTrue(_raw_transfer(f"/v1/pc/videos/{video_id}/file"))
+        self.assertFalse(_raw_transfer("/v1/videos"))
         denied = self.client.get(f"/v1/pc/videos/{video_id}/file", headers=self.headers, params={"lease": "sai"})
         self.assertEqual(denied.status_code, 409)
         posted = self.client.post(

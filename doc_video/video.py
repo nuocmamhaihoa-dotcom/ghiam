@@ -10,6 +10,8 @@ lần đọc vẫn sửa được lỗi của từng lần.
 
 from __future__ import annotations
 
+import ctypes
+import math
 import os
 import shutil
 import subprocess
@@ -24,6 +26,7 @@ import numpy as np
 from PIL import Image
 
 from doc_video.frame import Contact, FrameRead, Layout, read_layout, row_at, scan_frame
+from doc_video.viet import weights_path
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mkv", ".avi", ".webm"}
@@ -33,6 +36,115 @@ SAME_FRAME = 0.6
 # kỹ @id đã gồm sáu lần đọc ở nhiều cỡ rồi bỏ phiếu, nên hồ sơ cần ít khung hơn.
 READS_PER_PERSON = 3
 READS_PER_PROFILE = 2
+# Một tiến trình có VietOCR giữ khoảng này. Không có bộ dấu thì nhẹ hơn.
+_RAM_WITH_VIET = 800 * 1024 * 1024
+_RAM_TESSERACT = 256 * 1024 * 1024
+
+
+def _fraction(name: str) -> float | None:
+    """Phần tài nguyên được phép dùng, từ 0 đến 1. Trống hoặc sai thì không giới hạn."""
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        return None
+    if not 0 < value <= 1:
+        return None
+    return value
+
+
+def _memory_bytes() -> tuple[int, int]:
+    """(tổng RAM, RAM còn trống). (0, 0) nếu máy không cho biết."""
+    if os.name == "nt":
+        class MemoryStatus(ctypes.Structure):
+            _fields_ = (
+                ("dwLength", ctypes.c_ulong),
+                ("dwMemoryLoad", ctypes.c_ulong),
+                ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+            )
+
+        status = MemoryStatus()
+        status.dwLength = ctypes.sizeof(MemoryStatus)
+        if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+            return 0, 0
+        return int(status.ullTotalPhys), int(status.ullAvailPhys)
+    meminfo = Path("/proc/meminfo")
+    if not meminfo.is_file():
+        return 0, 0
+    total = available = 0
+    for line in meminfo.read_text(encoding="utf-8", errors="replace").splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        if parts[0] == "MemTotal:":
+            total = int(parts[1]) * 1024
+        elif parts[0] == "MemAvailable:":
+            available = int(parts[1]) * 1024
+        elif parts[0] == "MemFree:" and available == 0:
+            available = int(parts[1]) * 1024
+    return total, available
+
+
+def _bytes_per_worker() -> int:
+    if os.environ.get("DOC_VIDEO_VIETOCR", "1").strip() == "0":
+        return _RAM_TESSERACT
+    if weights_path().is_file():
+        return _RAM_WITH_VIET
+    return _RAM_TESSERACT
+
+
+def ffmpeg_thread_count() -> int:
+    """0 nghĩa là ffmpeg dùng mọi nhân. Có mức trần thì không vượt trần đó."""
+    fraction = _fraction("DOC_VIDEO_CPU_FRACTION")
+    if fraction is None:
+        return 0
+    cores = max(1, os.cpu_count() or 1)
+    return max(1, math.floor(cores * fraction))
+
+
+def read_worker_count(requested: int | None = None) -> int:
+    """Số tiến trình đọc. Không đặt mức trần thì bằng số nhân, hoặc đúng số được yêu cầu.
+
+    Có mức trần thì lấy phần nhỏ hơn giữa trần CPU và chỗ RAM còn lại dưới trần.
+    Luôn còn ít nhất một tiến trình để video vẫn được đọc.
+    """
+    cores = max(1, os.cpu_count() or 1)
+    chosen = cores if requested is None else max(1, requested)
+    cpu_fraction = _fraction("DOC_VIDEO_CPU_FRACTION")
+    ram_fraction = _fraction("DOC_VIDEO_RAM_FRACTION")
+    if cpu_fraction is None and ram_fraction is None:
+        return chosen
+    cpu_cap = cores if cpu_fraction is None else max(1, math.floor(cores * cpu_fraction))
+    cap = cpu_cap
+    if ram_fraction is not None:
+        total, available = _memory_bytes()
+        if total > 0:
+            reserve = math.ceil(total * (1.0 - ram_fraction))
+            headroom = available - reserve
+            per = _bytes_per_worker()
+            ram_cap = 1 if headroom < per else max(1, headroom // per)
+            cap = min(cap, ram_cap)
+    return max(1, min(chosen, cap))
+
+
+def within_resource_ceiling() -> bool:
+    """Còn đủ RAM trống dưới mức trần cho một tiến trình đọc hay không."""
+    fraction = _fraction("DOC_VIDEO_RAM_FRACTION")
+    if fraction is None:
+        return True
+    total, available = _memory_bytes()
+    if total <= 0:
+        return True
+    reserve = math.ceil(total * (1.0 - fraction))
+    return available >= reserve + _bytes_per_worker()
 
 
 def _scan_file(path: str, at: float) -> Layout:
@@ -71,7 +183,7 @@ def extract_frames(video: Path, folder: Path, fps: float) -> list[tuple[Path, fl
             "-loglevel",
             "error",
             "-threads",
-            "0",
+            str(ffmpeg_thread_count()),
             "-i",
             str(video),
             "-vf",
@@ -235,7 +347,7 @@ def read_inputs(
             else:
                 raise RuntimeError(f"Không đọc được {path.name}: cần ảnh hoặc video.")
         if submit is None:
-            workers = workers or max(1, os.cpu_count() or 1)
+            workers = read_worker_count(workers)
             if workers > 1 and len(jobs) > 1:
                 pool = ProcessPoolExecutor(max_workers=workers)
                 submit = pool.submit
