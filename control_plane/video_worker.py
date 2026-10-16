@@ -158,10 +158,11 @@ def _shrink_loop(db_path: Path, stop: threading.Event) -> None:
 class ProgressWriter:
     """Ghi tiến độ vào cơ sở dữ liệu tối đa mỗi vài giây, và mỗi khi đổi bước. Ghi hỏng thì bỏ qua."""
 
-    def __init__(self, db_path: Path, video_id: int, every: float = 5.0) -> None:
+    def __init__(self, db_path: Path, video_id: int, every: float = 5.0, lease: str = "") -> None:
         self.db_path = db_path
         self.video_id = video_id
         self.every = every
+        self.lease = lease
         self.stage = ""
         self.at = 0.0
 
@@ -172,7 +173,7 @@ class ProgressWriter:
         self.stage = stage
         self.at = now
         try:
-            report_progress(self.db_path, self.video_id, stage, done, total)
+            report_progress(self.db_path, self.video_id, stage, done, total, self.lease or None)
         except Exception:
             pass
 
@@ -180,20 +181,29 @@ class ProgressWriter:
 def run_job(db_path: Path, job: dict[str, object], scan=scan_paths) -> None:
     video_id = int(job["id"])
     path = Path(str(job["path"]))
+    lease = str(job.get("lease") or "") or None
     started = time.monotonic()
     try:
         if scan is scan_paths or isinstance(scan, functools.partial) and scan.func is scan_paths:
-            table, frames = scan([path], progress=ProgressWriter(db_path, video_id))
+            table, frames = scan([path], progress=ProgressWriter(db_path, video_id, lease=lease or ""))
         else:
             table, frames = scan([path])
-        finish(db_path, video_id, table)
+        if not finish(db_path, video_id, table, lease=lease):
+            print(f"Video {video_id} không còn thuộc lượt đọc này. Không ghi đè kết quả.", flush=True)
+            return
     except BrokenExecutor:
-        requeue(db_path, video_id)
+        requeue(db_path, video_id, lease)
         raise
     except Exception as exc:
         message = str(exc) or "Không đọc được video."
-        fail(db_path, video_id, message)
-        print(f"Video {video_id} lỗi sau {time.monotonic() - started:.0f} giây: {message[:300]}", flush=True)
+        if fail(db_path, video_id, message, lease):
+            print(f"Video {video_id} lỗi sau {time.monotonic() - started:.0f} giây: {message[:300]}", flush=True)
+        else:
+            print(
+                f"Video {video_id} lỗi ở lượt đọc cũ sau {time.monotonic() - started:.0f} giây, "
+                f"video đã sang lượt khác nên không đánh lỗi: {message[:300]}",
+                flush=True,
+            )
         keep_newest_videos(db_path)
         return
     keep_newest_videos(db_path)
@@ -231,7 +241,7 @@ def _feed(db_path: Path, pool: ProcessPoolExecutor, work_dir: Path, stop: thread
     finally:
         # Luồng nhận video chết giữa chừng mà tiến trình vẫn sống thì recover_dead không cứu được.
         if current is not None:
-            requeue(db_path, int(current["id"]))
+            requeue(db_path, int(current["id"]), str(current.get("lease") or "") or None)
 
 
 def main() -> None:

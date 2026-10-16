@@ -40,6 +40,8 @@ from control_plane.video_store import (
     recover_dead,
     release_pc,
     release_stale_pc,
+    report_progress,
+    requeue,
     requeue_running,
     result_page,
     retry,
@@ -810,6 +812,31 @@ class PcClaimTests(unittest.TestCase):
         failed = {int(row["id"]): row for row in list_videos(self.db)}
         self.assertEqual(failed[other]["helper"], "VPS")
         self.assertEqual(failed[other]["status"], "error")
+
+    def test_a_stale_server_read_cannot_clobber_the_next_one(self) -> None:
+        video_id = self._add("a.mp4", "stale")
+        first = claim(self.db, 11)
+        assert first is not None
+        self.assertTrue(requeue(self.db, video_id, str(first["lease"])))
+        second = claim(self.db, 12)
+        assert second is not None
+        self.assertNotEqual(first["lease"], second["lease"])
+        stale = str(first["lease"])
+        self.assertFalse(finish(self.db, video_id, Table(rows=[Row("0900000001", "Cu", "@cu")]), lease=stale))
+        self.assertFalse(fail(self.db, video_id, "lượt cũ", stale))
+        self.assertFalse(requeue(self.db, video_id, stale))
+        report_progress(self.db, video_id, "scan", 9, 9, stale)
+        current = list_videos(self.db)[0]
+        self.assertEqual(current["status"], "running")
+        self.assertEqual(current["progress_done"], 0)
+        self.assertEqual(search_results(self.db, "0900000001"), [])
+        self.assertTrue(
+            finish(self.db, video_id, Table(rows=[Row("0900000002", "Moi", "@moi")]), lease=str(second["lease"]))
+        )
+        done = list_videos(self.db)[0]
+        self.assertEqual(done["status"], "done")
+        self.assertEqual(done["helper"], "VPS")
+        self.assertEqual(search_results(self.db, "0900000002")[0]["username"], "@moi")
 
 
 class FullCheckTests(unittest.TestCase):

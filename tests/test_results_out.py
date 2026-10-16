@@ -18,6 +18,7 @@ from control_plane.results_out import (
     create_api_key,
     export_xlsx,
     list_api_keys,
+    post_json,
     revoke_api_key,
     save_webhook,
     saved_rows_after,
@@ -202,6 +203,30 @@ class FilterExportTests(unittest.TestCase):
         save_webhook(self.db, "", resolve=public)
         self.assertEqual(webhook_settings(self.db)["url"], "")
         self.assertEqual(json.loads(json.dumps(sent))[0]["source"], "ghiam")
+
+    def test_webhook_redirect_keeps_the_body_and_stays_public(self) -> None:
+        seen: list[tuple[str, str, bytes]] = []
+
+        def exchange(host: str, ip: str, _port: int, _scheme: str, target: str, body: bytes, _timeout: float):
+            seen.append((host, ip, body))
+            if target == "/hook":
+                return 302, "https://sheets.example/exec"
+            return 200, ""
+
+        post_json("https://example.com/hook", {"rows": [1]}, resolve=public, exchange=exchange)
+        self.assertEqual(seen[0][0], "example.com")
+        self.assertEqual(seen[0][1], "93.184.216.34")
+        self.assertEqual(seen[1][0], "sheets.example")
+        self.assertEqual(seen[0][2], seen[1][2])
+        self.assertIn("rows", seen[1][2].decode("utf-8"))
+
+        def inward(host: str, ip: str, _port: int, _scheme: str, target: str, body: bytes, _timeout: float):
+            return 302, "http://127.0.0.1/latest"
+
+        with self.assertRaises(ValueError):
+            post_json("https://example.com/hook", {"rows": [1]}, resolve=public, exchange=inward)
+        with self.assertRaises(ValueError):
+            check_public_url("http://10.1.1.1/secret", public)
 
 
 if __name__ == "__main__":

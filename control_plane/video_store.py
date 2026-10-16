@@ -795,14 +795,16 @@ def claim(db_path: Path, pid: int) -> dict[str, object] | None:
         if row is None:
             conn.execute("COMMIT")
             return None
+        lease = secrets.token_hex(16)
         cur = conn.execute(
             """
             UPDATE videos
             SET status = 'running', pid = ?, started_at = ?, error = '',
-                helper = '', lease = '', lease_at = NULL
+                helper = '', lease = ?, lease_at = NULL,
+                progress_stage = '', progress_done = 0, progress_total = 0, progress_at = NULL
             WHERE id = ? AND status = 'queued'
             """,
-            (pid, utcnow(), row["id"]),
+            (pid, utcnow(), lease, row["id"]),
         )
         conn.execute("COMMIT")
         if cur.rowcount != 1:
@@ -812,6 +814,7 @@ def claim(db_path: Path, pid: int) -> dict[str, object] | None:
             "name": row["name"],
             "path": row["path"],
             "check": int(row["check_pass"]),
+            "lease": lease,
         }
 
 
@@ -1010,18 +1013,28 @@ def release_pc(db_path: Path, video_id: int, lease: str, reason: str = "fail", e
         return True
 
 
-def report_progress(db_path: Path, video_id: int, stage: str, done: int, total: int) -> None:
-    """Tiến độ video máy chủ đang đọc, để trang và giờ dự kiến biết video đang tới đâu."""
+def report_progress(
+    db_path: Path, video_id: int, stage: str, done: int, total: int, lease: str | None = None
+) -> None:
+    """Tiến độ video máy chủ đang đọc, để trang và giờ dự kiến biết video đang tới đâu.
+
+    Có phiếu thì chỉ ghi khi video vẫn thuộc đúng lượt đọc đó.
+    """
     if stage not in PROGRESS_STAGES:
         return
     now = utcnow()
+    where = "WHERE id = ? AND status = 'running'"
+    params: list[object] = [stage, max(0, int(done)), max(0, int(total)), now, video_id]
+    if lease:
+        where += " AND lease = ?"
+        params.append(lease)
     with connect(db_path) as conn:
         conn.execute(
-            """
+            f"""
             UPDATE videos SET progress_stage = ?, progress_done = ?, progress_total = ?, progress_at = ?
-            WHERE id = ? AND status = 'running'
+            {where}
             """,
-            (stage, max(0, int(done)), max(0, int(total)), now, video_id),
+            params,
         )
 
 
@@ -1080,12 +1093,25 @@ def pc_video_path(db_path: Path, video_id: int, lease: str, root: Path) -> Path 
     return path
 
 
-def requeue(db_path: Path, video_id: int) -> None:
+def requeue(db_path: Path, video_id: int, lease: str | None = None) -> bool:
+    """Đưa video đang đọc về hàng chờ. Có phiếu thì không đụng lượt đọc khác đã nhận video này."""
+    where = "WHERE id = ? AND status = 'running'"
+    params: list[object] = [video_id]
+    if lease is not None:
+        where += " AND lease = ?"
+        params.append(lease)
     with connect(db_path) as conn:
-        conn.execute(
-            "UPDATE videos SET status = 'queued', pid = NULL, started_at = NULL WHERE id = ? AND status = 'running'",
-            (video_id,),
+        cur = conn.execute(
+            f"""
+            UPDATE videos
+            SET status = 'queued', pid = NULL, started_at = NULL,
+                lease = '', lease_at = NULL, helper = '',
+                progress_stage = '', progress_done = 0, progress_total = 0, progress_at = NULL
+            {where}
+            """,
+            params,
         )
+        return cur.rowcount == 1
 
 
 def requeue_running(db_path: Path, keep_pid: int) -> int:
@@ -1094,7 +1120,10 @@ def requeue_running(db_path: Path, keep_pid: int) -> int:
     with connect(db_path) as conn:
         cur = conn.execute(
             """
-            UPDATE videos SET status = 'queued', pid = NULL, started_at = NULL
+            UPDATE videos
+            SET status = 'queued', pid = NULL, started_at = NULL,
+                lease = '', lease_at = NULL,
+                progress_stage = '', progress_done = 0, progress_total = 0, progress_at = NULL
             WHERE status = 'running' AND (pid IS NULL OR pid != ?)
             """,
             (keep_pid,),
@@ -1110,7 +1139,13 @@ def recover_dead(db_path: Path) -> int:
             if _alive(row["pid"]):
                 continue
             conn.execute(
-                "UPDATE videos SET status = 'queued', pid = NULL, started_at = NULL WHERE id = ? AND status = 'running'",
+                """
+                UPDATE videos
+                SET status = 'queued', pid = NULL, started_at = NULL,
+                    lease = '', lease_at = NULL,
+                    progress_stage = '', progress_done = 0, progress_total = 0, progress_at = NULL
+                WHERE id = ? AND status = 'running'
+                """,
                 (row["id"],),
             )
             recovered += 1
@@ -1197,14 +1232,16 @@ def _mark_video_done(
         params = [utcnow(), counts[0], counts[1], video_id]
         count_sql = "phone_count = ?, full_count = ?,"
     if lease is not None:
-        where += " AND status = 'pc' AND lease = ?"
+        where += " AND lease = ? AND status IN ('pc', 'running')"
         params.append(lease)
+        helper_sql = "helper = CASE WHEN status = 'pc' THEN helper ELSE 'VPS' END"
     cur = conn.execute(
         f"""
         UPDATE videos
         SET status = 'done', pid = NULL, finished_at = ?, error = '',
             {count_sql}
-            lease = '', {helper_sql}, lease_at = NULL, check_pass = 0, priority = 0
+            lease = '', {helper_sql}, lease_at = NULL, check_pass = 0, priority = 0,
+            progress_stage = '', progress_done = 0, progress_total = 0, progress_at = NULL
         {where}
         """,
         params,
@@ -1222,15 +1259,19 @@ def finish(db_path: Path, video_id: int, table: Table, lease: str | None = None)
 
     Video đang ở lần kiểm thì không ghi đè. Chỉ đối chiếu các dòng đã đủ ba ô.
 
-    Có phiếu thì chỉ ghi khi video vẫn đang do đúng PC đó giữ. Phiếu sai thì
-    không đổi dòng nào.
+    Có phiếu thì chỉ ghi khi video vẫn thuộc đúng lượt đó: máy chủ đang đọc,
+    hoặc PC đang giữ. Phiếu sai, hoặc video đã sang lượt khác, thì không đổi
+    dòng nào.
     """
     phones, full = video_counts(table)
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         if lease is not None:
             owned = conn.execute(
-                "SELECT id FROM videos WHERE id = ? AND status = 'pc' AND lease = ? AND lease != ''",
+                """
+                SELECT id FROM videos
+                WHERE id = ? AND lease = ? AND lease != '' AND status IN ('pc', 'running')
+                """,
                 (video_id, lease),
             ).fetchone()
             if owned is None:
@@ -1444,26 +1485,33 @@ def _confirm_open_profiles(conn: sqlite3.Connection) -> int:
     return changed
 
 
-def fail(db_path: Path, video_id: int, message: str) -> None:
+def fail(db_path: Path, video_id: int, message: str, lease: str | None = None) -> bool:
+    """Đánh video là lỗi. Có phiếu thì chỉ đánh khi video vẫn thuộc đúng lượt đọc đang chạy."""
+    where = "WHERE id = ?"
+    params: list[object] = [utcnow(), message[:500], video_id]
+    if lease is not None:
+        where += " AND status = 'running' AND lease = ?"
+        params.append(lease)
     with connect(db_path) as conn:
-        conn.execute(
-            """
+        cur = conn.execute(
+            f"""
             UPDATE videos
             SET status = 'error', pid = NULL, finished_at = ?, error = ?,
                 helper = CASE WHEN helper IS NULL OR helper = '' THEN 'VPS' ELSE helper END,
-                check_pass = 0, priority = 0,
+                lease = '', lease_at = NULL, check_pass = 0, priority = 0,
                 progress_stage = '', progress_done = 0, progress_total = 0
-            WHERE id = ?
+            {where}
             """,
-            (utcnow(), message[:500], video_id),
+            params,
         )
+        return cur.rowcount == 1
 
 
 def retry(db_path: Path, video_id: int) -> bool:
     """Đưa video lỗi hoặc đã đọc xong về hàng chờ, nếu file còn trên máy chủ.
 
-    Đọc lại dùng bộ đọc hiện tại. Kết quả mới chỉ nâng dòng cần xem hoặc chưa
-    mở hồ sơ lên đã lưu; dòng đã lưu đủ ba ô không bị ghi đè.
+    Đọc lại dùng bộ đọc hiện tại. Dòng đã lưu của video khác giữ nguyên.
+    Dòng đã lưu của chính video này được thay bằng lần đọc mới.
     """
     with connect(db_path) as conn:
         row = conn.execute("SELECT path, status FROM videos WHERE id = ?", (video_id,)).fetchone()
