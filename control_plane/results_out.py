@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import http.client
 import ipaddress
 import json
 import secrets
 import socket
+import ssl
 import urllib.error
 import urllib.parse
-import urllib.request
 from collections.abc import Callable, Iterator
 from datetime import datetime
 from pathlib import Path
@@ -180,9 +181,16 @@ def check_public_url(url: str, resolve: Callable[[str], list[str]] | None = None
     parts = urllib.parse.urlsplit(text)
     if parts.scheme not in ("http", "https") or not parts.hostname:
         raise ValueError("Địa chỉ phải bắt đầu bằng https:// hoặc http://")
+    host = parts.hostname
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        literal = False
+    else:
+        literal = True
     lookup = resolve or _resolve
     try:
-        addresses = lookup(parts.hostname)
+        addresses = [host] if literal else lookup(host)
     except OSError as exc:
         raise ValueError("Không tìm thấy địa chỉ này.") from exc
     if not addresses:
@@ -238,12 +246,83 @@ def save_webhook(db_path: Path, url: str, include_old: bool = False, resolve=Non
     set_meta(db_path, WEBHOOK_URL, checked)
 
 
-def post_json(url: str, payload: dict, timeout: float = 30) -> None:
-    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    request = urllib.request.Request(url, data=data, method="POST", headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        if response.status >= 300:
-            raise urllib.error.HTTPError(url, response.status, "gửi không thành công", response.headers, None)
+def _public_ip(host: str, resolve: Callable[[str], list[str]] | None) -> str:
+    """Một địa chỉ công khai để nối tới. Địa chỉ viết sẵn thì dùng đúng địa chỉ đó."""
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        lookup = resolve or _resolve
+        try:
+            addresses = lookup(host)
+        except OSError as exc:
+            raise ValueError("Không tìm thấy địa chỉ này.") from exc
+    else:
+        addresses = [host]
+    if not addresses:
+        raise ValueError("Không tìm thấy địa chỉ này.")
+    for raw in addresses:
+        if not ipaddress.ip_address(raw).is_global:
+            raise ValueError("Không gửi tới địa chỉ nội bộ.")
+    return addresses[0]
+
+
+class _PinnedConnection(http.client.HTTPConnection):
+    """Nối tới đúng địa chỉ đã kiểm, nhưng vẫn gửi tên máy cho chứng chỉ và tiêu đề Host."""
+
+    def __init__(self, host: str, ip: str, port: int, timeout: float, context: ssl.SSLContext | None) -> None:
+        super().__init__(host, port, timeout=timeout)
+        self._ip = ip
+        self._context = context
+
+    def connect(self) -> None:
+        sock = socket.create_connection((self._ip, self.port), self.timeout)
+        if self._context is not None:
+            sock = self._context.wrap_socket(sock, server_hostname=self.host)
+        self.sock = sock
+
+
+def _exchange(host: str, ip: str, port: int, scheme: str, target: str, body: bytes, timeout: float) -> tuple[int, str]:
+    context = ssl.create_default_context() if scheme == "https" else None
+    conn = _PinnedConnection(host, ip, port, timeout, context)
+    try:
+        conn.request("POST", target, body=body, headers={"Content-Type": "application/json"})
+        response = conn.getresponse()
+        status = response.status
+        location = response.getheader("Location") or ""
+        response.read()
+        return status, location
+    finally:
+        conn.close()
+
+
+def post_json(
+    url: str,
+    payload: dict,
+    timeout: float = 30,
+    resolve: Callable[[str], list[str]] | None = None,
+    exchange: Callable[[str, str, int, str, str, bytes, float], tuple[int, str]] | None = None,
+) -> None:
+    """Gửi JSON. Giữ nguyên nội dung khi địa chỉ chuyển hướng, và không đi vào máy nội bộ."""
+    sender = exchange or _exchange
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    current = url
+    for _hop in range(5):
+        checked = check_public_url(current, resolve)
+        parts = urllib.parse.urlsplit(checked)
+        host = parts.hostname or ""
+        ip = _public_ip(host, resolve)
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+        target = parts.path or "/"
+        if parts.query:
+            target = f"{target}?{parts.query}"
+        status, location = sender(host, ip, port, parts.scheme, target, body, timeout)
+        if status in (301, 302, 303, 307, 308) and location:
+            current = urllib.parse.urljoin(checked, location)
+            continue
+        if status >= 300:
+            raise urllib.error.HTTPError(checked, status, "gửi không thành công", None, None)
+        return
+    raise ValueError("Quá nhiều lần chuyển hướng.")
 
 
 def send_webhook_batch(db_path: Path, poster: Callable[[str, dict], None] = post_json, resolve=None) -> int:
@@ -262,7 +341,11 @@ def send_webhook_batch(db_path: Path, poster: Callable[[str, dict], None] = post
         state = {}
     try:
         check_public_url(url, resolve)
-        poster(url, {"source": "ghiam", "rows": rows})
+        payload = {"source": "ghiam", "rows": rows}
+        if poster is post_json:
+            poster(url, payload, resolve=resolve)
+        else:
+            poster(url, payload)
     except (ValueError, OSError, urllib.error.URLError) as exc:
         state.update(error=str(exc)[:300], at=utcnow())
         set_meta(db_path, WEBHOOK_STATE, json.dumps(state, ensure_ascii=False))
@@ -308,4 +391,8 @@ def sample_payload() -> dict[str, object]:
 
 
 def test_webhook(url: str, poster: Callable[[str, dict], None] = post_json, resolve=None) -> None:
-    poster(check_public_url(url, resolve), sample_payload())
+    checked = check_public_url(url, resolve)
+    if poster is post_json:
+        poster(checked, sample_payload(), resolve=resolve)
+    else:
+        poster(checked, sample_payload())
