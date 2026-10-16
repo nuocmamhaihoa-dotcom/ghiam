@@ -75,6 +75,22 @@ try {
     Set-Content -LiteralPath $ready -Value '1' -Encoding ascii
   }
 
+  $runtimeMark = Join-Path $pyDir 'runtime-ready.txt'
+  if (-not (Test-Path -LiteralPath $runtimeMark)) {
+    $runtime = Join-Path $tools 'runtime.zip'
+    $runtimeDir = Join-Path $tools 'runtime'
+    Save-Url ($base + '/v1/pc/tools/runtime.zip') $runtime 'Đang tải bộ đọc dấu từ máy chủ.'
+    if (Test-Path -LiteralPath $runtimeDir) { Remove-Item -LiteralPath $runtimeDir -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
+    & tar.exe -xf $runtime -C $runtimeDir
+    if ($LASTEXITCODE -ne 0) { throw 'Chưa giải nén được bộ đọc dấu.' }
+    $runtimeWheels = @(Get-ChildItem -LiteralPath $runtimeDir -Filter '*.whl' | ForEach-Object { $_.FullName })
+    if ($runtimeWheels.Count -lt 1) { throw 'Bộ đọc dấu tải về không có gói.' }
+    & $pyExe -m pip install --disable-pip-version-check --no-index --no-deps --find-links $runtimeDir @runtimeWheels
+    if ($LASTEXITCODE -ne 0) { throw 'Chưa cài được bộ đọc dấu.' }
+    Set-Content -LiteralPath $runtimeMark -Value '1' -Encoding ascii
+  }
+
   $ffRoot = Join-Path $tools 'ffmpeg-src'
   $ff = Get-ChildItem -LiteralPath $ffRoot -Recurse -Filter 'ffmpeg.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $ff) {
