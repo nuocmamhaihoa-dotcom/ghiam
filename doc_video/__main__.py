@@ -12,9 +12,9 @@ import csv
 import sys
 from pathlib import Path
 
-from doc_video.join import Result, add_full_name_rows, add_side_rows, build
+from doc_video.join import Result, build
 from doc_video.ocr import check_tesseract
-from doc_video.video import FRAME_FPS, read_inputs
+from doc_video.video import read_inputs
 
 
 def write_csv(path: Path, header: list[str], rows: list[list[str]]) -> None:
@@ -42,12 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m doc_video", description="Ghép số điện thoại, tên khách, id từ video danh bạ TikTok.")
     parser.add_argument("inputs", nargs="+", type=Path, help="Video hoặc ảnh, theo đúng thứ tự quay.")
     parser.add_argument("-o", "--output", type=Path, default=Path("ket_qua.csv"), help="File bảng kết quả (CSV mở bằng Excel).")
-    parser.add_argument(
-        "--fps",
-        type=float,
-        default=FRAME_FPS,
-        help="Nhịp giữ màn hình đứng yên mỗi giây. Mặc định 4. Lần mở ngắn vẫn được lấy riêng.",
-    )
+    parser.add_argument("--fps", type=float, default=2.0, help="Số khung đọc mỗi giây video. Mặc định 2.")
     parser.add_argument("--workers", type=int, default=None, help="Số tiến trình đọc song song.")
     parser.add_argument("--chi-tiet", action="store_true", help="In những gì đọc được trên từng khung.")
     args = parser.parse_args(argv)
@@ -68,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{where} danh bạ: " + "; ".join(f"{c.phone} {c.name}" for c in frame.contacts))
             elif frame.kind == "profile":
                 print(f"{where} hồ sơ: {frame.profile_name} {frame.handle}")
-    result = add_full_name_rows(add_side_rows(build(frames), frames), frames)
+    result = build(frames)
     print(f"Bảng kết quả: {len(result.rows)} hàng")
     for row in result.rows:
         print(f"  {row.phone} | {row.name} | {row.handle}")

@@ -60,12 +60,10 @@ Ra 3 file CSV (mở bằng Excel):
      Số gạch dưới được đếm lại bằng chiều dài nét ngang dưới chân chữ (`__` dài gấp đôi `_`).
 4. Mỗi người hiện ở nhiều khung: bỏ phiếu tên theo từng ký tự giữa các khung. Các khung của một lần
    mở hồ sơ được gộp, ID đọc lệch một ký tự dễ nhầm (l với 1, q với g) được gộp vào ID đọc nhiều hơn.
-5. Ghép theo hai lượt. Lượt 1 là cách cho tỷ lệ đủ ba ô cao nhất: một màn danh bạ được mở hết
-   từng dòng từ trên xuống thì dòng thứ nhất ứng với hồ sơ mở đầu tiên. Hàng này không bị sửa.
-   Số, tên hoặc ID còn thiếu mới sang lượt 2: cùng tên và chỉ một cặp; ID sinh từ tên danh bạ
-   (không tính tên mặc định `user…`); dòng vừa bấm; tên chứa nhau; tên lệch nhẹ ngay trên màn đó;
-   đúng một số trống tên. Cặp số-tên mà bước quét bỏ sót, và bốn dãy ký tự cùng tên, chỉ thêm
-   hàng còn thiếu. Không chắc thì đưa vào bảng cần xem.
+5. Ghép số với ID khi chắc: cùng tên; ID sinh từ tên danh bạ (không tính tên mặc định `user…`);
+   dòng vừa bấm (vòng tròn chạm nằm trên đúng một dòng ngay trước khi hồ sơ mở, tìm cả trên khung
+   kề bên khi vòng tròn che mất chữ); hoặc thứ tự mở khi đã mở hết một màn danh bạ.
+   Không chắc thì đưa vào bảng cần xem.
 
 Đo trên ảnh và video dựng lại có đáp án. Mỗi khung đọc riêng: tên danh bạ đúng từng ký tự khoảng
 97%, ID khoảng 95%, tên hồ sơ khoảng 92%. Cả video (cuộn danh bạ, mở từng hồ sơ, có vòng tròn chạm):
