@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import io
 import os
+import re
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -15,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONNECTOR_FILE = Path(__file__).with_name("pc_connector.py")
 CONNECTOR_BAT = Path(__file__).with_name("pc_connector.bat")
 LAUNCHER_FILE = Path(__file__).with_name("pc_open.bat")
+OPEN_SCRIPT = Path(__file__).with_name("pc_open.ps1")
 # File cài PC tải từ máy chủ, không tải từ mạng ngoài. Tên URL ngắn, tên file trên đĩa là bản đã kiểm.
 PC_TOOL_FILES = {
     "python.zip": "python-3.12.7-embed-amd64.zip",
@@ -112,8 +116,23 @@ def tessdata_dir() -> Path:
     return ROOT / "tessdata_best"
 
 
-def tessdata_info() -> dict[str, object] | None:
-    folder = tessdata_dir()
+@functools.lru_cache(maxsize=1)
+def default_tessdata_dir() -> Path | None:
+    """Thư mục bộ chữ tesseract dùng khi lệnh không ghi --tessdata-dir. Bước quét khung đọc bằng bộ này."""
+    raw = os.environ.get("CONTROL_TESSDATA_DEFAULT", "").strip()
+    if raw:
+        return Path(raw)
+    try:
+        listed = subprocess.run(["tesseract", "--list-langs"], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    match = re.search(r'"([^"]+)"', listed.stdout + "\n" + listed.stderr)
+    return Path(match.group(1)) if match else None
+
+
+def _letters_info(folder: Path | None) -> dict[str, object] | None:
+    if folder is None:
+        return None
     files = [folder / name for name in TESSDATA_NAMES]
     if not all(path.is_file() for path in files):
         return None
@@ -132,14 +151,35 @@ def tessdata_info() -> dict[str, object] | None:
     return {"sha256": digest, "bytes": total}
 
 
-def tessdata_zip() -> bytes | None:
-    if tessdata_info() is None:
+def _letters_zip(folder: Path | None) -> bytes | None:
+    if folder is None or _letters_info(folder) is None:
         return None
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name in TESSDATA_NAMES:
-            archive.write(tessdata_dir() / name, name)
+            archive.write(folder / name, name)
     return buffer.getvalue()
+
+
+def tessdata_info() -> dict[str, object] | None:
+    return _letters_info(tessdata_dir())
+
+
+def tessdata_zip() -> bytes | None:
+    return _letters_zip(tessdata_dir())
+
+
+def default_tessdata_info() -> dict[str, object] | None:
+    return _letters_info(default_tessdata_dir())
+
+
+def default_tessdata_zip() -> bytes | None:
+    return _letters_zip(default_tessdata_dir())
+
+
+def open_script_bytes() -> bytes:
+    """Bản cài PC. File .bat tải lại bản này mỗi lượt, nên PC đang mở tự nhận bản sửa mới."""
+    return OPEN_SCRIPT.read_bytes()
 
 
 def reader_manifest() -> dict[str, object]:
@@ -150,6 +190,7 @@ def reader_manifest() -> dict[str, object]:
         "version": CONNECTOR_VERSION,
         "weights": weights_info(),
         "tessdata": tessdata_info(),
+        "tessdata_default": default_tessdata_info(),
         "runtime": runtime_info(),
     }
 

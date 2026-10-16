@@ -6,6 +6,7 @@ import gzip
 import os
 import sqlite3
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -721,6 +722,37 @@ class PcClaimTests(unittest.TestCase):
         self.assertEqual(listed[int(one["id"])]["status"], "pc")
         self.assertEqual(stats(self.db)["pc"], 2)
         self.assertEqual(stats(self.db)["queued"], 0)
+
+    def test_many_pcs_claim_different_videos_at_once(self) -> None:
+        ids = [self._add(f"{index}.mp4", f"many-{index}") for index in range(6)]
+        found: list[dict[str, object]] = []
+        errors: list[BaseException] = []
+        lock = threading.Lock()
+
+        def take(name: str) -> None:
+            try:
+                job = claim_pc(self.db, name)
+            except BaseException as exc:
+                with lock:
+                    errors.append(exc)
+                return
+            if job is not None:
+                with lock:
+                    found.append(job)
+
+        threads = [threading.Thread(target=take, args=(f"May-{index}",)) for index in range(6)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(errors, [])
+        self.assertEqual(len(found), 6)
+        claimed = {int(job["id"]) for job in found}
+        self.assertEqual(claimed, set(ids))
+        self.assertEqual(len({str(job["lease"]) for job in found}), 6)
+        self.assertEqual(stats(self.db)["pc"], 6)
+        self.assertEqual(stats(self.db)["queued"], 0)
+        self.assertIsNone(claim(self.db, 11))
 
     def test_finish_records_who_read_the_video(self) -> None:
         video_id = self._add("a.mp4", "who-pc")

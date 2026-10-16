@@ -7,6 +7,7 @@ PC chỉ dùng tối đa 80% CPU, RAM và ổ đĩa. Đường truyền không b
 
 from __future__ import annotations
 
+import ctypes
 import hashlib
 import json
 import math
@@ -121,6 +122,11 @@ def zip_entry_safe(name: str) -> bool:
     if not name or name.endswith(("/", "\\")) or "\\" in name or name.startswith(("/", "\\")) or ":" in name:
         return False
     return ".." not in Path(name).parts
+
+
+def lang_names(listed: str) -> set[str]:
+    """Tên bộ chữ trong kết quả tesseract --list-langs. Dòng đầu là đường thư mục, không phải tên."""
+    return {line.strip() for line in listed.splitlines()[1:] if line.strip()}
 
 
 def _replace_tree(staging: Path, target: Path) -> None:
@@ -248,11 +254,26 @@ def _download(path: str, dest: Path, timeout: float = 600) -> None:
         raise
 
 
-def _synced_tessdata() -> Path | None:
-    folder = CACHE / "tessdata"
-    if (folder / "eng.traineddata").is_file() and (folder / "vie.traineddata").is_file():
+def _synced_letters(name: str) -> Path | None:
+    folder = CACHE / name
+    if all((folder / item).is_file() for item in TESSDATA_NAMES):
         return folder
     return None
+
+
+def _list_langs(extra: list[str]) -> set[str] | None:
+    try:
+        listed = subprocess.run(
+            ["tesseract", *extra, "--list-langs"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        ).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return lang_names(listed)
 
 
 def _tools_ok() -> bool:
@@ -262,26 +283,19 @@ def _tools_ok() -> bool:
         ok = False
     if shutil.which("tesseract") is None:
         print("Chưa có tesseract. PC đang thử lại.")
+        return False
+    # Bước quét khung đọc bằng bộ chữ mặc định, giống máy chủ. Thiếu bộ này thì mọi khung ra rỗng.
+    plain = _list_langs([])
+    if plain is None:
+        print("Chưa chạy được tesseract. PC đang thử lại.")
+        return False
+    if not {"vie", "eng"} <= plain:
+        print("Tesseract chưa có bộ chữ mặc định giống máy chủ. PC chưa nhận video.")
         ok = False
-    else:
-        command = ["tesseract"]
-        folder = _synced_tessdata()
-        if folder is not None:
-            command += ["--tessdata-dir", str(folder)]
-        command.append("--list-langs")
-        try:
-            listed = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=60,
-            ).stdout
-        except (OSError, subprocess.TimeoutExpired):
-            print("Chưa chạy được tesseract. PC đang thử lại.")
-            return False
-        if "vie" not in listed or "eng" not in listed:
+    folder = _synced_letters("tessdata")
+    if folder is not None:
+        best = _list_langs(["--tessdata-dir", str(folder)])
+        if best is None or not {"vie", "eng"} <= best:
             print("Tesseract thiếu tiếng Việt hoặc tiếng Anh.")
             ok = False
     return ok
@@ -303,12 +317,71 @@ def _importable(module: str) -> bool:
     return True
 
 
-def _diacritics_importable() -> bool:
-    """Đủ thư viện thì PC đọc dấu giống máy chủ. Không tải gói từ mạng công cộng."""
-    return all(_importable(name) for name in ("torch", "torchvision", "einops", "yaml", "gdown", "vietocr"))
+_RUNTIME_PROBE = (
+    "import torch, torchvision, einops, yaml, gdown, vietocr\n"
+    "from vietocr.tool.config import Cfg\n"
+    "from vietocr.tool.predictor import Predictor\n"
+)
+
+
+def _last_line(text: str) -> str:
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    return lines[-1][:200] if lines else ""
+
+
+def _runtime_problem() -> str:
+    """Nạp bộ đọc dấu trong tiến trình riêng. Rỗng là chạy được, còn lại là lý do lỗi.
+
+    Nạp hỏng torch trong chính tiến trình này thì lần nạp sau vẫn hỏng, nên không nạp ở đây.
+    """
+    try:
+        done = subprocess.run(
+            [sys.executable, "-c", _RUNTIME_PROBE],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=600,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return type(exc).__name__
+    if done.returncode == 0:
+        return ""
+    return _last_line(done.stderr) or _last_line(done.stdout) or f"mã thoát {done.returncode}"
+
+
+_SINGLE: list[object] = []
+
+
+def _single_instance() -> bool:
+    """Một PC chỉ chạy một chương trình nối, để không nhận hai video cùng lúc trên một máy."""
+    if os.name != "nt":
+        return True
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateMutexW.restype = ctypes.c_void_p
+    kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
+    kernel32.WaitForSingleObject.restype = ctypes.c_uint32
+    kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    handle = kernel32.CreateMutexW(None, False, "Local\\GhiamPCReader")
+    if not handle:
+        return True
+    # 0: nhận được. 0x80: bản trước đã tắt mà chưa nhả, vẫn tính là nhận được.
+    if kernel32.WaitForSingleObject(handle, 0) in (0, 0x80):
+        _SINGLE.append(handle)
+        return True
+    kernel32.CloseHandle(handle)
+    return False
 
 
 def _relaunch() -> int:
+    """Mã 2: cửa sổ PC mở lại chương trình nối với bản mới.
+
+    Windows không có execv thật: tiến trình cũ thoát ngay còn bản mới chạy ngầm,
+    cửa sổ tưởng đã tắt nên mở thêm một bản nữa. Vì vậy trên Windows chỉ trả mã 2.
+    """
+    if os.name == "nt":
+        return 2
     argv = [sys.executable, str(Path(__file__).resolve())]
     try:
         os.execv(sys.executable, argv)
@@ -451,23 +524,32 @@ def _sync_weights(info: dict | None) -> tuple[bool, bool]:
 
 
 def _sync_tessdata(info: dict | None) -> tuple[bool, bool]:
+    return _sync_letters(info, "/v1/pc/tessdata.zip", "tessdata")
+
+
+def _sync_plain_letters(info: dict | None) -> tuple[bool, bool]:
+    """Bộ chữ mặc định của tesseract trên máy chủ. Bước quét khung đọc bằng bộ này."""
+    return _sync_letters(info, "/v1/pc/tessdata-default.zip", "tessdata-default")
+
+
+def _sync_letters(info: dict | None, route: str, name: str) -> tuple[bool, bool]:
     if not info:
         return True, False
     digest = str(info.get("sha256") or "")
-    marker = CACHE / "tessdata.sha256"
-    target = CACHE / "tessdata"
+    marker = CACHE / f"{name}.sha256"
+    target = CACHE / name
     verified = False
     try:
-        verified = bool(digest) and all((target / name).is_file() for name in TESSDATA_NAMES)
+        verified = bool(digest) and all((target / item).is_file() for item in TESSDATA_NAMES)
         verified = verified and bundle_sha256(target, TESSDATA_NAMES) == digest
     except OSError:
         verified = False
     if digest and not verified:
         print("Đang lấy bộ chữ của máy chủ.")
-        archive_path = CACHE / "tessdata.zip"
-        staging = CACHE / "tessdata-new"
+        archive_path = CACHE / f"{name}.zip"
+        staging = CACHE / f"{name}-new"
         try:
-            _download("/v1/pc/tessdata.zip", archive_path)
+            _download(route, archive_path)
             if staging.exists():
                 shutil.rmtree(staging)
             verified = _extract_named(archive_path, staging, list(TESSDATA_NAMES))
@@ -514,7 +596,7 @@ def _extract_wheels(archive: Path, target: Path) -> bool:
     return True
 
 
-def _install_wheels(folder: Path) -> bool:
+def _install_wheels(folder: Path, force: bool = False) -> bool:
     wheels = sorted(str(path) for path in folder.glob("*.whl"))
     if not wheels:
         return False
@@ -524,8 +606,10 @@ def _install_wheels(folder: Path) -> bool:
         "pip",
         "install",
         "--disable-pip-version-check",
+        "--no-warn-script-location",
         "--no-index",
         "--no-deps",
+        *(["--force-reinstall"] if force else []),
         "--find-links",
         str(folder),
         *wheels,
@@ -539,38 +623,53 @@ def _install_wheels(folder: Path) -> bool:
             errors="replace",
             timeout=900,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"Chưa cài được gói thư viện: {type(exc).__name__}.")
         return False
-    return done.returncode == 0
+    if done.returncode != 0:
+        print(f"Chưa cài được gói thư viện: {_last_line(done.stderr) or _last_line(done.stdout)}")
+        return False
+    return True
 
 
-_RUNTIME_FAIL_AT = 0.0
+# Bộ thư viện đã nạp thử được trong lần chạy này, và bộ vừa hỏng kèm lúc hỏng.
+_RUNTIME_OK = ""
+_RUNTIME_FAIL: tuple[str, float] = ("", 0.0)
 
 
 def _sync_runtime(info: dict | None, need_model: bool) -> tuple[bool, bool]:
     """Cài bộ thư viện từ máy chủ. PC không nhận video khi máy chủ có bộ dấu mà PC chưa cài được."""
-    global _RUNTIME_FAIL_AT
+    global _RUNTIME_OK, _RUNTIME_FAIL
     if not need_model:
         return True, False
     if not info:
         print("Máy chủ đọc bằng bộ dấu nhưng chưa phát bộ thư viện cho PC. PC chưa nhận video.")
         return False, False
     digest = str(info.get("sha256") or "")
+    if digest and digest == _RUNTIME_OK:
+        return True, False
+    failed, failed_at = _RUNTIME_FAIL
+    # Máy chủ đổi bộ thư viện thì thử ngay, không chờ hết lượt chờ của bản cũ.
+    if failed == digest and time.monotonic() - failed_at < 600:
+        return False, False
     marker = CACHE / "runtime.sha256"
     archive = CACHE / "runtime.zip"
     folder = CACHE / "runtime"
+    repair = False
+    if digest and _saved(marker).strip() == digest:
+        problem = _runtime_problem()
+        if not problem:
+            _RUNTIME_OK = digest
+            return True, False
+        print(f"Bộ đọc dấu chưa chạy được: {problem}. PC cài lại.")
+        repair = True
+    if not _disk_ready(max(_info_bytes(info), 1) * 4):
+        print("Ổ đĩa PC không còn đủ chỗ cho bộ đọc dấu. PC chờ.")
+        return False, False
     try:
         cached = bool(digest) and archive.is_file() and _file_sha256(archive) == digest
     except OSError:
         cached = False
-    if _saved(marker).strip() == digest and cached and _diacritics_importable():
-        return True, False
-    if _RUNTIME_FAIL_AT and time.monotonic() - _RUNTIME_FAIL_AT < 600:
-        print("Bộ thư viện đọc dấu chưa cài được. PC chờ rồi thử lại.")
-        return False, False
-    if not _disk_ready(max(_info_bytes(info), 1) * 4):
-        print("Ổ đĩa PC không còn đủ chỗ cho bộ đọc dấu. PC chờ.")
-        return False, False
     print("Đang lấy bộ thư viện đọc dấu của máy chủ.")
     try:
         if not cached:
@@ -580,18 +679,21 @@ def _sync_runtime(info: dict | None, need_model: bool) -> tuple[bool, bool]:
         verified = False
     if not verified:
         archive.unlink(missing_ok=True)
-        _RUNTIME_FAIL_AT = time.monotonic()
+        _RUNTIME_FAIL = (digest, time.monotonic())
         print("Bộ thư viện đọc dấu tải về không khớp. PC chưa nhận video.")
         return False, False
-    saved = _saved(marker).strip()
-    if saved == digest and _diacritics_importable():
-        return True, False
-    if not _extract_wheels(archive, folder) or not _install_wheels(folder) or not _diacritics_importable():
-        _RUNTIME_FAIL_AT = time.monotonic()
-        print("Chưa cài được bộ đọc dấu giống máy chủ. PC chưa nhận video.")
+    if not _extract_wheels(archive, folder) or not _install_wheels(folder, force=repair):
+        _RUNTIME_FAIL = (digest, time.monotonic())
+        print("Chưa cài được bộ đọc dấu giống máy chủ. PC chưa nhận video, 10 phút nữa thử lại.")
+        return False, False
+    problem = _runtime_problem()
+    if problem:
+        _RUNTIME_FAIL = (digest, time.monotonic())
+        print(f"Bộ đọc dấu chưa chạy được: {problem}. PC chưa nhận video, 10 phút nữa thử lại.")
         return False, False
     if not _remember(marker, digest):
         return False, False
+    _RUNTIME_OK = digest
     print("Đã cài bộ đọc dấu giống máy chủ. PC chạy lại để đọc giống máy chủ.")
     return True, True
 
@@ -669,9 +771,62 @@ def _prepare_env() -> None:
     weights = CACHE / "weights" / "vgg_transformer.pth"
     if weights.is_file():
         os.environ["DOC_VIDEO_VIETOCR_WEIGHTS"] = str(weights)
-    tessdata = CACHE / "tessdata"
-    if (tessdata / "eng.traineddata").is_file() and (tessdata / "vie.traineddata").is_file():
+    tessdata = _synced_letters("tessdata")
+    if tessdata is not None:
         os.environ["DOC_VIDEO_TESSDATA"] = str(tessdata)
+    # Lệnh tesseract không ghi thư mục bộ chữ thì đọc ở đây. Máy có TESSDATA_PREFIX cũ cũng bị thay.
+    plain = _synced_letters("tessdata-default")
+    if plain is not None:
+        os.environ["TESSDATA_PREFIX"] = str(plain)
+
+
+_SELF_TEST = r'''
+import sys
+from PIL import Image, ImageDraw, ImageFont
+from doc_video import ocr, viet
+
+font = ImageFont.load_default(size=64)
+image = Image.new("RGB", (1000, 300), "white")
+draw = ImageDraw.Draw(image)
+draw.text((40, 40), "0901234567", fill="black", font=font)
+draw.text((40, 170), "Nguyen Van An", fill="black", font=font)
+found = ["".join(ch for ch in line.text if ch.isdigit()) for line in ocr.find_lines(image)]
+if "0901234567" not in found:
+    print("bước quét khung không ra số")
+    sys.exit(3)
+digits = ocr.read_texts([image.crop((0, 0, 1000, 150))], "eng", ocr.DIGITS)[0]
+if "".join(ch for ch in digits if ch.isdigit()) != "0901234567":
+    print("bước đọc kỹ không ra số")
+    sys.exit(4)
+if viet.weights_path().is_file():
+    if not viet.available():
+        print("bộ đọc dấu: " + viet.unavailable_reason())
+        sys.exit(5)
+    if not viet.read_lines([image.crop((0, 150, 1000, 300))])[0].strip():
+        print("bộ đọc dấu đọc ra rỗng")
+        sys.exit(6)
+'''
+
+
+def _self_test() -> str:
+    """Đọc một ảnh dựng sẵn bằng đúng bộ đọc của máy chủ, trong tiến trình riêng.
+
+    Rỗng là đọc đúng. Còn lại là lý do; khi đó PC không nhận video thật, để không gửi lên bảng rỗng.
+    """
+    try:
+        done = subprocess.run(
+            [sys.executable, "-c", _SELF_TEST],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=900,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return type(exc).__name__
+    if done.returncode == 0:
+        return ""
+    return _last_line(done.stdout) or _last_line(done.stderr) or f"mã thoát {done.returncode}"
 
 
 def _read(video: Path):
@@ -842,6 +997,12 @@ def main() -> int:
     if not _configured():
         print("File này chưa được tải từ trang video. Mở trang máy chủ và bấm Tải bản kết nối PC.")
         return 1
+    waited = False
+    while not _single_instance():
+        if not waited:
+            print("PC này đã có một chương trình nối đang chạy. Bản này chờ, không nhận thêm video.")
+            waited = True
+        time.sleep(30)
     _limit_pc()
     _windows_temp()
     name = pc_name()
@@ -867,23 +1028,32 @@ def main() -> int:
             reader_ready, reader_relaunch = _sync_reader(str(manifest.get("sha256") or ""), names)
             weights = manifest.get("weights") if isinstance(manifest.get("weights"), dict) else None
             tessdata = manifest.get("tessdata") if isinstance(manifest.get("tessdata"), dict) else None
+            plain = manifest.get("tessdata_default") if isinstance(manifest.get("tessdata_default"), dict) else None
             runtime = manifest.get("runtime") if isinstance(manifest.get("runtime"), dict) else None
             weights_ready, weights_relaunch = _sync_weights(weights)
             tess_ready, tess_relaunch = _sync_tessdata(tessdata)
+            plain_ready, plain_relaunch = _sync_plain_letters(plain)
             runtime_ready, runtime_relaunch = _sync_runtime(runtime, weights is not None)
-            if not (reader_ready and weights_ready and tess_ready and runtime_ready):
+            if not (reader_ready and weights_ready and tess_ready and plain_ready and runtime_ready):
                 time.sleep(30)
                 continue
-            if reader_relaunch or weights_relaunch or tess_relaunch or runtime_relaunch:
+            if reader_relaunch or weights_relaunch or tess_relaunch or plain_relaunch or runtime_relaunch:
                 print("Đã cập nhật bộ đọc cho khớp máy chủ. PC chạy lại.")
                 return _relaunch()
+            _prepare_env()
             if not ready:
                 if not _tools_ok() or not _ensure_runtime():
                     print("PC chưa sẵn sàng. Cứ để cửa sổ này mở, PC tự thử lại.")
                     time.sleep(20)
                     continue
+                print("PC đang đọc thử một ảnh mẫu bằng bộ đọc của máy chủ.")
+                problem = _self_test()
+                if problem:
+                    print(f"PC đọc thử chưa đúng: {problem}. PC chưa nhận video, 2 phút nữa thử lại.")
+                    time.sleep(120)
+                    continue
+                print("PC đọc thử đúng. Bắt đầu nhận video.")
                 ready = True
-            _prepare_env()
             if not _disk_ready(512 * 1024 * 1024):
                 if not _DISK_WAIT:
                     print("Ổ đĩa PC đã dùng quá 80%. PC chờ, không nhận video cho đến khi còn chỗ.")
@@ -922,8 +1092,8 @@ def main() -> int:
         except urllib.error.URLError:
             print("Mất kết nối máy chủ. Thử lại sau.")
             time.sleep(10)
-        except Exception:
-            print("PC gặp lỗi và vẫn mở. Thử lại sau.")
+        except Exception as exc:
+            print(f"PC gặp lỗi và vẫn mở, thử lại sau: {type(exc).__name__}: {str(exc)[:200]}")
             time.sleep(10)
 
 
