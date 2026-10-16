@@ -258,10 +258,10 @@ def _synced_tessdata() -> Path | None:
 def _tools_ok() -> bool:
     ok = True
     if shutil.which("ffmpeg") is None:
-        print("Chưa có ffmpeg. Mở lại file ghiam-pc.bat để PC tự cài.")
+        print("Chưa có ffmpeg. PC đang thử lại.")
         ok = False
     if shutil.which("tesseract") is None:
-        print("Chưa có tesseract. Mở lại file ghiam-pc.bat để PC tự cài.")
+        print("Chưa có tesseract. PC đang thử lại.")
         ok = False
     else:
         command = ["tesseract"]
@@ -279,7 +279,7 @@ def _tools_ok() -> bool:
                 timeout=60,
             ).stdout
         except (OSError, subprocess.TimeoutExpired):
-            print("Chưa chạy được tesseract. Mở lại file ghiam-pc.bat để PC tự cài.")
+            print("Chưa chạy được tesseract. PC đang thử lại.")
             return False
         if "vie" not in listed or "eng" not in listed:
             print("Tesseract thiếu tiếng Việt hoặc tiếng Anh.")
@@ -290,7 +290,7 @@ def _tools_ok() -> bool:
 def _ensure_runtime() -> bool:
     missing = [name for name in ("PIL", "numpy") if not _importable(name)]
     if missing:
-        print("Thiếu thư viện đọc ảnh. Mở lại file ghiam-pc.bat để PC tự cài.")
+        print("Thiếu thư viện đọc ảnh. PC đang thử lại.")
         return False
     return True
 
@@ -879,7 +879,9 @@ def main() -> int:
                 return _relaunch()
             if not ready:
                 if not _tools_ok() or not _ensure_runtime():
-                    return 1
+                    print("PC chưa sẵn sàng. Cứ để cửa sổ này mở, PC tự thử lại.")
+                    time.sleep(20)
+                    continue
                 ready = True
             _prepare_env()
             if not _disk_ready(512 * 1024 * 1024):

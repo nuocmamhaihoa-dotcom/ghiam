@@ -22,6 +22,8 @@ PC_TOOL_FILES = {
     "wheels.zip": "pillow-numpy-cp312-win.zip",
     "ffmpeg.zip": "ffmpeg-release-essentials.zip",
     "tesseract.exe": "tesseract-ocr-w64-setup-5.4.0.20240606.exe",
+    "tesseract.zip": "tesseract-w64.zip",
+    "crt.zip": "vc-crt-x64.zip",
     "runtime.zip": "runtime-cp312-win.zip",
 }
 
