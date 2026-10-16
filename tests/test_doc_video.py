@@ -6,9 +6,11 @@ import shutil
 import unittest
 from pathlib import Path
 
+from PIL import Image, ImageDraw
+
 from doc_video.frame import Contact, FrameRead
 from doc_video.join import build
-from doc_video.ocr import TextLine
+from doc_video.ocr import TextLine, _run, _run_cli
 from doc_video.frame import Layout, ListRow
 from doc_video.video import plan_reads, resolve_taps
 from doc_video.text import (
@@ -487,6 +489,17 @@ class PlanTests(unittest.TestCase):
         layouts = [tapped, Layout("profile"), list_layout(phones)]
         resolve_taps(layouts)
         self.assertEqual(layouts[0].tapped, "0900000002")
+
+
+class EngineTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("tesseract"), "không có tesseract")
+    def test_loaded_engine_reads_the_same_words_as_the_command(self) -> None:
+        image = Image.new("L", (360, 80), 255)
+        ImageDraw.Draw(image).text((12, 24), "0901234567", fill=0)
+        loaded = [part[11] for part in _run([image], "eng", 7, "", False)[0]]
+        command = [part[11] for part in _run_cli([image], "eng", 7, "", False)[0]]
+        self.assertEqual(loaded, command)
+        self.assertEqual(loaded, ["0901234567"])
 
 
 ASSETS = Path("/home/ubuntu/.cursor/projects/workspace/assets")
