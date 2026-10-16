@@ -15,6 +15,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -22,7 +23,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-CONNECTOR_VERSION = 3
+CONNECTOR_VERSION = 4
 # Trần tài nguyên của PC. Máy chủ không đặt biến này nên máy chủ vẫn dùng hết nhân.
 PC_HEADROOM = 0.8
 SERVER = "__GHIAM_SERVER__"
@@ -73,6 +74,32 @@ def clean_pc_name(raw: str) -> str:
     text = " ".join(str(raw or "").replace("\n", " ").split())
     text = "".join(ch for ch in text if ch.isprintable())
     return text[:40] or "PC"
+
+
+def reader_import_path(root: str, current: str) -> str:
+    """Đường bộ đọc phải có sẵn trước khi Windows mở tiến trình đọc mới.
+
+    Tiến trình mới không kế thừa đường vừa thêm trong bộ nhớ, chỉ nhận biến môi trường.
+    """
+    parts = [part for part in current.split(os.pathsep) if part]
+    if root and root not in parts:
+        parts.insert(0, root)
+    return os.pathsep.join(parts)
+
+
+def reader_launch_lines(lines: list[str], root: str) -> list[str]:
+    """Thêm thư mục bộ đọc vào file đường dẫn của Python nhúng.
+
+    File python*._pth thay thế PYTHONPATH. Không ghi lại nếu đường đó đã có.
+    """
+    wanted = os.path.normcase(os.path.normpath(root))
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if os.path.normcase(os.path.normpath(stripped)) == wanted:
+            return list(lines)
+    return [*lines, root]
 
 
 def pc_name() -> str:
@@ -174,72 +201,77 @@ def _download(path: str, dest: Path, timeout: float = 600) -> None:
         raise
 
 
+def _synced_tessdata() -> Path | None:
+    folder = CACHE / "tessdata"
+    if (folder / "eng.traineddata").is_file() and (folder / "vie.traineddata").is_file():
+        return folder
+    return None
+
+
 def _tools_ok() -> bool:
     ok = True
     if shutil.which("ffmpeg") is None:
-        print("Chưa có ffmpeg.")
-        print("Windows: cài ffmpeg và thêm vào PATH.")
-        print("Ubuntu: sudo apt install ffmpeg")
+        print("Chưa có ffmpeg. Mở lại file ghiam-pc.bat để PC tự cài.")
         ok = False
     if shutil.which("tesseract") is None:
-        print("Chưa có tesseract.")
-        print("Windows: cài Tesseract, thêm vào PATH, gồm gói chữ tiếng Việt (vie) và tiếng Anh (eng).")
-        print("Ubuntu: sudo apt install tesseract-ocr tesseract-ocr-vie tesseract-ocr-eng")
+        print("Chưa có tesseract. Mở lại file ghiam-pc.bat để PC tự cài.")
         ok = False
     else:
-        listed = subprocess.run(["tesseract", "--list-langs"], capture_output=True, text=True).stdout
+        command = ["tesseract"]
+        folder = _synced_tessdata()
+        if folder is not None:
+            command += ["--tessdata-dir", str(folder)]
+        command.append("--list-langs")
+        try:
+            listed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=60,
+            ).stdout
+        except (OSError, subprocess.TimeoutExpired):
+            print("Chưa chạy được tesseract. Mở lại file ghiam-pc.bat để PC tự cài.")
+            return False
         if "vie" not in listed or "eng" not in listed:
             print("Tesseract thiếu tiếng Việt hoặc tiếng Anh.")
-            print("Ubuntu: sudo apt install tesseract-ocr-vie tesseract-ocr-eng")
             ok = False
     return ok
 
 
-def _ensure_import(module: str, package: str) -> bool:
-    try:
-        __import__(module)
-        return True
-    except ImportError:
-        print(f"Đang cài {package}...")
-        try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-        except subprocess.CalledProcessError:
-            print(f"Chưa cài được {package}.")
-            return False
-    try:
-        __import__(module)
-        return True
-    except ImportError:
-        return False
-
-
 def _ensure_runtime() -> bool:
-    if not _ensure_import("PIL", "pillow"):
+    missing = [name for name in ("PIL", "numpy") if not _importable(name)]
+    if missing:
+        print("Thiếu thư viện đọc ảnh. Mở lại file ghiam-pc.bat để PC tự cài.")
         return False
-    if not _ensure_import("numpy", "numpy"):
+    return True
+
+
+def _importable(module: str) -> bool:
+    try:
+        __import__(module)
+    except Exception:
         return False
     return True
 
 
 def _maybe_vietocr(weights: Path) -> None:
-    if not weights.is_file():
+    """Không tải torch từ mạng. Thiếu bộ đọc dấu thì PC đọc tiếp bằng tesseract."""
+    if not weights.is_file() or os.environ.get("DOC_VIDEO_VIETOCR", "1").strip() == "0":
         return
+    if _importable("torch") and _importable("vietocr"):
+        return
+    os.environ["DOC_VIDEO_VIETOCR"] = "0"
     marker = CACHE / "vietocr.tried"
-    try:
-        __import__("torch")
-        __import__("vietocr")
-        return
-    except ImportError:
-        pass
     if marker.is_file():
         return
-    print("Máy chủ có bộ đọc dấu tiếng Việt. Lần đầu PC cài thêm, có thể mất một lúc.")
+    print("Bộ đọc dấu chưa chạy được trên PC này. PC vẫn đọc bằng tesseract.")
     try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "torch", "vietocr"])
-    except subprocess.CalledProcessError:
-        print("Chưa cài được bộ đọc dấu. PC vẫn đọc bằng tesseract.")
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text("1", encoding="utf-8")
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("1", encoding="utf-8")
+    except OSError:
+        return
 
 
 def _relaunch() -> int:
@@ -347,8 +379,76 @@ def _sync_tessdata(info: dict | None) -> bool:
     return _LOADED
 
 
+def _windows_temp() -> None:
+    """Ảnh tạm để ở thư mục tên ASCII. Bộ đọc chữ trên Windows không mở được đường có dấu."""
+    if os.name != "nt":
+        return
+    folder = Path(os.environ.get("PUBLIC", r"C:\Users\Public")) / "GhiamPC" / "tmp"
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return
+    path = str(folder)
+    os.environ["TEMP"] = path
+    os.environ["TMP"] = path
+    tempfile.tempdir = path
+
+
+def _publish_reader_path() -> None:
+    root = CACHE / "reader"
+    if not root.is_dir():
+        return
+    root_text = str(root)
+    os.environ["PYTHONPATH"] = reader_import_path(root_text, os.environ.get("PYTHONPATH", ""))
+    if os.name != "nt":
+        return
+    # File .bat đặt PYTHONUTF8=1. Python nhúng đọc đường dẫn bằng UTF-8, không phải bảng mã cũ.
+    os.environ["PYTHONUTF8"] = "1"
+    py_dir = Path(sys.executable).resolve().parent
+    _write_utf8_line(py_dir / "Lib" / "site-packages" / "ghiam-reader.pth", root_text)
+    _append_python_pth(py_dir, root_text)
+
+
+def _write_utf8_line(marker: Path, line: str) -> None:
+    encoded = (line + "\n").encode("utf-8")
+    try:
+        if marker.is_file() and marker.read_bytes().replace(b"\r\n", b"\n") == encoded:
+            return
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_bytes(encoded)
+    except OSError:
+        return
+
+
+def _append_python_pth(py_dir: Path, root_text: str) -> None:
+    matches = sorted(py_dir.glob("python*._pth"))
+    if len(matches) != 1:
+        return
+    path = matches[0]
+    try:
+        raw = path.read_bytes()
+        if raw.startswith(b"\xef\xbb\xbf"):
+            raw = raw[3:]
+        text = raw.decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        return
+    newline = "\r\n" if "\r\n" in text else "\n"
+    lines = text.splitlines()
+    updated = reader_launch_lines(lines, root_text)
+    if updated == lines:
+        return
+    temporary = path.with_suffix(path.suffix + ".new")
+    try:
+        temporary.write_bytes((newline.join(updated) + newline).encode("utf-8"))
+        temporary.replace(path)
+    except OSError:
+        temporary.unlink(missing_ok=True)
+
+
 def _prepare_env() -> None:
     _limit_pc()
+    _windows_temp()
+    _publish_reader_path()
     weights = CACHE / "weights" / "vgg_transformer.pth"
     if weights.is_file():
         os.environ["DOC_VIDEO_VIETOCR_WEIGHTS"] = str(weights)
@@ -477,7 +577,7 @@ def _read_one(job: dict) -> str:
         print(f"Đang tải video {video_id} ({size_mb} MB).")
         if not _fetch_video(video_id, lease, local, expected):
             print(f"Video {video_id} tải về không khớp. Trả lại hàng chờ.")
-            return ""
+            return "fail"
         if stop.is_set():
             print(f"Máy chủ đã nhận lại video {video_id}.")
             return ""
@@ -498,7 +598,7 @@ def _read_one(job: dict) -> str:
             return ""
         if status != 200 or not body.get("ok"):
             print(f"Chưa gửi được kết quả video {video_id}. Trả lại hàng chờ.")
-            return ""
+            return "fail"
         posted_ok = True
         spent = time.monotonic() - started
         print(
@@ -506,13 +606,16 @@ def _read_one(job: dict) -> str:
             f"{len(result.rows)} hàng đủ, {len(result.review)} cần xem, {len(result.unopened)} chưa mở hồ sơ. "
             "Đã gửi lên máy chủ."
         )
-        return ""
+        return "ok"
     except Exception as exc:
         print(f"Video {video_id} chưa đọc xong: {exc}. Trả lại hàng chờ.")
-        return ""
+        return "fail"
     finally:
         stop.set()
-        local.unlink(missing_ok=True)
+        try:
+            local.unlink(missing_ok=True)
+        except OSError:
+            pass
         if not posted_ok:
             _release(video_id, lease)
 
@@ -520,15 +623,15 @@ def _read_one(job: dict) -> str:
 def main() -> int:
     global _IDLE, _DISK_WAIT, _RAM_WAIT
     if not _configured():
-        print("File này chưa được tải từ trang video. Mở trang máy chủ và bấm Tải chương trình đọc trên PC.")
-        return 1
-    if not _tools_ok() or not _ensure_runtime():
+        print("File này chưa được tải từ trang video. Mở trang máy chủ và bấm Tải bản kết nối PC.")
         return 1
     _limit_pc()
+    _windows_temp()
     name = pc_name()
     print("PC đang nối máy chủ. Cứ để cửa sổ này mở. Đóng cửa sổ là PC ngừng đọc.")
     print(f"PC này tên là {name}. Nhiều PC có thể mở cùng lúc, mỗi máy đọc một video đang chờ.")
     print("PC dùng tối đa 80% CPU, RAM và ổ đĩa. 20% còn lại để máy vẫn chạy ổn.")
+    ready = False
     while True:
         try:
             if _update_connector():
@@ -546,6 +649,10 @@ def main() -> int:
             if relaunch:
                 print("Đã có bộ đọc mới. Chạy lại để đọc giống máy chủ.")
                 return _relaunch()
+            if not ready:
+                if not _tools_ok() or not _ensure_runtime():
+                    return 1
+                ready = True
             _maybe_vietocr(CACHE / "weights" / "vgg_transformer.pth")
             _prepare_env()
             if not _disk_ready(512 * 1024 * 1024):
@@ -574,14 +681,20 @@ def main() -> int:
                     _IDLE = True
                 time.sleep(5)
                 continue
-            if _read_one(job) == "disk":
+            outcome = _read_one(job)
+            if outcome == "disk":
                 # Nhả video trước, rồi chờ máy chủ nhận. Không nhận lại ngay.
                 time.sleep(45)
+            elif outcome == "fail":
+                time.sleep(20)
         except KeyboardInterrupt:
             print("Đã dừng.")
             return 0
         except urllib.error.URLError:
             print("Mất kết nối máy chủ. Thử lại sau.")
+            time.sleep(10)
+        except Exception:
+            print("PC gặp lỗi và vẫn mở. Thử lại sau.")
             time.sleep(10)
 
 

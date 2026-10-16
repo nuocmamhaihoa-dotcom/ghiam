@@ -120,8 +120,8 @@
     <h2>PC cùng đọc</h2>
     <p>Nhiều PC có thể mở cùng lúc. Mỗi PC lấy một video đang chờ khác nhau, đọc bằng đúng bộ đọc trên máy chủ, rồi gửi kết quả lên. VPS vẫn đọc một video. Đường truyền không bị giới hạn tốc độ.</p>
     <p class="note">Máy chủ đổi cách đọc hoặc cách tải thì PC đang mở tự lấy bản mới. Không cần tải lại, không cần cài lại kết nối.</p>
-    <p class="note">Cài một lần trên mỗi PC: Python 3.11, ffmpeg, và Tesseract có tiếng Việt cùng tiếng Anh. Giải nén rồi bấm đúp <b>ghiam-pc.bat</b> và để cửa sổ đó mở. Tên máy tính hiện ở cột Đọc bởi.</p>
-    <p style="margin-top:0.8rem"><button id="pcDownload" class="primary" type="button">Tải chương trình đọc trên PC</button></p>
+    <p class="note">Trên PC, bấm nút bên dưới hoặc mở link. Trình duyệt tải <b>ghiam-pc.bat</b>. Bấm mở file đó. PC tự cài đủ phần đọc và tự nối máy chủ. Không cần gõ địa chỉ, không cần giải nén. Cứ để cửa sổ đó mở. Tên máy tính hiện ở cột Đọc bởi. Nếu Windows hỏi quyền cài, bấm Có.</p>
+    <p style="margin-top:0.8rem"><button id="pcDownload" class="primary" type="button">Tải bản kết nối PC</button></p>
     <p id="pcNote" class="note"></p>
     <div id="pcLink"></div>
   </section>
@@ -990,7 +990,7 @@
     }
     var body = await response.json();
     var link = body.link || body.url || "";
-    note.textContent = "Trình duyệt đang tải ghiam-pc.zip. Link bên dưới dùng 24 giờ: mở trên từng PC, giải nén, bấm đúp ghiam-pc.bat.";
+    note.textContent = "Đã tải ghiam-pc.bat. Bấm mở file đó. PC tự nối, không cần nhập gì. Link bên dưới dùng 24 giờ để mở trên PC khác.";
     note.className = "note ok";
     var box = document.getElementById("pcLink");
     box.textContent = "";

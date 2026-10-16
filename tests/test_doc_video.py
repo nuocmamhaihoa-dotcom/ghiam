@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image, ImageDraw
 
 from doc_video.frame import Contact, FrameRead
 from doc_video.join import build
+from doc_video import ocr
 from doc_video.ocr import TextLine, _run, _run_cli
 from doc_video.frame import Layout, ListRow
 from doc_video.video import plan_reads, resolve_taps
@@ -500,6 +503,21 @@ class EngineTests(unittest.TestCase):
         command = [part[11] for part in _run_cli([image], "eng", 7, "", False)[0]]
         self.assertEqual(loaded, command)
         self.assertEqual(loaded, ["0901234567"])
+
+    def test_command_decode_is_utf8(self) -> None:
+        image = Image.new("L", (10, 10), 255)
+        with patch("doc_video.ocr.subprocess.run") as run:
+            run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+            _run_cli([image], "eng", 7, "", False)
+        self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
+
+    def test_windows_does_not_load_a_tesseract_dll(self) -> None:
+        ocr._ENGINE.pop("lib", None)
+        try:
+            with patch("doc_video.ocr.os.name", "nt"):
+                self.assertIsNone(ocr._library())
+        finally:
+            ocr._ENGINE.pop("lib", None)
 
 
 ASSETS = Path("/home/ubuntu/.cursor/projects/workspace/assets")

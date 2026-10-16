@@ -13,6 +13,15 @@ from control_plane.screen_table import Review, Row, Table, Unopened
 ROOT = Path(__file__).resolve().parents[1]
 CONNECTOR_FILE = Path(__file__).with_name("pc_connector.py")
 CONNECTOR_BAT = Path(__file__).with_name("pc_connector.bat")
+LAUNCHER_FILE = Path(__file__).with_name("pc_open.bat")
+# File cài PC tải từ máy chủ, không tải từ mạng ngoài. Tên URL ngắn, tên file trên đĩa là bản đã kiểm.
+PC_TOOL_FILES = {
+    "python.zip": "python-3.12.7-embed-amd64.zip",
+    "get-pip.py": "get-pip.py",
+    "wheels.zip": "pillow-numpy-cp312-win.zip",
+    "ffmpeg.zip": "ffmpeg-release-essentials.zip",
+    "tesseract.exe": "tesseract-ocr-w64-setup-5.4.0.20240606.exe",
+}
 
 READER_FILES = (
     "doc_video/__init__.py",
@@ -159,6 +168,25 @@ def connector_source(server: str, token: str) -> str:
 
 def connector_bytes(server: str, token: str) -> bytes:
     return connector_source(server, token).encode("utf-8")
+
+
+def launcher_text(server: str, token: str) -> str:
+    """File .bat mở ra là PC tự cài đủ và tự nối. Địa chỉ và mã đã điền sẵn."""
+    if not server.startswith(("http://", "https://")) or "\n" in server or "\r" in server:
+        raise ValueError("server")
+    if not token or "\n" in token or "\r" in token or '"' in token:
+        raise ValueError("token")
+    text = LAUNCHER_FILE.read_text(encoding="utf-8")
+    if "__GHIAM_SERVER__" not in text or "__GHIAM_TOKEN__" not in text:
+        raise RuntimeError("launcher template missing placeholders")
+    filled = text.replace("__GHIAM_SERVER__", server.rstrip("/")).replace("__GHIAM_TOKEN__", token)
+    if "__GHIAM_" in filled:
+        raise RuntimeError("launcher template was not filled")
+    return filled.replace("\r\n", "\n").replace("\n", "\r\n")
+
+
+def launcher_bytes(server: str, token: str) -> bytes:
+    return launcher_text(server, token).encode("utf-8")
 
 
 def package_zip(server: str, token: str) -> bytes:

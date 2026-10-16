@@ -29,9 +29,10 @@ from control_plane.upload_parts import (
 from control_plane.video_scan import IMAGE_SUFFIXES, VIDEO_SUFFIXES
 from control_plane.pc_reader import (
     code_sha256,
+    PC_TOOL_FILES,
     connector_bytes,
     connector_template_sha256,
-    package_zip,
+    launcher_bytes,
     reader_manifest,
     reader_zip,
     table_from_payload,
@@ -482,6 +483,23 @@ def pc_tessdata(authorization: str | None = Header(default=None)) -> Response:
     return Response(content=payload, media_type="application/zip", headers={"Cache-Control": "no-cache"})
 
 
+@router.get("/v1/pc/tools/{name}")
+def pc_tool(name: str, authorization: str | None = Header(default=None)) -> FileResponse:
+    _auth(authorization)
+    filename = PC_TOOL_FILES.get(name)
+    if filename is None or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=404, detail="Không có bộ cài này.")
+    path = settings.data_dir / "pc-tools" / filename
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Máy chủ chưa có bộ cài này.")
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        filename=name,
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
 @router.get("/v1/pc/connector/version")
 def pc_connector_version(authorization: str | None = Header(default=None)) -> dict[str, object]:
     _auth(authorization)
@@ -519,9 +537,9 @@ def pc_package(ticket: str, request: Request) -> Response:
     if not token:
         raise HTTPException(status_code=404, detail="Chưa có mã trang.")
     return Response(
-        content=package_zip(_public_base(request), token),
-        media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="ghiam-pc.zip"', "Cache-Control": "no-cache"},
+        content=launcher_bytes(_public_base(request), token),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": 'attachment; filename="ghiam-pc.bat"', "Cache-Control": "no-cache"},
     )
 
 

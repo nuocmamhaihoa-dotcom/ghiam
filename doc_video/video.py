@@ -360,9 +360,15 @@ def read_inputs(
         return [done[index] if index in done else _unread(layout) for index, layout in enumerate(layouts)]
     finally:
         if pool is not None:
-            pool.shutdown(cancel_futures=True)
+            try:
+                pool.shutdown(cancel_futures=True)
+            except Exception:
+                pass
         for folder in temps:
-            folder.cleanup()
+            try:
+                folder.cleanup()
+            except OSError:
+                pass
 
 
 def _run(submit: Callable[..., Future] | None, calls: list[tuple], timeout: float | None = None) -> list:
