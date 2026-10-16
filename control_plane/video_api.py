@@ -85,9 +85,9 @@ def _ticket_key(purpose: str = "backup-ticket") -> bytes:
     return derive_secret(settings.token or "no-token", purpose).encode("utf-8")
 
 
-def make_ticket(now: float, purpose: str = "backup-ticket") -> str:
+def make_ticket(now: float, purpose: str = "backup-ticket", seconds: int = TICKET_SECONDS) -> str:
     """Vé tải tự kiểm được, nên chạy nhiều tiến trình web vẫn nhận ra vé của nhau."""
-    expiry = str(int(now) + TICKET_SECONDS)
+    expiry = str(int(now) + seconds)
     signature = hmac.new(_ticket_key(purpose), expiry.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
     return f"{expiry}-{signature}"
 
@@ -101,6 +101,8 @@ def ticket_ok(ticket: str, now: float, purpose: str = "backup-ticket") -> bool:
 
 
 PC_TICKET = "pc-ticket"
+# Link cài trên nhiều PC. Vé sao lưu vẫn hết hạn sau TICKET_SECONDS.
+PC_TICKET_SECONDS = 24 * 60 * 60
 
 
 def _public_base(request: Request) -> str:
@@ -479,7 +481,8 @@ def pc_ticket(request: Request, authorization: str | None = Header(default=None)
     _auth(authorization)
     if not _page_token():
         raise HTTPException(status_code=404, detail="Chưa có mã trang.")
-    return {"url": f"/v1/pc/package/{make_ticket(time.time(), PC_TICKET)}"}
+    path = f"/v1/pc/package/{make_ticket(time.time(), PC_TICKET, PC_TICKET_SECONDS)}"
+    return {"url": path, "link": f"{_public_base(request)}{path}"}
 
 
 @router.get("/v1/pc/package/{ticket}")

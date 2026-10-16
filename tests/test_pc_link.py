@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from control_plane.pc_connector import (
     CONNECTOR_VERSION,
+    clean_pc_name,
     connector_outdated,
     disk_has_headroom,
     restored_template,
@@ -103,6 +104,18 @@ class LinkTests(unittest.TestCase):
         self.assertIn("var CHUNK_BYTES = 8 * 1024 * 1024;", page)
         self.assertIn("120000", page)
         self.assertNotIn("4 * 1024 * 1024", page)
+        self.assertIn("Đọc bởi", page)
+        self.assertIn("body.link", page)
+        self.assertIn("Nhiều PC có thể mở cùng lúc", page)
+
+    def test_pc_name_is_one_short_line(self) -> None:
+        self.assertEqual(clean_pc_name("  May\nA  "), "May A")
+        self.assertEqual(clean_pc_name(""), "PC")
+        self.assertEqual(len(clean_pc_name("x" * 80)), 40)
+        self.assertGreaterEqual(CONNECTOR_VERSION, 3)
+        source = CONNECTOR_FILE.read_text(encoding="utf-8")
+        self.assertIn("socket.gethostname", source)
+        self.assertIn('{"name": name}', source)
 
 
 if __name__ == "__main__":
