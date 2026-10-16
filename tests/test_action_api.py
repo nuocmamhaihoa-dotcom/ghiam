@@ -935,6 +935,25 @@ class PcReaderApiTests(unittest.TestCase):
         self.assertEqual((item["avg_download_s"], item["avg_read_s"], item["ok_count"]), (12.5, 300.0, 1))
         self.assertIsNone(item["video"])
 
+    def test_urgent_video_moves_to_the_front(self) -> None:
+        first = self._queue_only("urgent-a")
+        created = begin_upload(settings.video_db_path, name="urgent-b.mp4", size_bytes=5, sha256="urgent-b")
+        second = int(created["id"])
+        path = settings.video_dir / f"{second}.mp4"
+        path.write_bytes(b"v" * 64)
+        commit_upload(settings.video_db_path, second, str(path))
+        queue = {item["id"]: item for item in self.client.get("/v1/videos", headers=self.headers).json()["items"]}
+        self.assertEqual((queue[first]["position"], queue[second]["position"]), (1, 2))
+        marked = self.client.post(f"/v1/videos/{second}/priority", headers=self.headers, json={"urgent": True})
+        self.assertEqual(marked.status_code, 200, marked.text)
+        queue = {item["id"]: item for item in self.client.get("/v1/videos", headers=self.headers).json()["items"]}
+        self.assertEqual((queue[second]["position"], queue[second]["priority"]), (1, 1))
+        claimed = self.client.post("/v1/pc/claim", headers=self.headers, json={"name": "PC gấp"}).json()
+        self.assertEqual(claimed["video"]["id"], second)
+        gone = self.client.post(f"/v1/videos/{second}/priority", headers=self.headers, json={"urgent": False})
+        self.assertEqual(gone.status_code, 404)
+        self.client.post(f"/v1/pc/videos/{second}/release", headers=self.headers, json={"lease": claimed["video"]["lease"], "reason": "disk"})
+
     def test_disk_release_from_a_pc_is_not_counted(self) -> None:
         video_id = self._queue_only("disk-api")
         claimed = self.client.post("/v1/pc/claim", headers=self.headers, json={"name": "PC đầy"}).json()

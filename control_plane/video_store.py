@@ -276,6 +276,10 @@ def _ensure_fleet_columns(conn: sqlite3.Connection) -> None:
         ("pc_read_s", "REAL"),
         ("pc_fails", "INTEGER NOT NULL DEFAULT 0"),
         ("pc_last_fail", "TEXT NOT NULL DEFAULT ''"),
+        ("priority", "INTEGER NOT NULL DEFAULT 0"),
+        ("file_sha256", "TEXT NOT NULL DEFAULT ''"),
+        ("shrunk", "INTEGER NOT NULL DEFAULT 0"),
+        ("upload_bytes", "INTEGER"),
     ):
         if name not in columns:
             _add_column(conn, "videos", name, kind)
@@ -432,7 +436,9 @@ def begin_upload(
                 UPDATE videos
                 SET name = ?, size_bytes = ?, path = '', status = 'uploading', error = '',
                     pid = NULL, started_at = NULL, finished_at = NULL, created_at = ?,
-                    phone_count = NULL, full_count = NULL, device = ?
+                    phone_count = NULL, full_count = NULL, device = ?,
+                    file_sha256 = '', shrunk = 0, upload_bytes = NULL,
+                    pc_fails = 0, pc_last_fail = '', priority = 0
                 WHERE id = ?
                 """,
                 (name, size_bytes, utcnow(), kept, existing["id"]),
@@ -481,6 +487,105 @@ def commit_upload(db_path: Path, video_id: int, path: str) -> None:
         )
 
 
+def get_meta(db_path: Path, key: str, default: str = "") -> str:
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    return str(row["value"]) if row is not None else default
+
+
+def set_meta(db_path: Path, key: str, value: str) -> None:
+    with connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+
+
+# Không thu nhỏ vài video đầu hàng chờ: máy sắp nhận chúng, thu nhỏ xong cũng không kịp dùng.
+SHRINK_SKIP = 2
+SMALL_SUFFIX = ".small.mp4"
+
+
+def next_to_shrink(db_path: Path, skip: int = SHRINK_SKIP) -> dict[str, object] | None:
+    """Video đang chờ chưa thu nhỏ, theo thứ tự đọc, bỏ qua vài video đầu hàng."""
+    with connect(db_path) as conn:
+        rows = conn.execute(_waiting_sql(first_only=False)).fetchall()
+    for index, row in enumerate(rows):
+        if index >= skip and int(row["shrunk"]) == 0:
+            return {"id": int(row["id"]), "path": str(row["path"]), "bytes": int(row["size_bytes"] or 0)}
+    return None
+
+
+def adopt_shrunk(db_path: Path, video_id: int, old_path: str, new_path: Path, new_sha: str) -> bool:
+    """Đổi file chờ đọc sang bản thu nhỏ, chỉ khi video vẫn đang chờ và chưa máy nào nhận.
+
+    Mã băm lúc tải lên giữ nguyên để nhận ra lần tải lại cùng file. PC kiểm file tải về bằng mã băm mới.
+    Bản thu nhỏ không nhỏ hơn thì giữ file gốc.
+    """
+    size = new_path.stat().st_size
+    final = new_path.with_name(f"{video_id}{SMALL_SUFFIX}")
+    with connect(db_path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT status, path, size_bytes FROM videos WHERE id = ?", (video_id,)).fetchone()
+        if row is None or row["status"] != "queued" or str(row["path"]) != old_path or old_path == str(final):
+            conn.execute("ROLLBACK")
+            new_path.unlink(missing_ok=True)
+            return False
+        if size >= int(row["size_bytes"] or 0):
+            conn.execute("UPDATE videos SET shrunk = 2 WHERE id = ?", (video_id,))
+            conn.execute("COMMIT")
+            new_path.unlink(missing_ok=True)
+            return False
+        try:
+            os.replace(new_path, final)
+            conn.execute(
+                """
+                UPDATE videos
+                SET path = ?, size_bytes = ?, file_sha256 = ?, shrunk = 1,
+                    upload_bytes = COALESCE(upload_bytes, size_bytes)
+                WHERE id = ?
+                """,
+                (str(final), size, new_sha, video_id),
+            )
+            conn.execute("COMMIT")
+        except BaseException:
+            final.unlink(missing_ok=True)
+            raise
+    Path(old_path).unlink(missing_ok=True)
+    return True
+
+
+def drop_orphan_small(db_path: Path, video_dir: Path) -> int:
+    """Bản thu nhỏ còn sót khi tiến trình đọc tắt giữa chừng, không video nào trỏ tới."""
+    if not video_dir.is_dir():
+        return 0
+    with connect(db_path) as conn:
+        used = {str(row["path"]) for row in conn.execute("SELECT path FROM videos WHERE path LIKE ?", (f"%{SMALL_SUFFIX}",))}
+    removed = 0
+    for path in video_dir.glob(f"*{SMALL_SUFFIX}"):
+        if str(path) not in used:
+            path.unlink(missing_ok=True)
+            removed += 1
+    return removed
+
+
+def shrink_failed(db_path: Path, video_id: int) -> None:
+    """Thu nhỏ hỏng thì giữ file gốc và không thử lại video đó."""
+    with connect(db_path) as conn:
+        conn.execute("UPDATE videos SET shrunk = 2 WHERE id = ? AND shrunk = 0", (video_id,))
+
+
+def shrink_totals(db_path: Path) -> dict[str, int]:
+    with connect(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS n, COALESCE(SUM(upload_bytes - size_bytes), 0) AS saved
+            FROM videos WHERE shrunk = 1 AND upload_bytes IS NOT NULL
+            """
+        ).fetchone()
+    return {"shrunk": int(row["n"]), "saved_bytes": int(row["saved"])}
+
+
 def drop_stale_uploads(db_path: Path, older_than_seconds: float = 1800) -> int:
     """Tải lên dở hơn 30 phút là trình duyệt đã đóng giữa chừng. Xóa dòng đó để nó không chiếm chỗ hàng đợi."""
     cutoff = time.time() - older_than_seconds
@@ -518,7 +623,7 @@ def list_videos(db_path: Path, limit: int | None = None, device: str | None = No
     sql = """
         SELECT id, name, size_bytes, status, error, created_at, started_at, finished_at,
                phone_count, full_count, path, device, helper, check_pass,
-               progress_stage, progress_done, progress_total
+               progress_stage, progress_done, progress_total, priority
         FROM videos
     """
     params: list[object] = []
@@ -531,6 +636,7 @@ def list_videos(db_path: Path, limit: int | None = None, device: str | None = No
         params.append(limit)
     with connect(db_path) as conn:
         rows = conn.execute(sql, params).fetchall()
+        order = {int(row["id"]): index + 1 for index, row in enumerate(conn.execute(_waiting_sql(first_only=False)))}
     items = []
     for row in rows:
         item = dict(row)
@@ -538,6 +644,8 @@ def list_videos(db_path: Path, limit: int | None = None, device: str | None = No
         item["has_file"] = bool(path) and Path(path).is_file()
         item["helper"] = str(item.get("helper") or "")
         item["check_pass"] = int(item.get("check_pass") or 0)
+        item["priority"] = int(item.get("priority") or 0)
+        item["position"] = order.get(int(item["id"]))
         busy = item["status"] in ("pc", "running")
         item["progress_stage"] = str(item.get("progress_stage") or "") if busy else ""
         item["progress_done"] = int(item.get("progress_done") or 0) if busy else 0
@@ -623,18 +731,52 @@ def device_day(db_path: Path, now: datetime | None = None) -> dict[str, object]:
     return {"day": day, "known": known, "items": items}
 
 
+def _waiting_sql(where: str = "", first_only: bool = True) -> str:
+    """Thứ tự đọc chung cho máy chủ và PC.
+
+    Video gấp trước. Rồi video mới trước video của lần kiểm. Rồi xoay vòng theo điện thoại:
+    video thứ k của mỗi máy đứng trước video thứ k+1 của bất kỳ máy nào, nên một đợt lớn
+    của một máy không chặn video của máy khác. Cùng lượt thì video vào trước đọc trước.
+    """
+    return f"""
+        WITH waiting AS (
+          SELECT id, name, path, size_bytes, sha256, COALESCE(file_sha256, '') AS file_sha256,
+                 COALESCE(shrunk, 0) AS shrunk,
+                 COALESCE(check_pass, 0) AS check_pass,
+                 COALESCE(priority, 0) AS priority,
+                 COALESCE(pc_fails, 0) AS pc_fails,
+                 COALESCE(pc_last_fail, '') AS pc_last_fail,
+                 ROW_NUMBER() OVER (PARTITION BY device, COALESCE(check_pass, 0) ORDER BY id) AS turn
+          FROM videos
+          WHERE status = 'queued' AND path != ''
+        )
+        SELECT id, name, path, size_bytes, sha256, file_sha256, shrunk, check_pass, priority FROM waiting
+        {where}
+        ORDER BY priority DESC, check_pass, turn, id
+        {"LIMIT 1" if first_only else ""}
+    """
+
+
+def queue_order(db_path: Path) -> list[int]:
+    """Video đang chờ, theo đúng thứ tự sẽ được đọc."""
+    with connect(db_path) as conn:
+        return [int(row["id"]) for row in conn.execute(_waiting_sql(first_only=False))]
+
+
+def set_priority(db_path: Path, video_id: int, urgent: bool) -> bool:
+    """Đọc gấp một video đang chờ hoặc đang tải lên. Đọc xong thì cờ gấp tự bỏ."""
+    with connect(db_path) as conn:
+        cur = conn.execute(
+            "UPDATE videos SET priority = ? WHERE id = ? AND status IN ('queued', 'uploading')",
+            (1 if urgent else 0, video_id),
+        )
+        return cur.rowcount == 1
+
+
 def claim(db_path: Path, pid: int) -> dict[str, object] | None:
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute(
-            """
-            SELECT id, name, path, COALESCE(check_pass, 0) AS check_pass
-            FROM videos
-            WHERE status = 'queued' AND path != ''
-            ORDER BY COALESCE(check_pass, 0), id
-            LIMIT 1
-            """
-        ).fetchone()
+        row = conn.execute(_waiting_sql()).fetchone()
         if row is None:
             conn.execute("COMMIT")
             return None
@@ -717,13 +859,7 @@ def claim_pc(db_path: Path, helper: str) -> dict[str, object] | None:
         _release_stale_pc(conn)
         for _ in range(20):
             row = conn.execute(
-                f"""
-                SELECT id, path, size_bytes, sha256 FROM videos
-                WHERE status = 'queued' AND path != ''
-                  AND COALESCE(pc_fails, 0) < {PC_VIDEO_FAIL_LIMIT} AND COALESCE(pc_last_fail, '') != ?
-                ORDER BY COALESCE(check_pass, 0), id
-                LIMIT 1
-                """,
+                _waiting_sql(f"WHERE pc_fails < {PC_VIDEO_FAIL_LIMIT} AND pc_last_fail != ?"),
                 (name,),
             ).fetchone()
             if row is None:
@@ -758,7 +894,7 @@ def claim_pc(db_path: Path, helper: str) -> dict[str, object] | None:
             return {
                 "id": int(row["id"]),
                 "bytes": int(row["size_bytes"]),
-                "sha256": str(row["sha256"]),
+                "sha256": str(row["file_sha256"] or row["sha256"]),
                 "lease": lease,
             }
         conn.execute("COMMIT")
@@ -857,6 +993,21 @@ def release_pc(db_path: Path, video_id: int, lease: str, reason: str = "fail", e
                 )
         conn.execute("COMMIT")
         return True
+
+
+def report_progress(db_path: Path, video_id: int, stage: str, done: int, total: int) -> None:
+    """Tiến độ video máy chủ đang đọc, để trang và giờ dự kiến biết video đang tới đâu."""
+    if stage not in PROGRESS_STAGES:
+        return
+    now = utcnow()
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE videos SET progress_stage = ?, progress_done = ?, progress_total = ?, progress_at = ?
+            WHERE id = ? AND status = 'running'
+            """,
+            (stage, max(0, int(done)), max(0, int(total)), now, video_id),
+        )
 
 
 def record_pc_result(
@@ -1038,7 +1189,7 @@ def _mark_video_done(
         UPDATE videos
         SET status = 'done', pid = NULL, finished_at = ?, error = '',
             {count_sql}
-            lease = '', {helper_sql}, lease_at = NULL, check_pass = 0
+            lease = '', {helper_sql}, lease_at = NULL, check_pass = 0, priority = 0
         {where}
         """,
         params,
@@ -1285,7 +1436,8 @@ def fail(db_path: Path, video_id: int, message: str) -> None:
             UPDATE videos
             SET status = 'error', pid = NULL, finished_at = ?, error = ?,
                 helper = CASE WHEN helper IS NULL OR helper = '' THEN 'VPS' ELSE helper END,
-                check_pass = 0
+                check_pass = 0, priority = 0,
+                progress_stage = '', progress_done = 0, progress_total = 0
             WHERE id = ?
             """,
             (utcnow(), message[:500], video_id),
