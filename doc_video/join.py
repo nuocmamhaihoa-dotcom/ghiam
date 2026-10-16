@@ -21,8 +21,8 @@ chỗ còn trống:
 7. Luồng đọc toàn bộ: tên đọc kỹ trên mọi khung còn lại. Chỉ ghép khi tên
    danh bạ và tên hồ sơ trùng, mỗi bên một cặp. Hàng đã có không đổi.
 
-Mở thiếu một dòng thì không ghép theo thứ tự, trừ khi chỉ còn đúng một số và
-một hồ sơ.
+Mở thiếu một dòng thì không dồn các dòng còn lại. Dòng đã bấm vẫn ghép. Đoạn
+nằm giữa hai lần bấm chỉ ghép khi số dòng trong đoạn đó đúng bằng số hồ sơ.
 """
 
 from __future__ import annotations
@@ -252,7 +252,7 @@ def _recent_tap(
 
 
 def build(frames: list[FrameRead]) -> Result:
-    frames = _merge_handle_misreads(_vote_visits(frames))
+    frames = _merge_handle_misreads(_vote_visits(_adopt_missed_profiles(frames)))
     phones: dict[str, _Seen] = {}
     handles: dict[str, _Seen] = {}
     frames_with: dict[str, set[int]] = {}
@@ -572,6 +572,137 @@ def _similar(left: str, right: str) -> bool:
     return SequenceMatcher(None, left, right, autojunk=False).ratio() >= 0.75
 
 
+def _adopt_missed_profiles(frames: list[FrameRead]) -> list[FrameRead]:
+    """@id luồng chính bỏ sót nhưng luồng khác đã đọc thì đưa vào lần mở hồ sơ.
+
+    Chỉ điền khoảng giữa hai màn danh bạ khi khoảng đó chưa có @id nào. Không
+    đè @id đã đọc, và không lấy lại @id đã thuộc một hồ sơ khác trong video.
+    """
+    known = {frame.handle for frame in frames if frame.handle.startswith("@")}
+    span: list[int] = []
+
+    def close() -> None:
+        nonlocal span
+        if span and not any(frames[index].handle.startswith("@") for index in span):
+            _adopt_span(frames, span, known)
+        span = []
+
+    for index, frame in enumerate(frames):
+        if frame.kind == "list":
+            close()
+            continue
+        span.append(index)
+    close()
+    return frames
+
+
+def _adopt_span(frames: list[FrameRead], indexes: list[int], known: set[str]) -> None:
+    recovered: list[tuple[int, str, str]] = []
+    for index in indexes:
+        frame = frames[index]
+        if frame.full_handle.startswith("@") and frame.full_handle not in known:
+            recovered.append((index, frame.full_handle, frame.full_profile_name))
+        elif frame.side_handle.startswith("@") and frame.side_handle not in known:
+            recovered.append((index, frame.side_handle, frame.side_profile_name))
+    groups: dict[str, list[tuple[int, str, str]]] = {}
+    for item in recovered:
+        placed = False
+        for key in groups:
+            if item[1] == key or lookalike_handles(item[1], key):
+                groups[key].append(item)
+                placed = True
+                break
+        if not placed:
+            groups[item[1]] = [item]
+    for items in groups.values():
+        best = Counter(handle for _, handle, _ in items).most_common(1)[0][0]
+        if best in known:
+            continue
+        index, _, name = next(item for item in items if item[1] == best)
+        frame = frames[index]
+        frame.kind = "profile"
+        frame.handle = best
+        if name and not frame.profile_name:
+            frame.profile_name = name
+        known.add(best)
+
+
+def _tap_claims(
+    handles: dict[str, _Seen],
+    phones: dict[str, _Seen],
+    used_phones: set[str],
+    used_handles: set[str],
+) -> dict[str, str]:
+    """Mỗi hồ sơ chỉ nhận một dòng bấm, và dòng đó không bị hồ sơ khác nhận."""
+    claims: dict[str, str] = {}
+    for handle, seen in handles.items():
+        if handle in used_handles:
+            continue
+        tapped = {phone for phone in seen.taps if phone in phones and phone not in used_phones}
+        if len(tapped) == 1:
+            claims[handle] = next(iter(tapped))
+    counts = Counter(claims.values())
+    return {handle: phone for handle, phone in claims.items() if counts[phone] == 1}
+
+
+def _pair_between_taps(
+    result: Result,
+    phones: dict[str, _Seen],
+    handles: dict[str, _Seen],
+    shown: list[str],
+    opened: list[str],
+    used_phones: set[str],
+    used_handles: set[str],
+    claims: dict[str, str],
+) -> None:
+    """Ghép dòng đã bấm, rồi ghép đoạn nằm giữa hai lần bấm nếu đoạn đó đủ hồ sơ.
+
+    Phần trước lần bấm đầu và sau lần bấm cuối không được dồn, vì không biết
+    dòng nào bị bỏ qua.
+    """
+    visible = tuple(shown)
+    pending = [
+        handle
+        for handle in opened
+        if handle not in used_handles
+        and handle in handles
+        and not _named_elsewhere(handle, visible, phones, handles, used_phones)
+    ]
+    left = [phone for phone in shown if phone in phones and phone not in used_phones]
+    anchors: list[tuple[int, int]] = []
+    last_phone = -1
+    for handle_index, handle in enumerate(pending):
+        phone = claims.get(handle)
+        if phone not in left:
+            continue
+        phone_index = left.index(phone)
+        if phone_index <= last_phone:
+            continue
+        anchors.append((handle_index, phone_index))
+        last_phone = phone_index
+    if not anchors:
+        return
+    points = [(-1, -1), *anchors, (len(pending), len(left))]
+    for (start_handle, start_phone), (end_handle, end_phone) in zip(points, points[1:]):
+        if start_handle >= 0 and left[start_phone] not in used_phones and pending[start_handle] not in used_handles:
+            _add(result, phones, handles, left[start_phone], pending[start_handle], used_phones, used_handles)
+        if start_handle < 0 or end_handle >= len(pending):
+            continue
+        between_handles = pending[start_handle + 1 : end_handle]
+        between_phones = left[start_phone + 1 : end_phone]
+        if len(between_handles) != len(between_phones):
+            continue
+        if any(
+            claims.get(handle) not in (None, phone) or (phone in claims.values() and claims.get(handle) != phone)
+            for phone, handle in zip(between_phones, between_handles)
+        ):
+            continue
+        for phone, handle in zip(between_phones, between_handles):
+            if phone in used_phones or handle in used_handles:
+                continue
+            _add(result, phones, handles, phone, handle, used_phones, used_handles)
+
+
 def _pair_opened_screen(
     result: Result,
     phones: dict[str, _Seen],
@@ -584,12 +715,14 @@ def _pair_opened_screen(
 
     Hai màn kề nhau còn chung phần lớn số thì là cùng một lượt cuộn. Đã mở hết
     thì ghép đúng chỗ, kể cả khi tên TikTok khác tên danh bạ. Hàng đã có không
-    bị đổi. Mở thiếu một dòng thì không dồn các dòng còn lại, trừ khi chỉ còn
-    đúng một số và một hồ sơ.
+    bị đổi. Mở thiếu một dòng thì không dồn các dòng còn lại. Dòng đã bấm vẫn
+    ghép, và đoạn nằm giữa hai lần bấm chỉ ghép khi đủ số hồ sơ cho đoạn đó.
     """
+    claims = _tap_claims(handles, phones, used_phones, used_handles)
     for shown, opened in _scroll_groups(visits):
         if _pair_aligned_open(result, phones, handles, shown, opened, used_phones, used_handles):
             continue
+        _pair_between_taps(result, phones, handles, shown, opened, used_phones, used_handles, claims)
         pending = [
             handle
             for handle in opened
