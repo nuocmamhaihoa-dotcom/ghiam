@@ -8,7 +8,17 @@ from pathlib import Path
 
 import numpy as np
 
-from doc_video.frame import Contact, FrameRead, Layout, ListRow, _list_pairs, _supplement_pairs, _tap_center, row_at
+from doc_video.frame import (
+    Contact,
+    FrameRead,
+    Layout,
+    ListRow,
+    _list_pairs,
+    _supplement_pairs,
+    _tap_center,
+    promote_unclassified_profile,
+    row_at,
+)
 from doc_video.join import Result, Review, Row, add_full_name_rows, add_side_rows, build
 from doc_video.ocr import TextLine
 from doc_video.side import select_left_profile, select_right_pairs
@@ -81,6 +91,9 @@ class TextTests(unittest.TestCase):
         self.assertEqual(subtitle_handle("Kem"), "")
         self.assertEqual(subtitle_handle("Lan 2"), "")
         self.assertEqual(subtitle_handle("123456"), "")
+        self.assertEqual(subtitle_handle("user89627391ó"), "@user896273916")
+        self.assertEqual(subtitle_handle("camtruong1954!"), "@camtruong1954")
+        self.assertEqual(subtitle_handle("Binh"), "")
 
     def test_names_keep_special_characters_except_bar(self) -> None:
         self.assertEqual(clean_name("Huyền Phương (Cà)"), "Huyền Phương (Cà)")
@@ -405,6 +418,87 @@ class JoinTests(unittest.TestCase):
         self.assertEqual([row.phone for row in result.rows], [phone for phone, _ in people])
         self.assertEqual(result.unopened, [])
 
+    def test_taps_pair_the_middle_without_shifting_the_ends(self) -> None:
+        screen = (
+            ("0900000001", "An"),
+            ("0900000002", "Binh"),
+            ("0900000003", "Chi"),
+            ("0900000004", "Dung"),
+            ("0900000005", "Em"),
+        )
+        contacts = [Contact(phone, name) for phone, name in screen]
+        result = build(
+            [
+                FrameRead("list", contacts, tapped="0900000002"),
+                profile("Tên khác", "@bbbbxxxx"),
+                FrameRead("list", contacts),
+                profile("Tên khác", "@ccccxxxx"),
+                FrameRead("list", contacts, tapped="0900000004"),
+                profile("Tên khác", "@ddddxxxx"),
+            ]
+        )
+        self.assertEqual(
+            {(row.phone, row.handle) for row in result.rows},
+            {
+                ("0900000002", "@bbbbxxxx"),
+                ("0900000003", "@ccccxxxx"),
+                ("0900000004", "@ddddxxxx"),
+            },
+        )
+        self.assertEqual([phone for phone, _ in result.unopened], ["0900000001", "0900000005"])
+
+    def test_a_gap_between_taps_is_not_shifted(self) -> None:
+        screen = (
+            ("0900000001", "An"),
+            ("0900000002", "Binh"),
+            ("0900000003", "Chi"),
+            ("0900000004", "Dung"),
+        )
+        contacts = [Contact(phone, name) for phone, name in screen]
+        result = build(
+            [
+                FrameRead("list", contacts, tapped="0900000001"),
+                profile("Tên khác", "@aaaaxxxx"),
+                FrameRead("list", contacts),
+                profile("Tên khác", "@xxxxgiua"),
+                FrameRead("list", contacts, tapped="0900000004"),
+                profile("Tên khác", "@ddddxxxx"),
+            ]
+        )
+        self.assertEqual(
+            {(row.phone, row.handle) for row in result.rows},
+            {("0900000001", "@aaaaxxxx"), ("0900000004", "@ddddxxxx")},
+        )
+        self.assertIn("0900000002", [phone for phone, _ in result.unopened])
+        self.assertIn("0900000003", [phone for phone, _ in result.unopened])
+
+    def test_a_missed_profile_read_still_joins_in_order(self) -> None:
+        screen = (("0900000001", "Nhà gỗ"), ("0900000002", "Quốc Thanh"))
+        result = build(
+            [
+                listing(*screen),
+                FrameRead("other", full_handle="@woodhouse", full_profile_name="Wood"),
+                listing(*screen),
+                FrameRead("other", full_handle="@televisionnn", full_profile_name=""),
+            ]
+        )
+        self.assertEqual(
+            [(row.phone, row.handle) for row in result.rows],
+            [("0900000001", "@woodhouse"), ("0900000002", "@televisionnn")],
+        )
+        self.assertEqual(result.unopened, [])
+
+    def test_a_recovered_handle_does_not_replace_one_already_read(self) -> None:
+        result = build(
+            [
+                listing(("0900000001", "Lan"), ("0900000002", "Hoa")),
+                profile("Lan", "@lan.shop"),
+                FrameRead("other", full_handle="@khacxxxx"),
+            ]
+        )
+        self.assertEqual([(row.phone, row.handle) for row in result.rows], [("0900000001", "@lan.shop")])
+        self.assertEqual([phone for phone, _ in result.unopened], ["0900000002"])
+
     def test_one_profile_on_a_full_screen_is_not_guessed(self) -> None:
         result = build(
             [
@@ -649,6 +743,27 @@ def list_layout(phones: list[str], tap_y: float = -1.0, clear: bool = True) -> L
 
 
 class ProfileHintTests(unittest.TestCase):
+    def test_an_unclassified_frame_with_a_left_handle_becomes_a_profile(self) -> None:
+        handle = TextLine("@woodhouse", 40, 400, 280, 440, 32)
+        layout = Layout(side_handle_line=handle, side_name_line=TextLine("Wood", 40, 340, 200, 380, 32))
+        promote_unclassified_profile(layout)
+        self.assertEqual(layout.kind, "profile")
+        self.assertEqual(layout.handle_hint, "@woodhouse")
+        self.assertIs(layout.handle_line, handle)
+
+    def test_a_contact_list_is_not_turned_into_a_profile(self) -> None:
+        layout = Layout(
+            "list",
+            side_handle_line=TextLine("@woodhouse", 40, 400, 280, 440, 32),
+        )
+        promote_unclassified_profile(layout)
+        self.assertEqual(layout.kind, "list")
+
+    def test_a_plain_word_on_the_left_is_not_a_profile(self) -> None:
+        layout = Layout(side_handle_line=TextLine("Kem", 40, 400, 120, 440, 32))
+        promote_unclassified_profile(layout)
+        self.assertEqual(layout.kind, "other")
+
     def test_a_missed_handle_keeps_the_one_seen_while_scanning(self) -> None:
         from doc_video.video import _fill_missing_profile_handles
 

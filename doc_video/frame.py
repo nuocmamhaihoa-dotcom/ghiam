@@ -570,7 +570,28 @@ def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
         return layout
     layout = Layout(at=at)
     _attach_side(layout, lines, screen, geometric)
+    promote_unclassified_profile(layout)
     return layout
+
+
+def promote_unclassified_profile(layout: Layout) -> None:
+    """Màn chưa đủ hai dòng danh bạ nhưng có @id hồ sơ ở bên trái thì là hồ sơ.
+
+    Hồ sơ lướt qua một khung hay chưa đủ chữ để nhận ở bước chính, trong khi
+    cột trái đã thấy @id. Danh bạ đã nhận không bị đổi thành hồ sơ.
+    """
+    if layout.kind != "other" or layout.side_handle_line is None or layout.side_pairs:
+        return
+    compact = "".join(layout.side_handle_line.text.split())
+    if not compact.startswith("@"):
+        return
+    hint = handle_from_read(compact)
+    if not hint:
+        return
+    layout.kind = "profile"
+    layout.handle_line = layout.side_handle_line
+    layout.name_line = layout.side_name_line
+    layout.handle_hint = hint
 
 
 def _attach_side(

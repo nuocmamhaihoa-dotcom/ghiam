@@ -113,6 +113,19 @@ def _same_text(left: str, right: str) -> bool:
     return len(short) >= 6 or len(short) >= 0.72 * len(long)
 
 
+def _handle_token(text: str) -> str:
+    """Phần chữ của một @id in dưới số. Bỏ dấu và ký tự rác.
+
+    ó thành 6 chỉ khi dòng đã có chữ số hoặc dấu @. Tên thuần như Binh không
+    bị đổi thành số rồi nhận nhầm là @id.
+    """
+    raw = str(text or "")
+    if "@" in raw or any(ch.isdigit() for ch in raw):
+        raw = raw.translate(_HANDLE_LOOKALIKE)
+    folded = fold(raw)
+    return "".join(ch for ch in folded if ch.isalnum() or ch in "._").rstrip(".").lower()
+
+
 def subtitle_handle(name: str) -> str:
     """@id đã in sẵn ở dòng dưới số, khi dòng đó không thể là tên người.
 
@@ -121,18 +134,22 @@ def subtitle_handle(name: str) -> str:
     teehairsalon) vẫn là tên. Dòng nhiều từ cũng là tên (Lan 2).
     """
     text = " ".join(str(name or "").split())
-    if not text or looks_like_phone(text):
+    if not text or looks_like_phone(text) or " " in text:
         return ""
     if text.startswith("@"):
         body = text[1:].rstrip(".").lower()
         if _HANDLE_TOKEN.match(body) and not body.startswith("."):
             return "@" + body
+        folded = _handle_token(text[1:])
+        if _HANDLE_TOKEN.match(folded) and not folded.startswith("."):
+            return "@" + folded
         return ""
-    if " " in text or not _HANDLE_TOKEN.match(text):
+    cleaned = _handle_token(text)
+    if not _HANDLE_TOKEN.match(cleaned):
         return ""
-    if not any(ch.isdigit() for ch in text) or not any(ch.isalpha() for ch in text):
+    if not any(ch.isdigit() for ch in cleaned) or not any(ch.isalpha() for ch in cleaned):
         return ""
-    return find_handle("@" + text)
+    return find_handle("@" + cleaned)
 
 
 def find_handle(text: str) -> str:

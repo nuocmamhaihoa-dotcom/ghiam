@@ -34,6 +34,9 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mkv", ".avi", ".webm"}
 # Hai hồ sơ khác nhau gần như cùng một màn hình trắng, nên chỉ bỏ khung gần như y hệt.
 SAME_FRAME = 0.6
+# Quay nhanh thì hồ sơ chỉ hiện khoảng một phần ba giây. Lấy 4 khung mỗi giây
+# để lần mở đó còn một khung, rồi bước bỏ khung trùng vẫn loại ảnh đứng yên.
+FRAME_FPS = 4.0
 # Số khung đọc kỹ cho mỗi số điện thoại, và cho mỗi lần mở hồ sơ. Mỗi lần đọc
 # kỹ @id đã gồm sáu lần đọc ở nhiều cỡ rồi bỏ phiếu, nên hồ sơ cần ít khung hơn.
 READS_PER_PERSON = 3
@@ -375,7 +378,7 @@ def plan_reads(
 
 def read_inputs(
     paths: list[Path],
-    fps: float = 2.0,
+    fps: float = FRAME_FPS,
     workers: int | None = None,
     submit: Callable[..., Future] | None = None,
     work_dir: Path | None = None,
