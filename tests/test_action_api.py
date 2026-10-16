@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -758,7 +759,7 @@ class PcReaderApiTests(unittest.TestCase):
         self.assertIn("DOC_VIDEO_CPU_FRACTION", program)
         self.assertIn("DOC_VIDEO_RAM_FRACTION", program)
         self.assertIn("socket.gethostname", program)
-        self.assertIn('{"name": name}', program)
+        self.assertIn('{"name": name, "version": str(CONNECTOR_VERSION)}', program)
         version = self.client.get("/v1/pc/connector/version", headers=self.headers)
         self.assertEqual(version.status_code, 200)
         self.assertGreaterEqual(version.json()["version"], 4)
@@ -838,6 +839,113 @@ class PcReaderApiTests(unittest.TestCase):
         self.assertEqual(after["unopened"], before["unopened"] + 1)
         self.assertEqual(after["pc"], 0)
         path.unlink(missing_ok=True)
+
+    def _queue_only(self, sha: str) -> int:
+        init_db(settings.video_db_path)
+        with connect(settings.video_db_path) as conn:
+            conn.execute("UPDATE videos SET status = 'done' WHERE status IN ('queued', 'pc')")
+        created = begin_upload(settings.video_db_path, name=f"{sha}.mp4", size_bytes=5, sha256=sha)
+        video_id = int(created["id"])
+        path = settings.video_dir / f"{video_id}.mp4"
+        path.write_bytes(b"v" * 64)
+        commit_upload(settings.video_db_path, video_id, str(path))
+        return video_id
+
+    def test_invite_link_gives_a_pc_only_code_that_can_be_revoked(self) -> None:
+        made = self.client.post("/v1/pc/invites", headers=self.headers, json={"label": "Văn phòng"})
+        self.assertEqual(made.status_code, 200, made.text)
+        invite = made.json()
+        self.assertTrue(invite["link"].endswith("/v1/pc/join/" + invite["code"]))
+        self.assertTrue(_raw_transfer("/v1/pc/join/" + invite["code"]))
+        self.assertTrue(_raw_transfer("/v1/pc/launcher.bat"))
+        joined = self.client.get("/v1/pc/join/" + invite["code"])
+        self.assertEqual(joined.status_code, 200)
+        bat = joined.content.decode("utf-8")
+        self.assertNotIn(settings.page_token, bat)
+        found = re.search(r"\$token = '([^']+)'", bat)
+        assert found is not None
+        token = found.group(1)
+        pc = {"Authorization": f"Bearer {token}"}
+        self.assertEqual(self.client.get("/v1/pc/reader", headers=pc).status_code, 200)
+        program = self.client.get("/v1/pc/connector.py", headers=pc).content.decode("utf-8")
+        self.assertIn(token, program)
+        self.assertNotIn(settings.page_token, program)
+        self.assertIn(token, self.client.get("/v1/pc/launcher.bat", headers=pc).content.decode("utf-8"))
+        self.assertEqual(self.client.get("/v1/results", headers=pc).status_code, 401)
+        self.assertEqual(self.client.get("/v1/pcs", headers=pc).status_code, 401)
+        self.assertEqual(self.client.post("/v1/pc/invites", headers=pc, json={}).status_code, 401)
+        self.assertEqual(self.client.post("/v1/pc/ticket", headers=pc).status_code, 401)
+        status = self.client.post("/v1/pc/status", headers=pc, json={"name": "PC mời", "state": "testing"})
+        self.assertEqual(status.status_code, 200, status.text)
+        self.assertEqual(status.json()["wait"], "")
+        listed = self.client.get("/v1/pcs", headers=self.headers).json()
+        item = next(entry for entry in listed["items"] if entry["name"] == "PC mời")
+        self.assertEqual((item["invite"], item["state"], item["online"]), ("Văn phòng", "testing", True))
+        self.assertEqual(next(entry for entry in listed["invites"] if entry["code"] == invite["code"])["pcs"], 1)
+        revoked = self.client.post(f"/v1/pc/invites/{invite['id']}/revoke", headers=self.headers)
+        self.assertEqual(revoked.status_code, 200)
+        denied = self.client.get("/v1/pc/reader", headers=pc)
+        self.assertEqual(denied.status_code, 401)
+        self.assertIn("thu hồi", denied.json()["detail"])
+        self.assertEqual(self.client.get("/v1/pc/join/" + invite["code"]).status_code, 404)
+        listed = self.client.get("/v1/pcs", headers=self.headers).json()
+        self.assertEqual(next(entry for entry in listed["invites"] if entry["code"] == invite["code"])["link"], "")
+        page_pc = {"Authorization": f"Bearer {settings.page_token}"}
+        self.assertEqual(self.client.get("/v1/pc/reader", headers=page_pc).status_code, 200)
+
+    def test_paused_pc_waits_and_progress_reaches_the_page(self) -> None:
+        video_id = self._queue_only("pause-api")
+        self.assertEqual(self.client.post("/v1/pc/status", headers=self.headers, json={"name": "PC tạm"}).status_code, 200)
+        paused = self.client.post("/v1/pcs/update", headers=self.headers, json={"name": "PC tạm", "paused": True})
+        self.assertEqual(paused.status_code, 200, paused.text)
+        waiting = self.client.post("/v1/pc/claim", headers=self.headers, json={"name": "PC tạm"}).json()
+        self.assertIsNone(waiting["video"])
+        self.assertEqual(waiting["wait"], "paused")
+        bad = self.client.post("/v1/pcs/update", headers=self.headers, json={"name": "PC tạm", "schedule": "25:00-26:00"})
+        self.assertEqual(bad.status_code, 400)
+        missing = self.client.post("/v1/pcs/update", headers=self.headers, json={"name": "Không có", "paused": True})
+        self.assertEqual(missing.status_code, 404)
+        self.client.post("/v1/pcs/update", headers=self.headers, json={"name": "PC tạm", "paused": False, "autostart": True})
+        claimed = self.client.post("/v1/pc/claim", headers=self.headers, json={"name": "PC tạm", "version": "5"}).json()
+        self.assertEqual(claimed["video"]["id"], video_id)
+        self.assertTrue(claimed["autostart"])
+        lease = claimed["video"]["lease"]
+        beat = self.client.post(
+            f"/v1/pc/videos/{video_id}/heartbeat",
+            headers=self.headers,
+            json={"lease": lease, "stage": "read", "done": 3, "total": 10},
+        )
+        self.assertEqual(beat.status_code, 200)
+        listed = self.client.get("/v1/pcs", headers=self.headers).json()["items"]
+        item = next(entry for entry in listed if entry["name"] == "PC tạm")
+        self.assertEqual((item["video"]["id"], item["video"]["stage"], item["video"]["done"]), (video_id, "read", 3))
+        self.assertEqual(item["version"], "5")
+        queue = self.client.get("/v1/videos", headers=self.headers).json()["items"]
+        row = next(entry for entry in queue if entry["id"] == video_id)
+        self.assertEqual((row["progress_stage"], row["progress_done"], row["progress_total"]), ("read", 3, 10))
+        busy = self.client.post("/v1/pcs/forget", headers=self.headers, json={"name": "PC tạm"})
+        self.assertEqual(busy.status_code, 409)
+        posted = self.client.post(
+            f"/v1/pc/videos/{video_id}/result",
+            headers=self.headers,
+            json={"lease": lease, "rows": [], "review": [], "unopened": [], "download_s": 12.5, "read_s": 300},
+        )
+        self.assertEqual(posted.status_code, 200, posted.text)
+        item = next(entry for entry in self.client.get("/v1/pcs", headers=self.headers).json()["items"] if entry["name"] == "PC tạm")
+        self.assertEqual((item["avg_download_s"], item["avg_read_s"], item["ok_count"]), (12.5, 300.0, 1))
+        self.assertIsNone(item["video"])
+
+    def test_disk_release_from_a_pc_is_not_counted(self) -> None:
+        video_id = self._queue_only("disk-api")
+        claimed = self.client.post("/v1/pc/claim", headers=self.headers, json={"name": "PC đầy"}).json()
+        released = self.client.post(
+            f"/v1/pc/videos/{video_id}/release",
+            headers=self.headers,
+            json={"lease": claimed["video"]["lease"], "reason": "disk"},
+        )
+        self.assertTrue(released.json()["ok"])
+        item = next(entry for entry in self.client.get("/v1/pcs", headers=self.headers).json()["items"] if entry["name"] == "PC đầy")
+        self.assertEqual((item["fail_count"], item["state"]), (0, "wait-disk"))
 
 
 if __name__ == "__main__":

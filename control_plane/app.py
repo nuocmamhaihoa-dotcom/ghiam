@@ -83,9 +83,16 @@ app.add_middleware(LimitUploadSizeMiddleware)
 
 def _raw_transfer(path: str) -> bool:
     """File đã nén hoặc video lớn. Nén thêm chỉ tốn CPU và không làm đường truyền nhanh hơn."""
-    if path in {"/v1/pc/weights", "/v1/pc/reader.zip", "/v1/pc/tessdata.zip", "/v1/pc/tessdata-default.zip", "/v1/pc/open.ps1"}:
+    if path in {
+        "/v1/pc/weights",
+        "/v1/pc/reader.zip",
+        "/v1/pc/tessdata.zip",
+        "/v1/pc/tessdata-default.zip",
+        "/v1/pc/open.ps1",
+        "/v1/pc/launcher.bat",
+    }:
         return True
-    if path.startswith("/v1/pc/package/") or path.startswith("/v1/pc/tools/"):
+    if path.startswith(("/v1/pc/package/", "/v1/pc/join/", "/v1/pc/tools/")):
         return True
     return path.startswith("/v1/pc/videos/") and path.endswith("/file")
 

@@ -199,7 +199,7 @@ class LinkTests(unittest.TestCase):
         self.assertEqual(reader_launch_lines(added, "/reader"), added)
         source = CONNECTOR_FILE.read_text(encoding="utf-8")
         self.assertIn("socket.gethostname", source)
-        self.assertIn('{"name": name}', source)
+        self.assertIn('{"name": name, "version": str(CONNECTOR_VERSION)}', source)
         self.assertIn("PYTHONPATH", source)
         self.assertIn("--no-index", source)
         self.assertIn("--no-deps", source)
