@@ -15,9 +15,14 @@
     .lead { color: var(--muted); margin-bottom: 1rem; }
     section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem; margin: 0 0 0.8rem; }
     label { display: block; font-weight: 650; margin: 0 0 0.35rem; }
-    input[type="text"], input[type="password"], input[type="search"], input[type="url"] {
+    input[type="text"], input[type="password"], input[type="search"], input[type="url"],
+    input[type="date"], input[type="number"], select {
       width: 100%; font: inherit; padding: 0.7rem 0.75rem; border: 1px solid #cfd5dc; border-radius: 10px; background: #fff;
     }
+    label.quiet { font-weight: 550; font-size: 0.86rem; color: var(--muted); flex: 1 1 9.5rem; min-width: 8.5rem; }
+    label.quiet input, label.quiet select { margin-top: 0.2rem; color: var(--ink); font-size: 1rem; padding: 0.45rem 0.55rem; }
+    label.check { display: flex; align-items: center; gap: 0.4rem; font-weight: 550; }
+    label.check input { width: auto; }
     .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
     button, .file {
       font: inherit; font-weight: 700; border: 0; border-radius: 10px; min-height: 46px; padding: 0 1rem; cursor: pointer;
@@ -118,8 +123,39 @@
 
   <section>
     <h2>Kết quả đã lưu</h2>
-    <p class="note">Hiện mọi dòng đã quét. Dòng mới nhất ở trên. Cột Đọc bởi ghi video nào do PC nào đọc, video nào do VPS đọc.</p>
-    <input id="query" type="search" placeholder="Gõ đầu số điện thoại hoặc @username" />
+    <p class="note">Hiện mọi dòng đã quét. Dòng mới nhất ở trên. Cột Đọc bởi ghi video nào do PC nào đọc, video nào do VPS đọc. Số chuẩn và nhà mạng tính lúc hiện, số đã lưu giữ nguyên.</p>
+    <input id="query" type="search" placeholder="Đầu số, tên (không cần dấu), hoặc @username" />
+    <div class="row" style="margin-top:0.55rem">
+      <label class="quiet">Từ ngày<input id="dayFrom" type="date" /></label>
+      <label class="quiet">Đến ngày<input id="dayTo" type="date" /></label>
+      <label class="quiet">Điện thoại tải
+        <select id="resultDevice">
+          <option value="">Mọi điện thoại</option>
+          <option value="__none__">Chưa gắn máy</option>
+        </select>
+      </label>
+      <label class="quiet">Mã video<input id="resultVideo" type="number" min="1" inputmode="numeric" placeholder="Tất cả" /></label>
+      <label class="quiet">Loại
+        <select id="resultBucket">
+          <option value="">Mọi loại</option>
+          <option value="saved">Đã lưu</option>
+          <option value="review">Cần xem</option>
+          <option value="unopened">Chưa mở hồ sơ</option>
+        </select>
+      </label>
+      <label class="quiet">Kiểm
+        <select id="resultChecked">
+          <option value="">Mọi dòng</option>
+          <option value="ok">Khớp</option>
+          <option value="diff">Lệch</option>
+          <option value="none">Chưa kiểm</option>
+        </select>
+      </label>
+    </div>
+    <p class="row" style="margin-top:0.7rem">
+      <button id="exportExcel" class="primary" type="button">Tải Excel theo bộ lọc</button>
+    </p>
+    <p id="exportNote" class="note"></p>
     <p id="resultCount" class="note"></p>
     <div id="results"></div>
   </section>
@@ -151,6 +187,30 @@
     <p class="note">Bấm một lần. Trình duyệt sẽ tải file .csv.gz.</p>
     <p style="margin-top:0.8rem"><button id="backup" class="primary" type="button">Tải bản sao lưu về PC</button></p>
     <p id="backupNote" class="note"></p>
+  </section>
+
+  <section>
+    <h2>Gửi dòng mới đi</h2>
+    <p class="note">Mỗi dòng đã lưu đủ số, tên và @id được gửi một lần tới địa chỉ bạn nhập, dạng JSON. Dùng được cho Google Apps Script hoặc một bảng tính. Để trống địa chỉ rồi bấm Lưu để ngừng gửi. Mặc định chỉ gửi dòng mới kể từ lúc lưu. Bật «Gửi cả dòng đã có» khi muốn gửi lại từ đầu.</p>
+    <input id="webhookUrl" type="url" placeholder="https://script.google.com/..." style="margin-top:0.55rem" />
+    <p class="row" style="margin-top:0.55rem">
+      <label class="check"><input id="webhookOld" type="checkbox" /> Gửi cả dòng đã có</label>
+      <button id="webhookSave" class="primary" type="button">Lưu địa chỉ</button>
+      <button id="webhookTest" class="ghost" type="button">Gửi thử</button>
+    </p>
+    <p id="webhookNote" class="note"></p>
+  </section>
+
+  <section>
+    <h2>Khoá đọc kết quả</h2>
+    <p class="note">Khoá này chỉ đọc dòng đã lưu đủ 3 ô và số liệu tổng, qua <b>/v1/api/results</b> và <b>/v1/api/stats</b>. Không mở trang, không tải video, không sửa gì. Khoá đầy đủ chỉ hiện một lần lúc tạo. Thu hồi thì khoá ngừng dùng ngay.</p>
+    <div class="row" style="margin-top:0.55rem">
+      <input id="keyName" type="text" maxlength="60" placeholder="Tên khoá, ví dụ bảng tính" style="flex:1 1 14rem; width:auto" />
+      <button id="keyMake" class="primary" type="button">Tạo khoá</button>
+    </div>
+    <p id="keyNote" class="note"></p>
+    <div id="keyOnce"></div>
+    <div id="keyList"></div>
   </section>
 </main>
 <script>
@@ -456,6 +516,7 @@
     var phones = body.phones || { day: "", known: [], items: [] };
     knownPhones = phones.known || [];
     phoneItems = phones.items || [];
+    fillResultDevices();
     renderPhoneBoard(phones.day || "");
     renderThisPhone();
     var queuePath = "/v1/videos";
@@ -521,16 +582,84 @@
     if (!items.length) return "0:" + total + ":" + (capped ? 1 : 0);
     var first = items[0];
     var last = items[items.length - 1];
-    var readers = items.map(function (item) { return (item.video_id || 0) + ":" + (item.helper || "") + ":" + (item.checked || ""); }).join(",");
+    var readers = items.map(function (item) {
+      return (item.video_id || 0) + ":" + (item.helper || "") + ":" + (item.checked || "") + ":" + (item.device || "") + ":" + (item.carrier || "");
+    }).join(",");
     return items.length + ":" + first.id + ":" + last.id + ":" + first.phone + ":" + first.name + ":" + first.username + ":" + first.bucket + ":" + first.reason + ":" + readers + ":" + total + ":" + (capped ? 1 : 0);
   }
 
-  async function fetchResultPage(q, extra) {
-    var path = "/v1/results?limit=" + RESULT_PAGE + "&q=" + encodeURIComponent(q);
-    if (extra) path += "&" + extra;
-    var response = await api(path);
+  function resultFilters() {
+    return {
+      q: document.getElementById("query").value.trim(),
+      day_from: document.getElementById("dayFrom").value,
+      day_to: document.getElementById("dayTo").value,
+      device: document.getElementById("resultDevice").value,
+      video: document.getElementById("resultVideo").value.trim(),
+      bucket: document.getElementById("resultBucket").value,
+      checked: document.getElementById("resultChecked").value
+    };
+  }
+
+  function filterKey() {
+    var chosen = resultFilters();
+    return [chosen.q, chosen.day_from, chosen.day_to, chosen.device, chosen.video, chosen.bucket, chosen.checked].join("\n");
+  }
+
+  function resultQuery(extra) {
+    var chosen = resultFilters();
+    var parts = ["limit=" + RESULT_PAGE, "q=" + encodeURIComponent(chosen.q)];
+    if (chosen.day_from) parts.push("day_from=" + encodeURIComponent(chosen.day_from));
+    if (chosen.day_to) parts.push("day_to=" + encodeURIComponent(chosen.day_to));
+    if (chosen.device === "__none__") parts.push("device=");
+    else if (chosen.device) parts.push("device=" + encodeURIComponent(chosen.device));
+    var videoId = Number(chosen.video);
+    if (videoId > 0) parts.push("video=" + encodeURIComponent(String(videoId)));
+    if (chosen.bucket) parts.push("bucket=" + encodeURIComponent(chosen.bucket));
+    if (chosen.checked) parts.push("checked=" + encodeURIComponent(chosen.checked));
+    if (extra) parts.push(extra);
+    return parts.join("&");
+  }
+
+  function exportQuery() {
+    return resultQuery("").replace(/^limit=\d+&/, "");
+  }
+
+  async function fetchResultPage(extra) {
+    var response = await api("/v1/results?" + resultQuery(extra));
     if (!response.ok) return null;
     return response.json();
+  }
+
+  function vnStamp(stamp) {
+    if (!stamp) return "";
+    var moment = new Date(stamp);
+    if (isNaN(moment.getTime())) return "";
+    return new Intl.DateTimeFormat("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).format(moment);
+  }
+
+  function fillResultDevices() {
+    var select = document.getElementById("resultDevice");
+    if (!select || document.activeElement === select) return;
+    var names = knownPhones.slice();
+    var sig = names.join("\n");
+    if (select.getAttribute("data-known") === sig) return;
+    var current = select.value;
+    select.setAttribute("data-known", sig);
+    var html = "<option value=\"\">Mọi điện thoại</option><option value=\"__none__\">Chưa gắn máy</option>";
+    names.forEach(function (name) {
+      html += "<option value=\"" + escapeHtml(name) + "\">" + escapeHtml(name) + "</option>";
+    });
+    select.innerHTML = html;
+    select.value = current;
+    if (select.value !== current) select.value = "";
   }
 
   function paintResults(items, total, capped) {
@@ -547,15 +676,22 @@
     note.textContent = capped
       ? "Đang hiện " + items.length + " / " + total + ". Mới nhất ở trên."
       : total + " kết quả. Mới nhất ở trên.";
-    var html = "<table><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Loại</th><th>Đọc bởi</th><th>Kiểm</th></tr>";
+    var html = "<table><tr><th>Số điện thoại</th><th>Số chuẩn</th><th>Nhà mạng</th><th>Tên</th><th>Username</th><th>Loại</th><th>Đọc bởi</th><th>Kiểm</th></tr>";
     items.forEach(function (item) {
       var reason = item.reason ? "<div class='note'>" + escapeHtml(item.reason) + "</div>" : "";
-      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(item.bucket) + reason + "</td><td>" + escapeHtml(resultReader(item)) + "</td><td>" + escapeHtml(checkLabel(item)) + "</td></tr>";
+      var standard = item.normalized && item.normalized !== item.phone ? escapeHtml(item.normalized) : "";
+      var network = escapeHtml(item.carrier || "");
+      if (item.phone_note) network += "<div class='small'>" + escapeHtml(item.phone_note) + "</div>";
+      var who = escapeHtml(resultReader(item));
+      if (item.device) who += "<div class='small'>Tải từ " + escapeHtml(item.device) + "</div>";
+      var when = vnStamp(item.created_at);
+      if (when) who += "<div class='small'>" + escapeHtml(when) + "</div>";
+      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + standard + "</td><td>" + network + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(item.bucket) + reason + "</td><td>" + who + "</td><td>" + escapeHtml(checkLabel(item)) + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
   }
 
-  async function loadAllResults(q, asked) {
+  async function loadAllResults(asked) {
     var items = [];
     var total = 0;
     var before = 0;
@@ -563,7 +699,7 @@
     var guard = 0;
     while (guard < 50) {
       guard += 1;
-      var page = await fetchResultPage(q, before ? "before=" + before : "");
+      var page = await fetchResultPage(before ? "before=" + before : "");
       if (asked !== resultsAsked || !page) return null;
       var pageItems = page.items || [];
       items = items.concat(pageItems);
@@ -580,19 +716,19 @@
 
   async function loadResults() {
     var asked = ++resultsAsked;
-    var q = document.getElementById("query").value.trim();
+    var key = filterKey();
     var now = Date.now();
     var cached = resultCache;
-    var canDelta = cached && cached.q === q && cached.complete && cached.maxId > 0 && (now - cached.at) < 60000;
+    var canDelta = cached && cached.key === key && cached.complete && cached.maxId > 0 && (now - cached.at) < 60000;
     if (canDelta) {
-      var newer = await fetchResultPage(q, "after=" + cached.maxId);
+      var newer = await fetchResultPage("after=" + cached.maxId);
       if (asked !== resultsAsked || !newer) return;
       var total = newer.total != null ? newer.total : cached.total;
       if (total >= cached.items.length) {
         var items = (newer.items || []).concat(cached.items);
         if (items.length > RESULT_CAP) items = items.slice(0, RESULT_CAP);
         resultCache = {
-          q: q,
+          key: key,
           at: cached.at,
           maxId: items.length ? items[0].id : cached.maxId,
           items: items,
@@ -604,10 +740,10 @@
         return;
       }
     }
-    var loaded = await loadAllResults(q, asked);
+    var loaded = await loadAllResults(asked);
     if (!loaded || asked !== resultsAsked) return;
     resultCache = {
-      q: q,
+      key: key,
       at: now,
       maxId: loaded.items.length ? loaded.items[0].id : 0,
       items: loaded.items,
@@ -1224,6 +1360,26 @@
     refresh();
   });
   document.getElementById("query").addEventListener("input", loadResults);
+  ["dayFrom", "dayTo", "resultDevice", "resultBucket", "resultChecked"].forEach(function (id) {
+    document.getElementById(id).addEventListener("change", loadResults);
+  });
+  document.getElementById("resultVideo").addEventListener("input", loadResults);
+  document.getElementById("exportExcel").addEventListener("click", async function () {
+    var note = document.getElementById("exportNote");
+    note.textContent = "Đang tạo file Excel theo bộ lọc đang chọn...";
+    note.className = "note";
+    var response = await api("/v1/results/export/ticket", { method: "POST" });
+    if (!response.ok) {
+      note.textContent = await errorDetail(response, "Chưa tải được. Thử lại sau vài giây.");
+      note.className = "note warn";
+      return;
+    }
+    var body = await response.json();
+    var query = exportQuery();
+    note.textContent = "Trình duyệt đang tải file Excel.";
+    note.className = "note ok";
+    window.location.href = body.url + (query ? "?" + query : "");
+  });
   document.getElementById("pcDownload").addEventListener("click", async function () {
     var note = document.getElementById("pcNote");
     note.textContent = "Đang tạo liên kết tải...";
@@ -1304,9 +1460,184 @@
     window.location.href = body.url;
   });
 
+  async function errorDetail(response, fallback) {
+    try {
+      var body = await response.json();
+      if (body && body.detail) return String(body.detail);
+    } catch (error) {}
+    return fallback;
+  }
+
+  function renderKeys(items) {
+    var box = document.getElementById("keyList");
+    var sig = items.map(function (item) {
+      return item.id + ":" + (item.prefix || "") + ":" + (item.revoked_at || "") + ":" + (item.last_used_at || "");
+    }).join(",");
+    if (box.getAttribute("data-sig") === sig) return;
+    box.setAttribute("data-sig", sig);
+    if (!items.length) {
+      box.innerHTML = "<p class='note'>Chưa có khoá nào.</p>";
+      return;
+    }
+    var html = "<table><tr><th>Tên</th><th>Đầu khoá</th><th>Trạng thái</th></tr>";
+    items.forEach(function (item) {
+      var state = item.revoked_at ? "Đã thu hồi" : "Đang dùng";
+      var button = item.revoked_at ? "" : " <button class='ghost' type='button' data-revoke='" + item.id + "'>Thu hồi</button>";
+      html += "<tr><td>" + escapeHtml(item.name || "Không tên") + "</td><td>" + escapeHtml(item.prefix || "") + "</td><td>" + state + button + "</td></tr>";
+    });
+    box.innerHTML = html + "</table>";
+    box.querySelectorAll("[data-revoke]").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        button.disabled = true;
+        var response = await api("/v1/api-keys/" + button.getAttribute("data-revoke") + "/revoke", { method: "POST" });
+        var note = document.getElementById("keyNote");
+        if (!response.ok) {
+          note.textContent = await errorDetail(response, "Chưa thu hồi được.");
+          note.className = "note warn";
+          button.disabled = false;
+          return;
+        }
+        note.textContent = "Đã thu hồi khoá. Khoá đó không đọc được nữa.";
+        note.className = "note ok";
+        box.setAttribute("data-sig", "");
+        loadShare();
+      });
+    });
+  }
+
+  async function loadShare() {
+    var hook = await api("/v1/webhook");
+    if (hook.ok) {
+      var body = await hook.json();
+      var field = document.getElementById("webhookUrl");
+      var saved = body.url || "";
+      if (document.activeElement !== field && field.getAttribute("data-saved") !== saved) {
+        field.value = saved;
+        field.setAttribute("data-saved", saved);
+      }
+      var parts = [];
+      if (saved) {
+        parts.push("Đang gửi. Còn " + (body.waiting || 0) + " dòng chưa gửi.");
+        if (body.sent) parts.push("Đã gửi " + body.sent + " dòng.");
+      } else {
+        parts.push("Chưa đặt địa chỉ nhận.");
+      }
+      if (body.error) parts.push("Lần gửi gần nhất lỗi: " + body.error);
+      var text = parts.join(" ");
+      var note = document.getElementById("webhookNote");
+      if (!note.getAttribute("data-hold") && note.getAttribute("data-sig") !== text) {
+        note.textContent = text;
+        note.className = body.error ? "note warn" : "note";
+        note.setAttribute("data-sig", text);
+      }
+    }
+    var keys = await api("/v1/api-keys");
+    if (keys.ok) {
+      var listed = await keys.json();
+      renderKeys(listed.items || []);
+    }
+  }
+
+  document.getElementById("webhookSave").addEventListener("click", async function () {
+    var note = document.getElementById("webhookNote");
+    var field = document.getElementById("webhookUrl");
+    note.setAttribute("data-hold", "1");
+    note.textContent = "Đang lưu địa chỉ...";
+    note.className = "note";
+    var response = await api("/v1/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: field.value.trim(),
+        include_old: document.getElementById("webhookOld").checked
+      })
+    });
+    note.removeAttribute("data-hold");
+    if (!response.ok) {
+      note.textContent = await errorDetail(response, "Chưa lưu được địa chỉ.");
+      note.className = "note warn";
+      note.setAttribute("data-sig", note.textContent);
+      return;
+    }
+    var body = await response.json();
+    field.setAttribute("data-saved", body.url || "");
+    note.textContent = body.url ? "Đã lưu. Dòng đủ 3 ô sẽ được gửi tới địa chỉ này." : "Đã ngừng gửi.";
+    note.className = "note ok";
+    note.setAttribute("data-sig", note.textContent);
+  });
+  document.getElementById("webhookTest").addEventListener("click", async function () {
+    var note = document.getElementById("webhookNote");
+    var button = document.getElementById("webhookTest");
+    button.disabled = true;
+    note.setAttribute("data-hold", "1");
+    note.textContent = "Đang gửi một dòng mẫu...";
+    note.className = "note";
+    var response = await api("/v1/webhook/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: document.getElementById("webhookUrl").value.trim() })
+    });
+    button.disabled = false;
+    note.removeAttribute("data-hold");
+    if (!response.ok) {
+      note.textContent = await errorDetail(response, "Chưa gửi thử được.");
+      note.className = "note warn";
+    } else {
+      note.textContent = "Địa chỉ đã nhận dòng mẫu. Bấm Lưu địa chỉ để gửi dòng thật.";
+      note.className = "note ok";
+    }
+    note.setAttribute("data-sig", note.textContent);
+  });
+  document.getElementById("keyMake").addEventListener("click", async function () {
+    var note = document.getElementById("keyNote");
+    var name = document.getElementById("keyName");
+    var response = await api("/v1/api-keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name.value })
+    });
+    if (!response.ok) {
+      note.textContent = await errorDetail(response, "Chưa tạo được khoá.");
+      note.className = "note warn";
+      return;
+    }
+    var body = await response.json();
+    name.value = "";
+    note.textContent = "Đã tạo khoá. Sao chép ngay, lần sau chỉ còn thấy đầu khoá.";
+    note.className = "note ok";
+    var box = document.getElementById("keyOnce");
+    box.textContent = "";
+    var field = document.createElement("input");
+    field.type = "text";
+    field.readOnly = true;
+    field.value = body.key || "";
+    var copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "ghost";
+    copy.style.marginTop = "0.45rem";
+    copy.textContent = "Sao chép khoá";
+    copy.addEventListener("click", function () {
+      field.select();
+      var done = function () { note.textContent = "Đã sao chép khoá. Giữ khoá này ở nơi chỉ bạn mở được."; };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(field.value).then(done, function () { document.execCommand("copy"); done(); });
+      } else {
+        document.execCommand("copy");
+        done();
+      }
+    });
+    box.appendChild(field);
+    box.appendChild(document.createElement("br"));
+    box.appendChild(copy);
+    document.getElementById("keyList").setAttribute("data-sig", "");
+    loadShare();
+  });
+
   renderThisPhone();
   refresh();
+  loadShare();
   setInterval(refresh, 4000);
+  setInterval(loadShare, 15000);
 </script>
 </body>
 </html>

@@ -21,6 +21,7 @@ from pathlib import Path
 from doc_video.frame import FrameRead
 from doc_video.pipeline import read_video
 
+from control_plane.results_out import webhook_loop
 from control_plane.screen_table import Review, Row, Table, Unopened
 from control_plane.settings import settings
 from control_plane.video_shrink import DEFAULT_CRF, shrink
@@ -264,6 +265,7 @@ def main() -> None:
 
         threads = [start_feeder() for _ in range(feeders)]
         threading.Thread(target=_shrink_loop, args=(db_path, stop), daemon=True).start()
+        threading.Thread(target=webhook_loop, args=(db_path, stop), daemon=True).start()
         while not broken.is_set():
             touch_heartbeat(heartbeat_path())
             now = time.monotonic()

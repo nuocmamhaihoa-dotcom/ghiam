@@ -15,6 +15,7 @@ import time
 import unicodedata
 from collections import defaultdict
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
@@ -22,6 +23,7 @@ from zoneinfo import ZoneInfo
 
 from doc_video.text import handle_matches_name, lookalike_handles
 
+from control_plane.phone_vn import phone_columns
 from control_plane.screen_table import Review, Table, joined_name, pair_close_names
 
 BUCKET_OK = 1
@@ -176,6 +178,19 @@ def init_db(db_path: Path) -> None:
         _ensure_pc_columns(conn)
         _ensure_check_columns(conn)
         _ensure_fleet_columns(conn)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS api_keys (
+              id INTEGER PRIMARY KEY,
+              name TEXT NOT NULL DEFAULT '',
+              prefix TEXT NOT NULL,
+              key_hash TEXT NOT NULL UNIQUE,
+              created_at TEXT NOT NULL,
+              revoked_at TEXT,
+              last_used_at TEXT
+            )
+            """
+        )
     _READY.add(key)
 
 
@@ -1525,24 +1540,86 @@ def merge_close_results(db_path: Path) -> int:
     return merged
 
 
-def _result_filter(query: str, alias: str = "") -> tuple[str, list[object]]:
-    """Lọc theo đầu số hoặc đầu username. Chuỗi rỗng là mọi dòng."""
-    prefix = f"{alias}." if alias else ""
-    text = "".join(query.split())
+@dataclass(frozen=True)
+class ResultFilter:
+    """Bộ lọc kết quả. Ngày theo giờ Việt Nam, dạng YYYY-MM-DD, tính theo lúc dòng được đọc ra."""
+
+    query: str = ""
+    day_from: str = ""
+    day_to: str = ""
+    device: str | None = None
+    video_id: int = 0
+    bucket: int = 0
+    checked: str = ""
+
+    def empty(self) -> bool:
+        return self == ResultFilter()
+
+
+def fold_text(text: str) -> str:
+    """Chữ thường, bỏ dấu, đ thành d: gõ "nguyen van" vẫn tìm ra "Nguyễn Văn"."""
+    decomposed = unicodedata.normalize("NFD", str(text or ""))
+    bare = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return bare.replace("đ", "d").replace("Đ", "D").lower()
+
+
+def _day_start(day: str) -> str:
+    try:
+        moment = datetime.strptime(day, "%Y-%m-%d").replace(hour=12, tzinfo=VN_TZ)
+    except ValueError as exc:
+        raise ValueError(f"Ngày không đúng dạng: {day}") from exc
+    return vn_day_bounds(moment)[1]
+
+
+def _result_where(filters: ResultFilter) -> tuple[str, list[object]]:
+    """Điều kiện SQL trên results r và videos v. Chuỗi rỗng là mọi dòng."""
+    parts: list[str] = []
+    params: list[object] = []
+    text = "".join(filters.query.split())
     if text.startswith("+84"):
         text = "0" + text[3:]
     if text.isdigit():
-        return (
-            f"WHERE {prefix}phone >= ? AND {prefix}phone < ? AND {prefix}phone != ''",
-            [text, text + ":"],
-        )
-    if text:
-        handle = text if text.startswith("@") else "@" + text
-        return (
-            f"WHERE {prefix}username >= ? AND {prefix}username < ? AND {prefix}username != ''",
-            [handle, handle + "\U0010ffff"],
-        )
-    return "", []
+        parts.append("r.phone >= ? AND r.phone < ? AND r.phone != ''")
+        params += [text, text + ":"]
+    elif text.startswith("@"):
+        parts.append("r.username >= ? AND r.username < ? AND r.username != ''")
+        params += [text, text + "\U0010ffff"]
+    elif text:
+        handle = "@" + text
+        words = " ".join(filters.query.split())
+        pattern = "%" + fold_text(words).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        parts.append("((r.username >= ? AND r.username < ? AND r.username != '') OR fold(r.name) LIKE ? ESCAPE '\\')")
+        params += [handle, handle + "\U0010ffff", pattern]
+    if filters.day_from:
+        parts.append("r.created_at >= ?")
+        params.append(_day_start(filters.day_from))
+    if filters.day_to:
+        parts.append("r.created_at < ?")
+        try:
+            moment = datetime.strptime(filters.day_to, "%Y-%m-%d").replace(hour=12, tzinfo=VN_TZ)
+        except ValueError as exc:
+            raise ValueError(f"Ngày không đúng dạng: {filters.day_to}") from exc
+        params.append(vn_day_bounds(moment)[2])
+    if filters.device is not None:
+        parts.append("COALESCE(v.device, '') = ?")
+        params.append(filters.device)
+    if filters.video_id:
+        parts.append("r.video_id = ?")
+        params.append(int(filters.video_id))
+    if filters.bucket:
+        parts.append("r.bucket = ?")
+        params.append(int(filters.bucket))
+    if filters.checked in ("ok", "diff"):
+        parts.append("r.checked = ?")
+        params.append(filters.checked)
+    elif filters.checked == "none":
+        parts.append("COALESCE(r.checked, '') = ''")
+    return ("WHERE " + " AND ".join(parts), params) if parts else ("", [])
+
+
+def _with_fold(conn: sqlite3.Connection) -> sqlite3.Connection:
+    conn.create_function("fold", 1, fold_text, deterministic=True)
+    return conn
 
 
 def result_page(
@@ -1551,15 +1628,17 @@ def result_page(
     limit: int = 50,
     before: int = 0,
     after: int = 0,
+    filters: ResultFilter | None = None,
 ) -> dict[str, object]:
     """Một trang kết quả, dòng mới nhất (id lớn hơn) ở trên.
 
     before lấy các dòng cũ hơn id đó. after lấy các dòng mới hơn id đó.
     Nếu cả hai cùng có thì after thắng. before trong kết quả là id dòng cuối
     khi trang đầy và đang đi xuống, để lấy trang kế. 0 nghĩa là hết trang.
+    query là đầu số, đầu @username, hoặc một phần tên (không cần gõ dấu).
     """
-    where, params = _result_filter(query, "r")
-    count_where, count_params = _result_filter(query)
+    chosen = filters if filters is not None else ResultFilter(query=query)
+    where, params = _result_where(chosen)
     page_size = max(1, min(int(limit), 1000))
     cursor_sql = ""
     cursor_params: list[object] = []
@@ -1570,14 +1649,20 @@ def result_page(
         cursor_sql = (" AND " if where else " WHERE ") + "r.id < ?"
         cursor_params = [int(before)]
     with connect(db_path) as conn:
-        if count_where:
-            total = int(conn.execute(f"SELECT COUNT(*) AS n FROM results {count_where}", count_params).fetchone()["n"])
+        _with_fold(conn)
+        if where:
+            total = int(
+                conn.execute(
+                    f"SELECT COUNT(*) AS n FROM results r LEFT JOIN videos v ON v.id = r.video_id {where}", params
+                ).fetchone()["n"]
+            )
         else:
             total = int(conn.execute("SELECT COALESCE(SUM(n), 0) AS n FROM result_counts").fetchone()["n"])
         rows = conn.execute(
             f"""
-            SELECT r.id, r.phone, r.name, r.username, r.bucket, r.reason, r.video_id,
-                   COALESCE(v.helper, '') AS helper, COALESCE(r.checked, '') AS checked
+            SELECT r.id, r.phone, r.name, r.username, r.bucket, r.reason, r.video_id, r.created_at,
+                   COALESCE(v.helper, '') AS helper, COALESCE(r.checked, '') AS checked,
+                   COALESCE(v.device, '') AS device
             FROM results r
             LEFT JOIN videos v ON v.id = r.video_id
             {where}{cursor_sql}
@@ -1591,6 +1676,35 @@ def result_page(
     if after <= 0 and len(items) == page_size:
         next_before = int(items[-1]["id"])
     return {"items": items, "total": total, "before": next_before}
+
+
+def iter_results(db_path: Path, filters: ResultFilter) -> Iterator[dict[str, object]]:
+    """Mọi dòng khớp bộ lọc, cũ trước mới sau, để xuất file. Đọc trong một lần chụp nhất quán."""
+    where, params = _result_where(filters)
+    conn = _with_fold(sqlite3.connect(str(db_path), timeout=30, isolation_level=None))
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA query_only=ON;")
+    conn.execute("BEGIN")
+    try:
+        cursor = conn.execute(
+            f"""
+            SELECT r.id, r.phone, r.name, r.username, r.bucket, r.reason, r.video_id, r.created_at,
+                   COALESCE(v.helper, '') AS helper, COALESCE(r.checked, '') AS checked,
+                   COALESCE(v.device, '') AS device, COALESCE(v.name, '') AS video
+            FROM results r
+            LEFT JOIN videos v ON v.id = r.video_id
+            {where}
+            ORDER BY r.id
+            """,
+            params,
+        )
+        for row in cursor:
+            item = _public_result(row)
+            item["video"] = str(row["video"] or "")
+            yield item
+    finally:
+        conn.execute("ROLLBACK")
+        conn.close()
 
 
 def search_results(db_path: Path, query: str = "", limit: int = 50) -> list[dict[str, object]]:
@@ -1735,6 +1849,8 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
 
 
 def _public_result(row: sqlite3.Row) -> dict[str, object]:
+    keys = row.keys()
+    normalized, network, note = phone_columns(str(row["phone"] or ""))
     return {
         "id": int(row["id"]),
         "phone": row["phone"],
@@ -1745,6 +1861,11 @@ def _public_result(row: sqlite3.Row) -> dict[str, object]:
         "video_id": int(row["video_id"] or 0),
         "helper": str(row["helper"] or ""),
         "checked": str(row["checked"] or ""),
+        "device": str(row["device"] or "") if "device" in keys else "",
+        "created_at": str(row["created_at"] or "") if "created_at" in keys else "",
+        "normalized": normalized,
+        "carrier": network,
+        "phone_note": note,
     }
 
 
