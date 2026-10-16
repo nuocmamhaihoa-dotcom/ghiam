@@ -1,16 +1,27 @@
 @echo off
-chcp 65001 >nul
+setlocal EnableExtensions
 set PYTHONIOENCODING=utf-8
 set PYTHONUTF8=1
+set "GHIAM_ROOT=%PUBLIC%\GhiamPC"
+if not exist "%GHIAM_ROOT%" mkdir "%GHIAM_ROOT%"
+copy /Y "%~f0" "%GHIAM_ROOT%\ghiam-pc.bat" >nul
 set "GHIAM_LAUNCHER=%~f0"
+if exist "%GHIAM_ROOT%\ghiam-pc.bat" set "GHIAM_LAUNCHER=%GHIAM_ROOT%\ghiam-pc.bat"
+:run
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$raw = [IO.File]::ReadAllText($env:GHIAM_LAUNCHER, [Text.UTF8Encoding]::new($false)); $mark = '###GHIAM_PS1###'; $i = $raw.IndexOf($mark); if ($i -lt 0) { Write-Host 'File ket noi khong dung.'; exit 1 }; Invoke-Expression $raw.Substring($i + $mark.Length).Trim(); if ($null -eq $LASTEXITCODE) { exit 0 } else { exit $LASTEXITCODE }"
-echo.
-echo Dong cua so nay la PC ngung giup doc. Mo lai file nay khi muon PC doc tiep.
-pause
+if "%ERRORLEVEL%"=="0" goto done
+echo Chua xong. Dang thu lai, cu de cua so nay mo.
+ping -n 11 127.0.0.1 >nul
+goto run
+:done
+echo Cua so nay dung. Neu chua co cua so khac dang mo, hay mo lai file.
+ping -n 6 127.0.0.1 >nul
 exit /b 0
 ###GHIAM_PS1###
 $ErrorActionPreference = 'Stop'
+try { chcp 65001 | Out-Null } catch {}
 try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch {}
+[System.Net.ServicePointManager]::Expect100Continue = $false
 $server = '__GHIAM_SERVER__'
 $token = '__GHIAM_TOKEN__'
 if (-not [Environment]::Is64BitOperatingSystem) {
@@ -28,8 +39,6 @@ if (-not $haveWindow) {
   Write-Host 'PC đã có một cửa sổ đang chạy. Cứ để cửa sổ đó mở.'
   exit 0
 }
-$curl = Join-Path $env:SystemRoot 'System32\curl.exe'
-if (-not (Test-Path -LiteralPath $curl)) { $curl = 'curl.exe' }
 $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
 if (-not (Test-Path -LiteralPath $tar)) { $tar = 'tar.exe' }
 $root = Join-Path $env:PUBLIC 'GhiamPC'
@@ -46,15 +55,66 @@ function Save-Url([string]$Url, [string]$Dest, [string]$Label) {
   $part = $Dest + '.part'
   $done = $false
   for ($try = 1; $try -le 8; $try++) {
-    $before = 0
-    if (Test-Path -LiteralPath $part) { $before = (Get-Item -LiteralPath $part).Length }
-    & $curl -fL --retry 3 --retry-delay 2 -C - --speed-time 60 --speed-limit 1000 -H "Authorization: Bearer $token" -o $part $Url
-    $after = 0
-    if (Test-Path -LiteralPath $part) { $after = (Get-Item -LiteralPath $part).Length }
-    if ($LASTEXITCODE -eq 0 -and $after -gt 0) { $done = $true; break }
-    if ($after -le $before) { Remove-Item -LiteralPath $part -Force -ErrorAction SilentlyContinue }
-    Write-Host "Chưa tải xong. Thử lại lần $try."
-    Start-Sleep -Seconds (5 * $try)
+    $resp = $null
+    $stream = $null
+    $file = $null
+    try {
+      $start = [int64]0
+      if (Test-Path -LiteralPath $part) { $start = (Get-Item -LiteralPath $part).Length }
+      $req = [System.Net.HttpWebRequest]([System.Net.WebRequest]::Create($Url))
+      $req.Method = 'GET'
+      $req.AllowAutoRedirect = $true
+      $req.AutomaticDecompression = [System.Net.DecompressionMethods]::None
+      $req.Timeout = 120000
+      $req.ReadWriteTimeout = 300000
+      $req.UserAgent = 'GhiamPC'
+      $proxy = [System.Net.WebRequest]::GetSystemWebProxy()
+      $proxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
+      $req.Proxy = $proxy
+      $req.Headers.Add('Authorization', ('Bearer ' + $token))
+      if ($start -gt 0) { [void]$req.AddRange($start) }
+      $resp = $req.GetResponse()
+      $code = [int]$resp.StatusCode
+      if ($start -gt 0 -and $code -ne 206) { $start = 0 }
+      $stream = $resp.GetResponseStream()
+      $mode = [System.IO.FileMode]::Create
+      if ($start -gt 0) { $mode = [System.IO.FileMode]::Append }
+      $access = [System.IO.FileAccess]::Write
+      $file = New-Object System.IO.FileStream($part, $mode, $access)
+      $buffer = New-Object byte[] 1048576
+      while ($true) {
+        $n = $stream.Read($buffer, 0, $buffer.Length)
+        if ($n -le 0) { break }
+        $file.Write($buffer, 0, $n)
+      }
+      $file.Dispose()
+      $file = $null
+      $expect = [int64]$resp.ContentLength
+      $got = (Get-Item -LiteralPath $part).Length
+      if ($expect -ge 0) {
+        $received = $got - $start
+        if ($code -eq 206) { if ($received -ne $expect) { throw 'Tải còn thiếu.' } }
+        elseif ($got -ne $expect) { throw 'Tải còn thiếu.' }
+      }
+      if ($got -le 0) { throw 'Tải về rỗng.' }
+      $done = $true
+      break
+    } catch {
+      $status = 0
+      $web = $_.Exception
+      if (-not $web.Response -and $web.InnerException -and $web.InnerException.Response) { $web = $web.InnerException }
+      if ($web.Response) {
+        try { $status = [int]$web.Response.StatusCode } catch {}
+        try { $web.Response.Close() } catch {}
+      }
+      if ($status -eq 416) { Remove-Item -LiteralPath $part -Force -ErrorAction SilentlyContinue }
+      Write-Host ("Chưa tải xong. Thử lại lần " + $try + ".")
+      Start-Sleep -Seconds (5 * $try)
+    } finally {
+      if ($file) { $file.Dispose() }
+      if ($stream) { $stream.Dispose() }
+      if ($resp) { $resp.Dispose() }
+    }
   }
   if (-not $done) { throw 'Chưa tải xong từ máy chủ. Cứ để cửa sổ này mở.' }
   Move-Item -LiteralPath $part -Destination $Dest -Force
@@ -215,6 +275,13 @@ while ($true) {
 
     if (-not $script:basePath) { $script:basePath = $env:Path }
     $env:Path = (Split-Path -Parent $pyExe) + ';' + (Split-Path -Parent $ff.FullName) + ';' + (Split-Path -Parent $tessExe) + ';' + $script:basePath
+    $proxyProbe = [System.Net.WebRequest]::GetSystemWebProxy()
+    $direct = New-Object System.Uri ($base + '/')
+    $via = $proxyProbe.GetProxy($direct)
+    if ($via.AbsoluteUri -ne $direct.AbsoluteUri) {
+      $env:HTTP_PROXY = $via.AbsoluteUri
+      $env:HTTPS_PROXY = $via.AbsoluteUri
+    }
     Set-Location -LiteralPath $root
     & $pyExe $script
     if ($LASTEXITCODE -eq 2) {
