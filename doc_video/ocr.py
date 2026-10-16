@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import atexit
+import ctypes
+import ctypes.util
 import functools
 import os
 import shutil
@@ -12,9 +15,15 @@ from pathlib import Path
 
 from PIL import Image
 
+# Mỗi tiến trình đọc đã chiếm một nhân. Không để tesseract tự mở thêm luồng.
+os.environ.setdefault("OMP_THREAD_LIMIT", "1")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+
 DIGITS = "0123456789"
 ASCII = "@._-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ "
 _ONE_THREAD = {**os.environ, "OMP_THREAD_LIMIT": "1", "OMP_NUM_THREADS": "1"}
+_ENGINE: dict[str, ctypes.CDLL | None] = {}
+_ENGINES: dict[tuple[str, int, str, str | None], int | None] = {}
 
 
 @dataclass(frozen=True)
@@ -58,11 +67,128 @@ def best_dir() -> str | None:
     return None
 
 
+def _library():
+    """Thư viện tesseract nạp một lần trong tiến trình. None nếu máy không có."""
+    if "lib" in _ENGINE:
+        return _ENGINE["lib"]
+    name = ctypes.util.find_library("tesseract")
+    try:
+        lib = ctypes.CDLL(name or "libtesseract.so.5")
+        lib.TessBaseAPIGetTsvText.restype = ctypes.c_void_p
+    except (AttributeError, OSError):
+        _ENGINE["lib"] = None
+        return None
+    lib.TessBaseAPICreate.restype = ctypes.c_void_p
+    lib.TessBaseAPIInit2.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+    lib.TessBaseAPIInit2.restype = ctypes.c_int
+    lib.TessBaseAPISetPageSegMode.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    lib.TessBaseAPISetVariable.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+    lib.TessBaseAPISetVariable.restype = ctypes.c_int
+    lib.TessBaseAPISetImage.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+    ]
+    lib.TessBaseAPISetSourceResolution.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    lib.TessBaseAPIGetTsvText.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    lib.TessBaseAPIEnd.argtypes = [ctypes.c_void_p]
+    lib.TessBaseAPIDelete.argtypes = [ctypes.c_void_p]
+    lib.TessDeleteText.argtypes = [ctypes.c_void_p]
+    _ENGINE["lib"] = lib
+    return lib
+
+
+def _close_engines() -> None:
+    lib = _ENGINE.get("lib")
+    if lib is None:
+        return
+    for api in _ENGINES.values():
+        if api:
+            lib.TessBaseAPIEnd(api)
+            lib.TessBaseAPIDelete(api)
+    _ENGINES.clear()
+
+
+atexit.register(_close_engines)
+
+
+def _engine(lang: str, psm: int, whitelist: str, best: bool):
+    """Một bộ đọc giữ sẵn trong tiến trình. Nạp lại bộ chữ cho mỗi khung làm chậm hơn nhiều lần đọc."""
+    tessdata = best_dir() if best else None
+    key = (lang, psm, whitelist, tessdata)
+    if key in _ENGINES:
+        return _ENGINES[key]
+    lib = _library()
+    if lib is None:
+        _ENGINES[key] = None
+        return None
+    api = lib.TessBaseAPICreate()
+    folder = tessdata.encode() if tessdata else None
+    if not api or lib.TessBaseAPIInit2(api, folder, lang.encode(), 3) != 0:
+        _ENGINES[key] = None
+        return None
+    lib.TessBaseAPISetPageSegMode(api, psm)
+    if whitelist:
+        lib.TessBaseAPISetVariable(api, b"tessedit_char_whitelist", whitelist.encode())
+    _ENGINES[key] = api
+    return api
+
+
+def _words_from_tsv(text: str) -> list[list[str]]:
+    rows: list[list[str]] = []
+    for raw in text.splitlines():
+        parts = raw.split("\t")
+        if len(parts) < 12 or parts[0] != "5" or not parts[11].strip():
+            continue
+        rows.append(parts)
+    return rows
+
+
+def _recognize(api: int, image: Image.Image) -> list[list[str]]:
+    lib = _library()
+    if lib is None:
+        return []
+    if image.mode == "L":
+        pixels, channels = image.tobytes(), 1
+    else:
+        rgb = image if image.mode == "RGB" else image.convert("RGB")
+        pixels, channels = rgb.tobytes(), 3
+        image = rgb
+    buffer = ctypes.create_string_buffer(pixels)
+    saved = os.dup(2)
+    quiet = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(quiet, 2)
+        lib.TessBaseAPISetImage(api, buffer, image.width, image.height, channels, image.width * channels)
+        lib.TessBaseAPISetSourceResolution(api, 300)
+        pointer = lib.TessBaseAPIGetTsvText(api, 0)
+    finally:
+        os.dup2(saved, 2)
+        os.close(saved)
+        os.close(quiet)
+    if not pointer:
+        return []
+    raw = ctypes.cast(pointer, ctypes.c_char_p).value or b""
+    lib.TessDeleteText(pointer)
+    return _words_from_tsv(raw.decode("utf-8", "replace"))
+
+
 def _run(images: list[Image.Image], lang: str, psm: int, whitelist: str, best: bool) -> list[list[list[str]]]:
     """Trả về, cho từng ảnh, danh sách dòng TSV (đã tách cột) ở mức từ."""
-    pages: list[list[list[str]]] = [[] for _ in images]
     if not images:
-        return pages
+        return []
+    api = _engine(lang, psm, whitelist, best)
+    if api is not None:
+        return [_recognize(api, image) for image in images]
+    return _run_cli(images, lang, psm, whitelist, best)
+
+
+def _run_cli(images: list[Image.Image], lang: str, psm: int, whitelist: str, best: bool) -> list[list[list[str]]]:
+    """Đọc bằng tiến trình tesseract khi không nạp được thư viện."""
+    pages: list[list[list[str]]] = [[] for _ in images]
     with tempfile.TemporaryDirectory(prefix="docvideo-") as folder:
         paths = []
         for index, image in enumerate(images):

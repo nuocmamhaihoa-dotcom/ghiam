@@ -65,7 +65,21 @@ def extract_frames(video: Path, folder: Path, fps: float) -> list[tuple[Path, fl
         raise RuntimeError("Chưa cài ffmpeg. Ubuntu: sudo apt install ffmpeg")
     pattern = folder / "f_%06d.jpg"
     done = subprocess.run(
-        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(video), "-vf", f"fps={fps}", "-q:v", "2", str(pattern)],
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-threads",
+            "0",
+            "-i",
+            str(video),
+            "-vf",
+            f"fps={fps}",
+            "-q:v",
+            "2",
+            str(pattern),
+        ],
         capture_output=True,
         text=True,
         errors="replace",
@@ -221,7 +235,7 @@ def read_inputs(
             else:
                 raise RuntimeError(f"Không đọc được {path.name}: cần ảnh hoặc video.")
         if submit is None:
-            workers = workers or max(1, (os.cpu_count() or 2) - 1)
+            workers = workers or max(1, os.cpu_count() or 1)
             if workers > 1 and len(jobs) > 1:
                 pool = ProcessPoolExecutor(max_workers=workers)
                 submit = pool.submit

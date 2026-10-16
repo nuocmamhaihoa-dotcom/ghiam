@@ -57,17 +57,17 @@ def vn_day_bounds(now: datetime | None = None) -> tuple[str, str, str]:
 
 
 def worker_count() -> int:
+    """Số tiến trình đọc khung. Mặc định bằng mọi nhân của máy."""
     raw = os.environ.get("CONTROL_VIDEO_WORKERS", "").strip()
     if raw:
         return max(1, int(raw))
-    cpus = os.cpu_count() or 2
-    return max(1, cpus - 1)
+    return max(1, os.cpu_count() or 1)
 
 
 def feeder_count() -> int:
     """Số video đọc cùng lúc. Mặc định một video: các video còn lại nằm trong hàng chờ.
 
-    Một video đã dùng hết các nhân để đọc khung. Đọc thêm video cùng lúc chỉ thêm đĩa và bộ nhớ,
+    Một video đã dùng hết các nhân để đọc khung. Đọc thêm video cùng lúc chỉ tranh nhân,
     và một video hỏng làm phải khởi động lại cả nhóm.
     """
     raw = os.environ.get("CONTROL_VIDEO_FEEDERS", "").strip()
