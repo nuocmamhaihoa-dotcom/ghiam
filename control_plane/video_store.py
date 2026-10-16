@@ -8,6 +8,7 @@ Một dòng khoảng vài trăm byte. Một trăm triệu dòng nằm trong vài
 from __future__ import annotations
 
 import os
+import secrets
 import shutil
 import sqlite3
 import time
@@ -26,6 +27,10 @@ BUCKET_OK = 1
 BUCKET_REVIEW = 2
 BUCKET_UNOPENED = 3
 BUCKET_LABEL = {BUCKET_OK: "Đã lưu", BUCKET_REVIEW: "Cần xem", BUCKET_UNOPENED: "Chưa mở hồ sơ"}
+# PC giữ video ở trạng thái pc, không phải running. Bộ đọc trên máy chủ chỉ nhận queued
+# và chỉ thu hồi running, nên khởi động lại bộ đọc không cướp video PC đang đọc.
+# Không có nhịp trong khoảng này thì video trở lại hàng chờ.
+PC_LEASE_SECONDS = 900
 
 
 def utcnow() -> str:
@@ -163,6 +168,7 @@ def init_db(db_path: Path) -> None:
         )
         _ensure_video_count_columns(conn)
         _ensure_video_device_column(conn)
+        _ensure_pc_columns(conn)
     _READY.add(key)
 
 
@@ -186,13 +192,24 @@ def _ensure_video_device_column(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_device ON videos(device, created_at)")
 
 
+def _ensure_pc_columns(conn: sqlite3.Connection) -> None:
+    """Cột giữ video cho PC. Bộ đọc trên máy chủ không đụng trạng thái pc."""
+    columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(videos)")}
+    if "helper" not in columns:
+        conn.execute("ALTER TABLE videos ADD COLUMN helper TEXT NOT NULL DEFAULT ''")
+    if "lease" not in columns:
+        conn.execute("ALTER TABLE videos ADD COLUMN lease TEXT NOT NULL DEFAULT ''")
+    if "lease_at" not in columns:
+        conn.execute("ALTER TABLE videos ADD COLUMN lease_at TEXT")
+
+
 def queued_bytes(db_path: Path) -> int:
     """Dung lượng video còn file trên đĩa: đang tải, đang chờ, đang đọc, đã xong và lỗi."""
     with connect(db_path) as conn:
         row = conn.execute(
             """
             SELECT COALESCE(SUM(size_bytes), 0) AS n FROM videos
-            WHERE status IN ('uploading', 'queued', 'running')
+            WHERE status IN ('uploading', 'queued', 'running', 'pc')
                OR (status IN ('done', 'error') AND path != '')
             """
         ).fetchone()
@@ -425,7 +442,7 @@ def list_videos(db_path: Path, limit: int | None = None, device: str | None = No
 
 
 def stats(db_path: Path) -> dict[str, int]:
-    counts = {"queued": 0, "running": 0, "done": 0, "error": 0, "uploading": 0}
+    counts = {"queued": 0, "running": 0, "done": 0, "error": 0, "uploading": 0, "pc": 0}
     buckets = {"saved": 0, "review": 0, "unopened": 0}
     with connect(db_path) as conn:
         for row in conn.execute("SELECT status, COUNT(*) AS n FROM videos GROUP BY status"):
@@ -465,7 +482,7 @@ def device_day(db_path: Path, now: datetime | None = None) -> dict[str, object]:
               COALESCE(SUM(CASE
                 WHEN status = 'done' AND finished_at >= ? AND finished_at < ? THEN 1 ELSE 0 END), 0) AS done,
               COALESCE(SUM(CASE
-                WHEN status IN ('queued', 'running', 'uploading') THEN 1 ELSE 0 END), 0) AS waiting
+                WHEN status IN ('queued', 'running', 'uploading', 'pc') THEN 1 ELSE 0 END), 0) AS waiting
             FROM videos
             GROUP BY device
             ORDER BY uploaded DESC, waiting DESC, device ASC
@@ -511,6 +528,125 @@ def claim(db_path: Path, pid: int) -> dict[str, object] | None:
         if cur.rowcount != 1:
             return None
         return {"id": int(row["id"]), "name": row["name"], "path": row["path"]}
+
+
+def _release_stale_pc(conn: sqlite3.Connection, seconds: int = PC_LEASE_SECONDS) -> int:
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=seconds)).isoformat()
+    cur = conn.execute(
+        """
+        UPDATE videos
+        SET status = 'queued', pid = NULL, started_at = NULL, error = '',
+            lease = '', helper = '', lease_at = NULL
+        WHERE status = 'pc' AND (lease_at IS NULL OR lease_at = '' OR lease_at < ?)
+        """,
+        (cutoff,),
+    )
+    return cur.rowcount
+
+
+def release_stale_pc(db_path: Path, seconds: int = PC_LEASE_SECONDS) -> int:
+    """Video PC đã nhận nhưng không còn nhịp thì trở lại hàng chờ cho máy chủ hoặc PC khác."""
+    with connect(db_path) as conn:
+        return _release_stale_pc(conn, seconds)
+
+
+def claim_pc(db_path: Path, helper: str) -> dict[str, object] | None:
+    """Đưa một video đang chờ cho PC. Trạng thái pc, bộ đọc trên máy chủ không nhận."""
+    name = clean_device(helper) or "PC"
+    with connect(db_path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _release_stale_pc(conn)
+        for _ in range(20):
+            row = conn.execute(
+                """
+                SELECT id, path, size_bytes, sha256 FROM videos
+                WHERE status = 'queued' AND path != ''
+                ORDER BY id LIMIT 1
+                """
+            ).fetchone()
+            if row is None:
+                conn.execute("COMMIT")
+                return None
+            if not Path(str(row["path"])).is_file():
+                conn.execute(
+                    """
+                    UPDATE videos
+                    SET status = 'error', error = ?, finished_at = ?, pid = NULL
+                    WHERE id = ? AND status = 'queued'
+                    """,
+                    ("Không còn file video.", utcnow(), row["id"]),
+                )
+                continue
+            lease = secrets.token_hex(16)
+            now = utcnow()
+            cur = conn.execute(
+                """
+                UPDATE videos
+                SET status = 'pc', pid = NULL, started_at = ?, error = '',
+                    helper = ?, lease = ?, lease_at = ?
+                WHERE id = ? AND status = 'queued'
+                """,
+                (now, name, lease, now, row["id"]),
+            )
+            if cur.rowcount != 1:
+                continue
+            conn.execute("COMMIT")
+            return {
+                "id": int(row["id"]),
+                "bytes": int(row["size_bytes"]),
+                "sha256": str(row["sha256"]),
+                "lease": lease,
+            }
+        conn.execute("COMMIT")
+        return None
+
+
+def touch_pc(db_path: Path, video_id: int, lease: str) -> bool:
+    if not lease:
+        return False
+    with connect(db_path) as conn:
+        cur = conn.execute(
+            """
+            UPDATE videos SET lease_at = ?
+            WHERE id = ? AND status = 'pc' AND lease = ?
+            """,
+            (utcnow(), video_id, lease),
+        )
+        return cur.rowcount == 1
+
+
+def release_pc(db_path: Path, video_id: int, lease: str) -> bool:
+    """PC đọc hỏng thì trả video về hàng chờ. Phiếu không khớp thì không đụng video của máy khác."""
+    if not lease:
+        return False
+    with connect(db_path) as conn:
+        cur = conn.execute(
+            """
+            UPDATE videos
+            SET status = 'queued', pid = NULL, started_at = NULL, error = '',
+                lease = '', helper = '', lease_at = NULL
+            WHERE id = ? AND status = 'pc' AND lease = ?
+            """,
+            (video_id, lease),
+        )
+        return cur.rowcount == 1
+
+
+def pc_video_path(db_path: Path, video_id: int, lease: str, root: Path) -> Path | None:
+    """File video chỉ khi PC còn giữ đúng phiếu, và file nằm trong thư mục video."""
+    if not lease:
+        return None
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT path FROM videos WHERE id = ? AND status = 'pc' AND lease = ?",
+            (video_id, lease),
+        ).fetchone()
+    if row is None:
+        return None
+    path = Path(str(row["path"] or ""))
+    if not path.is_file() or not _path_inside(path, root):
+        return None
+    return path
 
 
 def requeue(db_path: Path, video_id: int) -> None:
@@ -572,17 +708,28 @@ def video_counts(table: Table) -> tuple[int, int]:
     return len(phones), len(complete)
 
 
-def finish(db_path: Path, video_id: int, table: Table) -> None:
+def finish(db_path: Path, video_id: int, table: Table, lease: str | None = None) -> bool:
     """Ghi kết quả một lần đọc video.
 
     Đọc lại một video thì bỏ các dòng cần xem và chưa mở hồ sơ mà chính video đó
     để lại từ lần đọc trước, rồi ghi kết quả mới; nếu không, dòng sai của bộ đọc
     cũ nằm lại mãi. Dòng đã lưu của video đó được thay bằng dòng đã lưu mới.
     Dòng do video khác tạo ra không bị đụng tới.
+
+    Có phiếu thì chỉ ghi khi video vẫn đang do đúng PC đó giữ. Phiếu sai thì
+    không đổi dòng nào.
     """
     phones, full = video_counts(table)
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
+        if lease is not None:
+            owned = conn.execute(
+                "SELECT id FROM videos WHERE id = ? AND status = 'pc' AND lease = ? AND lease != ''",
+                (video_id, lease),
+            ).fetchone()
+            if owned is None:
+                conn.execute("ROLLBACK")
+                return False
         conn.execute("DELETE FROM results WHERE video_id = ? AND bucket != ?", (video_id, BUCKET_OK))
         for row in table.rows:
             _put(conn, row.phone, row.name, row.username, BUCKET_OK, "", video_id, upgrade=True)
@@ -590,16 +737,26 @@ def finish(db_path: Path, video_id: int, table: Table) -> None:
             _put(conn, item.phone, item.name, "", BUCKET_UNOPENED, "", video_id, upgrade=False)
         for item in table.review:
             _put_review(conn, item, video_id)
-        conn.execute(
-            """
+        where = "WHERE id = ?"
+        params: list[object] = [utcnow(), phones, full, video_id]
+        if lease is not None:
+            where += " AND status = 'pc' AND lease = ?"
+            params.append(lease)
+        cur = conn.execute(
+            f"""
             UPDATE videos
             SET status = 'done', pid = NULL, finished_at = ?, error = '',
-                phone_count = ?, full_count = ?
-            WHERE id = ?
+                phone_count = ?, full_count = ?,
+                lease = '', helper = '', lease_at = NULL
+            {where}
             """,
-            (utcnow(), phones, full, video_id),
+            params,
         )
+        if cur.rowcount != 1:
+            conn.execute("ROLLBACK")
+            return False
         conn.execute("COMMIT")
+    return True
 
 
 def backfill_video_counts(db_path: Path) -> int:

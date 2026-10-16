@@ -12,8 +12,9 @@ import zlib
 from pathlib import Path
 from typing import Any, BinaryIO
 
-from fastapi import APIRouter, File, Form, Header, HTTPException, Query, UploadFile
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import APIRouter, File, Form, Header, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from control_plane.settings import derive_secret, settings
@@ -26,21 +27,38 @@ from control_plane.upload_parts import (
     write_part,
 )
 from control_plane.video_scan import IMAGE_SUFFIXES, VIDEO_SUFFIXES
+from control_plane.pc_reader import (
+    code_sha256,
+    connector_bytes,
+    package_zip,
+    reader_manifest,
+    reader_zip,
+    table_from_payload,
+    tessdata_zip,
+    weights_file,
+    weights_info,
+)
 from control_plane.video_store import (
     abort_upload,
     begin_upload,
+    claim_pc,
     clean_device,
     commit_upload,
     device_day,
     disk_limit_bytes,
+    finish,
     init_db,
     iter_backup,
     list_videos,
+    pc_video_path,
     prune_old_videos,
     reader_alive,
+    release_pc,
+    release_stale_pc,
     result_page,
     retry,
     stats,
+    touch_pc,
     worker_count,
 )
 
@@ -62,29 +80,62 @@ def _disk_snapshot() -> tuple[int, int, int]:
     return usage.used, usage.free, disk_limit_bytes(usage.total, settings.video_disk_percent)
 
 
-def _ticket_key() -> bytes:
-    return derive_secret(settings.token or "no-token", "backup-ticket").encode("utf-8")
+def _ticket_key(purpose: str = "backup-ticket") -> bytes:
+    return derive_secret(settings.token or "no-token", purpose).encode("utf-8")
 
 
-def make_ticket(now: float) -> str:
+def make_ticket(now: float, purpose: str = "backup-ticket") -> str:
     """Vé tải tự kiểm được, nên chạy nhiều tiến trình web vẫn nhận ra vé của nhau."""
     expiry = str(int(now) + TICKET_SECONDS)
-    signature = hmac.new(_ticket_key(), expiry.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+    signature = hmac.new(_ticket_key(purpose), expiry.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
     return f"{expiry}-{signature}"
 
 
-def ticket_ok(ticket: str, now: float) -> bool:
+def ticket_ok(ticket: str, now: float, purpose: str = "backup-ticket") -> bool:
     expiry, _, signature = ticket.partition("-")
     if not expiry.isdigit() or int(expiry) < now:
         return False
-    expected = hmac.new(_ticket_key(), expiry.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+    expected = hmac.new(_ticket_key(purpose), expiry.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
     return hmac.compare_digest(signature, expected)
+
+
+PC_TICKET = "pc-ticket"
+
+
+def _public_base(request: Request) -> str:
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    if not host or "\n" in host or "\r" in host:
+        return str(request.base_url).rstrip("/")
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
+    if scheme not in ("http", "https"):
+        scheme = request.url.scheme
+    return f"{scheme}://{host}".rstrip("/")
+
+
+def _page_token() -> str:
+    return settings.page_token or settings.token
+
+
+class PcClaimBody(BaseModel):
+    name: str = "PC"
+
+
+class PcLeaseBody(BaseModel):
+    lease: str = ""
+
+
+class PcResultBody(BaseModel):
+    lease: str = ""
+    rows: list[dict] = Field(default_factory=list)
+    review: list[dict] = Field(default_factory=list)
+    unopened: list[dict] = Field(default_factory=list)
 
 
 @router.get("/v1/videos/stats")
 def video_stats(authorization: str | None = Header(default=None)) -> dict[str, object]:
     _auth(authorization)
     init_db(settings.video_db_path)
+    release_stale_pc(settings.video_db_path)
     body = stats(settings.video_db_path)
     body["workers"] = worker_count()
     body["reader_alive"] = reader_alive(settings.data_dir / "video-worker.heartbeat")
@@ -356,3 +407,140 @@ def backup_download(ticket: str) -> StreamingResponse:
         media_type="application/gzip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/v1/pc/reader")
+def pc_reader_manifest(authorization: str | None = Header(default=None)) -> dict[str, object]:
+    _auth(authorization)
+    return reader_manifest()
+
+
+@router.get("/v1/pc/reader.zip")
+def pc_reader_zip(authorization: str | None = Header(default=None)) -> Response:
+    _auth(authorization)
+    digest = code_sha256()
+    return Response(
+        content=reader_zip(),
+        media_type="application/zip",
+        headers={
+            "X-Reader-Sha256": digest,
+            "Cache-Control": "no-cache",
+        },
+    )
+
+
+@router.get("/v1/pc/weights")
+def pc_weights(authorization: str | None = Header(default=None)) -> FileResponse:
+    _auth(authorization)
+    info = weights_info()
+    path = weights_file()
+    if info is None or not path.is_file():
+        raise HTTPException(status_code=404, detail="Máy chủ không có bộ đọc dấu.")
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        filename="vgg_transformer.pth",
+        headers={"X-Weights-Sha256": str(info["sha256"]), "Cache-Control": "no-cache"},
+    )
+
+
+@router.get("/v1/pc/tessdata.zip")
+def pc_tessdata(authorization: str | None = Header(default=None)) -> Response:
+    _auth(authorization)
+    payload = tessdata_zip()
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Máy chủ không có bộ chữ riêng.")
+    return Response(content=payload, media_type="application/zip", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/v1/pc/connector/version")
+def pc_connector_version(authorization: str | None = Header(default=None)) -> dict[str, int]:
+    _auth(authorization)
+    manifest = reader_manifest()
+    return {"version": int(manifest["version"])}
+
+
+@router.get("/v1/pc/connector.py")
+def pc_connector_script(request: Request, authorization: str | None = Header(default=None)) -> Response:
+    _auth(authorization)
+    token = _page_token()
+    if not token:
+        raise HTTPException(status_code=404, detail="Chưa có mã trang.")
+    return Response(
+        content=connector_bytes(_public_base(request), token),
+        media_type="text/x-python",
+        headers={"Cache-Control": "no-cache", "Content-Disposition": 'attachment; filename="ghiam-pc.py"'},
+    )
+
+
+@router.post("/v1/pc/ticket")
+def pc_ticket(request: Request, authorization: str | None = Header(default=None)) -> dict[str, str]:
+    _auth(authorization)
+    if not _page_token():
+        raise HTTPException(status_code=404, detail="Chưa có mã trang.")
+    return {"url": f"/v1/pc/package/{make_ticket(time.time(), PC_TICKET)}"}
+
+
+@router.get("/v1/pc/package/{ticket}")
+def pc_package(ticket: str, request: Request) -> Response:
+    if not ticket_ok(ticket, time.time(), PC_TICKET):
+        raise HTTPException(status_code=404, detail="Liên kết tải đã hết hạn. Bấm tải lại.")
+    token = _page_token()
+    if not token:
+        raise HTTPException(status_code=404, detail="Chưa có mã trang.")
+    return Response(
+        content=package_zip(_public_base(request), token),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="ghiam-pc.zip"', "Cache-Control": "no-cache"},
+    )
+
+
+@router.post("/v1/pc/claim")
+def pc_claim(body: PcClaimBody, authorization: str | None = Header(default=None)) -> dict[str, object]:
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    job = claim_pc(settings.video_db_path, body.name)
+    if job is not None:
+        print(f"PC nhận video {job['id']}.", flush=True)
+    return {"video": job}
+
+
+@router.post("/v1/pc/videos/{video_id}/heartbeat")
+def pc_heartbeat(video_id: int, body: PcLeaseBody, authorization: str | None = Header(default=None)) -> dict[str, bool]:
+    _auth(authorization)
+    if not touch_pc(settings.video_db_path, video_id, body.lease):
+        raise HTTPException(status_code=409, detail="Video không còn dành cho PC này.")
+    return {"ok": True}
+
+
+@router.get("/v1/pc/videos/{video_id}/file")
+def pc_file(video_id: int, lease: str = Query(default=""), authorization: str | None = Header(default=None)) -> FileResponse:
+    _auth(authorization)
+    path = pc_video_path(settings.video_db_path, video_id, lease, settings.video_dir)
+    if path is None:
+        raise HTTPException(status_code=409, detail="Video không còn dành cho PC này.")
+    return FileResponse(path, media_type="video/mp4", filename=f"{video_id}.mp4")
+
+
+@router.post("/v1/pc/videos/{video_id}/release")
+def pc_release(video_id: int, body: PcLeaseBody, authorization: str | None = Header(default=None)) -> dict[str, bool]:
+    _auth(authorization)
+    return {"ok": release_pc(settings.video_db_path, video_id, body.lease)}
+
+
+@router.post("/v1/pc/videos/{video_id}/result")
+def pc_result(video_id: int, body: PcResultBody, authorization: str | None = Header(default=None)) -> dict[str, object]:
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    try:
+        table = table_from_payload({"rows": body.rows, "review": body.review, "unopened": body.unopened})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    saved = finish(settings.video_db_path, video_id, table, lease=body.lease)
+    if not saved:
+        raise HTTPException(status_code=409, detail="Video không còn dành cho PC này.")
+    print(
+        f"PC xong video {video_id}: {len(table.rows)} hàng đủ, {len(table.review)} cần xem, {len(table.unopened)} chưa mở hồ sơ.",
+        flush=True,
+    )
+    return {"ok": True, "rows": len(table.rows), "review": len(table.review), "unopened": len(table.unopened)}
