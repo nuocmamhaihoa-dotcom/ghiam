@@ -12,6 +12,7 @@ import secrets
 import shutil
 import sqlite3
 import time
+import unicodedata
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -169,6 +170,7 @@ def init_db(db_path: Path) -> None:
         _ensure_video_count_columns(conn)
         _ensure_video_device_column(conn)
         _ensure_pc_columns(conn)
+        _ensure_check_columns(conn)
     _READY.add(key)
 
 
@@ -201,6 +203,17 @@ def _ensure_pc_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE videos ADD COLUMN lease TEXT NOT NULL DEFAULT ''")
     if "lease_at" not in columns:
         conn.execute("ALTER TABLE videos ADD COLUMN lease_at TEXT")
+
+
+def _ensure_check_columns(conn: sqlite3.Connection) -> None:
+    """Lần kiểm đọc lại dòng đủ ba ô. check_pass=1 là video đang được đối chiếu, không phải lần đọc mới."""
+    videos = {str(row["name"]) for row in conn.execute("PRAGMA table_info(videos)")}
+    if "check_pass" not in videos:
+        conn.execute("ALTER TABLE videos ADD COLUMN check_pass INTEGER NOT NULL DEFAULT 0")
+    results = {str(row["name"]) for row in conn.execute("PRAGMA table_info(results)")}
+    if "checked" not in results:
+        conn.execute("ALTER TABLE results ADD COLUMN checked TEXT NOT NULL DEFAULT ''")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_results_checked ON results(checked) WHERE checked != ''")
 
 
 def queued_bytes(db_path: Path) -> int:
@@ -419,7 +432,7 @@ def list_videos(db_path: Path, limit: int | None = None, device: str | None = No
     """
     sql = """
         SELECT id, name, size_bytes, status, error, created_at, started_at, finished_at,
-               phone_count, full_count, path, device, helper
+               phone_count, full_count, path, device, helper, check_pass
         FROM videos
     """
     params: list[object] = []
@@ -438,6 +451,7 @@ def list_videos(db_path: Path, limit: int | None = None, device: str | None = No
         path = str(item.pop("path") or "")
         item["has_file"] = bool(path) and Path(path).is_file()
         item["helper"] = str(item.get("helper") or "")
+        item["check_pass"] = int(item.get("check_pass") or 0)
         items.append(item)
     return items
 
@@ -456,7 +470,18 @@ def stats(db_path: Path) -> dict[str, int]:
                 buckets["review"] = int(row["n"])
             elif row["bucket"] == BUCKET_UNOPENED:
                 buckets["unopened"] = int(row["n"])
+        matched = conn.execute("SELECT COUNT(*) AS n FROM results WHERE checked = 'ok'").fetchone()
+        differed = conn.execute("SELECT COUNT(*) AS n FROM results WHERE checked = 'diff'").fetchone()
+        checking = conn.execute(
+            """
+            SELECT COUNT(*) AS n FROM videos
+            WHERE COALESCE(check_pass, 0) = 1 AND status IN ('queued', 'running', 'pc')
+            """
+        ).fetchone()
     counts.update(buckets)
+    counts["matched"] = int(matched["n"])
+    counts["differed"] = int(differed["n"])
+    counts["checking"] = int(checking["n"])
     counts["results"] = buckets["saved"] + buckets["review"] + buckets["unopened"]
     return counts
 
@@ -512,7 +537,13 @@ def claim(db_path: Path, pid: int) -> dict[str, object] | None:
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
-            "SELECT id, name, path FROM videos WHERE status = 'queued' AND path != '' ORDER BY id LIMIT 1"
+            """
+            SELECT id, name, path, COALESCE(check_pass, 0) AS check_pass
+            FROM videos
+            WHERE status = 'queued' AND path != ''
+            ORDER BY COALESCE(check_pass, 0), id
+            LIMIT 1
+            """
         ).fetchone()
         if row is None:
             conn.execute("COMMIT")
@@ -529,7 +560,12 @@ def claim(db_path: Path, pid: int) -> dict[str, object] | None:
         conn.execute("COMMIT")
         if cur.rowcount != 1:
             return None
-        return {"id": int(row["id"]), "name": row["name"], "path": row["path"]}
+        return {
+            "id": int(row["id"]),
+            "name": row["name"],
+            "path": row["path"],
+            "check": int(row["check_pass"]),
+        }
 
 
 def _release_stale_pc(conn: sqlite3.Connection, seconds: int = PC_LEASE_SECONDS) -> int:
@@ -563,7 +599,8 @@ def claim_pc(db_path: Path, helper: str) -> dict[str, object] | None:
                 """
                 SELECT id, path, size_bytes, sha256 FROM videos
                 WHERE status = 'queued' AND path != ''
-                ORDER BY id LIMIT 1
+                ORDER BY COALESCE(check_pass, 0), id
+                LIMIT 1
                 """
             ).fetchone()
             if row is None:
@@ -573,7 +610,7 @@ def claim_pc(db_path: Path, helper: str) -> dict[str, object] | None:
                 conn.execute(
                     """
                     UPDATE videos
-                    SET status = 'error', error = ?, finished_at = ?, pid = NULL
+                    SET status = 'error', error = ?, finished_at = ?, pid = NULL, check_pass = 0
                     WHERE id = ? AND status = 'queued'
                     """,
                     ("Không còn file video.", utcnow(), row["id"]),
@@ -710,6 +747,79 @@ def video_counts(table: Table) -> tuple[int, int]:
     return len(phones), len(complete)
 
 
+def _cell(value: str) -> str:
+    return unicodedata.normalize("NFC", str(value or "")).strip()
+
+
+def _confirm_saved_rows(conn: sqlite3.Connection, video_id: int, table: Table) -> None:
+    """Đối chiếu lần đọc mới với dòng đã đủ ba ô của đúng video này.
+
+    Khớp thì ghi đã kiểm. Lệch thì giữ nguyên số, tên và id đã lưu, chỉ ghi lần
+    đọc sau vào lý do. Không thấy lại thì bỏ dấu khớp cũ, không xóa dòng.
+    Dòng của video khác và dòng chưa đủ ba ô không bị đụng tới.
+    """
+    fresh: dict[str, tuple[str, str]] = {}
+    for row in table.rows:
+        phone = _cell(row.phone)
+        name = _cell(row.name)
+        username = _cell(row.username)
+        if phone and name and username:
+            fresh[phone] = (name, username)
+    saved = conn.execute(
+        """
+        SELECT id, phone, name, username FROM results
+        WHERE video_id = ? AND bucket = ? AND phone != '' AND name != '' AND username != ''
+        """,
+        (video_id, BUCKET_OK),
+    ).fetchall()
+    for item in saved:
+        found = fresh.get(_cell(str(item["phone"])))
+        if found is None:
+            conn.execute("UPDATE results SET checked = '' WHERE id = ?", (int(item["id"]),))
+            continue
+        if found == (_cell(str(item["name"])), _cell(str(item["username"]))):
+            conn.execute(
+                "UPDATE results SET checked = 'ok', reason = '' WHERE id = ?",
+                (int(item["id"]),),
+            )
+            continue
+        note = f"Lần đọc sau: {found[0]} {found[1]}"
+        conn.execute(
+            "UPDATE results SET checked = 'diff', reason = ? WHERE id = ?",
+            (note[:500], int(item["id"])),
+        )
+
+
+def _mark_video_done(
+    conn: sqlite3.Connection,
+    video_id: int,
+    lease: str | None,
+    counts: tuple[int, int] | None,
+) -> bool:
+    where = "WHERE id = ?"
+    helper_sql = "helper = helper" if lease is not None else "helper = 'VPS'"
+    if counts is None:
+        params: list[object] = [utcnow(), video_id]
+        count_sql = ""
+    else:
+        params = [utcnow(), counts[0], counts[1], video_id]
+        count_sql = "phone_count = ?, full_count = ?,"
+    if lease is not None:
+        where += " AND status = 'pc' AND lease = ?"
+        params.append(lease)
+    cur = conn.execute(
+        f"""
+        UPDATE videos
+        SET status = 'done', pid = NULL, finished_at = ?, error = '',
+            {count_sql}
+            lease = '', {helper_sql}, lease_at = NULL, check_pass = 0
+        {where}
+        """,
+        params,
+    )
+    return cur.rowcount == 1
+
+
 def finish(db_path: Path, video_id: int, table: Table, lease: str | None = None) -> bool:
     """Ghi kết quả một lần đọc video.
 
@@ -717,6 +827,8 @@ def finish(db_path: Path, video_id: int, table: Table, lease: str | None = None)
     để lại từ lần đọc trước, rồi ghi kết quả mới; nếu không, dòng sai của bộ đọc
     cũ nằm lại mãi. Dòng đã lưu của video đó được thay bằng dòng đã lưu mới.
     Dòng do video khác tạo ra không bị đụng tới.
+
+    Video đang ở lần kiểm thì không ghi đè. Chỉ đối chiếu các dòng đã đủ ba ô.
 
     Có phiếu thì chỉ ghi khi video vẫn đang do đúng PC đó giữ. Phiếu sai thì
     không đổi dòng nào.
@@ -732,35 +844,98 @@ def finish(db_path: Path, video_id: int, table: Table, lease: str | None = None)
             if owned is None:
                 conn.execute("ROLLBACK")
                 return False
-        conn.execute("DELETE FROM results WHERE video_id = ? AND bucket != ?", (video_id, BUCKET_OK))
-        for row in table.rows:
-            _put(conn, row.phone, row.name, row.username, BUCKET_OK, "", video_id, upgrade=True)
-        for item in table.unopened:
-            _put(conn, item.phone, item.name, "", BUCKET_UNOPENED, "", video_id, upgrade=False)
-        for item in table.review:
-            _put_review(conn, item, video_id)
-        where = "WHERE id = ?"
-        params: list[object] = [utcnow(), phones, full, video_id]
-        if lease is not None:
-            where += " AND status = 'pc' AND lease = ?"
-            params.append(lease)
-        # PC giữ tên máy đã nhận video. Máy chủ không có phiếu thì ghi VPS.
-        helper_sql = "helper = helper" if lease is not None else "helper = 'VPS'"
-        cur = conn.execute(
-            f"""
-            UPDATE videos
-            SET status = 'done', pid = NULL, finished_at = ?, error = '',
-                phone_count = ?, full_count = ?,
-                lease = '', {helper_sql}, lease_at = NULL
-            {where}
-            """,
-            params,
-        )
-        if cur.rowcount != 1:
+        mode = conn.execute(
+            "SELECT COALESCE(check_pass, 0) AS check_pass FROM videos WHERE id = ?",
+            (video_id,),
+        ).fetchone()
+        if mode is not None and int(mode["check_pass"]) == 1:
+            _confirm_saved_rows(conn, video_id, table)
+            saved = _mark_video_done(conn, video_id, lease, None)
+        else:
+            conn.execute("DELETE FROM results WHERE video_id = ? AND bucket != ?", (video_id, BUCKET_OK))
+            for row in table.rows:
+                _put(conn, row.phone, row.name, row.username, BUCKET_OK, "", video_id, upgrade=True)
+            for item in table.unopened:
+                _put(conn, item.phone, item.name, "", BUCKET_UNOPENED, "", video_id, upgrade=False)
+            for item in table.review:
+                _put_review(conn, item, video_id)
+            saved = _mark_video_done(conn, video_id, lease, (phones, full))
+        if not saved:
             conn.execute("ROLLBACK")
             return False
         conn.execute("COMMIT")
     return True
+
+
+def start_full_check(db_path: Path) -> dict[str, int]:
+    """Đưa vào hàng chờ mọi video còn file và đã có ít nhất một dòng đủ ba ô.
+
+    Video đang tải, đang chờ, đang đọc hoặc PC đang giữ thì không đụng tới.
+    Dòng đã khớp từ lần kiểm trước được giữ cho đến khi video đó được đọc lại.
+    """
+    queued = 0
+    rows = 0
+    missing = 0
+    busy = 0
+    with connect(db_path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        found = conn.execute(
+            """
+            SELECT v.id, v.status, v.path, COUNT(r.id) AS n
+            FROM videos v
+            JOIN results r ON r.video_id = v.id
+            WHERE r.bucket = ? AND r.phone != '' AND r.name != '' AND r.username != ''
+            GROUP BY v.id
+            """,
+            (BUCKET_OK,),
+        ).fetchall()
+        for row in found:
+            status = str(row["status"])
+            if status in ("queued", "running", "uploading", "pc"):
+                busy += 1
+                continue
+            if status not in ("done", "error"):
+                continue
+            path = str(row["path"] or "")
+            if not path or not Path(path).is_file():
+                missing += 1
+                continue
+            cur = conn.execute(
+                """
+                UPDATE videos
+                SET status = 'queued', error = '', pid = NULL,
+                    check_pass = 1, lease = '', lease_at = NULL
+                WHERE id = ? AND status IN ('done', 'error')
+                """,
+                (int(row["id"]),),
+            )
+            if cur.rowcount != 1:
+                busy += 1
+                continue
+            queued += 1
+            rows += int(row["n"])
+        conn.execute("COMMIT")
+    return {"videos": queued, "rows": rows, "missing": missing, "busy": busy}
+
+
+def stop_full_check(db_path: Path) -> dict[str, int]:
+    """Dừng các video kiểm chưa bắt đầu đọc. Video đang đọc vẫn kiểm nốt."""
+    with connect(db_path) as conn:
+        cur = conn.execute(
+            """
+            UPDATE videos
+            SET status = 'done', check_pass = 0, pid = NULL, error = '',
+                lease = '', lease_at = NULL
+            WHERE status = 'queued' AND COALESCE(check_pass, 0) = 1
+            """
+        )
+        reading = conn.execute(
+            """
+            SELECT COUNT(*) AS n FROM videos
+            WHERE COALESCE(check_pass, 0) = 1 AND status IN ('running', 'pc')
+            """
+        ).fetchone()
+    return {"stopped": cur.rowcount, "reading": int(reading["n"])}
 
 
 def backfill_video_counts(db_path: Path) -> int:
@@ -883,7 +1058,8 @@ def fail(db_path: Path, video_id: int, message: str) -> None:
             """
             UPDATE videos
             SET status = 'error', pid = NULL, finished_at = ?, error = ?,
-                helper = CASE WHEN helper IS NULL OR helper = '' THEN 'VPS' ELSE helper END
+                helper = CASE WHEN helper IS NULL OR helper = '' THEN 'VPS' ELSE helper END,
+                check_pass = 0
             WHERE id = ?
             """,
             (utcnow(), message[:500], video_id),
@@ -905,7 +1081,7 @@ def retry(db_path: Path, video_id: int) -> bool:
             UPDATE videos
             SET status = 'queued', error = '', finished_at = NULL, pid = NULL,
                 phone_count = NULL, full_count = NULL,
-                helper = '', lease = '', lease_at = NULL
+                helper = '', lease = '', lease_at = NULL, check_pass = 0
             WHERE id = ? AND status IN ('error', 'done')
             """,
             (video_id,),
@@ -1023,7 +1199,7 @@ def result_page(
         rows = conn.execute(
             f"""
             SELECT r.id, r.phone, r.name, r.username, r.bucket, r.reason, r.video_id,
-                   COALESCE(v.helper, '') AS helper
+                   COALESCE(v.helper, '') AS helper, COALESCE(r.checked, '') AS checked
             FROM results r
             LEFT JOIN videos v ON v.id = r.video_id
             {where}{cursor_sql}
@@ -1053,11 +1229,12 @@ def iter_backup(db_path: Path) -> Iterator[str]:
     conn.execute("PRAGMA query_only=ON;")
     conn.execute("BEGIN")
     try:
-        yield "Số điện thoại,Tên,Username,Loại,Lý do,Video,Đọc bởi\n"
+        yield "Số điện thoại,Tên,Username,Loại,Lý do,Video,Đọc bởi,Kiểm\n"
         cursor = conn.execute(
             """
             SELECT r.phone, r.name, r.username, r.bucket, r.reason,
-                   COALESCE(v.name, '') AS video, COALESCE(v.helper, '') AS helper
+                   COALESCE(v.name, '') AS video, COALESCE(v.helper, '') AS helper,
+                   COALESCE(r.checked, '') AS checked
             FROM results r
             LEFT JOIN videos v ON v.id = r.video_id
             ORDER BY r.id
@@ -1073,6 +1250,7 @@ def iter_backup(db_path: Path) -> Iterator[str]:
                     row["reason"],
                     row["video"],
                     row["helper"],
+                    _check_label(str(row["checked"] or "")),
                 ]
             )
     finally:
@@ -1114,7 +1292,7 @@ def _put(
     if int(existing["bucket"]) == BUCKET_OK and existing["username"] and not same_video:
         return
     conn.execute(
-        "UPDATE results SET name = ?, username = ?, bucket = ?, reason = '', video_id = ? WHERE id = ?",
+        "UPDATE results SET name = ?, username = ?, bucket = ?, reason = '', video_id = ?, checked = '' WHERE id = ?",
         (name, username, BUCKET_OK, video_id, existing["id"]),
     )
     _drop_lone_username(conn, username, bucket)
@@ -1188,7 +1366,16 @@ def _public_result(row: sqlite3.Row) -> dict[str, object]:
         "reason": row["reason"],
         "video_id": int(row["video_id"] or 0),
         "helper": str(row["helper"] or ""),
+        "checked": str(row["checked"] or ""),
     }
+
+
+def _check_label(checked: str) -> str:
+    if checked == "ok":
+        return "Khớp"
+    if checked == "diff":
+        return "Lệch"
+    return ""
 
 
 def _csv_line(fields: list[str]) -> str:

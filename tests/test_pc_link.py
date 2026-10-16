@@ -107,6 +107,10 @@ class LinkTests(unittest.TestCase):
         self.assertIn("Đọc bởi", page)
         self.assertIn("body.link", page)
         self.assertIn("Nhiều PC có thể mở cùng lúc", page)
+        self.assertIn("id=\"checkStart\"", page)
+        self.assertIn("id=\"checkStop\"", page)
+        self.assertIn("/v1/results/check/start", page)
+        self.assertIn("/v1/results/check/stop", page)
 
     def test_pc_name_is_one_short_line(self) -> None:
         self.assertEqual(clean_pc_name("  May\nA  "), "May A")

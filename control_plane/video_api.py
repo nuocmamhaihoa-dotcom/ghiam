@@ -58,7 +58,9 @@ from control_plane.video_store import (
     release_stale_pc,
     result_page,
     retry,
+    start_full_check,
     stats,
+    stop_full_check,
     touch_pc,
     worker_count,
 )
@@ -359,6 +361,30 @@ def retry_video(video_id: int, authorization: str | None = Header(default=None))
     if not retry(settings.video_db_path, video_id):
         raise HTTPException(status_code=404, detail="Không đọc lại được video này.")
     return {"ok": True}
+
+
+@router.post("/v1/results/check/start")
+def start_result_check(authorization: str | None = Header(default=None)) -> dict[str, int]:
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    outcome = start_full_check(settings.video_db_path)
+    print(
+        f"Bắt đầu kiểm {outcome['videos']} video, {outcome['rows']} dòng đủ ba ô.",
+        flush=True,
+    )
+    return outcome
+
+
+@router.post("/v1/results/check/stop")
+def stop_result_check(authorization: str | None = Header(default=None)) -> dict[str, int]:
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    outcome = stop_full_check(settings.video_db_path)
+    print(
+        f"Dừng kiểm {outcome['stopped']} video chưa đọc. Còn {outcome['reading']} video đang kiểm.",
+        flush=True,
+    )
+    return outcome
 
 
 @router.get("/v1/results")

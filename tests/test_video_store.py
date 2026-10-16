@@ -40,7 +40,9 @@ from control_plane.video_store import (
     result_page,
     retry,
     search_results,
+    start_full_check,
     stats,
+    stop_full_check,
     touch_pc,
 )
 
@@ -758,6 +760,126 @@ class PcClaimTests(unittest.TestCase):
         failed = {int(row["id"]): row for row in list_videos(self.db)}
         self.assertEqual(failed[other]["helper"], "VPS")
         self.assertEqual(failed[other]["status"], "error")
+
+
+class FullCheckTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.db = Path(self._tmp.name) / "video.db"
+        self.root = Path(self._tmp.name)
+        init_db(self.db)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _done(self, name: str, sha: str, phone: str, person: str, handle: str) -> int:
+        created = begin_upload(self.db, name=name, size_bytes=5, sha256=sha)
+        video_id = int(created["id"])
+        path = self.root / f"{video_id}.mp4"
+        path.write_bytes(b"video")
+        commit_upload(self.db, video_id, str(path))
+        claim(self.db, 4)
+        self.assertTrue(finish(self.db, video_id, Table(rows=[Row(phone, person, handle)])))
+        return video_id
+
+    def test_start_queues_only_finished_videos_that_still_have_a_file(self) -> None:
+        kept = self._done("a.mp4", "check-a", "0900000093", "Mot", "@mot93")
+        missing = self._done("b.mp4", "check-b", "0900000094", "Hai", "@hai94")
+        Path(self.root / f"{missing}.mp4").unlink()
+        busy = self._done("c.mp4", "check-c", "0900000095", "Ba", "@ba95")
+        with connect(self.db) as conn:
+            conn.execute("UPDATE videos SET status = 'running' WHERE id = ?", (busy,))
+        outcome = start_full_check(self.db)
+        self.assertEqual(outcome["videos"], 1)
+        self.assertEqual(outcome["rows"], 1)
+        self.assertEqual(outcome["missing"], 1)
+        self.assertEqual(outcome["busy"], 1)
+        listed = {int(item["id"]): item for item in list_videos(self.db)}
+        self.assertEqual(listed[kept]["status"], "queued")
+        self.assertEqual(listed[kept]["check_pass"], 1)
+        self.assertEqual(listed[busy]["status"], "running")
+        self.assertEqual(stats(self.db)["checking"], 1)
+
+    def test_a_new_video_is_read_before_the_check_queue(self) -> None:
+        self._done("a.mp4", "check-order", "0900000093", "Mot", "@mot93")
+        start_full_check(self.db)
+        fresh = begin_upload(self.db, name="moi.mp4", size_bytes=5, sha256="check-new")
+        path = self.root / f"{fresh['id']}.mp4"
+        path.write_bytes(b"video")
+        commit_upload(self.db, int(fresh["id"]), str(path))
+        job = claim(self.db, 8)
+        assert job is not None
+        self.assertEqual(job["id"], int(fresh["id"]))
+        self.assertEqual(job["check"], 0)
+
+    def test_second_read_marks_a_match_and_keeps_a_difference(self) -> None:
+        same = self._done("a.mp4", "check-same", "0900000093", "Mot", "@mot93")
+        other = self._done("b.mp4", "check-diff", "0900000094", "Hai", "@hai94")
+        review_id = self._done("c.mp4", "check-review", "0900000095", "Ba", "@ba95")
+        finish(
+            self.db,
+            review_id,
+            Table(
+                rows=[Row("0900000095", "Ba", "@ba95")],
+                review=[Review("0900000096", "Bon", "", "@bon96", "cần xem")],
+            ),
+        )
+        start_full_check(self.db)
+        claimed = claim(self.db, 9)
+        assert claimed is not None
+        self.assertEqual(claimed["check"], 1)
+        self.assertTrue(
+            finish(
+                self.db,
+                int(claimed["id"]),
+                Table(rows=[Row("0900000093", "Mot", "@mot93"), Row("0900000099", "Moi", "@moi99")]),
+            )
+        )
+        # Hai video còn lại vẫn chờ kiểm. Đọc đúng video lệch và video có dòng cần xem.
+        while True:
+            job = claim(self.db, 9)
+            if job is None:
+                break
+            video_id = int(job["id"])
+            if video_id == other:
+                table = Table(rows=[Row("0900000094", "Hai khac", "@hai94")])
+            else:
+                table = Table(rows=[Row("0900000098", "Khong thay", "@khong")])
+            self.assertTrue(finish(self.db, video_id, table))
+        page = {item["phone"]: item for item in result_page(self.db, limit=20)["items"]}
+        self.assertEqual(page["0900000093"]["checked"], "ok")
+        self.assertEqual(page["0900000093"]["name"], "Mot")
+        self.assertNotIn("0900000099", page)
+        self.assertEqual(page["0900000094"]["checked"], "diff")
+        self.assertEqual(page["0900000094"]["name"], "Hai")
+        self.assertEqual(page["0900000094"]["username"], "@hai94")
+        self.assertIn("Lần đọc sau:", page["0900000094"]["reason"])
+        self.assertEqual(page["0900000095"]["checked"], "")
+        self.assertEqual(page["0900000095"]["username"], "@ba95")
+        self.assertEqual(page["0900000096"]["bucket"], "Cần xem")
+        self.assertEqual(stats(self.db)["matched"], 1)
+        self.assertEqual(stats(self.db)["differed"], 1)
+        self.assertEqual(list_videos(self.db)[0]["check_pass"], 0)
+        stopped = stop_full_check(self.db)
+        self.assertEqual(stopped["stopped"], 0)
+
+    def test_stop_returns_unread_checks_and_leaves_the_one_being_read(self) -> None:
+        first = self._done("a.mp4", "stop-a", "0900000093", "Mot", "@mot93")
+        second = self._done("b.mp4", "stop-b", "0900000094", "Hai", "@hai94")
+        start_full_check(self.db)
+        job = claim(self.db, 4)
+        assert job is not None
+        outcome = stop_full_check(self.db)
+        self.assertEqual(outcome["stopped"], 1)
+        self.assertEqual(outcome["reading"], 1)
+        listed = {int(item["id"]): item for item in list_videos(self.db)}
+        running_id = int(job["id"])
+        waiting_id = second if running_id == first else first
+        self.assertEqual(listed[running_id]["status"], "running")
+        self.assertEqual(listed[running_id]["check_pass"], 1)
+        self.assertEqual(listed[waiting_id]["status"], "done")
+        self.assertEqual(listed[waiting_id]["check_pass"], 0)
+        self.assertEqual(listed[waiting_id]["helper"], "VPS")
 
 
 class BackupGzipTests(unittest.TestCase):

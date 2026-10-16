@@ -98,6 +98,12 @@ def run_job(db_path: Path, job: dict[str, object], scan=scan_paths) -> None:
         keep_newest_videos(db_path)
         return
     keep_newest_videos(db_path)
+    if job.get("check"):
+        print(
+            f"Video {video_id} kiểm xong trong {time.monotonic() - started:.0f} giây, {len(frames)} khung.",
+            flush=True,
+        )
+        return
     print(
         f"Video {video_id} xong trong {time.monotonic() - started:.0f} giây, {len(frames)} khung: "
         f"{len(table.rows)} hàng đủ, {len(table.review)} cần xem, {len(table.unopened)} chưa mở hồ sơ.",
