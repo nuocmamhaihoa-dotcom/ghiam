@@ -16,6 +16,7 @@ from control_plane.video_store import (
     begin_upload,
     can_accept,
     claim,
+    claim_pc,
     clean_device,
     commit_upload,
     confirm_open_profiles,
@@ -31,12 +32,16 @@ from control_plane.video_store import (
     disk_limit_bytes,
     drop_stale_uploads,
     prune_old_videos,
+    pc_video_path,
     recover_dead,
+    release_pc,
+    release_stale_pc,
     requeue_running,
     result_page,
     retry,
     search_results,
     stats,
+    touch_pc,
 )
 
 
@@ -620,6 +625,81 @@ class VideoStoreTests(unittest.TestCase):
     def test_done_videos_kept_on_disk_count_toward_stored_bytes(self) -> None:
         self._finish_kept("giu.mp4", "kept", "2026-01-01T00:00:00+00:00", b"a" * 80, "0900000001")
         self.assertEqual(queued_bytes(self.db), 80)
+
+
+class PcClaimTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.db = Path(self._tmp.name) / "video.db"
+        self.root = Path(self._tmp.name)
+        init_db(self.db)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _add(self, name: str, sha: str) -> int:
+        created = begin_upload(self.db, name=name, size_bytes=5, sha256=sha)
+        video_id = int(created["id"])
+        path = self.root / f"{video_id}.mp4"
+        path.write_bytes(b"video")
+        commit_upload(self.db, video_id, str(path))
+        return video_id
+
+    def test_server_restart_does_not_take_a_pc_video(self) -> None:
+        self._add("a.mp4", "pc-a")
+        job = claim_pc(self.db, "PC")
+        self.assertIsNotNone(job)
+        assert job is not None
+        self.assertEqual(requeue_running(self.db, os.getpid()), 0)
+        self.assertEqual(recover_dead(self.db), 0)
+        self.assertIsNone(claim(self.db, 5))
+        self.assertEqual(stats(self.db)["pc"], 1)
+        self.assertEqual(stats(self.db)["queued"], 0)
+        path = pc_video_path(self.db, int(job["id"]), str(job["lease"]), self.root)
+        self.assertIsNotNone(path)
+        self.assertIsNone(pc_video_path(self.db, int(job["id"]), "sai", self.root))
+
+    def test_stale_pc_returns_to_the_queue(self) -> None:
+        video_id = self._add("a.mp4", "pc-stale")
+        job = claim_pc(self.db, "PC")
+        assert job is not None
+        with connect(self.db) as conn:
+            conn.execute(
+                "UPDATE videos SET lease_at = '2020-01-01T00:00:00+00:00' WHERE id = ?",
+                (video_id,),
+            )
+        self.assertEqual(release_stale_pc(self.db), 1)
+        again = claim(self.db, 5)
+        self.assertEqual(again["id"], video_id)
+
+    def test_wrong_lease_does_not_write_results(self) -> None:
+        video_id = self._add("a.mp4", "pc-lease")
+        job = claim_pc(self.db, "PC")
+        assert job is not None
+        saved = finish(self.db, video_id, Table(rows=[Row("0900000001", "Mot", "@mot")]), lease="sai")
+        self.assertFalse(saved)
+        self.assertEqual(stats(self.db)["saved"], 0)
+        self.assertEqual(stats(self.db)["pc"], 1)
+        self.assertTrue(touch_pc(self.db, video_id, str(job["lease"])))
+        self.assertFalse(touch_pc(self.db, video_id, "sai"))
+        self.assertTrue(release_pc(self.db, video_id, str(job["lease"])))
+        self.assertIsNotNone(claim(self.db, 8))
+
+    def test_pc_result_is_stored_once(self) -> None:
+        video_id = self._add("a.mp4", "pc-done")
+        job = claim_pc(self.db, "PC")
+        assert job is not None
+        saved = finish(
+            self.db,
+            video_id,
+            Table(rows=[Row("0900000001", "Mot", "@mot")], unopened=[Unopened("0900000002", "Hai")]),
+            lease=str(job["lease"]),
+        )
+        self.assertTrue(saved)
+        self.assertEqual(stats(self.db)["saved"], 1)
+        self.assertEqual(stats(self.db)["unopened"], 1)
+        self.assertEqual(stats(self.db)["done"], 1)
+        self.assertFalse(finish(self.db, video_id, Table(rows=[Row("0900000003", "Ba", "@ba")]), lease=str(job["lease"])))
 
 
 class BackupGzipTests(unittest.TestCase):

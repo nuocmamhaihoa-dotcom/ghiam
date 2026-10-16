@@ -106,6 +106,15 @@
   </section>
 
   <section>
+    <h2>PC cùng đọc</h2>
+    <p>Tải chương trình một lần, giải nén, rồi bấm đúp <b>ghiam-pc.bat</b>. Cứ để cửa sổ đó mở. PC lấy video đang chờ, đọc bằng đúng bộ đọc trên máy chủ, rồi gửi kết quả lên.</p>
+    <p class="note">Lần sau máy chủ đổi cách đọc, PC tự lấy bản mới. Không cần tải lại chương trình, không cần cài lại kết nối.</p>
+    <p class="note">Cài một lần trên PC: Python 3.11, ffmpeg, và Tesseract có tiếng Việt cùng tiếng Anh. Lần chạy đầu có thể tải thêm bộ đọc dấu nếu máy chủ đang dùng.</p>
+    <p style="margin-top:0.8rem"><button id="pcDownload" class="primary" type="button">Tải chương trình đọc trên PC</button></p>
+    <p id="pcNote" class="note"></p>
+  </section>
+
+  <section>
     <h2>Sao lưu về PC</h2>
     <p>File nén này là bản sao các kết quả đã lưu. Tải về và giữ trên máy tính. Đó là bản dự phòng ngoài VPS.</p>
     <p class="note">Bấm một lần. Trình duyệt sẽ tải file .csv.gz.</p>
@@ -147,6 +156,7 @@
     if (status === "done") return "Xong";
     if (status === "error") return "Lỗi";
     if (status === "uploading") return "Đang tải lên";
+    if (status === "pc") return "PC đang đọc";
     return status;
   }
 
@@ -159,7 +169,8 @@
       stat(body.review, "Cần xem") +
       stat(body.unopened, "Chưa mở hồ sơ") +
       stat(body.queued, "Video đang chờ") +
-      stat(body.running, "Video đang đọc") +
+      stat(body.running, "Máy chủ đang đọc") +
+      stat(body.pc || 0, "PC đang đọc") +
       stat(body.done, "Video đã xong") +
       stat(body.error, "Video lỗi");
     var reader = document.getElementById("reader");
@@ -168,8 +179,9 @@
         ? "Hàng đợi còn video nhưng bộ đọc trên máy chủ chưa chạy."
         : "Bộ đọc trên máy chủ chưa chạy.";
       reader.className = "note warn";
-    } else if (body.running > 0 || body.queued > 0) {
-      reader.textContent = "Máy chủ đang đọc 1 video. " + body.queued + " video nằm trong hàng chờ. Tắt trang, máy chủ vẫn đọc tiếp.";
+    } else if (body.running > 0 || body.queued > 0 || (body.pc || 0) > 0) {
+      var pcNote = (body.pc || 0) > 0 ? " PC đang đọc " + body.pc + " video." : "";
+      reader.textContent = "Máy chủ đang đọc " + body.running + " video. " + body.queued + " video nằm trong hàng chờ." + pcNote + " Tắt trang, việc đọc vẫn tiếp tục.";
       reader.className = "note ok";
     } else {
       reader.textContent = "Bộ đọc đang chạy. Video mới sẽ được đọc lần lượt, video còn lại chờ đến lượt.";
@@ -890,6 +902,21 @@
     addFiles(event.dataTransfer.files);
   });
   document.getElementById("query").addEventListener("input", loadResults);
+  document.getElementById("pcDownload").addEventListener("click", async function () {
+    var note = document.getElementById("pcNote");
+    note.textContent = "Đang tạo liên kết tải...";
+    note.className = "note";
+    var response = await api("/v1/pc/ticket", { method: "POST" });
+    if (!response.ok) {
+      note.textContent = "Chưa tải được. Thử lại sau vài giây.";
+      note.className = "note warn";
+      return;
+    }
+    var body = await response.json();
+    note.textContent = "Trình duyệt đang tải ghiam-pc.zip. Giải nén rồi bấm đúp ghiam-pc.bat.";
+    note.className = "note ok";
+    window.location.href = body.url;
+  });
   document.getElementById("backup").addEventListener("click", async function () {
     var note = document.getElementById("backupNote");
     note.textContent = "Đang tạo liên kết tải...";

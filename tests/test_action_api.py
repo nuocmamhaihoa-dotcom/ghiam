@@ -23,6 +23,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from control_plane.app import app  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
+from control_plane.video_store import begin_upload, commit_upload, connect, init_db, stats as video_stats  # noqa: E402
 
 
 def tearDownModule() -> None:
@@ -662,6 +663,90 @@ class ActionApiTests(unittest.TestCase):
             guide = archive.read("DanhBa/HUONG-DAN.txt").decode("utf-8")
             self.assertIn("Nạp lên iPhone", guide)
             self.assertNotIn("token", guide.lower())
+
+
+class PcReaderApiTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._client_cm = TestClient(app)
+        self.client = self._client_cm.__enter__()
+        self.headers = {"Authorization": "Bearer test-token"}
+
+    def tearDown(self) -> None:
+        self._client_cm.__exit__(None, None, None)
+
+    def test_reader_zip_matches_the_files_on_disk(self) -> None:
+        denied = self.client.get("/v1/pc/reader")
+        self.assertEqual(denied.status_code, 401)
+        manifest = self.client.get("/v1/pc/reader", headers=self.headers)
+        self.assertEqual(manifest.status_code, 200, manifest.text)
+        body = manifest.json()
+        self.assertEqual(body["entry"], "doc_video.pipeline:read_video")
+        self.assertIn("doc_video/pipeline.py", body["files"])
+        package = self.client.get("/v1/pc/reader.zip", headers=self.headers)
+        self.assertEqual(package.status_code, 200)
+        self.assertEqual(package.headers["x-reader-sha256"], body["sha256"])
+        with zipfile.ZipFile(io.BytesIO(package.content)) as archive:
+            self.assertEqual(archive.read("doc_video/pipeline.py"), (Path(__file__).resolve().parents[1] / "doc_video" / "pipeline.py").read_bytes())
+
+    def test_package_bakes_the_page_and_updates_without_a_new_install(self) -> None:
+        ticket = self.client.post("/v1/pc/ticket", headers=self.headers)
+        self.assertEqual(ticket.status_code, 200, ticket.text)
+        downloaded = self.client.get(ticket.json()["url"])
+        self.assertEqual(downloaded.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(downloaded.content)) as archive:
+            script = archive.read("ghiam-pc.py").decode("utf-8")
+            self.assertIn("ghiam-pc.bat", archive.namelist())
+        self.assertIn(settings.page_token, script)
+        self.assertNotIn("__GHIAM_", script)
+        self.assertIn("doc_video.pipeline", script)
+        version = self.client.get("/v1/pc/connector/version", headers=self.headers)
+        self.assertEqual(version.status_code, 200)
+        self.assertGreaterEqual(version.json()["version"], 1)
+        backup = self.client.post("/v1/backup/ticket", headers=self.headers)
+        stolen = self.client.get("/v1/pc/package/" + backup.json()["url"].rsplit("/", 1)[-1])
+        self.assertEqual(stolen.status_code, 404)
+
+    def test_pc_uploads_the_table_it_read(self) -> None:
+        init_db(settings.video_db_path)
+        created = begin_upload(settings.video_db_path, name="pc.mp4", size_bytes=5, sha256="pc-api-video")
+        self.assertFalse(created["duplicate"])
+        video_id = int(created["id"])
+        path = settings.video_dir / f"{video_id}.mp4"
+        path.write_bytes(b"video")
+        commit_upload(settings.video_db_path, video_id, str(path))
+        with connect(settings.video_db_path) as conn:
+            conn.execute("UPDATE videos SET status = 'done' WHERE status = 'queued' AND id != ?", (video_id,))
+        before = video_stats(settings.video_db_path)
+        claimed = self.client.post("/v1/pc/claim", headers=self.headers, json={"name": "PC"})
+        self.assertEqual(claimed.status_code, 200, claimed.text)
+        job = claimed.json()["video"]
+        self.assertEqual(job["id"], video_id)
+        downloaded = self.client.get(
+            f"/v1/pc/videos/{video_id}/file",
+            headers=self.headers,
+            params={"lease": job["lease"]},
+        )
+        self.assertEqual(downloaded.status_code, 200)
+        self.assertEqual(downloaded.content, b"video")
+        denied = self.client.get(f"/v1/pc/videos/{video_id}/file", headers=self.headers, params={"lease": "sai"})
+        self.assertEqual(denied.status_code, 409)
+        posted = self.client.post(
+            f"/v1/pc/videos/{video_id}/result",
+            headers=self.headers,
+            json={
+                "lease": job["lease"],
+                "rows": [{"phone": "0900000091", "name": "Mot", "username": "@mot91"}],
+                "review": [],
+                "unopened": [{"phone": "0900000092", "name": "Hai"}],
+            },
+        )
+        self.assertEqual(posted.status_code, 200, posted.text)
+        self.assertEqual(posted.json()["rows"], 1)
+        after = video_stats(settings.video_db_path)
+        self.assertEqual(after["saved"], before["saved"] + 1)
+        self.assertEqual(after["unopened"], before["unopened"] + 1)
+        self.assertEqual(after["pc"], 0)
+        path.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

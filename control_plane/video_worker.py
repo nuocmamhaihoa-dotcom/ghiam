@@ -18,8 +18,7 @@ from concurrent.futures import BrokenExecutor, ProcessPoolExecutor
 from pathlib import Path
 
 from doc_video.frame import FrameRead
-from doc_video.join import build
-from doc_video.video import read_inputs
+from doc_video.pipeline import read_video
 
 from control_plane.screen_table import Review, Row, Table, Unopened
 from control_plane.settings import settings
@@ -41,15 +40,9 @@ from control_plane.video_store import (
 )
 
 
-# Một khung đọc mất vài giây. Chờ một khung quá lâu là nhóm tiến trình đọc đã hỏng: đưa video về
-# hàng chờ và khởi động lại bộ đọc, thay vì treo mãi.
-FRAME_TIMEOUT_SECONDS = 900
-
-
 def scan_paths(paths: list[Path], submit=None, work_dir: Path | None = None) -> tuple[Table, list[FrameRead]]:
     """Đọc bằng doc_video rồi đổi sang dạng bảng mà kho kết quả đang lưu."""
-    frames = read_inputs(paths, submit=submit, work_dir=work_dir, task_timeout=FRAME_TIMEOUT_SECONDS)
-    result = build(frames)
+    result, frames = read_video(paths, submit=submit, work_dir=work_dir)
     table = Table(
         rows=[Row(row.phone, row.name, row.handle) for row in result.rows],
         review=[Review(item.phone, item.list_name, item.profile_name, item.handle, item.reason) for item in result.review],
