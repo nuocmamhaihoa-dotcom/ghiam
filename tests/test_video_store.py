@@ -467,7 +467,8 @@ class VideoStoreTests(unittest.TestCase):
         finish(self.db, video_id, Table(rows=[Row("0332001753", "khactam", "@khactam60")]))
         text = "".join(iter_backup(self.db))
         self.assertIn("Số điện thoại,Tên,Username", text)
-        self.assertIn("0332001753,khactam,@khactam60,Đã lưu,,clip.mp4", text)
+        self.assertIn("0332001753,khactam,@khactam60,Đã lưu,,clip.mp4,VPS", text)
+        self.assertIn("Đọc bởi", text)
 
     def test_error_can_be_retried_only_while_the_file_remains(self) -> None:
         video_id = self._add("a.mp4", "a")
@@ -700,6 +701,63 @@ class PcClaimTests(unittest.TestCase):
         self.assertEqual(stats(self.db)["unopened"], 1)
         self.assertEqual(stats(self.db)["done"], 1)
         self.assertFalse(finish(self.db, video_id, Table(rows=[Row("0900000003", "Ba", "@ba")]), lease=str(job["lease"])))
+        self.assertEqual(list_videos(self.db)[0]["helper"], "PC")
+
+    def test_two_pcs_claim_different_videos(self) -> None:
+        first = self._add("a.mp4", "two-a")
+        second = self._add("b.mp4", "two-b")
+        one = claim_pc(self.db, "May-A")
+        two = claim_pc(self.db, "May-B")
+        self.assertIsNotNone(one)
+        self.assertIsNotNone(two)
+        assert one is not None and two is not None
+        self.assertNotEqual(one["id"], two["id"])
+        self.assertEqual({int(one["id"]), int(two["id"])}, {first, second})
+        listed = {int(item["id"]): item for item in list_videos(self.db)}
+        self.assertEqual(listed[int(one["id"])]["helper"], "May-A")
+        self.assertEqual(listed[int(two["id"])]["helper"], "May-B")
+        self.assertEqual(listed[int(one["id"])]["status"], "pc")
+        self.assertEqual(stats(self.db)["pc"], 2)
+        self.assertEqual(stats(self.db)["queued"], 0)
+
+    def test_finish_records_who_read_the_video(self) -> None:
+        video_id = self._add("a.mp4", "who-pc")
+        job = claim_pc(self.db, "May-A")
+        assert job is not None
+        saved = finish(
+            self.db,
+            video_id,
+            Table(rows=[Row("0900000091", "Mot", "@mot91")]),
+            lease=str(job["lease"]),
+        )
+        self.assertTrue(saved)
+        item = list_videos(self.db)[0]
+        self.assertEqual(item["status"], "done")
+        self.assertEqual(item["helper"], "May-A")
+        page = result_page(self.db, "0900000091")
+        self.assertEqual(page["items"][0]["helper"], "May-A")
+        self.assertEqual(page["items"][0]["video_id"], video_id)
+        self.assertTrue(retry(self.db, video_id))
+        again = list_videos(self.db)[0]
+        self.assertEqual(again["status"], "queued")
+        self.assertEqual(again["helper"], "")
+
+    def test_vps_finish_and_failure_are_labeled_vps(self) -> None:
+        video_id = self._add("a.mp4", "who-vps")
+        claim(self.db, 9)
+        self.assertEqual(list_videos(self.db)[0]["helper"], "")
+        self.assertTrue(finish(self.db, video_id, Table(rows=[Row("0900000092", "Hai", "@hai92")])))
+        item = list_videos(self.db)[0]
+        self.assertEqual(item["helper"], "VPS")
+        page = result_page(self.db, "0900000092")
+        self.assertEqual(page["items"][0]["helper"], "VPS")
+        self.assertEqual(page["items"][0]["video_id"], video_id)
+        other = self._add("b.mp4", "who-fail")
+        claim(self.db, 10)
+        fail(self.db, other, "hỏng")
+        failed = {int(row["id"]): row for row in list_videos(self.db)}
+        self.assertEqual(failed[other]["helper"], "VPS")
+        self.assertEqual(failed[other]["status"], "error")
 
 
 class BackupGzipTests(unittest.TestCase):

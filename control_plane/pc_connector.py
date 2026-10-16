@@ -12,6 +12,7 @@ import json
 import math
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -21,7 +22,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-CONNECTOR_VERSION = 2
+CONNECTOR_VERSION = 3
 # Trần tài nguyên của PC. Máy chủ không đặt biến này nên máy chủ vẫn dùng hết nhân.
 PC_HEADROOM = 0.8
 SERVER = "__GHIAM_SERVER__"
@@ -65,6 +66,33 @@ def connector_outdated(local_sha: str, remote_sha: str, remote_version: int, loc
     if remote_sha and local_sha and remote_sha != local_sha:
         return True
     return remote_version > local_version
+
+
+def clean_pc_name(raw: str) -> str:
+    """Tên máy hiện trên bảng kết quả: một dòng, ngắn, không ký tự điều khiển."""
+    text = " ".join(str(raw or "").replace("\n", " ").split())
+    text = "".join(ch for ch in text if ch.isprintable())
+    return text[:40] or "PC"
+
+
+def pc_name() -> str:
+    """Tên ổn định của PC này. Nhiều máy cùng mở thì mỗi máy một tên."""
+    raw = os.environ.get("GHIAM_PC_NAME", "").strip()
+    saved = CACHE / "name.txt"
+    if not raw and saved.is_file():
+        try:
+            raw = saved.read_text(encoding="utf-8").strip()
+        except OSError:
+            raw = ""
+    if not raw:
+        raw = os.environ.get("COMPUTERNAME", "").strip() or socket.gethostname()
+    name = clean_pc_name(raw)
+    try:
+        CACHE.mkdir(parents=True, exist_ok=True)
+        saved.write_text(name, encoding="utf-8")
+    except OSError:
+        pass
+    return name
 
 
 def disk_has_headroom(total: int, free: int, extra: int = 0, fraction: float = PC_HEADROOM) -> bool:
@@ -497,7 +525,9 @@ def main() -> int:
     if not _tools_ok() or not _ensure_runtime():
         return 1
     _limit_pc()
+    name = pc_name()
     print("PC đang nối máy chủ. Cứ để cửa sổ này mở. Đóng cửa sổ là PC ngừng đọc.")
+    print(f"PC này tên là {name}. Nhiều PC có thể mở cùng lúc, mỗi máy đọc một video đang chờ.")
     print("PC dùng tối đa 80% CPU, RAM và ổ đĩa. 20% còn lại để máy vẫn chạy ổn.")
     while True:
         try:
@@ -532,7 +562,7 @@ def main() -> int:
                 time.sleep(30)
                 continue
             _RAM_WAIT = False
-            status, body = _json("POST", "/v1/pc/claim", {"name": "PC"}, timeout=120)
+            status, body = _json("POST", "/v1/pc/claim", {"name": name}, timeout=120)
             if status != 200:
                 print("Chưa nhận được video. Thử lại sau.")
                 time.sleep(10)

@@ -6,6 +6,7 @@ import io
 import os
 import shutil
 import tempfile
+import time
 import unittest
 import zipfile
 from pathlib import Path
@@ -24,6 +25,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from control_plane.app import _raw_transfer, app  # noqa: E402
 from control_plane.pc_reader import connector_template_sha256  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
+from control_plane.video_api import PC_TICKET, PC_TICKET_SECONDS, ticket_ok  # noqa: E402
 from control_plane.video_store import begin_upload, commit_upload, connect, init_db, stats as video_stats  # noqa: E402
 
 
@@ -692,7 +694,15 @@ class PcReaderApiTests(unittest.TestCase):
     def test_package_bakes_the_page_and_updates_without_a_new_install(self) -> None:
         ticket = self.client.post("/v1/pc/ticket", headers=self.headers)
         self.assertEqual(ticket.status_code, 200, ticket.text)
-        downloaded = self.client.get(ticket.json()["url"])
+        issued = ticket.json()
+        self.assertTrue(issued["url"].startswith("/v1/pc/package/"))
+        self.assertTrue(issued["link"].endswith(issued["url"]))
+        self.assertTrue(issued["link"].startswith("http"))
+        expiry = int(issued["url"].rsplit("/", 1)[-1].split("-", 1)[0])
+        self.assertGreater(expiry, int(time.time()) + 23 * 60 * 60)
+        self.assertTrue(ticket_ok(issued["url"].rsplit("/", 1)[-1], time.time(), PC_TICKET))
+        self.assertEqual(PC_TICKET_SECONDS, 24 * 60 * 60)
+        downloaded = self.client.get(issued["url"])
         self.assertEqual(downloaded.status_code, 200)
         with zipfile.ZipFile(io.BytesIO(downloaded.content)) as archive:
             script = archive.read("ghiam-pc.py").decode("utf-8")
@@ -702,9 +712,11 @@ class PcReaderApiTests(unittest.TestCase):
         self.assertIn("doc_video.pipeline", script)
         self.assertIn("DOC_VIDEO_CPU_FRACTION", script)
         self.assertIn("DOC_VIDEO_RAM_FRACTION", script)
+        self.assertIn("socket.gethostname", script)
+        self.assertIn('{"name": name}', script)
         version = self.client.get("/v1/pc/connector/version", headers=self.headers)
         self.assertEqual(version.status_code, 200)
-        self.assertGreaterEqual(version.json()["version"], 2)
+        self.assertGreaterEqual(version.json()["version"], 3)
         self.assertEqual(version.json()["sha256"], connector_template_sha256())
         self.assertEqual(len(version.json()["sha256"]), 64)
         backup = self.client.post("/v1/backup/ticket", headers=self.headers)

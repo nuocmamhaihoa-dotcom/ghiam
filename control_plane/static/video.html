@@ -15,7 +15,7 @@
     .lead { color: var(--muted); margin-bottom: 1rem; }
     section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem; margin: 0 0 0.8rem; }
     label { display: block; font-weight: 650; margin: 0 0 0.35rem; }
-    input[type="text"], input[type="password"], input[type="search"] {
+    input[type="text"], input[type="password"], input[type="search"], input[type="url"] {
       width: 100%; font: inherit; padding: 0.7rem 0.75rem; border: 1px solid #cfd5dc; border-radius: 10px; background: #fff;
     }
     .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
@@ -99,7 +99,7 @@
 
   <section>
     <h2>Kết quả đã lưu</h2>
-    <p class="note">Hiện mọi dòng đã quét. Dòng mới nhất ở trên.</p>
+    <p class="note">Hiện mọi dòng đã quét. Dòng mới nhất ở trên. Cột Đọc bởi ghi video nào do PC nào đọc, video nào do VPS đọc.</p>
     <input id="query" type="search" placeholder="Gõ đầu số điện thoại hoặc @username" />
     <p id="resultCount" class="note"></p>
     <div id="results"></div>
@@ -107,11 +107,12 @@
 
   <section>
     <h2>PC cùng đọc</h2>
-    <p>Tải chương trình một lần, giải nén, rồi bấm đúp <b>ghiam-pc.bat</b>. Cứ để cửa sổ đó mở. PC lấy video đang chờ, đọc bằng đúng bộ đọc trên máy chủ, rồi gửi kết quả lên.</p>
-    <p class="note">Lần sau máy chủ đổi cách đọc, PC tự lấy bản mới. Không cần tải lại chương trình, không cần cài lại kết nối.</p>
-    <p class="note">Cài một lần trên PC: Python 3.11, ffmpeg, và Tesseract có tiếng Việt cùng tiếng Anh. Lần chạy đầu có thể tải thêm bộ đọc dấu nếu máy chủ đang dùng.</p>
+    <p>Nhiều PC có thể mở cùng lúc. Mỗi PC lấy một video đang chờ khác nhau, đọc bằng đúng bộ đọc trên máy chủ, rồi gửi kết quả lên. VPS vẫn đọc một video. Đường truyền không bị giới hạn tốc độ.</p>
+    <p class="note">Máy chủ đổi cách đọc hoặc cách tải thì PC đang mở tự lấy bản mới. Không cần tải lại, không cần cài lại kết nối.</p>
+    <p class="note">Cài một lần trên mỗi PC: Python 3.11, ffmpeg, và Tesseract có tiếng Việt cùng tiếng Anh. Giải nén rồi bấm đúp <b>ghiam-pc.bat</b> và để cửa sổ đó mở. Tên máy tính hiện ở cột Đọc bởi.</p>
     <p style="margin-top:0.8rem"><button id="pcDownload" class="primary" type="button">Tải chương trình đọc trên PC</button></p>
     <p id="pcNote" class="note"></p>
+    <div id="pcLink"></div>
   </section>
 
   <section>
@@ -160,6 +161,20 @@
     return status;
   }
 
+  function readerLabel(item) {
+    var name = String(item.helper || "").trim();
+    if (item.status === "running") return "VPS";
+    if (item.status === "pc") return name || "PC";
+    if (item.status === "done" || item.status === "error") return name || "VPS";
+    return "";
+  }
+
+  function resultReader(item) {
+    var who = String(item.helper || "").trim() || "VPS";
+    var video = item.video_id ? "Video " + item.video_id : "Video";
+    return video + " · " + who;
+  }
+
   async function refresh() {
     var statsResponse = await api("/v1/videos/stats");
     if (!statsResponse.ok) return;
@@ -203,7 +218,7 @@
 
   function renderQueue(items) {
     var sig = items.map(function (item) {
-      return item.id + ":" + item.status + ":" + (item.error || "") + ":" + (item.device || "") + ":" + countText(item) + ":" + (item.has_file ? 1 : 0) + ":" + item.name;
+      return item.id + ":" + item.status + ":" + (item.error || "") + ":" + (item.device || "") + ":" + (item.helper || "") + ":" + countText(item) + ":" + (item.has_file ? 1 : 0) + ":" + item.name;
     }).join("|");
     if (sig === queueSig) return;
     queueSig = sig;
@@ -212,13 +227,13 @@
       box.innerHTML = "<p class='note'>Chưa có video.</p>";
       return;
     }
-    var html = "<table><tr><th>Video</th><th>Điện thoại</th><th>Đủ 3 ô</th><th>Trạng thái</th></tr>";
+    var html = "<table><tr><th>Video</th><th>Điện thoại</th><th>Đủ 3 ô</th><th>Đọc bởi</th><th>Trạng thái</th></tr>";
     items.forEach(function (item) {
       var extra = item.error ? "<div class='warn'>" + escapeHtml(item.error) + "</div>" : "";
       var canReread = (item.status === "error" || item.status === "done") && item.has_file;
       var retry = canReread ? " <button class='ghost' type='button' data-retry='" + item.id + "'>Đọc lại</button>" : "";
       var phone = item.device ? escapeHtml(item.device) : "<span class='note'>Chưa gắn máy</span>";
-      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + phone + "</td><td>" + countText(item) + "</td><td>" + statusText(item.status) + retry + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + phone + "</td><td>" + countText(item) + "</td><td>" + escapeHtml(readerLabel(item)) + "</td><td>" + statusText(item.status) + retry + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-retry]").forEach(function (button) {
@@ -238,7 +253,8 @@
     if (!items.length) return "0:" + total + ":" + (capped ? 1 : 0);
     var first = items[0];
     var last = items[items.length - 1];
-    return items.length + ":" + first.id + ":" + last.id + ":" + first.phone + ":" + first.name + ":" + first.username + ":" + first.bucket + ":" + first.reason + ":" + total + ":" + (capped ? 1 : 0);
+    var readers = items.map(function (item) { return (item.video_id || 0) + ":" + (item.helper || ""); }).join(",");
+    return items.length + ":" + first.id + ":" + last.id + ":" + first.phone + ":" + first.name + ":" + first.username + ":" + first.bucket + ":" + first.reason + ":" + readers + ":" + total + ":" + (capped ? 1 : 0);
   }
 
   async function fetchResultPage(q, extra) {
@@ -263,10 +279,10 @@
     note.textContent = capped
       ? "Đang hiện " + items.length + " / " + total + ". Mới nhất ở trên."
       : total + " kết quả. Mới nhất ở trên.";
-    var html = "<table><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Loại</th></tr>";
+    var html = "<table><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Loại</th><th>Đọc bởi</th></tr>";
     items.forEach(function (item) {
       var reason = item.reason ? "<div class='note'>" + escapeHtml(item.reason) + "</div>" : "";
-      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(item.bucket) + reason + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(item.bucket) + reason + "</td><td>" + escapeHtml(resultReader(item)) + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
   }
@@ -913,9 +929,40 @@
       return;
     }
     var body = await response.json();
-    note.textContent = "Trình duyệt đang tải ghiam-pc.zip. Giải nén rồi bấm đúp ghiam-pc.bat.";
+    var link = body.link || body.url || "";
+    note.textContent = "Trình duyệt đang tải ghiam-pc.zip. Link bên dưới dùng 24 giờ: mở trên từng PC, giải nén, bấm đúp ghiam-pc.bat.";
     note.className = "note ok";
-    window.location.href = body.url;
+    var box = document.getElementById("pcLink");
+    box.textContent = "";
+    var label = document.createElement("p");
+    label.className = "note";
+    label.textContent = "Link tải chương trình kết nối PC:";
+    var field = document.createElement("input");
+    field.type = "url";
+    field.readOnly = true;
+    field.value = link;
+    var copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "ghost";
+    copy.style.marginTop = "0.45rem";
+    copy.textContent = "Sao chép link";
+    copy.addEventListener("click", function () {
+      field.select();
+      var done = function () {
+        note.textContent = "Đã sao chép link. Mở link đó trên PC khác để tải chương trình.";
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(done, function () { document.execCommand("copy"); done(); });
+      } else {
+        document.execCommand("copy");
+        done();
+      }
+    });
+    box.appendChild(label);
+    box.appendChild(field);
+    box.appendChild(document.createElement("br"));
+    box.appendChild(copy);
+    if (body.url) window.location.href = body.url;
   });
   document.getElementById("backup").addEventListener("click", async function () {
     var note = document.getElementById("backupNote");

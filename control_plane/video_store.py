@@ -419,7 +419,7 @@ def list_videos(db_path: Path, limit: int | None = None, device: str | None = No
     """
     sql = """
         SELECT id, name, size_bytes, status, error, created_at, started_at, finished_at,
-               phone_count, full_count, path, device
+               phone_count, full_count, path, device, helper
         FROM videos
     """
     params: list[object] = []
@@ -437,6 +437,7 @@ def list_videos(db_path: Path, limit: int | None = None, device: str | None = No
         item = dict(row)
         path = str(item.pop("path") or "")
         item["has_file"] = bool(path) and Path(path).is_file()
+        item["helper"] = str(item.get("helper") or "")
         items.append(item)
     return items
 
@@ -519,7 +520,8 @@ def claim(db_path: Path, pid: int) -> dict[str, object] | None:
         cur = conn.execute(
             """
             UPDATE videos
-            SET status = 'running', pid = ?, started_at = ?, error = ''
+            SET status = 'running', pid = ?, started_at = ?, error = '',
+                helper = '', lease = '', lease_at = NULL
             WHERE id = ? AND status = 'queued'
             """,
             (pid, utcnow(), row["id"]),
@@ -742,12 +744,14 @@ def finish(db_path: Path, video_id: int, table: Table, lease: str | None = None)
         if lease is not None:
             where += " AND status = 'pc' AND lease = ?"
             params.append(lease)
+        # PC giữ tên máy đã nhận video. Máy chủ không có phiếu thì ghi VPS.
+        helper_sql = "helper = helper" if lease is not None else "helper = 'VPS'"
         cur = conn.execute(
             f"""
             UPDATE videos
             SET status = 'done', pid = NULL, finished_at = ?, error = '',
                 phone_count = ?, full_count = ?,
-                lease = '', helper = '', lease_at = NULL
+                lease = '', {helper_sql}, lease_at = NULL
             {where}
             """,
             params,
@@ -876,7 +880,12 @@ def _confirm_open_profiles(conn: sqlite3.Connection) -> int:
 def fail(db_path: Path, video_id: int, message: str) -> None:
     with connect(db_path) as conn:
         conn.execute(
-            "UPDATE videos SET status = 'error', pid = NULL, finished_at = ?, error = ? WHERE id = ?",
+            """
+            UPDATE videos
+            SET status = 'error', pid = NULL, finished_at = ?, error = ?,
+                helper = CASE WHEN helper IS NULL OR helper = '' THEN 'VPS' ELSE helper END
+            WHERE id = ?
+            """,
             (utcnow(), message[:500], video_id),
         )
 
@@ -895,7 +904,8 @@ def retry(db_path: Path, video_id: int) -> bool:
             """
             UPDATE videos
             SET status = 'queued', error = '', finished_at = NULL, pid = NULL,
-                phone_count = NULL, full_count = NULL
+                phone_count = NULL, full_count = NULL,
+                helper = '', lease = '', lease_at = NULL
             WHERE id = ? AND status IN ('error', 'done')
             """,
             (video_id,),
@@ -961,16 +971,23 @@ def merge_close_results(db_path: Path) -> int:
     return merged
 
 
-def _result_filter(query: str) -> tuple[str, list[object]]:
+def _result_filter(query: str, alias: str = "") -> tuple[str, list[object]]:
     """Lọc theo đầu số hoặc đầu username. Chuỗi rỗng là mọi dòng."""
+    prefix = f"{alias}." if alias else ""
     text = "".join(query.split())
     if text.startswith("+84"):
         text = "0" + text[3:]
     if text.isdigit():
-        return "WHERE phone >= ? AND phone < ? AND phone != ''", [text, text + ":"]
+        return (
+            f"WHERE {prefix}phone >= ? AND {prefix}phone < ? AND {prefix}phone != ''",
+            [text, text + ":"],
+        )
     if text:
         handle = text if text.startswith("@") else "@" + text
-        return "WHERE username >= ? AND username < ? AND username != ''", [handle, handle + "\U0010ffff"]
+        return (
+            f"WHERE {prefix}username >= ? AND {prefix}username < ? AND {prefix}username != ''",
+            [handle, handle + "\U0010ffff"],
+        )
     return "", []
 
 
@@ -987,27 +1004,30 @@ def result_page(
     Nếu cả hai cùng có thì after thắng. before trong kết quả là id dòng cuối
     khi trang đầy và đang đi xuống, để lấy trang kế. 0 nghĩa là hết trang.
     """
-    where, params = _result_filter(query)
+    where, params = _result_filter(query, "r")
+    count_where, count_params = _result_filter(query)
     page_size = max(1, min(int(limit), 1000))
     cursor_sql = ""
     cursor_params: list[object] = []
     if after > 0:
-        cursor_sql = (" AND " if where else " WHERE ") + "id > ?"
+        cursor_sql = (" AND " if where else " WHERE ") + "r.id > ?"
         cursor_params = [int(after)]
     elif before > 0:
-        cursor_sql = (" AND " if where else " WHERE ") + "id < ?"
+        cursor_sql = (" AND " if where else " WHERE ") + "r.id < ?"
         cursor_params = [int(before)]
     with connect(db_path) as conn:
-        if where:
-            total = int(conn.execute(f"SELECT COUNT(*) AS n FROM results {where}", params).fetchone()["n"])
+        if count_where:
+            total = int(conn.execute(f"SELECT COUNT(*) AS n FROM results {count_where}", count_params).fetchone()["n"])
         else:
             total = int(conn.execute("SELECT COALESCE(SUM(n), 0) AS n FROM result_counts").fetchone()["n"])
         rows = conn.execute(
             f"""
-            SELECT id, phone, name, username, bucket, reason
-            FROM results
+            SELECT r.id, r.phone, r.name, r.username, r.bucket, r.reason, r.video_id,
+                   COALESCE(v.helper, '') AS helper
+            FROM results r
+            LEFT JOIN videos v ON v.id = r.video_id
             {where}{cursor_sql}
-            ORDER BY id DESC
+            ORDER BY r.id DESC
             LIMIT ?
             """,
             [*params, *cursor_params, page_size],
@@ -1033,10 +1053,11 @@ def iter_backup(db_path: Path) -> Iterator[str]:
     conn.execute("PRAGMA query_only=ON;")
     conn.execute("BEGIN")
     try:
-        yield "Số điện thoại,Tên,Username,Loại,Lý do,Video\n"
+        yield "Số điện thoại,Tên,Username,Loại,Lý do,Video,Đọc bởi\n"
         cursor = conn.execute(
             """
-            SELECT r.phone, r.name, r.username, r.bucket, r.reason, COALESCE(v.name, '') AS video
+            SELECT r.phone, r.name, r.username, r.bucket, r.reason,
+                   COALESCE(v.name, '') AS video, COALESCE(v.helper, '') AS helper
             FROM results r
             LEFT JOIN videos v ON v.id = r.video_id
             ORDER BY r.id
@@ -1051,6 +1072,7 @@ def iter_backup(db_path: Path) -> Iterator[str]:
                     BUCKET_LABEL.get(int(row["bucket"]), ""),
                     row["reason"],
                     row["video"],
+                    row["helper"],
                 ]
             )
     finally:
@@ -1164,6 +1186,8 @@ def _public_result(row: sqlite3.Row) -> dict[str, object]:
         "username": row["username"],
         "bucket": BUCKET_LABEL.get(int(row["bucket"]), ""),
         "reason": row["reason"],
+        "video_id": int(row["video_id"] or 0),
+        "helper": str(row["helper"] or ""),
     }
 
 
