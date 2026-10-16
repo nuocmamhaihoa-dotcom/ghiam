@@ -620,9 +620,9 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Cài Danh bạ trên iPhone", page.text)
         self.assertIn('href="/danhba/"', page.text)
         self.assertEqual(payload["danhbaPath"], "/danhba/")
-        self.assertEqual(payload["danhbaBuild"], 1)
+        self.assertEqual(payload["danhbaBuild"], 2)
         self.assertEqual(body["danhba"], "/danhba/")
-        self.assertEqual(body["danhbaBuild"], 1)
+        self.assertEqual(body["danhbaBuild"], 2)
 
         install = self.client.get("/danhba", follow_redirects=False)
         self.assertEqual(install.status_code, 302, install.text)
@@ -631,17 +631,19 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(screen.status_code, 200, screen.text)
         self.assertEqual(screen.headers["cache-control"], "no-cache")
         self.assertIn("Nạp lên iPhone", screen.text)
-        self.assertIn('content="1"', screen.text)
+        self.assertIn('content="2"', screen.text)
         self.assertIn("/danhba/sw.js", screen.text)
-        self.assertIn("/danhba/app.js?v=1", screen.text)
+        self.assertIn("/danhba/app.js?v=2", screen.text)
         self.assertIn("Thêm vào Màn hình chính", screen.text)
+        self.assertIn("Bỏ nhóm trên trang", screen.text)
+        self.assertIn("/v1/results/missing/", screen.text)
         version = self.client.get("/danhba/version")
         self.assertEqual(version.status_code, 200, version.text)
-        self.assertEqual(version.json()["build"], 1)
+        self.assertEqual(version.json()["build"], 2)
         worker = self.client.get("/danhba/sw.js")
         self.assertEqual(worker.status_code, 200, worker.text)
         self.assertIn("javascript", worker.headers["content-type"])
-        self.assertIn('var BUILD = "1";', worker.text)
+        self.assertIn('var BUILD = "2";', worker.text)
         self.assertIn('var CACHE = "danhba-" + BUILD;', worker.text)
         self.assertEqual(worker.headers["service-worker-allowed"], "/danhba/")
         manifest = self.client.get("/danhba/manifest.webmanifest")
@@ -1016,6 +1018,32 @@ class PcReaderApiTests(unittest.TestCase):
         self.assertTrue(released.json()["ok"])
         item = next(entry for entry in self.client.get("/v1/pcs", headers=self.headers).json()["items"] if entry["name"] == "PC đầy")
         self.assertEqual((item["fail_count"], item["state"]), (0, "wait-disk"))
+
+    def test_missing_numbers_can_be_handed_to_danhba(self) -> None:
+        video_id = self._queue_only("missing-api")
+        claimed = self.client.post("/v1/pc/claim", headers=self.headers, json={"name": "PC thiếu"}).json()
+        posted = self.client.post(
+            f"/v1/pc/videos/{video_id}/result",
+            headers=self.headers,
+            json={"lease": claimed["video"]["lease"], "unopened": [{"phone": "0901234567", "name": "Mai"}]},
+        )
+        self.assertEqual(posted.status_code, 200, posted.text)
+        listed = self.client.get("/v1/results/missing", headers=self.headers)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        body = listed.json()
+        mine = next(item for item in body["items"] if item["video_id"] == video_id)
+        self.assertEqual(mine["unopened"], 1)
+        self.assertNotIn("0901234567", listed.text)
+        cover = self.client.get("/v1/results/coverage", headers=self.headers)
+        self.assertEqual(cover.status_code, 200)
+        self.assertTrue(any(item["carrier"] == "MobiFone" and item["unopened"] >= 1 for item in cover.json()["carriers"]))
+        self.assertEqual(self.client.get("/v1/results/missing").status_code, 401)
+        ticket = self.client.post("/v1/results/missing/ticket", headers=self.headers)
+        self.assertEqual(ticket.status_code, 200, ticket.text)
+        downloaded = self.client.get(ticket.json()["url"], params={"video": video_id})
+        self.assertEqual(downloaded.status_code, 200)
+        self.assertEqual(downloaded.content, "Mai\t0901234567\n".encode())
+        self.assertIn("so-chua-mo", downloaded.headers["content-disposition"])
 
 
 if __name__ == "__main__":

@@ -69,7 +69,8 @@
   <p class="build" id="buildLine">Phiên bản __DANHBA_BUILD__</p>
   <div class="bar">
     <button id="go" type="button">Nạp lên iPhone</button>
-    <button id="remove" class="ghost" type="button" hidden>Xoá nhóm đang dùng</button>
+    <button id="remove" class="ghost" type="button" hidden>Bỏ nhóm trên trang</button>
+    <p class="hint">Nút này chỉ bỏ nhóm khỏi trang. Số đã nạp vẫn nằm trong Danh bạ của iPhone cho đến khi bạn xoá đúng tên nhóm trong app Danh bạ.</p>
   </div>
   <script>
     window.DANHBA_BUILD = __DANHBA_BUILD__;
@@ -137,7 +138,7 @@
       goButton.textContent = upcoming ? "Nạp " + upcoming.name : "Đã nạp hết";
       goButton.disabled = !upcoming && !pasteInput.value.trim();
       removeButton.hidden = !(current && current.sent);
-      removeButton.textContent = current && current.sent ? "Xoá " + current.name : "Xoá nhóm đang dùng";
+      removeButton.textContent = current && current.sent ? "Bỏ " + current.name + " trên trang" : "Bỏ nhóm trên trang";
       booksBox.textContent = "";
       books.forEach(function (book) {
         var button = document.createElement("button");
@@ -314,6 +315,37 @@
 
     if (library.title) titleInput.value = library.title;
     render();
+    var people = new URLSearchParams(location.search).get("people") || "";
+    if (people.indexOf("/v1/results/missing/") === 0 && people.indexOf("://") === -1) {
+      fetch(people, { cache: "no-store" }).then(function (response) {
+        if (!response.ok) {
+          showMessage("Liên kết số chưa mở đã hết hạn. Bấm lại trên trang đọc video.", true);
+          return null;
+        }
+        return response.text();
+      }).then(function (text) {
+        if (text == null) return;
+        var parsed = DanhBa.parseLines(text);
+        var made = DanhBa.split(parsed.drafts, titleNow(), DanhBa.pageSize);
+        if (!made || !made.books.length) {
+          showMessage("Không có số chưa mở để nạp.", true);
+          return;
+        }
+        made.books.forEach(function (book, index) {
+          book.id = "missing-" + index;
+        });
+        library.books = library.books.filter(function (book) {
+          return String(book.id).indexOf("missing-") !== 0;
+        }).concat(made.books);
+        library.activeId = made.books[0].id;
+        saveLibrary();
+        render();
+        var count = made.books.reduce(function (sum, book) { return sum + book.entries.length; }, 0);
+        showMessage("Đã lấy " + count + " số chưa mở hồ sơ. Bấm Nạp lên iPhone.", false);
+      }).catch(function () {
+        showMessage("Chưa lấy được số chưa mở.", true);
+      });
+    }
   </script>
 </body>
 </html>

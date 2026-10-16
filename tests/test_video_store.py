@@ -27,7 +27,10 @@ from control_plane.video_store import (
     finish,
     init_db,
     iter_backup,
+    coverage_counts,
     list_videos,
+    missing_text,
+    missing_videos,
     merge_close_results,
     queued_bytes,
     disk_limit_bytes,
@@ -273,6 +276,21 @@ class VideoStoreTests(unittest.TestCase):
         listed = list_videos(self.db)[0]
         self.assertEqual(listed["phone_count"], 4)
         self.assertEqual(listed["full_count"], 1)
+
+    def test_missing_list_counts_unopened_rows_and_skips_videos_still_waiting(self) -> None:
+        video_id = self._add("a.mp4", "miss")
+        finish(self.db, video_id, Table(unopened=[Unopened("0912345678", "An Le")]))
+        waiting = self._add("b.mp4", "wait")
+        items = missing_videos(self.db)
+        self.assertEqual([item["video_id"] for item in items], [video_id])
+        self.assertEqual(items[0]["unopened"], 1)
+        self.assertNotIn("phone", items[0])
+        self.assertEqual(missing_text(self.db, video_id), "An Le\t0912345678\n")
+        self.assertEqual(missing_text(self.db, waiting), "")
+        carriers = coverage_counts(self.db)["carriers"]
+        self.assertIsInstance(carriers, list)
+        self.assertEqual(carriers[0]["carrier"], "Vinaphone")
+        self.assertEqual(carriers[0]["unopened"], 1)
 
     def test_unopened_only_video_has_phones_but_no_complete_rows(self) -> None:
         video_id = self._add("a.mp4", "a")

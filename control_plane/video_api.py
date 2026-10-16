@@ -79,8 +79,11 @@ from control_plane.video_store import (
     finish,
     get_meta,
     init_db,
+    coverage_counts,
     iter_backup,
     list_videos,
+    missing_text,
+    missing_videos,
     pc_video_path,
     prune_old_videos,
     reader_alive,
@@ -573,6 +576,7 @@ def results(
 
 
 EXPORT_TICKET = "export-ticket"
+MISSING_TICKET = "missing-ticket"
 
 
 @router.post("/v1/results/export/ticket")
@@ -602,6 +606,42 @@ def export_download(
     return Response(
         content=payload,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "no-store"},
+    )
+
+
+@router.get("/v1/results/missing")
+def missing(authorization: str | None = Header(default=None)) -> dict[str, object]:
+    """Số video còn số chưa mở hồ sơ. Không kèm số điện thoại."""
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    items = missing_videos(settings.video_db_path)
+    return {"items": items, "unopened": sum(int(item["unopened"]) for item in items)}
+
+
+@router.get("/v1/results/coverage")
+def coverage(authorization: str | None = Header(default=None)) -> dict[str, object]:
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    return coverage_counts(settings.video_db_path)
+
+
+@router.post("/v1/results/missing/ticket")
+def missing_ticket(authorization: str | None = Header(default=None)) -> dict[str, str]:
+    _auth(authorization)
+    return {"url": f"/v1/results/missing/{make_ticket(time.time(), MISSING_TICKET)}"}
+
+
+@router.get("/v1/results/missing/{ticket}")
+def missing_download(ticket: str, video: int = Query(default=0, ge=0)) -> Response:
+    if not ticket_ok(ticket, time.time(), MISSING_TICKET):
+        raise HTTPException(status_code=404, detail="Liên kết tải đã hết hạn. Bấm lấy số chưa mở lại.")
+    init_db(settings.video_db_path)
+    payload = missing_text(settings.video_db_path, video)
+    filename = f"so-chua-mo-{video}.txt" if video else "so-chua-mo.txt"
+    return Response(
+        content=payload.encode("utf-8"),
+        media_type="text/plain; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "no-store"},
     )
 
