@@ -40,6 +40,7 @@ from control_plane.video_store import (
     merge_close_results,
     next_to_shrink,
     prune_old_videos,
+    release_stale_pc,
     report_progress,
     requeue,
     requeue_running,
@@ -282,6 +283,7 @@ def main() -> None:
             if now - last_sweep >= 60:
                 last_sweep = now
                 drop_stale_uploads(db_path)
+                release_stale_pc(db_path)
                 _drop_old_parts(settings.video_dir)
                 keep_newest_videos(db_path)
                 backfill_video_counts(db_path)

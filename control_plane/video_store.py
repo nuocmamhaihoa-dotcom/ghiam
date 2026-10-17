@@ -789,8 +789,10 @@ def set_priority(db_path: Path, video_id: int, urgent: bool) -> bool:
 
 
 def claim(db_path: Path, pid: int) -> dict[str, object] | None:
+    """Nhận video đang chờ. Video PC đã mất nhịp quá hạn thì trả về hàng chờ ngay trong lượt này."""
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
+        _release_stale_pc(conn)
         row = conn.execute(_waiting_sql()).fetchone()
         if row is None:
             conn.execute("COMMIT")
@@ -835,7 +837,7 @@ def _release_stale_pc(conn: sqlite3.Connection, seconds: int = PC_LEASE_SECONDS)
         UPDATE videos
         SET status = 'queued', pid = NULL, started_at = NULL, error = '',
             lease = '', helper = '', lease_at = NULL,
-            progress_stage = '', progress_done = 0, progress_total = 0
+            progress_stage = '', progress_done = 0, progress_total = 0, progress_at = NULL
         WHERE status = 'pc' AND (lease_at IS NULL OR lease_at = '' OR lease_at < ?)
         """,
         (cutoff,),
@@ -1619,16 +1621,34 @@ def _day_start(day: str) -> str:
     return vn_day_bounds(moment)[1]
 
 
+def _phone_prefix(text: str) -> str | None:
+    """Đầu số để so với số đã lưu, hoặc None khi chuỗi không phải số.
+
+    Số trong kho luôn là 10 chữ số bắt đầu bằng 0. Người dùng gõ 84982, +84982,
+    0084982 hoặc 982117072 vẫn phải ra cùng các dòng với 0982.
+    84 đứng một mình giữ nguyên, để không thành đầu 0 rồi khớp mọi số.
+    """
+    raw = text[1:] if text.startswith("+") else text
+    if not raw.isdigit():
+        return None
+    if raw.startswith("0084") and len(raw) > 4:
+        raw = "0" + raw[4:]
+    elif raw.startswith("84") and len(raw) > 2:
+        raw = "0" + raw[2:]
+    elif len(raw) == 9 and raw[0] in "35789":
+        raw = "0" + raw
+    return raw
+
+
 def _result_where(filters: ResultFilter) -> tuple[str, list[object]]:
     """Điều kiện SQL trên results r và videos v. Chuỗi rỗng là mọi dòng."""
     parts: list[str] = []
     params: list[object] = []
     text = "".join(filters.query.split())
-    if text.startswith("+84"):
-        text = "0" + text[3:]
-    if text.isdigit():
+    prefix = _phone_prefix(text)
+    if prefix is not None:
         parts.append("r.phone >= ? AND r.phone < ? AND r.phone != ''")
-        params += [text, text + ":"]
+        params += [prefix, prefix + ":"]
     elif text.startswith("@"):
         parts.append("r.username >= ? AND r.username < ? AND r.username != ''")
         params += [text, text + "\U0010ffff"]
