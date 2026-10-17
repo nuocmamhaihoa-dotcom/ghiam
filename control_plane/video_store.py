@@ -704,34 +704,47 @@ def stats(db_path: Path) -> dict[str, int]:
     return counts
 
 
-def device_day(db_path: Path, now: datetime | None = None) -> dict[str, object]:
-    """Số video mỗi điện thoại đã tải lên trong ngày hôm nay, và số video lỗi trong ngày đó.
+def device_day(db_path: Path, now: datetime | None = None, span: str = "today") -> dict[str, object]:
+    """Số video mỗi điện thoại đã tải, đã đọc xong, bị lỗi và đang chờ.
 
-    Ngày tính theo giờ Việt Nam. Đã tải là file đã vào hàng chờ hôm nay, kể cả đang đọc hoặc đã xong.
-    Lỗi là video đọc hỏng hoặc tải lại bị đứt trong ngày, dù file đó lên từ hôm trước.
+    span=today đếm theo ngày giờ Việt Nam. Đã tải là file đã vào hàng chờ trong ngày,
+    kể cả đang đọc hoặc đã xong. Lỗi là video đọc hỏng hoặc tải lại bị đứt trong ngày,
+    dù file đó lên từ hôm trước. Đọc xong là video kết thúc trong ngày.
+    span=all đếm mọi video đã vào hàng chờ, mọi video đọc xong và mọi video lỗi.
+    Đang chờ luôn là số video còn trong hàng lúc này, vì đó là việc chưa xong chứ không phải việc của một ngày.
     Video đang tải dở chưa tính là đã tải.
     """
+    whole = span == "all"
     day, start, end = vn_day_bounds(now)
+    if whole:
+        uploaded_when = "status != 'uploading'"
+        error_when = "status = 'error'"
+        done_when = "status = 'done'"
+        params: tuple[str, ...] = ()
+    else:
+        uploaded_when = "status != 'uploading' AND created_at >= ? AND created_at < ?"
+        error_when = (
+            "status = 'error' AND ("
+            "(finished_at >= ? AND finished_at < ?) OR "
+            "((finished_at IS NULL OR finished_at = '') AND created_at >= ? AND created_at < ?)"
+            ")"
+        )
+        done_when = "status = 'done' AND finished_at >= ? AND finished_at < ?"
+        params = (start, end, start, end, start, end, start, end)
     with connect(db_path) as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT device,
-              COALESCE(SUM(CASE
-                WHEN status != 'uploading' AND created_at >= ? AND created_at < ? THEN 1 ELSE 0 END), 0) AS uploaded,
-              COALESCE(SUM(CASE
-                WHEN status = 'error' AND (
-                  (finished_at >= ? AND finished_at < ?)
-                  OR ((finished_at IS NULL OR finished_at = '') AND created_at >= ? AND created_at < ?)
-                ) THEN 1 ELSE 0 END), 0) AS errors,
-              COALESCE(SUM(CASE
-                WHEN status = 'done' AND finished_at >= ? AND finished_at < ? THEN 1 ELSE 0 END), 0) AS done,
+              COALESCE(SUM(CASE WHEN {uploaded_when} THEN 1 ELSE 0 END), 0) AS uploaded,
+              COALESCE(SUM(CASE WHEN {error_when} THEN 1 ELSE 0 END), 0) AS errors,
+              COALESCE(SUM(CASE WHEN {done_when} THEN 1 ELSE 0 END), 0) AS done,
               COALESCE(SUM(CASE
                 WHEN status IN ('queued', 'running', 'uploading', 'pc') THEN 1 ELSE 0 END), 0) AS waiting
             FROM videos
             GROUP BY device
             ORDER BY uploaded DESC, waiting DESC, device ASC
             """,
-            (start, end, start, end, start, end, start, end),
+            params,
         ).fetchall()
     items = []
     known: list[str] = []
@@ -748,7 +761,7 @@ def device_day(db_path: Path, now: datetime | None = None) -> dict[str, object]:
             known.append(device)
         if device or item["uploaded"] or item["errors"] or item["done"] or item["waiting"]:
             items.append(item)
-    return {"day": day, "known": known, "items": items}
+    return {"day": day, "span": "all" if whole else "today", "known": known, "items": items}
 
 
 def _waiting_sql(where: str = "", first_only: bool = True) -> str:

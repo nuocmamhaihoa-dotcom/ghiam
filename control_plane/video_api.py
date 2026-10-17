@@ -252,7 +252,11 @@ class InviteBody(BaseModel):
 
 
 @router.get("/v1/videos/stats")
-def video_stats(authorization: str | None = Header(default=None)) -> dict[str, object]:
+def video_stats(
+    authorization: str | None = Header(default=None),
+    span: str = Query(default="today"),
+) -> dict[str, object]:
+    """span=today đếm video theo ngày giờ Việt Nam. span=all đếm toàn bộ thời gian."""
     _auth(authorization)
     init_db(settings.video_db_path)
     release_stale_pc(settings.video_db_path)
@@ -262,7 +266,7 @@ def video_stats(authorization: str | None = Header(default=None)) -> dict[str, o
     used, _free, limit = _disk_snapshot()
     body["disk_used_bytes"] = used
     body["disk_limit_bytes"] = limit
-    body["phones"] = device_day(settings.video_db_path)
+    body["phones"] = device_day(settings.video_db_path, span="all" if span == "all" else "today")
     body["shrink"] = {**shrink_totals(settings.video_db_path), "on": get_meta(settings.video_db_path, "video_shrink", "off") == "on"}
     return body
 
