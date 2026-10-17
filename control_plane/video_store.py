@@ -34,6 +34,10 @@ BUCKET_LABEL = {BUCKET_OK: "Đã lưu", BUCKET_REVIEW: "Cần xem", BUCKET_UNOPE
 # và chỉ thu hồi running, nên khởi động lại bộ đọc không cướp video PC đang đọc.
 # Không có nhịp trong khoảng này thì video trở lại hàng chờ.
 PC_LEASE_SECONDS = 900
+# PC vẫn gửi nhịp sau khi một bước đã xong, hoặc đang gửi kết quả, nhưng không nộp bảng.
+# Nhịp làm mới lease_at nên hạn 900 giây không thấy video này. progress_same_at chỉ đổi khi
+# bước hoặc số tiến độ đổi, nên video đang tải hoặc đang đọc dở không bị lấy lại.
+PC_DONE_HOLD_SECONDS = 300
 # PC hỏng chừng này video liền nhau thì không nhận video nữa, cho đến khi trang bấm cho đọc lại.
 PC_FAIL_LIMIT = 3
 # Video hỏng trên chừng này PC thì chỉ để máy chủ đọc.
@@ -287,6 +291,7 @@ def _ensure_fleet_columns(conn: sqlite3.Connection) -> None:
         ("progress_done", "INTEGER NOT NULL DEFAULT 0"),
         ("progress_total", "INTEGER NOT NULL DEFAULT 0"),
         ("progress_at", "TEXT"),
+        ("progress_same_at", "TEXT"),
         ("pc_download_s", "REAL"),
         ("pc_read_s", "REAL"),
         ("pc_fails", "INTEGER NOT NULL DEFAULT 0"),
@@ -789,7 +794,7 @@ def set_priority(db_path: Path, video_id: int, urgent: bool) -> bool:
 
 
 def claim(db_path: Path, pid: int) -> dict[str, object] | None:
-    """Nhận video đang chờ. Video PC đã mất nhịp quá hạn thì trả về hàng chờ ngay trong lượt này."""
+    """Nhận video đang chờ. Video PC mất nhịp hoặc đọc xong mà không gửi kết quả thì trả về hàng chờ."""
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         _release_stale_pc(conn)
@@ -820,9 +825,83 @@ def claim(db_path: Path, pid: int) -> dict[str, object] | None:
         }
 
 
-def _release_stale_pc(conn: sqlite3.Connection, seconds: int = PC_LEASE_SECONDS) -> int:
+def _return_pc_videos(conn: sqlite3.Connection, rows: list[sqlite3.Row], note: str) -> int:
+    """Đưa các video PC về hàng chờ. Không tính chuỗi lỗi: PC tắt giữa chừng hoặc kẹt sau khi đọc xong."""
+    if not rows:
+        return 0
+    ids = [int(row["id"]) for row in rows]
+    cur = conn.execute(
+        f"""
+        UPDATE videos
+        SET status = 'queued', pid = NULL, started_at = NULL, error = '',
+            lease = '', helper = '', lease_at = NULL,
+            progress_stage = '', progress_done = 0, progress_total = 0,
+            progress_at = NULL, progress_same_at = NULL
+        WHERE status = 'pc' AND id IN ({",".join("?" * len(ids))})
+        """,
+        ids,
+    )
+    now = utcnow()
+    for row in rows:
+        helper = str(row["helper"] or "")
+        if not helper:
+            continue
+        conn.execute(
+            """
+            UPDATE pcs SET last_error = ?, last_error_at = ?, video_id = NULL
+            WHERE name = ? AND (video_id IS NULL OR video_id = ?)
+            """,
+            (note.format(id=int(row["id"])), now, helper, int(row["id"])),
+        )
+    return cur.rowcount
+
+
+def _stuck_finished_pc(conn: sqlite3.Connection, cutoff: str) -> list[sqlite3.Row]:
+    """PC đã báo xong một bước, hoặc đang gửi kết quả, và tiến độ không đổi quá hạn."""
+    return conn.execute(
+        """
+        SELECT id, helper FROM videos
+        WHERE status = 'pc'
+          AND progress_same_at IS NOT NULL AND progress_same_at != '' AND progress_same_at < ?
+          AND (
+            progress_stage = 'send'
+            OR (
+              progress_stage IN ('download', 'extract', 'scan', 'read')
+              AND progress_total > 0 AND progress_done >= progress_total
+            )
+          )
+        """,
+        (cutoff,),
+    ).fetchall()
+
+
+def _arm_finished_pc(conn: sqlite3.Connection, now: str) -> None:
+    """Video đã xong bước từ trước khi có mốc tiến độ thì bắt đầu đếm từ bây giờ, chưa lấy lại ngay."""
+    conn.execute(
+        """
+        UPDATE videos
+        SET progress_same_at = ?
+        WHERE status = 'pc' AND (progress_same_at IS NULL OR progress_same_at = '')
+          AND (
+            progress_stage = 'send'
+            OR (
+              progress_stage IN ('download', 'extract', 'scan', 'read')
+              AND progress_total > 0 AND progress_done >= progress_total
+            )
+          )
+        """,
+        (now,),
+    )
+
+
+def _release_stale_pc(
+    conn: sqlite3.Connection,
+    seconds: int = PC_LEASE_SECONDS,
+    done_hold_seconds: int = PC_DONE_HOLD_SECONDS,
+) -> int:
     """Gọi trong một giao dịch đang mở, để video chọn ra đúng là video được trả về."""
-    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=seconds)).isoformat()
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(seconds=seconds)).isoformat()
     stale = conn.execute(
         """
         SELECT id, helper FROM videos
@@ -830,39 +909,27 @@ def _release_stale_pc(conn: sqlite3.Connection, seconds: int = PC_LEASE_SECONDS)
         """,
         (cutoff,),
     ).fetchall()
-    if not stale:
-        return 0
-    cur = conn.execute(
-        """
-        UPDATE videos
-        SET status = 'queued', pid = NULL, started_at = NULL, error = '',
-            lease = '', helper = '', lease_at = NULL,
-            progress_stage = '', progress_done = 0, progress_total = 0, progress_at = NULL
-        WHERE status = 'pc' AND (lease_at IS NULL OR lease_at = '' OR lease_at < ?)
-        """,
-        (cutoff,),
+    released = _return_pc_videos(
+        conn, stale, "Mất nhịp khi đọc video {id}. Video đã trả về hàng chờ."
     )
-    now = utcnow()
-    for row in stale:
-        helper = str(row["helper"] or "")
-        if not helper:
-            continue
-        # PC tắt cửa sổ giữa chừng không phải lỗi đọc, nên không tính vào chuỗi lỗi.
-        conn.execute(
-            """
-            UPDATE pcs SET last_error = ?, last_error_at = ?, video_id = NULL
-            WHERE name = ? AND (video_id IS NULL OR video_id = ?)
-            """,
-            (f"Mất nhịp khi đọc video {int(row['id'])}. Video đã trả về hàng chờ.", now, helper, int(row["id"])),
-        )
-    return cur.rowcount
+    hold_cutoff = (now - timedelta(seconds=done_hold_seconds)).isoformat()
+    stuck = _stuck_finished_pc(conn, hold_cutoff)
+    released += _return_pc_videos(
+        conn, stuck, "Đọc xong nhưng không gửi kết quả video {id}. Video đã trả về hàng chờ."
+    )
+    _arm_finished_pc(conn, now.isoformat())
+    return released
 
 
-def release_stale_pc(db_path: Path, seconds: int = PC_LEASE_SECONDS) -> int:
-    """Video PC đã nhận nhưng không còn nhịp thì trở lại hàng chờ cho máy chủ hoặc PC khác."""
+def release_stale_pc(
+    db_path: Path,
+    seconds: int = PC_LEASE_SECONDS,
+    done_hold_seconds: int = PC_DONE_HOLD_SECONDS,
+) -> int:
+    """Video PC mất nhịp, hoặc đọc xong mà không gửi kết quả, trở lại hàng chờ."""
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
-        released = _release_stale_pc(conn, seconds)
+        released = _release_stale_pc(conn, seconds, done_hold_seconds)
         conn.execute("COMMIT")
         return released
 
@@ -902,10 +969,11 @@ def claim_pc(db_path: Path, helper: str) -> dict[str, object] | None:
                 UPDATE videos
                 SET status = 'pc', pid = NULL, started_at = ?, error = '',
                     helper = ?, lease = ?, lease_at = ?,
-                    progress_stage = 'download', progress_done = 0, progress_total = ?, progress_at = ?
+                    progress_stage = 'download', progress_done = 0, progress_total = ?,
+                    progress_at = ?, progress_same_at = ?
                 WHERE id = ? AND status = 'queued'
                 """,
-                (now, name, lease, now, int(row["size_bytes"] or 0), now, row["id"]),
+                (now, name, lease, now, int(row["size_bytes"] or 0), now, now, row["id"]),
             )
             if cur.rowcount != 1:
                 continue
@@ -925,27 +993,45 @@ PROGRESS_STAGES = {"download", "extract", "scan", "read", "send"}
 
 
 def touch_pc(db_path: Path, video_id: int, lease: str, stage: str = "", done: int = 0, total: int = 0) -> bool:
-    """Nhịp của PC đang giữ video, kèm bước đang làm và tiến độ. PC bản cũ chỉ gửi phiếu."""
+    """Nhịp của PC đang giữ video, kèm bước đang làm và tiến độ. PC bản cũ chỉ gửi phiếu.
+
+    Cùng một bước và cùng số tiến độ thì giữ nguyên progress_same_at. Nhịp lặp lại không
+    được gia hạn video đã đọc xong mà chưa gửi kết quả.
+    """
     if not lease:
         return False
+    init_db(db_path)
     now = utcnow()
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
-            "SELECT helper FROM videos WHERE id = ? AND status = 'pc' AND lease = ?",
+            """
+            SELECT helper, progress_stage, progress_done, progress_total, progress_same_at
+            FROM videos WHERE id = ? AND status = 'pc' AND lease = ?
+            """,
             (video_id, lease),
         ).fetchone()
         if row is None:
             conn.execute("ROLLBACK")
             return False
         if stage in PROGRESS_STAGES:
+            done_n = max(0, int(done))
+            total_n = max(0, int(total))
+            unchanged = (
+                str(row["progress_stage"] or "") == stage
+                and int(row["progress_done"] or 0) == done_n
+                and int(row["progress_total"] or 0) == total_n
+                and str(row["progress_same_at"] or "")
+            )
+            same_at = str(row["progress_same_at"]) if unchanged else now
             conn.execute(
                 """
                 UPDATE videos
-                SET lease_at = ?, progress_stage = ?, progress_done = ?, progress_total = ?, progress_at = ?
+                SET lease_at = ?, progress_stage = ?, progress_done = ?, progress_total = ?,
+                    progress_at = ?, progress_same_at = ?
                 WHERE id = ?
                 """,
-                (now, stage, max(0, int(done)), max(0, int(total)), now, video_id),
+                (now, stage, done_n, total_n, now, same_at, video_id),
             )
         else:
             conn.execute("UPDATE videos SET lease_at = ? WHERE id = ?", (now, video_id))
