@@ -461,13 +461,105 @@ class VideoStoreTests(unittest.TestCase):
         everything = {item["device"]: item for item in whole["items"]}
         self.assertEqual(
             (today["Ly13"]["uploaded"], today["Ly13"]["done"], today["Ly13"]["errors"], today["Ly13"]["waiting"]),
-            (0, 0, 0, 1),
+            (0, 0, 0, 0),
         )
         self.assertEqual(
             (everything["Ly13"]["uploaded"], everything["Ly13"]["done"], everything["Ly13"]["errors"], everything["Ly13"]["waiting"]),
             (3, 1, 1, 1),
         )
         self.assertEqual(device_day(self.db, now, span="khac")["span"], "today")
+
+    def test_today_and_all_time_cover_rows_queue_and_carriers(self) -> None:
+        now = datetime(2026, 10, 17, 7, 0, tzinfo=timezone.utc)
+        old_done = self._add("cu.mp4", "cu")
+        claim(self.db, 11)
+        finish(self.db, old_done, Table(rows=[Row("0900000001", "Mot", "@mot")]))
+        fresh = self._add("moi.mp4", "moi")
+        claim(self.db, 11)
+        finish(
+            self.db,
+            fresh,
+            Table(
+                rows=[Row("0900000002", "Hai", "@hai")],
+                review=[Review("0900000003", "Ba", "Ba", "@ba", "cần xem")],
+                unopened=[Unopened("0900000004", "Bon")],
+            ),
+        )
+        waiting = self._add("cho-moi.mp4", "cho-moi")
+        old_wait = self._add("cho-cu.mp4", "cho-cu")
+        live = self._add("dang-doc.mp4", "dang")
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                UPDATE videos
+                SET device = 'Ly13', created_at = '2026-10-15T12:00:00+00:00',
+                    finished_at = '2026-10-16T02:00:00+00:00'
+                WHERE id = ?
+                """,
+                (old_done,),
+            )
+            conn.execute(
+                "UPDATE results SET created_at = '2026-10-16T02:00:00+00:00', checked = 'ok' WHERE video_id = ?",
+                (old_done,),
+            )
+            conn.execute(
+                """
+                UPDATE videos
+                SET device = 'Ly13', created_at = '2026-10-17T01:00:00+00:00',
+                    finished_at = '2026-10-17T02:00:00+00:00'
+                WHERE id = ?
+                """,
+                (fresh,),
+            )
+            conn.execute(
+                "UPDATE results SET created_at = '2026-10-17T02:00:00+00:00' WHERE video_id = ?",
+                (fresh,),
+            )
+            conn.execute(
+                "UPDATE results SET checked = 'diff' WHERE phone = '0900000002'",
+            )
+            conn.execute(
+                "UPDATE videos SET device = 'Ly13', status = 'queued', created_at = '2026-10-17T03:00:00+00:00' WHERE id = ?",
+                (waiting,),
+            )
+            conn.execute(
+                "UPDATE videos SET device = 'Ly13', status = 'queued', created_at = '2026-10-15T12:30:00+00:00' WHERE id = ?",
+                (old_wait,),
+            )
+            conn.execute(
+                """
+                UPDATE videos
+                SET device = 'Ly13', status = 'running',
+                    created_at = '2026-10-15T08:00:00+00:00',
+                    started_at = '2026-10-15T09:00:00+00:00'
+                WHERE id = ?
+                """,
+                (live,),
+            )
+        today = device_day(self.db, now)
+        whole = device_day(self.db, now, span="all")
+        phone_today = {item["device"]: item for item in today["items"]}["Ly13"]
+        phone_all = {item["device"]: item for item in whole["items"]}["Ly13"]
+        self.assertEqual(
+            (phone_today["uploaded"], phone_today["done"], phone_today["waiting"], phone_today["running"]),
+            (2, 1, 1, 0),
+        )
+        self.assertEqual(
+            (phone_today["saved"], phone_today["review"], phone_today["unopened"], phone_today["matched"], phone_today["differed"]),
+            (1, 1, 1, 0, 1),
+        )
+        self.assertEqual(today["totals"]["saved"], 1)
+        self.assertEqual(today["totals"]["waiting"], 1)
+        self.assertEqual(
+            (phone_all["uploaded"], phone_all["done"], phone_all["waiting"], phone_all["running"], phone_all["saved"], phone_all["matched"]),
+            (5, 2, 3, 1, 2, 1),
+        )
+        self.assertEqual(whole["totals"]["unopened"], 1)
+        today_names = {item["name"] for item in list_videos(self.db, device="Ly13", span="today", now=now)}
+        self.assertEqual(today_names, {"moi.mp4", "cho-moi.mp4", "dang-doc.mp4"})
+        self.assertEqual(len(list_videos(self.db, device="Ly13", span="all", now=now)), 5)
+        self.assertEqual(coverage_counts(self.db, span="today", now=now)["carriers"][0]["total"], 3)
+        self.assertEqual(sum(item["total"] for item in coverage_counts(self.db, span="all", now=now)["carriers"]), 4)
 
     def test_review_rows_with_a_matching_handle_become_saved(self) -> None:
         video_id = self._add("a.mp4", "a")

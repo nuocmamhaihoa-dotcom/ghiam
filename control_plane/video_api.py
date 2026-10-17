@@ -276,12 +276,16 @@ def videos(
     authorization: str | None = Header(default=None),
     limit: int | None = Query(default=None, ge=1),
     device: str | None = Query(default=None),
+    span: str = Query(default="all"),
 ) -> dict[str, object]:
-    """Không truyền limit thì trả hết video, mới nhất trước. device có mặt thì chỉ máy đó."""
+    """Không truyền limit thì trả hết video, mới nhất trước. device có mặt thì chỉ máy đó.
+
+    span=today là video của ngày giờ Việt Nam. span=all là mọi video.
+    """
     _auth(authorization)
     init_db(settings.video_db_path)
     chosen = None if device is None else device
-    items = list_videos(settings.video_db_path, limit, chosen)
+    items = list_videos(settings.video_db_path, limit, chosen, span="today" if span == "today" else "all")
     return {"count": len(items), "items": items}
 
 
@@ -624,10 +628,14 @@ def missing(authorization: str | None = Header(default=None)) -> dict[str, objec
 
 
 @router.get("/v1/results/coverage")
-def coverage(authorization: str | None = Header(default=None)) -> dict[str, object]:
+def coverage(
+    authorization: str | None = Header(default=None),
+    span: str = Query(default="all"),
+) -> dict[str, object]:
+    """span=today đếm dòng ghi trong ngày. span=all đếm mọi dòng."""
     _auth(authorization)
     init_db(settings.video_db_path)
-    return coverage_counts(settings.video_db_path)
+    return coverage_counts(settings.video_db_path, span="today" if span == "today" else "all")
 
 
 @router.post("/v1/results/missing/ticket")

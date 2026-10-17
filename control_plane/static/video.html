@@ -110,7 +110,8 @@
 
   <section>
     <h2>Hàng đợi</h2>
-    <p class="note">Hàng đợi hiện mọi video, không cắt bớt. Nhiều danh sách tải cùng lúc đều vào đây và chờ đến lượt đọc. Cột Điện thoại là máy đã tải video đó. Cột Đủ 3 ô hiện sau khi đọc xong: số kết quả có đủ số điện thoại, tên và id, trên tổng số điện thoại trong video. Video mới được giữ trên máy chủ. Khi ổ đĩa đầy 80%, video cũ nhất tự xóa để còn chỗ. Kết quả đã đọc vẫn giữ. Video còn trên máy chủ có nút Đọc lại để đọc lại bằng bộ đọc mới nhất.</p>
+    <p id="queueScope" class="note"></p>
+    <p class="note">Nhiều danh sách tải cùng lúc đều vào đây và chờ đến lượt đọc. Cột Điện thoại là máy đã tải video đó. Cột Đủ 3 ô hiện sau khi đọc xong: số kết quả có đủ số điện thoại, tên và id, trên tổng số điện thoại trong video. Video mới được giữ trên máy chủ. Khi ổ đĩa đầy 80%, video cũ nhất tự xóa để còn chỗ. Kết quả đã đọc vẫn giữ. Video còn trên máy chủ có nút Đọc lại để đọc lại bằng bộ đọc mới nhất.</p>
     <p class="note">Thứ tự đọc: video bấm <b>Đọc gấp</b> trước. Còn lại xoay vòng theo điện thoại: mỗi máy lần lượt được đọc một video, nên một máy tải cả chục video không làm video của máy khác phải chờ hết đợt đó.</p>
     <div id="queue"></div>
   </section>
@@ -513,30 +514,30 @@
     var phones = body.phones || { day: "", known: [], items: [] };
     knownPhones = phones.known || [];
     phoneItems = phones.items || [];
-    var uploaded = 0;
-    var finished = 0;
-    var failed = 0;
-    phoneItems.forEach(function (item) {
-      uploaded += item.uploaded || 0;
-      finished += item.done || 0;
-      failed += item.errors || 0;
-    });
+    var totals = phones.totals || {};
     var period = statSpan === "all" ? "" : " hôm nay";
     document.getElementById("stats").innerHTML =
-      stat(uploaded, "Đã tải" + period) +
-      stat(finished, "Đọc xong" + period) +
-      stat(failed, "Lỗi" + period) +
-      stat(body.queued, "Video đang chờ") +
+      stat(totals.uploaded || 0, "Đã tải" + period) +
+      stat(totals.done || 0, "Đọc xong" + period) +
+      stat(totals.errors || 0, "Lỗi" + period) +
+      stat(totals.waiting || 0, "Video đang chờ" + period) +
       stat(body.running, "Máy chủ đang đọc") +
       stat(body.pc || 0, "PC đang đọc") +
-      stat(body.saved, "Đã lưu") +
-      stat(body.review, "Cần xem") +
-      stat(body.unopened, "Chưa mở hồ sơ") +
-      stat(body.matched || 0, "Khớp 2 lần") +
-      stat(body.differed || 0, "Đọc lại lệch");
+      stat(totals.saved || 0, "Đã lưu" + period) +
+      stat(totals.review || 0, "Cần xem" + period) +
+      stat(totals.unopened || 0, "Chưa mở hồ sơ" + period) +
+      stat(totals.matched || 0, "Khớp 2 lần" + period) +
+      stat(totals.differed || 0, "Đọc lại lệch" + period);
     document.getElementById("statScope").textContent = statSpan === "all"
-      ? "Đã tải, đọc xong và lỗi tính toàn bộ thời gian. Đang chờ và đang đọc là lúc này."
-      : "Đã tải, đọc xong và lỗi tính trong ngày hôm nay. Đang chờ, đang đọc và các dòng đã lưu vẫn tính toàn bộ.";
+      ? "Báo cáo nhanh, từng điện thoại, hàng đợi, dòng kết quả và nhà mạng đều tính toàn bộ thời gian. Máy chủ đang đọc và PC đang đọc là lúc này."
+      : "Báo cáo nhanh, từng điện thoại, hàng đợi, dòng kết quả và nhà mạng đều tính trong ngày hôm nay. Máy chủ đang đọc và PC đang đọc là lúc này.";
+    var queueScope = document.getElementById("queueScope");
+    if (queueScope) {
+      queueScope.textContent = statSpan === "all"
+        ? "Đang hiện mọi video."
+        : "Đang hiện video của hôm nay, cùng video máy chủ hoặc PC đang đọc.";
+    }
+    applySpanDates(phones.day || "");
     var reader = document.getElementById("reader");
     if (!body.reader_alive) {
       reader.textContent = body.queued > 0
@@ -555,8 +556,8 @@
     fillResultDevices();
     renderPhoneBoard(phones.day || "");
     renderThisPhone();
-    var queuePath = "/v1/videos";
-    if (phoneFilter !== null) queuePath += "?device=" + encodeURIComponent(phoneFilter);
+    var queuePath = "/v1/videos?span=" + encodeURIComponent(statSpan);
+    if (phoneFilter !== null) queuePath += "&device=" + encodeURIComponent(phoneFilter);
     var queueResponse = await api(queuePath);
     if (queueResponse.ok) renderQueue((await queueResponse.json()).items || []);
     loadPcs();
@@ -590,12 +591,12 @@
 
   async function loadMissing() {
     var listed = await api("/v1/results/missing");
-    var cover = await api("/v1/results/coverage");
+    var cover = await api("/v1/results/coverage?span=" + encodeURIComponent(statSpan));
     if (!listed.ok) return;
     var body = await listed.json();
     var carriers = cover.ok ? ((await cover.json()).carriers || []) : [];
     var note = document.getElementById("coverage");
-    var text = coverageText(carriers);
+    var text = (statSpan === "all" ? "Toàn bộ thời gian. " : "Hôm nay. ") + coverageText(carriers);
     if (note.textContent !== text) note.textContent = text;
     var items = body.items || [];
     var sig = (body.unopened || 0) + ":" + items.map(function (item) {
@@ -630,7 +631,7 @@
     queueSig = sig;
     var box = document.getElementById("queue");
     if (!items.length) {
-      box.innerHTML = "<p class='note'>Chưa có video.</p>";
+      box.innerHTML = "<p class='note'>" + (statSpan === "all" ? "Chưa có video." : "Hôm nay chưa có video.") + "</p>";
       return;
     }
     var html = "<table><tr><th>Video</th><th>Điện thoại</th><th>Đủ 3 ô</th><th>Đọc bởi</th><th>Trạng thái</th></tr>";
@@ -866,6 +867,7 @@
   var knownPhones = [];
   var phoneItems = [];
   var statSpan = "today";
+  var followSpanDates = true;
   try { thisPhone = localStorage.getItem(PHONE_KEY) || ""; } catch (error) { thisPhone = ""; }
   try {
     var savedSpan = localStorage.getItem("ghiam-stat-span");
@@ -884,6 +886,7 @@
     if (next !== "today" && next !== "all") return;
     if (next === statSpan) return;
     statSpan = next;
+    followSpanDates = true;
     try { localStorage.setItem("ghiam-stat-span", statSpan); } catch (error) {}
     paintSpanButtons();
     refresh();
@@ -891,6 +894,32 @@
   paintSpanButtons();
 
   function phoneLabel(name) { return name ? name : "Chưa gắn máy"; }
+
+  function applySpanDates(day) {
+    if (!followSpanDates) return;
+    var from = document.getElementById("dayFrom");
+    var to = document.getElementById("dayTo");
+    if (!from || !to) return;
+    var next = statSpan === "all" ? "" : (day || "");
+    if (from.value === next && to.value === next) return;
+    from.value = next;
+    to.value = next;
+  }
+
+  function phoneFigures(item) {
+    var row = item || {};
+    return {
+      uploaded: row.uploaded || 0,
+      errors: row.errors || 0,
+      done: row.done || 0,
+      waiting: row.waiting || 0,
+      saved: row.saved || 0,
+      review: row.review || 0,
+      unopened: row.unopened || 0,
+      matched: row.matched || 0,
+      differed: row.differed || 0
+    };
+  }
 
   function choosePhone(name) {
     var cleaned = String(name || "").replace(/\s+/g, " ").trim().slice(0, 40);
@@ -905,16 +934,17 @@
     if (thisPhone) {
       var mine = null;
       phoneItems.forEach(function (item) { if (item.device === thisPhone) mine = item; });
-      var uploaded = mine ? mine.uploaded : 0;
-      var errors = mine ? mine.errors : 0;
-      var finished = mine ? mine.done : 0;
-      var stamp = statSpan + "|" + thisPhone + "|" + uploaded + "|" + finished + "|" + errors;
+      var figures = phoneFigures(mine);
+      var stamp = statSpan + "|" + thisPhone + "|" + Object.keys(figures).map(function (key) { return figures[key]; }).join("|");
       if (box.getAttribute("data-stamp") === stamp) return;
       box.setAttribute("data-stamp", stamp);
       box.setAttribute("data-mode", "chosen");
-      var lead = statSpan === "all" ? "Toàn bộ thời gian, máy này đã tải " : "Hôm nay máy này đã tải ";
+      var lead = statSpan === "all" ? "Toàn bộ thời gian, máy này: " : "Hôm nay máy này: ";
       box.innerHTML = "<div class='phonebar'><div><b>" + escapeHtml(thisPhone) + "</b>"
-        + "<div class='note'>" + lead + uploaded + " video, đọc xong " + finished + ", lỗi " + errors + ".</div></div>"
+        + "<div class='note'>" + lead + figures.uploaded + " đã tải, " + figures.done + " đọc xong, "
+        + figures.errors + " lỗi, " + figures.waiting + " đang chờ. " + figures.saved + " đã lưu, "
+        + figures.review + " cần xem, " + figures.unopened + " chưa mở, " + figures.matched + " khớp, "
+        + figures.differed + " lệch.</div></div>"
         + "<button class='ghost' type='button' id='changePhone'>Đổi</button></div>";
       document.getElementById("changePhone").addEventListener("click", function () {
         thisPhone = "";
@@ -957,7 +987,9 @@
     var shown = parts.length === 3 ? parts[2] + "/" + parts[1] : "";
     var looking = phoneFilter === null ? "mọi điện thoại" : phoneLabel(phoneFilter);
     var prefix = statSpan === "all" ? "Toàn bộ thời gian. " : (shown ? "Ngày " + shown + ". " : "");
-    var extra = statSpan === "all" ? "" : " Số đếm trong ngày. Hàng đợi vẫn hiện mọi video của máy đang xem.";
+    var extra = statSpan === "all"
+      ? " Số đếm và hàng đợi của máy đang xem tính toàn bộ thời gian."
+      : " Số đếm và hàng đợi của máy đang xem tính trong ngày.";
     note.textContent = prefix + "Bấm một máy để lọc hàng đợi. Đang xem " + looking + "." + extra;
     var html = "<div class='phones'><button type='button' data-all='1' class='" + (phoneFilter === null ? "on" : "") + "'>Tất cả<span>mọi máy</span></button>";
     if (!phoneItems.length) {
@@ -966,10 +998,13 @@
     } else {
       phoneItems.forEach(function (item) {
         var on = phoneFilter !== null && phoneFilter === item.device;
+        var figures = phoneFigures(item);
         html += "<button type='button' data-phone='" + escapeHtml(item.device) + "' class='" + (on ? "on" : "") + "'>"
           + escapeHtml(phoneLabel(item.device))
-          + "<span>" + item.uploaded + " đã tải · " + item.errors + " lỗi</span>"
-          + "<span>" + item.done + " đọc xong · " + item.waiting + " đang chờ</span></button>";
+          + "<span>" + figures.uploaded + " đã tải · " + figures.errors + " lỗi</span>"
+          + "<span>" + figures.done + " đọc xong · " + figures.waiting + " đang chờ</span>"
+          + "<span>" + figures.saved + " đã lưu · " + figures.review + " cần xem · " + figures.unopened + " chưa mở</span>"
+          + "<span>" + figures.matched + " khớp · " + figures.differed + " lệch</span></button>";
       });
       box.innerHTML = html + "</div>";
     }
@@ -1484,7 +1519,13 @@
   });
   document.getElementById("missingAll").addEventListener("click", function () { openMissing(""); });
   document.getElementById("query").addEventListener("input", loadResults);
-  ["dayFrom", "dayTo", "resultDevice", "resultBucket", "resultChecked"].forEach(function (id) {
+  ["dayFrom", "dayTo"].forEach(function (id) {
+    document.getElementById(id).addEventListener("change", function () {
+      followSpanDates = false;
+      loadResults();
+    });
+  });
+  ["resultDevice", "resultBucket", "resultChecked"].forEach(function (id) {
     document.getElementById(id).addEventListener("change", loadResults);
   });
   document.getElementById("resultVideo").addEventListener("input", loadResults);
