@@ -231,14 +231,31 @@ def _ensure_pc_columns(conn: sqlite3.Connection) -> None:
 
 
 def _ensure_check_columns(conn: sqlite3.Connection) -> None:
-    """Lần kiểm đọc lại dòng đủ ba ô. check_pass=1 là video đang được đối chiếu, không phải lần đọc mới."""
+    """Lần kiểm đọc lại dòng đủ ba ô. check_pass=1 là video đang được đối chiếu, không phải lần đọc mới.
+
+    check_from và check_error nhớ trạng thái trước khi xếp vào hàng kiểm, để dừng kiểm
+    trả video lỗi về lỗi. updated_at là lúc dòng được ghi hoặc sửa. checked_at là lúc đối chiếu.
+    """
     videos = {str(row["name"]) for row in conn.execute("PRAGMA table_info(videos)")}
     if "check_pass" not in videos:
         conn.execute("ALTER TABLE videos ADD COLUMN check_pass INTEGER NOT NULL DEFAULT 0")
+    for name, kind in (
+        ("check_from", "TEXT NOT NULL DEFAULT ''"),
+        ("check_error", "TEXT NOT NULL DEFAULT ''"),
+    ):
+        if name not in videos:
+            _add_column(conn, "videos", name, kind)
     results = {str(row["name"]) for row in conn.execute("PRAGMA table_info(results)")}
     if "checked" not in results:
         conn.execute("ALTER TABLE results ADD COLUMN checked TEXT NOT NULL DEFAULT ''")
+    for name, kind in (
+        ("updated_at", "TEXT NOT NULL DEFAULT ''"),
+        ("checked_at", "TEXT NOT NULL DEFAULT ''"),
+    ):
+        if name not in results:
+            _add_column(conn, "results", name, kind)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_results_checked ON results(checked) WHERE checked != ''")
+    conn.execute("UPDATE results SET updated_at = created_at WHERE updated_at IS NULL OR updated_at = ''")
 
 
 def _add_column(conn: sqlite3.Connection, table: str, name: str, kind: str) -> None:
@@ -343,6 +360,22 @@ def can_accept(used_bytes: int, new_bytes: int, limit_bytes: int, free_bytes: in
     if new_bytes > limit_bytes or used_bytes + new_bytes > limit_bytes:
         return False
     return free_bytes > new_bytes + (2 * 1024 * 1024 * 1024)
+
+
+_FREE_FLOOR = 2 * 1024 * 1024 * 1024
+
+
+def upload_room(used: int, free: int, total: int, percent: int) -> bool:
+    """Còn nhận video mới sau khi đã xóa file đã đọc xong.
+
+    File đã xong bị xóa khi đĩa vượt mức phần trăm cấu hình, mặc định 80.
+    Từ chối khi phần trống còn không quá 2 GB, hoặc phần đã dùng vượt trần
+    min(90, phần trăm + 10).
+    """
+    if free <= _FREE_FLOOR:
+        return False
+    ceiling = disk_limit_bytes(total, min(90, percent + 10))
+    return used <= ceiling
 
 
 def disk_limit_bytes(total_bytes: int, percent: int) -> int:
@@ -459,7 +492,11 @@ def begin_upload(
                     pid = NULL, started_at = NULL, finished_at = NULL, created_at = ?,
                     phone_count = NULL, full_count = NULL, device = ?,
                     file_sha256 = '', shrunk = 0, upload_bytes = NULL,
-                    pc_fails = 0, pc_last_fail = '', priority = 0
+                    pc_fails = 0, pc_last_fail = '', priority = 0,
+                    check_pass = 0, check_from = '', check_error = '',
+                    lease = '', lease_at = NULL, helper = '',
+                    progress_stage = '', progress_done = 0, progress_total = 0,
+                    progress_at = NULL, progress_same_at = NULL
                 WHERE id = ?
                 """,
                 (name, size_bytes, utcnow(), kept, existing["id"]),
@@ -735,6 +772,7 @@ _PHONE_COUNTS = (
     "unopened",
     "matched",
     "differed",
+    "unnamed",
 )
 
 
@@ -750,24 +788,31 @@ def device_day(db_path: Path, now: datetime | None = None, span: str = "today") 
 
     span=today đếm theo ngày giờ Việt Nam. Đã tải là file đã vào hàng chờ trong ngày.
     Lỗi là video đọc hỏng hoặc tải lại bị đứt trong ngày. Đọc xong là video kết thúc trong ngày.
-    Đang chờ là video còn trong hàng và được tải lên trong ngày.
+    Đang chờ là video đang chờ hoặc đang tải lên trong ngày.
     Máy chủ đang đọc và PC đang đọc là video bắt đầu hoặc được tải lên trong ngày và vẫn đang đọc.
-    Dòng đã lưu, cần xem, chưa mở, khớp và lệch là dòng kết quả ghi trong ngày.
+    Đã lưu, cần xem, chưa mở hồ sơ và thiếu tên theo lúc dòng được ghi hoặc sửa.
+    Khớp và lệch theo lúc kiểm. Dòng kiểm từ trước chưa có mốc thì theo lúc dòng được ghi.
     span=all đếm mọi video đã vào hàng chờ, mọi video đang chờ, mọi video đang đọc và mọi dòng kết quả.
-    Video đang tải dở chưa tính là đã tải.
+    Video đang tải dở chưa tính là đã tải. Đã lưu là dòng có tên. Thiếu tên là dòng đã lưu mà tên trống.
     """
     whole = span == "all"
     day, start, end = vn_day_bounds(now)
+    wrote = "COALESCE(NULLIF(r.updated_at, ''), r.created_at)"
     if whole:
         uploaded_when = "status != 'uploading'"
         error_when = "status = 'error'"
         done_when = "status = 'done'"
-        waiting_when = "status IN ('queued', 'running', 'uploading', 'pc')"
+        waiting_when = "status IN ('queued', 'uploading')"
         running_when = "status = 'running'"
         pc_when = "status = 'pc'"
         params: tuple[str, ...] = ()
-        result_where = ""
-        result_params: tuple[object, ...] = ()
+        saved_when = "r.bucket = ? AND r.name != ''"
+        unnamed_when = "r.bucket = ? AND r.name = ''"
+        review_when = "r.bucket = ?"
+        unopened_when = "r.bucket = ?"
+        matched_when = "r.checked = 'ok'"
+        differed_when = "r.checked = 'diff'"
+        result_params: tuple[object, ...] = (BUCKET_OK, BUCKET_OK, BUCKET_REVIEW, BUCKET_UNOPENED)
     else:
         uploaded_when = "status != 'uploading' AND created_at >= ? AND created_at < ?"
         error_when = (
@@ -777,14 +822,46 @@ def device_day(db_path: Path, now: datetime | None = None, span: str = "today") 
             ")"
         )
         done_when = "status = 'done' AND finished_at >= ? AND finished_at < ?"
-        waiting_when = "status IN ('queued', 'running', 'uploading', 'pc') AND created_at >= ? AND created_at < ?"
+        waiting_when = "status IN ('queued', 'uploading') AND created_at >= ? AND created_at < ?"
         running_when = (
             "status = 'running' AND ((started_at >= ? AND started_at < ?) OR (created_at >= ? AND created_at < ?))"
         )
         pc_when = "status = 'pc' AND ((started_at >= ? AND started_at < ?) OR (created_at >= ? AND created_at < ?))"
+        # uploaded 2, lỗi 4, đọc xong 2, đang chờ 2, máy chủ 4, PC 4.
         params = (start, end) * 9
-        result_where = "WHERE r.created_at >= ? AND r.created_at < ?"
-        result_params = (start, end)
+        wrote_day = f"{wrote} >= ? AND {wrote} < ?"
+        check_day = (
+            "((COALESCE(r.checked_at, '') != '' AND r.checked_at >= ? AND r.checked_at < ?) "
+            "OR (COALESCE(r.checked_at, '') = '' AND r.created_at >= ? AND r.created_at < ?))"
+        )
+        saved_when = f"r.bucket = ? AND r.name != '' AND {wrote_day}"
+        unnamed_when = f"r.bucket = ? AND r.name = '' AND {wrote_day}"
+        review_when = f"r.bucket = ? AND {wrote_day}"
+        unopened_when = f"r.bucket = ? AND {wrote_day}"
+        matched_when = f"r.checked = 'ok' AND {check_day}"
+        differed_when = f"r.checked = 'diff' AND {check_day}"
+        result_params = (
+            BUCKET_OK,
+            start,
+            end,
+            BUCKET_OK,
+            start,
+            end,
+            BUCKET_REVIEW,
+            start,
+            end,
+            BUCKET_UNOPENED,
+            start,
+            end,
+            start,
+            end,
+            start,
+            end,
+            start,
+            end,
+            start,
+            end,
+        )
     with connect(db_path) as conn:
         rows = conn.execute(
             f"""
@@ -803,17 +880,17 @@ def device_day(db_path: Path, now: datetime | None = None, span: str = "today") 
         result_rows = conn.execute(
             f"""
             SELECT COALESCE(v.device, '') AS device,
-              COALESCE(SUM(CASE WHEN r.bucket = ? THEN 1 ELSE 0 END), 0) AS saved,
-              COALESCE(SUM(CASE WHEN r.bucket = ? THEN 1 ELSE 0 END), 0) AS review,
-              COALESCE(SUM(CASE WHEN r.bucket = ? THEN 1 ELSE 0 END), 0) AS unopened,
-              COALESCE(SUM(CASE WHEN r.checked = 'ok' THEN 1 ELSE 0 END), 0) AS matched,
-              COALESCE(SUM(CASE WHEN r.checked = 'diff' THEN 1 ELSE 0 END), 0) AS differed
+              COALESCE(SUM(CASE WHEN {saved_when} THEN 1 ELSE 0 END), 0) AS saved,
+              COALESCE(SUM(CASE WHEN {unnamed_when} THEN 1 ELSE 0 END), 0) AS unnamed,
+              COALESCE(SUM(CASE WHEN {review_when} THEN 1 ELSE 0 END), 0) AS review,
+              COALESCE(SUM(CASE WHEN {unopened_when} THEN 1 ELSE 0 END), 0) AS unopened,
+              COALESCE(SUM(CASE WHEN {matched_when} THEN 1 ELSE 0 END), 0) AS matched,
+              COALESCE(SUM(CASE WHEN {differed_when} THEN 1 ELSE 0 END), 0) AS differed
             FROM results r
             LEFT JOIN videos v ON v.id = r.video_id
-            {result_where}
             GROUP BY COALESCE(v.device, '')
             """,
-            (BUCKET_OK, BUCKET_REVIEW, BUCKET_UNOPENED, *result_params),
+            result_params,
         ).fetchall()
     by_device: dict[str, dict[str, object]] = {}
     for row in rows:
@@ -825,7 +902,7 @@ def device_day(db_path: Path, now: datetime | None = None, span: str = "today") 
     for row in result_rows:
         device = str(row["device"] or "")
         item = by_device.setdefault(device, _phone_item(device))
-        for key in ("saved", "review", "unopened", "matched", "differed"):
+        for key in ("saved", "unnamed", "review", "unopened", "matched", "differed"):
             item[key] = int(row[key])
     items = [
         item
@@ -1049,7 +1126,8 @@ def claim_pc(db_path: Path, helper: str) -> dict[str, object] | None:
                 conn.execute(
                     """
                     UPDATE videos
-                    SET status = 'error', error = ?, finished_at = ?, pid = NULL, check_pass = 0
+                    SET status = 'error', error = ?, finished_at = ?, pid = NULL, check_pass = 0,
+                        check_from = '', check_error = ''
                     WHERE id = ? AND status = 'queued'
                     """,
                     ("Không còn file video.", utcnow(), row["id"]),
@@ -1383,18 +1461,21 @@ def _confirm_saved_rows(conn: sqlite3.Connection, video_id: int, table: Table) -
     for item in saved:
         found = fresh.get(_cell(str(item["phone"])))
         if found is None:
-            conn.execute("UPDATE results SET checked = '' WHERE id = ?", (int(item["id"]),))
+            conn.execute(
+                "UPDATE results SET checked = '', checked_at = '' WHERE id = ?",
+                (int(item["id"]),),
+            )
             continue
         if found == (_cell(str(item["name"])), _cell(str(item["username"]))):
             conn.execute(
-                "UPDATE results SET checked = 'ok', reason = '' WHERE id = ?",
-                (int(item["id"]),),
+                "UPDATE results SET checked = 'ok', reason = '', checked_at = ? WHERE id = ?",
+                (utcnow(), int(item["id"])),
             )
             continue
         note = f"Lần đọc sau: {found[0]} {found[1]}"
         conn.execute(
-            "UPDATE results SET checked = 'diff', reason = ? WHERE id = ?",
-            (note[:500], int(item["id"])),
+            "UPDATE results SET checked = 'diff', reason = ?, checked_at = ? WHERE id = ?",
+            (note[:500], utcnow(), int(item["id"])),
         )
 
 
@@ -1422,6 +1503,7 @@ def _mark_video_done(
         SET status = 'done', pid = NULL, finished_at = ?, error = '',
             {count_sql}
             lease = '', {helper_sql}, lease_at = NULL, check_pass = 0, priority = 0,
+            check_from = '', check_error = '',
             progress_stage = '', progress_done = 0, progress_total = 0, progress_at = NULL
         {where}
         """,
@@ -1517,7 +1599,8 @@ def start_full_check(db_path: Path) -> dict[str, int]:
             cur = conn.execute(
                 """
                 UPDATE videos
-                SET status = 'queued', error = '', pid = NULL,
+                SET check_from = status, check_error = error,
+                    status = 'queued', error = '', pid = NULL,
                     check_pass = 1, lease = '', lease_at = NULL
                 WHERE id = ? AND status IN ('done', 'error')
                 """,
@@ -1538,8 +1621,11 @@ def stop_full_check(db_path: Path) -> dict[str, int]:
         cur = conn.execute(
             """
             UPDATE videos
-            SET status = 'done', check_pass = 0, pid = NULL, error = '',
-                lease = '', lease_at = NULL
+            SET status = CASE WHEN check_from = 'error' THEN 'error' ELSE 'done' END,
+                error = CASE WHEN check_from = 'error' THEN check_error ELSE '' END,
+                check_pass = 0, pid = NULL,
+                lease = '', lease_at = NULL,
+                check_from = '', check_error = ''
             WHERE status = 'queued' AND COALESCE(check_pass, 0) = 1
             """
         )
@@ -1631,8 +1717,8 @@ def _confirm_open_profiles(conn: sqlite3.Connection) -> int:
         if not handle_matches_name(username, str(row["name"])):
             continue
         conn.execute(
-            "UPDATE results SET bucket = ?, reason = '' WHERE id = ?",
-            (BUCKET_OK, row["id"]),
+            "UPDATE results SET bucket = ?, reason = '', updated_at = ? WHERE id = ?",
+            (BUCKET_OK, utcnow(), row["id"]),
         )
         changed += 1
 
@@ -1657,8 +1743,8 @@ def _confirm_open_profiles(conn: sqlite3.Connection) -> int:
             continue
         target = hits[0]
         conn.execute(
-            "UPDATE results SET username = ?, bucket = ?, reason = '' WHERE id = ?",
-            (username, BUCKET_OK, target["id"]),
+            "UPDATE results SET username = ?, bucket = ?, reason = '', updated_at = ? WHERE id = ?",
+            (username, BUCKET_OK, utcnow(), target["id"]),
         )
         conn.execute("DELETE FROM results WHERE id = ?", (orphan["id"],))
         del free[int(target["id"])]
@@ -1667,11 +1753,15 @@ def _confirm_open_profiles(conn: sqlite3.Connection) -> int:
 
 
 def fail(db_path: Path, video_id: int, message: str, lease: str | None = None) -> bool:
-    """Đánh video là lỗi. Có phiếu thì chỉ đánh khi video vẫn thuộc đúng lượt đọc đang chạy."""
-    where = "WHERE id = ?"
+    """Đánh video là lỗi.
+
+    Có phiếu thì chỉ đánh khi video vẫn thuộc đúng lượt đọc đang chạy.
+    Không có phiếu thì chỉ đánh video máy chủ đang đọc.
+    """
+    where = "WHERE id = ? AND status = 'running'"
     params: list[object] = [utcnow(), message[:500], video_id]
     if lease is not None:
-        where += " AND status = 'running' AND lease = ?"
+        where += " AND lease = ?"
         params.append(lease)
     with connect(db_path) as conn:
         cur = conn.execute(
@@ -1680,6 +1770,7 @@ def fail(db_path: Path, video_id: int, message: str, lease: str | None = None) -
             SET status = 'error', pid = NULL, finished_at = ?, error = ?,
                 helper = CASE WHEN helper IS NULL OR helper = '' THEN 'VPS' ELSE helper END,
                 lease = '', lease_at = NULL, check_pass = 0, priority = 0,
+                check_from = '', check_error = '',
                 progress_stage = '', progress_done = 0, progress_total = 0
             {where}
             """,
@@ -1703,7 +1794,8 @@ def retry(db_path: Path, video_id: int) -> bool:
             UPDATE videos
             SET status = 'queued', error = '', finished_at = NULL, pid = NULL,
                 phone_count = NULL, full_count = NULL,
-                helper = '', lease = '', lease_at = NULL, check_pass = 0
+                helper = '', lease = '', lease_at = NULL, check_pass = 0,
+                check_from = '', check_error = ''
             WHERE id = ? AND status IN ('error', 'done')
             """,
             (video_id,),
@@ -1752,10 +1844,10 @@ def merge_close_results(db_path: Path) -> int:
                     updated = conn.execute(
                         """
                         UPDATE results
-                        SET name = ?, username = ?, bucket = ?, reason = ''
+                        SET name = ?, username = ?, bucket = ?, reason = '', updated_at = ?
                         WHERE id = ? AND username = ''
                         """,
-                        (joined_name(phone["name"], user["name"]), user["username"], BUCKET_OK, phone["id"]),
+                        (joined_name(phone["name"], user["name"]), user["username"], BUCKET_OK, utcnow(), phone["id"]),
                     )
                     if updated.rowcount != 1:
                         continue
@@ -1918,11 +2010,23 @@ def result_page(
             """,
             [*params, *cursor_params, page_size],
         ).fetchall()
+        stamp = conn.execute(
+            f"""
+            SELECT COALESCE(MAX(r.id), 0) AS max_id,
+                   COALESCE(MAX(COALESCE(NULLIF(r.updated_at, ''), r.created_at)), '') AS wrote,
+                   COALESCE(MAX(COALESCE(r.checked_at, '')), '') AS checked
+            FROM results r
+            LEFT JOIN videos v ON v.id = r.video_id
+            {where}
+            """,
+            params,
+        ).fetchone()
     items = [_public_result(row) for row in rows]
     next_before = 0
     if after <= 0 and len(items) == page_size:
         next_before = int(items[-1]["id"])
-    return {"items": items, "total": total, "before": next_before}
+    revision = f"{total}|{int(stamp['max_id'])}|{stamp['wrote']}|{stamp['checked']}"
+    return {"items": items, "total": total, "before": next_before, "revision": revision}
 
 
 def iter_results(db_path: Path, filters: ResultFilter) -> Iterator[dict[str, object]]:
@@ -2093,13 +2197,14 @@ def _put(
         "SELECT id, bucket, username, video_id FROM results WHERE phone = ? AND phone != ''",
         (phone,),
     ).fetchone()
+    now = utcnow()
     if existing is None:
         conn.execute(
             """
-            INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (phone, name, username, bucket, reason, video_id, utcnow()),
+            (phone, name, username, bucket, reason, video_id, now, now),
         )
         _drop_lone_username(conn, username, bucket)
         return
@@ -2111,8 +2216,13 @@ def _put(
     if int(existing["bucket"]) == BUCKET_OK and existing["username"] and not same_video:
         return
     conn.execute(
-        "UPDATE results SET name = ?, username = ?, bucket = ?, reason = '', video_id = ?, checked = '' WHERE id = ?",
-        (name, username, BUCKET_OK, video_id, existing["id"]),
+        """
+        UPDATE results
+        SET name = ?, username = ?, bucket = ?, reason = '', video_id = ?,
+            checked = '', checked_at = '', updated_at = ?
+        WHERE id = ?
+        """,
+        (name, username, BUCKET_OK, video_id, now, existing["id"]),
     )
     _drop_lone_username(conn, username, bucket)
 
@@ -2137,14 +2247,19 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
             # Số đang "chưa mở hồ sơ" mà video sau đã mở được hồ sơ: giữ username lại để người xem quyết định.
             if int(existing["bucket"]) == BUCKET_UNOPENED and item.username and not existing["username"]:
                 conn.execute(
-                    "UPDATE results SET username = ?, bucket = ?, reason = ?, video_id = ? WHERE id = ?",
-                    (item.username, BUCKET_REVIEW, item.reason, video_id, existing["id"]),
+                    """
+                    UPDATE results
+                    SET username = ?, bucket = ?, reason = ?, video_id = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (item.username, BUCKET_REVIEW, item.reason, video_id, utcnow(), existing["id"]),
                 )
             return
+        now = utcnow()
         conn.execute(
             """
-            INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 item.phone,
@@ -2153,7 +2268,8 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
                 BUCKET_REVIEW,
                 item.reason,
                 video_id,
-                utcnow(),
+                now,
+                now,
             ),
         )
         return
@@ -2166,12 +2282,13 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
     # Đã có @id này, hoặc @id chỉ khác một ký tự dễ đọc nhầm (l với i, _ với __): không thêm dòng mồ côi.
     if any(row["username"] == item.username or lookalike_handles(row["username"], item.username) for row in nearby):
         return
+    now = utcnow()
     conn.execute(
         """
-        INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at)
-        VALUES ('', ?, ?, ?, ?, ?, ?)
+        INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at, updated_at)
+        VALUES ('', ?, ?, ?, ?, ?, ?, ?)
         """,
-        (item.profile_name, item.username, BUCKET_REVIEW, item.reason, video_id, utcnow()),
+        (item.profile_name, item.username, BUCKET_REVIEW, item.reason, video_id, now, now),
     )
 
 

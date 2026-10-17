@@ -174,6 +174,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Thống kê hôm nay", response.text)
         self.assertIn("Thống kê toàn bộ thời gian", response.text)
         self.assertIn("Chi tiết theo điện thoại", response.text)
+        self.assertIn("Thiếu tên", response.text)
         self.assertIn("Điện thoại này", response.text)
         self.assertIn("Hôm nay theo điện thoại", response.text)
         self.assertIn("Toàn bộ thời gian", response.text)

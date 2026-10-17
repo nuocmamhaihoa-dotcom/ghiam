@@ -35,6 +35,7 @@ from control_plane.video_store import (
     merge_close_results,
     queued_bytes,
     disk_limit_bytes,
+    upload_room,
     drop_stale_uploads,
     prune_old_videos,
     pc_video_path,
@@ -389,7 +390,8 @@ class VideoStoreTests(unittest.TestCase):
         by_phone = {item["device"]: item for item in report["items"]}
         self.assertEqual(by_phone["Máy 1"]["uploaded"], 1)
         self.assertEqual(by_phone["Máy 1"]["errors"], 1)
-        self.assertEqual(by_phone["Máy 1"]["waiting"], 1)
+        self.assertEqual(by_phone["Máy 1"]["waiting"], 0)
+        self.assertEqual(by_phone["Máy 1"]["running"], 1)
         self.assertEqual((by_phone["Máy 2"]["uploaded"], by_phone["Máy 2"]["done"], by_phone["Máy 2"]["errors"]), (1, 1, 0))
         self.assertEqual(by_phone["Máy 2"]["waiting"], 1)
         self.assertEqual(
@@ -499,7 +501,13 @@ class VideoStoreTests(unittest.TestCase):
                 (old_done,),
             )
             conn.execute(
-                "UPDATE results SET created_at = '2026-10-16T02:00:00+00:00', checked = 'ok' WHERE video_id = ?",
+                """
+                UPDATE results
+                SET created_at = '2026-10-16T02:00:00+00:00',
+                    updated_at = '2026-10-16T02:00:00+00:00',
+                    checked = 'ok'
+                WHERE video_id = ?
+                """,
                 (old_done,),
             )
             conn.execute(
@@ -512,7 +520,12 @@ class VideoStoreTests(unittest.TestCase):
                 (fresh,),
             )
             conn.execute(
-                "UPDATE results SET created_at = '2026-10-17T02:00:00+00:00' WHERE video_id = ?",
+                """
+                UPDATE results
+                SET created_at = '2026-10-17T02:00:00+00:00',
+                    updated_at = '2026-10-17T02:00:00+00:00'
+                WHERE video_id = ?
+                """,
                 (fresh,),
             )
             conn.execute(
@@ -552,7 +565,7 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(today["totals"]["waiting"], 1)
         self.assertEqual(
             (phone_all["uploaded"], phone_all["done"], phone_all["waiting"], phone_all["running"], phone_all["saved"], phone_all["matched"]),
-            (5, 2, 3, 1, 2, 1),
+            (5, 2, 2, 1, 2, 1),
         )
         self.assertEqual(whole["totals"]["unopened"], 1)
         today_names = {item["name"] for item in list_videos(self.db, device="Ly13", span="today", now=now)}
@@ -560,6 +573,78 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(len(list_videos(self.db, device="Ly13", span="all", now=now)), 5)
         self.assertEqual(coverage_counts(self.db, span="today", now=now)["carriers"][0]["total"], 3)
         self.assertEqual(sum(item["total"] for item in coverage_counts(self.db, span="all", now=now)["carriers"]), 4)
+        self.assertEqual(phone_today["unnamed"], 0)
+        self.assertEqual(phone_all["unnamed"], 0)
+
+    def test_rewritten_and_checked_rows_follow_their_own_days(self) -> None:
+        now = datetime(2026, 10, 17, 7, 0, tzinfo=timezone.utc)
+        video_id = self._add("sua.mp4", "sua")
+        claim(self.db, 11)
+        finish(self.db, video_id, Table(rows=[Row("0900000011", "Cu", "@cu")]))
+        blank = self._add("trong.mp4", "trong")
+        claim(self.db, 11)
+        finish(self.db, blank, Table(rows=[Row("0900000012", "", "@trong")]))
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                UPDATE videos
+                SET device = 'Ly13', created_at = '2026-10-15T01:00:00+00:00',
+                    finished_at = '2026-10-15T02:00:00+00:00'
+                WHERE id IN (?, ?)
+                """,
+                (video_id, blank),
+            )
+            conn.execute(
+                """
+                UPDATE results
+                SET created_at = '2026-10-15T02:00:00+00:00',
+                    updated_at = '2026-10-15T02:00:00+00:00'
+                """
+            )
+        yesterday = device_day(self.db, now)
+        self.assertEqual(yesterday["totals"]["saved"], 0)
+        self.assertEqual(yesterday["totals"]["unnamed"], 0)
+        whole = device_day(self.db, now, span="all")
+        self.assertEqual((whole["totals"]["saved"], whole["totals"]["unnamed"]), (1, 1))
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                UPDATE results
+                SET name = 'Moi', updated_at = '2026-10-17T02:00:00+00:00',
+                    checked = '', checked_at = ''
+                WHERE phone = '0900000011'
+                """
+            )
+        rewritten = device_day(self.db, now)
+        self.assertEqual(rewritten["totals"]["saved"], 1)
+        self.assertEqual(rewritten["totals"]["unnamed"], 0)
+        self.assertEqual(device_day(self.db, now, span="all")["totals"]["saved"], 1)
+        before = result_page(self.db, limit=10)["revision"]
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                UPDATE results
+                SET checked = 'ok', checked_at = '2026-10-17T03:00:00+00:00'
+                WHERE phone = '0900000011'
+                """
+            )
+        after = result_page(self.db, limit=10)
+        self.assertNotEqual(before, after["revision"])
+        self.assertTrue(str(after["revision"]).startswith(f"{after['total']}|"))
+        checked = device_day(self.db, now)
+        self.assertEqual(checked["totals"]["saved"], 1)
+        self.assertEqual(checked["totals"]["matched"], 1)
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                UPDATE results
+                SET updated_at = '2026-10-15T02:00:00+00:00'
+                WHERE phone = '0900000011'
+                """
+            )
+        moved = device_day(self.db, now)
+        self.assertEqual(moved["totals"]["saved"], 0)
+        self.assertEqual(moved["totals"]["matched"], 1)
 
     def test_review_rows_with_a_matching_handle_become_saved(self) -> None:
         video_id = self._add("a.mp4", "a")
@@ -589,6 +674,19 @@ class VideoStoreTests(unittest.TestCase):
         video_id = self._add("a.mp4", "same")
         claim(self.db, 7)
         finish(self.db, video_id, Table())
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                UPDATE videos
+                SET check_pass = 1, lease = 'cu', lease_at = '2020-01-01T00:00:00+00:00',
+                    helper = 'PC', progress_stage = 'read', progress_done = 3, progress_total = 9,
+                    progress_at = '2020-01-01T00:00:00+00:00',
+                    progress_same_at = '2020-01-01T00:00:00+00:00',
+                    check_from = 'error', check_error = 'cu'
+                WHERE id = ?
+                """,
+                (video_id,),
+            )
         again = begin_upload(self.db, name="a.mp4", size_bytes=10, sha256="same")
         self.assertFalse(again["duplicate"])
         self.assertTrue(again["reopened"])
@@ -597,6 +695,24 @@ class VideoStoreTests(unittest.TestCase):
         reopened = list_videos(self.db)[0]
         self.assertIsNone(reopened["phone_count"])
         self.assertIsNone(reopened["full_count"])
+        self.assertEqual(reopened["check_pass"], 0)
+        self.assertEqual(reopened["helper"], "")
+        with connect(self.db) as conn:
+            row = conn.execute(
+                """
+                SELECT lease, lease_at, progress_stage, progress_done, progress_same_at,
+                       check_from, check_error
+                FROM videos WHERE id = ?
+                """,
+                (video_id,),
+            ).fetchone()
+        self.assertEqual(row["lease"], "")
+        self.assertIsNone(row["lease_at"])
+        self.assertEqual(row["progress_stage"], "")
+        self.assertEqual(row["progress_done"], 0)
+        self.assertIsNone(row["progress_same_at"])
+        self.assertEqual(row["check_from"], "")
+        self.assertEqual(row["check_error"], "")
         abort_upload(self.db, video_id, reopened=True)
         self.assertEqual(stats(self.db)["error"], 1)
         self.assertEqual(len(list_videos(self.db)), 1)
@@ -719,6 +835,12 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(disk_limit_bytes(1000, 80), 800)
         self.assertEqual(disk_limit_bytes(1000, 99), 900)
         self.assertEqual(disk_limit_bytes(1000, 1), 100)
+        total = 100 * gb
+        self.assertTrue(upload_room(80 * gb, 20 * gb, total, 80))
+        self.assertTrue(upload_room(90 * gb, 10 * gb, total, 80))
+        self.assertFalse(upload_room(91 * gb, 9 * gb, total, 80))
+        self.assertFalse(upload_room(50 * gb, 2 * gb, total, 80))
+        self.assertTrue(upload_room(50 * gb, 2 * gb + 1, total, 80))
 
     def _finish_kept(self, name: str, sha: str, created_at: str, payload: bytes, phone: str) -> tuple[int, Path]:
         video_id = self._add(name, sha, size=len(payload))
@@ -816,6 +938,20 @@ class PcClaimTests(unittest.TestCase):
         path.write_bytes(b"video")
         commit_upload(self.db, video_id, str(path))
         return video_id
+
+    def test_fail_without_a_lease_leaves_a_pc_video_alone(self) -> None:
+        video_id = self._add("a.mp4", "pc-fail")
+        job = claim_pc(self.db, "PC")
+        self.assertIsNotNone(job)
+        self.assertFalse(fail(self.db, video_id, "nhầm"))
+        self.assertEqual(stats(self.db)["pc"], 1)
+        self.assertEqual(stats(self.db)["error"], 0)
+        running = self._add("b.mp4", "vps-fail")
+        claim(self.db, 6)
+        self.assertTrue(fail(self.db, running, "hỏng"))
+        states = {int(item["id"]): item["status"] for item in list_videos(self.db)}
+        self.assertEqual(states[video_id], "pc")
+        self.assertEqual(states[running], "error")
 
     def test_server_restart_does_not_take_a_pc_video(self) -> None:
         self._add("a.mp4", "pc-a")
@@ -1205,6 +1341,28 @@ class FullCheckTests(unittest.TestCase):
         self.assertEqual(listed[waiting_id]["status"], "done")
         self.assertEqual(listed[waiting_id]["check_pass"], 0)
         self.assertEqual(listed[waiting_id]["helper"], "VPS")
+
+    def test_stop_restores_an_error_video_that_was_queued_for_a_check(self) -> None:
+        video_id = self._done("loi.mp4", "stop-err", "0900000097", "Bay", "@bay97")
+        with connect(self.db) as conn:
+            conn.execute(
+                "UPDATE videos SET status = 'error', error = 'đọc hỏng' WHERE id = ?",
+                (video_id,),
+            )
+        self.assertEqual(start_full_check(self.db)["videos"], 1)
+        stopped = stop_full_check(self.db)
+        self.assertEqual(stopped["stopped"], 1)
+        listed = {int(item["id"]): item for item in list_videos(self.db)}
+        self.assertEqual(listed[video_id]["status"], "error")
+        self.assertEqual(listed[video_id]["error"], "đọc hỏng")
+        self.assertEqual(listed[video_id]["check_pass"], 0)
+        with connect(self.db) as conn:
+            row = conn.execute(
+                "SELECT check_from, check_error FROM videos WHERE id = ?",
+                (video_id,),
+            ).fetchone()
+        self.assertEqual(row["check_from"], "")
+        self.assertEqual(row["check_error"], "")
 
 
 class BackupGzipTests(unittest.TestCase):
