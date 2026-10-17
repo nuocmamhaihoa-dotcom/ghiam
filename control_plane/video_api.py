@@ -266,7 +266,11 @@ def video_stats(
     used, _free, limit = _disk_snapshot()
     body["disk_used_bytes"] = used
     body["disk_limit_bytes"] = limit
-    body["phones"] = device_day(settings.video_db_path, span="all" if span == "all" else "today")
+    today_phones = device_day(settings.video_db_path, span="today")
+    all_phones = device_day(settings.video_db_path, span="all")
+    body["today"] = today_phones
+    body["all"] = all_phones
+    body["phones"] = all_phones if span == "all" else today_phones
     body["shrink"] = {**shrink_totals(settings.video_db_path), "on": get_meta(settings.video_db_path, "video_shrink", "off") == "on"}
     return body
 
