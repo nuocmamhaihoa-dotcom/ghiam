@@ -8,6 +8,7 @@ import sqlite3
 import tempfile
 import threading
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 from control_plane.screen_table import Review, Row, Table, Unopened
@@ -857,6 +858,90 @@ class PcClaimTests(unittest.TestCase):
         self.assertEqual(done["status"], "done")
         self.assertEqual(done["helper"], "VPS")
         self.assertEqual(search_results(self.db, "0900000002")[0]["username"], "@moi")
+
+    def _video(self, video_id: int) -> dict[str, object]:
+        with connect(self.db) as conn:
+            row = conn.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
+            return dict(row)
+
+    def _age_progress(self, video_id: int) -> None:
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                UPDATE videos
+                SET progress_same_at = '2020-01-01T00:00:00+00:00', lease_at = ?
+                WHERE id = ?
+                """,
+                (datetime.now(timezone.utc).isoformat(), video_id),
+            )
+
+    def test_finished_pc_read_returns_even_while_heartbeats_continue(self) -> None:
+        stuck = self._add("stuck.mp4", "pc-stuck")
+        moving = self._add("moving.mp4", "pc-moving")
+        held = claim_pc(self.db, "May-Stuck")
+        live = claim_pc(self.db, "May-Live")
+        assert held is not None and live is not None
+        self.assertTrue(touch_pc(self.db, stuck, str(held["lease"]), "read", 1272, 1272))
+        self.assertTrue(touch_pc(self.db, moving, str(live["lease"]), "download", 1, 5))
+        frozen = self._video(stuck)["progress_same_at"]
+        self.assertTrue(touch_pc(self.db, stuck, str(held["lease"]), "read", 1272, 1272))
+        self.assertEqual(self._video(stuck)["progress_same_at"], frozen)
+        self._age_progress(stuck)
+        self._age_progress(moving)
+        self.assertEqual(release_stale_pc(self.db), 1)
+        self.assertEqual(self._video(stuck)["status"], "queued")
+        self.assertEqual(self._video(moving)["status"], "pc")
+        with connect(self.db) as conn:
+            streak = conn.execute("SELECT fail_streak FROM pcs WHERE name = 'May-Stuck'").fetchone()
+        self.assertEqual(int(streak["fail_streak"]), 0)
+        taken = claim(self.db, 21)
+        assert taken is not None
+        self.assertEqual(taken["id"], stuck)
+        self.assertEqual(self._video(moving)["status"], "pc")
+
+    def test_finished_progress_is_armed_before_it_is_reclaimed(self) -> None:
+        video_id = self._add("arm.mp4", "pc-arm")
+        job = claim_pc(self.db, "May-Arm")
+        assert job is not None
+        self.assertTrue(touch_pc(self.db, video_id, str(job["lease"]), "read", 4, 4))
+        with connect(self.db) as conn:
+            conn.execute("UPDATE videos SET progress_same_at = NULL WHERE id = ?", (video_id,))
+        self.assertEqual(release_stale_pc(self.db), 0)
+        self.assertEqual(self._video(video_id)["status"], "pc")
+        self.assertTrue(self._video(video_id)["progress_same_at"])
+        self.assertTrue(touch_pc(self.db, video_id, str(job["lease"]), "read", 4, 4))
+        self._age_progress(video_id)
+        self.assertEqual(release_stale_pc(self.db), 1)
+        self.assertEqual(self._video(video_id)["status"], "queued")
+
+    def test_live_read_and_server_read_stay_put(self) -> None:
+        reading = self._add("mid.mp4", "pc-mid")
+        sending = self._add("send.mp4", "pc-send")
+        server = self._add("vps.mp4", "vps-full")
+        mid = claim_pc(self.db, "May-Mid")
+        late = claim_pc(self.db, "May-Send")
+        assert mid is not None and late is not None
+        self.assertTrue(touch_pc(self.db, reading, str(mid["lease"]), "read", 10, 100))
+        self.assertTrue(touch_pc(self.db, sending, str(late["lease"]), "send", 0, 0))
+        earlier = self._video(reading)["progress_same_at"]
+        self.assertTrue(touch_pc(self.db, reading, str(mid["lease"]), "read", 11, 100))
+        self.assertNotEqual(self._video(reading)["progress_same_at"], earlier)
+        taken = claim(self.db, 22)
+        assert taken is not None
+        self.assertEqual(taken["id"], server)
+        report_progress(self.db, server, "read", 10, 10)
+        with connect(self.db) as conn:
+            conn.execute(
+                "UPDATE videos SET progress_same_at = '2020-01-01T00:00:00+00:00' WHERE id = ?",
+                (server,),
+            )
+        self._age_progress(reading)
+        self._age_progress(sending)
+        self.assertEqual(release_stale_pc(self.db), 1)
+        self.assertEqual(self._video(reading)["status"], "pc")
+        self.assertEqual(self._video(reading)["progress_done"], 11)
+        self.assertEqual(self._video(sending)["status"], "queued")
+        self.assertEqual(self._video(server)["status"], "running")
 
 
 class FullCheckTests(unittest.TestCase):
