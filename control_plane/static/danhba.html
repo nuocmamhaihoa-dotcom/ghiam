@@ -316,7 +316,7 @@
     if (library.title) titleInput.value = library.title;
     render();
     var people = new URLSearchParams(location.search).get("people") || "";
-    if (people.indexOf("/v1/results/missing/") === 0 && people.indexOf("://") === -1) {
+    if (/^\/v1\/results\/missing\/\d+-[0-9a-f]{32}(?:\?video=\d+)?$/.test(people)) {
       fetch(people, { cache: "no-store" }).then(function (response) {
         if (!response.ok) {
           showMessage("Liên kết số chưa mở đã hết hạn. Bấm lại trên trang đọc video.", true);

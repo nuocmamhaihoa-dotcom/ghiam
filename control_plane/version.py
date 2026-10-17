@@ -3,4 +3,4 @@
 IPHONE_BUILD = 5
 
 # Bản Danh bạ cài trên màn hình chính. Tăng số này mỗi lần đổi tính năng để iPhone tự lấy bản mới.
-DANHBA_BUILD = 2
+DANHBA_BUILD = 3

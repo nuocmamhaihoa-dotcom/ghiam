@@ -232,6 +232,10 @@ class VideoStoreTests(unittest.TestCase):
         )
         self.assertEqual([item["phone"] for item in search_results(self.db, "0332")], ["0332001753"])
         self.assertEqual([item["phone"] for item in search_results(self.db, "+84982")], ["0982117072"])
+        self.assertEqual([item["phone"] for item in search_results(self.db, "84982")], ["0982117072"])
+        self.assertEqual([item["phone"] for item in search_results(self.db, "0084982")], ["0982117072"])
+        self.assertEqual([item["phone"] for item in search_results(self.db, "982117072")], ["0982117072"])
+        self.assertEqual(search_results(self.db, "84"), [])
         self.assertEqual([item["phone"] for item in search_results(self.db, "dangtam")], ["0982117072"])
         self.assertEqual([item["phone"] for item in search_results(self.db, "@khac")], ["0332001753"])
         self.assertEqual(search_results(self.db, "0999"), [])
@@ -695,6 +699,22 @@ class PcClaimTests(unittest.TestCase):
         self.assertEqual(release_stale_pc(self.db), 1)
         again = claim(self.db, 5)
         self.assertEqual(again["id"], video_id)
+
+    def test_server_picks_up_a_pc_video_after_the_lease_expires(self) -> None:
+        video_id = self._add("a.mp4", "pc-expire")
+        job = claim_pc(self.db, "PC")
+        assert job is not None
+        with connect(self.db) as conn:
+            conn.execute(
+                "UPDATE videos SET lease_at = '2020-01-01T00:00:00+00:00' WHERE id = ?",
+                (video_id,),
+            )
+        taken = claim(self.db, 5)
+        assert taken is not None
+        self.assertEqual(taken["id"], video_id)
+        self.assertEqual(stats(self.db)["pc"], 0)
+        self.assertEqual(stats(self.db)["running"], 1)
+        self.assertNotEqual(taken["lease"], job["lease"])
 
     def test_wrong_lease_does_not_write_results(self) -> None:
         video_id = self._add("a.mp4", "pc-lease")
