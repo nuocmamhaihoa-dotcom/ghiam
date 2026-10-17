@@ -182,6 +182,7 @@ def init_db(db_path: Path) -> None:
         _ensure_pc_columns(conn)
         _ensure_check_columns(conn)
         _ensure_fleet_columns(conn)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_results_created ON results(created_at)")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS api_keys (
@@ -635,21 +636,39 @@ def abort_upload(db_path: Path, video_id: int, reopened: bool = False) -> None:
         conn.execute("DELETE FROM videos WHERE id = ? AND status = 'uploading'", (video_id,))
 
 
-def list_videos(db_path: Path, limit: int | None = None, device: str | None = None) -> list[dict[str, object]]:
+def list_videos(
+    db_path: Path,
+    limit: int | None = None,
+    device: str | None = None,
+    span: str = "all",
+    now: datetime | None = None,
+) -> list[dict[str, object]]:
     """Mọi video, mới nhất trước. limit=None là không cắt. device=None là mọi máy.
 
     Chuỗi device rỗng là các video tải trước khi có tên điện thoại.
+    span=today chỉ lấy video của ngày giờ Việt Nam: tải lên trong ngày, đọc xong hoặc lỗi
+    trong ngày, cộng video máy chủ hoặc PC đang đọc lúc này.
     """
+    clauses: list[str] = []
+    params: list[object] = []
+    if device is not None:
+        clauses.append("device = ?")
+        params.append(device)
+    if span == "today":
+        _day, start, end = vn_day_bounds(now)
+        clauses.append(
+            "((created_at >= ? AND created_at < ?) OR (finished_at >= ? AND finished_at < ?) "
+            "OR status IN ('running', 'pc'))"
+        )
+        params.extend((start, end, start, end))
     sql = """
         SELECT id, name, size_bytes, status, error, created_at, started_at, finished_at,
                phone_count, full_count, path, device, helper, check_pass,
                progress_stage, progress_done, progress_total, priority
         FROM videos
     """
-    params: list[object] = []
-    if device is not None:
-        sql += " WHERE device = ?"
-        params.append(device)
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
     sql += " ORDER BY id DESC"
     if limit is not None:
         sql += " LIMIT ?"
@@ -704,51 +723,125 @@ def stats(db_path: Path) -> dict[str, int]:
     return counts
 
 
-def device_day(db_path: Path, now: datetime | None = None) -> dict[str, object]:
-    """Số video mỗi điện thoại đã tải lên trong ngày hôm nay, và số video lỗi trong ngày đó.
+_PHONE_COUNTS = (
+    "uploaded",
+    "errors",
+    "done",
+    "waiting",
+    "running",
+    "pc",
+    "saved",
+    "review",
+    "unopened",
+    "matched",
+    "differed",
+)
 
-    Ngày tính theo giờ Việt Nam. Đã tải là file đã vào hàng chờ hôm nay, kể cả đang đọc hoặc đã xong.
-    Lỗi là video đọc hỏng hoặc tải lại bị đứt trong ngày, dù file đó lên từ hôm trước.
+
+def _phone_item(device: str) -> dict[str, object]:
+    item: dict[str, object] = {"device": device}
+    for key in _PHONE_COUNTS:
+        item[key] = 0
+    return item
+
+
+def device_day(db_path: Path, now: datetime | None = None, span: str = "today") -> dict[str, object]:
+    """Số video và số dòng kết quả, theo từng điện thoại và theo tổng.
+
+    span=today đếm theo ngày giờ Việt Nam. Đã tải là file đã vào hàng chờ trong ngày.
+    Lỗi là video đọc hỏng hoặc tải lại bị đứt trong ngày. Đọc xong là video kết thúc trong ngày.
+    Đang chờ là video còn trong hàng và được tải lên trong ngày.
+    Máy chủ đang đọc và PC đang đọc là video bắt đầu hoặc được tải lên trong ngày và vẫn đang đọc.
+    Dòng đã lưu, cần xem, chưa mở, khớp và lệch là dòng kết quả ghi trong ngày.
+    span=all đếm mọi video đã vào hàng chờ, mọi video đang chờ, mọi video đang đọc và mọi dòng kết quả.
     Video đang tải dở chưa tính là đã tải.
     """
+    whole = span == "all"
     day, start, end = vn_day_bounds(now)
+    if whole:
+        uploaded_when = "status != 'uploading'"
+        error_when = "status = 'error'"
+        done_when = "status = 'done'"
+        waiting_when = "status IN ('queued', 'running', 'uploading', 'pc')"
+        running_when = "status = 'running'"
+        pc_when = "status = 'pc'"
+        params: tuple[str, ...] = ()
+        result_where = ""
+        result_params: tuple[object, ...] = ()
+    else:
+        uploaded_when = "status != 'uploading' AND created_at >= ? AND created_at < ?"
+        error_when = (
+            "status = 'error' AND ("
+            "(finished_at >= ? AND finished_at < ?) OR "
+            "((finished_at IS NULL OR finished_at = '') AND created_at >= ? AND created_at < ?)"
+            ")"
+        )
+        done_when = "status = 'done' AND finished_at >= ? AND finished_at < ?"
+        waiting_when = "status IN ('queued', 'running', 'uploading', 'pc') AND created_at >= ? AND created_at < ?"
+        running_when = (
+            "status = 'running' AND ((started_at >= ? AND started_at < ?) OR (created_at >= ? AND created_at < ?))"
+        )
+        pc_when = "status = 'pc' AND ((started_at >= ? AND started_at < ?) OR (created_at >= ? AND created_at < ?))"
+        params = (start, end) * 9
+        result_where = "WHERE r.created_at >= ? AND r.created_at < ?"
+        result_params = (start, end)
     with connect(db_path) as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT device,
-              COALESCE(SUM(CASE
-                WHEN status != 'uploading' AND created_at >= ? AND created_at < ? THEN 1 ELSE 0 END), 0) AS uploaded,
-              COALESCE(SUM(CASE
-                WHEN status = 'error' AND (
-                  (finished_at >= ? AND finished_at < ?)
-                  OR ((finished_at IS NULL OR finished_at = '') AND created_at >= ? AND created_at < ?)
-                ) THEN 1 ELSE 0 END), 0) AS errors,
-              COALESCE(SUM(CASE
-                WHEN status = 'done' AND finished_at >= ? AND finished_at < ? THEN 1 ELSE 0 END), 0) AS done,
-              COALESCE(SUM(CASE
-                WHEN status IN ('queued', 'running', 'uploading', 'pc') THEN 1 ELSE 0 END), 0) AS waiting
+              COALESCE(SUM(CASE WHEN {uploaded_when} THEN 1 ELSE 0 END), 0) AS uploaded,
+              COALESCE(SUM(CASE WHEN {error_when} THEN 1 ELSE 0 END), 0) AS errors,
+              COALESCE(SUM(CASE WHEN {done_when} THEN 1 ELSE 0 END), 0) AS done,
+              COALESCE(SUM(CASE WHEN {waiting_when} THEN 1 ELSE 0 END), 0) AS waiting,
+              COALESCE(SUM(CASE WHEN {running_when} THEN 1 ELSE 0 END), 0) AS running,
+              COALESCE(SUM(CASE WHEN {pc_when} THEN 1 ELSE 0 END), 0) AS pc
             FROM videos
             GROUP BY device
-            ORDER BY uploaded DESC, waiting DESC, device ASC
             """,
-            (start, end, start, end, start, end, start, end),
+            params,
         ).fetchall()
-    items = []
-    known: list[str] = []
+        result_rows = conn.execute(
+            f"""
+            SELECT COALESCE(v.device, '') AS device,
+              COALESCE(SUM(CASE WHEN r.bucket = ? THEN 1 ELSE 0 END), 0) AS saved,
+              COALESCE(SUM(CASE WHEN r.bucket = ? THEN 1 ELSE 0 END), 0) AS review,
+              COALESCE(SUM(CASE WHEN r.bucket = ? THEN 1 ELSE 0 END), 0) AS unopened,
+              COALESCE(SUM(CASE WHEN r.checked = 'ok' THEN 1 ELSE 0 END), 0) AS matched,
+              COALESCE(SUM(CASE WHEN r.checked = 'diff' THEN 1 ELSE 0 END), 0) AS differed
+            FROM results r
+            LEFT JOIN videos v ON v.id = r.video_id
+            {result_where}
+            GROUP BY COALESCE(v.device, '')
+            """,
+            (BUCKET_OK, BUCKET_REVIEW, BUCKET_UNOPENED, *result_params),
+        ).fetchall()
+    by_device: dict[str, dict[str, object]] = {}
     for row in rows:
         device = str(row["device"] or "")
-        item = {
-            "device": device,
-            "uploaded": int(row["uploaded"]),
-            "errors": int(row["errors"]),
-            "done": int(row["done"]),
-            "waiting": int(row["waiting"]),
-        }
-        if device:
-            known.append(device)
-        if device or item["uploaded"] or item["errors"] or item["done"] or item["waiting"]:
-            items.append(item)
-    return {"day": day, "known": known, "items": items}
+        item = _phone_item(device)
+        for key in ("uploaded", "errors", "done", "waiting", "running", "pc"):
+            item[key] = int(row[key])
+        by_device[device] = item
+    for row in result_rows:
+        device = str(row["device"] or "")
+        item = by_device.setdefault(device, _phone_item(device))
+        for key in ("saved", "review", "unopened", "matched", "differed"):
+            item[key] = int(row[key])
+    items = [
+        item
+        for item in by_device.values()
+        if item["device"] or any(int(item[key]) for key in _PHONE_COUNTS)
+    ]
+    items.sort(key=lambda item: (-int(item["uploaded"]), -int(item["waiting"]), str(item["device"])))
+    known = [str(item["device"]) for item in items if item["device"]]
+    totals = {key: sum(int(item[key]) for item in items) for key in _PHONE_COUNTS}
+    return {
+        "day": day,
+        "span": "all" if whole else "today",
+        "known": known,
+        "items": items,
+        "totals": totals,
+    }
 
 
 def _waiting_sql(where: str = "", first_only: bool = True) -> str:
@@ -1920,12 +2013,21 @@ def missing_text(db_path: Path, video_id: int = 0) -> str:
     return "\n".join(lines) + ("\n" if lines else "")
 
 
-def coverage_counts(db_path: Path) -> dict[str, object]:
-    """Đếm dòng theo nhà mạng gốc. Không trả số điện thoại."""
+def coverage_counts(db_path: Path, span: str = "all", now: datetime | None = None) -> dict[str, object]:
+    """Đếm dòng theo nhà mạng gốc. Không trả số điện thoại.
+
+    span=today chỉ dòng ghi trong ngày giờ Việt Nam. span=all là mọi dòng.
+    """
     labels = {BUCKET_OK: "saved", BUCKET_REVIEW: "review", BUCKET_UNOPENED: "unopened"}
     totals: dict[str, dict[str, int]] = defaultdict(lambda: {"saved": 0, "review": 0, "unopened": 0})
+    sql = "SELECT phone, bucket FROM results WHERE phone != ''"
+    params: tuple[str, ...] = ()
+    if span == "today":
+        _day, start, end = vn_day_bounds(now)
+        sql += " AND created_at >= ? AND created_at < ?"
+        params = (start, end)
     with connect(db_path) as conn:
-        rows = conn.execute("SELECT phone, bucket FROM results WHERE phone != ''")
+        rows = conn.execute(sql, params)
         for row in rows:
             name = carrier(str(row["phone"] or "")) or "Chưa rõ"
             slot = labels.get(int(row["bucket"]), "")

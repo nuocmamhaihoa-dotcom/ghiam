@@ -227,7 +227,9 @@ def _html(name: str) -> HTMLResponse:
 @app.get("/", response_class=HTMLResponse)
 def dashboard() -> HTMLResponse:
     """Trang duy nhất: thêm video, xem thống kê, tải bản sao lưu."""
-    return _html("video.html")
+    page = _html("video.html")
+    page.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return page
 
 
 @app.get("/phone", response_class=HTMLResponse)
