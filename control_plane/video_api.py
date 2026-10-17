@@ -76,6 +76,7 @@ from control_plane.video_store import (
     commit_upload,
     device_day,
     disk_limit_bytes,
+    upload_room,
     finish,
     get_meta,
     init_db,
@@ -158,9 +159,10 @@ def _pc_token(invite: str) -> str:
     return _invite_token(invite) if invite else _page_token()
 
 
-def _disk_snapshot() -> tuple[int, int, int]:
+def _disk_snapshot() -> tuple[int, int, int, int]:
     usage = shutil.disk_usage(settings.video_dir)
-    return usage.used, usage.free, disk_limit_bytes(usage.total, settings.video_disk_percent)
+    limit = disk_limit_bytes(usage.total, settings.video_disk_percent)
+    return usage.used, usage.free, usage.total, limit
 
 
 def _ticket_key(purpose: str = "backup-ticket") -> bytes:
@@ -263,7 +265,7 @@ def video_stats(
     body = stats(settings.video_db_path)
     body["workers"] = worker_count()
     body["reader_alive"] = reader_alive(settings.data_dir / "video-worker.heartbeat")
-    used, _free, limit = _disk_snapshot()
+    used, _free, _total, limit = _disk_snapshot()
     body["disk_used_bytes"] = used
     body["disk_limit_bytes"] = limit
     today_phones = device_day(settings.video_db_path, span="today")
@@ -328,13 +330,13 @@ async def _publish_file(src: Path, original: str, size: int, digest: str, device
             protect_newest=False,
         )
     )
-    used, free, limit = _disk_snapshot()
-    if used > limit or free <= 2 * 1024 * 1024 * 1024:
+    used, free, total, _limit = _disk_snapshot()
+    if not upload_room(used, free, total, settings.video_disk_percent):
         raise HTTPException(
             status_code=507,
             detail=(
-                f"Ổ đĩa đã tới {settings.video_disk_percent}%."
-                " Video đang đọc chưa xóa được. Đợi đọc xong rồi tải tiếp."
+                "Ổ đĩa gần đầy. Video chưa đọc vẫn nằm trên đĩa. "
+                "Đợi đọc xong hoặc nối thêm PC rồi tải tiếp."
             ),
         )
     created: dict[str, object] | None = None

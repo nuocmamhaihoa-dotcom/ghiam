@@ -527,6 +527,7 @@
       stat(row.errors || 0, "Lỗi") +
       stat(row.waiting || 0, "Đang chờ") +
       stat(row.saved || 0, "Đã lưu") +
+      stat(row.unnamed || 0, "Thiếu tên") +
       stat(row.review || 0, "Cần xem") +
       stat(row.unopened || 0, "Chưa mở hồ sơ") +
       stat(row.matched || 0, "Khớp") +
@@ -811,11 +812,13 @@
     var total = 0;
     var before = 0;
     var full = false;
+    var revision = "";
     var guard = 0;
     while (guard < 50) {
       guard += 1;
       var page = await fetchResultPage(before ? "before=" + before : "");
       if (asked !== resultsAsked || !page) return null;
+      if (!revision && page.revision) revision = page.revision;
       var pageItems = page.items || [];
       items = items.concat(pageItems);
       total = page.total != null ? page.total : items.length;
@@ -826,7 +829,7 @@
       }
     }
     if (items.length > RESULT_CAP) items = items.slice(0, RESULT_CAP);
-    return { items: items, total: total, full: full };
+    return { items: items, total: total, full: full, revision: revision };
   }
 
   async function loadResults() {
@@ -834,17 +837,22 @@
     var key = filterKey();
     var now = Date.now();
     var cached = resultCache;
-    var canDelta = cached && cached.key === key && cached.complete && cached.maxId > 0 && (now - cached.at) < 60000;
+    var freshEnough = cached && (now - cached.at) < 60000;
+    var canDelta = cached && cached.key === key && cached.complete && cached.maxId > 0 && (cached.revision || freshEnough);
     if (canDelta) {
       var newer = await fetchResultPage("after=" + cached.maxId);
       if (asked !== resultsAsked || !newer) return;
+      var arrived = newer.items || [];
+      var revision = newer.revision || "";
       var total = newer.total != null ? newer.total : cached.total;
-      if (total >= cached.items.length) {
-        var items = (newer.items || []).concat(cached.items);
+      var editedInPlace = revision && cached.revision && revision !== cached.revision && !arrived.length;
+      if (!editedInPlace && total >= cached.items.length) {
+        var items = arrived.concat(cached.items);
         if (items.length > RESULT_CAP) items = items.slice(0, RESULT_CAP);
         resultCache = {
           key: key,
-          at: cached.at,
+          at: revision ? now : cached.at,
+          revision: revision || cached.revision || "",
           maxId: items.length ? items[0].id : cached.maxId,
           items: items,
           total: total,
@@ -860,6 +868,7 @@
     resultCache = {
       key: key,
       at: now,
+      revision: loaded.revision || "",
       maxId: loaded.items.length ? loaded.items[0].id : 0,
       items: loaded.items,
       total: loaded.total,
@@ -940,11 +949,20 @@
       done: row.done || 0,
       waiting: row.waiting || 0,
       saved: row.saved || 0,
+      unnamed: row.unnamed || 0,
       review: row.review || 0,
       unopened: row.unopened || 0,
       matched: row.matched || 0,
       differed: row.differed || 0
     };
+  }
+
+  function phoneStamp(figures) {
+    return [
+      figures.uploaded, figures.done, figures.errors, figures.waiting,
+      figures.saved, figures.unnamed, figures.review, figures.unopened,
+      figures.matched, figures.differed
+    ].join(",");
   }
 
   function choosePhone(name) {
@@ -964,18 +982,18 @@
       phoneAll.forEach(function (item) { if (item.device === thisPhone) mineAll = item; });
       var todayFigures = phoneFigures(mineToday);
       var allFigures = phoneFigures(mineAll);
-      var stamp = thisPhone + "|" + Object.keys(todayFigures).concat(Object.keys(allFigures)).map(function (key, index) {
-        return index < 9 ? todayFigures[key] : allFigures[key];
-      }).join("|");
+      var stamp = thisPhone + "|" + phoneStamp(todayFigures) + "|" + phoneStamp(allFigures);
       if (box.getAttribute("data-stamp") === stamp) return;
       box.setAttribute("data-stamp", stamp);
       box.setAttribute("data-mode", "chosen");
       box.innerHTML = "<div class='phonebar'><div><b>" + escapeHtml(thisPhone) + "</b>"
         + "<div class='note'>Hôm nay: " + todayFigures.uploaded + " đã tải, " + todayFigures.done + " đọc xong, "
         + todayFigures.errors + " lỗi, " + todayFigures.waiting + " đang chờ, " + todayFigures.saved + " đã lưu, "
+        + todayFigures.unnamed + " thiếu tên, "
         + todayFigures.review + " cần xem, " + todayFigures.unopened + " chưa mở.</div>"
         + "<div class='note'>Toàn bộ thời gian: " + allFigures.uploaded + " đã tải, " + allFigures.done + " đọc xong, "
         + allFigures.errors + " lỗi, " + allFigures.waiting + " đang chờ, " + allFigures.saved + " đã lưu, "
+        + allFigures.unnamed + " thiếu tên, "
         + allFigures.review + " cần xem, " + allFigures.unopened + " chưa mở.</div></div>"
         + "<button class='ghost' type='button' id='changePhone'>Đổi</button></div>";
       document.getElementById("changePhone").addEventListener("click", function () {
@@ -1020,7 +1038,7 @@
     var figures = phoneFigures(item);
     return "<span class='when'>" + (item && item._label ? item._label : "") + "</span>"
       + "<span>" + figures.uploaded + " đã tải · " + figures.done + " đọc xong · " + figures.errors + " lỗi · " + figures.waiting + " đang chờ</span>"
-      + "<span>" + figures.saved + " đã lưu · " + figures.review + " cần xem · " + figures.unopened + " chưa mở · " + figures.matched + " khớp · " + figures.differed + " lệch</span>";
+      + "<span>" + figures.saved + " đã lưu · " + figures.unnamed + " thiếu tên · " + figures.review + " cần xem · " + figures.unopened + " chưa mở · " + figures.matched + " khớp · " + figures.differed + " lệch</span>";
   }
 
   function renderPhoneBoard(day) {
