@@ -13,6 +13,7 @@ from __future__ import annotations
 import ctypes
 import math
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -318,6 +319,192 @@ def plan_reads(
     return plan
 
 
+# Khoảng cách hai khung danh bạ 2 hình/giây. Ngắn hơn là đứng yên, dài hơn là dừng lại.
+_FAST_GAP_MIN = 0.2
+_FAST_GAP_MAX = 0.75
+# Khung giữa cách khung đã có ít hơn chừng này thì bỏ, vì gần như cùng một ảnh.
+_MIDPOINT_GAP = 0.12
+_PTS_TIME = re.compile(r"pts_time:([0-9]+(?:\.[0-9]+)?)")
+
+
+def fast_scroll_spans(layouts: list[Layout]) -> list[tuple[float, float]]:
+    """Các khoảng danh bạ vuốt nhanh: trong một nhịp 2 hình/giây, ít nhất hai số đi và hai số tới.
+
+    Hồ sơ nằm giữa thì đó là lúc mở người, không phải một nhịp cuộn. Khung không
+    phải danh bạ cũng không phải hồ sơ thì bỏ qua, vẫn so hai danh bạ kề nhau.
+    """
+    spans: list[tuple[float, float]] = []
+    previous: Layout | None = None
+    for layout in layouts:
+        if layout.at < 0:
+            previous = None
+            continue
+        if layout.kind == "profile":
+            previous = None
+            continue
+        if layout.kind != "list":
+            continue
+        if previous is not None:
+            gap = layout.at - previous.at
+            before = {row.phone for row in previous.rows}
+            after = {row.phone for row in layout.rows}
+            if (
+                _FAST_GAP_MIN <= gap <= _FAST_GAP_MAX
+                and len(before) >= 2
+                and len(after) >= 2
+                and len(before - after) >= 2
+                and len(after - before) >= 2
+            ):
+                spans.append((previous.at, layout.at))
+        previous = layout
+    return _merge_spans(spans)
+
+
+def _merge_spans(spans: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    if not spans:
+        return []
+    ordered = sorted(spans)
+    merged = [ordered[0]]
+    for start, end in ordered[1:]:
+        if start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def _mid_targets(spans: list[tuple[float, float]]) -> list[float]:
+    """Mốc giữa mỗi nửa giây nằm trong khoảng vuốt, tức nhịp 4 hình/giây."""
+    targets: list[float] = []
+    for start, end in spans:
+        moment = math.floor(start / 0.5) * 0.5 + 0.25
+        if moment <= start + 1e-3:
+            moment += 0.5
+        while moment < end - 1e-3:
+            targets.append(moment)
+            moment += 0.5
+    return targets
+
+
+def extract_midpoints(video: Path, folder: Path, spans: list[tuple[float, float]]) -> list[tuple[Path, float]]:
+    """Lấy đúng khung giữa của các khoảng vuốt nhanh. Lỗi ffmpeg thì trả về rỗng, lần đọc vẫn tiếp tục."""
+    spans = _merge_spans(spans)
+    if not spans or shutil.which("ffmpeg") is None:
+        return []
+    try:
+        windows = "+".join(f"between(t\\,{start:.3f}\\,{end:.3f})" for start, end in spans)
+        select = f"gt({windows}\\,0)*lt(abs(mod(t\\,0.5)-0.25)\\,0.08)"
+        pattern = folder / "m_%06d.jpg"
+        done = subprocess.run(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "info",
+                "-threads",
+                str(ffmpeg_thread_count()),
+                "-i",
+                str(video),
+                "-vf",
+                f"select={select},showinfo",
+                "-fps_mode",
+                "vfr",
+                "-q:v",
+                "2",
+                str(pattern),
+            ],
+            capture_output=True,
+            text=True,
+            errors="replace",
+        )
+        files = sorted(folder.glob("m_*.jpg"))
+        if done.returncode != 0 and not files:
+            return []
+        times = [float(item) for item in _PTS_TIME.findall(done.stderr)]
+        if len(times) < len(files):
+            return []
+        return _closest_midpoints(list(zip(files, times[: len(files)])), spans)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return []
+
+
+def _closest_midpoints(
+    found: list[tuple[Path, float]], spans: list[tuple[float, float]]
+) -> list[tuple[Path, float]]:
+    """Mỗi mốc giữa chỉ giữ một khung, khung gần mốc nhất."""
+    chosen: list[tuple[Path, float]] = []
+    used: set[int] = set()
+    for target in _mid_targets(spans):
+        best: tuple[int, Path, float] | None = None
+        best_gap = 0.08
+        for index, (path, at) in enumerate(found):
+            if index in used:
+                continue
+            gap = abs(at - target)
+            if gap < best_gap or (best is not None and gap == best_gap and at < best[2]):
+                best_gap = gap
+                best = (index, path, at)
+        if best is None:
+            continue
+        used.add(best[0])
+        chosen.append((best[1], best[2]))
+    chosen.sort(key=lambda item: item[1])
+    return chosen
+
+
+def _insert_fast_frames(
+    jobs: list[tuple[str, float]],
+    layouts: list[Layout],
+    video_slices: list[tuple[Path, int, int]],
+    temps: list[tempfile.TemporaryDirectory[str]],
+    work_dir: Path | None,
+    submit: Callable[..., Future] | None,
+    task_timeout: float | None,
+    on_done: Callable[[int, int], None] | None,
+) -> tuple[list[tuple[str, float]], list[Layout]]:
+    """Quét thêm khung giữa các nhịp vuốt nhanh, rồi xếp lại theo thời gian của từng video."""
+    if not video_slices:
+        return jobs, layouts
+    rebuilt_jobs: list[tuple[str, float]] = []
+    rebuilt: list[Layout] = []
+    cursor = 0
+    indexed = {start: (path, end) for path, start, end in video_slices}
+    while cursor < len(jobs):
+        if cursor not in indexed:
+            rebuilt_jobs.append(jobs[cursor])
+            rebuilt.append(layouts[cursor])
+            cursor += 1
+            continue
+        path, end = indexed[cursor]
+        segment_jobs = list(jobs[cursor:end])
+        segment_layouts = list(layouts[cursor:end])
+        spans = fast_scroll_spans(segment_layouts)
+        fresh: list[tuple[Path, float]] = []
+        if spans:
+            folder = tempfile.TemporaryDirectory(prefix="docvideo-mid-", dir=work_dir)
+            temps.append(folder)
+            existing = [at for _, at in segment_jobs]
+            for frame, at in extract_midpoints(path, Path(folder.name), spans):
+                if all(abs(at - old) >= _MIDPOINT_GAP for old in existing):
+                    fresh.append((frame, at))
+        extra: list[Layout] = []
+        if fresh:
+            extra = _run(
+                submit,
+                [(_scan_file, str(frame), at) for frame, at in fresh],
+                task_timeout,
+                on_done,
+            )
+        paired = list(zip(segment_jobs, segment_layouts))
+        paired.extend(((str(frame), at), layout) for (frame, at), layout in zip(fresh, extra))
+        paired.sort(key=lambda item: item[0][1])
+        for job, layout in paired:
+            rebuilt_jobs.append(job)
+            rebuilt.append(layout)
+        cursor = end
+    return rebuilt_jobs, rebuilt
+
+
 def _reporter(progress: Callable[[str, int, int], None] | None, stage: str) -> Callable[[int, int], None] | None:
     """Báo tiến độ ra ngoài. Lỗi ở chỗ báo không được làm hỏng lần đọc."""
     if progress is None:
@@ -349,6 +536,7 @@ def read_inputs(
     """
     jobs: list[tuple[str, float]] = []
     temps: list[tempfile.TemporaryDirectory[str]] = []
+    video_slices: list[tuple[Path, int, int]] = []
     pool: ProcessPoolExecutor | None = None
     extracting = _reporter(progress, "extract")
     try:
@@ -361,8 +549,11 @@ def read_inputs(
                     extracting(0, 0)
                 folder = tempfile.TemporaryDirectory(prefix="docvideo-frames-", dir=work_dir)
                 temps.append(folder)
+                start = len(jobs)
                 frames = drop_repeats(extract_frames(path, Path(folder.name), fps))
                 jobs.extend((str(frame), at) for frame, at in frames)
+                if frames:
+                    video_slices.append((path, start, len(jobs)))
             else:
                 raise RuntimeError(f"Không đọc được {path.name}: cần ảnh hoặc video.")
         if submit is None:
@@ -371,6 +562,16 @@ def read_inputs(
                 pool = ProcessPoolExecutor(max_workers=workers)
                 submit = pool.submit
         layouts = _run(submit, [(_scan_file, path, at) for path, at in jobs], task_timeout, _reporter(progress, "scan"))
+        jobs, layouts = _insert_fast_frames(
+            jobs,
+            layouts,
+            video_slices,
+            temps,
+            work_dir,
+            submit,
+            task_timeout,
+            _reporter(progress, "scan"),
+        )
         resolve_taps(layouts)
         plan = plan_reads(layouts)
         order = sorted(plan)

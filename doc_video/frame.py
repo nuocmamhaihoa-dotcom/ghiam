@@ -25,6 +25,7 @@ import numpy as np
 from PIL import Image, ImageOps
 
 from doc_video import ocr, viet
+from doc_video.digits import read_digit_line
 from doc_video.text import (
     clean_name,
     find_handle,
@@ -67,6 +68,8 @@ class FrameRead:
     at: float = -1.0
     # Danh bạ: số điện thoại của dòng đang có vòng tròn chạm màn hình, tức dòng vừa được bấm.
     tapped: str = ""
+    # Hồ sơ: các khung của một lượt mở @id hoà phiếu từng ký tự, chưa chọn một @id.
+    handle_uncertain: bool = False
 
 
 @dataclass(frozen=True)
@@ -475,24 +478,38 @@ def _crop(screen: Image.Image, line: ocr.TextLine, target: int = NAME_LARGE) -> 
 
 
 def _read_names(small: list[Image.Image], large: list[Image.Image]) -> list[str]:
-    """Đọc tên bằng mọi bộ đọc rồi bỏ phiếu. small và large là cùng các dòng ở hai cỡ phóng."""
+    """Đọc tên bằng mọi bộ đọc rồi bỏ phiếu. small và large là cùng các dòng ở hai cỡ phóng.
+
+    Hai lần tiếng Việt đầu đã ra cùng một tên thì dừng, không gọi bộ không dấu
+    và VietOCR cho dòng đó. Khác dấu, dù chỉ một chữ, thì vẫn đọc tiếp.
+    """
     best = ocr.read_texts(small, "vie")
     fast = ocr.read_texts(small, "vie", best=False)
-    plain = ocr.read_texts(large, "eng", ocr.ASCII)
-    if viet.available():
-        extra, extra_weight = viet.read_lines(large), 1.5
-    else:
-        extra, extra_weight = ocr.read_texts(large, "vie"), 0.6
-    names = []
+    names = [""] * len(small)
+    pending: list[int] = []
     for index in range(len(small)):
+        agreed = clean_name(best[index])
+        if agreed and agreed == clean_name(fast[index]) and is_name(agreed):
+            names[index] = agreed
+        else:
+            pending.append(index)
+    if not pending:
+        return names
+    pending_large = [large[index] for index in pending]
+    plain = ocr.read_texts(pending_large, "eng", ocr.ASCII)
+    if viet.available():
+        extra, extra_weight = viet.read_lines(pending_large), 1.5
+    else:
+        extra, extra_weight = ocr.read_texts(pending_large, "vie"), 0.6
+    for slot, index in enumerate(pending):
         reads = [
-            (clean_name(extra[index]), extra_weight),
+            (clean_name(extra[slot]), extra_weight),
             (clean_name(best[index]), 1.0),
             (clean_name(fast[index]), 1.0),
-            (clean_name(plain[index]), 0.7),
+            (clean_name(plain[slot]), 0.7),
         ]
         voted = clean_name(vote_chars(reads, loose=True))
-        names.append(prefer_plain_digits_and_case(voted, clean_name(plain[index])))
+        names[index] = prefer_plain_digits_and_case(voted, clean_name(plain[slot]))
     return names
 
 
@@ -500,8 +517,16 @@ def _read_phones(screen: Image.Image, pairs: list[tuple[ocr.TextLine, ocr.TextLi
     phone_crops = [_crop(screen, phone) for phone, _ in pairs]
     best_digits = ocr.read_texts(phone_crops, "eng", ocr.DIGITS)
     fast_digits = ocr.read_texts(phone_crops, "eng", ocr.DIGITS, best=False)
+    glyphs = [read_digit_line(crop) for crop in phone_crops]
     return [
-        vote([normalize_phone(best_digits[index]), normalize_phone(fast_digits[index]), normalize_phone(phone_line.text)])
+        vote(
+            [
+                normalize_phone(best_digits[index]),
+                normalize_phone(fast_digits[index]),
+                normalize_phone(phone_line.text),
+                normalize_phone(glyphs[index]),
+            ]
+        )
         for index, (phone_line, _) in enumerate(pairs)
     ]
 
@@ -510,11 +535,20 @@ def _read_handle(screen: Image.Image, line: ocr.TextLine) -> str:
     """Đọc dòng @id ở nhiều cỡ, bằng nhiều bộ, rồi bỏ phiếu theo từng ký tự.
 
     Bộ tiếng Việt đọc chữ cái trong @id tốt, nhưng hay đọc 3 thành 5; chữ số
-    của nó được tin ít hơn chữ số của bộ tiếng Anh.
+    của nó được tin ít hơn chữ số của bộ tiếng Anh. Lần quét và lần cắt 28 điểm
+    đã ra cùng một @id không có chữ số thì dừng các cỡ còn lại. Có chữ số thì
+    vẫn đọc bộ tiếng Anh, vì hai lần tiếng Việt có thể cùng nhầm 3 thành 5.
+    Nét gạch dưới vẫn đo sau đó.
     """
-    reads: list[tuple[str, float, float]] = [(handle_from_read(line.text), 1.0, VIE_DIGIT_WEIGHT)]
+    first = handle_from_read(line.text)
+    second = handle_from_read(ocr.read_texts([_crop(screen, line, 28)], "vie", "", False)[0])
+    if first and second and first == second and not any(ch.isdigit() for ch in first):
+        return find_handle(fix_underscores(first, _underscore_strokes(screen, line, len(first))))
+    reads: list[tuple[str, float, float]] = [
+        (first, 1.0, VIE_DIGIT_WEIGHT),
+        (second, 1.0, VIE_DIGIT_WEIGHT),
+    ]
     for target, lang, whitelist, best in (
-        (28, "vie", "", False),
         (46, "vie", "", False),
         (60, "eng", LOWER_HANDLE, False),
         (60, "eng", ocr.ASCII, False),

@@ -190,15 +190,26 @@ def vote_chars(reads: list[tuple[str, float]] | list[tuple[str, float, float]], 
     một chữ số: bộ tiếng Việt hay đọc 3 thành 5, nên ở chỗ chọn giữa hai chữ số
     nó được tin ít hơn. Chỗ chọn giữa 1 và l vẫn dùng trọng số thường.
     """
+    text, _tied = vote_is_tied(reads, loose)
+    return text
+
+
+def vote_is_tied(reads: list[tuple[str, float]] | list[tuple[str, float, float]], loose: bool = True) -> tuple[str, bool]:
+    """Cùng kết quả với vote_chars, và True khi có một vị trí hai ký tự cùng trọng số cao nhất.
+
+    Hoà kể cả việc giữ hay bỏ ký tự. Hai lần đọc lệch nhau mà một bên nhiều hơn
+    (2 với 1) thì không phải hoà. Chuỗi trả về vẫn nghiêng về lần đọc làm gốc
+    khi trọng số bằng nhau, để các chỗ gọi cũ không đổi chữ.
+    """
     present = [
         (str(item[0]), float(item[1]), float(item[2]) if len(item) > 2 else float(item[1]))
         for item in reads
         if item[0] and item[1] > 0
     ]
     if not present:
-        return ""
+        return "", False
     if len(present) == 1:
-        return present[0][0]
+        return present[0][0], False
 
     def key(text: str) -> str:
         return fold(text).casefold() if loose else text
@@ -242,6 +253,7 @@ def vote_chars(reads: list[tuple[str, float]] | list[tuple[str, float, float]], 
         for position, piece in inserted.items():
             gaps[position][piece] += weight
     out: list[str] = []
+    tied = False
     for index in range(len(pivot) + 1):
         if gaps[index]:
             piece, support = max(gaps[index].items(), key=lambda item: item[1])
@@ -251,9 +263,12 @@ def vote_chars(reads: list[tuple[str, float]] | list[tuple[str, float, float]], 
             counts = slots[index]
             if all(char.isdigit() for char in counts):
                 counts = digit_slots[index]
-            choice, _ = max(counts.items(), key=lambda item: (item[1], item[0] == pivot[index]))
+            choice, _weight = max(counts.items(), key=lambda item: (item[1], item[0] == pivot[index]))
+            top = max(counts.values())
+            if sum(1 for weight in counts.values() if weight == top) > 1:
+                tied = True
             out.append(choice)
-    return "".join(out)
+    return "".join(out), tied
 
 
 def prefer_plain_digits_and_case(voted: str, plain: str) -> str:
