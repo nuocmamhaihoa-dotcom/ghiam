@@ -40,8 +40,9 @@ PC_LEASE_SECONDS = 900
 PC_DONE_HOLD_SECONDS = 300
 # PC hỏng chừng này video liền nhau thì không nhận video nữa, cho đến khi trang bấm cho đọc lại.
 PC_FAIL_LIMIT = 3
-# Một PC giữ tối đa hai video: video đang đọc và một video đã tải sẵn để đọc tiếp.
-PC_HELD_LIMIT = 2
+# Mỗi PC giữ tối đa 50 GB video đang chờ đọc, ngoài video đang đọc.
+# Video đang đọc không tính vào 50 GB. Đọc xong thì PC xóa file đó.
+PC_CACHE_BYTES = 50 * 1024 * 1024 * 1024
 # Video hỏng trên chừng này PC thì chỉ để máy chủ đọc.
 PC_VIDEO_FAIL_LIMIT = 2
 
@@ -1145,24 +1146,57 @@ def _release_pc_slot(conn: sqlite3.Connection, helper: str, video_id: int, now: 
     )
 
 
+def cache_has_room(held_bytes: int, video_bytes: int, *, reading: bool, limit: int = PC_CACHE_BYTES) -> bool:
+    """Video đang đọc nhận dù lớn hơn 50 GB. Video chờ chỉ nhận khi cộng vào vẫn không quá 50 GB."""
+    if not reading:
+        return True
+    return max(0, int(held_bytes)) + max(0, int(video_bytes)) <= limit
+
+
+def _cache_holding(conn: sqlite3.Connection, name: str) -> tuple[int, int]:
+    """Byte video chờ đọc của PC này, và id video đang được tính là đang đọc."""
+    row = conn.execute("SELECT video_id FROM pcs WHERE name = ?", (name,)).fetchone()
+    active = int(row["video_id"] or 0) if row is not None and row["video_id"] else 0
+    if active:
+        live = conn.execute(
+            "SELECT 1 FROM videos WHERE id = ? AND status = 'pc' AND helper = ?",
+            (active, name),
+        ).fetchone()
+        if live is None:
+            active = 0
+    total = conn.execute(
+        """
+        SELECT COALESCE(SUM(size_bytes), 0) AS n FROM videos
+        WHERE status = 'pc' AND helper = ? AND id != ?
+        """,
+        (name, active),
+    ).fetchone()
+    return int(total["n"] or 0), active
+
+
+def pc_holding(db_path: Path, helper: str) -> bool:
+    """PC này còn giữ ít nhất một video. Hàng chờ đầy không có nghĩa là PC đang rảnh."""
+    name = clean_device(helper) or "PC"
+    init_db(db_path)
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT 1 FROM videos WHERE status = 'pc' AND helper = ? LIMIT 1",
+            (name,),
+        ).fetchone()
+    return row is not None
+
+
 def claim_pc(db_path: Path, helper: str) -> dict[str, object] | None:
     """Đưa một video đang chờ cho PC. Trạng thái pc, bộ đọc trên máy chủ không nhận.
 
     PC không nhận lại video nó vừa đọc hỏng. Video đã hỏng trên hai PC thì chỉ để máy chủ
-    đọc: lỗi có thể nằm ở video chứ không ở PC. Một PC chỉ giữ video đang đọc và một video
-    đã tải sẵn.
+    đọc: lỗi có thể nằm ở video chứ không ở PC. Ngoài video đang đọc, PC chỉ nhận thêm
+    video cho đến khi đủ 50 GB video chờ.
     """
     name = clean_device(helper) or "PC"
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         _release_stale_pc(conn)
-        busy = conn.execute(
-            "SELECT COUNT(*) AS n FROM videos WHERE status = 'pc' AND helper = ?",
-            (name,),
-        ).fetchone()
-        if int(busy["n"]) >= PC_HELD_LIMIT:
-            conn.execute("COMMIT")
-            return None
         for _ in range(20):
             row = conn.execute(
                 _waiting_sql(f"WHERE pc_fails < {PC_VIDEO_FAIL_LIMIT} AND pc_last_fail != ?"),
@@ -1182,6 +1216,10 @@ def claim_pc(db_path: Path, helper: str) -> dict[str, object] | None:
                     ("Không còn file video.", utcnow(), row["id"]),
                 )
                 continue
+            held, active = _cache_holding(conn, name)
+            if not cache_has_room(held, int(row["size_bytes"] or 0), reading=bool(active), limit=PC_CACHE_BYTES):
+                conn.execute("COMMIT")
+                return None
             lease = secrets.token_hex(16)
             now = utcnow()
             cur = conn.execute(
@@ -1212,6 +1250,56 @@ def claim_pc(db_path: Path, helper: str) -> dict[str, object] | None:
 PROGRESS_STAGES = {"download", "extract", "scan", "read", "send", "hold"}
 
 
+def _touch_pc_in(
+    conn: sqlite3.Connection,
+    video_id: int,
+    lease: str,
+    stage: str,
+    done: int,
+    total: int,
+    now: str,
+) -> bool:
+    """Gia hạn một phiếu trong giao dịch đang mở. Bước hold không được chiếm chỗ video đang đọc."""
+    if not lease:
+        return False
+    row = conn.execute(
+        """
+        SELECT helper, progress_stage, progress_done, progress_total, progress_same_at
+        FROM videos WHERE id = ? AND status = 'pc' AND lease = ?
+        """,
+        (video_id, lease),
+    ).fetchone()
+    if row is None:
+        return False
+    if stage in PROGRESS_STAGES:
+        done_n = max(0, int(done))
+        total_n = max(0, int(total))
+        unchanged = (
+            str(row["progress_stage"] or "") == stage
+            and int(row["progress_done"] or 0) == done_n
+            and int(row["progress_total"] or 0) == total_n
+            and str(row["progress_same_at"] or "")
+        )
+        same_at = str(row["progress_same_at"]) if unchanged else now
+        conn.execute(
+            """
+            UPDATE videos
+            SET lease_at = ?, progress_stage = ?, progress_done = ?, progress_total = ?,
+                progress_at = ?, progress_same_at = ?
+            WHERE id = ?
+            """,
+            (now, stage, done_n, total_n, now, same_at, video_id),
+        )
+    else:
+        conn.execute("UPDATE videos SET lease_at = ? WHERE id = ?", (now, video_id))
+    helper = str(row["helper"] or "")
+    if helper and stage == "hold":
+        _pc_seen(conn, helper, now)
+    elif helper:
+        _note_pc_video(conn, helper, now, video_id)
+    return True
+
+
 def touch_pc(db_path: Path, video_id: int, lease: str, stage: str = "", done: int = 0, total: int = 0) -> bool:
     """Nhịp của PC đang giữ video, kèm bước đang làm và tiến độ. PC bản cũ chỉ gửi phiếu.
 
@@ -1224,42 +1312,27 @@ def touch_pc(db_path: Path, video_id: int, lease: str, stage: str = "", done: in
     now = utcnow()
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute(
-            """
-            SELECT helper, progress_stage, progress_done, progress_total, progress_same_at
-            FROM videos WHERE id = ? AND status = 'pc' AND lease = ?
-            """,
-            (video_id, lease),
-        ).fetchone()
-        if row is None:
+        if not _touch_pc_in(conn, video_id, lease, stage, done, total, now):
             conn.execute("ROLLBACK")
             return False
-        if stage in PROGRESS_STAGES:
-            done_n = max(0, int(done))
-            total_n = max(0, int(total))
-            unchanged = (
-                str(row["progress_stage"] or "") == stage
-                and int(row["progress_done"] or 0) == done_n
-                and int(row["progress_total"] or 0) == total_n
-                and str(row["progress_same_at"] or "")
-            )
-            same_at = str(row["progress_same_at"]) if unchanged else now
-            conn.execute(
-                """
-                UPDATE videos
-                SET lease_at = ?, progress_stage = ?, progress_done = ?, progress_total = ?,
-                    progress_at = ?, progress_same_at = ?
-                WHERE id = ?
-                """,
-                (now, stage, done_n, total_n, now, same_at, video_id),
-            )
-        else:
-            conn.execute("UPDATE videos SET lease_at = ? WHERE id = ?", (now, video_id))
-        helper = str(row["helper"] or "")
-        if helper:
-            _note_pc_video(conn, helper, now, video_id)
         conn.execute("COMMIT")
         return True
+
+
+def touch_pc_many(db_path: Path, items: list[tuple[int, str, str, int, int]]) -> list[int]:
+    """Gia hạn nhiều video chờ trong một giao dịch. Trả về id không còn thuộc PC này."""
+    lost: list[int] = []
+    if not items:
+        return lost
+    init_db(db_path)
+    now = utcnow()
+    with connect(db_path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        for video_id, lease, stage, done, total in items[:400]:
+            if not _touch_pc_in(conn, int(video_id), str(lease or ""), str(stage or ""), int(done), int(total), now):
+                lost.append(int(video_id))
+        conn.execute("COMMIT")
+    return lost
 
 
 def release_pc(db_path: Path, video_id: int, lease: str, reason: str = "fail", error: str = "") -> bool:

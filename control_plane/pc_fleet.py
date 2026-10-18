@@ -150,7 +150,7 @@ def _mean(values: list[float]) -> float | None:
     return round(sum(values) / len(values), 1) if values else None
 
 
-_STAGE_RANK = {"read": 0, "scan": 1, "extract": 2, "send": 3, "download": 4, "hold": 5}
+_STAGE_RANK = {"read": 0, "scan": 1, "extract": 2, "send": 3, "hold": 4, "download": 5}
 
 
 def _active_pc_video(rows: list):
@@ -211,6 +211,8 @@ def list_pcs(db_path: Path, now: datetime | None = None) -> list[dict[str, objec
         online = seen is not None and seen <= ONLINE_SECONDS
         videos = grouped.get(name, [])
         video = _active_pc_video(videos)
+        shown = int(video["id"]) if video is not None else 0
+        ahead_bytes = sum(int(item["size_bytes"] or 0) for item in videos if int(item["id"]) != shown)
         current = None
         if video is not None:
             current = {
@@ -241,6 +243,7 @@ def list_pcs(db_path: Path, now: datetime | None = None) -> list[dict[str, objec
                 "invite": labels.get(invite, "Mã mời đã xoá" if invite else ""),
                 "video": current,
                 "ahead": max(0, len(videos) - (1 if video is not None else 0)),
+                "ahead_bytes": ahead_bytes,
                 "paused": bool(row["paused"]),
                 "schedule": schedule,
                 "schedule_open": schedule_open(schedule, moment),

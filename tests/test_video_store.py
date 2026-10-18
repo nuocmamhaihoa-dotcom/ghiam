@@ -8,6 +8,7 @@ import sqlite3
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -43,6 +44,7 @@ from control_plane.video_store import (
     release_pc,
     release_stale_pc,
     report_progress,
+    record_pc_result,
     requeue,
     requeue_running,
     result_page,
@@ -931,8 +933,8 @@ class PcClaimTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def _add(self, name: str, sha: str) -> int:
-        created = begin_upload(self.db, name=name, size_bytes=5, sha256=sha)
+    def _add(self, name: str, sha: str, size: int = 5) -> int:
+        created = begin_upload(self.db, name=name, size_bytes=size, sha256=sha)
         video_id = int(created["id"])
         path = self.root / f"{video_id}.mp4"
         path.write_bytes(b"video")
@@ -1176,6 +1178,29 @@ class PcClaimTests(unittest.TestCase):
         self.assertEqual(int(pc["video_id"]), reading)
         self.assertEqual(pc["state"], "reading")
         self.assertEqual((int(pc["fail_streak"]), int(pc["fail_count"])), (0, 0))
+
+    def test_a_pc_keeps_fifty_gigabytes_of_videos_that_are_waiting(self) -> None:
+        with patch("control_plane.video_store.PC_CACHE_BYTES", 100):
+            reading = self._add("doc.mp4", "cap-doc", 80)
+            first = self._add("cho-a.mp4", "cap-a", 60)
+            second = self._add("cho-b.mp4", "cap-b", 50)
+            current = claim_pc(self.db, "May-Cap")
+            assert current is not None
+            self.assertEqual(int(current["id"]), reading)
+            nxt = claim_pc(self.db, "May-Cap")
+            assert nxt is not None
+            self.assertEqual(int(nxt["id"]), first)
+            self.assertIsNone(claim_pc(self.db, "May-Cap"))
+            other = claim_pc(self.db, "May-Khac")
+            assert other is not None
+            self.assertEqual(int(other["id"]), second)
+            self.assertTrue(finish(self.db, reading, Table(rows=[]), lease=str(current["lease"])))
+            record_pc_result(self.db, reading)
+            self.assertIsNone(claim_pc(self.db, "May-Cap"))
+            release_pc(self.db, first, str(nxt["lease"]), "return")
+            freed = claim_pc(self.db, "May-Cap")
+            assert freed is not None
+            self.assertEqual(int(freed["id"]), first)
 
     def test_finished_pc_read_returns_even_while_heartbeats_continue(self) -> None:
         stuck = self._add("stuck.mp4", "pc-stuck")

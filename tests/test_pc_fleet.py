@@ -119,13 +119,16 @@ class FleetTests(unittest.TestCase):
         assert current is not None and nxt is not None
         self.assertEqual(int(current["id"]), reading)
         self.assertEqual(int(nxt["id"]), waiting)
-        self.assertIsNone(claim_pc(self.db, "May-Read"))
+        later = claim_pc(self.db, "May-Read")
+        assert later is not None
+        self.assertEqual(int(later["id"]), extra)
         self.assertTrue(touch_pc(self.db, reading, str(current["lease"]), "read", 3, 10))
         self.assertTrue(touch_pc(self.db, waiting, str(nxt["lease"]), "hold", 1, 1))
         pc = self._pc("May-Read")
         self.assertEqual(pc["video"]["id"], reading)
         self.assertEqual(pc["video"]["stage"], "read")
-        self.assertEqual(pc["ahead"], 1)
+        self.assertEqual(pc["ahead"], 2)
+        self.assertEqual(pc["ahead_bytes"], 10)
         with connect(self.db) as conn:
             shown = conn.execute("SELECT video_id FROM pcs WHERE name = 'May-Read'").fetchone()
         self.assertEqual(int(shown["video_id"]), reading)
@@ -134,8 +137,8 @@ class FleetTests(unittest.TestCase):
         pc = self._pc("May-Read")
         self.assertEqual(pc["video"]["id"], waiting)
         self.assertEqual(pc["video"]["stage"], "hold")
-        self.assertEqual(pc["ahead"], 0)
-        self.assertEqual(int(claim_pc(self.db, "May-Read")["id"]), extra)
+        self.assertEqual(pc["ahead"], 1)
+        self.assertEqual(pc["ahead_bytes"], 5)
 
     def test_success_resets_the_failure_streak(self) -> None:
         first = self._add("streak-a")
