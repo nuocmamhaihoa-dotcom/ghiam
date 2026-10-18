@@ -110,6 +110,33 @@ class FleetTests(unittest.TestCase):
         self.assertEqual(control["wait"], "")
         self.assertEqual(self._pc("May-B")["fail_streak"], 0)
 
+    def test_one_pc_keeps_the_next_video_ready_and_shows_the_one_being_read(self) -> None:
+        reading = self._add("reading")
+        waiting = self._add("waiting")
+        extra = self._add("extra")
+        current = claim_pc(self.db, "May-Read")
+        nxt = claim_pc(self.db, "May-Read")
+        assert current is not None and nxt is not None
+        self.assertEqual(int(current["id"]), reading)
+        self.assertEqual(int(nxt["id"]), waiting)
+        self.assertIsNone(claim_pc(self.db, "May-Read"))
+        self.assertTrue(touch_pc(self.db, reading, str(current["lease"]), "read", 3, 10))
+        self.assertTrue(touch_pc(self.db, waiting, str(nxt["lease"]), "hold", 1, 1))
+        pc = self._pc("May-Read")
+        self.assertEqual(pc["video"]["id"], reading)
+        self.assertEqual(pc["video"]["stage"], "read")
+        self.assertEqual(pc["ahead"], 1)
+        with connect(self.db) as conn:
+            shown = conn.execute("SELECT video_id FROM pcs WHERE name = 'May-Read'").fetchone()
+        self.assertEqual(int(shown["video_id"]), reading)
+        self.assertTrue(finish(self.db, reading, Table(rows=[]), lease=str(current["lease"])))
+        record_pc_result(self.db, reading, 3.0, 8.0)
+        pc = self._pc("May-Read")
+        self.assertEqual(pc["video"]["id"], waiting)
+        self.assertEqual(pc["video"]["stage"], "hold")
+        self.assertEqual(pc["ahead"], 0)
+        self.assertEqual(int(claim_pc(self.db, "May-Read")["id"]), extra)
+
     def test_success_resets_the_failure_streak(self) -> None:
         first = self._add("streak-a")
         job = claim_pc(self.db, "May-C")

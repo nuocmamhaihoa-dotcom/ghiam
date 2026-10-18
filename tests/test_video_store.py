@@ -1154,6 +1154,29 @@ class PcClaimTests(unittest.TestCase):
                 (datetime.now(timezone.utc).isoformat(), video_id),
             )
 
+    def test_a_video_waiting_on_the_pc_is_not_taken_back_for_being_downloaded(self) -> None:
+        reading = self._add("doc.mp4", "pc-doc")
+        waiting = self._add("cho.mp4", "pc-cho")
+        current = claim_pc(self.db, "May-PC")
+        nxt = claim_pc(self.db, "May-PC")
+        assert current is not None and nxt is not None
+        self.assertTrue(touch_pc(self.db, reading, str(current["lease"]), "read", 4, 20))
+        self.assertTrue(touch_pc(self.db, waiting, str(nxt["lease"]), "hold", 1, 1))
+        self._age_progress(waiting)
+        self.assertEqual(release_stale_pc(self.db), 0)
+        self.assertEqual(self._video(waiting)["status"], "pc")
+        self.assertEqual(self._video(reading)["status"], "pc")
+        self.assertTrue(release_pc(self.db, waiting, str(nxt["lease"]), "return"))
+        self.assertEqual(self._video(waiting)["status"], "queued")
+        self.assertEqual(self._video(reading)["status"], "pc")
+        with connect(self.db) as conn:
+            pc = conn.execute(
+                "SELECT video_id, state, fail_streak, fail_count FROM pcs WHERE name = 'May-PC'"
+            ).fetchone()
+        self.assertEqual(int(pc["video_id"]), reading)
+        self.assertEqual(pc["state"], "reading")
+        self.assertEqual((int(pc["fail_streak"]), int(pc["fail_count"])), (0, 0))
+
     def test_finished_pc_read_returns_even_while_heartbeats_continue(self) -> None:
         stuck = self._add("stuck.mp4", "pc-stuck")
         moving = self._add("moving.mp4", "pc-moving")
