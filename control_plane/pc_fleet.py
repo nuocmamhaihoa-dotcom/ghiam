@@ -150,22 +150,37 @@ def _mean(values: list[float]) -> float | None:
     return round(sum(values) / len(values), 1) if values else None
 
 
+_STAGE_RANK = {"read": 0, "scan": 1, "extract": 2, "send": 3, "download": 4, "hold": 5}
+
+
+def _active_pc_video(rows: list):
+    """Video đang đọc. Video đã tải sẵn chỉ hiện khi PC không đang đọc video khác."""
+    if not rows:
+        return None
+
+    def key(row):
+        stage = str(row["progress_stage"] or "")
+        started = str(row["started_at"] or "")
+        return (_STAGE_RANK.get(stage, 4), started, int(row["id"]))
+
+    return min(rows, key=key)
+
+
 def list_pcs(db_path: Path, now: datetime | None = None) -> list[dict[str, object]]:
     """Mọi PC đã từng nối, kèm video đang đọc, tiến độ, tốc độ gần đây và số video xong hôm nay."""
     moment = now or datetime.now(timezone.utc)
     _day, start, end = vn_day_bounds(moment)
     with connect(db_path) as conn:
         rows = conn.execute("SELECT * FROM pcs ORDER BY name COLLATE NOCASE").fetchall()
-        reading = {
-            str(row["helper"]): row
-            for row in conn.execute(
-                """
-                SELECT id, helper, started_at, size_bytes, check_pass,
-                       progress_stage, progress_done, progress_total, progress_at
-                FROM videos WHERE status = 'pc'
-                """
-            )
-        }
+        grouped: dict[str, list] = {}
+        for row in conn.execute(
+            """
+            SELECT id, helper, started_at, size_bytes, check_pass,
+                   progress_stage, progress_done, progress_total, progress_at
+            FROM videos WHERE status = 'pc'
+            """
+        ):
+            grouped.setdefault(str(row["helper"]), []).append(row)
         today = {
             str(row["helper"]): int(row["n"])
             for row in conn.execute(
@@ -194,7 +209,8 @@ def list_pcs(db_path: Path, now: datetime | None = None) -> list[dict[str, objec
         name = str(row["name"])
         seen = _age_seconds(row["last_seen"], moment)
         online = seen is not None and seen <= ONLINE_SECONDS
-        video = reading.get(name)
+        videos = grouped.get(name, [])
+        video = _active_pc_video(videos)
         current = None
         if video is not None:
             current = {
@@ -224,6 +240,7 @@ def list_pcs(db_path: Path, now: datetime | None = None) -> list[dict[str, objec
                 "version": str(row["version"] or ""),
                 "invite": labels.get(invite, "Mã mời đã xoá" if invite else ""),
                 "video": current,
+                "ahead": max(0, len(videos) - (1 if video is not None else 0)),
                 "paused": bool(row["paused"]),
                 "schedule": schedule,
                 "schedule_open": schedule_open(schedule, moment),

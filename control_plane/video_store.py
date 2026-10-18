@@ -40,6 +40,8 @@ PC_LEASE_SECONDS = 900
 PC_DONE_HOLD_SECONDS = 300
 # PC hỏng chừng này video liền nhau thì không nhận video nữa, cho đến khi trang bấm cho đọc lại.
 PC_FAIL_LIMIT = 3
+# Một PC giữ tối đa hai video: video đang đọc và một video đã tải sẵn để đọc tiếp.
+PC_HELD_LIMIT = 2
 # Video hỏng trên chừng này PC thì chỉ để máy chủ đọc.
 PC_VIDEO_FAIL_LIMIT = 2
 
@@ -1027,7 +1029,11 @@ def _return_pc_videos(conn: sqlite3.Connection, rows: list[sqlite3.Row], note: s
 
 
 def _stuck_finished_pc(conn: sqlite3.Connection, cutoff: str) -> list[sqlite3.Row]:
-    """PC đã báo xong một bước, hoặc đang gửi kết quả, và tiến độ không đổi quá hạn."""
+    """PC đã báo xong một bước, hoặc đang gửi kết quả, và tiến độ không đổi quá hạn.
+
+    Bước hold là video đã tải sẵn trên PC và đang chờ đến lượt đọc. Nhịp vẫn chạy.
+    Không lấy lại video đó chỉ vì file đã tải xong.
+    """
     return conn.execute(
         """
         SELECT id, helper FROM videos
@@ -1104,16 +1110,59 @@ def release_stale_pc(
         return released
 
 
+def _note_pc_video(conn: sqlite3.Connection, name: str, now: str, video_id: int) -> None:
+    """Gắn PC với video đang đọc. Video đã tải sẵn không được che video đang đọc."""
+    row = conn.execute("SELECT video_id FROM pcs WHERE name = ?", (name,)).fetchone()
+    shown = int(row["video_id"] or 0) if row is not None and row["video_id"] else 0
+    if shown and shown != int(video_id):
+        live = conn.execute("SELECT 1 FROM videos WHERE id = ? AND status = 'pc'", (shown,)).fetchone()
+        if live is not None:
+            _pc_seen(conn, name, now)
+            return
+    _pc_seen(conn, name, now, video_id=int(video_id), state="reading")
+
+
+def _release_pc_slot(conn: sqlite3.Connection, helper: str, video_id: int, now: str, state: str) -> None:
+    """Nhả ô video của PC. Còn video khác thì trang vẫn hiện video đó."""
+    other = conn.execute(
+        """
+        SELECT id FROM videos
+        WHERE helper = ? AND status = 'pc' AND id != ?
+        ORDER BY started_at, id
+        LIMIT 1
+        """,
+        (helper, video_id),
+    ).fetchone()
+    if other is not None:
+        conn.execute(
+            "UPDATE pcs SET video_id = ?, state = 'reading', last_seen = ? WHERE name = ?",
+            (int(other["id"]), now, helper),
+        )
+        return
+    conn.execute(
+        "UPDATE pcs SET video_id = NULL, state = ?, last_seen = ? WHERE name = ?",
+        (state, now, helper),
+    )
+
+
 def claim_pc(db_path: Path, helper: str) -> dict[str, object] | None:
     """Đưa một video đang chờ cho PC. Trạng thái pc, bộ đọc trên máy chủ không nhận.
 
     PC không nhận lại video nó vừa đọc hỏng. Video đã hỏng trên hai PC thì chỉ để máy chủ
-    đọc: lỗi có thể nằm ở video chứ không ở PC.
+    đọc: lỗi có thể nằm ở video chứ không ở PC. Một PC chỉ giữ video đang đọc và một video
+    đã tải sẵn.
     """
     name = clean_device(helper) or "PC"
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         _release_stale_pc(conn)
+        busy = conn.execute(
+            "SELECT COUNT(*) AS n FROM videos WHERE status = 'pc' AND helper = ?",
+            (name,),
+        ).fetchone()
+        if int(busy["n"]) >= PC_HELD_LIMIT:
+            conn.execute("COMMIT")
+            return None
         for _ in range(20):
             row = conn.execute(
                 _waiting_sql(f"WHERE pc_fails < {PC_VIDEO_FAIL_LIMIT} AND pc_last_fail != ?"),
@@ -1148,7 +1197,7 @@ def claim_pc(db_path: Path, helper: str) -> dict[str, object] | None:
             )
             if cur.rowcount != 1:
                 continue
-            _pc_seen(conn, name, now, video_id=int(row["id"]), state="reading", message="")
+            _note_pc_video(conn, name, now, int(row["id"]))
             conn.execute("COMMIT")
             return {
                 "id": int(row["id"]),
@@ -1160,7 +1209,7 @@ def claim_pc(db_path: Path, helper: str) -> dict[str, object] | None:
         return None
 
 
-PROGRESS_STAGES = {"download", "extract", "scan", "read", "send"}
+PROGRESS_STAGES = {"download", "extract", "scan", "read", "send", "hold"}
 
 
 def touch_pc(db_path: Path, video_id: int, lease: str, stage: str = "", done: int = 0, total: int = 0) -> bool:
@@ -1208,7 +1257,7 @@ def touch_pc(db_path: Path, video_id: int, lease: str, stage: str = "", done: in
             conn.execute("UPDATE videos SET lease_at = ? WHERE id = ?", (now, video_id))
         helper = str(row["helper"] or "")
         if helper:
-            _pc_seen(conn, helper, now, video_id=video_id, state="reading")
+            _note_pc_video(conn, helper, now, video_id)
         conn.execute("COMMIT")
         return True
 
@@ -1217,12 +1266,13 @@ def release_pc(db_path: Path, video_id: int, lease: str, reason: str = "fail", e
     """PC đọc hỏng thì trả video về hàng chờ. Phiếu không khớp thì không đụng video của máy khác.
 
     reason="disk" là PC thiếu chỗ, không phải lỗi đọc: không tính vào lỗi của PC hay của video.
+    reason="return" là PC trả video chưa đọc (cập nhật hoặc tắt). Không tính lỗi, không coi là hết đĩa.
     Một PC hỏng PC_FAIL_LIMIT video liền nhau thì bị loại, cho đến khi trang bấm cho đọc lại.
     Video đã hỏng trên PC khác thì lần hỏng này không tính vào chuỗi lỗi của PC.
     """
     if not lease:
         return False
-    counted = reason != "disk"
+    counted = reason not in ("disk", "return")
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
@@ -1254,7 +1304,7 @@ def release_pc(db_path: Path, video_id: int, lease: str, reason: str = "fail", e
                     """
                     UPDATE pcs
                     SET fail_count = fail_count + 1, fail_streak = fail_streak + ?,
-                        last_error = ?, last_error_at = ?, video_id = NULL, last_seen = ?, state = 'idle'
+                        last_error = ?, last_error_at = ?, last_seen = ?
                     WHERE name = ?
                     """,
                     (streak, f"Video {video_id}: {note}", now, now, helper),
@@ -1263,11 +1313,7 @@ def release_pc(db_path: Path, video_id: int, lease: str, reason: str = "fail", e
                     "UPDATE pcs SET excluded = 1 WHERE name = ? AND fail_streak >= ?",
                     (helper, PC_FAIL_LIMIT),
                 )
-            else:
-                conn.execute(
-                    "UPDATE pcs SET video_id = NULL, last_seen = ?, state = 'wait-disk' WHERE name = ?",
-                    (now, helper),
-                )
+            _release_pc_slot(conn, helper, video_id, now, "wait-disk" if reason == "disk" else "idle")
         conn.execute("COMMIT")
         return True
 
@@ -1324,14 +1370,33 @@ def record_pc_result(
         )
         helper = str(row["helper"] or "") if row is not None else ""
         if helper and helper != "VPS":
-            _pc_seen(conn, helper, now)
-            conn.execute(
+            other = conn.execute(
                 """
-                UPDATE pcs SET ok_count = ok_count + 1, fail_streak = 0, video_id = NULL, state = 'idle'
-                WHERE name = ?
+                SELECT id FROM videos
+                WHERE helper = ? AND status = 'pc'
+                ORDER BY started_at, id
+                LIMIT 1
                 """,
                 (helper,),
-            )
+            ).fetchone()
+            _pc_seen(conn, helper, now)
+            if other is not None:
+                conn.execute(
+                    """
+                    UPDATE pcs
+                    SET ok_count = ok_count + 1, fail_streak = 0, video_id = ?, state = 'reading', last_seen = ?
+                    WHERE name = ?
+                    """,
+                    (int(other["id"]), now, helper),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE pcs SET ok_count = ok_count + 1, fail_streak = 0, video_id = NULL, state = 'idle'
+                    WHERE name = ?
+                    """,
+                    (helper,),
+                )
         conn.execute("COMMIT")
 
 

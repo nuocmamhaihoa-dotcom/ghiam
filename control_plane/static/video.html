@@ -331,6 +331,7 @@
     if (stage === "scan") return "quét khung" + (total ? " " + done + "/" + total : "");
     if (stage === "read") return "đọc kỹ" + (total ? " " + done + "/" + total : "");
     if (stage === "send") return "đang gửi kết quả";
+    if (stage === "hold") return "đã tải, chờ đọc";
     return "";
   }
 
@@ -356,9 +357,11 @@
     if (!pc.online) return { text: "Mất kết nối, lần cuối " + ago(pc.seen_seconds), warn: true };
     if (pc.video) {
       var video = pc.video;
+      if (video.stage === "hold") return { text: "Đã tải sẵn video " + video.id + ", chờ đọc" };
       var step = stageText(video.stage, video.done, video.total);
       var text = (video.check ? "Đang kiểm video " : "Đang đọc video ") + video.id + (step ? ": " + step : "");
       if (video.seconds != null) text += " · đã " + duration(video.seconds);
+      if (pc.ahead) text += " · video kế đã tải sẵn";
       var bar = video.total > 0 && video.stage !== "send" ? Math.min(100, Math.floor(video.done * 100 / video.total)) : null;
       return { text: text, bar: bar };
     }

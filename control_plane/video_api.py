@@ -987,7 +987,12 @@ def pc_file(video_id: int, lease: str = Query(default=""), authorization: str | 
 @router.post("/v1/pc/videos/{video_id}/release")
 def pc_release(video_id: int, body: PcReleaseBody, authorization: str | None = Header(default=None)) -> dict[str, bool]:
     _pc_auth(authorization)
-    reason = "disk" if body.reason == "disk" else "fail"
+    if body.reason == "disk":
+        reason = "disk"
+    elif body.reason == "return":
+        reason = "return"
+    else:
+        reason = "fail"
     return {"ok": release_pc(settings.video_db_path, video_id, body.lease, reason, body.error)}
 
 
