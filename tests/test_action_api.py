@@ -1014,6 +1014,46 @@ class PcReaderApiTests(unittest.TestCase):
         claimed = self.client.post("/v1/pc/claim", headers=self.headers, json={"name": "PC khoa"}).json()
         self.assertEqual(claimed["video"]["id"], video_id)
 
+    def test_rest_keeps_a_blocked_pc_state(self) -> None:
+        init_db(settings.video_db_path)
+        with connect(settings.video_db_path) as conn:
+            conn.execute("UPDATE videos SET status = 'done' WHERE status IN ('queued', 'pc')")
+        failed = self.client.post(
+            "/v1/pc/status",
+            headers=self.headers,
+            json={"name": "PC thu", "state": "test-failed", "message": "lech mau"},
+        )
+        self.assertEqual(failed.status_code, 200, failed.text)
+        resting = self.client.post("/v1/pc/wait", headers=self.headers, json={"name": "PC thu", "seconds": 0})
+        self.assertFalse(resting.json()["ready"])
+        item = next(entry for entry in self.client.get("/v1/pcs", headers=self.headers).json()["items"] if entry["name"] == "PC thu")
+        self.assertEqual((item["state"], item["message"]), ("test-failed", "lech mau"))
+        disk = self.client.post(
+            "/v1/pc/status",
+            headers=self.headers,
+            json={"name": "PC dia", "state": "wait-disk", "message": "day dia"},
+        )
+        self.assertEqual(disk.status_code, 200, disk.text)
+        self.client.post("/v1/pc/wait", headers=self.headers, json={"name": "PC dia", "seconds": 0})
+        item = next(entry for entry in self.client.get("/v1/pcs", headers=self.headers).json()["items"] if entry["name"] == "PC dia")
+        self.assertEqual((item["state"], item["message"]), ("wait-disk", "day dia"))
+        self.client.post("/v1/pc/status", headers=self.headers, json={"name": "PC xong", "state": "reading"})
+        self.client.post("/v1/pc/wait", headers=self.headers, json={"name": "PC xong", "seconds": 0})
+        item = next(entry for entry in self.client.get("/v1/pcs", headers=self.headers).json()["items"] if entry["name"] == "PC xong")
+        self.assertEqual(item["state"], "idle")
+
+    def test_an_empty_queue_holds_the_rest(self) -> None:
+        init_db(settings.video_db_path)
+        with connect(settings.video_db_path) as conn:
+            conn.execute("UPDATE videos SET status = 'done' WHERE status IN ('queued', 'pc')")
+        started = time.monotonic()
+        resting = self.client.post("/v1/pc/wait", headers=self.headers, json={"name": "PC nam", "seconds": 1.2})
+        elapsed = time.monotonic() - started
+        self.assertEqual(resting.status_code, 200, resting.text)
+        self.assertFalse(resting.json()["ready"])
+        self.assertGreaterEqual(elapsed, 1.0)
+        self.assertLess(elapsed, 3.0)
+
     def test_urgent_video_moves_to_the_front(self) -> None:
         first = self._queue_only("urgent-a")
         created = begin_upload(settings.video_db_path, name="urgent-b.mp4", size_bytes=5, sha256="urgent-b")

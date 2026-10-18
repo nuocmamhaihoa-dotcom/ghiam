@@ -112,6 +112,39 @@ def pc_gate(db_path: Path, name: str, now: datetime | None = None) -> dict[str, 
     return {"name": pc, **pc_control(row, now)}
 
 
+# PC hết việc thì ghi đang nghỉ. Các trạng thái này là PC đang bận việc khác, không được đè.
+_KEEP_WHILE_RESTING = {"setup", "testing", "test-failed", "wait-disk", "wait-ram"}
+
+
+def pc_mark_idle(db_path: Path, name: str) -> bool:
+    """Ghi PC đang nghỉ khi PC không giữ video.
+
+    Không đè trạng thái đang cài, đang đọc thử, đọc thử hỏng, chờ đĩa hay chờ RAM.
+    Những trạng thái đó do chính PC báo, và một lần nghỉ không được xóa chúng.
+    """
+    pc = clean_device(name) or "PC"
+    stamp = utcnow()
+    with connect(db_path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT state FROM pcs WHERE name = ?", (pc,)).fetchone()
+        if row is None:
+            conn.execute(
+                "INSERT INTO pcs (name, first_seen, last_seen, state) VALUES (?, ?, ?, 'idle')",
+                (pc, stamp, stamp),
+            )
+            conn.execute("COMMIT")
+            return True
+        if str(row["state"] or "") in _KEEP_WHILE_RESTING:
+            conn.execute("COMMIT")
+            return False
+        conn.execute(
+            "UPDATE pcs SET state = 'idle', message = '', last_seen = ? WHERE name = ?",
+            (stamp, pc),
+        )
+        conn.execute("COMMIT")
+        return True
+
+
 def pc_checkin(
     db_path: Path,
     name: str,

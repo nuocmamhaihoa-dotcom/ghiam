@@ -37,6 +37,7 @@ from control_plane.pc_fleet import (
     list_pcs,
     pc_checkin,
     pc_gate,
+    pc_mark_idle,
     revoke_invite,
     update_pc,
 )
@@ -1020,13 +1021,7 @@ async def pc_wait(body: PcWaitBody, authorization: str | None = Header(default=N
                 and gate["wait"] == ""
                 and not await run_in_threadpool(pc_holding, settings.video_db_path, body.name)
             ):
-                await run_in_threadpool(
-                    pc_checkin,
-                    settings.video_db_path,
-                    body.name,
-                    state="idle",
-                    invite=invite,
-                )
+                await run_in_threadpool(pc_mark_idle, settings.video_db_path, body.name)
             return {"ready": ready, **gate}
         await asyncio.sleep(0.25)
 
