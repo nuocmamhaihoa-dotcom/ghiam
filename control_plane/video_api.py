@@ -85,6 +85,7 @@ from control_plane.video_store import (
     list_videos,
     missing_text,
     missing_videos,
+    pc_holding,
     pc_video_path,
     prune_old_videos,
     reader_alive,
@@ -99,6 +100,7 @@ from control_plane.video_store import (
     stats,
     stop_full_check,
     touch_pc,
+    touch_pc_many,
     worker_count,
 )
 
@@ -213,6 +215,18 @@ class PcLeaseBody(BaseModel):
     stage: str = ""
     done: int = 0
     total: int = 0
+
+
+class PcBeatItem(BaseModel):
+    id: int
+    lease: str = ""
+    stage: str = ""
+    done: int = 0
+    total: int = 0
+
+
+class PcBeatsBody(BaseModel):
+    items: list[PcBeatItem] = Field(default_factory=list, max_length=400)
 
 
 class PcReleaseBody(BaseModel):
@@ -962,7 +976,7 @@ def pc_claim(body: PcClaimBody, authorization: str | None = Header(default=None)
     job = claim_pc(settings.video_db_path, body.name)
     if job is not None:
         print(f"PC nhận video {job['id']}.", flush=True)
-    else:
+    elif not pc_holding(settings.video_db_path, body.name):
         pc_checkin(settings.video_db_path, body.name, state="idle", invite=invite)
     return {"video": job, **control}
 
@@ -973,6 +987,17 @@ def pc_heartbeat(video_id: int, body: PcLeaseBody, authorization: str | None = H
     if not touch_pc(settings.video_db_path, video_id, body.lease, body.stage, body.done, body.total):
         raise HTTPException(status_code=409, detail="Video không còn dành cho PC này.")
     return {"ok": True}
+
+
+@router.post("/v1/pc/heartbeats")
+def pc_heartbeats(body: PcBeatsBody, authorization: str | None = Header(default=None)) -> dict[str, object]:
+    """Một nhịp cho mọi video đang chờ trên PC, thay vì một yêu cầu cho từng video."""
+    _pc_auth(authorization)
+    lost = touch_pc_many(
+        settings.video_db_path,
+        [(item.id, item.lease, item.stage, item.done, item.total) for item in body.items],
+    )
+    return {"ok": True, "lost": lost}
 
 
 @router.get("/v1/pc/videos/{video_id}/file")

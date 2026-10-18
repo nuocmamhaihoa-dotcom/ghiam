@@ -3,7 +3,7 @@
 Mỗi vòng nó hỏi máy chủ bản đọc và bản nối hiện tại. File trên máy chủ đổi
 thì PC tự lấy bản mới, kể cả cách đọc và cách tải, không cần cài lại.
 PC chỉ dùng tối đa 80% CPU, RAM và ổ đĩa. Đường truyền không bị giới hạn tốc độ.
-Trong lúc đọc, PC giữ đúng một video kế trên đĩa của máy. Đọc xong thì xóa video đó.
+Trong lúc đọc, PC giữ tới 50 GB video chờ trên đĩa của máy. Đọc xong video nào thì xóa video đó.
 """
 
 from __future__ import annotations
@@ -26,9 +26,11 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-CONNECTOR_VERSION = 6
+CONNECTOR_VERSION = 7
 # Trần tài nguyên của PC. Máy chủ không đặt biến này nên máy chủ vẫn dùng hết nhân.
 PC_HEADROOM = 0.8
+# Video chờ đọc nằm trên đĩa PC, tối đa 50 GB. Video đang đọc không tính vào mức này.
+PC_CACHE_BYTES = 50 * 1024 * 1024 * 1024
 SERVER = "__GHIAM_SERVER__"
 TOKEN = "__GHIAM_TOKEN__"
 
@@ -67,6 +69,10 @@ def restored_template(text: str, server: str, token: str) -> str:
 
 def text_sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def claim_body(name: str) -> dict[str, str]:
+    return {"name": name, "version": str(CONNECTOR_VERSION)}
 
 
 def connector_outdated(local_sha: str, remote_sha: str, remote_version: int, local_version: int = CONNECTOR_VERSION) -> bool:
@@ -1004,21 +1010,44 @@ def _ram_ready() -> bool:
         return True
 
 
-def cached_ready(path: Path, expected: str) -> bool:
-    """File đã có trên PC và đúng mã kiểm thì đọc luôn, không tải lại."""
+def cached_ready(path: Path, expected: str, size: int = 0) -> bool:
+    """File đã có trên PC thì đọc luôn, không tải lại.
+
+    Biết đúng số byte thì chỉ so kích thước. File chỉ được đổi tên vào chỗ này sau khi tải đủ.
+    """
     if not path.is_file():
         return False
     try:
-        if path.stat().st_size <= 0:
-            return False
+        actual = path.stat().st_size
     except OSError:
         return False
+    if actual <= 0:
+        return False
+    if size > 0:
+        return actual == size
     if not expected:
         return True
     try:
         return _file_sha256(path) == expected
     except OSError:
         return False
+
+
+def waiting_cache_bytes(sizes: list[int], reading: bool) -> int:
+    """Byte tính vào 50 GB. Video sắp đọc, khi PC chưa đọc video khác, không tính."""
+    clean = [max(0, int(size)) for size in sizes]
+    if reading:
+        return sum(clean)
+    if len(clean) <= 1:
+        return 0
+    return sum(clean[1:])
+
+
+def _gb_text(nbytes: int) -> str:
+    gb = max(0, int(nbytes)) / (1024 * 1024 * 1024)
+    if gb >= 10:
+        return f"{round(gb)} GB"
+    return f"{gb:.1f}".replace(".", ",") + " GB"
 
 
 def forget_local(path: Path) -> None:
@@ -1032,13 +1061,28 @@ def forget_local(path: Path) -> None:
 
 def clear_video_cache(folder: Path) -> int:
     """Xóa video còn sót từ lần PC tắt giữa chừng. Bản trên máy chủ vẫn còn."""
+    return prune_video_cache(folder, set())
+
+
+def prune_video_cache(folder: Path, keep: set[int]) -> int:
+    """Xóa file video không còn trong sổ. Bản trên máy chủ vẫn còn."""
     if not folder.is_dir():
         return 0
     removed = 0
     for path in folder.iterdir():
         if not path.is_file():
             continue
-        if path.suffix != ".mp4" and not path.name.endswith(".mp4.part"):
+        name = path.name
+        if name.endswith(".mp4.part"):
+            stem = name[: -len(".mp4.part")]
+            drop = True
+            if stem.isdigit() and int(stem) in keep:
+                drop = False
+        elif path.suffix == ".mp4" and path.stem.isdigit():
+            drop = int(path.stem) not in keep
+        else:
+            continue
+        if not drop:
             continue
         try:
             path.unlink()
@@ -1046,6 +1090,58 @@ def clear_video_cache(folder: Path) -> int:
             continue
         removed += 1
     return removed
+
+
+def load_video_ledger(folder: Path) -> list[dict]:
+    """Sổ video đã tải đủ trên PC. File hỏng thì bỏ, không chặn PC."""
+    path = folder / "ledger.json"
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeError):
+        return []
+    rows = raw.get("videos") if isinstance(raw, dict) else None
+    if not isinstance(rows, list):
+        return []
+    kept: list[dict] = []
+    seen: set[int] = set()
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        try:
+            video_id = int(item.get("id") or 0)
+            size = max(0, int(item.get("bytes") or 0))
+        except (TypeError, ValueError):
+            continue
+        lease = str(item.get("lease") or "")
+        digest = str(item.get("sha256") or "")
+        if video_id <= 0 or not lease or video_id in seen:
+            continue
+        seen.add(video_id)
+        kept.append({"id": video_id, "lease": lease, "sha256": digest, "bytes": size})
+    return kept
+
+
+def save_video_ledger(folder: Path, rows: list[dict]) -> None:
+    """Ghi sổ rồi đổi tên, để mất điện không để lại sổ viết dở."""
+    folder.mkdir(parents=True, exist_ok=True)
+    payload = []
+    for item in rows:
+        try:
+            video_id = int(item["id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        payload.append(
+            {
+                "id": video_id,
+                "lease": str(item.get("lease") or ""),
+                "sha256": str(item.get("sha256") or ""),
+                "bytes": max(0, int(item.get("bytes") or 0)),
+            }
+        )
+    target = folder / "ledger.json"
+    temporary = folder / "ledger.json.tmp"
+    temporary.write_text(json.dumps({"videos": payload}, ensure_ascii=True), encoding="utf-8")
+    temporary.replace(target)
 
 
 def _lease_open(video_id: int, lease: str) -> bool:
@@ -1076,113 +1172,314 @@ def _fetch_video(video_id: int, lease: str, local: Path, expected: str, progress
     return False
 
 
-class _Ahead:
-    """Tải đúng một video kế trong lúc PC đang đọc video hiện tại.
+class _Cache:
+    """Giữ tới 50 GB video chờ trên đĩa PC trong lúc đang đọc.
 
-    File nằm trên đĩa PC, trong phần còn trống dưới mức 80%. Đọc xong thì xóa.
+    Tải lần lượt, không tải song song. Đọc xong video nào thì xóa file đó.
+    Cập nhật chương trình thì giữ file và phiếu, để không tải lại hàng chục GB.
     """
 
     def __init__(self) -> None:
-        self.job: dict | None = None
         self.reason = ""
-        self.ready = threading.Event()
+        self.stages: list[str] = []
+        self._name = ""
+        self._control: dict = {}
+        self._http = 0
+        self._ready: list[dict] = []
+        self._reading: dict | None = None
+        self._beats: dict[int, dict] = {}
+        self._filling = False
+        self._noted_full = False
+        self._resumed = 0
+        self._pruned = 0
         self._stop = threading.Event()
+        self._beat_stop = threading.Event()
+        self._cond = threading.Condition()
         self._thread: threading.Thread | None = None
+        self._beat_thread: threading.Thread | None = None
 
-    def start(self, name: str, skip_id: int) -> None:
-        self._thread = threading.Thread(target=self._run, args=(name, skip_id), name="ghiam-ahead", daemon=True)
+    def start(self, name: str) -> None:
+        self._name = name
+        self._load()
+        self._beat_thread = threading.Thread(target=self._beat_loop, name="ghiam-cache-beat", daemon=True)
+        self._beat_thread.start()
+        self._thread = threading.Thread(target=self._run, name="ghiam-cache", daemon=True)
         self._thread.start()
+        if self._resumed:
+            total = sum(int(item.get("bytes") or 0) for item in self._ready)
+            print(f"PC còn {self._resumed} video đã tải sẵn, {_gb_text(total)}. Đọc tiếp, không tải lại.")
+        elif self._pruned:
+            print(f"Đã xóa {self._pruned} video còn trên PC từ lần đọc trước.")
 
-    def take(self) -> dict | None:
-        self.ready.wait()
-        job = self.job
-        self.job = None
+    def allow(self, enabled: bool) -> None:
+        with self._cond:
+            self._filling = enabled
+            if enabled:
+                self.reason = ""
+            self._cond.notify_all()
+
+    def take(self, timeout: float = 30) -> dict | None:
+        """Lấy video đã tải đủ. Video này rời khỏi 50 GB chờ và sang lượt đọc."""
+        deadline = time.monotonic() + timeout
+        with self._cond:
+            while not self._ready and not self._stop.is_set():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                self._cond.wait(remaining)
+            if not self._ready:
+                return None
+            job = self._ready.pop(0)
+            self._reading = job
+            self._beats.pop(int(job["id"]), None)
+            self._save_locked()
+            self._noted_full = False
+            self._cond.notify_all()
+            return job
+
+    def finished(self) -> None:
+        """Video đang đọc đã xóa khỏi đĩa. Chỗ trống được dùng để tải thêm."""
+        with self._cond:
+            self._reading = None
+            self._save_locked()
+            self._cond.notify_all()
+
+    def control(self) -> dict:
+        with self._cond:
+            return dict(self._control)
+
+    def http_status(self) -> int:
+        with self._cond:
+            return self._http
+
+    def close(self, give_back: bool) -> None:
+        """Tắt thì trả video chưa đọc. Cập nhật chương trình thì giữ file để đọc tiếp."""
         self._stop.set()
+        self._beat_stop.set()
+        with self._cond:
+            self._cond.notify_all()
         if self._thread is not None:
             self._thread.join(timeout=5)
-        return job
+        if self._beat_thread is not None:
+            self._beat_thread.join(timeout=5)
+        if not give_back:
+            with self._cond:
+                self._save_locked()
+            return
+        with self._cond:
+            jobs = list(self._ready)
+            self._ready.clear()
+            self._beats.clear()
+            self._save_locked()
+        for job in jobs:
+            video_id = int(job["id"])
+            forget_local(CACHE / "videos" / f"{video_id}.mp4")
+            _release(video_id, str(job.get("lease") or ""), "return")
 
-    def _run(self, name: str, skip_id: int) -> None:
-        local: Path | None = None
-        video_id = 0
-        lease = ""
-        held = False
-        try:
-            status, body = _json(
-                "POST",
-                "/v1/pc/claim",
-                {"name": name, "version": str(CONNECTOR_VERSION)},
-                timeout=120,
-            )
-            if status != 200 or self._stop.is_set():
-                self.reason = "none"
+    def _waiting_locked(self) -> int:
+        sizes = [int(item.get("bytes") or 0) for item in self._ready]
+        return waiting_cache_bytes(sizes, self._reading is not None)
+
+    def _rows_locked(self) -> list[dict]:
+        rows: list[dict] = []
+        if self._reading is not None:
+            rows.append(self._reading)
+        rows.extend(self._ready)
+        return rows
+
+    def _save_locked(self) -> None:
+        save_video_ledger(CACHE / "videos", self._rows_locked())
+
+    def _load(self) -> None:
+        folder = CACHE / "videos"
+        folder.mkdir(parents=True, exist_ok=True)
+        ready: list[dict] = []
+        for row in load_video_ledger(folder):
+            local = folder / f"{int(row['id'])}.mp4"
+            if cached_ready(local, str(row.get("sha256") or ""), int(row.get("bytes") or 0)):
+                ready.append(dict(row))
+            else:
+                forget_local(local)
+        with self._cond:
+            self._ready = ready
+            self._beats = {
+                int(item["id"]): {"lease": str(item["lease"]), "stage": "hold", "done": 1, "total": 1}
+                for item in ready
+            }
+            self._save_locked()
+            keep = {int(item["id"]) for item in ready}
+        self._pruned = prune_video_cache(folder, keep)
+        lost = self._send_beats()
+        if lost:
+            with self._cond:
+                gone = set(lost)
+                self._ready = [item for item in self._ready if int(item["id"]) not in gone]
+                for video_id in gone:
+                    self._beats.pop(video_id, None)
+                    forget_local(folder / f"{video_id}.mp4")
+                self._save_locked()
+        with self._cond:
+            self._resumed = len(self._ready)
+
+    def _send_beats(self) -> list[int]:
+        with self._cond:
+            items = [
+                {
+                    "id": video_id,
+                    "lease": str(progress.get("lease") or ""),
+                    "stage": str(progress.get("stage") or ""),
+                    "done": int(progress.get("done") or 0),
+                    "total": int(progress.get("total") or 0),
+                }
+                for video_id, progress in self._beats.items()
+            ]
+        lost: list[int] = []
+        for start in range(0, len(items), 400):
+            chunk = items[start : start + 400]
+            if not chunk:
+                continue
+            try:
+                status, body = _json("POST", "/v1/pc/heartbeats", {"items": chunk}, timeout=30)
+            except (urllib.error.URLError, TimeoutError, OSError):
+                continue
+            if status != 200 or not isinstance(body, dict):
+                continue
+            raw = body.get("lost")
+            if isinstance(raw, list):
+                for item in raw:
+                    try:
+                        lost.append(int(item))
+                    except (TypeError, ValueError):
+                        continue
+        return lost
+
+    def _beat_loop(self) -> None:
+        while not self._beat_stop.is_set():
+            lost = self._send_beats()
+            if lost:
+                with self._cond:
+                    gone = set(lost)
+                    self._ready = [item for item in self._ready if int(item["id"]) not in gone]
+                    for video_id in gone:
+                        self._beats.pop(video_id, None)
+                        forget_local(CACHE / "videos" / f"{video_id}.mp4")
+                    self._save_locked()
+                    self._cond.notify_all()
+            if self._beat_stop.wait(20):
                 return
+
+    def _note_full(self) -> None:
+        if self._noted_full:
+            return
+        self._noted_full = True
+        print(f"PC đã giữ đủ {_gb_text(PC_CACHE_BYTES)} video chờ đọc. Đọc xong sẽ tải thêm.")
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            with self._cond:
+                while not self._filling and not self._stop.is_set():
+                    self._cond.wait(1)
+                if self._stop.is_set():
+                    return
+                waiting = self._waiting_locked()
+                full = waiting >= PC_CACHE_BYTES
+                if full:
+                    self._note_full()
+            if full:
+                self._stop.wait(5)
+                continue
+            try:
+                status, body = _json(
+                    "POST",
+                    "/v1/pc/claim",
+                    claim_body(self._name),
+                    timeout=120,
+                )
+            except (urllib.error.URLError, TimeoutError, OSError):
+                self._stop.wait(10)
+                continue
+            if self._stop.is_set():
+                return
+            if not isinstance(body, dict):
+                body = {}
+            with self._cond:
+                self._control = body
+                self._http = status
+            if status != 200:
+                self._stop.wait(10)
+                continue
+            if body.get("wait"):
+                self._stop.wait(10)
+                continue
             job = body.get("video")
             if not isinstance(job, dict):
-                self.reason = "none"
-                return
+                self._stop.wait(15 if waiting else 5)
+                continue
+            self._store(job)
+
+    def _store(self, job: dict) -> None:
+        try:
             video_id = int(job["id"])
             lease = str(job["lease"])
-            if video_id == skip_id:
-                self.reason = "none"
-                _release(video_id, lease, "return")
-                return
-            expected = str(job.get("sha256") or "")
-            size_bytes = max(0, int(job.get("bytes") or 0))
-            if not _disk_ready(size_bytes):
-                self.reason = "disk"
-                _release(video_id, lease, "disk")
-                return
-            folder = CACHE / "videos"
-            folder.mkdir(parents=True, exist_ok=True)
-            local = folder / f"{video_id}.mp4"
-            progress: dict = {"stage": "download", "done": 0, "total": size_bytes}
+        except (KeyError, TypeError, ValueError):
+            return
+        expected = str(job.get("sha256") or "")
+        size_bytes = max(0, int(job.get("bytes") or 0))
+        with self._cond:
+            known = int(job["id"]) in self._beats or any(int(item["id"]) == video_id for item in self._ready)
+            reading = self._reading is not None and int(self._reading["id"]) == video_id
+        if known or reading:
+            _release(video_id, lease, "return")
+            return
+        if not _disk_ready(size_bytes):
+            self.reason = "disk"
+            _release(video_id, lease, "disk")
+            print(f"Video {video_id} cần nhiều chỗ hơn phần PC còn giữ. Tạm dừng tải thêm.")
+            self._stop.wait(30)
+            return
+        folder = CACHE / "videos"
+        folder.mkdir(parents=True, exist_ok=True)
+        local = folder / f"{video_id}.mp4"
+        progress = {"lease": lease, "stage": "download", "done": 0, "total": size_bytes}
 
-            def downloaded(done: int, total: int) -> None:
-                progress.update(stage="download", done=done, total=total or size_bytes)
+        def downloaded(done: int, total: int) -> None:
+            progress["stage"] = "download"
+            progress["done"] = done
+            progress["total"] = total or size_bytes
 
-            threading.Thread(target=_beat, args=(video_id, lease, self._stop, progress), daemon=True).start()
-            held = True
-            started = time.monotonic()
-            if not _fetch_video(video_id, lease, local, expected, downloaded):
-                self.reason = "fail"
-                forget_local(local)
-                local = None
-                _release(video_id, lease, "fail", "Tải về không khớp mã kiểm.")
-                held = False
-                return
-            if self._stop.is_set():
-                self.reason = "lost"
-                forget_local(local)
-                local = None
-                return
-            progress.update(stage="hold", done=1, total=1)
-            job["download_s"] = round(time.monotonic() - started, 1)
-            self.job = job
-            self.ready.set()
-            while not self._stop.wait(1):
-                pass
+        with self._cond:
+            self._beats[video_id] = progress
+        started = time.monotonic()
+        try:
+            fetched = _fetch_video(video_id, lease, local, expected, downloaded)
         except Exception as exc:
-            self.reason = "fail"
-            print(f"Chưa giữ được video kế trên PC: {type(exc).__name__}.")
-            if local is not None:
-                forget_local(local)
-            if held and lease:
-                _release(video_id, lease, "fail", f"{type(exc).__name__}: {exc}")
-        finally:
-            self.ready.set()
-
-
-def _drop_ahead(ahead: _Ahead | None) -> None:
-    """Trả video đã nhận sẵn về hàng chờ khi PC cập nhật hoặc tắt. Không tính là đọc hỏng."""
-    if ahead is None:
-        return
-    job = ahead.take()
-    if not isinstance(job, dict):
-        return
-    video_id = int(job["id"])
-    forget_local(CACHE / "videos" / f"{video_id}.mp4")
-    _release(video_id, str(job.get("lease") or ""), "return")
+            print(f"Chưa giữ được video {video_id} trên PC: {type(exc).__name__}.")
+            forget_local(local)
+            with self._cond:
+                self._beats.pop(video_id, None)
+            _release(video_id, lease, "fail", f"{type(exc).__name__}: {exc}")
+            return
+        if not fetched or self._stop.is_set():
+            forget_local(local)
+            with self._cond:
+                self._beats.pop(video_id, None)
+            if self._stop.is_set():
+                _release(video_id, lease, "return")
+            else:
+                _release(video_id, lease, "fail", "Tải về không khớp mã kiểm.")
+            return
+        progress["stage"] = "hold"
+        progress["done"] = 1
+        progress["total"] = 1
+        job["download_s"] = round(time.monotonic() - started, 1)
+        with self._cond:
+            self._ready.append(job)
+            self.stages.append("hold")
+            self._save_locked()
+            held = self._waiting_locked()
+            self._cond.notify_all()
+        size_mb = max(1, size_bytes // (1024 * 1024))
+        print(f"Đã tải sẵn video {video_id} ({size_mb} MB). PC đang giữ {_gb_text(held)} video chờ đọc.")
 
 
 def _read_one(job: dict, on_ready=None) -> str:
@@ -1203,7 +1500,7 @@ def _read_one(job: dict, on_ready=None) -> str:
     def reading(stage: str, done: int, total: int) -> None:
         progress.update(stage=stage, done=done, total=total)
 
-    parked = cached_ready(local, expected)
+    parked = cached_ready(local, expected, size_bytes)
     if parked:
         progress.update(stage="extract", done=0, total=0)
     stop = threading.Event()
@@ -1306,17 +1603,18 @@ def main() -> int:
     name = pc_name()
     print("PC đang nối máy chủ. Cứ để cửa sổ này mở. Đóng cửa sổ là PC ngừng đọc.")
     print(f"PC này tên là {name}. Nhiều PC có thể mở cùng lúc, mỗi máy đọc một video đang chờ.")
-    print("Trong lúc đang đọc, PC tải sẵn đúng một video kế tiếp vào máy. Đọc xong thì xóa video đó khỏi máy.")
+    print(
+        f"Trong lúc đang đọc, PC giữ tới {_gb_text(PC_CACHE_BYTES)} video chờ trên đĩa của máy. "
+        "Đọc xong video nào thì xóa video đó khỏi máy."
+    )
     print("PC dùng tối đa 80% CPU, RAM và ổ đĩa. 20% còn lại để máy vẫn chạy ổn.")
     ready = False
-    ahead: _Ahead | None = None
-    cleared = clear_video_cache(CACHE / "videos")
-    if cleared:
-        print(f"Đã xóa {cleared} video còn trên PC từ lần đọc trước.")
+    cache = _Cache()
+    cache.start(name)
     while True:
         try:
             if _update_connector():
-                _drop_ahead(ahead)
+                cache.close(False)
                 return _relaunch()
             status, manifest = _json("GET", "/v1/pc/reader", timeout=120)
             if status == 401:
@@ -1348,7 +1646,7 @@ def main() -> int:
                 continue
             if reader_relaunch or weights_relaunch or tess_relaunch or plain_relaunch or runtime_relaunch:
                 print("Đã cập nhật bộ đọc cho khớp máy chủ. PC chạy lại.")
-                _drop_ahead(ahead)
+                cache.close(False)
                 return _relaunch()
             _prepare_env()
             if not ready:
@@ -1367,15 +1665,17 @@ def main() -> int:
                     continue
                 print("PC đọc thử đúng. Bắt đầu nhận video.")
                 ready = True
-            if not _disk_ready(512 * 1024 * 1024):
+            disk_ok = _disk_ready(512 * 1024 * 1024)
+            if not disk_ok:
+                cache.allow(False)
                 if not _DISK_WAIT:
                     print("Ổ đĩa PC đã dùng quá 80%. PC chờ, không nhận video cho đến khi còn chỗ.")
                     _DISK_WAIT = True
                 _status(name, "wait-disk")
-                time.sleep(30)
-                continue
-            _DISK_WAIT = False
+            else:
+                _DISK_WAIT = False
             if not _ram_ready():
+                cache.allow(False)
                 if not _RAM_WAIT:
                     print("RAM PC đã dùng quá 80%. PC chờ, không nhận video cho đến khi máy còn chỗ.")
                     _RAM_WAIT = True
@@ -1383,31 +1683,30 @@ def main() -> int:
                 time.sleep(30)
                 continue
             _RAM_WAIT = False
-            parked = None
-            parked_reason = ""
-            if ahead is not None:
-                parked = ahead.take()
-                parked_reason = ahead.reason
-                ahead = None
-            if parked is None and parked_reason == "disk":
-                if not _DISK_WAIT:
-                    print("Ổ đĩa PC đã dùng quá 80%. PC chờ, không nhận video kế cho đến khi còn chỗ.")
-                    _DISK_WAIT = True
-                _status(name, "wait-disk")
-                time.sleep(45)
+            if disk_ok:
+                cache.allow(True)
+            # Hết chỗ vẫn đọc video đã tải, vì đọc xong thì file được xóa và ổ đĩa trống ra.
+            job = cache.take(5 if disk_ok else 0.2)
+            if isinstance(job, dict):
+                _IDLE = False
+                try:
+                    outcome = _read_one(job)
+                finally:
+                    cache.finished()
+                if outcome == "disk":
+                    time.sleep(45)
+                elif outcome == "fail":
+                    time.sleep(20)
                 continue
-            if isinstance(parked, dict):
-                status, body = 200, {"video": parked}
-            else:
-                status, body = _json("POST", "/v1/pc/claim", {"name": name, "version": str(CONNECTOR_VERSION)}, timeout=120)
-            if status == 401:
-                _auth_lost(body)
+            if not disk_ok:
+                time.sleep(30)
                 continue
-            if status != 200:
-                print("Chưa nhận được video. Thử lại sau.")
-                time.sleep(10)
+            if cache.http_status() == 401:
+                _auth_lost(cache.control())
                 continue
-            _apply_control(body)
+            body = cache.control()
+            if body:
+                _apply_control(body)
             wait = str(body.get("wait") or "")
             if wait:
                 notes = {
@@ -1427,27 +1726,12 @@ def main() -> int:
             if _WAIT_NOTE:
                 print("Trang đã cho PC đọc tiếp.")
                 _WAIT_NOTE = ""
-            job = body.get("video")
-            if not isinstance(job, dict):
-                if not _IDLE:
-                    print("Chưa có video đang chờ. PC vẫn mở, có video mới thì đọc tiếp.")
-                    _IDLE = True
-                time.sleep(5)
-                continue
-
-            def begin_ahead(video_id: int = int(job["id"])) -> None:
-                nonlocal ahead
-                ahead = _Ahead()
-                ahead.start(name, video_id)
-
-            outcome = _read_one(job, on_ready=begin_ahead)
-            if outcome == "disk":
-                # Nhả video trước, rồi chờ máy chủ nhận. Không nhận lại ngay.
-                time.sleep(45)
-            elif outcome == "fail":
-                time.sleep(20)
+            if not _IDLE:
+                print("Chưa có video đang chờ. PC vẫn mở, có video mới thì đọc tiếp.")
+                _IDLE = True
+            time.sleep(5)
         except KeyboardInterrupt:
-            _drop_ahead(ahead)
+            cache.close(True)
             print("Đã dừng.")
             return 0
         except urllib.error.URLError:

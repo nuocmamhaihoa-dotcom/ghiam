@@ -324,6 +324,16 @@
     return String(Math.round(seconds / 6) / 10).replace(".", ",") + " phút";
   }
 
+  function byteText(bytes) {
+    var n = Number(bytes) || 0;
+    var gb = n / (1024 ** 3);
+    if (gb >= 10) return Math.round(gb) + " GB";
+    if (gb >= 0.1) return String(Math.round(gb * 10) / 10).replace(".", ",") + " GB";
+    var mb = Math.round(n / (1024 ** 2) * 10) / 10;
+    if (mb >= 10) return Math.round(mb) + " MB";
+    return String(mb).replace(".", ",") + " MB";
+  }
+
   function stageText(stage, done, total) {
     var share = total > 0 ? Math.min(100, Math.floor(done * 100 / total)) : null;
     if (stage === "download") return "đang tải" + (share == null ? "" : " " + share + "%");
@@ -361,7 +371,7 @@
       var step = stageText(video.stage, video.done, video.total);
       var text = (video.check ? "Đang kiểm video " : "Đang đọc video ") + video.id + (step ? ": " + step : "");
       if (video.seconds != null) text += " · đã " + duration(video.seconds);
-      if (pc.ahead) text += " · video kế đã tải sẵn";
+      if (pc.ahead) text += " · đã tải sẵn " + byteText(pc.ahead_bytes) + ", chờ đọc";
       var bar = video.total > 0 && video.stage !== "send" ? Math.min(100, Math.floor(video.done * 100 / video.total)) : null;
       return { text: text, bar: bar };
     }

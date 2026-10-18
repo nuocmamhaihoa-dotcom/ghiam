@@ -135,7 +135,8 @@ class LinkTests(unittest.TestCase):
         self.assertIn("id=\"keyMake\"", page)
         self.assertIn("Nhà mạng", page)
         self.assertIn("đã tải, chờ đọc", page)
-        self.assertIn("video kế đã tải sẵn", page)
+        self.assertIn("byteText(pc.ahead_bytes)", page)
+        self.assertIn(", chờ đọc", page)
         self.assertIn("device=", page)
         self.assertIn("ghiam-pc.bat", page)
         self.assertIn("Không cần gõ địa chỉ, không cần giải nén.", page)
@@ -247,6 +248,8 @@ class CacheTests(unittest.TestCase):
             digest = hashlib.sha256(b"ready").hexdigest()
             self.assertTrue(pc_connector.cached_ready(ready, digest))
             self.assertFalse(pc_connector.cached_ready(ready, "khac"))
+            self.assertTrue(pc_connector.cached_ready(ready, "khac", ready.stat().st_size))
+            self.assertFalse(pc_connector.cached_ready(ready, digest, ready.stat().st_size + 1))
             self.assertFalse(pc_connector.cached_ready(folder / "missing.mp4", digest))
             (folder / "9.mp4.part").write_bytes(b"partial")
             (folder / "note.txt").write_text("giữ", encoding="utf-8")
@@ -263,6 +266,7 @@ class CacheTests(unittest.TestCase):
             folder.mkdir()
             local = folder / "7.mp4"
             local.write_bytes(b"video-bytes")
+            (folder / "8.mp4").write_bytes(b"giu-lai")
             digest = hashlib.sha256(b"video-bytes").hexdigest()
             fetched: list[int] = []
             started: list[int] = []
@@ -292,6 +296,7 @@ class CacheTests(unittest.TestCase):
             self.assertEqual(fetched, [])
             self.assertEqual(started, [1])
             self.assertFalse(local.exists())
+            self.assertTrue((folder / "8.mp4").is_file())
             released.assert_not_called()
 
     def test_a_wrong_file_is_downloaded_again(self) -> None:
@@ -321,15 +326,65 @@ class CacheTests(unittest.TestCase):
             self.assertEqual(fetched, [8])
             self.assertFalse(local.exists())
 
-    def test_the_next_video_is_kept_locally_until_it_is_taken(self) -> None:
+    def test_waiting_bytes_leave_out_the_video_about_to_be_read(self) -> None:
+        self.assertEqual(pc_connector.waiting_cache_bytes([40, 30, 20], False), 50)
+        self.assertEqual(pc_connector.waiting_cache_bytes([40], False), 0)
+        self.assertEqual(pc_connector.waiting_cache_bytes([40, 30], True), 70)
+        self.assertEqual(pc_connector.PC_CACHE_BYTES, 50 * 1024 * 1024 * 1024)
+
+    def test_a_saved_video_is_ready_again_without_downloading(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = Path(tmp)
+            folder = cache / "videos"
+            folder.mkdir()
+            (folder / "4.mp4").write_bytes(b"ready")
+            pc_connector.save_video_ledger(
+                folder, [{"id": 4, "lease": "lease-4", "sha256": "abc", "bytes": len(b"ready")}]
+            )
+            (folder / "9.mp4").write_bytes(b"thua")
+            fetched: list[int] = []
+
+            def fake_json(method, path, body=None, timeout=60):
+                if path == "/v1/pc/heartbeats":
+                    return 200, {"ok": True, "lost": []}
+                if path == "/v1/pc/claim":
+                    return 200, {"video": None}
+                return 200, {"ok": True}
+
+            with (
+                patch.object(pc_connector, "CACHE", cache),
+                patch.object(pc_connector, "_json", side_effect=fake_json),
+                patch.object(pc_connector, "_fetch_video", side_effect=lambda *args, **kwargs: fetched.append(1)),
+                patch.object(pc_connector, "_disk_ready", return_value=True),
+            ):
+                held = pc_connector._Cache()
+                held.start("May-A")
+                held.allow(True)
+                job = held.take(2)
+                held.close(False)
+            self.assertIsNotNone(job)
+            assert job is not None
+            self.assertEqual(int(job["id"]), 4)
+            self.assertEqual(fetched, [])
+            self.assertTrue((folder / "4.mp4").is_file())
+            self.assertFalse((folder / "9.mp4").exists())
+
+    def test_the_next_videos_stay_on_disk_until_they_are_read(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             cache = Path(tmp)
             digest = hashlib.sha256(b"ready").hexdigest()
-            stages: list[str] = []
+            calls = {"n": 0}
 
             def fake_json(method, path, body=None, timeout=60):
                 if path == "/v1/pc/claim":
-                    return 200, {"video": {"id": 4, "lease": "lease-4", "sha256": digest, "bytes": 5}}
+                    calls["n"] += 1
+                    if calls["n"] == 1:
+                        return 200, {"video": {"id": 4, "lease": "lease-4", "sha256": digest, "bytes": 5}}
+                    if calls["n"] == 2:
+                        return 200, {"video": {"id": 6, "lease": "lease-6", "sha256": digest, "bytes": 5}}
+                    return 200, {"video": None}
+                if path == "/v1/pc/heartbeats":
+                    return 200, {"ok": True, "lost": []}
                 return 200, {"ok": True}
 
             def fake_fetch(video_id, lease, path, expected, progress=None):
@@ -339,33 +394,33 @@ class CacheTests(unittest.TestCase):
                     progress(5, 5)
                 return True
 
-            def fake_beat(video_id, lease, stop, progress):
-                while not stop.wait(0.01):
-                    stages.append(str(progress.get("stage") or ""))
-                stages.append(str(progress.get("stage") or ""))
-
             with (
                 patch.object(pc_connector, "CACHE", cache),
                 patch.object(pc_connector, "_json", side_effect=fake_json),
                 patch.object(pc_connector, "_fetch_video", fake_fetch),
                 patch.object(pc_connector, "_disk_ready", return_value=True),
-                patch.object(pc_connector, "_beat", fake_beat),
                 patch.object(pc_connector, "_release") as released,
             ):
-                ahead = pc_connector._Ahead()
-                ahead.start("May-A", 1)
-                self.assertTrue(ahead.ready.wait(5), "tải sẵn không xong")
-                job = ahead.take()
-            self.assertIsNotNone(job)
-            assert job is not None
-            self.assertEqual(int(job["id"]), 4)
-            self.assertIn("download_s", job)
+                held = pc_connector._Cache()
+                held.start("May-A")
+                held.allow(True)
+                first = held.take(5)
+                second = held.take(5)
+                held.close(False)
+            self.assertIsNotNone(first)
+            self.assertIsNotNone(second)
+            assert first is not None and second is not None
+            self.assertEqual((int(first["id"]), int(second["id"])), (4, 6))
+            self.assertIn("download_s", first)
             self.assertTrue((cache / "videos" / "4.mp4").is_file())
-            self.assertIn("hold", stages)
+            self.assertTrue((cache / "videos" / "6.mp4").is_file())
+            self.assertIn("hold", held.stages)
             released.assert_not_called()
 
-    def test_no_room_returns_the_next_video_without_keeping_it(self) -> None:
+    def test_no_room_returns_the_video_without_keeping_it(self) -> None:
         def fake_json(method, path, body=None, timeout=60):
+            if path == "/v1/pc/heartbeats":
+                return 200, {"ok": True, "lost": []}
             return 200, {"video": {"id": 5, "lease": "lease-5", "sha256": "abc", "bytes": 9}}
 
         with (
@@ -374,13 +429,14 @@ class CacheTests(unittest.TestCase):
             patch.object(pc_connector, "_release") as released,
             patch.object(pc_connector, "_fetch_video") as fetched,
         ):
-            ahead = pc_connector._Ahead()
-            ahead.start("May-A", 1)
-            self.assertTrue(ahead.ready.wait(5))
-            self.assertIsNone(ahead.take())
-        self.assertEqual(ahead.reason, "disk")
+            held = pc_connector._Cache()
+            held.start("May-A")
+            held.allow(True)
+            self.assertIsNone(held.take(2))
+            held.close(False)
+        self.assertEqual(held.reason, "disk")
         fetched.assert_not_called()
-        released.assert_called_once()
+        released.assert_called()
         self.assertEqual(released.call_args.args[2], "disk")
 
 
