@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import time
 import unittest
 import zipfile
@@ -27,6 +28,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from control_plane.app import _raw_transfer, app  # noqa: E402
 from control_plane.pc_connector import bundle_sha256  # noqa: E402
+from control_plane.pc_fleet import update_pc  # noqa: E402
 from control_plane.pc_reader import connector_template_sha256  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
 from control_plane.video_api import PC_TICKET, PC_TICKET_SECONDS, ticket_ok  # noqa: E402
@@ -944,6 +946,73 @@ class PcReaderApiTests(unittest.TestCase):
         item = next(entry for entry in self.client.get("/v1/pcs", headers=self.headers).json()["items"] if entry["name"] == "PC tạm")
         self.assertEqual((item["avg_download_s"], item["avg_read_s"], item["ok_count"]), (12.5, 300.0, 1))
         self.assertIsNone(item["video"])
+
+    def test_an_idle_pc_rests_and_wakes_when_a_video_is_waiting(self) -> None:
+        init_db(settings.video_db_path)
+        with connect(settings.video_db_path) as conn:
+            conn.execute("UPDATE videos SET status = 'done' WHERE status IN ('queued', 'pc')")
+        named = self.client.post("/v1/pc/status", headers=self.headers, json={"name": "PC nghi"})
+        self.assertEqual(named.status_code, 200, named.text)
+        resting = self.client.post("/v1/pc/wait", headers=self.headers, json={"name": "PC nghi", "seconds": 0})
+        self.assertEqual(resting.status_code, 200, resting.text)
+        self.assertFalse(resting.json()["ready"])
+        self.assertEqual(resting.json()["wait"], "")
+        listed = self.client.get("/v1/pcs", headers=self.headers).json()["items"]
+        self.assertEqual(next(entry for entry in listed if entry["name"] == "PC nghi")["state"], "idle")
+        video_id = self._queue_only("rest-ready")
+        ready = self.client.post("/v1/pc/wait", headers=self.headers, json={"name": "PC nghi", "seconds": 0})
+        self.assertTrue(ready.json()["ready"])
+        self.assertEqual(ready.json()["wait"], "")
+        claimed = self.client.post("/v1/pc/claim", headers=self.headers, json={"name": "PC nghi"}).json()
+        self.assertEqual(claimed["video"]["id"], video_id)
+
+    def test_a_queued_video_wakes_the_resting_pc(self) -> None:
+        init_db(settings.video_db_path)
+        with connect(settings.video_db_path) as conn:
+            conn.execute("UPDATE videos SET status = 'done' WHERE status IN ('queued', 'pc')")
+        self.assertEqual(
+            self.client.post("/v1/pc/status", headers=self.headers, json={"name": "PC day"}).status_code,
+            200,
+        )
+
+        def queue_one() -> None:
+            time.sleep(0.4)
+            self._queue_only("rest-wake")
+
+        threading.Thread(target=queue_one, daemon=True).start()
+        started = time.monotonic()
+        woke = self.client.post("/v1/pc/wait", headers=self.headers, json={"name": "PC day", "seconds": 3})
+        elapsed = time.monotonic() - started
+        self.assertEqual(woke.status_code, 200, woke.text)
+        self.assertTrue(woke.json()["ready"])
+        self.assertLess(elapsed, 2.5)
+        claimed = self.client.post("/v1/pc/claim", headers=self.headers, json={"name": "PC day"}).json()
+        self.assertIsNotNone(claimed["video"])
+
+    def test_a_paused_pc_stays_asleep_until_the_page_lets_it_read(self) -> None:
+        video_id = self._queue_only("rest-pause")
+        self.assertEqual(
+            self.client.post("/v1/pc/status", headers=self.headers, json={"name": "PC khoa"}).status_code,
+            200,
+        )
+        paused = self.client.post("/v1/pcs/update", headers=self.headers, json={"name": "PC khoa", "paused": True})
+        self.assertEqual(paused.status_code, 200, paused.text)
+        asleep = self.client.post("/v1/pc/wait", headers=self.headers, json={"name": "PC khoa", "seconds": 0})
+        self.assertFalse(asleep.json()["ready"])
+        self.assertEqual(asleep.json()["wait"], "paused")
+
+        def allow() -> None:
+            time.sleep(0.4)
+            self.assertTrue(update_pc(settings.video_db_path, "PC khoa", paused=False))
+
+        threading.Thread(target=allow, daemon=True).start()
+        started = time.monotonic()
+        woke = self.client.post("/v1/pc/wait", headers=self.headers, json={"name": "PC khoa", "seconds": 3})
+        self.assertLess(time.monotonic() - started, 2.5)
+        self.assertTrue(woke.json()["ready"])
+        self.assertEqual(woke.json()["wait"], "")
+        claimed = self.client.post("/v1/pc/claim", headers=self.headers, json={"name": "PC khoa"}).json()
+        self.assertEqual(claimed["video"]["id"], video_id)
 
     def test_urgent_video_moves_to_the_front(self) -> None:
         first = self._queue_only("urgent-a")
