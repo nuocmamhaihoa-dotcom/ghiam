@@ -39,6 +39,7 @@ from control_plane.video_store import (
     upload_room,
     drop_stale_uploads,
     prune_old_videos,
+    pc_queue_ready,
     pc_video_path,
     recover_dead,
     release_pc,
@@ -1201,6 +1202,34 @@ class PcClaimTests(unittest.TestCase):
             freed = claim_pc(self.db, "May-Cap")
             assert freed is not None
             self.assertEqual(int(freed["id"]), first)
+
+    def test_queue_is_ready_only_when_this_pc_can_take_the_next_video(self) -> None:
+        self.assertFalse(pc_queue_ready(self.db, "May-Nghi"))
+        video_id = self._add("cho.mp4", "ready-one", 20)
+        self.assertTrue(pc_queue_ready(self.db, "May-Nghi"))
+        self.assertEqual(self._video(video_id)["status"], "queued")
+        with connect(self.db) as conn:
+            conn.execute("UPDATE videos SET pc_last_fail = ? WHERE id = ?", ("May-Nghi", video_id))
+        self.assertFalse(pc_queue_ready(self.db, "May-Nghi"))
+        self.assertTrue(pc_queue_ready(self.db, "May-Khac"))
+        missing = self._add("mat.mp4", "ready-missing", 8)
+        Path(str(self._video(missing)["path"])).unlink()
+        self.assertTrue(pc_queue_ready(self.db, "May-Nghi"))
+
+    def test_a_full_cache_is_not_ready_for_another_video(self) -> None:
+        with patch("control_plane.video_store.PC_CACHE_BYTES", 100):
+            reading = self._add("doc.mp4", "full-doc", 40)
+            waiting = self._add("day.mp4", "full-wait", 80)
+            current = claim_pc(self.db, "May-Day")
+            assert current is not None
+            self.assertEqual(int(current["id"]), reading)
+            extra = claim_pc(self.db, "May-Day")
+            assert extra is not None
+            self.assertEqual(int(extra["id"]), waiting)
+            blocked = self._add("nua.mp4", "full-block", 30)
+            self.assertFalse(pc_queue_ready(self.db, "May-Day"))
+            self.assertEqual(self._video(blocked)["status"], "queued")
+            self.assertTrue(pc_queue_ready(self.db, "May-Rong"))
 
     def test_finished_pc_read_returns_even_while_heartbeats_continue(self) -> None:
         stuck = self._add("stuck.mp4", "pc-stuck")

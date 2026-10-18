@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import os
@@ -35,6 +36,8 @@ from control_plane.pc_fleet import (
     list_invites,
     list_pcs,
     pc_checkin,
+    pc_gate,
+    pc_mark_idle,
     revoke_invite,
     update_pc,
 )
@@ -86,6 +89,7 @@ from control_plane.video_store import (
     missing_text,
     missing_videos,
     pc_holding,
+    pc_queue_ready,
     pc_video_path,
     prune_old_videos,
     reader_alive,
@@ -208,6 +212,12 @@ def _page_token() -> str:
 class PcClaimBody(BaseModel):
     name: str = "PC"
     version: str = ""
+
+
+class PcWaitBody(BaseModel):
+    name: str = "PC"
+    version: str = ""
+    seconds: float = 20
 
 
 class PcLeaseBody(BaseModel):
@@ -979,6 +989,41 @@ def pc_claim(body: PcClaimBody, authorization: str | None = Header(default=None)
     elif not pc_holding(settings.video_db_path, body.name):
         pc_checkin(settings.video_db_path, body.name, state="idle", invite=invite)
     return {"video": job, **control}
+
+
+@router.post("/v1/pc/wait")
+async def pc_wait(body: PcWaitBody, authorization: str | None = Header(default=None)) -> dict[str, object]:
+    """PC nghỉ tại đây khi chưa có video. Có video, hoặc trang đổi lệnh, thì trả lời ngay.
+
+    Không nhận video trong lúc chờ, để nhiều PC cùng nghỉ vẫn chỉ một máy nhận được video.
+    """
+    invite = _pc_auth(authorization)
+    init_db(settings.video_db_path)
+    seconds = min(25.0, max(0.0, float(body.seconds)))
+    await run_in_threadpool(
+        pc_checkin,
+        settings.video_db_path,
+        body.name,
+        version=body.version,
+        invite=invite,
+    )
+    started = await run_in_threadpool(pc_gate, settings.video_db_path, body.name)
+    deadline = time.monotonic() + seconds
+    while True:
+        gate = await run_in_threadpool(pc_gate, settings.video_db_path, body.name)
+        ready = gate["wait"] == "" and await run_in_threadpool(
+            pc_queue_ready, settings.video_db_path, body.name
+        )
+        changed = gate["wait"] != started["wait"]
+        if ready or changed or time.monotonic() >= deadline:
+            if (
+                not ready
+                and gate["wait"] == ""
+                and not await run_in_threadpool(pc_holding, settings.video_db_path, body.name)
+            ):
+                await run_in_threadpool(pc_mark_idle, settings.video_db_path, body.name)
+            return {"ready": ready, **gate}
+        await asyncio.sleep(0.25)
 
 
 @router.post("/v1/pc/videos/{video_id}/heartbeat")

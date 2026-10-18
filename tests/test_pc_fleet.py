@@ -19,6 +19,7 @@ from control_plane.pc_fleet import (
     list_invites,
     list_pcs,
     pc_checkin,
+    pc_mark_idle,
     revoke_invite,
     schedule_open,
     update_pc,
@@ -238,6 +239,16 @@ class FleetTests(unittest.TestCase):
         later = datetime.now(timezone.utc) + timedelta(minutes=10)
         self.assertTrue(forget_pc(self.db, "May-L", now=later))
         self.assertFalse(any(item["name"] == "May-L" for item in list_pcs(self.db)))
+
+    def test_rest_keeps_a_blocked_state(self) -> None:
+        pc_checkin(self.db, "PC-Thu", state="test-failed", message="lech mau")
+        self.assertFalse(pc_mark_idle(self.db, "PC-Thu"))
+        blocked = self._pc("PC-Thu")
+        self.assertEqual((blocked["state"], blocked["message"]), ("test-failed", "lech mau"))
+        pc_checkin(self.db, "PC-Doc", state="reading", message="dang doc")
+        self.assertTrue(pc_mark_idle(self.db, "PC-Doc"))
+        resting = self._pc("PC-Doc")
+        self.assertEqual((resting["state"], resting["message"]), ("idle", ""))
 
 
 class QueueOrderTests(unittest.TestCase):

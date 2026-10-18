@@ -359,7 +359,8 @@
     setup: "Đang cài hoặc cập nhật bộ đọc",
     testing: "Đang đọc thử ảnh mẫu",
     "wait-disk": "Đang chờ: ổ đĩa PC đã dùng quá 80%",
-    "wait-ram": "Đang chờ: RAM PC đã dùng quá 80%"
+    "wait-ram": "Đang chờ: RAM PC đã dùng quá 80%",
+    idle: "Đang nghỉ. Có video thì tự đọc ngay."
   };
 
   function pcState(pc) {
@@ -378,7 +379,7 @@
     if (pc.paused) return { text: "Tạm dừng" };
     if (!pc.schedule_open) return { text: "Ngoài giờ đọc (" + pc.schedule + ")" };
     if (pc.state === "test-failed") return { text: "Đọc thử chưa đúng: " + pc.message, warn: true };
-    return { text: PC_STATES[pc.state] || "Rảnh, chờ video" };
+    return { text: PC_STATES[pc.state] || "Đang nghỉ. Có video thì tự đọc ngay." };
   }
 
   function renderPcs(items) {

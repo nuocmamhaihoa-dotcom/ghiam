@@ -16,11 +16,12 @@ from control_plane.video_store import (
     clean_device,
     clean_note,
     connect,
+    init_db,
     utcnow,
     vn_day_bounds,
 )
 
-# PC rảnh hỏi video mỗi vài giây, PC đang đọc gửi nhịp mỗi 20 giây.
+# PC rảnh nằm chờ trên máy chủ. Có video thì máy chủ trả lời ngay. PC đang đọc gửi nhịp mỗi 20 giây.
 ONLINE_SECONDS = 90
 PC_STATES = {"setup", "testing", "test-failed", "idle", "reading", "wait-disk", "wait-ram"}
 _WINDOW = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)-([01]?\d|2[0-3]):([0-5]\d)$")
@@ -70,6 +71,80 @@ def schedule_open(schedule: str, now: datetime | None = None) -> bool:
     return False
 
 
+def pc_control(row, now: datetime | None = None) -> dict[str, object]:
+    """Điều trang đang đặt, đọc từ một dòng pcs. Không ghi gì."""
+    excluded = bool(row["excluded"])
+    paused = bool(row["paused"])
+    schedule = str(row["schedule"] or "")
+    open_now = schedule_open(schedule, now)
+    wait = "excluded" if excluded else "paused" if paused else "" if open_now else "schedule"
+    return {
+        "wait": wait,
+        "paused": paused,
+        "schedule": schedule,
+        "schedule_open": open_now,
+        "excluded": excluded,
+        "autostart": bool(row["autostart"]),
+        "message": str(row["last_error"] or "") if excluded else "",
+    }
+
+
+def pc_gate(db_path: Path, name: str, now: datetime | None = None) -> dict[str, object]:
+    """Điều trang đang đặt cho PC. Chỉ đọc, để lần nghỉ hỏi liên tục mà không ghi đè trạng thái."""
+    pc = clean_device(name) or "PC"
+    init_db(db_path)
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT paused, schedule, autostart, excluded, last_error FROM pcs WHERE name = ?",
+            (pc,),
+        ).fetchone()
+    if row is None:
+        return {
+            "name": pc,
+            "wait": "",
+            "paused": False,
+            "schedule": "",
+            "schedule_open": True,
+            "excluded": False,
+            "autostart": False,
+            "message": "",
+        }
+    return {"name": pc, **pc_control(row, now)}
+
+
+# PC hết việc thì ghi đang nghỉ. Các trạng thái này là PC đang bận việc khác, không được đè.
+_KEEP_WHILE_RESTING = {"setup", "testing", "test-failed", "wait-disk", "wait-ram"}
+
+
+def pc_mark_idle(db_path: Path, name: str) -> bool:
+    """Ghi PC đang nghỉ khi PC không giữ video.
+
+    Không đè trạng thái đang cài, đang đọc thử, đọc thử hỏng, chờ đĩa hay chờ RAM.
+    Những trạng thái đó do chính PC báo, và một lần nghỉ không được xóa chúng.
+    """
+    pc = clean_device(name) or "PC"
+    stamp = utcnow()
+    with connect(db_path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT state FROM pcs WHERE name = ?", (pc,)).fetchone()
+        if row is None:
+            conn.execute(
+                "INSERT INTO pcs (name, first_seen, last_seen, state) VALUES (?, ?, ?, 'idle')",
+                (pc, stamp, stamp),
+            )
+            conn.execute("COMMIT")
+            return True
+        if str(row["state"] or "") in _KEEP_WHILE_RESTING:
+            conn.execute("COMMIT")
+            return False
+        conn.execute(
+            "UPDATE pcs SET state = 'idle', message = '', last_seen = ? WHERE name = ?",
+            (stamp, pc),
+        )
+        conn.execute("COMMIT")
+        return True
+
+
 def pc_checkin(
     db_path: Path,
     name: str,
@@ -105,21 +180,7 @@ def pc_checkin(
             (pc,),
         ).fetchone()
         conn.execute("COMMIT")
-    excluded = bool(row["excluded"])
-    paused = bool(row["paused"])
-    schedule = str(row["schedule"] or "")
-    open_now = schedule_open(schedule, now)
-    wait = "excluded" if excluded else "paused" if paused else "" if open_now else "schedule"
-    return {
-        "name": pc,
-        "wait": wait,
-        "paused": paused,
-        "schedule": schedule,
-        "schedule_open": open_now,
-        "excluded": excluded,
-        "autostart": bool(row["autostart"]),
-        "message": str(row["last_error"] or "") if excluded else "",
-    }
+    return {"name": pc, **pc_control(row, now)}
 
 
 def _parse(stamp: object) -> datetime | None:

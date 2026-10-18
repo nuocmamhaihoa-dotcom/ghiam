@@ -1174,6 +1174,23 @@ def _cache_holding(conn: sqlite3.Connection, name: str) -> tuple[int, int]:
     return int(total["n"] or 0), active
 
 
+def pc_queue_ready(db_path: Path, helper: str) -> bool:
+    """Có video đang chờ mà PC này nhận được ngay. Không giữ khóa, không nhận video."""
+    name = clean_device(helper) or "PC"
+    init_db(db_path)
+    with connect(db_path) as conn:
+        row = conn.execute(
+            _waiting_sql(f"WHERE pc_fails < {PC_VIDEO_FAIL_LIMIT} AND pc_last_fail != ?"),
+            (name,),
+        ).fetchone()
+        if row is None:
+            return False
+        if not Path(str(row["path"])).is_file():
+            return True
+        held, active = _cache_holding(conn, name)
+        return cache_has_room(held, int(row["size_bytes"] or 0), reading=bool(active), limit=PC_CACHE_BYTES)
+
+
 def pc_holding(db_path: Path, helper: str) -> bool:
     """PC này còn giữ ít nhất một video. Hàng chờ đầy không có nghĩa là PC đang rảnh."""
     name = clean_device(helper) or "PC"

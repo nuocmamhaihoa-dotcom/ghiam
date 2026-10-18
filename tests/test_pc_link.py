@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import os
 import tempfile
+import threading
+import time
 import unittest
 import zipfile
 from pathlib import Path
@@ -136,6 +138,8 @@ class LinkTests(unittest.TestCase):
         self.assertIn("Nhà mạng", page)
         self.assertIn("đã tải, chờ đọc", page)
         self.assertIn("byteText(pc.ahead_bytes)", page)
+        self.assertIn('idle: "Đang nghỉ. Có video thì tự đọc ngay."', page)
+        self.assertNotIn("Rảnh, chờ video", page)
         self.assertIn(", chờ đọc", page)
         self.assertIn("device=", page)
         self.assertIn("ghiam-pc.bat", page)
@@ -438,6 +442,93 @@ class CacheTests(unittest.TestCase):
         fetched.assert_not_called()
         released.assert_called()
         self.assertEqual(released.call_args.args[2], "disk")
+
+    def test_a_changed_order_wakes_the_reader_at_once(self) -> None:
+        held = pc_connector._Cache()
+        entered = threading.Event()
+        original = held._cond.wait
+
+        def waiting(timeout=None):
+            entered.set()
+            return original(timeout)
+
+        held._cond.wait = waiting
+        found: dict[str, object] = {}
+
+        def reader() -> None:
+            found["job"] = held.take(3)
+
+        threading.Thread(target=reader, daemon=True).start()
+        self.assertTrue(entered.wait(1))
+        held._remember(200, {"wait": "paused"})
+        for _ in range(20):
+            if "job" in found:
+                break
+            time.sleep(0.05)
+        self.assertIn("job", found)
+        self.assertIsNone(found["job"])
+        self.assertEqual(held.control()["wait"], "paused")
+
+    def test_rest_claims_as_soon_as_a_video_is_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            calls = {"claim": 0, "wait": 0}
+
+            def fake_json(method, path, body=None, timeout=60):
+                if path == "/v1/pc/claim":
+                    calls["claim"] += 1
+                    if calls["claim"] == 1:
+                        return 200, {"video": None, "wait": ""}
+                    return 200, {"video": {"id": 3, "lease": "lease-3", "sha256": "abc", "bytes": 4}, "wait": ""}
+                if path == "/v1/pc/wait":
+                    calls["wait"] += 1
+                    return 200, {"ready": True, "wait": ""}
+                if path == "/v1/pc/heartbeats":
+                    return 200, {"ok": True, "lost": []}
+                return 200, {"ok": True}
+
+            def fake_fetch(video_id, lease, path, expected, progress=None):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"clip")
+                return True
+
+            with (
+                patch.object(pc_connector, "CACHE", Path(tmp)),
+                patch.object(pc_connector, "_json", side_effect=fake_json),
+                patch.object(pc_connector, "_fetch_video", fake_fetch),
+                patch.object(pc_connector, "_disk_ready", return_value=True),
+            ):
+                held = pc_connector._Cache()
+                held.start("May-A")
+                held.allow(True)
+                started = time.monotonic()
+                job = held.take(3)
+                held.close(False)
+            self.assertLess(time.monotonic() - started, 2.5)
+            self.assertIsNotNone(job)
+            assert job is not None
+            self.assertEqual(int(job["id"]), 3)
+            self.assertGreaterEqual(calls["wait"], 1)
+
+    def test_stopping_ends_a_rest_without_waiting_out_the_server(self) -> None:
+        def fake_json(method, path, body=None, timeout=60):
+            if path == "/v1/pc/wait":
+                time.sleep(8)
+                return 200, {"ready": False, "wait": ""}
+            if path == "/v1/pc/heartbeats":
+                return 200, {"ok": True, "lost": []}
+            return 200, {"video": None, "wait": ""}
+
+        with (
+            patch.object(pc_connector, "_json", side_effect=fake_json),
+            patch.object(pc_connector, "_disk_ready", return_value=True),
+        ):
+            held = pc_connector._Cache()
+            held.start("May-A")
+            held.allow(True)
+            time.sleep(0.3)
+            started = time.monotonic()
+            held.close(False)
+        self.assertLess(time.monotonic() - started, 2)
 
 
 class SyncTests(unittest.TestCase):

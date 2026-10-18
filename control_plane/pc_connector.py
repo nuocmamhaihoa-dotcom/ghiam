@@ -26,11 +26,13 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-CONNECTOR_VERSION = 7
+CONNECTOR_VERSION = 8
 # Trần tài nguyên của PC. Máy chủ không đặt biến này nên máy chủ vẫn dùng hết nhân.
 PC_HEADROOM = 0.8
 # Video chờ đọc nằm trên đĩa PC, tối đa 50 GB. Video đang đọc không tính vào mức này.
 PC_CACHE_BYTES = 50 * 1024 * 1024 * 1024
+# Hết video thì PC nằm chờ tối đa từng này giây. Có video thì máy chủ trả lời trước.
+REST_SECONDS = 20
 SERVER = "__GHIAM_SERVER__"
 TOKEN = "__GHIAM_TOKEN__"
 
@@ -1195,6 +1197,7 @@ class _Cache:
         self._stop = threading.Event()
         self._beat_stop = threading.Event()
         self._cond = threading.Condition()
+        self._control_tick = 0
         self._thread: threading.Thread | None = None
         self._beat_thread: threading.Thread | None = None
 
@@ -1219,10 +1222,14 @@ class _Cache:
             self._cond.notify_all()
 
     def take(self, timeout: float = 30) -> dict | None:
-        """Lấy video đã tải đủ. Video này rời khỏi 50 GB chờ và sang lượt đọc."""
+        """Lấy video đã tải đủ. Video này rời khỏi 50 GB chờ và sang lượt đọc.
+
+        Hết video thì nằm chờ đến hết giờ. Có video tải xong, hoặc trang đổi lệnh, thì trả về ngay.
+        """
         deadline = time.monotonic() + timeout
         with self._cond:
-            while not self._ready and not self._stop.is_set():
+            seen = self._control_tick
+            while not self._ready and self._control_tick == seen and not self._stop.is_set():
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     return None
@@ -1242,6 +1249,15 @@ class _Cache:
         with self._cond:
             self._reading = None
             self._save_locked()
+            self._cond.notify_all()
+
+    def _remember(self, status: int, body: dict) -> None:
+        with self._cond:
+            previous = str(self._control.get("wait") or "")
+            self._control = body
+            self._http = status
+            if str(body.get("wait") or "") != previous:
+                self._control_tick += 1
             self._cond.notify_all()
 
     def control(self) -> dict:
@@ -1374,19 +1390,53 @@ class _Cache:
         self._noted_full = True
         print(f"PC đã giữ đủ {_gb_text(PC_CACHE_BYTES)} video chờ đọc. Đọc xong sẽ tải thêm.")
 
+    def _rest(self) -> None:
+        """Nằm chờ máy chủ. Có video hoặc trang đổi lệnh thì dậy ngay. Dừng PC thì thôi chờ."""
+        if self._stop.is_set():
+            return
+        done = threading.Event()
+        holder: dict = {}
+
+        def call() -> None:
+            try:
+                status, payload = _json(
+                    "POST",
+                    "/v1/pc/wait",
+                    {"name": self._name, "version": str(CONNECTOR_VERSION), "seconds": REST_SECONDS},
+                    timeout=REST_SECONDS + 15,
+                )
+            except (urllib.error.URLError, TimeoutError, OSError):
+                status, payload = 0, {}
+            holder["status"] = status
+            holder["body"] = payload if isinstance(payload, dict) else {}
+            done.set()
+
+        threading.Thread(target=call, name="ghiam-rest", daemon=True).start()
+        while not done.is_set() and not self._stop.is_set():
+            done.wait(0.2)
+        if self._stop.is_set():
+            return
+        status = int(holder.get("status") or 0)
+        body = holder.get("body") or {}
+        if status == 200 and "ready" in body:
+            self._remember(status, body)
+            return
+        self._stop.wait(1)
+
     def _run(self) -> None:
         while not self._stop.is_set():
             with self._cond:
                 while not self._filling and not self._stop.is_set():
-                    self._cond.wait(1)
+                    self._cond.wait()
                 if self._stop.is_set():
                     return
-                waiting = self._waiting_locked()
-                full = waiting >= PC_CACHE_BYTES
+                full = self._waiting_locked() >= PC_CACHE_BYTES
                 if full:
                     self._note_full()
             if full:
-                self._stop.wait(5)
+                with self._cond:
+                    if self._waiting_locked() >= PC_CACHE_BYTES and not self._stop.is_set():
+                        self._cond.wait(30)
                 continue
             try:
                 status, body = _json(
@@ -1396,24 +1446,22 @@ class _Cache:
                     timeout=120,
                 )
             except (urllib.error.URLError, TimeoutError, OSError):
-                self._stop.wait(10)
+                self._stop.wait(2)
                 continue
             if self._stop.is_set():
                 return
             if not isinstance(body, dict):
                 body = {}
-            with self._cond:
-                self._control = body
-                self._http = status
+            self._remember(status, body)
             if status != 200:
-                self._stop.wait(10)
+                self._stop.wait(2)
                 continue
             if body.get("wait"):
-                self._stop.wait(10)
+                self._rest()
                 continue
             job = body.get("video")
             if not isinstance(job, dict):
-                self._stop.wait(15 if waiting else 5)
+                self._rest()
                 continue
             self._store(job)
 
@@ -1686,7 +1734,8 @@ def main() -> int:
             if disk_ok:
                 cache.allow(True)
             # Hết chỗ vẫn đọc video đã tải, vì đọc xong thì file được xóa và ổ đĩa trống ra.
-            job = cache.take(5 if disk_ok else 0.2)
+            # Không có video thì nằm chờ. Tải xong video mới thì dậy đọc ngay, không ngủ thêm.
+            job = cache.take(25 if disk_ok else 0.2)
             if isinstance(job, dict):
                 _IDLE = False
                 try:
@@ -1721,15 +1770,13 @@ def main() -> int:
                 if note != _WAIT_NOTE:
                     print(note)
                     _WAIT_NOTE = note
-                time.sleep(30)
                 continue
             if _WAIT_NOTE:
                 print("Trang đã cho PC đọc tiếp.")
                 _WAIT_NOTE = ""
             if not _IDLE:
-                print("Chưa có video đang chờ. PC vẫn mở, có video mới thì đọc tiếp.")
+                print("Không có video cần đọc. PC nghỉ. Có video mới thì PC tự đọc ngay.")
                 _IDLE = True
-            time.sleep(5)
         except KeyboardInterrupt:
             cache.close(True)
             print("Đã dừng.")
