@@ -20,7 +20,7 @@ from dataclasses import dataclass, field, replace
 from difflib import SequenceMatcher
 
 from doc_video.frame import FrameRead
-from doc_video.text import find_handle, handle_matches_name, lookalike_handles, name_key, vote_chars
+from doc_video.text import find_handle, handle_matches_name, lookalike_handles, name_key, vote_chars, vote_is_tied
 
 # Hai lần đọc @id trong cùng một lượt mở hồ sơ giống nhau ít nhất chừng này.
 _SAME_VISIT = 0.6
@@ -62,6 +62,9 @@ class _Seen:
     count: int = 0
     near: set[str] = field(default_factory=set)
     taps: Counter = field(default_factory=Counter)
+    # Khung hồ sơ mà phiếu @id đã ngã ngũ, và khung thuộc một lượt phiếu hoà.
+    clear_frames: int = 0
+    tied_frames: int = 0
 
     def name(self) -> str:
         """Bỏ phiếu theo từng ký tự giữa các khung đã đọc tên này. Mỗi khung sai một chỗ khác nhau."""
@@ -74,6 +77,17 @@ class _Seen:
             return voted
         top = max(self.names.values())
         return min((name for name, hits in self.names.items() if hits == top), key=lambda name: -_marks(name))
+
+    def name_tied(self) -> bool:
+        """Phiếu tên hoà đúng một vị trí: hai ký tự cùng trọng số, không bên nào nhiều hơn."""
+        if len(self.names) <= 1:
+            return False
+        _text, tied = vote_is_tied(list(self.names.items()), loose=True)
+        return tied
+
+    def handle_uncertain(self) -> bool:
+        """@id này chỉ xuất hiện trong lượt mở mà phiếu từng ký tự bị hoà."""
+        return self.tied_frames > 0 and self.clear_frames == 0
 
 
 def _marks(name: str) -> int:
@@ -102,14 +116,25 @@ def _lookalike_only(strong: str, weak: str) -> bool:
     return bool(diffs) and all(any(a in group and b in group for group in _DIGIT_LOOKALIKE) for a, b in diffs)
 
 
-def _merge_misreads(phones: dict[str, _Seen], frames_with: dict[str, set[int]]) -> dict[str, str]:
+def _plain_one_digit(strong: str, weak: str) -> bool:
+    """Lệch đúng một chữ số, và chỗ lệch không thuộc cặp dễ nhầm (3/5, 6/8…)."""
+    diffs = [(a, b) for a, b in zip(strong, weak) if a != b]
+    if len(diffs) != 1:
+        return False
+    left, right = diffs[0]
+    return not any(left in group and right in group for group in _DIGIT_LOOKALIKE)
+
+
+def _merge_misreads(phones: dict[str, _Seen], frames_with: dict[str, set[int]]) -> tuple[dict[str, str], set[str]]:
     """Số lệch vài chữ số so với số đọc được nhiều hơn, chưa từng cùng hiện trên một khung: là đọc nhầm.
 
     Cần cùng tên. Riêng số chỉ lệch ở các chữ số dễ nhầm (3 với 5…) mà hiếm khi thấy (tối đa
     3 khung) trong khi số kia thấy nhiều gấp ba trở lên thì gộp dù tên đọc ra khác: tên trên
-    vài khung đó cũng hay đọc sai. Trả về số đọc nhầm và số đúng tương ứng.
+    vài khung đó cũng hay đọc sai. Trả về số đọc nhầm và số đúng tương ứng, cùng các số đúng
+    bị gộp vì lệch một chữ số không dễ nhầm: những số đó chưa chắc nên đưa sang mục cần xem.
     """
     merged: dict[str, str] = {}
+    uncertain: set[str] = set()
     for weak in sorted(phones, key=lambda phone: phones[phone].count):
         if weak not in phones:
             continue
@@ -124,13 +149,15 @@ def _merge_misreads(phones: dict[str, _Seen], frames_with: dict[str, set[int]]) 
             rare = phones[weak].count <= 3 and seen.count >= 3 * phones[weak].count and _lookalike_only(strong, weak)
             if not same_name and not rare:
                 continue
+            if _plain_one_digit(strong, weak):
+                uncertain.add(strong)
             seen.names.update(phones[weak].names)
             seen.count += phones[weak].count
             frames_with[strong] |= frames_with.pop(weak)
             del phones[weak]
             merged[weak] = strong
             break
-    return merged
+    return merged, uncertain
 
 
 def _vote_visits(frames: list[FrameRead]) -> list[FrameRead]:
@@ -146,8 +173,12 @@ def _vote_visits(frames: list[FrameRead]) -> list[FrameRead]:
     def close() -> None:
         if len(run) > 1:
             counts = Counter(out[index].handle[1:] for index in run)
-            voted = find_handle("@" + vote_chars(list(counts.items()), loose=False))
-            if voted:
+            body, tied = vote_is_tied(list(counts.items()), loose=False)
+            voted = find_handle("@" + body) if body else ""
+            if tied:
+                for index in run:
+                    out[index] = replace(out[index], handle_uncertain=True)
+            elif voted:
                 for index in run:
                     out[index] = replace(out[index], handle=voted)
         run.clear()
@@ -257,13 +288,17 @@ def build(frames: list[FrameRead]) -> Result:
             if frame.profile_name:
                 seen.names[frame.profile_name] += 1
             seen.count += 1
+            if frame.handle_uncertain:
+                seen.tied_frames += 1
+            else:
+                seen.clear_frames += 1
             seen.near.update(visible)
             if not visits or visits[-1].handle != frame.handle:
                 visits.append(_Visit(frame.handle, visible))
                 if tap is not None and _recent_tap(tap, index, frame.at, visible, last_list):
                     seen.taps[tap[0]] += 1
             tap = None
-    merged = _merge_misreads(phones, frames_with)
+    merged, uncertain_phones = _merge_misreads(phones, frames_with)
     if merged:
         # Số đọc nhầm đã gộp vào số đúng: mọi chỗ còn nhắc tới số nhầm phải đổi theo, nếu
         # không bước ghép theo thứ tự tra một số không còn tồn tại.
@@ -277,10 +312,12 @@ def build(frames: list[FrameRead]) -> Result:
             seen.taps = Counter({fix(phone): hits for phone, hits in seen.taps.items()})
             seen.near = {fix(phone) for phone in seen.near}
         visits = [_Visit(visit.handle, fix_all(visit.visible)) for visit in visits]
-    return _pair(phones, handles, visits)
+    return _pair(phones, handles, visits, uncertain_phones)
 
 
-def _pair(phones: dict[str, _Seen], handles: dict[str, _Seen], visits: list[_Visit]) -> Result:
+def _pair(
+    phones: dict[str, _Seen], handles: dict[str, _Seen], visits: list[_Visit], uncertain_phones: set[str]
+) -> Result:
     result = Result()
     by_key_phone: dict[str, list[str]] = {}
     by_key_handle: dict[str, list[str]] = {}
@@ -298,12 +335,12 @@ def _pair(phones: dict[str, _Seen], handles: dict[str, _Seen], visits: list[_Vis
     for key, handle_list in by_key_handle.items():
         phone_list = by_key_phone.get(key, [])
         if len(phone_list) == 1 and len(handle_list) == 1:
-            _add(result, phones, handles, phone_list[0], handle_list[0], used_phones, used_handles)
+            _add(result, phones, handles, phone_list[0], handle_list[0], used_phones, used_handles, uncertain_phones)
             continue
         for handle in handle_list:
             nearby = [phone for phone in phone_list if phone in handles[handle].near and phone not in used_phones]
             if len(nearby) == 1:
-                _add(result, phones, handles, nearby[0], handle, used_phones, used_handles)
+                _add(result, phones, handles, nearby[0], handle, used_phones, used_handles, uncertain_phones)
 
     for handle in handles:
         if handle in used_handles:
@@ -312,13 +349,13 @@ def _pair(phones: dict[str, _Seen], handles: dict[str, _Seen], visits: list[_Vis
         on_screen = [phone for phone in agreed if phone in handles[handle].near]
         chosen = on_screen if len(on_screen) == 1 else agreed if len(agreed) == 1 else []
         if len(chosen) == 1:
-            _add(result, phones, handles, chosen[0], handle, used_phones, used_handles)
+            _add(result, phones, handles, chosen[0], handle, used_phones, used_handles, uncertain_phones)
 
-    _pair_tapped(result, phones, handles, used_phones, used_handles)
-    _pair_contained(result, phones, handles, used_phones, used_handles)
-    _pair_opened_screen(result, phones, handles, visits, used_phones, used_handles)
-    _pair_similar_on_screen(result, phones, handles, visits, used_phones, used_handles)
-    _pair_unnamed_on_screen(result, phones, handles, visits, used_phones, used_handles)
+    _pair_tapped(result, phones, handles, used_phones, used_handles, uncertain_phones)
+    _pair_contained(result, phones, handles, used_phones, used_handles, uncertain_phones)
+    _pair_opened_screen(result, phones, handles, visits, used_phones, used_handles, uncertain_phones)
+    _pair_similar_on_screen(result, phones, handles, visits, used_phones, used_handles, uncertain_phones)
+    _pair_unnamed_on_screen(result, phones, handles, visits, used_phones, used_handles, uncertain_phones)
 
     left_phones = [phone for phone in phones if phone not in used_phones]
     left_handles = [handle for handle in handles if handle not in used_handles]
@@ -335,7 +372,10 @@ def _pair(phones: dict[str, _Seen], handles: dict[str, _Seen], visits: list[_Vis
 
     for phone in phones:
         if phone not in used_phones:
-            result.unopened.append((phone, phones[phone].name()))
+            if phone in uncertain_phones:
+                result.review.append(Review(phone, phones[phone].name(), "", "", "số đọc chưa chắc"))
+            else:
+                result.unopened.append((phone, phones[phone].name()))
     result.rows.sort(key=lambda row: phones[row.phone].first)
     result.unopened.sort(key=lambda item: phones[item[0]].first)
     return result
@@ -347,6 +387,7 @@ def _pair_tapped(
     handles: dict[str, _Seen],
     used_phones: set[str],
     used_handles: set[str],
+    uncertain_phones: set[str],
 ) -> None:
     """Ghép hồ sơ với dòng vừa bấm trước khi nó mở.
 
@@ -363,7 +404,7 @@ def _pair_tapped(
     claimed = Counter(claims.values())
     for handle, phone in claims.items():
         if claimed[phone] == 1 and phone not in used_phones:
-            _add(result, phones, handles, phone, handle, used_phones, used_handles)
+            _add(result, phones, handles, phone, handle, used_phones, used_handles, uncertain_phones)
 
 
 def _contains(left: str, right: str) -> bool:
@@ -378,6 +419,7 @@ def _pair_contained(
     handles: dict[str, _Seen],
     used_phones: set[str],
     used_handles: set[str],
+    uncertain_phones: set[str],
 ) -> None:
     """Ghép khi tên hồ sơ và tên danh bạ chứa nhau, số đó đang hiện quanh lúc mở hồ sơ, và cả hai phía chỉ có một cặp."""
     options: dict[str, list[str]] = {}
@@ -395,7 +437,7 @@ def _pair_contained(
     claimed = Counter(phone for found in options.values() for phone in found)
     for handle, found in options.items():
         if len(found) == 1 and claimed[found[0]] == 1 and found[0] not in used_phones:
-            _add(result, phones, handles, found[0], handle, used_phones, used_handles)
+            _add(result, phones, handles, found[0], handle, used_phones, used_handles, uncertain_phones)
 
 
 def _pair_similar_on_screen(
@@ -405,6 +447,7 @@ def _pair_similar_on_screen(
     visits: list[_Visit],
     used_phones: set[str],
     used_handles: set[str],
+    uncertain_phones: set[str],
 ) -> None:
     """Tên đọc lệch một hai chữ (LêlLee với LêLee, Sade_s với Sads): ghép khi số đó nằm trên màn danh bạ
     ngay trước lúc mở hồ sơ, và cả hai phía chỉ có đúng một cặp gần giống.
@@ -431,7 +474,7 @@ def _pair_similar_on_screen(
     claimed = Counter(phone for found in options.values() for phone in found)
     for handle, found in options.items():
         if len(found) == 1 and claimed[found[0]] == 1 and found[0] not in used_phones:
-            _add(result, phones, handles, found[0], handle, used_phones, used_handles)
+            _add(result, phones, handles, found[0], handle, used_phones, used_handles, uncertain_phones)
 
 
 def _pair_unnamed_on_screen(
@@ -441,6 +484,7 @@ def _pair_unnamed_on_screen(
     visits: list[_Visit],
     used_phones: set[str],
     used_handles: set[str],
+    uncertain_phones: set[str],
 ) -> None:
     """Tên danh bạ chỉ gồm biểu tượng nên không đọc được. Hồ sơ còn lại ghép với số đó khi trên màn
     danh bạ ngay trước lúc mở chỉ có đúng một số chưa ghép không đọc được tên, tên hồ sơ không gần
@@ -467,7 +511,7 @@ def _pair_unnamed_on_screen(
     claimed = Counter(options.values())
     for handle, phone in options.items():
         if claimed[phone] == 1 and phone not in used_phones:
-            _add(result, phones, handles, phone, handle, used_phones, used_handles)
+            _add(result, phones, handles, phone, handle, used_phones, used_handles, uncertain_phones)
 
 
 def _similar(left: str, right: str) -> bool:
@@ -483,6 +527,7 @@ def _pair_opened_screen(
     visits: list[_Visit],
     used_phones: set[str],
     used_handles: set[str],
+    uncertain_phones: set[str],
 ) -> None:
     """Cuộn danh bạ và mở từng dòng từ trên xuống thì ghép theo thứ tự.
 
@@ -498,9 +543,9 @@ def _pair_opened_screen(
         left = [phone for phone in shown if phone not in used_phones]
         if pending and len(pending) == len(left) == len(shown):
             for phone, handle in zip(left, pending):
-                _add(result, phones, handles, phone, handle, used_phones, used_handles)
+                _add(result, phones, handles, phone, handle, used_phones, used_handles, uncertain_phones)
         elif len(pending) == 1 and len(left) == 1:
-            _add(result, phones, handles, left[0], pending[0], used_phones, used_handles)
+            _add(result, phones, handles, left[0], pending[0], used_phones, used_handles, uncertain_phones)
 
 
 def _scroll_groups(visits: list[_Visit]) -> list[tuple[list[str], list[str]]]:
@@ -560,10 +605,22 @@ def _add(
     handle: str,
     used_phones: set[str],
     used_handles: set[str],
+    uncertain_phones: set[str],
 ) -> None:
     used_phones.add(phone)
     used_handles.add(handle)
     list_name = phones[phone].name()
     profile_name = handles[handle].name()
-    name = list_name if _marks(list_name) > _marks(profile_name) else profile_name
-    result.rows.append(Row(phone, name, handle))
+    use_list = _marks(list_name) > _marks(profile_name)
+    name = list_name if use_list else profile_name
+    name_tied = phones[phone].name_tied() if use_list else handles[handle].name_tied()
+    if phone in uncertain_phones:
+        reason = "số đọc chưa chắc"
+    elif handles[handle].handle_uncertain():
+        reason = "id đọc chưa chắc"
+    elif name_tied:
+        reason = "tên đọc chưa chắc"
+    else:
+        result.rows.append(Row(phone, name, handle))
+        return
+    result.review.append(Review(phone, list_name, profile_name, handle, reason))

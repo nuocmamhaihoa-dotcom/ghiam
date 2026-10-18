@@ -15,7 +15,7 @@ from doc_video.join import build
 from doc_video import ocr
 from doc_video.ocr import TextLine, _run, _run_cli
 from doc_video.frame import Layout, ListRow
-from doc_video.video import plan_reads, resolve_taps
+from doc_video.video import extract_midpoints, fast_scroll_spans, plan_reads, resolve_taps
 from doc_video.text import (
     clean_name,
     find_handle,
@@ -27,6 +27,7 @@ from doc_video.text import (
     name_key,
     normalize_phone,
     vote_chars,
+    vote_is_tied,
 )
 
 
@@ -96,6 +97,16 @@ class TextTests(unittest.TestCase):
         reads = [("tamphuongca14899", 1), ("tamphuongcal4899", 1), ("tamphuongca14899", 1)]
         self.assertEqual(vote_chars(reads, loose=False), "tamphuongca14899")
         self.assertEqual(vote_chars([], loose=False), "")
+
+    def test_a_character_tie_is_flagged_without_changing_the_text(self) -> None:
+        reads = [("An", 1.0), ("In", 1.0)]
+        self.assertEqual(vote_is_tied(reads), ("An", True))
+        self.assertEqual(vote_chars(reads), "An")
+        majority = [("Hữu Nhung", 1.0), ("Hữ Nhung", 1.0), ("Hữu Nhung", 1.0)]
+        text, tied = vote_is_tied(majority)
+        self.assertEqual(text, vote_chars(majority))
+        self.assertFalse(tied)
+        self.assertFalse(vote_is_tied([("An", 2.0), ("In", 1.0)])[1])
 
 
 class JoinTests(unittest.TestCase):
@@ -441,6 +452,49 @@ class JoinTests(unittest.TestCase):
         frames.append(profile("thovahanh", "@thova"))
         self.assertEqual(build(frames).rows[0].name, "thovahanh")
 
+    def test_a_tied_character_on_the_chosen_name_goes_to_review(self) -> None:
+        result = build(
+            [
+                listing(("0900000001", "Lan")),
+                profile("Lan", "@lan"),
+                profile("Lin", "@lan"),
+            ]
+        )
+        self.assertEqual(result.rows, [])
+        self.assertEqual(result.unopened, [])
+        self.assertEqual([(item.phone, item.reason) for item in result.review], [("0900000001", "tên đọc chưa chắc")])
+
+    def test_one_plain_misread_digit_goes_to_review(self) -> None:
+        frames = [listing(("0919313090", "Truc")) for _ in range(3)]
+        frames.append(listing(("0919313092", "Truc")))
+        frames.append(profile("Truc", "@truc31798"))
+        result = build(frames)
+        self.assertEqual(result.rows, [])
+        self.assertEqual(result.unopened, [])
+        self.assertEqual([(item.phone, item.reason) for item in result.review], [("0919313090", "số đọc chưa chắc")])
+
+    def test_one_plain_misread_digit_left_closed_goes_to_review(self) -> None:
+        frames = [listing(("0919313090", "Truc"), ("0908031961", "Thu")) for _ in range(3)]
+        frames.append(listing(("0919313092", "Truc")))
+        result = build(frames)
+        self.assertIn("0908031961", [phone for phone, _name in result.unopened])
+        self.assertNotIn("0919313090", [phone for phone, _name in result.unopened])
+        self.assertEqual(
+            [(item.phone, item.reason) for item in result.review],
+            [("0919313090", "số đọc chưa chắc")],
+        )
+
+    def test_a_tied_handle_in_one_visit_goes_to_review(self) -> None:
+        result = build(
+            [
+                listing(("0900000001", "Lan")),
+                profile("Lan", "@lan1"),
+                profile("Lan", "@lanl"),
+            ]
+        )
+        self.assertEqual(result.rows, [])
+        self.assertIn("id đọc chưa chắc", [item.reason for item in result.review])
+
 
 def list_layout(phones: list[str], tap_y: float = -1.0, clear: bool = True) -> Layout:
     line = TextLine("x", 0, 0, 10, 10)
@@ -493,6 +547,64 @@ class PlanTests(unittest.TestCase):
         resolve_taps(layouts)
         self.assertEqual(layouts[0].tapped, "0900000002")
 
+    def test_a_fast_flick_needs_two_rows_each_way(self) -> None:
+        left = list_layout(["0900000001", "0900000002", "0900000003", "0900000004"])
+        left.at = 0.0
+        slow = list_layout(["0900000002", "0900000003", "0900000004", "0900000005"])
+        slow.at = 0.5
+        self.assertEqual(fast_scroll_spans([left, slow]), [])
+        fast = list_layout(["0900000003", "0900000004", "0900000005", "0900000006"])
+        fast.at = 0.5
+        self.assertEqual(fast_scroll_spans([left, fast]), [(0.0, 0.5)])
+        paused = list_layout(["0900000003", "0900000004", "0900000005", "0900000006"])
+        paused.at = 1.0
+        self.assertEqual(fast_scroll_spans([left, paused]), [])
+        quick = list_layout(["0900000003", "0900000004", "0900000005", "0900000006"])
+        quick.at = 0.1
+        self.assertEqual(fast_scroll_spans([left, quick]), [])
+
+    def test_a_profile_between_lists_is_not_a_flick(self) -> None:
+        left = list_layout(["0900000001", "0900000002", "0900000003", "0900000004"])
+        left.at = 0.0
+        right = list_layout(["0900000003", "0900000004", "0900000005", "0900000006"])
+        right.at = 0.5
+        self.assertEqual(fast_scroll_spans([left, Layout("profile", at=0.25), right]), [])
+        self.assertEqual(fast_scroll_spans([left, Layout("other", at=0.25), right]), [(0.0, 0.5)])
+
+    def test_touching_fast_spans_merge(self) -> None:
+        first = list_layout(["0900000001", "0900000002", "0900000003", "0900000004"])
+        first.at = 0.0
+        second = list_layout(["0900000003", "0900000004", "0900000005", "0900000006"])
+        second.at = 0.5
+        third = list_layout(["0900000005", "0900000006", "0900000007", "0900000008"])
+        third.at = 1.0
+        self.assertEqual(fast_scroll_spans([first, second, third]), [(0.0, 1.0)])
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "không có ffmpeg")
+    def test_one_midpoint_frame_is_taken_from_a_fast_span(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            video = Path(tmp) / "in.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=white:s=32x32:d=2:r=30",
+                    str(video),
+                ],
+                check=True,
+            )
+            found = extract_midpoints(video, Path(tmp), [(0.4, 1.1)])
+            self.assertEqual(len(found), 1)
+            self.assertAlmostEqual(found[0][1], 0.75, delta=0.05)
+            self.assertEqual(extract_midpoints(Path(tmp) / "missing.mp4", Path(tmp), [(0.0, 1.0)]), [])
+
 
 class EngineTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("tesseract"), "không có tesseract")
@@ -518,6 +630,201 @@ class EngineTests(unittest.TestCase):
                 self.assertIsNone(ocr._library())
         finally:
             ocr._ENGINE.pop("lib", None)
+
+
+class EarlyReadTests(unittest.TestCase):
+    def test_agreed_names_skip_the_plain_reader_and_vietocr(self) -> None:
+        from doc_video.frame import _read_names
+
+        images = [Image.new("L", (8, 8), 255), Image.new("L", (8, 8), 255)]
+
+        def fake(batch, lang, whitelist="", best=True):
+            self.assertEqual(lang, "vie")
+            return ["Lan", "Mai"]
+
+        with (
+            patch("doc_video.frame.ocr.read_texts", side_effect=fake) as read,
+            patch("doc_video.frame.viet.available", return_value=True),
+            patch("doc_video.frame.viet.read_lines") as viet_lines,
+        ):
+            self.assertEqual(_read_names(images, images), ["Lan", "Mai"])
+        self.assertEqual(read.call_count, 2)
+        viet_lines.assert_not_called()
+
+    def test_a_mark_difference_still_reads_vietocr(self) -> None:
+        from doc_video.frame import _read_names
+
+        images = [Image.new("L", (8, 8), 255)]
+        seen: list[str] = []
+
+        def fake(batch, lang, whitelist="", best=True):
+            seen.append(lang)
+            if lang == "vie" and best:
+                return ["Hữu"]
+            if lang == "vie":
+                return ["Huu"]
+            return ["Huu"]
+
+        with (
+            patch("doc_video.frame.ocr.read_texts", side_effect=fake),
+            patch("doc_video.frame.viet.available", return_value=True),
+            patch("doc_video.frame.viet.read_lines", return_value=["Hữu"]) as viet_lines,
+        ):
+            self.assertEqual(_read_names(images, images), ["Hữu"])
+        self.assertIn("eng", seen)
+        viet_lines.assert_called_once()
+
+    def test_an_empty_agreement_does_not_skip(self) -> None:
+        from doc_video.frame import _read_names
+
+        images = [Image.new("L", (8, 8), 255)]
+        seen: list[str] = []
+
+        def fake(batch, lang, whitelist="", best=True):
+            seen.append(lang)
+            return [""]
+
+        with (
+            patch("doc_video.frame.ocr.read_texts", side_effect=fake),
+            patch("doc_video.frame.viet.available", return_value=False),
+        ):
+            self.assertEqual(_read_names(images, images), [""])
+        self.assertIn("eng", seen)
+
+    def test_an_agreed_handle_skips_the_other_crops_and_still_fixes_underscores(self) -> None:
+        from doc_video.frame import _read_handle
+
+        line = TextLine("@lanshop", 4, 4, 90, 28)
+        screen = Image.new("RGB", (120, 48), (255, 255, 255))
+
+        def fake(batch, lang, whitelist="", best=True):
+            self.assertEqual((lang, best), ("vie", False))
+            return ["@lanshop"]
+
+        with (
+            patch("doc_video.frame.ocr.read_texts", side_effect=fake) as read,
+            patch("doc_video.frame.viet.available", return_value=True),
+            patch("doc_video.frame.viet.read_lines") as viet_lines,
+            patch("doc_video.frame._underscore_strokes", return_value=[(1.2, 0.9)]),
+        ):
+            self.assertEqual(_read_handle(screen, line), "@_lanshop")
+        self.assertEqual(read.call_count, 1)
+        viet_lines.assert_not_called()
+
+    def test_an_agreed_handle_with_a_digit_still_reads_the_english_crops(self) -> None:
+        from doc_video.frame import _read_handle
+
+        line = TextLine("@truc51798", 4, 4, 90, 28)
+        screen = Image.new("RGB", (120, 48), (255, 255, 255))
+        calls: list[tuple[str, bool]] = []
+
+        def fake(batch, lang, whitelist="", best=True):
+            calls.append((lang, best))
+            return ["@truc51798"]
+
+        with (
+            patch("doc_video.frame.ocr.read_texts", side_effect=fake),
+            patch("doc_video.frame.viet.available", return_value=False),
+        ):
+            _read_handle(screen, line)
+        self.assertEqual(len(calls), 5)
+        self.assertIn(("eng", True), calls)
+
+    def test_a_different_handle_still_reads_the_other_crops(self) -> None:
+        from doc_video.frame import _read_handle
+
+        line = TextLine("@lanshop", 4, 4, 90, 28)
+        screen = Image.new("RGB", (120, 48), (255, 255, 255))
+        calls: list[tuple[str, bool]] = []
+
+        def fake(batch, lang, whitelist="", best=True):
+            calls.append((lang, best))
+            return ["@lan_sh0p"]
+
+        with (
+            patch("doc_video.frame.ocr.read_texts", side_effect=fake),
+            patch("doc_video.frame.viet.available", return_value=False),
+        ):
+            _read_handle(screen, line)
+        self.assertEqual(len(calls), 5)
+
+    def test_an_empty_scan_handle_does_not_stop_early(self) -> None:
+        from doc_video.frame import _read_handle
+
+        line = TextLine("", 4, 4, 90, 28)
+        screen = Image.new("RGB", (120, 48), (255, 255, 255))
+        calls: list[tuple[str, bool]] = []
+
+        def fake(batch, lang, whitelist="", best=True):
+            calls.append((lang, best))
+            return ["@lanshop"]
+
+        with (
+            patch("doc_video.frame.ocr.read_texts", side_effect=fake),
+            patch("doc_video.frame.viet.available", return_value=False),
+        ):
+            _read_handle(screen, line)
+        self.assertEqual(len(calls), 5)
+
+    def test_the_digit_vote_breaks_a_tie_and_does_not_override_agreement(self) -> None:
+        from doc_video.frame import _read_phones
+
+        screen = Image.new("RGB", (80, 60), (255, 255, 255))
+        name = TextLine("Lan", 2, 24, 40, 40)
+
+        def disagree(batch, lang, whitelist="", best=True):
+            return ["0912345678" if best else "0912345679"]
+
+        phone = TextLine("không phải số", 2, 2, 70, 20)
+        with (
+            patch("doc_video.frame.ocr.read_texts", side_effect=disagree),
+            patch("doc_video.frame.read_digit_line", return_value="0912345679"),
+        ):
+            self.assertEqual(_read_phones(screen, [(phone, name)]), ["0912345679"])
+
+        def agree(batch, lang, whitelist="", best=True):
+            return ["0912345678"]
+
+        with (
+            patch("doc_video.frame.ocr.read_texts", side_effect=agree),
+            patch("doc_video.frame.read_digit_line", return_value="0998765432"),
+        ):
+            self.assertEqual(_read_phones(screen, [(phone, name)]), ["0912345678"])
+
+        blank = TextLine("", 2, 2, 70, 20)
+
+        def empty(batch, lang, whitelist="", best=True):
+            return [""]
+
+        with (
+            patch("doc_video.frame.ocr.read_texts", side_effect=empty),
+            patch("doc_video.frame.read_digit_line", return_value="0912345678"),
+        ):
+            self.assertEqual(_read_phones(screen, [(blank, name)]), ["0912345678"])
+
+
+class DigitTests(unittest.TestCase):
+    def test_three_fonts_read_every_digit(self) -> None:
+        from PIL import ImageDraw, ImageFont
+
+        from doc_video.digits import read_digit_line
+
+        fonts = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        ]
+        for path in fonts:
+            self.assertTrue(Path(path).is_file(), path)
+            font = ImageFont.truetype(path, 80)
+            for text in ("0123456789", "0912345678"):
+                box = ImageDraw.Draw(Image.new("L", (10, 10), 255)).textbbox((0, 0), text, font=font)
+                image = Image.new("L", (box[2] - box[0] + 48, box[3] - box[1] + 48), 255)
+                ImageDraw.Draw(image).text((24 - box[0], 24 - box[1]), text, fill=0, font=font)
+                self.assertEqual(read_digit_line(image), text)
+            letters = Image.new("L", (200, 80), 255)
+            ImageDraw.Draw(letters).text((8, 8), "abcdefghij", fill=0, font=font)
+            self.assertEqual(read_digit_line(letters), "")
 
 
 ASSETS = Path("/home/ubuntu/.cursor/projects/workspace/assets")

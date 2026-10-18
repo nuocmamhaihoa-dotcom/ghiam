@@ -33,6 +33,7 @@ PC_TOOL_FILES = {
 
 READER_FILES = (
     "doc_video/__init__.py",
+    "doc_video/digits.py",
     "doc_video/frame.py",
     "doc_video/join.py",
     "doc_video/ocr.py",
