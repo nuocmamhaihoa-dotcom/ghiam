@@ -142,6 +142,9 @@ def _append_rows(
                         "byline",
                         "signed_by",
                         "handle_name",
+                        "contributor_name",
+                        "member_name",
+                        "poster_title",
                     ),
                 )
             )
@@ -173,6 +176,8 @@ def _append_rows(
                             "account_name",
                             "byline",
                             "signed_by",
+                            "contributor_name",
+                            "member_name",
                         ),
                     )
                 )

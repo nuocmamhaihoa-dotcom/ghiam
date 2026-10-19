@@ -187,6 +187,11 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
             "handle_name",
             "display_handle",
             "credit",
+            "contributor_name",
+            "member_name",
+            "poster_title",
+            "user_alias",
+            "alias",
         )
         author_name = first_person_name(row, author_keys) or (
             first_person_name(inner, author_keys) if inner else None
@@ -270,6 +275,7 @@ def _rows(payload: Any, depth: int = 0) -> list[Any]:
         "result",
         "items",
         "payload",
+        "wrapper",
     ):
         value = payload.get(key)
         linked = connection_rows(value)

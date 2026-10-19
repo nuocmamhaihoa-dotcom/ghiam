@@ -117,6 +117,11 @@ _AUTHOR_KEYS = (
     "handle_name",
     "display_handle",
     "credit",
+    "contributor_name",
+    "member_name",
+    "poster_title",
+    "user_alias",
+    "alias",
     "tác giả",
     "tac gia",
 )
@@ -172,6 +177,10 @@ _TIME_KEYS = (
     "authored_at",
     "submitted_at",
     "unix_ms",
+    "recorded_at",
+    "event_time",
+    "occurred_at",
+    "epoch_ms",
 )
 
 
