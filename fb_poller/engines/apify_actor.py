@@ -295,6 +295,14 @@ def _one(row: Any) -> PublicComment | None:
         "poster_title",
         "user_alias",
         "alias",
+        "author_alias",
+        "posted_by",
+        "writer",
+        "account_title",
+        "comment_owner",
+        "author_display",
+        "person_name",
+        "handle",
     )
     return PublicComment(
         text=text,

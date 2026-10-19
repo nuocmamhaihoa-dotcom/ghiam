@@ -145,6 +145,14 @@ def _append_rows(
                         "contributor_name",
                         "member_name",
                         "poster_title",
+                        "author_alias",
+                        "posted_by",
+                        "writer",
+                        "account_title",
+                        "comment_owner",
+                        "author_display",
+                        "person_name",
+                        "handle",
                     ),
                 )
             )
@@ -178,6 +186,14 @@ def _append_rows(
                             "signed_by",
                             "contributor_name",
                             "member_name",
+                            "author_alias",
+                            "posted_by",
+                            "writer",
+                            "account_title",
+                            "comment_owner",
+                            "author_display",
+                            "person_name",
+                            "handle",
                         ),
                     )
                 )
