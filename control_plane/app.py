@@ -234,7 +234,7 @@ def dashboard() -> HTMLResponse:
 
 @app.get("/ket-qua", response_class=HTMLResponse)
 def result_board() -> HTMLResponse:
-    """Bảng tổng hợp kết quả quét: lọc ngày và máy, tải toàn bộ, nạp file."""
+    """Bảng kết quả đọc được: lọc thống kê theo ngày, máy và loại, tải toàn bộ, nạp file."""
     page = _html("ketqua.html")
     page.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return page

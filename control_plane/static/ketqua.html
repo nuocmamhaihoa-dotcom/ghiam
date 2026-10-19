@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <title>Bảng tổng hợp kết quả quét</title>
+  <title>Bảng kết quả đọc được</title>
   <style>
     :root { color-scheme: light; --ink: #17202a; --muted: #5c6770; --line: #e4e7ec; --bg: #f4f6f8; --card: #fff; --blue: #0b6bcb; }
     * { box-sizing: border-box; }
@@ -41,16 +41,45 @@
     .ok { color: #0d6b3a; }
     .split { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.8rem; }
     .scroll { overflow-x: auto; }
+    tr.pick { cursor: pointer; }
+    tr.pick:hover td { background: #f3f7fb; }
   </style>
 </head>
 <body>
 <main>
   <p class="note"><a href="/">Về trang đọc video</a></p>
-  <h1>Bảng tổng hợp kết quả quét</h1>
-  <p class="lead">Gom mọi dòng đã đọc: đã lưu, cần xem và chưa mở hồ sơ. Lọc theo ngày quét ra và máy đã đọc. Tải file lấy đủ dòng khớp bộ lọc. Nạp file đưa kết quả vào bảng hàng loạt.</p>
+  <h1>Bảng kết quả đọc được</h1>
+  <p class="lead">Gom mọi dòng đã đọc: đã lưu, cần xem và chưa mở hồ sơ. Bộ lọc thống kê đổi cả số tổng hợp và bảng từng dòng. Tải file lấy đủ dòng khớp bộ lọc. Nạp file đưa kết quả vào bảng hàng loạt.</p>
 
   <section>
-    <h2>Tổng hợp</h2>
+    <h2>Bộ lọc thống kê</h2>
+    <p class="note">Hôm nay tính theo giờ Việt Nam. Bấm một máy hoặc một ngày ở bảng tổng hợp để lọc đúng phần đó.</p>
+    <div class="row" id="statSpan">
+      <button id="spanToday" class="ghost" type="button">Hôm nay</button>
+      <button id="spanAll" class="primary" type="button">Toàn bộ thời gian</button>
+    </div>
+    <div class="row" style="margin-top:0.55rem">
+      <label class="quiet">Từ ngày quét<input id="dayFrom" type="date" /></label>
+      <label class="quiet">Đến ngày quét<input id="dayTo" type="date" /></label>
+      <label class="quiet">Máy quét
+        <select id="reader">
+          <option value="">Mọi máy quét</option>
+        </select>
+      </label>
+      <label class="quiet">Loại
+        <select id="resultBucket">
+          <option value="">Mọi loại</option>
+          <option value="saved">Đã lưu</option>
+          <option value="review">Cần xem</option>
+          <option value="unopened">Chưa mở hồ sơ</option>
+        </select>
+      </label>
+    </div>
+    <input id="query" type="search" placeholder="Đầu số, tên, hoặc @username" style="margin-top:0.55rem" />
+  </section>
+
+  <section>
+    <h2>Tổng hợp theo bộ lọc</h2>
     <div class="stats" id="totals"></div>
     <p id="summaryNote" class="note"></p>
     <div class="split" style="margin-top:0.8rem">
@@ -66,18 +95,8 @@
   </section>
 
   <section>
-    <h2>Bộ lọc</h2>
-    <input id="query" type="search" placeholder="Đầu số, tên, hoặc @username" />
-    <div class="row" style="margin-top:0.55rem">
-      <label class="quiet">Từ ngày quét<input id="dayFrom" type="date" /></label>
-      <label class="quiet">Đến ngày quét<input id="dayTo" type="date" /></label>
-      <label class="quiet">Máy quét
-        <select id="reader">
-          <option value="">Mọi máy quét</option>
-        </select>
-      </label>
-    </div>
-    <p class="row" style="margin-top:0.7rem">
+    <h2>Tải kết quả</h2>
+    <p class="row">
       <button id="downloadAll" class="primary" type="button">Tải toàn bộ kết quả</button>
       <button id="downloadFiltered" class="ghost" type="button">Tải theo bộ lọc</button>
     </p>
@@ -96,7 +115,7 @@
   </section>
 
   <section>
-    <h2>Các dòng đã đọc</h2>
+    <h2>Bảng kết quả đọc được</h2>
     <p id="resultCount" class="note"></p>
     <div class="scroll" id="results"></div>
     <p class="row" style="margin-top:0.7rem">
@@ -162,12 +181,30 @@
     }).format(moment);
   }
 
+  function vnToday() {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).format(new Date());
+  }
+
+  function markSpan() {
+    var today = vnToday();
+    var from = document.getElementById("dayFrom").value;
+    var to = document.getElementById("dayTo").value;
+    document.getElementById("spanAll").className = !from && !to ? "primary" : "ghost";
+    document.getElementById("spanToday").className = from === today && to === today ? "primary" : "ghost";
+  }
+
   function filters() {
     return {
       q: document.getElementById("query").value.trim(),
       day_from: document.getElementById("dayFrom").value,
       day_to: document.getElementById("dayTo").value,
-      reader: document.getElementById("reader").value
+      reader: document.getElementById("reader").value,
+      bucket: document.getElementById("resultBucket").value
     };
   }
 
@@ -178,6 +215,7 @@
     if (chosen.day_from) parts.push("day_from=" + encodeURIComponent(chosen.day_from));
     if (chosen.day_to) parts.push("day_to=" + encodeURIComponent(chosen.day_to));
     if (chosen.reader) parts.push("reader=" + encodeURIComponent(chosen.reader));
+    if (chosen.bucket) parts.push("bucket=" + encodeURIComponent(chosen.bucket));
     if (extra) parts.push(extra);
     return parts.join("&");
   }
@@ -221,7 +259,8 @@
     } else {
       var html = countHead();
       readers.forEach(function (item) {
-        html += "<tr><td>" + escapeHtml(item.reader || "VPS") + "</td>" + countCells(item) + "</tr>";
+        var name = item.reader || "VPS";
+        html += "<tr class='pick' data-reader=\"" + escapeHtml(name) + "\"><td>" + escapeHtml(name) + "</td>" + countCells(item) + "</tr>";
       });
       readerBox.innerHTML = html + "</table>";
     }
@@ -236,7 +275,7 @@
       var shownDays = days.slice(0, DAY_CAP);
       var table = countHead();
       shownDays.forEach(function (item) {
-        table += "<tr><td>" + escapeHtml(dayLabel(item.day)) + "</td>" + countCells(item) + "</tr>";
+        table += "<tr class='pick' data-day=\"" + escapeHtml(item.day) + "\"><td>" + escapeHtml(dayLabel(item.day)) + "</td>" + countCells(item) + "</tr>";
       });
       dayBox.innerHTML = table + "</table>";
       note.textContent = days.length > DAY_CAP
@@ -245,6 +284,7 @@
       note.className = "note";
     }
     fillReaders(body.readers || []);
+    markSpan();
   }
 
   async function loadSummary() {
@@ -326,6 +366,32 @@
   document.getElementById("dayFrom").addEventListener("change", reload);
   document.getElementById("dayTo").addEventListener("change", reload);
   document.getElementById("reader").addEventListener("change", reload);
+  document.getElementById("resultBucket").addEventListener("change", reload);
+  document.getElementById("spanToday").addEventListener("click", function () {
+    var today = vnToday();
+    document.getElementById("dayFrom").value = today;
+    document.getElementById("dayTo").value = today;
+    reload();
+  });
+  document.getElementById("spanAll").addEventListener("click", function () {
+    document.getElementById("dayFrom").value = "";
+    document.getElementById("dayTo").value = "";
+    reload();
+  });
+  document.getElementById("byReader").addEventListener("click", function (event) {
+    var row = event.target.closest("tr[data-reader]");
+    if (!row) return;
+    document.getElementById("reader").value = row.getAttribute("data-reader") || "";
+    reload();
+  });
+  document.getElementById("byDay").addEventListener("click", function (event) {
+    var row = event.target.closest("tr[data-day]");
+    if (!row) return;
+    var day = row.getAttribute("data-day") || "";
+    document.getElementById("dayFrom").value = day;
+    document.getElementById("dayTo").value = day;
+    reload();
+  });
   document.getElementById("more").addEventListener("click", function () { loadPage(false); });
   document.getElementById("downloadAll").addEventListener("click", function () { download(false); });
   document.getElementById("downloadFiltered").addEventListener("click", function () { download(true); });

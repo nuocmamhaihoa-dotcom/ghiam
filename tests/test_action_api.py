@@ -1118,12 +1118,16 @@ class PcReaderApiTests(unittest.TestCase):
     def test_result_board_filters_downloads_and_import(self) -> None:
         page = self.client.get("/ket-qua")
         self.assertEqual(page.status_code, 200)
-        self.assertIn("Bảng tổng hợp kết quả quét", page.text)
+        self.assertIn("Bảng kết quả đọc được", page.text)
+        self.assertIn("Bộ lọc thống kê", page.text)
         self.assertIn("Tải toàn bộ kết quả", page.text)
         self.assertIn("Tải theo bộ lọc", page.text)
         self.assertIn("Nạp kết quả hàng loạt", page.text)
         self.assertIn('id="dayFrom"', page.text)
         self.assertIn('id="reader"', page.text)
+        self.assertIn('id="spanToday"', page.text)
+        self.assertIn('id="spanAll"', page.text)
+        self.assertIn('id="resultBucket"', page.text)
         self.assertNotIn("__CONTROL_TOKEN__", page.text)
         self.assertEqual(self.client.get("/v1/results/summary").status_code, 401)
         csv_body = (
