@@ -121,10 +121,13 @@ def _close_engines() -> None:
 atexit.register(_close_engines)
 
 
+def _engine_key(lang: str, psm: int, whitelist: str, best: bool) -> tuple[str, int, str, str | None]:
+    return (lang, psm, whitelist, best_dir() if best else None)
+
+
 def _engine(lang: str, psm: int, whitelist: str, best: bool):
     """Một bộ đọc giữ sẵn trong tiến trình. Nạp lại bộ chữ cho mỗi khung làm chậm hơn nhiều lần đọc."""
-    tessdata = best_dir() if best else None
-    key = (lang, psm, whitelist, tessdata)
+    key = _engine_key(lang, psm, whitelist, best)
     if key in _ENGINES:
         return _ENGINES[key]
     lib = _library()
@@ -132,6 +135,7 @@ def _engine(lang: str, psm: int, whitelist: str, best: bool):
         _ENGINES[key] = None
         return None
     api = lib.TessBaseAPICreate()
+    tessdata = key[3]
     folder = tessdata.encode() if tessdata else None
     if not api or lib.TessBaseAPIInit2(api, folder, lang.encode(), 3) != 0:
         _ENGINES[key] = None
@@ -182,13 +186,33 @@ def _recognize(api: int, image: Image.Image) -> list[list[str]]:
     return _words_from_tsv(raw.decode("utf-8", "replace"))
 
 
+def _drop_engine(lang: str, psm: int, whitelist: str, best: bool) -> None:
+    """Bỏ bộ đọc trong tiến trình khi nó vừa ném lỗi, để lần đọc này chuyển sang lệnh tesseract.
+
+    Một bộ hỏng không được dùng lại cho các ảnh còn lại trong lô. Gọi đóng có thể
+    thất bại; bỏ sót một bộ hỏng còn hơn để nó làm chết tiến trình đọc.
+    """
+    api = _ENGINES.pop(_engine_key(lang, psm, whitelist, best), None)
+    lib = _ENGINE.get("lib")
+    if not api or lib is None:
+        return
+    try:
+        lib.TessBaseAPIEnd(api)
+        lib.TessBaseAPIDelete(api)
+    except Exception:
+        return
+
+
 def _run(images: list[Image.Image], lang: str, psm: int, whitelist: str, best: bool) -> list[list[list[str]]]:
     """Trả về, cho từng ảnh, danh sách dòng TSV (đã tách cột) ở mức từ."""
     if not images:
         return []
     api = _engine(lang, psm, whitelist, best)
     if api is not None:
-        return [_recognize(api, image) for image in images]
+        try:
+            return [_recognize(api, image) for image in images]
+        except Exception:
+            _drop_engine(lang, psm, whitelist, best)
     return _run_cli(images, lang, psm, whitelist, best)
 
 

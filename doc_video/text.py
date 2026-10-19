@@ -309,3 +309,28 @@ def vote(reads: list[str]) -> str:
     counts = Counter(present)
     top = max(counts.values())
     return next(item for item in present if counts[item] == top)
+
+
+def vote_digits(reads: list[str]) -> str:
+    """Ghép số điện thoại theo từng chữ số khi mỗi lần đọc sai một chỗ khác nhau.
+
+    Chỉ nhận khi mọi vị trí có đúng một chữ số thắng hẳn và số ghép là số di động
+    hợp lệ. Chỗ nào hoà, hoặc các lần đọc không cùng độ dài, thì quay về phiếu cả
+    chuỗi để không bịa một số mà không lần đọc nào ra.
+    """
+    present = [item for item in reads if item]
+    if not present:
+        return ""
+    whole = vote(present)
+    if len(present) == 1 or len({len(item) for item in present}) != 1:
+        return whole
+    built: list[str] = []
+    width = len(present[0])
+    for index in range(width):
+        counts = Counter(item[index] for item in present)
+        top = max(counts.values())
+        winners = [digit for digit, count in counts.items() if count == top]
+        if len(winners) != 1:
+            return whole
+        built.append(winners[0])
+    return normalize_phone("".join(built)) or whole

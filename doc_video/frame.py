@@ -37,8 +37,8 @@ from doc_video.text import (
     looks_like_phone,
     normalize_phone,
     prefer_plain_digits_and_case,
-    vote,
     vote_chars,
+    vote_digits,
 )
 
 WORK_WIDTH = 1200
@@ -267,6 +267,23 @@ def row_at(rows: list[ListRow], y: float, pitch: float) -> str:
     return ""
 
 
+def chosen_tap(rows: list[ListRow], highlighted: str, tap_y: float, pitch: float) -> str:
+    """Dòng được bấm: dòng tô sáng, rồi tâm vòng tròn, rồi đúng một dòng bị ngón tay che.
+
+    Nhiều dòng bị che thì không đoán. Không có tín hiệu thì trả về chuỗi rỗng.
+    """
+    if highlighted:
+        return highlighted
+    if tap_y >= 0:
+        found = row_at(rows, tap_y, pitch)
+        if found:
+            return found
+    covered = [row.phone for row in rows if row.phone and not row.clear]
+    if len(covered) == 1:
+        return covered[0]
+    return ""
+
+
 def _phones_without_name(
     lines: list[ocr.TextLine], pairs: list[tuple[ocr.TextLine, ocr.TextLine]], height: int
 ) -> list[tuple[ocr.TextLine, ocr.TextLine]]:
@@ -321,7 +338,7 @@ def scan_frame(image: Image.Image, at: float = -1.0) -> Layout:
         ]
         pitch = _row_pitch(pairs)
         tap_y = _tap_center(touched, pairs, pitch)
-        tapped = _highlighted_row(screen, rows, pitch) or (row_at(rows, tap_y, pitch) if tap_y >= 0 else "")
+        tapped = chosen_tap(rows, _highlighted_row(screen, rows, pitch), tap_y, pitch)
         return Layout("list", rows=rows, at=at, tapped=tapped, tap_y=tap_y, row_pitch=pitch)
     profile = _profile_lines(lines, screen.height)
     if profile is not None:
@@ -519,7 +536,7 @@ def _read_phones(screen: Image.Image, pairs: list[tuple[ocr.TextLine, ocr.TextLi
     fast_digits = ocr.read_texts(phone_crops, "eng", ocr.DIGITS, best=False)
     glyphs = [read_digit_line(crop) for crop in phone_crops]
     return [
-        vote(
+        vote_digits(
             [
                 normalize_phone(best_digits[index]),
                 normalize_phone(fast_digits[index]),
