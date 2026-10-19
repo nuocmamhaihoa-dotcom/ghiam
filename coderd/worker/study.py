@@ -109,8 +109,26 @@ OPEN_NOTE_LIMIT = 8
 
 def _clean_markup(line: str) -> str:
     line = re.sub(r":[A-Za-z0-9-]+:`!?([^`]+)`", r"\1", line)
+    line = re.sub(r"linkgit:([A-Za-z0-9-]+)\[\d+\]", r"\1", line)
+    line = re.sub(r"<([^>]+)>_?", r"\1", line)
+    line = re.sub(r"\b([A-Za-z][A-Za-z0-9-]*)_\b", r"\1", line)
     line = line.replace("`", "")
     return re.sub(r"\s+", " ", line).strip()
+
+
+def _pieces(line: str) -> list[str]:
+    if line.startswith("- "):
+        return [line]
+    parts = [part.strip() for part in re.split(r"(?<=[.!?])\s+", line) if part.strip()]
+    if not parts:
+        parts = [line]
+    fitted: list[str] = []
+    for part in parts:
+        if len(part) <= 240:
+            fitted.append(part)
+        else:
+            fitted.append(part[:240].rsplit(" ", 1)[0])
+    return fitted
 
 
 def _paragraphs(text: str) -> list[str]:
@@ -146,18 +164,19 @@ def extract_notes(text: str, limit: int = 8) -> list[str]:
     notes: list[str] = []
     seen: set[str] = set()
     for line in _paragraphs(text):
-        if line.startswith("- "):
-            item = line[2:].strip()
-        elif 40 <= len(line) <= 280 and not line.startswith("["):
-            item = line
-        else:
-            continue
-        if not keep_lesson(item) or item.lower() in seen:
-            continue
-        seen.add(item.lower())
-        notes.append(item[:240])
-        if len(notes) >= limit:
-            break
+        for piece in _pieces(line):
+            if piece.startswith("- "):
+                item = piece[2:].strip()
+            elif 40 <= len(piece) <= 280 and not piece.startswith("["):
+                item = piece
+            else:
+                continue
+            if not keep_lesson(item) or item.lower() in seen:
+                continue
+            seen.add(item.lower())
+            notes.append(item[:240])
+            if len(notes) >= limit:
+                return notes
     return notes
 
 
