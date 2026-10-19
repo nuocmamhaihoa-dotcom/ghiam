@@ -82,8 +82,16 @@ def _walk(node: Any, found: list[PublicComment], seen: set[str], limit: int) -> 
 
 def _comment_text(node: dict[str, Any]) -> str | None:
     body = node.get("body")
-    text = body.get("text") if isinstance(body, dict) else None
-    text = text or node.get("message")
+    if isinstance(body, dict):
+        text = body.get("text") or body.get("message")
+    else:
+        text = body
+    if not isinstance(text, str) or not text.strip():
+        message = node.get("message")
+        if isinstance(message, dict):
+            text = message.get("text") or message.get("message")
+        else:
+            text = message
     if not isinstance(text, str):
         return None
     text = text.strip()

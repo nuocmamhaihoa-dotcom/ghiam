@@ -20,6 +20,24 @@ RANK = 2
 NAME = "guest-graphql"
 
 
+def _node_text(node: dict[str, Any]) -> str | None:
+    """Comment text, including a message object instead of a plain string."""
+    body = node.get("body")
+    if isinstance(body, dict):
+        candidate = body.get("text") or body.get("message")
+    else:
+        candidate = body
+    if not isinstance(candidate, str) or not candidate.strip():
+        message = node.get("message")
+        if isinstance(message, dict):
+            candidate = message.get("text") or message.get("message")
+        else:
+            candidate = message
+    if isinstance(candidate, str) and candidate.strip():
+        return candidate
+    return None
+
+
 def comments_from_payload(payload: Any, limit: int) -> list[PublicComment]:
     found: list[PublicComment] = []
     seen: set[str] = set()
@@ -33,9 +51,7 @@ def comments_from_payload(payload: Any, limit: int) -> list[PublicComment]:
             return
         if not isinstance(node, dict):
             return
-        body = node.get("body")
-        text = body.get("text") if isinstance(body, dict) else None
-        text = text or node.get("message")
+        text = _node_text(node)
         if isinstance(text, str) and text.strip() and is_comment_typename(node.get("__typename")):
             author_node = node.get("author") if node.get("author") is not None else node.get("from")
             if isinstance(author_node, dict):

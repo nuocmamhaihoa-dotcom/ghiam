@@ -58,7 +58,10 @@ def comments_from_graph_payload(data: object, limit: int) -> tuple[list[PublicCo
     for row in rows:
         if not isinstance(row, dict):
             continue
-        text = scalar_text(row.get("message"))
+        raw_message = row.get("message")
+        if isinstance(raw_message, dict):
+            raw_message = raw_message.get("text") or raw_message.get("message")
+        text = scalar_text(raw_message)
         if not text:
             continue
         author = row.get("from")
@@ -83,7 +86,8 @@ def _graph_rows(data: dict[str, object]) -> list[object]:
     value = data.get("data")
     if isinstance(value, list) and value:
         return list(value)
-    if scalar_text(data.get("message")):
+    message = data.get("message")
+    if isinstance(message, dict) or scalar_text(message):
         return [data]
     return []
 

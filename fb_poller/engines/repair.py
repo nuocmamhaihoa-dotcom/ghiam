@@ -11,6 +11,7 @@ import html
 import json
 import re
 from collections.abc import Iterable
+from urllib.parse import unquote
 
 from fb_poller.engines.guard import comment_id, placeholder_text, redact_text, scalar_text
 from fb_poller.engines.types import EngineResult, PublicComment
@@ -31,6 +32,11 @@ REPAIR_CODES = (
     "prefer_longer_text",
     "recover_comments_from_error",
     "redact_error",
+    "strip_glued_chrome",
+    "strip_markup",
+    "decode_percent",
+    "comments_win",
+    "clear_null_time",
 )
 
 _ZERO_WIDTH = re.compile(r"[\u200b\u200c\u200d\u2060\ufeff]")
@@ -55,6 +61,21 @@ _CHROME_LINE = re.compile(
     re.IGNORECASE,
 )
 _BOOL_ID = {"true", "false", "none", "null"}
+_GRAPHQL_PREFIX = re.compile(r"^\s*for\s*\(\s*;;\s*\)\s*;\s*")
+_PERCENT = re.compile(r"%[0-9A-Fa-f]{2}")
+_BREAK = re.compile(r"(?i)<br\s*/?>")
+_TAG = re.compile(r"</?[A-Za-z][^>\n]*>")
+_GLUED_CHROME = re.compile(
+    r"(?:\s+(?:"
+    r"see translation|hide translation|xem bản dịch|ẩn bản dịch|"
+    r"see more|see less|xem thêm|"
+    r"view all \d+ replies|xem tất cả \d+ phản hồi|"
+    r"top fan|rising fan|"
+    r"just now|vừa xong|"
+    r"edited|đã chỉnh sửa"
+    r"))+$",
+    re.IGNORECASE,
+)
 _CHROME_AUTHOR = {
     "like",
     "reply",
@@ -88,6 +109,9 @@ def heal_result(result: EngineResult) -> EngineResult:
     ok = result.ok
     if comments:
         ok = True
+        if error:
+            codes.append("comments_win")
+            error = None
     elif result.ok:
         ok = False
         error = error or "empty_after_repair"
@@ -135,12 +159,14 @@ def heal_comments(comments: list[PublicComment]) -> tuple[list[PublicComment], l
         codes.extend(author_codes)
         cid, id_codes = _clean_id(comment.comment_id)
         codes.extend(id_codes)
+        created, time_codes = _clean_time(comment.created_time)
+        codes.extend(time_codes)
         cleaned.append(
             PublicComment(
                 text=text,
                 author_name=author,
                 comment_id=cid,
-                created_time=scalar_text(comment.created_time),
+                created_time=created,
             )
         )
     merged, merge_codes = _dedupe(cleaned)
@@ -156,20 +182,38 @@ def _clean_text(text: str) -> tuple[str | None, list[str]]:
     if without_hidden != cleaned:
         codes.append("normalize_text")
     cleaned = without_hidden
+    if " " not in cleaned and _PERCENT.search(cleaned):
+        decoded = unquote(cleaned)
+        if decoded != cleaned:
+            codes.append("decode_percent")
+            cleaned = decoded
     unescaped = html.unescape(html.unescape(cleaned))
     if unescaped != cleaned:
         codes.append("unescape_text")
     cleaned = unescaped
+    marked = _TAG.sub("", _BREAK.sub("\n", cleaned))
+    if marked != cleaned:
+        codes.append("strip_markup")
+    cleaned = marked
     kept: list[str] = []
     removed_chrome = False
+    removed_glued = False
     for line in cleaned.splitlines():
         stripped = line.strip()
+        if not stripped:
+            continue
+        unglued = _GLUED_CHROME.sub("", stripped).strip()
+        if unglued != stripped:
+            removed_glued = True
+        stripped = unglued
         if not stripped:
             continue
         if _CHROME_LINE.match(stripped):
             removed_chrome = True
             continue
         kept.append(stripped)
+    if removed_glued:
+        codes.append("strip_glued_chrome")
     if removed_chrome:
         codes.append("strip_chrome_lines")
     cleaned = "\n".join(kept).strip()
@@ -186,10 +230,16 @@ def _clean_author(author: str | None) -> tuple[str | None, list[str]]:
     text = scalar_text(author)
     if text is None:
         return None, []
-    text = html.unescape(text).strip()
-    if text.lower() in _CHROME_AUTHOR or _CHROME_LINE.match(text):
-        return None, ["clear_chrome_author"]
-    return text, []
+    visible = _ZERO_WIDTH.sub("", html.unescape(text)).replace("\u00a0", " ").strip()
+    codes: list[str] = []
+    if visible != text.strip():
+        codes.append("normalize_text")
+    if not visible:
+        return None, codes
+    if visible.lower() in _CHROME_AUTHOR or _CHROME_LINE.match(visible):
+        codes.append("clear_chrome_author")
+        return None, codes
+    return visible, codes
 
 
 def _clean_id(value: str | None) -> tuple[str | None, list[str]]:
@@ -201,18 +251,34 @@ def _clean_id(value: str | None) -> tuple[str | None, list[str]]:
     return cid, []
 
 
-def _expand_json_text(text: str) -> list[PublicComment] | None:
-    stripped = text.strip()
+def _clean_time(value: str | None) -> tuple[str | None, list[str]]:
+    text = scalar_text(value)
+    if text is None:
+        return None, []
+    if text.lower() in _BOOL_ID:
+        return None, ["clear_null_time"]
+    return text, []
+
+
+def _json_payload(text: str) -> object | None:
+    stripped = _GRAPHQL_PREFIX.sub("", text.strip())
     if not stripped.startswith(("{", "[")):
         return None
     try:
-        payload = json.loads(stripped)
+        return json.loads(stripped)
     except json.JSONDecodeError:
+        return None
+
+
+def _expand_json_text(text: str) -> list[PublicComment] | None:
+    payload = _json_payload(text)
+    if payload is None:
         return None
     rows = _loose_comments(payload)
     if not rows:
         return None
-    if len(rows) == 1 and rows[0].text == stripped:
+    bare = _GRAPHQL_PREFIX.sub("", text.strip())
+    if len(rows) == 1 and rows[0].text == bare:
         return None
     return rows
 

@@ -328,6 +328,18 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(found[0].author_name, "An")
 
 
+    def test_message_object_is_a_comment(self) -> None:
+        graphql = comments_from_payload(
+            {"__typename": "Comment", "message": {"text": "xin"}, "author": {"name": "An"}},
+            5,
+        )
+        self.assertEqual(graphql[0].text, "xin")
+        html = '<script>{"__typename":"Comment","message":{"text":"xin"},"author":{"name":"An"}}</script>'
+        self.assertEqual(comments_from_html(html)[0].text, "xin")
+        graph, error = comments_from_graph_payload({"message": {"text": "xin"}, "from": {"name": "An"}}, 5)
+        self.assertIsNone(error)
+        self.assertEqual(graph[0].author_name, "An")
+
     def test_graphql_accepts_a_string_author(self) -> None:
         found = comments_from_payload(
             {"__typename": "Comment", "message": "xin", "from": "An", "created_at": "2020-01-01"},
@@ -407,6 +419,40 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(recovered.comments[0].text, "xin")
         self.assertNotIn("super-secret", recovered.note or "")
         self.assertIn("recover_comments_from_error", recovered.note or "")
+
+        glued, glued_codes = heal_comments(
+            [PublicComment(text="xin chào See translation", author_name="Lan", created_time="null")]
+        )
+        self.assertEqual(glued[0].text, "xin chào")
+        self.assertIsNone(glued[0].created_time)
+        self.assertIn("strip_glued_chrome", glued_codes)
+        self.assertIn("clear_null_time", glued_codes)
+        self.assertEqual(heal_comments([PublicComment(text="I waited 2h")])[0][0].text, "I waited 2h")
+
+        marked, mark_codes = heal_comments([PublicComment(text="line<br>two", author_name="An\u200b")])
+        self.assertEqual(marked[0].text, "line\ntwo")
+        self.assertEqual(marked[0].author_name, "An")
+        self.assertIn("strip_markup", mark_codes)
+
+        encoded_row, pct_codes = heal_comments([PublicComment(text="hello%20world")])
+        self.assertEqual(encoded_row[0].text, "hello world")
+        self.assertIn("decode_percent", pct_codes)
+        self.assertEqual(heal_comments([PublicComment(text="100% sure")])[0][0].text, "100% sure")
+
+        prefixed, prefix_codes = heal_comments(
+            [PublicComment(text='for (;;);{"message":"xin","name":"An"}')]
+        )
+        self.assertEqual(prefixed[0].text, "xin")
+        self.assertEqual(prefixed[0].author_name, "An")
+        self.assertIn("expand_json_text", prefix_codes)
+
+        won = heal_result(
+            EngineResult("guest-ssr", 7, False, comments=[PublicComment(text="kept")], error="login_wall")
+        )
+        self.assertTrue(won.ok)
+        self.assertIsNone(won.error)
+        self.assertEqual(won.comments[0].text, "kept")
+        self.assertIn("comments_win", won.note or "")
 
         twice, _first = heal_comments(cleaned)
         again_clean, second_codes = heal_comments(twice)
