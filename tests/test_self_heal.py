@@ -146,6 +146,11 @@ class SelfHealTests(unittest.TestCase):
         self.assertEqual(self._status(real), "error")
         self.assertEqual(self._status(gone), "error")
         self.assertEqual(self._status(escaped), "error")
+        with connect(self.db) as conn:
+            gone_error = conn.execute("SELECT error FROM videos WHERE id = ?", (gone,)).fetchone()
+            escaped_error = conn.execute("SELECT error FROM videos WHERE id = ?", (escaped,)).fetchone()
+        self.assertEqual(gone_error["error"], "File video không còn trên máy chủ.")
+        self.assertIn("truncated", escaped_error["error"])
         self.assertLess(order.index(waiting), order.index(broken))
         self.assertLess(order.index(waiting), order.index(unknown))
         with connect(self.db) as conn:
@@ -158,7 +163,9 @@ class SelfHealTests(unittest.TestCase):
         self.assertIsNone(priority["progress_same_at"])
         self.assertTrue(any(f"Video {broken} lỗi vì một khung ảnh hỏng" in line for line in notes))
         self.assertFalse(any(str(real) in line for line in notes))
+        self.assertTrue(any(f"Video {gone} lỗi đã biết nhưng file không còn" in line for line in notes))
         self.assertFalse(any(str(escaped) in line for line in notes))
+        self.assertEqual(self._heal(), [])
 
     def test_a_disk_full_error_waits_behind_and_saved_rows_are_kept(self) -> None:
         waiting, _path = self._add("queued")

@@ -60,7 +60,20 @@ def _requeue_behind(db_path: Path, video_dir: Path) -> list[str]:
                 inside = path.resolve().is_relative_to(root)
             except (ValueError, OSError):
                 inside = False
-            if not inside or not path.is_file():
+            if not (inside and path.is_file()):
+                if path.is_file():
+                    # File nằm ngoài thư mục video. Không đọc lại và không nói là file đã mất.
+                    continue
+                cur = conn.execute(
+                    """
+                    UPDATE videos
+                    SET error = ?, finished_at = COALESCE(finished_at, ?)
+                    WHERE id = ? AND status = 'error'
+                    """,
+                    ("File video không còn trên máy chủ.", utcnow(), video_id),
+                )
+                if cur.rowcount == 1:
+                    notes.append(f"Video {video_id} lỗi đã biết nhưng file không còn. Giữ là lỗi.")
                 continue
             cur = conn.execute(
                 """
