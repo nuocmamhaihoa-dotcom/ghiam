@@ -327,7 +327,7 @@ def _read_group(path: Path) -> list[tuple[str, str, str]]:
     return rows
 
 
-def store_commands(root: Path, text: str, source: str, limit: int = 800) -> int:
+def store_commands(root: Path, text: str, source: str, limit: int = 2000) -> int:
     fresh = extract_commands(text)
     if not fresh:
         return 0
