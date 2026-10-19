@@ -178,6 +178,14 @@ def system_prompt(workspace: Workspace) -> str:
         note = memory.read_text(encoding="utf-8", errors="replace")[:2000].strip()
         if note:
             text += "\nGhi nhớ:\n" + note
+    try:
+        lessons = workspace.resolve("learn/kinh-nghiem.md")
+    except PermissionError:
+        return text
+    if lessons.is_file():
+        note = lessons.read_text(encoding="utf-8", errors="replace")[-800:].strip()
+        if note:
+            text += "\nĐã học:\n" + note
     return text
 
 

@@ -14,9 +14,11 @@ from worker.workspace import Workspace
 
 
 def load_env_file(path: Path) -> None:
-    if not path.is_file():
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
         return
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue

@@ -23,7 +23,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import create_app  # noqa: E402
 from app import db as appdb
-from worker.agent import normalize_reply, parse_text_tools, run_turn, scripted_complete, system_prompt  # noqa: E402
+from worker.agent import normalize_reply, parse_text_tools, run_turn, scripted_complete, system_prompt
+from worker.study import merge_lessons, parse_lessons, study_once  # noqa: E402
 from worker.tools import run_cmd, run_tool  # noqa: E402
 from worker.workspace import Workspace  # noqa: E402
 
@@ -290,6 +291,27 @@ class WorkerTests(unittest.TestCase):
             self.assertLess(sum(1 for kind, _payload in events if kind == "tool"), 6)
             self.assertTrue(any(kind == "text" and "4" in payload for kind, payload in events))
 
+    def test_study_keeps_a_lesson_once(self) -> None:
+        self.assertEqual(parse_lessons("- không có\n- Có\n- 4\n- 2 cộng 2 bằng 4\n- 2 cộng 2 bằng 4"), ["2 cộng 2 bằng 4"])
+        self.assertIn("phép cộng", merge_lessons("- phép cộng\n", ["phép cộng", "in ra 4"]))
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            database = root / "coderd.db"
+            appdb.init_db(database)
+            session = appdb.create_session(database)
+            message = appdb.add_message(database, session["id"], "2+2")
+            appdb.set_message_state(database, message["id"], "done")
+            appdb.add_event(database, message["id"], "text", "bằng 4")
+
+            def ask(_prompt: str) -> str:
+                return "- 2 cộng 2 bằng 4"
+
+            self.assertEqual(study_once(database, root / "work", ask), 1)
+            lesson = (root / "work" / "learn" / "kinh-nghiem.md").read_text(encoding="utf-8")
+            self.assertIn("2 cộng 2 bằng 4", lesson)
+            self.assertEqual(study_once(database, root / "work", ask), 0)
+            self.assertIn("OnUnitActiveSec=3min", (ROOT / "deploy" / "coderd-learn.timer").read_text(encoding="utf-8"))
+
     def test_text_tool_line_writes_a_file(self) -> None:
         def complete(messages, _tools):
             if any(item.get("role") == "tool" for item in messages):
@@ -330,7 +352,12 @@ class WorkerTests(unittest.TestCase):
         self.assertTrue((ROOT / "learn" / "nguon-api.md").is_file())
         self.assertIn("nguon-api.md", (ROOT / "learn" / "muc-luc.md").read_text(encoding="utf-8"))
         with TemporaryDirectory() as tmp:
-            self.assertIn("learn/muc-luc.md", system_prompt(Workspace(Path(tmp) / "work")))
+            root = Path(tmp) / "work"
+            workspace = Workspace(root)
+            workspace.ensure()
+            (root / "learn").mkdir()
+            (root / "learn" / "kinh-nghiem.md").write_text("- đã biết phép cộng\n", encoding="utf-8")
+            self.assertIn("đã biết phép cộng", system_prompt(workspace))
         junk = normalize_reply({"content": '{"truncated": false}', "tool_calls": []})
         self.assertIsNone(junk["content"])
 

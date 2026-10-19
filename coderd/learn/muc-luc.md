@@ -7,5 +7,7 @@
 - python.md: Python ngắn cho việc sửa code.
 - shell.md: lệnh trong workspace.
 - git.md: git trên máy này.
+- cac-ai.md: cách các AI khác học, và vòng học của coderd.
+- kinh-nghiem.md: bài học tự rút từ các đoạn chat, vòng nền ghi thêm liên tục.
 
 Việc cần nhớ cho lần sau thì ghi vào `.coderd/memory.md`.

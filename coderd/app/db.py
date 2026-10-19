@@ -64,6 +64,10 @@ def init_db(path: Path) -> None:
               last_seen TEXT NOT NULL,
               attached INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS studies (
+              message_id TEXT PRIMARY KEY,
+              created_at TEXT NOT NULL
+            );
             """
         )
 
@@ -162,6 +166,39 @@ def list_messages(path: Path, session_id: str) -> list[dict]:
             item["events"] = [dict(event) for event in events]
             items.append(item)
     return items
+
+
+def unstudied_messages(path: Path, limit: int = 2) -> list[dict]:
+    with session(path) as conn:
+        rows = conn.execute(
+            """
+            SELECT m.id, m.session_id, m.body
+            FROM messages m
+            LEFT JOIN studies s ON s.message_id = m.id
+            WHERE m.state = 'done' AND m.role = 'user' AND s.message_id IS NULL
+            ORDER BY m.created_at, m.id
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        items = []
+        for row in rows:
+            item = dict(row)
+            events = conn.execute(
+                "SELECT payload FROM events WHERE message_id = ? AND kind = 'text' ORDER BY created_at, id",
+                (item["id"],),
+            ).fetchall()
+            item["answer"] = "\n".join(event["payload"] for event in events if event["payload"])[:1200]
+            items.append(item)
+    return items
+
+
+def mark_studied(path: Path, message_id: str) -> None:
+    with session(path) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO studies (message_id, created_at) VALUES (?, ?)",
+            (message_id, now()),
+        )
 
 
 def prior_dialogue(path: Path, session_id: str, before_id: str, limit: int = 8) -> list[dict]:
