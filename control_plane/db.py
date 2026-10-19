@@ -152,7 +152,11 @@ def list_agents(db_path: Path) -> list[dict[str, Any]]:
         rows = conn.execute("SELECT * FROM agents ORDER BY last_seen_at DESC").fetchall()
     out = []
     for r in rows:
-        item = json.loads(r["payload_json"] or "{}")
+        try:
+            loaded = json.loads(r["payload_json"] or "{}")
+        except json.JSONDecodeError:
+            loaded = {}
+        item = loaded if isinstance(loaded, dict) else {}
         item.update(
             {
                 "machine_id": r["machine_id"],
@@ -233,6 +237,11 @@ def record_action(
         return int(cur.lastrowid)
 
 
+def _contains_like(needle: str) -> str:
+    escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
 def list_actions(
     db_path: Path,
     *,
@@ -245,8 +254,7 @@ def list_actions(
     params: list[Any] = []
     needle = q.strip()
     if needle:
-        escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        like = f"%{escaped}%"
+        like = _contains_like(needle)
         clauses.append(
             "(summary LIKE ? ESCAPE '\\' OR IFNULL(detail,'') LIKE ? ESCAPE '\\' "
             "OR kind LIKE ? ESCAPE '\\' OR actor LIKE ? ESCAPE '\\')"
@@ -368,16 +376,27 @@ def _load_parts(raw: str) -> list[dict[str, Any]]:
     return parts if isinstance(parts, list) else []
 
 
+def _clip_id(part: dict[str, Any]) -> int | None:
+    """Id đoạn trong một phần kịch bản. Chữ hoặc true không được thành id 1."""
+    value = part.get("clipId")
+    if isinstance(value, bool) or value is None or value == "":
+        return None
+    try:
+        clip_id = int(value)
+    except (TypeError, ValueError):
+        return None
+    if clip_id <= 0:
+        return None
+    return clip_id
+
+
 def _scenario_clip_ids(parts: list[dict[str, Any]]) -> set[int]:
     ids: set[int] = set()
     for part in parts:
         if not isinstance(part, dict):
             continue
-        try:
-            clip_id = int(part.get("clipId") or 0)
-        except (TypeError, ValueError):
-            continue
-        if clip_id > 0:
+        clip_id = _clip_id(part)
+        if clip_id is not None:
             ids.add(clip_id)
     return ids
 
@@ -488,12 +507,15 @@ def list_scenarios(db_path: Path, *, limit: int = 50) -> list[dict[str, Any]]:
         for part in _load_parts(row["parts_json"]):
             if not isinstance(part, dict):
                 continue
-            clip_id = int(part.get("clipId") or 0)
+            clip_id = _clip_id(part)
+            if clip_id is None:
+                continue
+            fills = part.get("fills")
             parts.append(
                 {
                     "clipId": clip_id,
                     "clipName": names.get(clip_id, ""),
-                    "fills": part.get("fills") or {},
+                    "fills": fills if isinstance(fills, dict) else {},
                 }
             )
         items.append({"id": int(row["id"]), "at": row["at"], "name": row["name"], "parts": parts})
@@ -513,12 +535,15 @@ def get_scenario(db_path: Path, scenario_id: int) -> dict[str, Any] | None:
     for part in _load_parts(row["parts_json"]):
         if not isinstance(part, dict):
             continue
-        clip_id = int(part.get("clipId") or 0)
+        clip_id = _clip_id(part)
+        if clip_id is None:
+            continue
+        fills = part.get("fills")
         parts.append(
             {
                 "clipId": clip_id,
                 "clipName": names.get(clip_id, ""),
-                "fills": part.get("fills") or {},
+                "fills": fills if isinstance(fills, dict) else {},
             }
         )
     return {"id": int(row["id"]), "at": row["at"], "name": row["name"], "parts": parts}
@@ -567,6 +592,19 @@ def transfer_summary(db_path: Path) -> dict[str, Any]:
     }
 
 
+def _public_post_url(value: object) -> str | None:
+    """Chỉ trả liên kết http. javascript: và data: chạy trong trang và đọc được token đã lưu."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text or any(ord(ch) <= 32 or ord(ch) == 127 for ch in text):
+        return None
+    head = text[:8].lower()
+    if head.startswith("https://") or head.startswith("http://"):
+        return text
+    return None
+
+
 def list_comments(
     db_path: Path,
     *,
@@ -576,7 +614,8 @@ def list_comments(
 ) -> list[dict[str, Any]]:
     limit = max(1, min(int(limit), 1000))
     offset = max(0, int(offset))
-    like = f"%{q.strip()}%" if q and q.strip() else None
+    needle = q.strip()
+    like = _contains_like(needle) if needle else None
     with session(db_path) as conn:
         if like:
             rows = conn.execute(
@@ -584,7 +623,8 @@ def list_comments(
                 SELECT comment_id, machine_id, post_url, post_id, text, author_name, author_id,
                        created_time, first_seen_at, synced_at
                 FROM comments
-                WHERE text LIKE ? OR author_name LIKE ? OR post_url LIKE ? OR comment_id LIKE ?
+                WHERE text LIKE ? ESCAPE '\\' OR author_name LIKE ? ESCAPE '\\'
+                   OR post_url LIKE ? ESCAPE '\\' OR comment_id LIKE ? ESCAPE '\\'
                 ORDER BY synced_at DESC
                 LIMIT ? OFFSET ?
                 """,
@@ -601,7 +641,12 @@ def list_comments(
                 """,
                 (limit, offset),
             ).fetchall()
-    return [dict(r) for r in rows]
+    items = []
+    for row in rows:
+        item = dict(row)
+        item["post_url"] = _public_post_url(item.get("post_url"))
+        items.append(item)
+    return items
 
 
 def upsert_proxy_endpoints(db_path: Path, endpoints: list[str], proxy_type: str = "static") -> int:

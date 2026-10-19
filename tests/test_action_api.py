@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import shutil
+import sqlite3
 import tempfile
 import unittest
 import zipfile
@@ -561,6 +563,86 @@ class ActionApiTests(unittest.TestCase):
             guide = archive.read("DanhBa/HUONG-DAN.txt").decode("utf-8")
             self.assertIn("Nạp lên iPhone", guide)
             self.assertNotIn("token", guide.lower())
+
+    def test_broken_scenario_part_does_not_hide_the_library(self) -> None:
+        created = self.client.post(
+            "/v1/clips",
+            headers=self.headers,
+            json={"name": "Một đoạn", "steps": [{"kind": "tap", "target": "#refresh", "label": "Tải lại"}]},
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        clip_id = created.json()["id"]
+        with sqlite3.connect(settings.db_path) as conn:
+            conn.execute(
+                "INSERT INTO script_scenarios(at, name, parts_json) VALUES(?,?,?)",
+                (
+                    "t",
+                    "Kịch bản hỏng",
+                    json.dumps(
+                        [
+                            {"clipId": "khong-phai-so", "fills": ["sai"]},
+                            {"clipId": True, "fills": {}},
+                            {"clipId": clip_id, "fills": {}},
+                        ]
+                    ),
+                ),
+            )
+        listed = self.client.get("/v1/scenarios", headers=self.headers)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        item = next(row for row in listed.json()["items"] if row["name"] == "Kịch bản hỏng")
+        self.assertEqual([part["clipId"] for part in item["parts"]], [clip_id])
+        self.assertEqual(item["parts"][0]["fills"], {})
+        one = self.client.get(f"/v1/scenarios/{item['id']}", headers=self.headers)
+        self.assertEqual(one.status_code, 200, one.text)
+        self.assertEqual([part["clipId"] for part in one.json()["parts"]], [clip_id])
+
+    def test_comment_link_stays_on_http_and_search_is_literal(self) -> None:
+        synced = self.client.post(
+            "/v1/sync/comments",
+            headers=self.headers,
+            json={
+                "machine_id": "pc-1",
+                "comments": [
+                    {"comment_id": "js-1", "post_url": "javascript:alert(1)", "post_id": "p1", "text": "100% xong", "author_name": "A"},
+                    {"comment_id": "ok-1", "post_url": "https://facebook.com/post/1", "post_id": "p2", "text": "100x xong", "author_name": "B"},
+                    {"comment_id": "data-1", "post_url": "data:text/html,hi", "post_id": "p3", "text": "khác", "author_name": "C"},
+                ],
+            },
+        )
+        self.assertEqual(synced.status_code, 200, synced.text)
+        listed = self.client.get("/v1/comments", headers=self.headers)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        by_id = {item["comment_id"]: item for item in listed.json()["items"]}
+        self.assertIsNone(by_id["js-1"]["post_url"])
+        self.assertEqual(by_id["ok-1"]["post_url"], "https://facebook.com/post/1")
+        self.assertIsNone(by_id["data-1"]["post_url"])
+        found = self.client.get("/v1/comments", headers=self.headers, params={"q": "100%"})
+        self.assertEqual([item["comment_id"] for item in found.json()["items"]], ["js-1"])
+        page = self.client.get("/static/dashboard.html")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("function safeUrl", page.text)
+        self.assertIn("safeUrl(c.post_url)", page.text)
+
+    def test_broken_agent_payload_does_not_hide_the_other_machines(self) -> None:
+        with sqlite3.connect(settings.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO agents(machine_id, hostname, payload_json, registered_at, last_seen_at, status)
+                VALUES('bad', 'may-hong', '{', 't', 't', 'connected')
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO agents(machine_id, hostname, payload_json, registered_at, last_seen_at, status)
+                VALUES('good', 'may-tot', '[]', 't', 't', 'online')
+                """
+            )
+        response = self.client.get("/v1/agents", headers=self.headers)
+        self.assertEqual(response.status_code, 200, response.text)
+        by_id = {item["machine_id"]: item for item in response.json()["agents"]}
+        self.assertEqual(by_id["bad"]["hostname"], "may-hong")
+        self.assertEqual(by_id["good"]["hostname"], "may-tot")
+        self.assertEqual(by_id["good"]["status"], "online")
 
 
 class ProxyUrlTests(unittest.TestCase):

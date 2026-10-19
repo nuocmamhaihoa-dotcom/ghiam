@@ -952,7 +952,15 @@ def clips_delete(clip_id: int, authorization: str | None = Header(default=None))
 def _public_scenario(item: dict[str, Any], clips: dict[int, list[dict[str, Any]]] | None = None) -> dict[str, Any]:
     parts = []
     for part in item["parts"]:
-        clip_id = int(part["clipId"])
+        raw_id = part.get("clipId") if isinstance(part, dict) else None
+        if isinstance(raw_id, bool):
+            continue
+        try:
+            clip_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if clip_id <= 0:
+            continue
         steps = (clips or {}).get(clip_id)
         blanks: list[dict[str, Any]] = []
         if steps is not None:
@@ -960,11 +968,12 @@ def _public_scenario(item: dict[str, Any], clips: dict[int, list[dict[str, Any]]
                 blanks = blanks_of(steps)
             except ValueError:
                 blanks = []
+        fills = part.get("fills")
         parts.append(
             {
                 "clipId": clip_id,
                 "clipName": part.get("clipName") or "",
-                "fills": part.get("fills") or {},
+                "fills": fills if isinstance(fills, dict) else {},
                 "blanks": blanks,
             }
         )

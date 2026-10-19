@@ -12,6 +12,8 @@ from control_plane.screen_read import _choose_name
 from control_plane.screen_table import (
     ContactHit,
     FrameObs,
+    Row,
+    Table,
     build_table,
     choose_phone,
     clean_username,
@@ -225,6 +227,16 @@ class MergeTests(unittest.TestCase):
             self.assertIn("0332001753", unopened)
             self.assertIn("khactam", unopened)
             self.assertEqual(len(written), 2)
+
+    def test_csv_formula_name_stays_text(self) -> None:
+        table = Table(rows=[Row("0982117072", "=HYPERLINK(\"http://e\")", "@dangtam.3")])
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder) / "bang.csv"
+            write_table(table, output)
+            text = output.read_text(encoding="utf-8-sig")
+            self.assertIn("'=HYPERLINK", text)
+            self.assertIn("@dangtam.3", text)
+            self.assertNotIn(",=HYPERLINK", text)
 
 
 class CloseNameTests(unittest.TestCase):

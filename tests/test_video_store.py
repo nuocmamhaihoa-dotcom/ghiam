@@ -192,6 +192,9 @@ class VideoStoreTests(unittest.TestCase):
         )
         self.assertEqual([item["phone"] for item in search_results(self.db, "0332")], ["0332001753"])
         self.assertEqual([item["phone"] for item in search_results(self.db, "+84982")], ["0982117072"])
+        self.assertEqual([item["phone"] for item in search_results(self.db, "0982.117.072")], ["0982117072"])
+        self.assertEqual([item["phone"] for item in search_results(self.db, "0982-117-072")], ["0982117072"])
+        self.assertEqual([item["phone"] for item in search_results(self.db, "84982117072")], ["0982117072"])
         self.assertEqual([item["phone"] for item in search_results(self.db, "dangtam")], ["0982117072"])
         self.assertEqual([item["phone"] for item in search_results(self.db, "@khac")], ["0332001753"])
         self.assertEqual(search_results(self.db, "0999"), [])
@@ -234,12 +237,47 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual(found["bucket"], "Cần xem")
         self.assertEqual((stats(self.db)["review"], stats(self.db)["unopened"]), (1, 0))
 
-    def test_startup_returns_half_read_videos_to_the_queue(self) -> None:
+    def test_startup_returns_half_read_videos_even_when_the_pid_is_reused(self) -> None:
         self._add("a.mp4", "a")
+        self._add("b.mp4", "b")
+        claim(self.db, os.getpid())
         claim(self.db, 4242)
+        self.assertEqual(stats(self.db)["running"], 2)
+        self.assertEqual(requeue_running(self.db), 2)
+        self.assertEqual(stats(self.db)["queued"], 2)
+        self.assertEqual(stats(self.db)["running"], 0)
+
+    def test_finish_removes_the_file_before_another_upload_can_replace_it(self) -> None:
+        video_id = self._add("a.mp4", "same")
+        job = claim(self.db, 7)
+        assert job is not None
+        path = Path(str(job["path"]))
+        self.assertTrue(finish(self.db, video_id, Table(rows=[Row("0332001753", "khactam", "@khactam60")]), owner_pid=7))
+        self.assertFalse(path.exists())
+        again = begin_upload(self.db, name="a.mp4", size_bytes=10, sha256="same")
+        self.assertTrue(again["reopened"])
+        path.write_bytes(b"video-moi")
+        self.assertTrue(commit_upload(self.db, video_id, str(path)))
+        self.assertEqual(path.read_bytes(), b"video-moi")
+
+    def test_late_finish_does_not_delete_the_file_now_owned_by_someone_else(self) -> None:
+        video_id = self._add("a.mp4", "late-file")
+        job = claim(self.db, 42)
+        assert job is not None
+        path = Path(str(job["path"]))
+        requeue(self.db, video_id)
+        claim(self.db, 99)
+        self.assertFalse(finish(self.db, video_id, Table(), owner_pid=42))
+        self.assertTrue(path.is_file())
         self.assertEqual(stats(self.db)["running"], 1)
-        self.assertEqual(requeue_running(self.db, os.getpid()), 1)
-        self.assertEqual(stats(self.db)["queued"], 1)
+
+    def test_backup_keeps_a_formula_like_name_as_text(self) -> None:
+        video_id = self._add("clip.mp4", "formula")
+        finish(self.db, video_id, Table(rows=[Row("0982117072", "=cmd|'/c calc'!A0", "@dangtam.3")]))
+        text = "".join(iter_backup(self.db))
+        self.assertIn("'=cmd|'/c calc'!A0", text)
+        self.assertIn("@dangtam.3", text)
+        self.assertNotIn(",=cmd", text)
 
     def test_backup_contains_the_saved_row(self) -> None:
         video_id = self._add("clip.mp4", "a")

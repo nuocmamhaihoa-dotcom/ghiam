@@ -333,7 +333,15 @@ def _write_csv(path: Path, header: list[str], rows: list[list[str]]) -> None:
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(header)
-        writer.writerows(rows)
+        writer.writerows([[_csv_cell(cell) for cell in row] for row in rows])
+
+
+def _csv_cell(value: str) -> str:
+    """Excel chạy ô bắt đầu bằng = + - như công thức. Dấu nháy đơn đầu ô không hiện khi mở file."""
+    text = str(value or "")
+    if text.startswith(("=", "+", "-", "\t", "\r")):
+        return "'" + text
+    return text
 
 
 def format_summary(table: Table) -> str:

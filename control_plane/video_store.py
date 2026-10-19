@@ -325,16 +325,18 @@ def requeue(db_path: Path, video_id: int) -> None:
         )
 
 
-def requeue_running(db_path: Path, keep_pid: int) -> int:
-    """Lúc bộ đọc khởi động, mọi video đang đọc dở thuộc tiến trình cũ đã chết. Không dựa vào pid còn sống,
-    vì sau khi khởi động lại máy, pid cũ có thể đã thuộc về chương trình khác."""
+def requeue_running(db_path: Path) -> int:
+    """Lúc bộ đọc khởi động, mọi video đang đọc dở thuộc tiến trình cũ đã chết.
+
+    Không chừa lại dòng có pid trùng tiến trình mới. Sau khi máy khởi động lại, pid cũ có thể
+    được cấp lại cho bộ đọc mới, và video đó sẽ kẹt ở trạng thái đang đọc.
+    """
     with connect(db_path) as conn:
         cur = conn.execute(
             """
             UPDATE videos SET status = 'queued', pid = NULL, started_at = NULL
-            WHERE status = 'running' AND (pid IS NULL OR pid != ?)
-            """,
-            (keep_pid,),
+            WHERE status = 'running'
+            """
         )
         return cur.rowcount
 
@@ -371,13 +373,21 @@ def finish(db_path: Path, video_id: int, table: Table, owner_pid: int | None = N
             _put(conn, item.phone, item.name, "", BUCKET_UNOPENED, "", video_id, upgrade=False)
         for item in table.review:
             _put_review(conn, item, video_id)
+        stored = conn.execute("SELECT path FROM videos WHERE id = ?", (video_id,)).fetchone()
+        file_path = str(stored["path"] or "") if stored else ""
         cur = conn.execute(
-            f"UPDATE videos SET status = 'done', pid = NULL, finished_at = ?, error = '' WHERE id = ? AND {_owner_clause(owner_pid)}",
+            f"UPDATE videos SET status = 'done', path = '', pid = NULL, finished_at = ?, error = '' WHERE id = ? AND {_owner_clause(owner_pid)}",
             (utcnow(), video_id, *_owner_params(owner_pid)),
         )
         if cur.rowcount != 1:
             conn.execute("ROLLBACK")
             return False
+        # Khoá ghi vẫn giữ đến commit, nên lần tải lại chưa ghi được file mới vào đường dẫn này.
+        if file_path:
+            try:
+                Path(file_path).unlink(missing_ok=True)
+            except OSError:
+                pass
         conn.execute("COMMIT")
         return True
 
@@ -484,13 +494,36 @@ def merge_close_results(db_path: Path) -> int:
     return merged
 
 
+def _phone_prefix(query: str) -> str | None:
+    """Đầu số để tìm. Nhận dấu chấm, gạch, và mã 84, cùng cách với số đã lưu dạng 0xxxxxxxxx."""
+    raw = str(query or "").strip()
+    if raw.startswith("+"):
+        raw = raw[1:]
+    digits: list[str] = []
+    for ch in raw:
+        if ch.isdigit():
+            digits.append(ch)
+            continue
+        if ch in "Oo" and digits:
+            digits.append("0")
+            continue
+        if ch.isspace() or ch in "-.()":
+            continue
+        return None
+    text = "".join(digits)
+    if len(text) >= 4 and text.startswith("84"):
+        text = "0" + text[2:]
+    if not text.startswith("0"):
+        return None
+    return text
+
+
 def search_results(db_path: Path, query: str = "", limit: int = 50) -> list[dict[str, object]]:
     """Tìm theo đầu số hoặc đầu username. Tìm theo khoảng trên chỉ mục, không quét cả bảng."""
-    text = "".join(query.split())
-    if text.startswith("+84"):
-        text = "0" + text[3:]
+    compact = "".join(str(query or "").split())
+    phone = _phone_prefix(compact)
     with connect(db_path) as conn:
-        if text.isdigit():
+        if phone:
             rows = conn.execute(
                 """
                 SELECT id, phone, name, username, bucket, reason
@@ -499,10 +532,10 @@ def search_results(db_path: Path, query: str = "", limit: int = 50) -> list[dict
                 ORDER BY phone
                 LIMIT ?
                 """,
-                (text, text + ":", limit),
+                (phone, phone + ":", limit),
             ).fetchall()
-        elif text:
-            handle = text if text.startswith("@") else "@" + text
+        elif compact:
+            handle = compact if compact.startswith("@") else "@" + compact
             rows = conn.execute(
                 """
                 SELECT id, phone, name, username, bucket, reason
@@ -669,6 +702,9 @@ def _csv_line(fields: list[str]) -> str:
     escaped = []
     for field in fields:
         text = str(field or "")
+        # Excel chạy ô bắt đầu bằng = + - như công thức. Dấu nháy đơn đầu ô chỉ là cờ chữ, không hiện ra.
+        if text.startswith(("=", "+", "-", "\t", "\r")):
+            text = "'" + text
         if any(ch in text for ch in ",\"\n\r"):
             text = '"' + text.replace('"', '""') + '"'
         escaped.append(text)
