@@ -108,6 +108,7 @@ OPEN_NOTE_LIMIT = 8
 
 
 def _clean_markup(line: str) -> str:
+    line = re.sub(r":pep:`(\d+)`", r"PEP \1", line)
     line = re.sub(r":[A-Za-z0-9-]+:`!?([^`]+)`", r"\1", line)
     line = re.sub(r"linkgit:([A-Za-z0-9-]+)\[\d+\]", r"\1", line)
     line = re.sub(r"<([^>]+)>_?", r"\1", line)
