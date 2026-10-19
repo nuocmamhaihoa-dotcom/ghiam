@@ -681,6 +681,17 @@ class EngineTests(unittest.TestCase):
             found = comments_from_export(path)
         self.assertEqual(found[0].author_name, "Lan")
 
+    def test_more_button_share_count_and_vietnamese_ago(self) -> None:
+        block = "\n".join(["Lan", "hello", "More", "Write a reply...", "1 share", "khoảng 1 giờ trước"])
+        self.assertEqual(comments_from_articles([block], 5)[0].text, "hello")
+        sentence = "\n".join(["Lan", "I need more time", "Like"])
+        self.assertEqual(comments_from_articles([sentence], 5)[0].text, "I need more time")
+        glued, codes = heal_comments([PublicComment(text="hello · 1 share")])
+        self.assertEqual(glued[0].text, "hello")
+        self.assertIn("strip_glued_chrome", codes)
+        kept, _codes = heal_comments([PublicComment(text="I left 1 comment yesterday in the thread")])
+        self.assertEqual(kept[0].text, "I left 1 comment yesterday in the thread")
+
 
 if __name__ == "__main__":
     unittest.main()

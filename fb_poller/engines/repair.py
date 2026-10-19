@@ -52,20 +52,24 @@ _ZERO_WIDTH = re.compile(r"[\u200b\u200c\u200d\u200e\u200f\u2060\ufeff\u00ad]")
 _CONTROLS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _CHROME_LINE = re.compile(
     r"^(?:"
-    r"like|comment|share|reply|follow|message|"
-    r"thích|bình luận|chia sẻ|trả lời|theo dõi|nhắn tin|"
+    r"like|comment|share|reply|follow|message|more|"
+    r"thích|bình luận|chia sẻ|trả lời|theo dõi|nhắn tin|thêm|"
     r"most relevant|newest|most recent|mới nhất|phù hợp nhất|"
     r"see more|see less|xem thêm|"
     r"write a comment\.\.\.|write a comment…|write a comment|"
     r"viết bình luận\.\.\.|viết bình luận…|viết bình luận|"
+    r"write a reply\.\.\.|write a reply…|write a reply|"
+    r"viết phản hồi\.\.\.|viết phản hồi…|viết phản hồi|"
+    r"view more comments|xem thêm bình luận|"
     r"all comments|tất cả bình luận|"
-    r"top fan|rising fan|tác giả|author|"
+    r"top fan|rising fan|tác giả|author|admin|verified|đã xác minh|"
     r"just now|vừa xong|yesterday|hôm qua|"
-    r"[·•]?\s*(?:about\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
+    r"[·•]?\s*(?:about\s+|khoảng\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
+    r"(?:khoảng\s+)?\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"\d+\s*(?:s|m|h|d|w|y)|"
     r"\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*[kmb]|"
     r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
-    r"\d+(?:\.\d+)?\s*[kmb]?\s+(?:likes?|reactions?|lượt thích)|"
+    r"\d+(?:\.\d+)?\s*[kmb]?\s+(?:likes?|reactions?|comments?|shares?|lượt thích|bình luận|chia sẻ)|"
     r"view all \d+ replies|xem tất cả \d+ phản hồi|\d+ replies|\d+ phản hồi|"
     r"see translation|hide translation|xem bản dịch|ẩn bản dịch|"
     r"see original(?:\s*\([^)\n]{0,80}\))?|hide original(?:\s*\([^)\n]{0,80}\))?|"
@@ -90,14 +94,16 @@ _GLUED_CHROME = re.compile(
     r"view all \d+ replies|xem tất cả \d+ phản hồi|"
     r"top fan|rising fan|"
     r"just now|vừa xong|"
-    r"edited|đã chỉnh sửa"
+    r"edited|đã chỉnh sửa|"
+    r"\d+\s+(?:likes?|reactions?|comments?|shares?|lượt thích|bình luận|chia sẻ)"
     r")"
     r"|"
     r"\s*[·•]\s*(?:"
     r"just now|vừa xong|"
-    r"(?:about\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
+    r"(?:about\s+|khoảng\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
     r"\d+\s*(?:s|m|h|d|w|y)|"
-    r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?"
+    r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
+    r"\d+\s+(?:likes?|reactions?|comments?|shares?|lượt thích|bình luận|chia sẻ)"
     r")"
     r")+$",
     re.IGNORECASE,
@@ -117,6 +123,11 @@ _CHROME_AUTHOR = {
     "chia sẻ",
     "theo dõi",
     "nhắn tin",
+    "more",
+    "thêm",
+    "admin",
+    "verified",
+    "đã xác minh",
 }
 
 
