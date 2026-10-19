@@ -921,10 +921,12 @@
   var resultsBusy = false;
   var resultsPending = false;
 
-  async function loadResults() {
+  async function loadResults(force) {
     if (resultsBusy) {
       resultsPending = true;
-      resultsAsked += 1;
+      // Nhịp 4 giây chỉ xếp một lượt sau. Đổi bộ lọc mới hủy lượt đang tải,
+      // kẻo danh sách dài bị tải lại từ đầu và không kịp hiện.
+      if (force) resultsAsked += 1;
       return;
     }
     resultsBusy = true;
