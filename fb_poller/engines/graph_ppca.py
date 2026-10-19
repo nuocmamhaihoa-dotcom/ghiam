@@ -133,6 +133,9 @@ def _append_rows(
                         "sender_name",
                         "entity_name",
                         "commenter_title",
+                        "creator_name",
+                        "owner_title",
+                        "user_label",
                     ),
                 )
             )
@@ -158,6 +161,8 @@ def _append_rows(
                             "display_title",
                             "sender_name",
                             "entity_name",
+                            "creator_name",
+                            "owner_title",
                         ),
                     )
                 )
@@ -219,7 +224,7 @@ def post_id_from_url(url: str) -> str | None:
     shop = re.search(r"/shop/product/(\d+)", raw, re.IGNORECASE)
     if shop:
         return accepted_object_id(shop.group(1))
-    share = re.search(r"/share/[pvr]/(\d+)", raw, re.IGNORECASE)
+    share = re.search(r"/share/[pvr]/(pfbid[A-Za-z0-9]+|\d+)", raw, re.IGNORECASE)
     if share:
         return accepted_object_id(share.group(1))
     notes = re.search(r"/notes/(\d+)", raw, re.IGNORECASE)
