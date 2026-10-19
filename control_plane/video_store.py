@@ -108,12 +108,15 @@ def employee_rows(items: list[dict[str, object]]) -> list[dict[str, object]]:
         if not name:
             continue
         uploaded = int(item.get("uploaded") or 0)
-        results = (
-            int(item.get("saved") or 0)
-            + int(item.get("unnamed") or 0)
-            + int(item.get("review") or 0)
-            + int(item.get("unopened") or 0)
-        )
+        if "results" in item:
+            results = int(item.get("results") or 0)
+        else:
+            results = (
+                int(item.get("saved") or 0)
+                + int(item.get("unnamed") or 0)
+                + int(item.get("review") or 0)
+                + int(item.get("unopened") or 0)
+            )
         key = name.casefold()
         slot = grouped.get(key)
         if slot is None:
@@ -1166,8 +1169,96 @@ def device_day(
         "span": "all" if whole else "today",
         "known": known,
         "items": items,
-        "employees": employee_rows(items),
         "totals": totals,
+    }
+
+
+def _vn_day_open(value: str) -> datetime:
+    """Đầu một ngày giờ Việt Nam. value là năm-tháng-ngày."""
+    try:
+        day = datetime.strptime(str(value or "").strip(), "%Y-%m-%d")
+    except ValueError as error:
+        raise ValueError("Ngày không đúng") from error
+    return day.replace(tzinfo=VN_TZ)
+
+
+def employee_report(
+    db_path: Path,
+    *,
+    now: datetime | None = None,
+    span: str = "today",
+    day_from: str = "",
+    day_to: str = "",
+    readonly: bool = False,
+) -> dict[str, object]:
+    """Video đã tải và kết quả mới của từng nhân viên trong một khoảng thời gian.
+
+    @id chỉ tính ở lần quét đầu trên toàn bộ thời gian. Lần sau cùng @id không tính,
+    kể cả khi lần sau nằm trong khoảng đang lọc và lần đầu nằm ngoài khoảng đó.
+    Dòng chưa có @id vẫn tính. Video đã tải là file đã vào hàng chờ trong khoảng đó.
+    """
+    start = ""
+    end = ""
+    label_from = ""
+    label_to = ""
+    chosen = "all" if span == "all" else "today"
+    if str(day_from or "").strip() or str(day_to or "").strip():
+        raw_from = str(day_from or day_to).strip()
+        raw_to = str(day_to or day_from).strip()
+        opening = _vn_day_open(raw_from)
+        closing = _vn_day_open(raw_to)
+        if closing < opening:
+            opening, closing = closing, opening
+        label_from = opening.date().isoformat()
+        label_to = closing.date().isoformat()
+        start = opening.astimezone(timezone.utc).isoformat()
+        end = (closing + timedelta(days=1)).astimezone(timezone.utc).isoformat()
+        chosen = "range"
+    elif chosen == "today":
+        label_from, start, end = vn_day_bounds(now)
+        label_to = label_from
+    video_where = "status != 'uploading'"
+    video_params: list[str] = []
+    result_where = FRESH_USERNAME_SQL
+    result_params: list[str] = []
+    if start:
+        video_where += " AND created_at >= ? AND created_at < ?"
+        video_params.extend((start, end))
+        result_where += " AND r.created_at >= ? AND r.created_at < ?"
+        result_params.extend((start, end))
+    with connect(db_path, readonly=readonly) as conn:
+        videos = conn.execute(
+            f"""
+            SELECT COALESCE(device, '') AS device, COUNT(*) AS uploaded
+            FROM videos
+            WHERE {video_where}
+            GROUP BY COALESCE(device, '')
+            """,
+            video_params,
+        ).fetchall()
+        scanned = conn.execute(
+            f"""
+            SELECT COALESCE(v.device, '') AS device, COUNT(*) AS results
+            FROM results r
+            LEFT JOIN videos v ON v.id = r.video_id
+            WHERE {result_where}
+            GROUP BY COALESCE(v.device, '')
+            """,
+            result_params,
+        ).fetchall()
+    by_device: dict[str, dict[str, object]] = {}
+    for row in videos:
+        device = str(row["device"] or "")
+        by_device[device] = {"device": device, "uploaded": int(row["uploaded"]), "results": 0}
+    for row in scanned:
+        device = str(row["device"] or "")
+        item = by_device.setdefault(device, {"device": device, "uploaded": 0, "results": 0})
+        item["results"] = int(row["results"])
+    return {
+        "span": chosen,
+        "day_from": label_from,
+        "day_to": label_to,
+        "employees": employee_rows(list(by_device.values())),
     }
 
 

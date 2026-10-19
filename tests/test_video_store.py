@@ -29,6 +29,7 @@ from control_plane.video_store import (
     device_day,
     employee_machine,
     employee_name,
+    employee_report,
     employee_rows,
     fail,
     finish,
@@ -544,12 +545,80 @@ class VideoStoreTests(unittest.TestCase):
                 """,
                 (first, today, second, today),
             )
-        people = {row["name"]: row for row in device_day(self.db, now)["employees"]}
+        people = {row["name"]: row for row in employee_report(self.db, now=now)["employees"]}
         self.assertEqual(people["Ly"]["uploaded"], 2)
         self.assertEqual(people["Ly"]["results"], 2)
         self.assertEqual(people["Ly"]["phones"], ["Ly2", "Ly14"])
         self.assertEqual(people["nghĩa"]["uploaded"], 1)
         self.assertEqual(people["nghĩa"]["results"], 0)
+
+    def test_a_later_scan_of_the_same_id_is_left_out_of_the_employee_count(self) -> None:
+        now = datetime(2026, 10, 19, 8, 0, tzinfo=timezone.utc)
+        yesterday = "2026-10-18T02:00:00+00:00"
+        today = "2026-10-19T02:00:00+00:00"
+        first = self._add("ly-old.mp4", "emp-old")
+        second = self._add("ly-new.mp4", "emp-new")
+        third = self._add("ly-again.mp4", "emp-again")
+        fourth = self._add("nghia-today.mp4", "emp-nghia-today")
+        with connect(self.db) as conn:
+            conn.execute(
+                "UPDATE videos SET device = 'Ly14', status = 'done', created_at = ?, finished_at = ? WHERE id = ?",
+                (yesterday, yesterday, first),
+            )
+            conn.execute(
+                "UPDATE videos SET device = 'Ly14', status = 'done', created_at = ?, finished_at = ? WHERE id = ?",
+                (today, today, second),
+            )
+            conn.execute(
+                "UPDATE videos SET device = 'Ly2', status = 'done', created_at = ?, finished_at = ? WHERE id = ?",
+                (today, today, third),
+            )
+            conn.execute(
+                "UPDATE videos SET device = 'nghĩa 2', status = 'queued', created_at = ? WHERE id = ?",
+                (today, fourth),
+            )
+            conn.execute(
+                """
+                INSERT INTO results (phone, name, username, bucket, video_id, created_at, updated_at)
+                VALUES ('0902000001', 'Cũ', '@old', 1, ?, ?, ?),
+                       ('0902000002', 'Cũ lại', '@old', 1, ?, ?, ?),
+                       ('0902000003', 'Mới', '@new', 1, ?, ?, ?),
+                       ('', '', '', 3, ?, ?, ?),
+                       ('0902000004', 'Mới lại', '@new', 1, ?, ?, ?)
+                """,
+                (
+                    first, yesterday, today,
+                    second, today, today,
+                    second, today, today,
+                    second, today, today,
+                    third, today, today,
+                ),
+            )
+        day = employee_report(self.db, now=now)
+        people = {row["name"]: row for row in day["employees"]}
+        self.assertEqual(day["span"], "today")
+        self.assertEqual(day["day_from"], "2026-10-19")
+        self.assertEqual(people["Ly"]["uploaded"], 2)
+        self.assertEqual(people["Ly"]["results"], 2)
+        self.assertEqual(people["nghĩa"]["uploaded"], 1)
+        self.assertEqual(people["nghĩa"]["results"], 0)
+        whole = employee_report(self.db, now=now, span="all")
+        everyone = {row["name"]: row for row in whole["employees"]}
+        self.assertEqual(whole["span"], "all")
+        self.assertEqual(everyone["Ly"]["uploaded"], 3)
+        self.assertEqual(everyone["Ly"]["results"], 3)
+        self.assertEqual(everyone["nghĩa"]["uploaded"], 1)
+        earlier = employee_report(self.db, day_from="2026-10-18", day_to="2026-10-18")
+        before = {row["name"]: row for row in earlier["employees"]}
+        self.assertEqual(earlier["span"], "range")
+        self.assertEqual(before["Ly"]["uploaded"], 1)
+        self.assertEqual(before["Ly"]["results"], 1)
+        self.assertNotIn("nghĩa", before)
+        swapped = employee_report(self.db, day_from="2026-10-19", day_to="2026-10-18")
+        self.assertEqual(swapped["day_from"], "2026-10-18")
+        self.assertEqual(swapped["day_to"], "2026-10-19")
+        with self.assertRaises(ValueError):
+            employee_report(self.db, day_from="19-10-2026")
 
     def test_a_queued_file_keeps_the_phone_that_uploaded_it_first(self) -> None:
         first = begin_upload(self.db, name="a.mp4", size_bytes=10, sha256="same-phone", device="Máy 1")

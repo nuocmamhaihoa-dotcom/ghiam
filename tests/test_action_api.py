@@ -46,6 +46,7 @@ def _forget_stats_snapshot() -> None:
     stats_api._LAST_REPORT = None
     stats_api._stats_at = 0.0
     stats_api._stats_db = ""
+    stats_api._EMPLOYEE_CACHE.clear()
 
 
 class ActionApiTests(unittest.TestCase):
@@ -182,7 +183,9 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Đọc video danh bạ", response.text)
         self.assertIn("Thêm video", response.text)
         self.assertIn("Tải bản sao lưu về PC", response.text)
-        self.assertIn("Nhân viên hôm nay", response.text)
+        self.assertIn(">Nhân viên<", response.text)
+        self.assertIn("Mỗi @id chỉ tính một lần", response.text)
+        self.assertIn('id="employeeFrom"', response.text)
         self.assertIn("Báo cáo nhanh", response.text)
         self.assertIn("Thống kê hôm nay", response.text)
         self.assertIn("Thống kê toàn bộ thời gian", response.text)
@@ -208,11 +211,19 @@ class ActionApiTests(unittest.TestCase):
         self.assertNotIn("Check proxy ngay", response.text)
         self.assertNotIn("Mở giả lập điện thoại trên PC", response.text)
 
+    def test_employee_report_rejects_a_bad_day(self) -> None:
+        missing = self.client.get("/v1/videos/employees")
+        self.assertEqual(missing.status_code, 401)
+        bad = self.client.get("/v1/videos/employees", headers=self.headers, params={"day_from": "19/10/2026"})
+        self.assertEqual(bad.status_code, 400)
+        self.assertEqual(bad.json()["detail"], "Ngày không đúng. Chọn lại ngày.")
+
     def test_page_token_opens_only_the_video_api(self) -> None:
         page = {"Authorization": f"Bearer {settings.page_token}"}
         self.assertTrue(settings.page_token)
         self.assertNotEqual(settings.page_token, "test-token")
         self.assertEqual(self.client.get("/v1/videos/stats", headers=page).status_code, 200)
+        self.assertEqual(self.client.get("/v1/videos/employees", headers=page).status_code, 200)
         listed = self.client.get("/v1/results", headers=page)
         self.assertEqual(listed.status_code, 200)
         body = listed.json()
