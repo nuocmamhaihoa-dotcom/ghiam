@@ -93,9 +93,9 @@ def _from_items(payload: Any, limit: int) -> list[PublicComment]:
     elif isinstance(payload, dict):
         nested_rows: list[Any] | None = None
         for key in ("items", "data", "comments", "comment_list", "results"):
-            value = payload.get(key)
-            if isinstance(value, list) and value:
-                nested_rows = value
+            linked = connection_rows(payload.get(key))
+            if linked:
+                nested_rows = linked
                 break
         if _one(payload) or nested_rows is None:
             rows = [payload]

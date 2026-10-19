@@ -84,9 +84,20 @@ _CHROME_LINE = re.compile(
     r"block this person|chặn người này|mute this conversation|"
     r"translate comment|dịch bình luận|"
     r"see more from \S+|"
+    r"reply from \S+|phản hồi từ \S+|"
+    r"view insights|xem số liệu|"
+    r"mark as unread|đánh dấu là chưa đọc|"
+    r"find comments|tìm bình luận|"
+    r"most relevant first|"
+    r"cách đây\s+\d+\s+(?:giây|phút|giờ|tiếng|ngày|tuần|tháng|năm)|"
+    r"\d+\s+(?:giây|phút|giờ|tiếng|ngày|tuần|tháng|năm)\s+trước đây|"
+    r"(?:khoảng\s+)?\d+\s+tiếng(?:\s+trước)?|"
+    r"a couple(?: of)? hours ago|half an hour ago|nửa giờ trước|"
+    r"author liked this|tác giả đã thích|"
+    r"you replied|bạn đã trả lời|"
     r"all replies|tất cả phản hồi|"
     r"report comment|báo cáo bình luận|"
-    r"copy link|sao chép liên kết|"
+    r"copy link(?:\s+to\s+comment)?|sao chép liên kết(?:\s+bình luận)?|"
     r"sort by(?:\s+\S.{0,40})?|sắp xếp theo(?:\s+\S.{0,40})?|"
     r"comments are turned off|comments disabled|bình luận đã tắt|"
     r"log in to comment|sign up to comment|đăng nhập để bình luận|"
@@ -171,7 +182,7 @@ _CHROME_LINE = re.compile(
     r"view previous replies|see previous replies|load previous comments|"
     r"comment\s*[·•∙‧⋅]\s*\d+\s*[smhdwy]|"
     r"this comment is unavailable|comment removed|bình luận này không còn|"
-    r"see translation|hide translation|show translation|view original|auto-translated|was this translation helpful\??|xem bản dịch|ẩn bản dịch|"
+    r"see translation(?:\s+from\s+\S+)?|hide translation|show translation|view original|auto-translated|was this translation helpful\??|xem bản dịch|ẩn bản dịch|"
     r"see original(?:\s+post|\s*\([^)\n]{0,80}\)|\s+in\s+\S.{0,40})?|hide original(?:\s*\([^)\n]{0,80}\)|\s+in\s+\S.{0,40})?|"
     r"xem bản gốc(?:\s*\([^)\n]{0,80}\))?|ẩn bản gốc(?:\s*\([^)\n]{0,80}\))?|"
     r"edited(?:(?:\s*[·•∙‧⋅]\s*|\s+)(?:"
@@ -211,7 +222,7 @@ _GLUED_CHROME = re.compile(
     r"write a comment(?:\.\.\.|…)?|viết bình luận(?:\.\.\.|…)?|"
     r"write a public comment(?:\.\.\.|…)?|viết bình luận công khai(?:\.\.\.|…)?|"
     r"view \d+ repl(?:y|ies)|show more|show less|"
-    r"see translation|hide translation|show translation|view original|auto-translated|was this translation helpful\??|xem bản dịch|ẩn bản dịch|"
+    r"see translation(?:\s+from\s+\S+)?|hide translation|show translation|view original|auto-translated|was this translation helpful\??|xem bản dịch|ẩn bản dịch|"
     r"see original(?:\s+post|\s*\([^)\n]{0,80}\)|\s+in\s+\S.{0,40})?|hide original(?:\s*\([^)\n]{0,80}\)|\s+in\s+\S.{0,40})?|"
     r"xem bản gốc(?:\s*\([^)\n]{0,80}\))?|ẩn bản gốc(?:\s*\([^)\n]{0,80}\))?|"
     r"see more|see less|xem thêm|"
@@ -422,8 +433,8 @@ def _clean_text(text: str) -> tuple[str | None, list[str]]:
     if len(spaced_lines) != len(collapsed_lines):
         spaced_lines = collapsed_lines
     for line, spaced_line in zip(collapsed_lines, spaced_lines):
-        stripped = line.strip()
-        spaced_stripped = spaced_line.strip()
+        stripped = line.strip().strip(" ·•∙‧⋅…").strip()
+        spaced_stripped = spaced_line.strip().strip(" ·•∙‧⋅…").strip()
         if not stripped and not spaced_stripped:
             continue
         if (stripped and _CHROME_LINE.match(stripped)) or (

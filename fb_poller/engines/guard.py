@@ -276,6 +276,7 @@ def timestamp_of(row: object) -> str | None:
         "updated_time",
         "posted_at",
         "published_at",
+        "datetime",
         "date",
         "time",
         "timestamp",

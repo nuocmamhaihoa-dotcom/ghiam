@@ -1492,6 +1492,38 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(imported.author_name, "Lan")
         self.assertEqual(imported.created_time, "2024-03-02")
 
+    def test_trailing_bullet_and_couple_hours(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nAll comments ·\nReply from Mai\nCopy link to comment\n"
+                "a couple of hours ago\ncách đây 2 giờ\nAuthor liked this\n"
+                "See translation from Vietnamese\nMost relevant first"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nSee translation from Vietnamese poetry tonight"], 5)
+        self.assertEqual(sentence[0].text, "See translation from Vietnamese poetry tonight")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\nAll comments ·\nAll comments•\nhalf an hour ago", author_name="Lan")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        named = _one({"text": "xin", "profileName": "Lan", "dateTime": "2024-03-02"})
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.created_time, "2024-03-02")
+        found = _from_items({"items": {"nodes": [{"text": "xin", "profileName": "Lan", "id": "5"}]}}, 5)
+        self.assertEqual(found[0].comment_id, "5")
+        self.assertEqual(found[0].author_name, "Lan")
+        edges = _from_items(
+            {"data": {"edges": [{"node": {"text": "xin", "profileName": "Lan", "id": "6"}}]}},
+            5,
+        )
+        self.assertEqual(edges[0].comment_id, "6")
+
 
 if __name__ == "__main__":
     unittest.main()
