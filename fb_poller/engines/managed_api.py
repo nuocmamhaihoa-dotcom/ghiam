@@ -179,6 +179,8 @@ def _field_source(row: dict[str, Any]) -> tuple[str | None, dict[str, Any] | Non
         "bodyText",
         "preferred_body",
         "content",
+        "message_text",
+        "plain_body",
     ):
         value = row.get(key)
         found = nested_text(value)

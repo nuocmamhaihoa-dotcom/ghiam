@@ -174,6 +174,8 @@ def _one(row: Any) -> PublicComment | None:
         "bodyText",
         "preferred_body",
         "content",
+        "message_text",
+        "plain_body",
     ):
         value = row.get(key)
         text = nested_text(value)

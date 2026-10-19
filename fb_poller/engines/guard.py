@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from typing import Any
+from urllib.parse import unquote
 
 _PROXY_USERINFO = re.compile(r"://[^\s/@:]+:[^\s/@]+@")
 _QUERY_SECRET = re.compile(r"(?i)(token|access_token|api_key|apikey|key)=([^&\s]+)")
@@ -77,7 +78,7 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         found = _id_value(folded.get(fold_key(key)))
         if found:
             return comment_id_from_url(found) or found
-    for key in ("comment_url", "permalink_url"):
+    for key in ("comment_url", "permalink_url", "permalink"):
         found = comment_id_from_url(folded.get(fold_key(key)))
         if found:
             return found
@@ -110,7 +111,7 @@ def comment_id_from_url(value: object) -> str | None:
     text = scalar_text(value)
     if text is None or "://" not in text:
         return None
-    match = _COMMENT_IN_URL.search(text)
+    match = _COMMENT_IN_URL.search(unquote(text))
     if match is None:
         return None
     return comment_id(match.group(1))
@@ -122,6 +123,15 @@ def person_name(value: object, depth: int = 0) -> str | None:
         return None
     plain = scalar_text(value)
     if plain:
+        if depth < 2 and plain.startswith("{") and plain.endswith("}"):
+            try:
+                loaded = json.loads(plain)
+            except json.JSONDecodeError:
+                loaded = None
+            if isinstance(loaded, (dict, list)):
+                found = person_name(loaded, depth + 1)
+                if found:
+                    return found
         return plain
     if isinstance(value, list):
         for item in value:
@@ -228,7 +238,19 @@ def nested_text(value: object, depth: int = 0) -> str | None:
                 parts.append(found)
         return " ".join(parts) if parts else None
     if isinstance(value, dict):
-        for key in ("text", "message", "comment", "body", "content", "commentBody", "comment_body", "bodyText", "body_text"):
+        for key in (
+            "text",
+            "message",
+            "comment",
+            "body",
+            "content",
+            "commentBody",
+            "comment_body",
+            "bodyText",
+            "body_text",
+            "message_text",
+            "plain_body",
+        ):
             if key not in value:
                 continue
             found = nested_text(value.get(key), depth + 1)

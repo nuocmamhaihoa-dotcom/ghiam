@@ -1403,6 +1403,55 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(found[0].comment_id, "4")
         self.assertEqual(found[0].author_name, "Lan")
 
+    def test_encoded_permalink_and_reply_to(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nWrite a reply to Lan\nSee 1 reply from Mai\n"
+                "edited about 2 hours ago\nEdited about an hour ago\n"
+                "Hide comment\nThis comment was hidden\nSee original post\n"
+                "Go to post\nLink copied\njoined the conversation"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(
+            ["Lan\nSee original photos in the album\nI will write a reply to Lan tomorrow"],
+            5,
+        )
+        self.assertEqual(
+            sentence[0].text,
+            "See original photos in the album I will write a reply to Lan tomorrow",
+        )
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nSee 1 reply from Mai\nxin Write a reply to Lan",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello\nxin")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertIn("strip_glued_chrome", codes)
+        self.assertEqual(
+            first_comment_id({"permalink": "https://www.facebook.com/x/posts/1?comment_id%3D42"}),
+            "42",
+        )
+        self.assertEqual(person_name('{"name": "Lan"}'), "Lan")
+        named = _one({"message_text": "xin", "author": '{"name": "Lan"}'})
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.text, "xin")
+        self.assertEqual(named.author_name, "Lan")
+        graph = comments_from_graph_payload(
+            {"data": [{"plain_body": "xin", "from": {"name": "Lan"}, "id": "6"}]},
+            5,
+        )
+        self.assertEqual(graph[0][0].text, "xin")
+        self.assertEqual(graph[0][0].author_name, "Lan")
+
 
 if __name__ == "__main__":
     unittest.main()
