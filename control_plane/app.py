@@ -232,6 +232,14 @@ def dashboard() -> HTMLResponse:
     return page
 
 
+@app.get("/ket-qua", response_class=HTMLResponse)
+def result_board() -> HTMLResponse:
+    """Bảng tổng hợp kết quả quét: lọc ngày và máy, tải toàn bộ, nạp file."""
+    page = _html("ketqua.html")
+    page.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return page
+
+
 @app.get("/phone", response_class=HTMLResponse)
 def phone() -> HTMLResponse:
     """Khung điện thoại trên PC. Trang trong khung là dashboard, chuột được ghi như ngón tay."""

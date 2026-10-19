@@ -533,6 +533,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(listed.json()["count"], 1)
         page = self.client.get("/")
         self.assertIn("Kết quả đã lưu", page.text)
+        self.assertIn('href="/ket-qua"', page.text)
         self.assertIn("Tải bản sao lưu về PC", page.text)
         sample = self.client.get("/sample-people")
         self.assertEqual(sample.status_code, 200)
@@ -1113,6 +1114,82 @@ class PcReaderApiTests(unittest.TestCase):
         self.assertNotIn("key", listed[0])
         self.assertEqual(self.client.post(f"/v1/api-keys/{made['id']}/revoke", headers=self.headers).status_code, 200)
         self.assertEqual(self.client.get("/v1/api/stats", headers={"X-Api-Key": key}).status_code, 401)
+
+    def test_result_board_filters_downloads_and_import(self) -> None:
+        page = self.client.get("/ket-qua")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Bảng tổng hợp kết quả quét", page.text)
+        self.assertIn("Tải toàn bộ kết quả", page.text)
+        self.assertIn("Tải theo bộ lọc", page.text)
+        self.assertIn("Nạp kết quả hàng loạt", page.text)
+        self.assertIn('id="dayFrom"', page.text)
+        self.assertIn('id="reader"', page.text)
+        self.assertNotIn("__CONTROL_TOKEN__", page.text)
+        self.assertEqual(self.client.get("/v1/results/summary").status_code, 401)
+        csv_body = (
+            "Số điện thoại,Tên,Username,Loại,Đọc bởi,Đọc lúc (giờ VN)\n"
+            "0908888777,Lê Nạp,@nap01,Đã lưu,May Nap,01/01/2020 10:00\n"
+            "không phải số,X,@x,Đã lưu,,\n"
+        ).encode("utf-8")
+        denied = self.client.post("/v1/results/import", files={"file": ("nap.csv", csv_body, "text/csv")})
+        self.assertEqual(denied.status_code, 401)
+        loaded = self.client.post(
+            "/v1/results/import",
+            headers=self.headers,
+            files={"file": ("nap.csv", csv_body, "text/csv")},
+        )
+        self.assertEqual(loaded.status_code, 200, loaded.text)
+        self.assertEqual((loaded.json()["added"], loaded.json()["invalid"]), (1, 1))
+        again = self.client.post(
+            "/v1/results/import",
+            headers=self.headers,
+            files={"file": ("nap.csv", csv_body, "text/csv")},
+        )
+        self.assertEqual((again.json()["added"], again.json()["skipped"]), (0, 1))
+        board = self.client.get(
+            "/v1/results/summary",
+            headers=self.headers,
+            params={"reader": "May Nap", "day_from": "2020-01-01", "day_to": "2020-01-01"},
+        )
+        self.assertEqual(board.status_code, 200, board.text)
+        self.assertEqual(board.json()["saved"], 1)
+        self.assertEqual(board.json()["total"], 1)
+        self.assertIn("May Nap", board.json()["readers"])
+        found = self.client.get("/v1/results", headers=self.headers, params={"reader": "May Nap"})
+        self.assertEqual(found.json()["total"], 1)
+        self.assertEqual(found.json()["items"][0]["helper"], "May Nap")
+        video_id = self._queue_only("board-keep")
+        claimed = self.client.post("/v1/pc/claim", headers=self.headers, json={"name": "PC giữ"}).json()
+        posted = self.client.post(
+            f"/v1/pc/videos/{video_id}/result",
+            headers=self.headers,
+            json={"lease": claimed["video"]["lease"], "rows": [{"phone": "0977111222", "name": "Giữ Lại", "username": "@giu"}]},
+        )
+        self.assertEqual(posted.status_code, 200, posted.text)
+        clash = "Số điện thoại,Tên,Username,Loại,Đọc bởi\n0977111222,Tên khác,@khac,Đã lưu,May Khac\n".encode("utf-8")
+        kept = self.client.post(
+            "/v1/results/import",
+            headers=self.headers,
+            files={"file": ("de.csv", clash, "text/csv")},
+        )
+        self.assertEqual(kept.json()["skipped"], 1)
+        self.assertEqual(kept.json()["updated"], 0)
+        still = self.client.get("/v1/results", headers=self.headers, params={"video": video_id, "bucket": "saved"}).json()
+        self.assertEqual(still["items"][0]["name"], "Giữ Lại")
+        self.assertEqual(still["items"][0]["username"], "@giu")
+        ticket = self.client.post("/v1/results/export/ticket", headers=self.headers).json()
+        everything = self.client.get(ticket["url"])
+        self.assertEqual(everything.status_code, 200)
+
+        def sheet_text(payload: bytes) -> str:
+            with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+                return archive.read("xl/worksheets/sheet1.xml").decode("utf-8")
+
+        narrowed = self.client.get(ticket["url"], params={"reader": "May Nap", "day_from": "2020-01-01", "day_to": "2020-01-01"})
+        self.assertEqual(narrowed.status_code, 200)
+        text = sheet_text(narrowed.content)
+        self.assertIn("0908888777", text)
+        self.assertNotIn("0977111222", text)
 
     def test_webhook_rejects_internal_addresses(self) -> None:
         saved = self.client.post("/v1/webhook", headers=self.headers, json={"url": "http://127.0.0.1:9/hook"})

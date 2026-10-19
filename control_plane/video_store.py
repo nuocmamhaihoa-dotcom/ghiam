@@ -23,13 +23,19 @@ from zoneinfo import ZoneInfo
 
 from doc_video.text import handle_matches_name, lookalike_handles
 
-from control_plane.phone_vn import carrier, phone_columns
+from control_plane.phone_vn import carrier, normalize_vn, phone_columns
 from control_plane.screen_table import Review, Table, joined_name, pair_close_names
 
 BUCKET_OK = 1
 BUCKET_REVIEW = 2
 BUCKET_UNOPENED = 3
 BUCKET_LABEL = {BUCKET_OK: "Đã lưu", BUCKET_REVIEW: "Cần xem", BUCKET_UNOPENED: "Chưa mở hồ sơ"}
+# Máy đã đọc dòng: cột reader khi nạp từ file, không thì tên PC trên video. Trống hiện là VPS.
+READER_SQL = (
+    "CASE WHEN TRIM(COALESCE(NULLIF(r.reader, ''), v.helper, '')) = '' "
+    "THEN 'VPS' ELSE TRIM(COALESCE(NULLIF(r.reader, ''), v.helper, '')) END"
+)
+IMPORT_ROW_LIMIT = 100_000
 # PC giữ video ở trạng thái pc, không phải running. Bộ đọc trên máy chủ chỉ nhận queued
 # và chỉ thu hồi running, nên khởi động lại bộ đọc không cướp video PC đang đọc.
 # Không có nhịp trong khoảng này thì video trở lại hàng chờ.
@@ -184,6 +190,7 @@ def init_db(db_path: Path) -> None:
         _ensure_video_device_column(conn)
         _ensure_pc_columns(conn)
         _ensure_check_columns(conn)
+        _ensure_reader_column(conn)
         _ensure_fleet_columns(conn)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_results_created ON results(created_at)")
         conn.execute(
@@ -259,6 +266,13 @@ def _ensure_check_columns(conn: sqlite3.Connection) -> None:
             _add_column(conn, "results", name, kind)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_results_checked ON results(checked) WHERE checked != ''")
     conn.execute("UPDATE results SET updated_at = created_at WHERE updated_at IS NULL OR updated_at = ''")
+
+
+def _ensure_reader_column(conn: sqlite3.Connection) -> None:
+    """Máy đọc ghi trên dòng nạp từ file. Dòng đọc từ video để trống và lấy helper của video."""
+    results = {str(row["name"]) for row in conn.execute("PRAGMA table_info(results)")}
+    if "reader" not in results:
+        _add_column(conn, "results", "reader", "TEXT NOT NULL DEFAULT ''")
 
 
 def _add_column(conn: sqlite3.Connection, table: str, name: str, kind: str) -> None:
@@ -2027,6 +2041,7 @@ class ResultFilter:
     video_id: int = 0
     bucket: int = 0
     checked: str = ""
+    reader: str | None = None
 
     def empty(self) -> bool:
         return self == ResultFilter()
@@ -2108,6 +2123,10 @@ def _result_where(filters: ResultFilter) -> tuple[str, list[object]]:
         params.append(filters.checked)
     elif filters.checked == "none":
         parts.append("COALESCE(r.checked, '') = ''")
+    if filters.reader is not None:
+        wanted = "VPS" if filters.reader.casefold() == "vps" else filters.reader
+        parts.append(f"{READER_SQL} = ?")
+        params.append(wanted)
     return ("WHERE " + " AND ".join(parts), params) if parts else ("", [])
 
 
@@ -2155,7 +2174,7 @@ def result_page(
         rows = conn.execute(
             f"""
             SELECT r.id, r.phone, r.name, r.username, r.bucket, r.reason, r.video_id, r.created_at,
-                   COALESCE(v.helper, '') AS helper, COALESCE(r.checked, '') AS checked,
+                   {READER_SQL} AS helper, COALESCE(r.checked, '') AS checked,
                    COALESCE(v.device, '') AS device
             FROM results r
             LEFT JOIN videos v ON v.id = r.video_id
@@ -2195,7 +2214,7 @@ def iter_results(db_path: Path, filters: ResultFilter) -> Iterator[dict[str, obj
         cursor = conn.execute(
             f"""
             SELECT r.id, r.phone, r.name, r.username, r.bucket, r.reason, r.video_id, r.created_at,
-                   COALESCE(v.helper, '') AS helper, COALESCE(r.checked, '') AS checked,
+                   {READER_SQL} AS helper, COALESCE(r.checked, '') AS checked,
                    COALESCE(v.device, '') AS device, COALESCE(v.name, '') AS video
             FROM results r
             LEFT JOIN videos v ON v.id = r.video_id
@@ -2300,6 +2319,217 @@ def coverage_counts(db_path: Path, span: str = "all", now: datetime | None = Non
     return {"carriers": carriers}
 
 
+_BUCKET_KEY = {BUCKET_OK: "saved", BUCKET_REVIEW: "review", BUCKET_UNOPENED: "unopened"}
+_LABEL_BUCKET = {
+    "đã lưu": BUCKET_OK,
+    "saved": BUCKET_OK,
+    "cần xem": BUCKET_REVIEW,
+    "review": BUCKET_REVIEW,
+    "chưa mở hồ sơ": BUCKET_UNOPENED,
+    "unopened": BUCKET_UNOPENED,
+}
+
+
+def _blank_counts() -> dict[str, int]:
+    return {"saved": 0, "review": 0, "unopened": 0, "total": 0}
+
+
+def _vn_day(stamp: str) -> str:
+    try:
+        moment = datetime.fromisoformat(str(stamp or ""))
+    except ValueError:
+        return ""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(VN_TZ).date().isoformat()
+
+
+def result_summary(db_path: Path, filters: ResultFilter) -> dict[str, object]:
+    """Tổng đã lưu, cần xem, chưa mở, theo máy quét và theo ngày giờ Việt Nam.
+
+    Danh sách máy là mọi máy từng đọc ra dòng, không thu hẹp theo bộ lọc,
+    để đổi máy khi đang lọc ngày vẫn còn tên để chọn.
+    """
+    where, params = _result_where(filters)
+    totals = _blank_counts()
+    readers_map: dict[str, dict[str, int]] = defaultdict(_blank_counts)
+    days_map: dict[str, dict[str, int]] = defaultdict(_blank_counts)
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT r.bucket, r.created_at, {READER_SQL} AS reader
+            FROM results r
+            LEFT JOIN videos v ON v.id = r.video_id
+            {where}
+            """,
+            params,
+        )
+        for row in rows:
+            slot = _BUCKET_KEY.get(int(row["bucket"]))
+            if not slot:
+                continue
+            totals[slot] += 1
+            totals["total"] += 1
+            reader = str(row["reader"] or "VPS")
+            readers_map[reader][slot] += 1
+            readers_map[reader]["total"] += 1
+            day = _vn_day(str(row["created_at"] or ""))
+            if day:
+                days_map[day][slot] += 1
+                days_map[day]["total"] += 1
+        known = conn.execute(
+            f"""
+            SELECT DISTINCT {READER_SQL} AS reader
+            FROM results r
+            LEFT JOIN videos v ON v.id = r.video_id
+            """
+        ).fetchall()
+    by_reader = [{"reader": name, **counts} for name, counts in readers_map.items()]
+    by_reader.sort(key=lambda item: (-int(item["total"]), str(item["reader"])))
+    by_day = [{"day": day, **counts} for day, counts in days_map.items()]
+    by_day.sort(key=lambda item: str(item["day"]), reverse=True)
+    names = sorted({str(row["reader"] or "VPS") for row in known})
+    if filters.reader:
+        picked = "VPS" if filters.reader.casefold() == "vps" else filters.reader
+        if picked not in names:
+            names.append(picked)
+            names.sort()
+    return {
+        "saved": totals["saved"],
+        "review": totals["review"],
+        "unopened": totals["unopened"],
+        "total": totals["total"],
+        "by_reader": by_reader,
+        "by_day": by_day,
+        "readers": names,
+    }
+
+
+def _import_bucket(label: str, name: str, username: str) -> int | None:
+    text = " ".join(str(label or "").split()).casefold()
+    if text in _LABEL_BUCKET:
+        return _LABEL_BUCKET[text]
+    if text:
+        return None
+    if name and username:
+        return BUCKET_OK
+    if not username:
+        return BUCKET_UNOPENED
+    return None
+
+
+def _parse_vn_stamp(text: str) -> str:
+    """Đọc lúc ghi dạng ngày/tháng/năm giờ:phút theo giờ Việt Nam, trả về UTC."""
+    raw = " ".join(str(text or "").split())
+    if not raw:
+        return ""
+    for fmt in ("%d/%m/%Y %H:%M", "%d/%m/%Y %H:%M:%S"):
+        try:
+            moment = datetime.strptime(raw, fmt).replace(tzinfo=VN_TZ)
+        except ValueError:
+            continue
+        return moment.astimezone(timezone.utc).isoformat()
+    try:
+        moment = datetime.fromisoformat(raw)
+    except ValueError:
+        return ""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=VN_TZ)
+    return moment.astimezone(timezone.utc).isoformat()
+
+
+def _store_reader(raw: str) -> str:
+    text = clean_device(raw)
+    if not text or text.casefold() == "vps":
+        return ""
+    return text
+
+
+def _reader_for_upgrade(conn: sqlite3.Connection, existing: sqlite3.Row, incoming: str) -> str:
+    """Giữ máy đã ghi. Dòng video do một PC đọc thì không bị tên trong file đè."""
+    kept = str(existing["reader"] or "")
+    if kept:
+        return kept
+    video = conn.execute(
+        "SELECT COALESCE(helper, '') AS helper FROM videos WHERE id = ?",
+        (int(existing["video_id"] or 0),),
+    ).fetchone()
+    helper = str(video["helper"] or "") if video is not None else ""
+    if helper and helper.casefold() != "vps":
+        return ""
+    return incoming
+
+
+def import_results(db_path: Path, rows: list[dict[str, str]]) -> dict[str, int]:
+    """Nạp dòng kết quả. Không tạo video. Không đè dòng đã lưu đủ tên và username của một video thật.
+
+    Dòng chưa mở hoặc cần xem được nâng lên đã lưu khi file có đủ số, tên và username.
+    """
+    if len(rows) > IMPORT_ROW_LIMIT:
+        raise ValueError("File vượt 100000 dòng.")
+    added = updated = skipped = invalid = 0
+    init_db(db_path)
+    with connect(db_path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for row in rows:
+                phone = normalize_vn(row.get("phone", ""))
+                if not phone:
+                    invalid += 1
+                    continue
+                name = " ".join(str(row.get("name") or "").split())[:200]
+                username = " ".join(str(row.get("username") or "").split())[:80]
+                if username and not username.startswith("@"):
+                    username = "@" + username
+                bucket = _import_bucket(str(row.get("bucket") or ""), name, username)
+                if bucket is None:
+                    skipped += 1
+                    continue
+                reason = " ".join(str(row.get("reason") or "").split())[:200]
+                reader = _store_reader(str(row.get("reader") or ""))
+                existing = conn.execute(
+                    """
+                    SELECT id, bucket, username, video_id, reader
+                    FROM results WHERE phone = ? AND phone != ''
+                    """,
+                    (phone,),
+                ).fetchone()
+                if existing is None:
+                    stamp = _parse_vn_stamp(str(row.get("created_at") or "")) or utcnow()
+                    conn.execute(
+                        """
+                        INSERT INTO results
+                          (phone, name, username, bucket, reason, video_id, created_at, updated_at, reader)
+                        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
+                        """,
+                        (phone, name, username, bucket, reason, stamp, utcnow(), reader),
+                    )
+                    added += 1
+                    continue
+                saved_full = int(existing["bucket"]) == BUCKET_OK and bool(str(existing["username"] or ""))
+                if saved_full:
+                    skipped += 1
+                    continue
+                if bucket != BUCKET_OK or not name or not username:
+                    skipped += 1
+                    continue
+                conn.execute(
+                    """
+                    UPDATE results
+                    SET name = ?, username = ?, bucket = ?, reason = '',
+                        checked = '', checked_at = '', updated_at = ?, reader = ?
+                    WHERE id = ?
+                    """,
+                    (name, username, BUCKET_OK, utcnow(), _reader_for_upgrade(conn, existing, reader), int(existing["id"])),
+                )
+                updated += 1
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+    return {"added": added, "updated": updated, "skipped": skipped, "invalid": invalid}
+
+
 def iter_backup(db_path: Path) -> Iterator[str]:
     """Ảnh chụp nhất quán các dòng đã commit. Người gọi giữ kết nối đến hết vòng lặp."""
     conn = sqlite3.connect(str(db_path), timeout=30, isolation_level=None)
@@ -2309,9 +2539,9 @@ def iter_backup(db_path: Path) -> Iterator[str]:
     try:
         yield "Số điện thoại,Tên,Username,Loại,Lý do,Video,Đọc bởi,Kiểm\n"
         cursor = conn.execute(
-            """
+            f"""
             SELECT r.phone, r.name, r.username, r.bucket, r.reason,
-                   COALESCE(v.name, '') AS video, COALESCE(v.helper, '') AS helper,
+                   COALESCE(v.name, '') AS video, {READER_SQL} AS helper,
                    COALESCE(r.checked, '') AS checked
             FROM results r
             LEFT JOIN videos v ON v.id = r.video_id
