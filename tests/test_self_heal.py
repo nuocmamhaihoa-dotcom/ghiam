@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -79,6 +80,50 @@ class SelfHealTests(unittest.TestCase):
 
     def test_an_empty_library_needs_nothing(self) -> None:
         self.assertEqual(self._heal(), [])
+        self.assertEqual(self._heal(), [])
+
+    def test_an_abandoned_partial_is_removed_and_a_live_piece_stays(self) -> None:
+        partial = self.videos / "partial"
+        partial.mkdir()
+        old = partial / "aabbccddeeff0011.part"
+        fresh = partial / "aabbccddeeff0022.part"
+        old_done = partial / "aabbccddeeff0033.done"
+        fresh_done = partial / "aabbccddeeff0044.done"
+        old_lock = partial / "aabbccddeeff0055.lock"
+        live_lock = partial / "aabbccddeeff0066.lock"
+        old.write_bytes(b"stale-video")
+        fresh.write_bytes(b"live")
+        old_done.write_text("{}", encoding="utf-8")
+        fresh_done.write_text("{}", encoding="utf-8")
+        old_lock.mkdir()
+        live_lock.mkdir()
+        now = time.time()
+        os.utime(old, (now - 7 * 3600, now - 7 * 3600))
+        os.utime(old_done, (now - 3 * 3600, now - 3 * 3600))
+        os.utime(old_lock, (now - 600, now - 600))
+        video_id, path = self._add("running", pid=os.getpid())
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                INSERT INTO results (phone, name, username, bucket, video_id, created_at)
+                VALUES ('0901000099', 'Giữ', '@giu', 1, ?, ?)
+                """,
+                (video_id, utcnow()),
+            )
+        notes = self._heal()
+        self.assertFalse(old.exists())
+        self.assertFalse(old_done.exists())
+        self.assertTrue(fresh.is_file())
+        self.assertEqual(fresh.read_bytes(), b"live")
+        self.assertTrue(fresh_done.is_file())
+        self.assertTrue(old_lock.is_dir())
+        self.assertTrue(live_lock.is_dir())
+        self.assertTrue(path.is_file())
+        self.assertEqual(self._status(video_id), "running")
+        with connect(self.db) as conn:
+            kept = conn.execute("SELECT COUNT(*) AS n FROM results").fetchone()
+        self.assertEqual(int(kept["n"]), 1)
+        self.assertTrue(any(note.startswith("Xóa 2 mảnh tải bỏ dở quá hạn") for note in notes))
         self.assertEqual(self._heal(), [])
 
     def test_a_fresh_upload_stays_and_an_abandoned_one_is_dropped(self) -> None:

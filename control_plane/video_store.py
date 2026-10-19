@@ -44,11 +44,20 @@ READER_SQL = (
 # SQLite 3.31 quét khóa chính theo id và trang kết quả không trả lời.
 FRESH_USERNAME_SQL = """(
   substr(r.username, 1, 1) != '@'
-  OR NOT EXISTS (
-    SELECT 1 FROM results earlier
-    WHERE earlier.username = r.username
-      AND earlier.username != ''
-      AND earlier.id < r.id
+  OR (
+    NOT EXISTS (
+      SELECT 1 FROM results earlier
+      WHERE earlier.username = r.username
+        AND earlier.username != ''
+        AND earlier.id < r.id
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM results earlier
+      WHERE earlier.username_key = r.username_key
+        AND earlier.username_key != ''
+        AND r.username_key != ''
+        AND earlier.id < r.id
+    )
   )
 )"""
 IMPORT_ROW_LIMIT = 100_000
@@ -71,6 +80,20 @@ PC_VIDEO_FAIL_LIMIT = 2
 
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def username_key(username: str) -> str:
+    """Khóa so @id, không phân biệt hoa thường.
+
+    Dòng không phải @id vẫn nhận khóa chữ thường để lần gắn khóa cũ đi hết,
+    nhưng bộ lọc chỉ dùng khóa khi username bắt đầu bằng @.
+    """
+    text = "".join(str(username or "").split())
+    if not text:
+        return ""
+    if text.startswith("@") and len(text) > 1:
+        return "@" + text[1:].casefold()
+    return text.casefold()
 
 
 VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -269,6 +292,7 @@ def init_db(db_path: Path) -> None:
               phone TEXT NOT NULL DEFAULT '',
               name TEXT NOT NULL DEFAULT '',
               username TEXT NOT NULL DEFAULT '',
+              username_key TEXT NOT NULL DEFAULT '',
               bucket INTEGER NOT NULL,
               reason TEXT NOT NULL DEFAULT '',
               video_id INTEGER NOT NULL,
@@ -389,6 +413,17 @@ def _ensure_reader_column(conn: sqlite3.Connection) -> None:
     results = {str(row["name"]) for row in conn.execute("PRAGMA table_info(results)")}
     if "reader" not in results:
         _add_column(conn, "results", "reader", "TEXT NOT NULL DEFAULT ''")
+    if "username_key" not in results:
+        _add_column(conn, "results", "username_key", "TEXT NOT NULL DEFAULT ''")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_results_username_key ON results(username_key) WHERE username_key != ''"
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_results_username_key_pending
+        ON results(id) WHERE username != '' AND username_key = ''
+        """
+    )
 
 
 def _add_column(conn: sqlite3.Connection, table: str, name: str, kind: str) -> None:
@@ -2155,6 +2190,32 @@ def stop_full_check(db_path: Path) -> dict[str, int]:
     return {"stopped": cur.rowcount, "reading": int(reading["n"])}
 
 
+def fill_username_keys(db_path: Path, limit: int = 500) -> int:
+    """Gắn khóa chữ thường cho @id cũ, từng cụm nhỏ, không đổi ngày sửa của dòng.
+
+    Dòng mới đã có khóa lúc ghi. Cụm này chỉ dành cho dữ liệu từ trước.
+    """
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, username FROM results
+            WHERE username != '' AND username_key = ''
+            ORDER BY id
+            LIMIT ?
+            """,
+            (max(1, int(limit)),),
+        ).fetchall()
+        for row in rows:
+            conn.execute(
+                """
+                UPDATE results SET username_key = ?
+                WHERE id = ? AND username_key = ''
+                """,
+                (username_key(str(row["username"] or "")), int(row["id"])),
+            )
+    return len(rows)
+
+
 def backfill_video_counts(db_path: Path) -> int:
     """Điền thống kê cho video đã xong từ trước, khi còn dòng trống.
 
@@ -2260,8 +2321,8 @@ def _confirm_open_profiles(conn: sqlite3.Connection) -> int:
             continue
         target = hits[0]
         conn.execute(
-            "UPDATE results SET username = ?, bucket = ?, reason = '', updated_at = ? WHERE id = ?",
-            (username, BUCKET_OK, utcnow(), target["id"]),
+            "UPDATE results SET username = ?, username_key = ?, bucket = ?, reason = '', updated_at = ? WHERE id = ?",
+            (username, username_key(username), BUCKET_OK, utcnow(), target["id"]),
         )
         conn.execute("DELETE FROM results WHERE id = ?", (orphan["id"],))
         del free[int(target["id"])]
@@ -2361,10 +2422,17 @@ def merge_close_results(db_path: Path) -> int:
                     updated = conn.execute(
                         """
                         UPDATE results
-                        SET name = ?, username = ?, bucket = ?, reason = '', updated_at = ?
+                        SET name = ?, username = ?, username_key = ?, bucket = ?, reason = '', updated_at = ?
                         WHERE id = ? AND username = ''
                         """,
-                        (joined_name(phone["name"], user["name"]), user["username"], BUCKET_OK, utcnow(), phone["id"]),
+                        (
+                            joined_name(phone["name"], user["name"]),
+                            user["username"],
+                            username_key(str(user["username"] or "")),
+                            BUCKET_OK,
+                            utcnow(),
+                            phone["id"],
+                        ),
                     )
                     if updated.rowcount != 1:
                         continue
@@ -2410,6 +2478,36 @@ def _day_start(day: str) -> str:
     return vn_day_bounds(moment)[1]
 
 
+def _username_prefixes(text: str) -> list[str]:
+    """Đầu @id đúng chữ người gõ, và dạng chữ thường. @id không phân biệt hoa thường."""
+    raw = text if text.startswith("@") else "@" + text
+    lowered = "@" + raw[1:].casefold()
+    if lowered == raw:
+        return [raw]
+    return [raw, lowered]
+
+
+def _username_span(text: str) -> str:
+    """Mỗi đầu @id là một khoảng chỉ mục, không quét cả bảng.
+
+    username_key đã gấp chữ thường nên một khoảng tìm được mọi cách viết.
+    Dòng cũ chưa gắn khóa vẫn tìm theo chữ đã lưu.
+    """
+    typed = " OR ".join(
+        "(r.username >= ? AND r.username < ? AND r.username != '')" for _ in _username_prefixes(text)
+    )
+    return f"({typed} OR (r.username_key >= ? AND r.username_key < ? AND r.username_key != ''))"
+
+
+def _username_bounds(text: str) -> list[str]:
+    bounds: list[str] = []
+    for prefix in _username_prefixes(text):
+        bounds.extend((prefix, prefix + "\U0010ffff"))
+    folded = _username_prefixes(text)[-1]
+    bounds.extend((folded, folded + "\U0010ffff"))
+    return bounds
+
+
 def _phone_prefix(text: str) -> str | None:
     """Đầu số để so với số đã lưu, hoặc None khi chuỗi không phải số.
 
@@ -2439,14 +2537,13 @@ def _result_where(filters: ResultFilter) -> tuple[str, list[object]]:
         parts.append("r.phone >= ? AND r.phone < ? AND r.phone != ''")
         params += [prefix, prefix + ":"]
     elif text.startswith("@"):
-        parts.append("r.username >= ? AND r.username < ? AND r.username != ''")
-        params += [text, text + "\U0010ffff"]
+        parts.append(_username_span(text))
+        params += _username_bounds(text)
     elif text:
-        handle = "@" + text
         words = " ".join(filters.query.split())
         pattern = "%" + fold_text(words).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-        parts.append("((r.username >= ? AND r.username < ? AND r.username != '') OR fold(r.name) LIKE ? ESCAPE '\\')")
-        params += [handle, handle + "\U0010ffff", pattern]
+        parts.append(f"({_username_span(text)} OR fold(r.name) LIKE ? ESCAPE '\\')")
+        params += [*_username_bounds(text), pattern]
     if filters.day_from:
         parts.append("r.created_at >= ?")
         params.append(_day_start(filters.day_from))
@@ -2490,9 +2587,30 @@ _VISIBLE_TOTALS: dict[tuple[object, ...], tuple[float, int]] = {}
 _VISIBLE_TOTAL_TTL = 3.0
 
 
-def _visible_total(conn: sqlite3.Connection, db_path: Path, where: str, params: list[object]) -> int:
-    """Đếm dòng đang hiện. Dòng mới làm đổi id lớn nhất thì đếm lại, không thì dùng số vừa đếm."""
-    stamp = int(conn.execute("SELECT COALESCE(MAX(id), 0) AS n FROM results").fetchone()["n"])
+def _result_stamp(conn: sqlite3.Connection, where: str, params: list[object]) -> tuple[int, str, str]:
+    """Mốc của đúng bộ lọc: id lớn nhất, lần sửa mới nhất, lần kiểm mới nhất."""
+    row = conn.execute(
+        f"""
+        SELECT COALESCE(MAX(r.id), 0) AS max_id,
+               COALESCE(MAX(COALESCE(NULLIF(r.updated_at, ''), r.created_at)), '') AS wrote,
+               COALESCE(MAX(COALESCE(r.checked_at, '')), '') AS checked
+        FROM results r
+        LEFT JOIN videos v ON v.id = r.video_id
+        {where}
+        """,
+        params,
+    ).fetchone()
+    return int(row["max_id"]), str(row["wrote"] or ""), str(row["checked"] or "")
+
+
+def _visible_total(
+    conn: sqlite3.Connection,
+    db_path: Path,
+    where: str,
+    params: list[object],
+    stamp: tuple[int, str, str],
+) -> int:
+    """Đếm dòng đang hiện. Sửa tên, @id hoặc lần kiểm làm đổi mốc thì đếm lại ngay."""
     key = (str(Path(db_path).resolve()), where, tuple(params), stamp)
     now = time.monotonic()
     cached = _VISIBLE_TOTALS.get(key)
@@ -2547,7 +2665,8 @@ def result_page(
         cursor_params = [int(before)]
     with connect(db_path) as conn:
         _with_fold(conn)
-        total = _visible_total(conn, db_path, where, params)
+        stamp = _result_stamp(conn, where, params)
+        total = _visible_total(conn, db_path, where, params, stamp)
         rows = conn.execute(
             f"""
             SELECT r.id, r.phone, r.name, r.username, r.bucket, r.reason, r.video_id, r.created_at,
@@ -2561,22 +2680,11 @@ def result_page(
             """,
             [*params, *cursor_params, page_size],
         ).fetchall()
-        stamp = conn.execute(
-            f"""
-            SELECT COALESCE(MAX(r.id), 0) AS max_id,
-                   COALESCE(MAX(COALESCE(NULLIF(r.updated_at, ''), r.created_at)), '') AS wrote,
-                   COALESCE(MAX(COALESCE(r.checked_at, '')), '') AS checked
-            FROM results r
-            LEFT JOIN videos v ON v.id = r.video_id
-            {where}
-            """,
-            params,
-        ).fetchone()
     items = [_public_result(row) for row in rows]
     next_before = 0
     if after <= 0 and len(items) == page_size:
         next_before = int(items[-1]["id"])
-    revision = f"{total}|{int(stamp['max_id'])}|{stamp['wrote']}|{stamp['checked']}"
+    revision = f"{total}|{stamp[0]}|{stamp[1]}|{stamp[2]}"
     return {"items": items, "total": total, "before": next_before, "revision": revision}
 
 
@@ -2880,10 +2988,10 @@ def import_results(db_path: Path, rows: list[dict[str, str]]) -> dict[str, int]:
                     conn.execute(
                         """
                         INSERT INTO results
-                          (phone, name, username, bucket, reason, video_id, created_at, updated_at, reader)
-                        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
+                          (phone, name, username, username_key, bucket, reason, video_id, created_at, updated_at, reader)
+                        VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
                         """,
-                        (phone, name, username, bucket, reason, stamp, utcnow(), reader),
+                        (phone, name, username, username_key(username), bucket, reason, stamp, utcnow(), reader),
                     )
                     added += 1
                     continue
@@ -2897,11 +3005,19 @@ def import_results(db_path: Path, rows: list[dict[str, str]]) -> dict[str, int]:
                 conn.execute(
                     """
                     UPDATE results
-                    SET name = ?, username = ?, bucket = ?, reason = '',
+                    SET name = ?, username = ?, username_key = ?, bucket = ?, reason = '',
                         checked = '', checked_at = '', updated_at = ?, reader = ?
                     WHERE id = ?
                     """,
-                    (name, username, BUCKET_OK, utcnow(), _reader_for_upgrade(conn, existing, reader), int(existing["id"])),
+                    (
+                        name,
+                        username,
+                        username_key(username),
+                        BUCKET_OK,
+                        utcnow(),
+                        _reader_for_upgrade(conn, existing, reader),
+                        int(existing["id"]),
+                    ),
                 )
                 updated += 1
             conn.execute("COMMIT")
@@ -2967,10 +3083,10 @@ def _put(
     if existing is None:
         conn.execute(
             """
-            INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO results (phone, name, username, username_key, bucket, reason, video_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (phone, name, username, bucket, reason, video_id, now, now),
+            (phone, name, username, username_key(username), bucket, reason, video_id, now, now),
         )
         _drop_lone_username(conn, username, bucket)
         return
@@ -2984,11 +3100,11 @@ def _put(
     conn.execute(
         """
         UPDATE results
-        SET name = ?, username = ?, bucket = ?, reason = '', video_id = ?,
+        SET name = ?, username = ?, username_key = ?, bucket = ?, reason = '', video_id = ?,
             checked = '', checked_at = '', updated_at = ?
         WHERE id = ?
         """,
-        (name, username, BUCKET_OK, video_id, now, existing["id"]),
+        (name, username, username_key(username), BUCKET_OK, video_id, now, existing["id"]),
     )
     _drop_lone_username(conn, username, bucket)
 
@@ -3015,22 +3131,23 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
                 conn.execute(
                     """
                     UPDATE results
-                    SET username = ?, bucket = ?, reason = ?, video_id = ?, updated_at = ?
+                    SET username = ?, username_key = ?, bucket = ?, reason = ?, video_id = ?, updated_at = ?
                     WHERE id = ?
                     """,
-                    (item.username, BUCKET_REVIEW, item.reason, video_id, utcnow(), existing["id"]),
+                    (item.username, username_key(item.username), BUCKET_REVIEW, item.reason, video_id, utcnow(), existing["id"]),
                 )
             return
         now = utcnow()
         conn.execute(
             """
-            INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO results (phone, name, username, username_key, bucket, reason, video_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 item.phone,
                 item.contact_name or item.profile_name,
                 item.username,
+                username_key(item.username),
                 BUCKET_REVIEW,
                 item.reason,
                 video_id,
@@ -3057,10 +3174,10 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
     now = utcnow()
     conn.execute(
         """
-        INSERT INTO results (phone, name, username, bucket, reason, video_id, created_at, updated_at)
-        VALUES ('', ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO results (phone, name, username, username_key, bucket, reason, video_id, created_at, updated_at)
+        VALUES ('', ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (item.profile_name, item.username, BUCKET_REVIEW, item.reason, video_id, now, now),
+        (item.profile_name, item.username, username_key(item.username), BUCKET_REVIEW, item.reason, video_id, now, now),
     )
 
 

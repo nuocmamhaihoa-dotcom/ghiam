@@ -10,10 +10,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from control_plane.pc_fleet import ONLINE_SECONDS
+from control_plane.upload_parts import sweep_parts
 from control_plane.video_store import (
     connect,
     drop_orphan_small,
     drop_stale_uploads,
+    fill_username_keys,
     recover_dead,
     release_stale_pc,
     utcnow,
@@ -190,9 +192,16 @@ def heal_once(
     notes.extend(_requeue_behind(db_path, video_dir))
     notes.extend(_mark_missing_queued(db_path, video_dir))
     notes.extend(_rest_abandoned_pcs(db_path, moment, pc_offline_seconds))
+    # Không gỡ khóa. Bản đang fsync trên hub cũ chưa làm mới mtime của khóa.
+    expired = sweep_parts(video_dir, locks=False)
+    if expired:
+        notes.append(f"Xóa {expired} mảnh tải bỏ dở quá hạn. Lần tải đang ghi không bị đụng.")
     orphans = drop_orphan_small(db_path, video_dir)
     if orphans:
         notes.append(f"Xóa {orphans} file thu nhỏ không video nào dùng.")
+    keyed = fill_username_keys(db_path)
+    if keyed:
+        notes.append(f"Gắn khóa @id cho {keyed} dòng cũ. @id khác hoa thường không hiện thêm.")
     return notes
 
 

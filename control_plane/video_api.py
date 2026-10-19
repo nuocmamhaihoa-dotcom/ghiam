@@ -512,6 +512,7 @@ def video_employees(
     là ngày giờ Việt Nam, tính cả hai đầu. @id chỉ tính lần quét đầu.
     """
     _auth(authorization)
+    init_db(settings.video_db_path)
     try:
         return _employee_body(span, day_from, day_to)
     except ValueError:

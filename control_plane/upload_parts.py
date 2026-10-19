@@ -114,12 +114,17 @@ def reclaim_stale_partials(
     return freed
 
 
-def sweep_parts(root: Path, now: float | None = None) -> None:
-    """Xóa mảnh bỏ dở quá hạn và kết quả tạm đã trả cho trình duyệt."""
+def sweep_parts(root: Path, now: float | None = None, *, locks: bool = True) -> int:
+    """Xóa mảnh bỏ dở quá hạn và kết quả tạm đã trả cho trình duyệt.
+
+    locks=False giữ thư mục khóa. Lần tự sửa dùng cách đó: khóa đang giữ một
+    lần ghi dài không bị gỡ chỉ vì mtime chưa được làm mới.
+    """
     folder = root / "partial"
     if not folder.is_dir():
-        return
+        return 0
     moment = time.time() if now is None else now
+    removed = 0
     for path in folder.iterdir():
         try:
             age = moment - path.stat().st_mtime
@@ -127,16 +132,20 @@ def sweep_parts(root: Path, now: float | None = None) -> None:
             continue
         try:
             if path.is_dir():
-                if age > LOCK_STALE_SECONDS:
+                if locks and age > LOCK_STALE_SECONDS:
                     path.rmdir()
+                    removed += 1
                 continue
             if path.name.endswith(".done"):
                 if age > DONE_TTL_SECONDS:
                     path.unlink(missing_ok=True)
+                    removed += 1
             elif age > PARTIAL_TTL_SECONDS:
                 path.unlink(missing_ok=True)
+                removed += 1
         except OSError:
             continue
+    return removed
 
 
 @contextmanager
