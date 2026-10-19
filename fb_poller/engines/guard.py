@@ -73,22 +73,28 @@ def objects_with_comments(html: str, max_hits: int = 80) -> list[Any]:
     chunks = _SCRIPT.findall(html) or [html]
     decoder = json.JSONDecoder()
     found: list[Any] = []
+    seen: set[tuple[int, int]] = set()
     hits = 0
-    for chunk in chunks:
+    for chunk_index, chunk in enumerate(chunks):
         for match in _COMMENT_TYPE.finditer(chunk):
             if hits >= max_hits:
                 return found
             hits += 1
             start = max(0, match.start() - 20000)
-            window = chunk[start : match.end() + 2000]
+            window = chunk[start:]
             relative = match.start() - start
             positions = [index for index, char in enumerate(window[:relative]) if char == "{"]
             for pos in reversed(positions[-40:]):
+                absolute = start + pos
+                if (chunk_index, absolute) in seen:
+                    break
                 try:
-                    obj, _ = decoder.raw_decode(window, pos)
+                    obj, end = decoder.raw_decode(window, pos)
                 except json.JSONDecodeError:
                     continue
-                if isinstance(obj, (dict, list)):
-                    found.append(obj)
-                    break
+                if end <= relative or not isinstance(obj, (dict, list)):
+                    continue
+                seen.add((chunk_index, absolute))
+                found.append(obj)
+                break
     return found

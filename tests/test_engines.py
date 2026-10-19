@@ -193,6 +193,29 @@ class EngineTests(unittest.TestCase):
             graph = asyncio.run(scan_one("graph-ppca", "https://www.facebook.com/NASA/posts/1", limit=1))
         self.assertEqual(graph.error, "invalid_GRAPH_VERSION")
 
+    def test_comment_fields_before_typename_are_kept(self) -> None:
+        html = (
+            '<script>{"author":{"name":"An"},"__typename":"Comment","id":"9",'
+            '"body":{"text":"xin chao"}}</script>'
+        )
+        found = comments_from_html(html)
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].text, "xin chao")
+        self.assertEqual(found[0].author_name, "An")
+
+    def test_number_inside_a_comment_is_kept(self) -> None:
+        block = "\n".join(["Lan", "The code is", "404", "2d", "3"])
+        found = comments_from_articles([block], 5)
+        self.assertEqual(found[0].text, "The code is 404")
+
+    def test_octoparse_multiline_csv_cell(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "multi.csv"
+            path.write_text('comment,author\n"line one\nline two",Lan\n', encoding="utf-8")
+            found = comments_from_export(path)
+        self.assertEqual(found[0].text, "line one\nline two")
+        self.assertEqual(found[0].author_name, "Lan")
+
     def test_octoparse_numeric_comment(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "nums.json"

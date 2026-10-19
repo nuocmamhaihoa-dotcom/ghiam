@@ -25,11 +25,11 @@ _DROP_LINE = re.compile(
     r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)|"
     r"view all \d+ replies|xem tất cả \d+ phản hồi|\d+ replies|\d+ phản hồi|"
     r"see translation|hide translation|xem bản dịch|ẩn bản dịch|"
-    r"edited|đã chỉnh sửa|"
-    r"\d{1,7}"
+    r"edited|đã chỉnh sửa"
     r")$",
     re.IGNORECASE,
 )
+_COUNT_LINE = re.compile(r"^\d{1,7}$")
 _TAIL = re.compile(r"(?:\s+\d+\s*(?:s|m|h|d|w|y))+(?:\s+\d{1,7})?\s*$", re.IGNORECASE)
 
 
@@ -44,6 +44,8 @@ def comments_from_articles(blocks: list[str], limit: int) -> list[PublicComment]
         if "all reactions" in lowered or "tất cả cảm xúc" in lowered:
             continue
         lines = [ln.strip() for ln in block.splitlines() if ln.strip() and not _DROP_LINE.match(ln.strip())]
+        if lines and _COUNT_LINE.match(lines[-1]):
+            lines.pop()
         if len(lines) < 2:
             continue
         author = lines[0]

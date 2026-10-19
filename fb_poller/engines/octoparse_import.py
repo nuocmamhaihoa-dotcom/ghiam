@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import io
 import json
 from pathlib import Path
 
@@ -44,7 +45,9 @@ def _from_json_lines(raw: str, limit: int) -> list[PublicComment]:
     return _from_json(rows, limit)
 
 
-def _from_json(payload: object, limit: int) -> list[PublicComment]:
+def _from_json(payload: object, limit: int, depth: int = 0) -> list[PublicComment]:
+    if depth > 6:
+        return []
     rows: list[object]
     if isinstance(payload, list):
         rows = payload
@@ -54,9 +57,9 @@ def _from_json(payload: object, limit: int) -> list[PublicComment]:
                 continue
             value = payload[key]
             if isinstance(value, list):
-                return _from_json(value, limit)
+                return _from_json(value, limit, depth + 1)
             if isinstance(value, dict):
-                return _from_json(value, limit)
+                return _from_json(value, limit, depth + 1)
         rows = [payload]
     else:
         return []
@@ -73,12 +76,11 @@ def _from_json(payload: object, limit: int) -> list[PublicComment]:
 
 
 def _from_csv(raw: str, limit: int) -> list[PublicComment]:
-    lines = raw.splitlines()
-    if not lines:
+    if not raw.strip():
         return []
-    header = lines[0]
+    header = raw.splitlines()[0]
     delimiter = ";" if header.count(";") > header.count(",") else ","
-    reader = csv.DictReader(lines, delimiter=delimiter)
+    reader = csv.DictReader(io.StringIO(raw), delimiter=delimiter)
     out: list[PublicComment] = []
     for row in reader:
         item = _from_mapping(row)
