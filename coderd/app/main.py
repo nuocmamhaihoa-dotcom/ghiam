@@ -60,6 +60,11 @@ def create_app() -> FastAPI:
     def home() -> str:
         return PAGE.read_text(encoding="utf-8")
 
+    @application.get("/v1/sessions")
+    def get_sessions(request: Request) -> list[dict]:
+        require_user(request)
+        return db.list_sessions(database)
+
     @application.post("/v1/sessions")
     def create_session(request: Request) -> dict:
         require_user(request)

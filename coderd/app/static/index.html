@@ -4,150 +4,411 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>coderd</title>
 <style>
-  body { font: 16px/1.4 sans-serif; margin: 24px; max-width: 760px; }
-  label { display: block; margin: 12px 0 4px; }
-  input, textarea, button { font: inherit; }
-  input, textarea { width: 100%; box-sizing: border-box; }
-  textarea { min-height: 80px; }
-  .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
-  button { padding: 6px 10px; }
-  .msg { border-top: 1px solid #ccc; padding: 8px 0; }
-  .state { font-weight: 600; }
-  pre { white-space: pre-wrap; background: #f6f6f6; padding: 8px; }
-  .err { color: #8a1f11; }
+  :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --sidebar: #f9f9f9;
+    --line: #ececec;
+    --text: #0d0d0d;
+    --muted: #6e6e6e;
+    --user: #f4f4f4;
+    --danger: #b42318;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 16px/1.5 ui-sans-serif, system-ui, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+  }
+  button, textarea, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  #gate {
+    min-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  #gate form {
+    width: min(420px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  #gate h1 { margin: 0; font-size: 28px; font-weight: 600; text-align: center; }
+  #gate p { margin: 0; color: var(--muted); text-align: center; }
+  #gate input {
+    border: 1px solid #d9d9d9;
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+  #gate button, .new-chat {
+    border: 1px solid #d9d9d9;
+    background: #fff;
+    border-radius: 12px;
+    padding: 10px 12px;
+  }
+  #app { display: none; height: 100%; }
+  #app.open { display: flex; }
+  aside {
+    width: 260px;
+    background: var(--sidebar);
+    border-right: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    gap: 12px;
+  }
+  .brand { font-weight: 600; padding: 4px 8px; }
+  #sessions { overflow: auto; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+  .session {
+    text-align: left;
+    border: 0;
+    background: transparent;
+    border-radius: 10px;
+    padding: 8px 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .session.active { background: #ececec; }
+  #worker {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 8px;
+  }
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .top { display: none; }
+  #thread {
+    flex: 1;
+    overflow: auto;
+    padding: 24px 16px 12px;
+  }
+  .column { width: min(720px, 100%); margin: 0 auto; }
+  #empty {
+    min-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: 500;
+  }
+  .turn { margin: 0 0 20px; }
+  .user {
+    margin-left: auto;
+    width: fit-content;
+    max-width: 85%;
+    background: var(--user);
+    border-radius: 18px;
+    padding: 10px 14px;
+    white-space: pre-wrap;
+  }
+  .assistant { white-space: pre-wrap; }
+  .tool {
+    margin-top: 8px;
+    background: #f7f7f7;
+    border-radius: 12px;
+    padding: 8px 10px;
+    font-family: ui-monospace, monospace;
+    font-size: 13px;
+    white-space: pre-wrap;
+  }
+  .state { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  form.composer {
+    width: min(720px, calc(100% - 32px));
+    margin: 0 auto 20px;
+    border: 1px solid #d9d9d9;
+    border-radius: 26px;
+    display: flex;
+    align-items: flex-end;
+    padding: 8px 8px 8px 16px;
+    background: #fff;
+  }
+  #composer {
+    flex: 1;
+    border: 0;
+    resize: none;
+    max-height: 160px;
+    outline: none;
+    padding: 8px 0;
+  }
+  #send, #stop {
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 50%;
+    background: #0d0d0d;
+    color: #fff;
+  }
+  #stop { display: none; }
+  #error { color: var(--danger); text-align: center; margin: 0 0 8px; min-height: 0; }
+  @media (max-width: 800px) {
+    aside { display: none; }
+    aside.show { display: flex; position: fixed; inset: 0 auto 0 0; z-index: 2; box-shadow: 0 0 24px rgba(0,0,0,.12); }
+    .top { display: flex; align-items: center; height: 48px; padding: 0 8px; }
+    .top button { border: 0; background: transparent; width: 40px; height: 40px; border-radius: 8px; }
+  }
 </style>
-<h1>coderd</h1>
-<p id="worker">PC: chưa rõ</p>
-<label for="token">Token</label>
-<input id="token" autocomplete="off">
-<div class="row">
-  <button id="new-session" type="button">Phiên mới</button>
-  <span id="session"></span>
+<div id="gate">
+  <form id="gate-form">
+    <h1>coderd</h1>
+    <p>Dán token để vào các đoạn chat của bạn.</p>
+    <input id="token" type="password" autocomplete="off" placeholder="Token">
+    <button type="submit">Tiếp tục</button>
+  </form>
 </div>
-<div id="messages"></div>
-<label for="text">Tin nhắn</label>
-<textarea id="text"></textarea>
-<div class="row">
-  <button id="send" type="button">Gửi</button>
-  <button id="stop" type="button">Dừng</button>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">coderd</div>
+    <button class="new-chat" id="new-session" type="button">Đoạn chat mới</button>
+    <div id="sessions"></div>
+    <div id="worker">PC: chưa rõ</div>
+  </aside>
+  <main>
+    <div class="top"><button id="menu" type="button" aria-label="Menu">☰</button></div>
+    <div id="thread">
+      <div class="column" id="empty">Hôm nay bạn muốn làm gì?</div>
+      <div class="column" id="messages" hidden></div>
+    </div>
+    <p id="error"></p>
+    <form class="composer" id="send-form">
+      <textarea id="composer" rows="1" placeholder="Nhắn tin cho coderd"></textarea>
+      <button id="stop" type="button" aria-label="Dừng">■</button>
+      <button id="send" type="submit" aria-label="Gửi">↑</button>
+    </form>
+  </main>
 </div>
-<p id="error" class="err"></p>
 <script>
 const tokenEl = document.querySelector("#token");
-const sessionEl = document.querySelector("#session");
+const gate = document.querySelector("#gate");
+const app = document.querySelector("#app");
+const sessionsEl = document.querySelector("#sessions");
 const messagesEl = document.querySelector("#messages");
-const textEl = document.querySelector("#text");
+const emptyEl = document.querySelector("#empty");
+const composer = document.querySelector("#composer");
 const errorEl = document.querySelector("#error");
 const workerEl = document.querySelector("#worker");
-tokenEl.value = localStorage.getItem("coderd.token") || "";
+const sendBtn = document.querySelector("#send");
+const stopBtn = document.querySelector("#stop");
 let sessionId = localStorage.getItem("coderd.session") || "";
-sessionEl.textContent = sessionId;
+let runningId = "";
 
 function headers() {
   return {
-    "Authorization": "Bearer " + tokenEl.value.trim(),
+    "Authorization": "Bearer " + localStorage.getItem("coderd.token"),
     "Content-Type": "application/json"
   };
-}
-
-function remember() {
-  localStorage.setItem("coderd.token", tokenEl.value.trim());
-  if (sessionId) localStorage.setItem("coderd.session", sessionId);
 }
 
 function showError(text) {
   errorEl.textContent = text || "";
 }
 
-function render(messages) {
-  messagesEl.textContent = "";
-  for (const message of messages) {
-    const box = document.createElement("div");
-    box.className = "msg";
-    const title = document.createElement("div");
-    const state = document.createElement("span");
-    state.className = "state";
-    state.textContent = message.state;
-    title.append(state, " " + message.body);
-    box.append(title);
-    for (const event of message.events || []) {
-      if (event.kind !== "text" && event.kind !== "tool") continue;
-      const pre = document.createElement("pre");
-      pre.textContent = event.payload;
-      box.append(pre);
-    }
-    if (message.state === "running") box.dataset.running = message.id;
-    messagesEl.append(box);
+function enter() {
+  gate.hidden = true;
+  app.classList.add("open");
+  refreshAll();
+}
+
+document.querySelector("#gate-form").onsubmit = (event) => {
+  event.preventDefault();
+  const token = tokenEl.value.trim();
+  if (!token) return;
+  localStorage.setItem("coderd.token", token);
+  enter();
+};
+
+if (localStorage.getItem("coderd.token")) enter();
+
+function renderSessions(items) {
+  sessionsEl.textContent = "";
+  for (const item of items) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "session" + (item.id === sessionId ? " active" : "");
+    button.textContent = item.title;
+    button.onclick = () => {
+      sessionId = item.id;
+      localStorage.setItem("coderd.session", sessionId);
+      refreshMessages();
+      renderSessions(items);
+    };
+    sessionsEl.append(button);
   }
 }
 
-async function refresh() {
-  if (!tokenEl.value.trim() || !sessionId) return;
-  const response = await fetch("/v1/sessions/" + sessionId + "/messages", {headers: headers()});
-  if (response.status === 401) {
-    showError("token không đúng");
+function renderMessages(messages) {
+  messagesEl.textContent = "";
+  runningId = "";
+  if (!messages.length) {
+    emptyEl.hidden = false;
+    messagesEl.hidden = true;
     return;
   }
+  emptyEl.hidden = true;
+  messagesEl.hidden = false;
+  for (const message of messages) {
+    const turn = document.createElement("div");
+    turn.className = "turn";
+    const user = document.createElement("div");
+    user.className = "user";
+    user.textContent = message.body;
+    turn.append(user);
+    const assistant = document.createElement("div");
+    assistant.className = "assistant";
+    let sawText = false;
+    for (const event of message.events || []) {
+      if (event.kind === "text" || event.kind === "error") {
+        const reply = document.createElement("div");
+        reply.textContent = event.payload;
+        assistant.append(reply);
+        sawText = true;
+      }
+      if (event.kind === "tool") {
+        const pre = document.createElement("div");
+        pre.className = "tool";
+        let label = event.payload;
+        try {
+          const parsed = JSON.parse(event.payload);
+          const result = parsed.result || {};
+          if (parsed.name === "git" && result.pushed) {
+            label = "git\nđã đẩy lên VPS";
+          } else {
+            const detail = result.stdout || result.error || result.path || "";
+            label = parsed.name + (detail ? "\n" + String(detail).slice(0, 400) : "");
+          }
+        } catch (err) {}
+        pre.textContent = label;
+        assistant.append(pre);
+      }
+    }
+    if (message.state === "error" && !sawText) {
+      const reply = document.createElement("div");
+      reply.textContent = "Không chạy được.";
+      assistant.append(reply);
+    }
+    if (message.state === "cancelled" && !sawText) {
+      const reply = document.createElement("div");
+      reply.textContent = "Đã dừng.";
+      assistant.append(reply);
+    }
+    if (message.state === "queued" || message.state === "running") {
+      const state = document.createElement("div");
+      state.className = "state";
+      state.textContent = message.state === "running" ? "Đang làm" : "Đang chờ PC";
+      assistant.append(state);
+    }
+    if (message.state === "running") runningId = message.id;
+    turn.append(assistant);
+    messagesEl.append(turn);
+  }
+  sendBtn.hidden = Boolean(runningId);
+  stopBtn.style.display = runningId ? "inline-block" : "none";
+  const thread = document.querySelector("#thread");
+  thread.scrollTop = thread.scrollHeight;
+}
+
+async function refreshSessions() {
+  const response = await fetch("/v1/sessions", {headers: headers()});
+  if (response.status === 401) {
+    localStorage.removeItem("coderd.token");
+    location.reload();
+    return [];
+  }
+  if (!response.ok) return [];
+  const items = await response.json();
+  renderSessions(items);
+  return items;
+}
+
+async function refreshMessages() {
+  if (!sessionId) {
+    renderMessages([]);
+    return;
+  }
+  const response = await fetch("/v1/sessions/" + sessionId + "/messages", {headers: headers()});
   if (!response.ok) return;
   showError("");
-  render(await response.json());
+  renderMessages(await response.json());
 }
 
 async function refreshWorker() {
-  if (!tokenEl.value.trim()) return;
   const response = await fetch("/v1/workers", {headers: headers()});
   if (!response.ok) return;
   const workers = await response.json();
-  if (!workers.length) {
-    workerEl.textContent = "PC: offline";
+  if (!workers.length || workers[0].status !== "online") {
+    workerEl.textContent = "PC offline";
     return;
   }
   const worker = workers[0];
-  const ram = Math.round(worker.ram_bytes / 1024 / 1024);
-  workerEl.textContent = "PC: " + worker.status + " · " + worker.hostname + " · " + worker.cpu_count + " CPU · " + ram + " MB";
+  const ram = Math.round(worker.ram_bytes / 1024 / 1024 / 1024);
+  workerEl.textContent = "PC online · " + worker.cpu_count + " CPU · " + ram + " GB";
+}
+
+async function refreshAll() {
+  await refreshSessions();
+  await refreshMessages();
+  await refreshWorker();
 }
 
 document.querySelector("#new-session").onclick = async () => {
-  remember();
   const response = await fetch("/v1/sessions", {method: "POST", headers: headers()});
   if (!response.ok) {
-    showError("không tạo được phiên");
+    showError("không tạo được đoạn chat");
     return;
   }
   sessionId = (await response.json()).id;
-  remember();
-  sessionEl.textContent = sessionId;
-  await refresh();
+  localStorage.setItem("coderd.session", sessionId);
+  await refreshAll();
+  composer.focus();
 };
 
-document.querySelector("#send").onclick = async () => {
-  remember();
+document.querySelector("#send-form").onsubmit = async (event) => {
+  event.preventDefault();
+  const text = composer.value.trim();
+  if (!text) return;
   if (!sessionId) {
-    showError("hãy tạo phiên");
-    return;
+    await document.querySelector("#new-session").onclick();
   }
   const response = await fetch("/v1/sessions/" + sessionId + "/messages", {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({text: textEl.value})
+    body: JSON.stringify({text})
   });
   if (!response.ok) {
     showError("không gửi được");
     return;
   }
-  textEl.value = "";
-  await refresh();
+  composer.value = "";
+  await refreshAll();
 };
 
-document.querySelector("#stop").onclick = async () => {
-  const running = messagesEl.querySelector("[data-running]");
-  if (!running) return;
-  await fetch("/v1/messages/" + running.dataset.running + "/cancel", {method: "POST", headers: headers()});
-  await refresh();
+stopBtn.onclick = async () => {
+  if (!runningId) return;
+  await fetch("/v1/messages/" + runningId + "/cancel", {method: "POST", headers: headers()});
+  await refreshMessages();
 };
 
-tokenEl.onchange = remember;
-refresh();
-refreshWorker();
-setInterval(() => { refresh(); refreshWorker(); }, 1000);
+document.querySelector("#menu").onclick = () => {
+  document.querySelector("#sidebar").classList.toggle("show");
+};
+sessionsEl.addEventListener("click", () => {
+  document.querySelector("#sidebar").classList.remove("show");
+});
+
+composer.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    document.querySelector("#send-form").requestSubmit();
+  }
+});
+
+setInterval(() => { if (app.classList.contains("open")) refreshAll(); }, 1000);
 </script>

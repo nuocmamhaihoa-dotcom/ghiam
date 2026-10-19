@@ -13,7 +13,7 @@ TERMINAL = {"done", "error", "cancelled"}
 
 
 def now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
 
 
 def new_id() -> str:
@@ -76,6 +76,24 @@ def create_session(path: Path) -> dict:
             (item["id"], item["created_at"]),
         )
     return item
+
+
+def list_sessions(path: Path) -> list[dict]:
+    with session(path) as conn:
+        rows = conn.execute("SELECT id, created_at FROM sessions ORDER BY created_at DESC, id DESC").fetchall()
+        items = []
+        for row in rows:
+            item = dict(row)
+            first = conn.execute(
+                "SELECT body FROM messages WHERE session_id = ? ORDER BY created_at, id LIMIT 1",
+                (item["id"],),
+            ).fetchone()
+            title = "Đoạn chat mới"
+            if first and str(first["body"]).strip():
+                title = " ".join(str(first["body"]).split())[:48]
+            item["title"] = title
+            items.append(item)
+    return items
 
 
 def get_session(path: Path, session_id: str) -> dict | None:

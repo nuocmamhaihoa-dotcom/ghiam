@@ -51,8 +51,8 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(denied.status_code, 401)
         page = self.client.get("/")
         self.assertEqual(page.status_code, 200)
-        self.assertIn("Phiên mới", page.text)
-        self.assertIn('id="stop"', page.text)
+        self.assertIn("Đoạn chat mới", page.text)
+        self.assertIn('id="composer"', page.text)
 
     def test_message_stays_queued_across_restart(self) -> None:
         session = self.client.post("/v1/sessions", headers=AUTH).json()
@@ -67,6 +67,9 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(listed.json()[0]["body"], "xin chào")
         self.assertEqual(listed.json()[0]["state"], "queued")
+        sessions = again.get("/v1/sessions", headers=AUTH)
+        self.assertEqual(sessions.status_code, 200)
+        self.assertEqual(sessions.json()[0]["title"], "xin chào")
 
     def hello(self, name: str = "pc") -> dict:
         return {
@@ -454,6 +457,39 @@ class EndToEndTests(unittest.TestCase):
         if workers and workers[0]["status"] == "online":
             return workers
         return None
+
+    def test_missing_model_returns_an_error(self) -> None:
+        env = self.env.copy()
+        env.pop("CODERD_SCRIPTED", None)
+        env.pop("MODEL_BASE_URL", None)
+        env["CODERD_URL"] = self.base
+        env["CODERD_HOSTNAME"] = "pc-test"
+        env["WORKSPACE_ROOT"] = str(self.root / "workspace")
+        env["PYTHONUNBUFFERED"] = "1"
+        self.worker_log = open(self.root / "worker.err", "w", encoding="utf-8")
+        worker = subprocess.Popen(
+            [sys.executable, "-m", "worker.connect"],
+            cwd=ROOT,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=self.worker_log,
+        )
+        try:
+            self.wait_until(lambda: self.online())
+            session = self.request("POST", "/v1/sessions")
+            self.request("POST", f"/v1/sessions/{session['id']}/messages", {"text": "xin chào"})
+
+            def failed():
+                messages = self.request("GET", f"/v1/sessions/{session['id']}/messages")
+                if messages and messages[0]["state"] == "error":
+                    return messages[0]
+                return None
+
+            message = self.wait_until(failed, timeout=10)
+            errors = [event["payload"] for event in message["events"] if event["kind"] == "error"]
+            self.assertTrue(any("MODEL_BASE_URL" in item for item in errors))
+        finally:
+            self.stop(worker)
 
     def test_cancel_sleep_from_the_page_api(self) -> None:
         worker = self.spawn_worker()

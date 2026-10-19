@@ -120,19 +120,22 @@ async def run_once() -> None:
                 if publish(workspace, lambda bundle: post_bundle(base, token, bundle)):
                     emit("tool", json.dumps({"name": "git", "result": {"pushed": True}}, ensure_ascii=False))
 
+            def turn() -> None:
+                try:
+                    run_turn(
+                        workspace,
+                        text,
+                        complete_from_env(),
+                        emit,
+                        cancel,
+                        procs,
+                        before_terminal,
+                    )
+                except Exception as exc:
+                    emit("error", str(exc)[:500])
+
             try:
-                await asyncio.to_thread(
-                    run_turn,
-                    workspace,
-                    text,
-                    complete_from_env(),
-                    emit,
-                    cancel,
-                    procs,
-                    before_terminal,
-                )
-            except Exception as exc:
-                emit("error", str(exc)[:500])
+                await asyncio.to_thread(turn)
             finally:
                 busy = False
                 cancel.clear()
