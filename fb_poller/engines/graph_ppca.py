@@ -11,6 +11,7 @@ import httpx
 from fb_poller.engines.guard import (
     first_comment_id,
     invalid_limit,
+    connection_rows,
     nested_text,
     person_name,
     public_error,
@@ -112,20 +113,14 @@ def _append_rows(
 
 
 def _connection_rows(value: object) -> list[object]:
-    """A Graph connection is ``{data: [...]}``. A bare list is the same list."""
-    if isinstance(value, list):
-        return value
-    if isinstance(value, dict):
-        data = value.get("data")
-        if isinstance(data, list):
-            return data
-    return []
+    """A Graph connection is ``{data: [...]}`` or ``{edges: [{node: ...}]}``."""
+    return connection_rows(value)
 
 
 def _graph_rows(data: dict[str, object]) -> list[object]:
     value = data.get("data")
     if isinstance(value, list) and value:
-        return list(value)
+        return connection_rows(value)
     for name in ("comments", "replies"):
         nested = _connection_rows(data.get(name))
         if nested:

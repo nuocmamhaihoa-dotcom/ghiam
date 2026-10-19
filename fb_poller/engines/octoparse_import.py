@@ -7,7 +7,14 @@ import io
 import json
 from pathlib import Path
 
-from fb_poller.engines.guard import first_person_name, invalid_limit, nested_text, public_error, time_text
+from fb_poller.engines.guard import (
+    first_comment_id,
+    first_person_name,
+    invalid_limit,
+    nested_text,
+    public_error,
+    time_text,
+)
 from fb_poller.engines.types import EngineResult, PublicComment
 
 RANK = 8
@@ -143,6 +150,7 @@ def _from_mapping(row: dict[str, object]) -> PublicComment | None:
     return PublicComment(
         text=text,
         author_name=first_person_name(lowered, _AUTHOR_KEYS),
+        comment_id=first_comment_id(lowered),
         created_time=_pick_time(lowered, _TIME_KEYS),
     )
 

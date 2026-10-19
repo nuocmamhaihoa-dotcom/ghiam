@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from fb_poller.engines.guard import (
+    connection_rows,
     first_comment_id,
     first_person_name,
     invalid_limit,
@@ -121,6 +122,10 @@ def _collect(
     for row in rows:
         if not isinstance(row, dict):
             continue
+        unwrapped = connection_rows([row])
+        row = unwrapped[0] if unwrapped else row
+        if not isinstance(row, dict):
+            continue
         item = _one(row)
         if item:
             key = item.comment_id or f"{item.author_name}|{item.text}"
@@ -138,15 +143,14 @@ def _collect(
 
 
 def _connection_rows(value: object) -> list[Any]:
-    """An empty list does not count. ``{data: [...]}`` is the list inside."""
-    if isinstance(value, list):
-        return value
-    if isinstance(value, dict):
-        data = value.get("data")
-        if isinstance(data, list):
-            return data
-        if nested_text(value.get("text")) or nested_text(value.get("message")) or nested_text(value.get("body")):
-            return [value]
+    """An empty list does not count. ``{data: [...]}`` and ``{edges: [{node}]}`` do."""
+    rows = connection_rows(value)
+    if rows:
+        return rows
+    if isinstance(value, dict) and (
+        nested_text(value.get("text")) or nested_text(value.get("message")) or nested_text(value.get("body"))
+    ):
+        return [value]
     return []
 
 

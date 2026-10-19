@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from fb_poller.engines.guard import (
+    connection_rows,
     first_comment_id,
     first_person_name,
     invalid_limit,
@@ -167,14 +168,18 @@ def _rows(payload: Any, depth: int = 0) -> list[Any]:
     if isinstance(payload, list):
         out: list[Any] = []
         for item in payload:
-            out.extend(_rows(item, depth + 1))
+            unwrapped = connection_rows([item])
+            out.extend(_rows(unwrapped[0] if unwrapped else item, depth + 1))
         return out
     if not isinstance(payload, dict):
         return []
     nested: list[Any] = []
     for key in ("comments", "replies", "data", "results", "items"):
         value = payload.get(key)
-        if isinstance(value, (list, dict)):
+        linked = connection_rows(value)
+        if linked:
+            nested.extend(_rows(linked, depth + 1))
+        elif isinstance(value, (list, dict)):
             nested.extend(_rows(value, depth + 1))
     if _own_text(payload):
         return [payload, *nested]

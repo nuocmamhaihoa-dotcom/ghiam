@@ -177,6 +177,32 @@ def nested_text(value: object, depth: int = 0) -> str | None:
     return None
 
 
+def connection_rows(value: object) -> list[object]:
+    """A list, ``{data: [...]}``, or ``{edges: [{node: ...}]}``. An empty list is empty."""
+    if isinstance(value, list):
+        return [_unwrap_node(item) for item in value]
+    if not isinstance(value, dict):
+        return []
+    for key in ("data", "edges"):
+        child = value.get(key)
+        if isinstance(child, list) and child:
+            return [_unwrap_node(item) for item in child]
+    return []
+
+
+def _unwrap_node(item: object) -> object:
+    """An edge is ``{node, cursor}``. A row that already has comment text stays itself."""
+    if not isinstance(item, dict):
+        return item
+    node = item.get("node")
+    if not isinstance(node, dict):
+        return item
+    for key in ("text", "message", "comment", "comment_text", "commentText", "body", "preferred_body"):
+        if nested_text(item.get(key)):
+            return item
+    return node
+
+
 def objects_with_comments(html: str, max_hits: int = 80) -> list[Any]:
     """Decode JSON objects that contain a comment typename, even late in a large script."""
     if max_hits < 1:

@@ -16,6 +16,7 @@ from urllib.parse import unquote
 
 from fb_poller.engines.guard import (
     comment_id,
+    connection_rows,
     first_comment_id,
     first_person_name,
     nested_text,
@@ -75,6 +76,7 @@ _CHROME_LINE = re.compile(
     r"[·•]?\s*(?:about\s+|khoảng\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
     r"(?:khoảng\s+)?\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"\d+\s*(?:s|m|h|d|w|y)\s*[·•]?|"
+    r"\d+\s*(?:secs?|mins?|hrs?|seconds?|minutes?|hours?)|"
     r"see \d+ repl(?:y|ies)|xem \d+ phản hồi|"
     r"translated from \S.{0,40}|được dịch từ \S.{0,60}|"
     r"rate translation|đánh giá bản dịch|"
@@ -135,6 +137,7 @@ _AUTHOR_STAMP = re.compile(
     r"(?:about\s+|khoảng\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
     r"(?:khoảng\s+)?\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"\d+\s*(?:s|m|h|d|w|y)|"
+    r"\d+\s*(?:secs?|mins?|hrs?|seconds?|minutes?|hours?)|"
     r"edited|đã chỉnh sửa|"
     r"top fan|rising fan|verified|đã xác minh|tác giả"
     r")"
@@ -438,7 +441,7 @@ def _loose_comments(payload: object, depth: int = 0) -> list[PublicComment]:
     if isinstance(payload, list):
         found: list[PublicComment] = []
         for item in payload:
-            found.extend(_loose_comments(item, depth + 1))
+            found.extend(_loose_comments(connection_rows([item])[0], depth + 1))
         return found
     if not isinstance(payload, dict):
         return []
@@ -465,8 +468,10 @@ def _loose_comments(payload: object, depth: int = 0) -> list[PublicComment]:
     nested: list[PublicComment] = []
     for key in ("comments", "replies", "data", "results", "items"):
         value = payload.get(key)
-        if isinstance(value, (list, dict)):
-            nested.extend(_loose_comments(value, depth + 1))
+        linked = connection_rows(value)
+        target = linked if linked else value
+        if isinstance(target, (list, dict)):
+            nested.extend(_loose_comments(target, depth + 1))
     return own + nested
 
 

@@ -810,6 +810,52 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(authed.password, "pa:ss")
         self.assertEqual(authed.as_httpx(), "http://user:pa%3Ass@[2001:db8::1]:8080")
 
+    def test_edges_hours_and_export_id(self) -> None:
+        edge = {
+            "comments": {
+                "edges": [
+                    {
+                        "cursor": "c",
+                        "node": {"message": "xin", "from": {"name": "An"}, "id": "9"},
+                    }
+                ]
+            }
+        }
+        graph, err = comments_from_graph_payload(edge, 5)
+        self.assertEqual(graph[0].text, "xin")
+        self.assertEqual(graph[0].author_name, "An")
+        self.assertEqual(graph[0].comment_id, "9")
+        self.assertIsNone(err)
+        relay, relay_err = comments_from_graph_payload(
+            {"data": [{"node": {"message": "xin", "from": {"name": "An"}, "id": "9"}}]},
+            5,
+        )
+        self.assertEqual(relay[0].comment_id, "9")
+        self.assertIsNone(relay_err)
+        self.assertEqual(_comments_from_json(edge, 5)[0].author_name, "An")
+        self.assertEqual(_from_items({"items": [{"node": {"comment": "xin", "user": {"name": "Lan"}}}]}, 5)[0].author_name, "Lan")
+        healed, codes = heal_comments([PublicComment(text=json.dumps(edge))])
+        self.assertEqual(healed[0].text, "xin")
+        self.assertEqual(healed[0].author_name, "An")
+        self.assertIn("expand_json_text", codes)
+        later, later_err = comments_from_graph_payload(
+            {"comments": {"edges": [], "data": [{"message": "later", "from": {"name": "Bo"}}]}},
+            5,
+        )
+        self.assertEqual(later[0].text, "later")
+        self.assertIsNone(later_err)
+        article = comments_from_articles(["Lan · 2 hrs\nhello\n2 hours"], 5)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nI waited 2 hours"], 5)
+        self.assertEqual(sentence[0].text, "I waited 2 hours")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "rows.csv"
+            path.write_text("comment,author,id\nxin,An,42\n", encoding="utf-8")
+            exported = comments_from_export(path)
+        self.assertEqual(exported[0].comment_id, "42")
+        self.assertEqual(exported[0].author_name, "An")
+
 
 if __name__ == "__main__":
     unittest.main()
