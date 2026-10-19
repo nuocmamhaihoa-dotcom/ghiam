@@ -127,6 +127,9 @@ def _append_rows(
                         "poster_name",
                         "owner_full_name",
                         "user_display_name",
+                        "writer_name",
+                        "display_title",
+                        "profile_title",
                     ),
                 )
             )
@@ -148,6 +151,8 @@ def _append_rows(
                             "actor_name",
                             "poster_name",
                             "owner_full_name",
+                            "writer_name",
+                            "display_title",
                         ),
                     )
                 )
@@ -212,6 +217,12 @@ def post_id_from_url(url: str) -> str | None:
     share = re.search(r"/share/[pvr]/(\d+)", raw, re.IGNORECASE)
     if share:
         return accepted_object_id(share.group(1))
+    notes = re.search(r"/notes/(\d+)", raw, re.IGNORECASE)
+    if notes:
+        return accepted_object_id(notes.group(1))
+    media = re.search(r"[?&]set=a\.(\d+)", raw, re.IGNORECASE)
+    if media:
+        return accepted_object_id(media.group(1))
     path = re.search(
         r"(?:posts|permalink|videos|reels?|photos|events)/(pfbid[A-Za-z0-9]+|\d+(?:_\d+)*)",
         raw,

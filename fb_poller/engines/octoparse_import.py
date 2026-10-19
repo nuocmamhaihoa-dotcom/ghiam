@@ -92,6 +92,11 @@ _AUTHOR_KEYS = (
     "owner_full_name",
     "user_display_name",
     "comment_author",
+    "writer_name",
+    "display_title",
+    "profile_title",
+    "user_title",
+    "author_label",
     "tác giả",
     "tac gia",
 )
@@ -129,6 +134,8 @@ _TIME_KEYS = (
     "published_time",
     "created_unix",
     "posted_at_ms",
+    "time_created",
+    "edited_time",
 )
 
 
