@@ -110,13 +110,27 @@ def _append_rows(
             author_name = (
                 person_name(row.get("from"))
                 or person_name(row.get("author"))
-                or first_person_name(row, ("owner_name", "commenter_name", "profileName", "userName"))
+                or first_person_name(
+                    row,
+                    ("owner_name", "commenter_name", "profileName", "userName", "display_name", "full_name", "screen_name"),
+                )
             )
             if author_name is None and from_inner and inner is not None:
                 author_name = (
                     person_name(inner.get("from"))
                     or person_name(inner.get("author"))
-                    or first_person_name(inner, ("owner_name", "commenter_name", "profileName", "userName"))
+                    or first_person_name(
+                        inner,
+                        (
+                            "owner_name",
+                            "commenter_name",
+                            "profileName",
+                            "userName",
+                            "display_name",
+                            "full_name",
+                            "screen_name",
+                        ),
+                    )
                 )
             created = timestamp_of(row)
             if created is None and from_inner and inner is not None:

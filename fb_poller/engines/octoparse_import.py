@@ -34,6 +34,8 @@ _TEXT_KEYS = (
     "plaintext",
     "comment_message",
     "body_html",
+    "nội dung bình luận",
+    "noi dung binh luan",
 )
 _AUTHOR_KEYS = (
     "author",
@@ -53,6 +55,12 @@ _AUTHOR_KEYS = (
     "nickname",
     "screen_name",
     "owner_name",
+    "display_name",
+    "full_name",
+    "screen_name",
+    "short_name",
+    "họ và tên",
+    "ho va ten",
     "tác giả",
     "tac gia",
 )
@@ -74,6 +82,8 @@ _TIME_KEYS = (
     "date_created",
     "posted_time",
     "comment_create_time",
+    "thời gian đăng",
+    "thoi gian dang",
 )
 
 

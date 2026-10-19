@@ -95,12 +95,31 @@ def _comment_text(node: dict[str, Any]) -> str | None:
         or nested_text(node.get("plaintext"))
         or nested_text(node.get("comment_message"))
         or nested_text(node.get("body_html"))
+        or _comet_text(node)
     )
     if not text or len(text) > 8000:
         return None
     if not is_comment_typename(node.get("__typename")) or placeholder_text(text):
         return None
     return text
+
+
+def _comet_text(node: dict[str, Any]) -> str | None:
+    """Text buried under a Comet comment section that does not repeat the typename."""
+    sections = node.get("comet_sections")
+    if not isinstance(sections, dict):
+        return None
+    for key in ("content", "body"):
+        content = sections.get(key)
+        if not isinstance(content, dict):
+            continue
+        story = content.get("story")
+        if not isinstance(story, dict):
+            continue
+        found = nested_text(story.get("message")) or nested_text(story.get("body")) or nested_text(story.get("text"))
+        if found:
+            return found
+    return None
 
 
 def _author(node: dict[str, Any]) -> str | None:

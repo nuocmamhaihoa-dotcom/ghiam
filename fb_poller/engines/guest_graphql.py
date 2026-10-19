@@ -36,7 +36,26 @@ def _node_text(node: dict[str, Any]) -> str | None:
         or nested_text(node.get("plaintext"))
         or nested_text(node.get("comment_message"))
         or nested_text(node.get("body_html"))
+        or _comet_text(node)
     )
+
+
+def _comet_text(node: dict[str, Any]) -> str | None:
+    """Text buried under a Comet comment section that does not repeat the typename."""
+    sections = node.get("comet_sections")
+    if not isinstance(sections, dict):
+        return None
+    for key in ("content", "body"):
+        content = sections.get(key)
+        if not isinstance(content, dict):
+            continue
+        story = content.get("story")
+        if not isinstance(story, dict):
+            continue
+        found = nested_text(story.get("message")) or nested_text(story.get("body")) or nested_text(story.get("text"))
+        if found:
+            return found
+    return None
 
 
 def comments_from_payload(payload: Any, limit: int) -> list[PublicComment]:

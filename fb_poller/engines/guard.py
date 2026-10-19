@@ -104,14 +104,19 @@ def _id_value(value: object, depth: int = 0) -> str | None:
 
 
 _COMMENT_IN_URL = re.compile(r"(?:comment_id|reply_comment_id)=([A-Za-z0-9_]+)")
+_REPLY_IN_URL = re.compile(r"reply_comment_id=([A-Za-z0-9_]+)")
 
 
 def comment_id_from_url(value: object) -> str | None:
-    """The comment id in a permalink. A post URL without one is not an id."""
+    """The comment id in a permalink. A reply id wins when both are present."""
     text = scalar_text(value)
     if text is None or "://" not in text:
         return None
-    match = _COMMENT_IN_URL.search(unquote(text))
+    decoded = unquote(text)
+    reply = _REPLY_IN_URL.search(decoded)
+    if reply:
+        return comment_id(reply.group(1))
+    match = _COMMENT_IN_URL.search(decoded)
     if match is None:
         return None
     return comment_id(match.group(1))

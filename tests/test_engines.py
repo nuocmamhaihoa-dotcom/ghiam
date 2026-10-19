@@ -1685,6 +1685,67 @@ class EngineTests(unittest.TestCase):
         )
         self.assertEqual(graph[0][0].author_name, "Lan")
 
+    def test_display_name_and_action_bar(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nĐã chỉnh sửa · vừa xong\nSee translation · Hide\n2 replies · Like\n"
+                "Like · Reply · 2d\nWrite a reply to Lan's comment\nLiked your comment\n"
+                "1 new reply\nAlso posting as Mai\nEnd of comments\nShow original\nCreated with AI"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nWrite a reply to Lan's comment about the soup"], 5)
+        self.assertEqual(sentence[0].text, "Write a reply to Lan's comment about the soup")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\nLike · Reply · 2d\nEnd of comments", author_name="Lan")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        named = _one({"text": "xin", "displayName": "Lan", "id": "1"})
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "Lan")
+        full = _one({"message": "xin", "fullName": "Lan Nguyen", "commentId": "2"})
+        self.assertIsNotNone(full)
+        assert full is not None
+        self.assertEqual(full.author_name, "Lan Nguyen")
+        self.assertEqual(full.comment_id, "2")
+        wrapped = _from_items(
+            {"feedback": {"comments": {"edges": [{"node": {"text": "xin", "id": "6", "author": {"name": "Lan"}}}]}}},
+            5,
+        )
+        self.assertEqual(wrapped[0].comment_id, "6")
+        self.assertEqual(
+            first_comment_id(
+                {
+                    "permalink_url": "https://www.facebook.com/permalink.php?story_fbid=1&id=2&comment_id=3&reply_comment_id=44"
+                }
+            ),
+            "44",
+        )
+        imported = _from_mapping(
+            {"Nội dung bình luận": "xin", "Họ và tên": "Lan", "Thời gian đăng": "2024-03-02"}
+        )
+        self.assertIsNotNone(imported)
+        assert imported is not None
+        self.assertEqual(imported.text, "xin")
+        self.assertEqual(imported.author_name, "Lan")
+        self.assertEqual(imported.created_time, "2024-03-02")
+        comet = comments_from_payload(
+            {
+                "__typename": "Comment",
+                "id": "1",
+                "author": {"name": "An"},
+                "comet_sections": {"content": {"story": {"message": {"text": "xin"}}}},
+            },
+            5,
+        )
+        self.assertEqual(comet[0].text, "xin")
+        self.assertEqual(comet[0].author_name, "An")
+
 
 if __name__ == "__main__":
     unittest.main()
