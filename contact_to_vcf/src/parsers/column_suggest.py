@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
+
 
 def suggest_columns(
     columns: list[str], samples: list[tuple[str, ...]]
@@ -38,8 +41,24 @@ def suggest_columns(
     return name_index, phone_index
 
 
+def phone_column_for_import(
+    file_format: str, columns: list[str], samples: list[tuple[str, ...]]
+) -> int:
+    """Excel address lists keep the phone in column B. Other files are detected."""
+    if file_format == "xlsx" and len(columns) > 1:
+        return 1
+    return suggest_columns(columns, samples)[1]
+
+
 def looks_like_phone(value: str) -> bool:
-    text = value.strip()
+    text = unicodedata.normalize("NFKC", value).replace("\u00a0", " ").strip()
+    if text.startswith(("'", "’")):
+        text = text[1:].strip()
+    compact = re.sub(r"\s+", "", text)
+    if re.fullmatch(r"[+]?\d+\.0+", compact):
+        return True
+    if re.fullmatch(r"[+]?\d+(?:\.\d+)?[eE][+-]?\d+", compact):
+        return True
     if text == "":
         return False
     if any(character.isalpha() for character in text):

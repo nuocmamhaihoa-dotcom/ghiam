@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
 
 from core.checkpoint import load_checkpoint
 from models.records import Checkpoint, FileInspection, JobConfig, JobResult, Progress
-from parsers.column_suggest import suggest_columns
+from parsers.column_suggest import phone_column_for_import, suggest_columns
 from parsers.detect import detect_format, inspect_source
 from processors.pool import CONTACTS_PER_FILE, export_book, list_books, pool_total
 from ui.worker import ConversionWorker, InspectWorker, PoolImportWorker
@@ -458,7 +458,12 @@ class MainWindow(QMainWindow):
             self.name_combo.addItem(name, index)
             self.phone_combo.addItem(name, index)
         if inspection.columns:
-            name_index, phone_index = suggest_columns(inspection.columns, inspection.samples)
+            name_index, _suggested = suggest_columns(inspection.columns, inspection.samples)
+            phone_index = phone_column_for_import(
+                inspection.file_format, inspection.columns, inspection.samples
+            )
+            if name_index == phone_index and len(inspection.columns) > 1:
+                name_index = 0 if phone_index != 0 else 1
             self.name_combo.setCurrentIndex(name_index)
             self.phone_combo.setCurrentIndex(phone_index)
         self.name_combo.blockSignals(False)
@@ -652,7 +657,7 @@ class MainWindow(QMainWindow):
             self._file_queue.pop(0)
             self._import_next_queued_file()
             return
-        _name_index, phone_index = suggest_columns(info.columns, info.samples)
+        phone_index = phone_column_for_import(info.file_format, info.columns, info.samples)
         self.pool_worker = PoolImportWorker(
             self.output_dir,
             path,

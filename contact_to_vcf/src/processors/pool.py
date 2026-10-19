@@ -22,6 +22,7 @@ class ImportStats:
     added: int
     duplicate: int
     rejected: int
+    filled: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -118,7 +119,7 @@ def import_file(
                 on_progress(seen)
         flush_batch()
         pool.finish()
-        stats = ImportStats(seen, added, duplicate, rejected)
+        stats = ImportStats(seen, added, duplicate, rejected, tuple(pool.filled_ids))
     finally:
         pool.close()
         close = getattr(stream, "close", None)
@@ -169,8 +170,8 @@ def pool_total(folder: Path) -> int:
     return int(row["total"])
 
 
-def export_book(folder: Path, book_id: int, destination: Path) -> int:
-    """Write one book and record the download time. Membership does not change."""
+def read_book_vcf(folder: Path, book_id: int) -> bytes:
+    """Build one vCard file. The book stays open until a download is recorded."""
     connection = _connect(pool_path(folder))
     try:
         _ensure_schema(connection)
@@ -178,22 +179,41 @@ def export_book(folder: Path, book_id: int, destination: Path) -> int:
             "SELECT phone FROM numbers WHERE book_id = ? ORDER BY rowid",
             (book_id,),
         ).fetchall()
-        if not rows:
-            raise ValueError("Danh bạ này không còn số để tải")
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        with destination.open("w", encoding="utf-8", newline="") as handle:
-            for row in rows:
-                phone = contact_label(str(row["phone"]))
-                handle.write(format_card(phone, phone))
+    finally:
+        connection.close()
+    if not rows:
+        raise ValueError("Danh bạ này không còn số để tải")
+    parts: list[str] = []
+    for row in rows:
+        phone = contact_label(str(row["phone"]))
+        parts.append(format_card(phone, phone))
+    return "".join(parts).encode("utf-8")
+
+
+def mark_books_downloaded(folder: Path, book_ids: list[int]) -> None:
+    """Freeze books after the file bytes were handed to the caller."""
+    if not book_ids:
+        return
+    connection = _connect(pool_path(folder))
+    try:
+        _ensure_schema(connection)
         downloaded_at = _now()
-        connection.execute(
+        connection.executemany(
             "UPDATE books SET downloaded_at = ? WHERE id = ?",
-            (downloaded_at, book_id),
+            [(downloaded_at, book_id) for book_id in book_ids],
         )
         connection.commit()
     finally:
         connection.close()
-    return len(rows)
+
+
+def export_book(folder: Path, book_id: int, destination: Path) -> int:
+    """Write one book and record the download time. Membership does not change."""
+    payload = read_book_vcf(folder, book_id)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(payload)
+    mark_books_downloaded(folder, [book_id])
+    return payload.count(b"BEGIN:VCARD")
 
 
 def book_of(folder: Path, phone: str) -> int | None:
@@ -224,6 +244,7 @@ class _Pool:
         self._book_id: int | None = None
         self._room = 0
         self._unflushed = 0
+        self.filled_ids: list[int] = []
         self.connection.execute("BEGIN")
 
     def add_many(self, phones: list[str], source_name: str) -> tuple[int, int]:
@@ -287,8 +308,11 @@ class _Pool:
             self._unflushed += 1
             added += 1
             if self._room <= 0:
+                finished = self._book_id
                 self._flush_book()
                 self._book_id = None
+                if finished is not None:
+                    self.filled_ids.append(finished)
         self._pending += added
         if self._pending >= 8000:
             self._flush_book()
@@ -395,8 +419,9 @@ class _Pool:
 
 
 def _connect(path: Path) -> sqlite3.Connection:
-    connection = sqlite3.connect(path)
+    connection = sqlite3.connect(path, timeout=600)
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA busy_timeout=600000")
     connection.execute("PRAGMA journal_mode=WAL")
     connection.execute("PRAGMA synchronous=NORMAL")
     connection.execute("PRAGMA temp_store=MEMORY")

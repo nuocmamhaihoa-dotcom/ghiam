@@ -107,7 +107,8 @@ def inspect_source(
     if resolved_format == "xlsx":
         resolved_delimiter = ""
         header = True if has_header is None else has_header
-        reader: Reader = XlsxReader(path, header)
+        reader = XlsxReader(path, header)
+        header = reader.drops_first_row()
         estimated = _xlsx_estimate(path)
         if header and estimated:
             estimated = max(0, estimated - 1)
@@ -227,10 +228,12 @@ def _xlsx_estimate(path: Path) -> int | None:
 
     workbook = load_workbook(path, read_only=True, data_only=True)
     try:
-        sheet = workbook.worksheets[0]
-        max_row = sheet.max_row
+        total = 0
+        for sheet in workbook.worksheets:
+            if sheet.max_row:
+                total += int(sheet.max_row)
     finally:
         workbook.close()
-    if max_row is None:
+    if total == 0:
         return None
-    return int(max_row)
+    return total

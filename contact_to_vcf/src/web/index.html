@@ -223,6 +223,7 @@
       let total = 0;
       let last = null;
       const failed = [];
+      const filled = [];
       try {
         for (let index = 0; index < files.length; index += 1) {
           const file = files[index];
@@ -237,6 +238,9 @@
             rejected += data.rejected;
             total = data.total;
             last = data;
+            if (Array.isArray(data.filled)) {
+              for (const id of data.filled) filled.push(id);
+            }
           } catch (error) {
             failed.push(file.name + ": " + error.message);
           }
@@ -252,15 +256,20 @@
         }
         let message = "Đã nạp " + files.length + " file. Thêm " + added + ". Trùng " + duplicate + ". Bỏ qua " + rejected + ".";
         if (total) message += " Kho có " + total + " số.";
+        if (added > 0 && filled.length === 0) {
+          message += " Danh bạ chưa đủ 1.000 số vẫn mở để nhận số mới.";
+        }
         if (failed.length) message += " Lỗi: " + failed.join("; ");
         $("result").textContent = message;
         await loadBooks();
-        if (added > 0 && last && last.pending.length === 1) {
+        if (added > 0 && filled.length === 1) {
           window.location.href = touch
-            ? iphoneFile(last.pending[0])
-            : ("/api/books/" + last.pending[0] + "/download");
-        } else if (added > 0 && last && last.pending.length > 1) {
-          window.location.href = touch ? "/iphone" : "/api/download-pending";
+            ? iphoneFile(filled[0])
+            : ("/api/books/" + filled[0] + "/download");
+        } else if (added > 0 && filled.length > 1) {
+          window.location.href = touch
+            ? "/iphone"
+            : ("/api/download-filled?ids=" + filled.join(","));
         }
       } catch (error) {
         $("result").textContent = error.message;

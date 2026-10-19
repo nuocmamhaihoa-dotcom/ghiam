@@ -312,14 +312,17 @@ def _estimate(config: JobConfig) -> int | None:
 
         workbook = load_workbook(config.input_path, read_only=True, data_only=True)
         try:
-            total = workbook.worksheets[0].max_row
+            total = 0
+            for sheet in workbook.worksheets:
+                if sheet.max_row:
+                    total += int(sheet.max_row)
         finally:
             workbook.close()
-        if total is None:
+        if total == 0:
             return None
         if config.has_header:
-            return max(0, int(total) - 1)
-        return int(total)
+            return max(0, total - 1)
+        return total
     total = estimate_text_rows(config.input_path)
     if config.has_header:
         return max(0, total - 1)

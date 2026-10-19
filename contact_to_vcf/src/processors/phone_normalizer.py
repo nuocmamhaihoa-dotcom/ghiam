@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import unicodedata
+from decimal import Decimal, InvalidOperation
 
 from models.records import PhoneResult
 
@@ -87,17 +89,14 @@ _LEGACY_PREFIX = {
 
 def to_vietnam_10(raw: str) -> str | None:
     """Return the 10-digit Vietnam carrier form, or None when it is not clear."""
-    cleaned = str(raw).strip().translate(_SEPARATORS).replace(",", "")
+    cleaned = _prepare_phone_text(raw).translate(_SEPARATORS).replace(",", "")
     if cleaned.startswith("00"):
         cleaned = cleaned[2:]
     elif cleaned.startswith("+"):
         cleaned = cleaned[1:]
     if not cleaned.isdigit():
         return None
-    if cleaned.startswith("84") and len(cleaned) in {11, 12}:
-        cleaned = cleaned[2:]
-    if not cleaned.startswith("0"):
-        cleaned = "0" + cleaned
+    cleaned = _strip_country_code(cleaned)
     if len(cleaned) == 11:
         prefix = _LEGACY_PREFIX.get(cleaned[:4])
         if prefix is None:
@@ -139,7 +138,7 @@ def canonical_phones(raw: str) -> list[str]:
 
 
 def _canonical_one(raw: str) -> str | None:
-    cleaned = str(raw).strip().translate(_SEPARATORS).replace(",", "")
+    cleaned = _prepare_phone_text(raw).translate(_SEPARATORS).replace(",", "")
     if cleaned.startswith("00"):
         cleaned = "+" + cleaned[2:]
     if any(character.isalpha() for character in cleaned):
@@ -255,6 +254,45 @@ def _length_result(original: str, digits: str, *, plus: bool) -> PhoneResult:
         return PhoneResult(False, original, "Số quá dài")
     phone = f"+{digits}" if plus else digits
     return PhoneResult(True, phone, "")
+
+
+def _prepare_phone_text(raw: str) -> str:
+    """Make Excel and full-width spellings readable before digit checks.
+
+    ``0901234567.0`` and ``8.4901234567E+10`` are numbers Excel stored as text.
+    Stripping every dot first would turn ``0901234567.0`` into an 11-digit value
+    and drop a real phone. Grouped forms such as ``090.123.4567`` stay unchanged.
+    """
+    text = unicodedata.normalize("NFKC", str(raw))
+    text = text.replace("\u00a0", " ").replace("\u200b", "").strip()
+    if text.startswith(("'", "’")):
+        text = text[1:].strip()
+    compact = re.sub(r"\s+", "", text)
+    if re.fullmatch(r"[+]?\d+\.0+", compact):
+        return compact.split(".", 1)[0]
+    if re.fullmatch(r"[+]?\d+(?:\.\d+)?[eE][+-]?\d+", compact):
+        try:
+            number = Decimal(compact)
+        except InvalidOperation:
+            return text
+        if number == number.to_integral():
+            sign = "+" if compact.startswith("+") else ""
+            return sign + str(int(number))
+    return text
+
+
+def _strip_country_code(digits: str) -> str:
+    """Turn 84… into the domestic form, including 84 + 0 + an 11-digit legacy number."""
+    if not digits.startswith("84"):
+        if digits.startswith("0"):
+            return digits
+        return "0" + digits
+    national = digits[2:]
+    if national.startswith("0") and len(national) in {10, 11}:
+        return national
+    if len(national) in {9, 10}:
+        return "0" + national
+    return "0" + digits
 
 
 def _digits(value: str) -> str:

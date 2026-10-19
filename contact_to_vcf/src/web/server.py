@@ -7,25 +7,29 @@ import json
 import os
 import re
 import secrets
-import shutil
-import tempfile
+import sqlite3
 import threading
+import time
 import zipfile
 from urllib.parse import quote, unquote
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from parsers.column_suggest import suggest_columns
-from parsers.detect import detect_format, inspect_source, prepare_source
+from parsers.column_suggest import phone_column_for_import, suggest_columns
+from parsers.detect import detect_encoding, detect_format, inspect_source, prepare_source
 from processors.pool import (
     CONTACTS_PER_FILE,
     ImportStats,
-    export_book,
+    BookInfo,
     import_file,
     list_books,
+    mark_books_downloaded,
     pool_total,
+    read_book_vcf,
 )
+
+MAX_UPLOAD_BYTES = 512 * 1024 * 1024
 
 PAGE = Path(__file__).with_name("index.html")
 USER = os.environ.get("DANHBA_USER", "danhba")
@@ -38,6 +42,7 @@ class PoolApp:
         self.kho.mkdir(parents=True, exist_ok=True)
         self.uploads = self.kho / "uploads"
         self.uploads.mkdir(parents=True, exist_ok=True)
+        _purge_old_uploads(self.uploads)
         self.sessions: set[str] = set()
         self.lock = threading.Lock()
 
@@ -105,6 +110,9 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             if path == "/api/download-pending":
                 self._download_pending()
                 return
+            if path == "/api/download-filled":
+                self._download_filled()
+                return
             if path == "/iphone":
                 self._iphone_page()
                 return
@@ -153,6 +161,8 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             self._json(404, {"error": "Không thấy trang"})
 
         def _inspect(self) -> None:
+            if self._too_large():
+                return
             form = _read_form(self)
             file_item = form.get("file")
             if file_item is None or not file_item[1]:
@@ -167,9 +177,10 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 info = inspect_source(ready, file_format=detected)
             except (OSError, ValueError) as exc:
                 target.unlink(missing_ok=True)
-                self._json(400, {"error": str(exc)})
+                self._json(400, {"error": _import_error(exc)})
                 return
-            name_index, phone_index = suggest_columns(info.columns, info.samples)
+            name_index, _suggested = suggest_columns(info.columns, info.samples)
+            phone_index = phone_column_for_import(info.file_format, info.columns, info.samples)
             self._json(
                 200,
                 {
@@ -202,18 +213,30 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 return
             if file_format == "xlsx":
                 delimiter = ""
-            stats = import_file(
-                app.kho,
-                source,
-                file_format=file_format,
-                delimiter=delimiter or ",",
-                has_header=has_header,
-                encoding="utf-8-sig",
-                phone_column=phone_column,
-            )
+            encoding = "utf-8-sig" if file_format == "xlsx" else detect_encoding(source)
+            try:
+                stats = import_file(
+                    app.kho,
+                    source,
+                    file_format=file_format,
+                    delimiter=delimiter or ",",
+                    has_header=has_header,
+                    encoding=encoding,
+                    phone_column=phone_column,
+                    contacts_per_file=CONTACTS_PER_FILE,
+                )
+            except (OSError, ValueError, sqlite3.Error) as exc:
+                self._json(400, {"error": _import_error(exc)})
+                return
+            except Exception as exc:
+                self._json(400, {"error": _import_error(exc)})
+                return
+            _delete_upload(source)
             self._json(200, _import_payload(app.kho, stats))
 
         def _import_now(self) -> None:
+            if self._too_large():
+                return
             form = _read_form(self)
             file_item = form.get("file")
             if file_item is None or not file_item[1]:
@@ -226,7 +249,9 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 ready = prepare_source(target)
                 detected = detect_format(ready)
                 info = inspect_source(ready, file_format=detected)
-                _name_index, phone_index = suggest_columns(info.columns, info.samples)
+                phone_index = phone_column_for_import(
+                    info.file_format, info.columns, info.samples
+                )
                 stats = import_file(
                     app.kho,
                     ready,
@@ -237,10 +262,15 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                     phone_column=phone_index,
                     contacts_per_file=CONTACTS_PER_FILE,
                 )
-            except (OSError, ValueError) as exc:
-                target.unlink(missing_ok=True)
-                self._json(400, {"error": str(exc)})
+            except (OSError, ValueError, sqlite3.Error) as exc:
+                _delete_upload(target)
+                self._json(400, {"error": _import_error(exc)})
                 return
+            except Exception as exc:
+                _delete_upload(target)
+                self._json(400, {"error": _import_error(exc)})
+                return
+            _delete_upload(target)
             payload_json = _import_payload(app.kho, stats)
             payload_json["upload_id"] = target.name
             payload_json["phone_column"] = phone_index
@@ -255,23 +285,44 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             if not pending:
                 self._json(404, {"error": "Không còn danh bạ chưa tải"})
                 return
-            temporary = Path(tempfile.mkdtemp(prefix="danhba-zip-"))
+            self._send_books(pending)
+
+        def _download_filled(self) -> None:
+            raw = parse_qs(urlparse(self.path).query).get("ids", [""])[0]
+            wanted: list[int] = []
+            for piece in raw.split(","):
+                if piece.isdigit():
+                    wanted.append(int(piece))
+            if not wanted:
+                self._json(404, {"error": "Không có danh bạ vừa đủ số"})
+                return
+            by_id = {book.id: book for book in list_books(app.kho, "all")}
+            chosen = [by_id[book_id] for book_id in wanted if book_id in by_id]
+            if not chosen:
+                self._json(404, {"error": "Không thấy danh bạ vừa đủ số"})
+                return
+            self._send_books(chosen)
+
+        def _send_books(self, books: list[BookInfo]) -> None:
+            buffer = io.BytesIO()
+            sent_ids: list[int] = []
             try:
-                buffer = io.BytesIO()
                 with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-                    for book in pending:
-                        destination = temporary / book.file_name
-                        export_book(app.kho, book.id, destination)
-                        archive.write(destination, book.file_name)
-                payload = buffer.getvalue()
-            finally:
-                shutil.rmtree(temporary, ignore_errors=True)
+                    for book in books:
+                        payload = read_book_vcf(app.kho, book.id)
+                        archive.writestr(book.file_name, payload)
+                        sent_ids.append(book.id)
+            except ValueError as exc:
+                self._json(404, {"error": str(exc)})
+                return
+            body = buffer.getvalue()
+            mark_books_downloaded(app.kho, sent_ids)
             self.send_response(200)
             self.send_header("Content-Type", "application/zip")
             self.send_header("Content-Disposition", 'attachment; filename="danh-ba-chua-tai.zip"')
-            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(payload)
+            self.wfile.write(body)
 
         def _iphone_page(self) -> None:
             books = list_books(app.kho, "all")
@@ -301,17 +352,12 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             self._bytes(200, body.encode("utf-8"), "text/html; charset=utf-8")
 
         def _download(self, book_id: int, for_iphone: bool = False) -> None:
-            temporary = Path(tempfile.mkdtemp(prefix="danhba-"))
             try:
-                destination = temporary / f"danhba_{book_id:05d}.vcf"
-                try:
-                    export_book(app.kho, book_id, destination)
-                except ValueError as exc:
-                    self._json(404, {"error": str(exc)})
-                    return
-                payload = destination.read_bytes()
-            finally:
-                shutil.rmtree(temporary, ignore_errors=True)
+                payload = read_book_vcf(app.kho, book_id)
+            except ValueError as exc:
+                self._json(404, {"error": str(exc)})
+                return
+            mark_books_downloaded(app.kho, [book_id])
             self._vcf(payload, f"danhba_{book_id:05d}.vcf", for_iphone=for_iphone)
 
         def _cookie_token(self) -> str:
@@ -328,12 +374,28 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 return True
             return app.allowed(self._cookie_token())
 
+        def _too_large(self) -> bool:
+            try:
+                length = int(self.headers.get("Content-Length", "0") or "0")
+            except ValueError:
+                length = 0
+            if length > MAX_UPLOAD_BYTES:
+                self._json(400, {"error": "File lớn hơn 512 MB. Hãy chia nhỏ file."})
+                return True
+            return False
+
         def _json_body(self) -> dict[str, object]:
-            length = int(self.headers.get("Content-Length", "0") or "0")
+            try:
+                length = int(self.headers.get("Content-Length", "0") or "0")
+            except ValueError:
+                return {}
             raw = self.rfile.read(length) if length else b""
             if not raw:
                 return {}
-            loaded = json.loads(raw.decode("utf-8"))
+            try:
+                loaded = json.loads(raw.decode("utf-8"))
+            except (UnicodeError, json.JSONDecodeError):
+                return {}
             if isinstance(loaded, dict):
                 return loaded
             return {}
@@ -380,6 +442,7 @@ def _import_payload(kho: Path, stats: ImportStats) -> dict[str, object]:
         "seen": stats.seen,
         "total": pool_total(kho),
         "pending": [book.id for book in list_books(kho, "pending")],
+        "filled": list(stats.filled),
     }
 
 
@@ -400,6 +463,30 @@ def _book_id(path: str) -> int | None:
     if not parts[2].isdigit():
         return None
     return int(parts[2])
+
+
+def _import_error(exc: Exception) -> str:
+    text = str(exc).lower()
+    if "locked" in text or "busy" in text:
+        return "Kho đang bận vì một file khác. Hãy đợi file đó nạp xong rồi thử lại."
+    message = str(exc).strip()
+    return message or "Không đọc được file"
+
+
+def _delete_upload(path: Path) -> None:
+    path.unlink(missing_ok=True)
+    sidecar = path.with_name(path.name + ".phones.txt")
+    sidecar.unlink(missing_ok=True)
+
+
+def _purge_old_uploads(folder: Path) -> None:
+    cutoff = time.time() - 24 * 60 * 60
+    for child in folder.iterdir():
+        try:
+            if child.is_file() and child.stat().st_mtime < cutoff:
+                child.unlink()
+        except OSError:
+            continue
 
 
 def _safe_suffix(filename: str) -> str:
