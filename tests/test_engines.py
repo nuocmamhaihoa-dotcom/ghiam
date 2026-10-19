@@ -1983,6 +1983,63 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(imported.author_name, "lan")
         self.assertEqual(imported.created_time, "1710000014")
 
+    def test_actor_name_and_reaction_count(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nReactions · 4\nSee 4 reactions\nAll comments · Newest\n"
+                "just now · Edited · Like\nHide · Unfollow · Report\nReact · Reply\n"
+                "GIF · Photo · Sticker\nOnly you can see this comment\nReply in Messenger\n"
+                "See edit history\nMute this thread"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nReply in Messenger about the soup tonight"], 5)
+        self.assertEqual(sentence[0].text, "Reply in Messenger about the soup tonight")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\nReactions · 4\nReact · Reply", author_name="Lan")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        html = (
+            '<script>{"__typename":"Comment","id":"4","body":{"text":"xin"},'
+            '"author":{"actor_name":"An"},"commentCreatedAt":"2024-07-01"}</script>'
+        )
+        found = comments_from_html(html)
+        self.assertEqual(found[0].author_name, "An")
+        self.assertEqual(found[0].created_time, "2024-07-01")
+        named = _one({"text": "xin", "commentLegacyId": "77", "author": {"from_name": "Bo"}})
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "Bo")
+        self.assertEqual(named.comment_id, "77")
+        rows, err = comments_from_graph_payload(
+            {"data": [{"message": "xin", "from_name": "An", "commented_at": "2024-08-01"}]},
+            5,
+        )
+        self.assertIsNone(err)
+        self.assertEqual(rows[0].author_name, "An")
+        self.assertEqual(rows[0].created_time, "2024-08-01")
+        self.assertEqual(post_id_from_url("https://www.facebook.com/share/p/99887766/"), "99887766")
+        self.assertEqual(post_id_from_url("https://www.facebook.com/share/v/99887766/"), "99887766")
+        self.assertEqual(post_id_from_url("https://www.facebook.com/shop/product/99887766"), "99887766")
+        threaded = _from_items({"data": {"comment_thread": {"comments": [{"text": "xin", "id": "8"}]}}}, 5)
+        self.assertEqual(threaded[0].comment_id, "8")
+        managed = _comments_from_json(
+            {"comment_thread": {"comments": [{"text": "xin", "actor_name": "Bo", "published_time": "2024-09-01"}]}},
+            5,
+        )
+        self.assertEqual(managed[0].author_name, "Bo")
+        self.assertEqual(managed[0].created_time, "2024-09-01")
+        imported = _from_mapping({"Nội dung gốc": "xin", "From name": "lan", "Ngày tạo": "2024-04-02"})
+        self.assertIsNotNone(imported)
+        assert imported is not None
+        self.assertEqual(imported.text, "xin")
+        self.assertEqual(imported.author_name, "lan")
+        self.assertEqual(imported.created_time, "2024-04-02")
+
 
 if __name__ == "__main__":
     unittest.main()

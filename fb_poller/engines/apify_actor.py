@@ -92,15 +92,43 @@ def _from_items(payload: Any, limit: int) -> list[PublicComment]:
         rows = payload
     elif isinstance(payload, dict):
         nested_rows: list[Any] | None = None
-        for key in ("items", "data", "comments", "comment", "comment_list", "commentList", "results", "result", "feedback"):
+        for key in (
+            "items",
+            "data",
+            "comments",
+            "comment",
+            "comment_list",
+            "commentList",
+            "comment_thread",
+            "results",
+            "result",
+            "feedback",
+        ):
             value = payload.get(key)
             linked = connection_rows(value)
             if not linked and isinstance(value, dict):
-                for inner_key in ("comments", "comment_list", "commentList", "items", "data", "results", "feedback"):
+                for inner_key in (
+                    "comments",
+                    "comment_list",
+                    "commentList",
+                    "comment_thread",
+                    "items",
+                    "data",
+                    "results",
+                    "feedback",
+                ):
                     child = value.get(inner_key)
                     linked = connection_rows(child)
                     if not linked and isinstance(child, dict):
-                        for deeper in ("comments", "comment_list", "commentList", "items", "data", "nodes"):
+                        for deeper in (
+                            "comments",
+                            "comment_list",
+                            "commentList",
+                            "comment_thread",
+                            "items",
+                            "data",
+                            "nodes",
+                        ):
                             linked = connection_rows(child.get(deeper))
                             if linked:
                                 break
@@ -230,6 +258,8 @@ def _one(row: Any) -> PublicComment | None:
         "author_sort_name",
         "page_name",
         "actor",
+        "actor_name",
+        "from_name",
     )
     return PublicComment(
         text=text,

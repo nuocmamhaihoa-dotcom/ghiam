@@ -40,6 +40,10 @@ _TEXT_KEYS = (
     "noi dung comment",
     "text comment",
     "comment body",
+    "nội dung gốc",
+    "noi dung goc",
+    "message_text",
+    "plain_body",
 )
 _AUTHOR_KEYS = (
     "author",
@@ -82,6 +86,8 @@ _AUTHOR_KEYS = (
     "profile_handle",
     "tên hiển thị",
     "ten hien thi",
+    "from_name",
+    "actor_name",
     "tác giả",
     "tac gia",
 )
@@ -113,6 +119,10 @@ _TIME_KEYS = (
     "created_time_seconds",
     "created_seconds",
     "created_ms",
+    "ngày tạo",
+    "ngay tao",
+    "comment_timestamp",
+    "published_time",
 )
 
 
