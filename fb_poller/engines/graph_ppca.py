@@ -84,7 +84,12 @@ def _append_rows(
     for row in rows:
         if not isinstance(row, dict):
             continue
-        text = nested_text(row.get("message")) or nested_text(row.get("text"))
+        text = (
+            nested_text(row.get("message"))
+            or nested_text(row.get("text"))
+            or nested_text(row.get("body"))
+            or nested_text(row.get("preferred_body"))
+        )
         if text:
             item = PublicComment(
                 text=text,

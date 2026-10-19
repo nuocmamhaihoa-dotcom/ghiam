@@ -65,6 +65,7 @@ _CHROME_LINE = re.compile(
     r"view \d+ more comments|xem thêm \d+ bình luận|"
     r"hide \d+ replies|ẩn \d+ phản hồi|"
     r"reply to \S.{0,60}|trả lời \S.{0,60}|"
+    r"comment as \S.{0,60}|reply as \S.{0,60}|bình luận với tư cách \S.{0,80}|"
     r"most relevant comments|newest comments|bình luận phù hợp nhất|bình luận mới nhất|"
     r"sponsored|được tài trợ|active now|đang hoạt động|"
     r"[·•]+|"
@@ -123,6 +124,19 @@ _GLUED_CHROME = re.compile(
     r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"\d+\s+(?:likes?|reactions?|comments?|shares?|lượt thích|bình luận|chia sẻ)|"
     r"edited|đã chỉnh sửa"
+    r")"
+    r")+$",
+    re.IGNORECASE,
+)
+_AUTHOR_STAMP = re.compile(
+    r"(?:"
+    r"\s*[·•]\s*(?:"
+    r"just now|vừa xong|yesterday|hôm qua|"
+    r"(?:about\s+|khoảng\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
+    r"(?:khoảng\s+)?\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
+    r"\d+\s*(?:s|m|h|d|w|y)|"
+    r"edited|đã chỉnh sửa|"
+    r"top fan|rising fan|verified|đã xác minh|tác giả"
     r")"
     r")+$",
     re.IGNORECASE,
@@ -307,6 +321,13 @@ def _clean_author(author: str | None) -> tuple[str | None, list[str]]:
     if visible.lower() in _CHROME_AUTHOR or _CHROME_LINE.match(visible):
         codes.append("clear_chrome_author")
         return None, codes
+    unstamped = _AUTHOR_STAMP.sub("", visible).strip(" ·•")
+    if unstamped != visible:
+        codes.append("strip_glued_chrome")
+        visible = unstamped
+    if not visible or visible.lower() in _CHROME_AUTHOR or _CHROME_LINE.match(visible):
+        codes.append("clear_chrome_author")
+        return None, codes
     return visible, codes
 
 
@@ -433,7 +454,7 @@ def _loose_comments(payload: object, depth: int = 0) -> list[PublicComment]:
                 text=rendered,
                 author_name=first_person_name(
                     payload,
-                    ("author", "author_name", "from", "profileName", "user_name", "name"),
+                    ("author", "author_name", "from", "profileName", "user_name", "name", "user", "profile", "owner"),
                 ),
                 comment_id=first_comment_id(payload),
                 created_time=time_text(payload.get("created_time"))

@@ -24,6 +24,7 @@ _DROP_LINE = re.compile(
     r"view \d+ more comments|xem thêm \d+ bình luận|"
     r"hide \d+ replies|ẩn \d+ phản hồi|"
     r"reply to \S.{0,60}|trả lời \S.{0,60}|"
+    r"comment as \S.{0,60}|reply as \S.{0,60}|bình luận với tư cách \S.{0,80}|"
     r"most relevant comments|newest comments|bình luận phù hợp nhất|bình luận mới nhất|"
     r"sponsored|được tài trợ|active now|đang hoạt động|"
     r"[·•]+|"
@@ -46,6 +47,19 @@ _DROP_LINE = re.compile(
     r"edited(?:\s*[·•]\s*\d+\s*[smhdwy])?|đã chỉnh sửa(?:\s*[·•]\s*\d+\s*[smhdwy])?|"
     r"\d+\s*[smhdwy]\s*[·•]\s*(?:edited|đã chỉnh sửa)?"
     r")$",
+    re.IGNORECASE,
+)
+_AUTHOR_STAMP = re.compile(
+    r"(?:"
+    r"\s*[·•]\s*(?:"
+    r"just now|vừa xong|yesterday|hôm qua|"
+    r"(?:about\s+|khoảng\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
+    r"(?:khoảng\s+)?\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
+    r"\d+\s*(?:s|m|h|d|w|y)|"
+    r"edited|đã chỉnh sửa|"
+    r"top fan|rising fan|verified|đã xác minh|tác giả"
+    r")"
+    r")+$",
     re.IGNORECASE,
 )
 _COUNT_LINE = re.compile(
@@ -78,7 +92,7 @@ def comments_from_articles(blocks: list[str], limit: int) -> list[PublicComment]
             lines.pop()
         if len(lines) < 2:
             continue
-        author = lines[0]
+        author = _AUTHOR_STAMP.sub("", lines[0]).strip(" ·•")
         text = " ".join(lines[1:]).strip()
         if len(author) < 1 or len(text) < 1 or _DROP_LINE.match(author) or placeholder_text(text):
             continue

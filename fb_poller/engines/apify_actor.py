@@ -162,7 +162,9 @@ def _one(row: Any) -> PublicComment | None:
         return None
     return PublicComment(
         text=text,
-        author_name=first_person_name(row, ("author", "profileName", "userName", "name", "from")),
+        author_name=first_person_name(
+            row, ("author", "profileName", "userName", "name", "from", "user", "profile", "owner")
+        ),
         comment_id=first_comment_id(row),
         created_time=time_text(row.get("date")) or time_text(row.get("created_time")),
     )

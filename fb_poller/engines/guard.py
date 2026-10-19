@@ -73,7 +73,23 @@ def comment_id(value: object) -> str | None:
 def first_comment_id(row: dict[str, object]) -> str | None:
     """The first real id. A bool ``id`` must not hide ``legacy_fbid``."""
     for key in ("id", "legacy_fbid", "comment_id", "commentId"):
-        found = comment_id(row.get(key))
+        found = _id_value(row.get(key))
+        if found:
+            return found
+    return None
+
+
+def _id_value(value: object, depth: int = 0) -> str | None:
+    """A string id, or the id inside one nested id object."""
+    found = comment_id(value)
+    if found:
+        return found
+    if depth > 1 or not isinstance(value, dict):
+        return None
+    for key in ("id", "legacy_fbid", "comment_id", "commentId"):
+        if key not in value:
+            continue
+        found = _id_value(value.get(key), depth + 1)
         if found:
             return found
     return None

@@ -66,6 +66,28 @@ def parse_proxy_line(line: str) -> ProxyConfig | None:
             raw=line,
         )
 
+    if line.startswith("["):
+        end = line.find("]")
+        if end > 1 and line[end + 1 : end + 2] == ":":
+            host = line[1:end]
+            rest = line[end + 2 :].split(":")
+            if host and rest and rest[0].isdigit():
+                port = rest[0]
+                server = f"http://[{host}]:{port}"
+                if len(rest) == 1:
+                    return ProxyConfig(id=None, server=server, raw=line)
+                user = rest[1]
+                password = ":".join(rest[2:]) if len(rest) > 2 else None
+                if user:
+                    return ProxyConfig(
+                        id=None,
+                        server=server,
+                        username=user,
+                        password=password,
+                        raw=line,
+                    )
+        return None
+
     parts = line.split(":")
     if len(parts) == 2:
         host, port = parts

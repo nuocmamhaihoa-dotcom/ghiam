@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from fb_poller.engines.apify_actor import _from_items
 from fb_poller.engines.graph_ppca import accepted_object_id, comments_from_graph_payload, post_id_from_url
-from fb_poller.engines.guard import comment_id, public_error, redact_text
+from fb_poller.engines.guard import comment_id, first_comment_id, public_error, redact_text
 from fb_poller.engines.guest_graphql import comments_from_html as graphql_from_html
 from fb_poller.engines.guest_graphql import comments_from_payload, merge_comments
 from fb_poller.engines.guest_ssr import comments_from_html
@@ -771,6 +771,44 @@ class EngineTests(unittest.TestCase):
         plain = heal_result(EngineResult("graph-ppca", 6, False, error="missing_GRAPH_ACCESS_TOKEN"))
         self.assertEqual(plain.comments, [])
         self.assertEqual(plain.error, "missing_GRAPH_ACCESS_TOKEN")
+
+    def test_author_stamp_user_object_and_nested_id(self) -> None:
+        block = "\n".join(["Lan · 2h", "hello", "Comment as Lan"])
+        article = comments_from_articles([block], 5)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\nComment as Lan", author_name="Lan · Just now")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertEqual(healed[0].author_name, "Lan")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertIn("strip_glued_chrome", codes)
+        kept, _ = heal_comments([PublicComment(text="hello", author_name="Lan · Nguyen")])
+        self.assertEqual(kept[0].author_name, "Lan · Nguyen")
+        apify = _from_items([{"comment": "xin", "user": {"name": "Lan"}}], 5)
+        self.assertEqual(apify[0].author_name, "Lan")
+        managed = _comments_from_json({"text": "xin", "user": {"name": "Lan"}}, 5)
+        self.assertEqual(managed[0].author_name, "Lan")
+        graph, err = comments_from_graph_payload(
+            {"data": [{"body": {"text": "xin"}, "from": {"name": "An"}}]},
+            5,
+        )
+        self.assertEqual(graph[0].text, "xin")
+        self.assertEqual(graph[0].author_name, "An")
+        self.assertIsNone(err)
+        self.assertEqual(first_comment_id({"id": {"id": "999"}}), "999")
+        self.assertEqual(first_comment_id({"id": {"name": "nope"}, "legacy_fbid": "7"}), "7")
+        parsed = parse_proxy_line("[2001:db8::1]:8080")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed.server, "http://[2001:db8::1]:8080")
+        authed = parse_proxy_line("[2001:db8::1]:8080:user:pa:ss")
+        self.assertIsNotNone(authed)
+        assert authed is not None
+        self.assertEqual(authed.username, "user")
+        self.assertEqual(authed.password, "pa:ss")
+        self.assertEqual(authed.as_httpx(), "http://user:pa%3Ass@[2001:db8::1]:8080")
 
 
 if __name__ == "__main__":
