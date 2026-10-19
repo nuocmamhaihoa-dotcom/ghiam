@@ -37,8 +37,11 @@
     .drop.over { background: #e8f2fc; border-color: var(--blue); }
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.55rem; }
     .stat { background: #f7f9fb; border-radius: 10px; padding: 0.7rem 0.75rem; }
+    a.stat { display: block; color: inherit; text-decoration: none; }
+    a.stat:active, a.report:active { background: #e8f2fc; }
     .stat b { display: block; font-size: 1.35rem; }
     .stat span { color: var(--muted); font-size: 0.92rem; }
+    .stats .miss { grid-column: 1 / -1; margin: 0; }
     table { width: 100%; border-collapse: collapse; }
     th, td { text-align: left; padding: 0.45rem 0.3rem; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 0.95rem; }
     th { color: var(--muted); font-weight: 650; }
@@ -55,7 +58,12 @@
     .phones button.on span { color: #d6e8fa; }
     .phones button .when { color: var(--ink); font-weight: 750; font-size: 0.82rem; letter-spacing: 0.01em; }
     .phones button.on .when { color: #fff; }
-    h3.report { margin: 0.85rem 0 0.4rem; }
+    a.report {
+      display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+      margin: 0.85rem 0 0.4rem; padding: 0.75rem 0.85rem; min-height: 48px;
+      background: #f7f9fb; border-radius: 10px; color: inherit; text-decoration: none; font-weight: 750;
+    }
+    a.report::after { content: "›"; color: var(--blue); font-size: 1.5rem; font-weight: 400; line-height: 1; }
     .phonebar { display: flex; justify-content: space-between; gap: 0.7rem; align-items: center; }
     h3 { font-size: 1rem; margin: 1.1rem 0 0.35rem; }
     .bar { height: 6px; background: #e4e7ec; border-radius: 3px; margin-top: 0.3rem; overflow: hidden; }
@@ -75,11 +83,11 @@
 
   <section>
     <h2>Báo cáo nhanh</h2>
-    <h3 class="report">Thống kê hôm nay</h3>
+    <a class="report" href="/ket-qua?span=today">Thống kê hôm nay</a>
     <div class="stats" id="statsToday"></div>
-    <h3 class="report">Thống kê toàn bộ thời gian</h3>
+    <a class="report" href="/ket-qua?span=all">Thống kê toàn bộ thời gian</a>
     <div class="stats" id="statsAll"></div>
-    <h3 class="report">Đang đọc lúc này</h3>
+    <a class="report" href="#hang-doi">Đang đọc lúc này</a>
     <div class="stats" id="statsLive"></div>
     <p id="statScope" class="note"></p>
     <p id="reader" class="note"></p>
@@ -117,7 +125,7 @@
     <p id="uploadNote" class="note"></p>
   </section>
 
-  <section>
+  <section id="hang-doi">
     <h2>Hàng đợi</h2>
     <div class="row spanpick" id="statSpanQueue" style="margin-bottom:0.7rem">
       <button type="button" class="ghost" data-span="today">Hôm nay</button>
@@ -261,8 +269,10 @@
     return response;
   }
 
-  function stat(value, label) {
-    return "<div class='stat'><b>" + value + "</b><span>" + label + "</span></div>";
+  function stat(value, label, href) {
+    var inner = "<b>" + value + "</b><span>" + label + "</span>";
+    if (!href) return "<div class='stat'>" + inner + "</div>";
+    return "<a class='stat' href='" + href + "'>" + inner + "</a>";
   }
 
   function countText(item) {
@@ -535,23 +545,60 @@
     renderInvites(body.invites || []);
   }
 
-  function periodTiles(totals) {
+  function reportLink(span, extra) {
+    return "/ket-qua?span=" + encodeURIComponent(span) + (extra ? "&" + extra : "");
+  }
+
+  function periodTiles(totals, span) {
     var row = totals || {};
-    return stat(row.uploaded || 0, "Đã tải") +
-      stat(row.done || 0, "Đọc xong") +
-      stat(row.errors || 0, "Lỗi") +
-      stat(row.waiting || 0, "Đang chờ") +
-      stat(row.saved || 0, "Đã lưu") +
-      stat(row.unnamed || 0, "Thiếu tên") +
-      stat(row.review || 0, "Cần xem") +
-      stat(row.unopened || 0, "Chưa mở hồ sơ") +
-      stat(row.matched || 0, "Khớp") +
-      stat(row.differed || 0, "Lệch");
+    return stat(row.uploaded || 0, "Đã tải", "#hang-doi") +
+      stat(row.done || 0, "Đọc xong", "#hang-doi") +
+      stat(row.errors || 0, "Lỗi", "#hang-doi") +
+      stat(row.waiting || 0, "Đang chờ", "#hang-doi") +
+      stat(row.saved || 0, "Đã lưu", reportLink(span, "bucket=saved")) +
+      stat(row.unnamed || 0, "Thiếu tên", reportLink(span, "")) +
+      stat(row.review || 0, "Cần xem", reportLink(span, "bucket=review")) +
+      stat(row.unopened || 0, "Chưa mở hồ sơ", reportLink(span, "bucket=unopened")) +
+      stat(row.matched || 0, "Khớp", reportLink(span, "checked=ok")) +
+      stat(row.differed || 0, "Lệch", reportLink(span, "checked=diff"));
+  }
+
+  function markStatsReady(id) {
+    var box = document.getElementById(id);
+    box.setAttribute("data-ready", "1");
+    box.removeAttribute("data-empty");
+  }
+
+  function showStatsMiss() {
+    var text = "<p class='note warn miss'>Chưa tải được số liệu. Đang thử lại.</p>";
+    ["statsToday", "statsAll", "statsLive"].forEach(function (id) {
+      var box = document.getElementById(id);
+      if (box.getAttribute("data-ready") === "1") return;
+      box.innerHTML = text;
+      box.setAttribute("data-empty", "1");
+    });
+    var board = document.getElementById("phoneBoard");
+    if (board && !board.querySelector("button")) {
+      board.innerHTML = "<p class='note warn'>Chưa tải được danh sách điện thoại. Đang thử lại.</p>";
+    }
+    var waiting = document.querySelector("#thisPhone[data-mode='wait'] .note");
+    if (waiting) waiting.textContent = "Chưa tải được số liệu của máy này. Đang thử lại.";
   }
 
   async function refresh() {
+    try {
+      await refreshStats();
+    } catch (error) {
+      showStatsMiss();
+    }
+  }
+
+  async function refreshStats() {
     var statsResponse = await api("/v1/videos/stats?span=" + encodeURIComponent(statSpan));
-    if (!statsResponse.ok) return;
+    if (!statsResponse.ok) {
+      showStatsMiss();
+      return;
+    }
     var body = await statsResponse.json();
     var todayReport = body.today || { day: "", known: [], items: [], totals: {} };
     var allReport = body.all || { day: "", known: [], items: [], totals: {} };
@@ -560,14 +607,18 @@
     phoneToday = todayReport.items || [];
     phoneAll = allReport.items || [];
     phoneItems = phones.items || [];
-    document.getElementById("statsToday").innerHTML = periodTiles(todayReport.totals);
-    document.getElementById("statsAll").innerHTML = periodTiles(allReport.totals);
+    document.getElementById("statsToday").innerHTML = periodTiles(todayReport.totals, "today");
+    document.getElementById("statsAll").innerHTML = periodTiles(allReport.totals, "all");
     document.getElementById("statsLive").innerHTML =
-      stat(body.running, "Máy chủ đang đọc") +
-      stat(body.pc || 0, "PC đang đọc");
+      stat(body.running, "Máy chủ đang đọc", "#hang-doi") +
+      stat(body.pc || 0, "PC đang đọc", "#hang-doi");
+    markStatsReady("statsToday");
+    markStatsReady("statsAll");
+    markStatsReady("statsLive");
+    statsReady = true;
     document.getElementById("statScope").textContent = statSpan === "all"
-      ? "Báo cáo nhanh luôn hiện cả hôm nay và toàn bộ thời gian. Chi tiết từng máy cũng hiện cả hai. Hàng đợi và bảng kết quả đang theo toàn bộ thời gian."
-      : "Báo cáo nhanh luôn hiện cả hôm nay và toàn bộ thời gian. Chi tiết từng máy cũng hiện cả hai. Hàng đợi và bảng kết quả đang theo hôm nay.";
+      ? "Bấm tiêu đề hoặc một ô số để mở báo cáo đó. Hàng đợi và bảng kết quả đang theo toàn bộ thời gian."
+      : "Bấm tiêu đề hoặc một ô số để mở báo cáo đó. Hàng đợi và bảng kết quả đang theo hôm nay.";
     var queueScope = document.getElementById("queueScope");
     if (queueScope) {
       queueScope.textContent = statSpan === "all"
@@ -914,6 +965,7 @@
   var phoneToday = [];
   var phoneAll = [];
   var statSpan = "today";
+  var statsReady = false;
   var followSpanDates = true;
   try { thisPhone = localStorage.getItem(PHONE_KEY) || ""; } catch (error) { thisPhone = ""; }
   try {
@@ -990,6 +1042,20 @@
 
   function renderThisPhone() {
     var box = document.getElementById("thisPhone");
+    if (thisPhone && !statsReady) {
+      if (box.getAttribute("data-mode") === "wait") return;
+      box.setAttribute("data-mode", "wait");
+      box.setAttribute("data-stamp", "");
+      box.innerHTML = "<div class='phonebar'><div><b>" + escapeHtml(thisPhone) + "</b>"
+        + "<div class='note'>Đang tải số liệu của máy này.</div></div>"
+        + "<button class='ghost' type='button' id='changePhone'>Đổi</button></div>";
+      document.getElementById("changePhone").addEventListener("click", function () {
+        thisPhone = "";
+        try { localStorage.removeItem(PHONE_KEY); } catch (error) {}
+        renderThisPhone();
+      });
+      return;
+    }
     if (thisPhone) {
       var mineToday = null;
       var mineAll = null;
