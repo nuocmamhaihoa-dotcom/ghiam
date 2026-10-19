@@ -43,14 +43,17 @@ def run_job(db_path: Path, job: dict[str, object], scan=scan_paths) -> None:
     started = time.monotonic()
     try:
         table, frames = scan([path])
-        finish(db_path, video_id, table)
+        saved = finish(db_path, video_id, table, owner_pid=os.getpid())
     except BrokenExecutor:
         requeue(db_path, video_id)
         raise
     except Exception as exc:
         message = str(exc) or "Không đọc được video."
-        fail(db_path, video_id, message)
+        fail(db_path, video_id, message, owner_pid=os.getpid())
         print(f"Video {video_id} lỗi sau {time.monotonic() - started:.0f} giây: {message[:300]}", flush=True)
+        return
+    if not saved:
+        print(f"Video {video_id} đã được trả về hàng đợi, không ghi đè.", flush=True)
         return
     path.unlink(missing_ok=True)
     print(

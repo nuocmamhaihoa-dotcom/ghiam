@@ -68,10 +68,33 @@ if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+# Phần đầu multipart (boundary, tên file) nằm ngoài dung lượng file. Chừa 1 MB để file đúng hạn mức vẫn tải được.
+_MULTIPART_SLACK = 1024 * 1024
+
+
+def upload_too_large(content_length: str | None, limit_bytes: int, content_type: str | None = None) -> bool:
+    """True khi Content-Length vượt hạn mức. Content-Length không phải số thì báo lỗi cho người gọi."""
+    if not content_length:
+        return False
+    try:
+        size = int(content_length)
+    except ValueError as exc:
+        raise ValueError("content-length không hợp lệ") from exc
+    slack = _MULTIPART_SLACK if content_type and "multipart/form-data" in content_type.lower() else 0
+    return size > limit_bytes + slack
+
+
 class LimitUploadSizeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
-        cl = request.headers.get("content-length")
-        if cl and int(cl) > settings.max_upload_mb * 1024 * 1024:
+        try:
+            too_large = upload_too_large(
+                request.headers.get("content-length"),
+                settings.max_upload_mb * 1024 * 1024,
+                request.headers.get("content-type"),
+            )
+        except ValueError:
+            return JSONResponse({"detail": "content-length không hợp lệ"}, status_code=400)
+        if too_large:
             return JSONResponse({"detail": "upload too large"}, status_code=413)
         return await call_next(request)
 

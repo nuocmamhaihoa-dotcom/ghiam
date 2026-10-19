@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import gzip
 import os
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 
 from control_plane.screen_table import Review, Row, Table, Unopened
+from control_plane.settings import env_float, env_int
 from control_plane.video_store import (
     abort_upload,
     begin_upload,
@@ -16,17 +18,21 @@ from control_plane.video_store import (
     claim,
     commit_upload,
     fail,
+    feeder_count,
     finish,
+    free_before_this_file,
     init_db,
     iter_backup,
     list_videos,
     merge_close_results,
     queued_bytes,
     recover_dead,
+    requeue,
     requeue_running,
     retry,
     search_results,
     stats,
+    worker_count,
 )
 
 
@@ -258,6 +264,96 @@ class VideoStoreTests(unittest.TestCase):
         self.assertFalse(can_accept(79 * gb, 2 * gb, 80 * gb, 10 * gb))
         self.assertFalse(can_accept(0, 100, 80 * gb, 1 * gb))
         self.assertEqual(queued_bytes(self.db), 0)
+
+    def test_free_space_is_measured_before_the_temp_file(self) -> None:
+        gb = 1024 * 1024 * 1024
+        free_after = 2 * gb + 50
+        written = 100
+        # Sau khi ghi, chỗ trống chỉ hơn 2 GB một chút. Cộng lại file vừa ghi thì vẫn đủ chỗ.
+        self.assertTrue(can_accept(0, written, 80 * gb, free_before_this_file(free_after, written)))
+        self.assertFalse(can_accept(0, written, 80 * gb, free_after))
+        self.assertFalse(can_accept(0, written, 80 * gb, free_before_this_file(gb, written)))
+
+    def test_stale_upload_frees_quota_and_accepts_the_same_file_again(self) -> None:
+        created = begin_upload(self.db, name="a.mp4", size_bytes=500, sha256="stuck")
+        video_id = int(created["id"])
+        with sqlite3.connect(self.db) as conn:
+            conn.execute(
+                "UPDATE videos SET created_at = ? WHERE id = ?",
+                ("2000-01-01T00:00:00+00:00", video_id),
+            )
+        self.assertEqual(queued_bytes(self.db), 0)
+        self.assertEqual(stats(self.db)["error"], 1)
+        self.assertEqual(stats(self.db)["uploading"], 0)
+        again = begin_upload(self.db, name="a.mp4", size_bytes=500, sha256="stuck")
+        self.assertFalse(again["duplicate"])
+        self.assertTrue(again["reopened"])
+        self.assertEqual(again["id"], video_id)
+
+    def test_fresh_upload_is_still_a_duplicate(self) -> None:
+        begin_upload(self.db, name="a.mp4", size_bytes=500, sha256="live")
+        again = begin_upload(self.db, name="a.mp4", size_bytes=500, sha256="live")
+        self.assertTrue(again["duplicate"])
+        self.assertEqual(queued_bytes(self.db), 500)
+
+    def test_late_worker_does_not_overwrite_a_requeued_video(self) -> None:
+        video_id = self._add("a.mp4", "late")
+        claim(self.db, 42)
+        requeue(self.db, video_id)
+        saved = finish(
+            self.db,
+            video_id,
+            Table(rows=[Row("0332001753", "khactam", "@khactam60")]),
+            owner_pid=42,
+        )
+        self.assertFalse(saved)
+        self.assertFalse(fail(self.db, video_id, "đến muộn", owner_pid=42))
+        self.assertEqual(stats(self.db)["queued"], 1)
+        self.assertEqual(stats(self.db)["saved"], 0)
+        self.assertEqual(search_results(self.db, "0332"), [])
+        claim(self.db, 42)
+        self.assertTrue(
+            finish(self.db, video_id, Table(rows=[Row("0332001753", "khactam", "@khactam60")]), owner_pid=42)
+        )
+        self.assertEqual(stats(self.db)["done"], 1)
+
+    def test_bad_worker_env_falls_back(self) -> None:
+        previous_workers = os.environ.get("CONTROL_VIDEO_WORKERS")
+        previous_feeders = os.environ.get("CONTROL_VIDEO_FEEDERS")
+        os.environ["CONTROL_VIDEO_WORKERS"] = "không-phải-số"
+        os.environ["CONTROL_VIDEO_FEEDERS"] = "không"
+        try:
+            self.assertGreaterEqual(worker_count(), 1)
+            self.assertEqual(feeder_count(), 3)
+            os.environ["CONTROL_VIDEO_FEEDERS"] = "4"
+            self.assertEqual(feeder_count(), 4)
+        finally:
+            if previous_workers is None:
+                os.environ.pop("CONTROL_VIDEO_WORKERS", None)
+            else:
+                os.environ["CONTROL_VIDEO_WORKERS"] = previous_workers
+            if previous_feeders is None:
+                os.environ.pop("CONTROL_VIDEO_FEEDERS", None)
+            else:
+                os.environ["CONTROL_VIDEO_FEEDERS"] = previous_feeders
+
+    def test_bad_settings_env_falls_back(self) -> None:
+        previous_port = os.environ.get("CONTROL_PORT")
+        previous_timeout = os.environ.get("CONTROL_PROXY_CHECK_TIMEOUT")
+        os.environ["CONTROL_PORT"] = "abc"
+        os.environ["CONTROL_PROXY_CHECK_TIMEOUT"] = "chậm"
+        try:
+            self.assertEqual(env_int("CONTROL_PORT", 8088), 8088)
+            self.assertEqual(env_float("CONTROL_PROXY_CHECK_TIMEOUT", 8.0), 8.0)
+        finally:
+            if previous_port is None:
+                os.environ.pop("CONTROL_PORT", None)
+            else:
+                os.environ["CONTROL_PORT"] = previous_port
+            if previous_timeout is None:
+                os.environ.pop("CONTROL_PROXY_CHECK_TIMEOUT", None)
+            else:
+                os.environ["CONTROL_PROXY_CHECK_TIMEOUT"] = previous_timeout
 
 
 class BackupGzipTests(unittest.TestCase):

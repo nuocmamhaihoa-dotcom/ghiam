@@ -21,7 +21,7 @@ Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from control_plane.app import app  # noqa: E402
+from control_plane.app import app, upload_too_large  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
 
 
@@ -192,6 +192,18 @@ class ActionApiTests(unittest.TestCase):
         self.assertFalse(ticket_ok(f"{int(expiry) + 3600}-{signature}", 1000.0))
         self.assertFalse(ticket_ok("garbage", 1000.0))
         self.assertEqual(self.client.get(f"/v1/backup/{expiry}-{'0' * 32}").status_code, 404)
+
+    def test_content_length_limit_keeps_a_file_at_the_cap(self) -> None:
+        limit = 100
+        self.assertFalse(upload_too_large(None, limit))
+        self.assertFalse(upload_too_large("100", limit))
+        self.assertTrue(upload_too_large("101", limit))
+        self.assertFalse(upload_too_large(str(limit + 1024), limit, "multipart/form-data; boundary=abc"))
+        self.assertTrue(upload_too_large(str(limit + 1024 * 1024 + 1), limit, "multipart/form-data"))
+        with self.assertRaises(ValueError):
+            upload_too_large("nope", limit)
+        response = self.client.get("/v1/videos/stats", headers={**self.headers, "content-length": "nope"})
+        self.assertEqual(response.status_code, 400)
 
     def test_same_video_after_it_is_read_is_read_again(self) -> None:
         from control_plane.video_store import connect
@@ -549,6 +561,26 @@ class ActionApiTests(unittest.TestCase):
             guide = archive.read("DanhBa/HUONG-DAN.txt").decode("utf-8")
             self.assertIn("Nạp lên iPhone", guide)
             self.assertNotIn("token", guide.lower())
+
+
+class ProxyUrlTests(unittest.TestCase):
+    def test_password_with_at_sign_stays_one_url(self) -> None:
+        from control_plane.proxy_check import to_proxy_url
+
+        self.assertEqual(to_proxy_url("1.2.3.4:8080"), "http://1.2.3.4:8080")
+        self.assertEqual(
+            to_proxy_url("1.2.3.4:8080:user:p@ss:word"),
+            None,
+        )
+        self.assertEqual(
+            to_proxy_url("1.2.3.4:8080:user:p@ss"),
+            "http://user:p%40ss@1.2.3.4:8080",
+        )
+        self.assertEqual(
+            to_proxy_url("1.2.3.4:8080", user="user", password="a:b"),
+            "http://user:a%3Ab@1.2.3.4:8080",
+        )
+        self.assertIsNone(to_proxy_url("1.2.3.4:notaport"))
 
 
 if __name__ == "__main__":

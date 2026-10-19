@@ -28,20 +28,28 @@ def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def worker_count() -> int:
-    raw = os.environ.get("CONTROL_VIDEO_WORKERS", "").strip()
-    if raw:
+# Một lần tải 4 GB trên đường chậm có thể kéo dài hàng giờ. Sau mốc này coi như đứt.
+STALE_UPLOAD_SECONDS = 12 * 60 * 60
+
+
+def _env_positive(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
         return max(1, int(raw))
+    except ValueError:
+        return default
+
+
+def worker_count() -> int:
     cpus = os.cpu_count() or 2
-    return max(1, cpus - 1)
+    return _env_positive("CONTROL_VIDEO_WORKERS", max(1, cpus - 1))
 
 
 def feeder_count() -> int:
     """Số video tách khung cùng lúc. Một video đang tách khung thì video kia đang được đọc."""
-    raw = os.environ.get("CONTROL_VIDEO_FEEDERS", "").strip()
-    if raw:
-        return max(1, int(raw))
-    return 3
+    return _env_positive("CONTROL_VIDEO_FEEDERS", 3)
 
 
 @contextmanager
@@ -131,6 +139,7 @@ def init_db(db_path: Path) -> None:
 
 def queued_bytes(db_path: Path) -> int:
     """Dung lượng video còn nằm trên đĩa, kể cả video lỗi được giữ lại để bấm Đọc lại."""
+    expire_stale_uploads(db_path)
     with connect(db_path) as conn:
         row = conn.execute(
             """
@@ -147,8 +156,49 @@ def can_accept(used_bytes: int, new_bytes: int, limit_bytes: int, free_bytes: in
     return free_bytes > new_bytes + (2 * 1024 * 1024 * 1024)
 
 
+def free_before_this_file(free_after_write: int, written_bytes: int) -> int:
+    """Chỗ trống trước khi ghi file tạm.
+
+    File đã nằm trên đĩa rồi mới hỏi còn nhận được không. os.replace không tạo thêm một bản sao,
+    nên phải cộng lại đúng số byte vừa ghi. Nếu không, video sát mức 2 GB dự phòng bị từ chối oan.
+    """
+    return free_after_write + max(0, written_bytes)
+
+
+def _created_age(created_at: str, now: float) -> float:
+    try:
+        created = datetime.fromisoformat(created_at)
+    except ValueError:
+        return STALE_UPLOAD_SECONDS + 1
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return now - created.timestamp()
+
+
+def expire_stale_uploads(db_path: Path, *, now: float | None = None, max_age: float = STALE_UPLOAD_SECONDS) -> int:
+    """Tải dở quá lâu thì thôi chiếm chỗ. Cùng một file tải lại được, không kẹt ở trạng thái đang tải."""
+    current = time.time() if now is None else now
+    expired = 0
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT id, created_at FROM videos WHERE status = 'uploading'").fetchall()
+        for row in rows:
+            if _created_age(str(row["created_at"]), current) < max_age:
+                continue
+            conn.execute(
+                """
+                UPDATE videos
+                SET status = 'error', error = ?, path = ''
+                WHERE id = ? AND status = 'uploading'
+                """,
+                ("Tải lên bị gián đoạn. Tải lại video.", row["id"]),
+            )
+            expired += 1
+    return expired
+
+
 def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str) -> dict[str, object]:
     """Cùng một file đang chờ hoặc đang đọc thì bỏ qua. Đã đọc xong hoặc lỗi thì đọc lại bằng bộ đọc hiện tại."""
+    expire_stale_uploads(db_path)
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         existing = conn.execute("SELECT id, status, name, path FROM videos WHERE sha256 = ?", (sha256,)).fetchone()
@@ -190,12 +240,13 @@ def begin_upload(db_path: Path, *, name: str, size_bytes: int, sha256: str) -> d
         return {"id": int(cur.lastrowid), "status": "uploading", "name": name, "duplicate": False}
 
 
-def commit_upload(db_path: Path, video_id: int, path: str) -> None:
+def commit_upload(db_path: Path, video_id: int, path: str) -> bool:
     with connect(db_path) as conn:
-        conn.execute(
+        cur = conn.execute(
             "UPDATE videos SET path = ?, status = 'queued' WHERE id = ? AND status = 'uploading'",
             (path, video_id),
         )
+        return cur.rowcount == 1
 
 
 def abort_upload(db_path: Path, video_id: int, reopened: bool = False) -> None:
@@ -224,6 +275,7 @@ def list_videos(db_path: Path, limit: int = 40) -> list[dict[str, object]]:
 
 
 def stats(db_path: Path) -> dict[str, int]:
+    expire_stale_uploads(db_path)
     counts = {"queued": 0, "running": 0, "done": 0, "error": 0, "uploading": 0}
     buckets = {"saved": 0, "review": 0, "unopened": 0}
     with connect(db_path) as conn:
@@ -302,28 +354,64 @@ def recover_dead(db_path: Path) -> int:
         return recovered
 
 
-def finish(db_path: Path, video_id: int, table: Table) -> None:
+def finish(db_path: Path, video_id: int, table: Table, owner_pid: int | None = None) -> bool:
+    """Ghi kết quả chỉ khi video vẫn thuộc lượt đọc này.
+
+    Không truyền owner_pid thì nhận video đang chờ hoặc đang đọc, để lần gọi trực tiếp vẫn lưu được.
+    Có owner_pid thì chỉ nhận đúng tiến trình đã nhận video. Video đã trả về hàng đợi không bị ghi đè.
+    """
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
+        if not _owns(conn, video_id, owner_pid):
+            conn.execute("COMMIT")
+            return False
         for row in table.rows:
             _put(conn, row.phone, row.name, row.username, BUCKET_OK, "", video_id, upgrade=True)
         for item in table.unopened:
             _put(conn, item.phone, item.name, "", BUCKET_UNOPENED, "", video_id, upgrade=False)
         for item in table.review:
             _put_review(conn, item, video_id)
-        conn.execute(
-            "UPDATE videos SET status = 'done', pid = NULL, finished_at = ?, error = '' WHERE id = ?",
-            (utcnow(), video_id),
+        cur = conn.execute(
+            f"UPDATE videos SET status = 'done', pid = NULL, finished_at = ?, error = '' WHERE id = ? AND {_owner_clause(owner_pid)}",
+            (utcnow(), video_id, *_owner_params(owner_pid)),
         )
+        if cur.rowcount != 1:
+            conn.execute("ROLLBACK")
+            return False
         conn.execute("COMMIT")
+        return True
 
 
-def fail(db_path: Path, video_id: int, message: str) -> None:
+def fail(db_path: Path, video_id: int, message: str, owner_pid: int | None = None) -> bool:
     with connect(db_path) as conn:
-        conn.execute(
-            "UPDATE videos SET status = 'error', pid = NULL, finished_at = ?, error = ? WHERE id = ?",
-            (utcnow(), message[:500], video_id),
+        cur = conn.execute(
+            f"""
+            UPDATE videos SET status = 'error', pid = NULL, finished_at = ?, error = ?
+            WHERE id = ? AND {_owner_clause(owner_pid)}
+            """,
+            (utcnow(), message[:500], video_id, *_owner_params(owner_pid)),
         )
+        return cur.rowcount == 1
+
+
+def _owner_clause(owner_pid: int | None) -> str:
+    if owner_pid is None:
+        return "status IN ('queued', 'running')"
+    return "status = 'running' AND pid = ?"
+
+
+def _owner_params(owner_pid: int | None) -> tuple[int, ...]:
+    if owner_pid is None:
+        return ()
+    return (owner_pid,)
+
+
+def _owns(conn: sqlite3.Connection, video_id: int, owner_pid: int | None) -> bool:
+    row = conn.execute(
+        f"SELECT id FROM videos WHERE id = ? AND {_owner_clause(owner_pid)}",
+        (video_id, *_owner_params(owner_pid)),
+    ).fetchone()
+    return row is not None
 
 
 def retry(db_path: Path, video_id: int) -> bool:

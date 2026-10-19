@@ -477,6 +477,8 @@ class TapSpotTests(unittest.TestCase):
 
 class VideoFailureTests(unittest.TestCase):
     def test_broken_frame_is_skipped_not_fatal(self) -> None:
+        from PIL import Image
+
         from control_plane.video_scan import read_frame_at, read_tap_at
 
         with tempfile.TemporaryDirectory() as folder:
@@ -485,6 +487,10 @@ class VideoFailureTests(unittest.TestCase):
             self.assertEqual(read_frame_at(str(broken), 1.5).kind, "unknown")
             self.assertEqual(read_frame_at(str(broken), 1.5).at, 1.5)
             self.assertEqual(read_tap_at([str(broken)], 2.0).kind, "unknown")
+            blank = Path(folder) / "f_000002.jpg"
+            Image.new("RGB", (40, 40), "white").save(blank)
+            # Khung hỏng đứng trước khung đọc được thì cửa sổ bấm vẫn kết thúc, không văng lỗi.
+            self.assertEqual(read_tap_at([str(broken), str(blank)], 3.0).kind, "unknown")
 
     def test_noisy_ffmpeg_does_not_hang_the_planner(self) -> None:
         import os

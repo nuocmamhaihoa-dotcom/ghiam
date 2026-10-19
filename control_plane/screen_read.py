@@ -152,10 +152,16 @@ def read_pillow(image: Image.Image) -> FrameObs:
 
 
 def read_tap(paths: list[str | Path]) -> FrameObs:
-    """Các khung ngay trước lúc màn hình chuyển. Chỉ đọc dòng có chấm chạm hoặc nền xám."""
+    """Các khung ngay trước lúc màn hình chuyển. Chỉ đọc dòng có chấm chạm hoặc nền xám.
+
+    Một khung hỏng bị bỏ qua. Các khung còn lại trong cửa sổ vẫn được đọc.
+    """
     _require_tesseract()
     for path in reversed(paths):
-        image = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+        try:
+            image = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+        except (OSError, ValueError):
+            continue
         listed = _list_buttons(_pink_boxes(image), image.width)
         if len(listed) < 3:
             continue
