@@ -10,6 +10,8 @@
 - cac-ai.md: cách các AI khác học, và vòng học của coderd.
 - kinh-nghiem.md: bài học ngắn đưa vào mỗi lượt chat.
 - da-hoc.md: kho đầy đủ vừa học. Đừng đọc cả file này.
-- sach/: mỗi chủ đề một file. Khi cần, đọc đúng một file trong thư mục này.
+- chi-muc.md: từ khóa trỏ tới một kỹ năng. Đọc file này trước.
+- the/: mỗi kỹ năng một file, gồm sự kiện, cách làm và ví dụ. Đọc đúng một file.
+- sach/: câu đã trích từ tài liệu. Đọc khi file trong the/ chưa đủ.
 
 Việc cần nhớ cho lần sau thì ghi vào `.coderd/memory.md`.

@@ -8,4 +8,11 @@ Trọng số của một model không đổi sau mỗi câu chat. Phần “họ
 - DeepSeek, Qwen, Llama, Gemma: file trọng số đứng yên. Muốn giỏi thêm thì thêm tài liệu (RAG) hoặc huấn luyện lại trên máy có GPU.
 - Letta (trước là MemGPT) tách bộ nhớ lõi ngắn và kho dài. Model tự quyết định ghi gì vào kho.
 
-Coderd làm bản nhỏ của cách đó. Vài phút một lần, tiến trình `coderd-learn` đọc các câu đã xong, rút tối đa ba dòng, ghi vào `learn/kinh-nghiem.md`. Lượt chat sau được đưa các dòng mới nhất. File `.gguf` không bị sửa.
+Coderd học theo cùng kiểu bộ nhớ, không sửa file `.gguf`.
+
+- Voyager: mỗi chủ đề thành một kỹ năng trong `learn/the/` (sự kiện, cách làm, ví dụ).
+- Generative Agents: `learn/dong-chay.md` là dòng thời gian, `learn/suy-ngam.md` nối hai chủ đề có chung thuật ngữ.
+- Reflexion: câu của model chỉ được giữ khi bám ghi chú gốc. Câu lệch thì giữ nguyên câu trong tài liệu.
+- Ôn tập: mỗi vòng lấy kỹ năng ít được hỏi nhất, ghi đáp án vào `learn/on-tap.md`.
+- MemGPT: `learn/kinh-nghiem.md` là bộ nhớ ngắn đưa vào câu chat. `learn/sach/` và `learn/the/` là kho dài.
+- Nguồn: file nội bộ, `.coderd/memory.md`, đoạn chat đã xong, tutorial Python, thư viện chuẩn, howto, FAQ và tài liệu git.

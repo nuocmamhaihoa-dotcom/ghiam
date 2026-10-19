@@ -24,7 +24,16 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app import db as appdb
 from worker.agent import normalize_reply, parse_text_tools, run_turn, scripted_complete, system_prompt
-from worker.study import extract_notes, ingest_sources, merge_lessons, parse_lessons, study_hours, study_once  # noqa: E402
+from worker.study import (  # noqa: E402
+    extract_examples,
+    extract_notes,
+    grounded,
+    ingest_sources,
+    merge_lessons,
+    parse_lessons,
+    study_hours,
+    study_once,
+)
 from worker.tools import run_cmd, run_tool  # noqa: E402
 from worker.workspace import Workspace  # noqa: E402
 
@@ -382,6 +391,10 @@ class WorkerTests(unittest.TestCase):
             lesson = (root / "learn" / "kinh-nghiem.md").read_text(encoding="utf-8")
             self.assertIn("không gian tên", lesson)
             self.assertIn("vòng 3", (root / "learn" / "nhat-ky.md").read_text(encoding="utf-8"))
+            skill = (root / "learn" / "the" / "alpha.md").read_text(encoding="utf-8")
+            self.assertIn("## Cách làm", skill)
+            self.assertIn("namespace", skill)
+            self.assertIn("alpha", (root / "learn" / "chi-muc.md").read_text(encoding="utf-8"))
             deep = (root / "learn" / "sach" / "alpha.md").read_text(encoding="utf-8")
             deep += "\n- một bài đào sâu đủ dài để không bị rút ngắn\n"
             (root / "learn" / "sach" / "alpha.md").write_text(deep, encoding="utf-8")
@@ -392,6 +405,48 @@ class WorkerTests(unittest.TestCase):
         self.assertIn("--hours 6", unit)
         self.assertIn("TimeoutStartSec=infinity", unit)
         self.assertIn("coderd-learn.timer", unit)
+
+    def test_lesson_must_match_the_source(self) -> None:
+        notes = ["SQLite is a C library that provides a lightweight disk-based database."]
+        self.assertTrue(grounded("SQLite là cơ sở dữ liệu nhẹ trên đĩa", notes))
+        self.assertFalse(grounded("the weather is sunny today", notes))
+        sample = "Intro\n\n    conn = sqlite3.connect('tutorial.db')\n    cur = conn.cursor()\n"
+        self.assertTrue(any("connect" in item for item in extract_examples(sample)))
+
+    def test_study_keeps_going_until_active_time_reaches_the_budget(self) -> None:
+        calls = {"n": 0}
+
+        def clock() -> float:
+            calls["n"] += 1
+            return 1_000_000 + calls["n"] * 10
+
+        def fetch(_url: str) -> str:
+            return "SQLite is a C library that provides a lightweight disk-based database.\n"
+
+        def ask(_prompt: str) -> str:
+            return "- SQLite là cơ sở dữ liệu nhẹ"
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "work"
+            learn = root / "learn"
+            learn.mkdir(parents=True)
+            (learn / "tien-do.json").write_text(
+                json.dumps({"deadline": 1, "started": 1, "active_seconds": 0, "need_seconds": 25, "offsets": {}}),
+                encoding="utf-8",
+            )
+            rounds = study_hours(
+                root,
+                root / "coderd.db",
+                ask,
+                6,
+                fetch=fetch,
+                clock=clock,
+                catalog=(("sqlite", "https://example.test/sqlite"),),
+            )
+            self.assertGreaterEqual(rounds, 2)
+            state = json.loads((learn / "tien-do.json").read_text(encoding="utf-8"))
+            self.assertGreaterEqual(state["active_seconds"], 25)
+            self.assertIn("Cách làm", (learn / "the" / "sqlite.md").read_text(encoding="utf-8"))
 
     def test_text_tool_line_writes_a_file(self) -> None:
         def complete(messages, _tools):
