@@ -72,12 +72,13 @@ def comment_id(value: object) -> str | None:
 
 def first_comment_id(row: dict[str, object]) -> str | None:
     """The first real id. A bool ``id`` must not hide ``legacy_fbid``."""
-    for key in ("id", "legacy_fbid", "comment_id", "commentId"):
-        found = _id_value(row.get(key))
+    lowered = {str(key).strip().lower(): value for key, value in row.items()}
+    for key in ("id", "legacy_fbid", "comment_id", "commentid"):
+        found = _id_value(lowered.get(key))
         if found:
             return comment_id_from_url(found) or found
-    for key in ("commentUrl", "comment_url", "permalink_url"):
-        found = comment_id_from_url(row.get(key))
+    for key in ("commenturl", "comment_url", "permalink_url", "permalinkurl"):
+        found = comment_id_from_url(lowered.get(key))
         if found:
             return found
     return None
@@ -90,10 +91,11 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         return found
     if depth > 1 or not isinstance(value, dict):
         return None
-    for key in ("id", "legacy_fbid", "comment_id", "commentId"):
-        if key not in value:
+    lowered = {str(key).strip().lower(): item for key, item in value.items()}
+    for key in ("id", "legacy_fbid", "comment_id", "commentid"):
+        if key not in lowered:
             continue
-        found = _id_value(value.get(key), depth + 1)
+        found = _id_value(lowered.get(key), depth + 1)
         if found:
             return found
     return None

@@ -1006,6 +1006,58 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(kept[0].text, "I have 1 like already")
         self.assertEqual(kept[0].author_name, "Lan · Nguyen")
 
+    def test_reply_counts_iso_dates_and_comment_id_case(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan · 15h04\nhello\nView 1 reply\n1 Reply\nSee previous comments\n"
+                "Load more comments\nLast week\nTuần trước\nEdited · March 2\n"
+                "2024-03-02\nWrite a public comment…\nand 3 others\n3:00 p.m.\n"
+                "2 thg 3 lúc 15:04\nShow more\nSee who reacted\nAll 12 comments"
+            ],
+            5,
+        )
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(
+            ["Lan\nI met Lan and 3 others last week\nThe meeting is at 3:00 p.m."],
+            5,
+        )
+        self.assertEqual(
+            sentence[0].text,
+            "I met Lan and 3 others last week The meeting is at 3:00 p.m.",
+        )
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text=(
+                        "hello\nView 1 reply\n1 Reply\nAll 12 comments\n2024-03-02\n"
+                        "Write a public comment…\n3:00 p.m.\n15h04"
+                    ),
+                    author_name="Lan · 2024-03-02",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertEqual(healed[0].author_name, "Lan")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertEqual(first_comment_id({"commentid": "42"}), "42")
+        self.assertEqual(first_comment_id({"CommentId": "42"}), "42")
+        self.assertEqual(first_comment_id({"COMMENT_ID": "9"}), "9")
+        self.assertEqual(
+            first_comment_id({"commenturl": "https://www.facebook.com/x?comment_id=77"}),
+            "77",
+        )
+        self.assertEqual(first_comment_id({"ID": {"ID": "999"}}), "999")
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", encoding="utf-8", delete=False) as handle:
+            handle.write("Comment,Author,CommentId\nxin,Lan,42\n")
+            export_path = handle.name
+        try:
+            imported = comments_from_export(Path(export_path), 5)
+        finally:
+            Path(export_path).unlink(missing_ok=True)
+        self.assertEqual(imported[0].comment_id, "42")
+        self.assertEqual(imported[0].text, "xin")
+
 
 if __name__ == "__main__":
     unittest.main()
