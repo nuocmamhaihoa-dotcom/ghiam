@@ -270,7 +270,9 @@
   }
 
   function stat(value, label, href) {
-    var inner = "<b>" + value + "</b><span>" + label + "</span>";
+    var number = Number(value);
+    var shown = isFinite(number) ? String(number) : "0";
+    var inner = "<b>" + shown + "</b><span>" + label + "</span>";
     if (!href) return "<div class='stat'>" + inner + "</div>";
     return "<a class='stat' href='" + href + "'>" + inner + "</a>";
   }
@@ -585,21 +587,14 @@
     if (waiting) waiting.textContent = "Chưa tải được số liệu của máy này. Đang thử lại.";
   }
 
-  async function refresh() {
-    try {
-      await refreshStats();
-    } catch (error) {
-      showStatsMiss();
-    }
+  var refreshBusy = false;
+  var STATS_KEY = "ghiam-stats";
+
+  function rememberStats(body) {
+    try { localStorage.setItem(STATS_KEY, JSON.stringify(body)); } catch (error) {}
   }
 
-  async function refreshStats() {
-    var statsResponse = await api("/v1/videos/stats?span=" + encodeURIComponent(statSpan));
-    if (!statsResponse.ok) {
-      showStatsMiss();
-      return;
-    }
-    var body = await statsResponse.json();
+  function paintStats(body) {
     var todayReport = body.today || { day: "", known: [], items: [], totals: {} };
     var allReport = body.all || { day: "", known: [], items: [], totals: {} };
     var phones = statSpan === "all" ? allReport : todayReport;
@@ -644,8 +639,31 @@
       reader.className = "note ok";
     }
     fillResultDevices();
-    renderPhoneBoard((todayReport.day || ""));
+    renderPhoneBoard(todayReport.day || "");
     renderThisPhone();
+  }
+
+  async function refresh() {
+    if (refreshBusy) return;
+    refreshBusy = true;
+    try {
+      await refreshStats();
+    } catch (error) {
+      if (!statsReady) showStatsMiss();
+    } finally {
+      refreshBusy = false;
+    }
+  }
+
+  async function refreshStats() {
+    var statsResponse = await api("/v1/videos/stats?span=" + encodeURIComponent(statSpan));
+    if (!statsResponse.ok) {
+      if (!statsReady) showStatsMiss();
+      return;
+    }
+    var body = await statsResponse.json();
+    paintStats(body);
+    rememberStats(body);
     var queuePath = "/v1/videos?span=" + encodeURIComponent(statSpan);
     if (phoneFilter !== null) queuePath += "&device=" + encodeURIComponent(phoneFilter);
     var queueResponse = await api(queuePath);
@@ -900,7 +918,27 @@
     return { items: items, total: total, full: full, revision: revision };
   }
 
+  var resultsBusy = false;
+  var resultsPending = false;
+
   async function loadResults() {
+    if (resultsBusy) {
+      resultsPending = true;
+      resultsAsked += 1;
+      return;
+    }
+    resultsBusy = true;
+    try {
+      do {
+        resultsPending = false;
+        await loadResultsPass();
+      } while (resultsPending);
+    } finally {
+      resultsBusy = false;
+    }
+  }
+
+  async function loadResultsPass() {
     var asked = ++resultsAsked;
     var key = filterKey();
     var now = Date.now();
@@ -1954,6 +1992,10 @@
     loadShare();
   });
 
+  try {
+    var savedReport = JSON.parse(localStorage.getItem("ghiam-stats") || "null");
+    if (savedReport && typeof savedReport === "object") paintStats(savedReport);
+  } catch (error) {}
   renderThisPhone();
   refresh();
   loadShare();
