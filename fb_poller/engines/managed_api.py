@@ -150,7 +150,7 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
 
 def _field_text(row: dict[str, Any]) -> str | None:
     """Read one text field. A dict in ``text`` must not hide a later string ``message``."""
-    for key in ("text", "message", "comment", "comment_text", "body", "preferred_body"):
+    for key in ("text", "message", "comment", "comment_text", "body", "preferred_body", "content"):
         found = nested_text(row.get(key))
         if found:
             return found

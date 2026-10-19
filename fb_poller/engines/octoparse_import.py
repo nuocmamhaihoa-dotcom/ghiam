@@ -95,6 +95,7 @@ def _delimiter(header: str) -> str:
     """Count separators outside quotes. A comma inside a header cell is not the delimiter."""
     semicolons = 0
     commas = 0
+    tabs = 0
     quoted = False
     for char in header:
         if char == '"':
@@ -106,6 +107,10 @@ def _delimiter(header: str) -> str:
             semicolons += 1
         elif char == ",":
             commas += 1
+        elif char == "\t":
+            tabs += 1
+    if tabs > commas and tabs > semicolons:
+        return "\t"
     return ";" if semicolons > commas else ","
 
 

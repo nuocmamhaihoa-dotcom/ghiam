@@ -167,6 +167,15 @@ def nested_text(value: object, depth: int = 0) -> str | None:
         return text or None
     if isinstance(value, (int, float)):
         return str(value)
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            if isinstance(item, (dict, list)):
+                return None
+            found = nested_text(item, depth + 1)
+            if found:
+                parts.append(found)
+        return " ".join(parts) if parts else None
     if isinstance(value, dict):
         for key in ("text", "message", "comment", "body", "content"):
             if key not in value:

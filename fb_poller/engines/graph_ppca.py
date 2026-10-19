@@ -90,6 +90,7 @@ def _append_rows(
             or nested_text(row.get("text"))
             or nested_text(row.get("body"))
             or nested_text(row.get("preferred_body"))
+            or nested_text(row.get("content"))
         )
         if text:
             item = PublicComment(
@@ -135,6 +136,9 @@ def post_id_from_url(url: str) -> str | None:
     raw = url.strip()
     if raw.isdigit() or ("_" in raw and raw.replace("_", "").isdigit()):
         return raw
+    photo = re.search(r"/photos/(?:a|pcb)\.(\d+)/(\d+)", raw, re.IGNORECASE)
+    if photo:
+        return accepted_object_id(photo.group(2))
     path = re.search(
         r"(?:posts|permalink|videos|reel|photos)/(pfbid[A-Za-z0-9]+|\d+(?:_\d+)*)",
         raw,

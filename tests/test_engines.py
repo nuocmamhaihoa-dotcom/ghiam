@@ -751,7 +751,7 @@ class EngineTests(unittest.TestCase):
             post_id_from_url("https://www.facebook.com/permalink.php?story_fbid=pfbid0abc%5F1&id=9"),
             "pfbid0abc_1",
         )
-        self.assertIsNone(post_id_from_url("https://www.facebook.com/NASA/photos/a.111/222"))
+        self.assertEqual(post_id_from_url("https://www.facebook.com/NASA/photos/a.111/222"), "222")
         self.assertIsNone(post_id_from_url("https://www.facebook.com/share/p/abcXYZ12/"))
         long_pfbid = "pfbid" + ("a" * 140)
         self.assertEqual(
@@ -855,6 +855,45 @@ class EngineTests(unittest.TestCase):
             exported = comments_from_export(path)
         self.assertEqual(exported[0].comment_id, "42")
         self.assertEqual(exported[0].author_name, "An")
+
+    def test_photo_url_days_and_content_field(self) -> None:
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/NASA/photos/pcb.111/222333"),
+            "222333",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/NASA/photos/a.111/222333/"),
+            "222333",
+        )
+        self.assertIsNone(post_id_from_url("https://www.facebook.com/share/p/abcXYZ12/"))
+        article = comments_from_articles(["Lan · 2 days\nhello\n2 days\nYesterday at 3:00 PM"], 5)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nI waited 2 days"], 5)
+        self.assertEqual(sentence[0].text, "I waited 2 days")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\nYesterday at 3:00 PM", author_name="Lan · 2 days")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertEqual(healed[0].author_name, "Lan")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertIn("strip_glued_chrome", codes)
+        listed = comments_from_payload(
+            {"__typename": "Comment", "body": {"text": ["xin"]}, "author": {"name": "An"}},
+            5,
+        )
+        self.assertEqual(listed[0].text, "xin")
+        self.assertEqual(_comments_from_json({"content": "xin", "author": "An"}, 5)[0].text, "xin")
+        timed = _from_items([{"content": "xin", "profileName": "Ha", "createdAt": "2020-01-01"}], 5)
+        self.assertEqual(timed[0].text, "xin")
+        self.assertEqual(timed[0].created_time, "2020-01-01")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "rows.tsv"
+            path.write_text("comment\tauthor\tid\nxin\tAn\t7\n", encoding="utf-8")
+            exported = comments_from_export(path)
+        self.assertEqual(exported[0].text, "xin")
+        self.assertEqual(exported[0].author_name, "An")
+        self.assertEqual(exported[0].comment_id, "7")
 
 
 if __name__ == "__main__":

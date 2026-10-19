@@ -158,7 +158,7 @@ def _one(row: Any) -> PublicComment | None:
     if not isinstance(row, dict):
         return None
     text = None
-    for key in ("text", "message", "comment", "commentText", "comment_text", "body", "preferred_body"):
+    for key in ("text", "message", "comment", "commentText", "comment_text", "body", "preferred_body", "content"):
         text = nested_text(row.get(key))
         if text:
             break
@@ -170,5 +170,8 @@ def _one(row: Any) -> PublicComment | None:
             row, ("author", "profileName", "userName", "name", "from", "user", "profile", "owner")
         ),
         comment_id=first_comment_id(row),
-        created_time=time_text(row.get("date")) or time_text(row.get("created_time")),
+        created_time=time_text(row.get("date"))
+        or time_text(row.get("created_time"))
+        or time_text(row.get("createdAt"))
+        or time_text(row.get("created_at")),
     )

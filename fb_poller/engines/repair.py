@@ -72,11 +72,14 @@ _CHROME_LINE = re.compile(
     r"[·•]+|"
     r"all comments|tất cả bình luận|"
     r"top fan|rising fan|tác giả|author|admin|verified|đã xác minh|"
-    r"just now|vừa xong|yesterday|hôm qua|"
+    r"just now|vừa xong|"
+    r"yesterday(?:\s+at\s+\d{1,2}:\d{2}(?:\s*[ap]m)?)?|"
+    r"hôm qua(?:\s+(?:lúc|vào)\s+\d{1,2}:\d{2})?|"
     r"[·•]?\s*(?:about\s+|khoảng\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
     r"(?:khoảng\s+)?\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"\d+\s*(?:s|m|h|d|w|y)\s*[·•]?|"
     r"\d+\s*(?:secs?|mins?|hrs?|seconds?|minutes?|hours?)|"
+    r"\d+\s*(?:days?|weeks?|months?|years?)|"
     r"see \d+ repl(?:y|ies)|xem \d+ phản hồi|"
     r"translated from \S.{0,40}|được dịch từ \S.{0,60}|"
     r"rate translation|đánh giá bản dịch|"
@@ -133,11 +136,14 @@ _GLUED_CHROME = re.compile(
 _AUTHOR_STAMP = re.compile(
     r"(?:"
     r"\s*[·•]\s*(?:"
-    r"just now|vừa xong|yesterday|hôm qua|"
+    r"just now|vừa xong|"
+    r"yesterday(?:\s+at\s+\d{1,2}:\d{2}(?:\s*[ap]m)?)?|"
+    r"hôm qua(?:\s+(?:lúc|vào)\s+\d{1,2}:\d{2})?|"
     r"(?:about\s+|khoảng\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
     r"(?:khoảng\s+)?\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"\d+\s*(?:s|m|h|d|w|y)|"
     r"\d+\s*(?:secs?|mins?|hrs?|seconds?|minutes?|hours?)|"
+    r"\d+\s*(?:days?|weeks?|months?|years?)|"
     r"edited|đã chỉnh sửa|"
     r"top fan|rising fan|verified|đã xác minh|tác giả"
     r")"
@@ -446,7 +452,7 @@ def _loose_comments(payload: object, depth: int = 0) -> list[PublicComment]:
     if not isinstance(payload, dict):
         return []
     rendered = None
-    for key in ("text", "message", "comment", "comment_text", "commentText", "body", "preferred_body"):
+    for key in ("text", "message", "comment", "comment_text", "commentText", "body", "preferred_body", "content"):
         rendered = nested_text(payload.get(key))
         if rendered:
             break
