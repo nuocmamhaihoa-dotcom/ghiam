@@ -35,6 +35,15 @@ GIT_BARE=$PREFIX/var/git/workspace.git
 EOF
 fi
 chmod 600 "$ENV_FILE"
+cat > "$PREFIX/run.sh" <<EOF
+#!/bin/bash
+set -a
+source "$ENV_FILE"
+set +a
+cd "$PREFIX"
+exec "$PREFIX/.venv/bin/python" -m app
+EOF
+chmod 750 "$PREFIX/run.sh"
 
 if [[ "$(id -u)" -eq 0 ]]; then
   if ! id coder >/dev/null 2>&1; then
@@ -47,7 +56,7 @@ else
 fi
 
 unit="$(sed -e "s|%CODERD_USER%|$run_user|g" -e "s|%CODERD_PREFIX%|$PREFIX|g" "$ROOT/deploy/coderd.service")"
-if [[ "$(id -u)" -eq 0 && "${CODERD_SKIP_SYSTEMD:-0}" != "1" ]] && command -v systemctl >/dev/null 2>&1; then
+if [[ "$(id -u)" -eq 0 && "${CODERD_SKIP_SYSTEMD:-0}" != "1" ]] && systemctl is-system-running >/dev/null 2>&1; then
   printf '%s\n' "$unit" > /etc/systemd/system/coderd.service
   systemctl daemon-reload
   systemctl enable --now coderd.service
