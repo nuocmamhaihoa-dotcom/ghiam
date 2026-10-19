@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from fb_poller.engines.apify_actor import _from_items
 from fb_poller.engines.graph_ppca import accepted_object_id, comments_from_graph_payload, post_id_from_url
-from fb_poller.engines.guard import public_error
+from fb_poller.engines.guard import public_error, redact_text
 from fb_poller.engines.guest_graphql import comments_from_html as graphql_from_html
 from fb_poller.engines.guest_graphql import comments_from_payload, merge_comments
 from fb_poller.engines.guest_ssr import comments_from_html
@@ -145,6 +145,10 @@ class EngineTests(unittest.TestCase):
         secret = public_error(RuntimeError("GET https://api.example/run?token=super-secret&x=1"))
         self.assertNotIn("super-secret", secret)
         self.assertIn("token=*", secret)
+        hidden = redact_text('{"access_token":"EAAAsecret","password":"112233"}')
+        self.assertNotIn("EAAAsecret", hidden)
+        self.assertNotIn("112233", hidden)
+        self.assertIn('"access_token":"*"', hidden)
 
     def test_missing_url_and_bad_limit_do_not_call_network(self) -> None:
         missing = asyncio.run(scan_one("guest-ssr", "  ", limit=5))
@@ -281,6 +285,18 @@ class EngineTests(unittest.TestCase):
             self.assertIsNone(bright_dataset_id())
         with patch.dict(os.environ, {"BRIGHTDATA_DATASET_ID": "gd_abc123"}, clear=False):
             self.assertEqual(bright_dataset_id(), "gd_abc123")
+
+    def test_pa1_drops_a_compact_reaction_count(self) -> None:
+        block = "\n".join(["Lan", "hello", "1.2K", "Like", "Reply"])
+        found = comments_from_articles([block], 5)
+        self.assertEqual(found[0].text, "hello")
+        price = "\n".join(["Lan", "The price is 1.2K", "Like", "Reply"])
+        self.assertEqual(comments_from_articles([price], 5)[0].text, "The price is 1.2K")
+
+    def test_missing_export_hides_the_directory(self) -> None:
+        missing = asyncio.run(scan_one("octoparse", "", export_path="/tmp/token=super-secret/missing.csv"))
+        self.assertEqual(missing.error, "file_not_found: missing.csv")
+        self.assertNotIn("super-secret", missing.error or "")
 
     def test_pa1_keeps_a_duration_written_in_the_comment(self) -> None:
         block = "\n".join(["Lan", "I waited 2h", "Like", "Reply", "3"])
@@ -428,6 +444,10 @@ class EngineTests(unittest.TestCase):
         self.assertIn("strip_glued_chrome", glued_codes)
         self.assertIn("clear_null_time", glued_codes)
         self.assertEqual(heal_comments([PublicComment(text="I waited 2h")])[0][0].text, "I waited 2h")
+        compact, compact_codes = heal_comments([PublicComment(text="hello\n1.2K\n1,234")])
+        self.assertEqual(compact[0].text, "hello")
+        self.assertIn("strip_chrome_lines", compact_codes)
+        self.assertEqual(heal_comments([PublicComment(text="The code is\n404")])[0][0].text, "The code is\n404")
 
         marked, mark_codes = heal_comments([PublicComment(text="line<br>two", author_name="An\u200b")])
         self.assertEqual(marked[0].text, "line\ntwo")

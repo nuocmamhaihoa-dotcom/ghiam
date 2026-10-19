@@ -143,7 +143,7 @@ async def scan(url: str = "", *, limit: int = 500, export_path: str = "", **_: o
         )
     path = Path(export_path)
     if not path.is_file():
-        return EngineResult(NAME, RANK, False, error=f"file_not_found: {path}")
+        return EngineResult(NAME, RANK, False, error=f"file_not_found: {path.name}")
     try:
         comments = comments_from_export(path, limit=limit)
     except Exception as exc:

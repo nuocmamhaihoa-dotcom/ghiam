@@ -8,6 +8,9 @@ from typing import Any
 
 _PROXY_USERINFO = re.compile(r"://[^\s/@:]+:[^\s/@]+@")
 _QUERY_SECRET = re.compile(r"(?i)(token|access_token|api_key|apikey|key)=([^&\s]+)")
+_JSON_SECRET = re.compile(
+    r"""(?i)(['"](?:access_token|api_key|apikey|token|password|secret|authorization)['"]\s*:\s*['"])([^'"]*)(['"])"""
+)
 _BEARER = re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._\-+/=]+")
 _SCRIPT = re.compile(r"<script\b[^>]*>(.*?)</script>", re.IGNORECASE | re.DOTALL)
 _COMMENT_TYPE = re.compile(r'"__typename"\s*:\s*"(?:Comment|FeedbackComment|XFBComment)"')
@@ -17,6 +20,7 @@ def redact_text(text: str, limit: int = 300) -> str:
     """Remove proxy passwords and API tokens from text that may be printed."""
     cleaned = _PROXY_USERINFO.sub("://*:*@", text)
     cleaned = _QUERY_SECRET.sub(r"\1=*", cleaned)
+    cleaned = _JSON_SECRET.sub(r"\1*\3", cleaned)
     cleaned = _BEARER.sub(r"\1*", cleaned)
     return cleaned[:limit]
 

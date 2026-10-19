@@ -52,6 +52,7 @@ _CHROME_LINE = re.compile(
     r"top fan|rising fan|tác giả|author|"
     r"just now|vừa xong|"
     r"\d+\s*(?:s|m|h|d|w|y)|"
+    r"\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*[kmb]|"
     r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)|"
     r"view all \d+ replies|xem tất cả \d+ phản hồi|\d+ replies|\d+ phản hồi|"
     r"see translation|hide translation|xem bản dịch|ẩn bản dịch|"

@@ -29,7 +29,10 @@ _DROP_LINE = re.compile(
     r")$",
     re.IGNORECASE,
 )
-_COUNT_LINE = re.compile(r"^\d{1,7}$")
+_COUNT_LINE = re.compile(
+    r"^(?:\d{1,7}|\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*[kmb])$",
+    re.IGNORECASE,
+)
 _POST_LABELS = {"all reactions", "tất cả cảm xúc"}
 
 
