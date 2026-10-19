@@ -12,3 +12,8 @@ def home() -> str:
 <title>coderd</title>
 <p>coderd đang chạy.</p>
 """
+
+
+@app.get("/health")
+def health() -> dict[str, bool]:
+    return {"ok": True}
