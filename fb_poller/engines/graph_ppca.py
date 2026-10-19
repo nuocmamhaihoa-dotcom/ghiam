@@ -191,6 +191,9 @@ def post_id_from_url(url: str) -> str | None:
     photo = re.search(r"/(?:photos|videos)/(?:a|pcb)\.(\d+)/(\d+)", raw, re.IGNORECASE)
     if photo:
         return accepted_object_id(photo.group(2))
+    market = re.search(r"/marketplace/item/(\d+)", raw, re.IGNORECASE)
+    if market:
+        return accepted_object_id(market.group(1))
     path = re.search(
         r"(?:posts|permalink|videos|reels?|photos|events)/(pfbid[A-Za-z0-9]+|\d+(?:_\d+)*)",
         raw,

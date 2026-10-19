@@ -211,6 +211,7 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "i18n_name",
             "alternate_name",
             "localized_name",
+            "structured_name",
         ):
             token = fold_key(key)
             if token not in lowered:

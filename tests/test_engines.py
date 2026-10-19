@@ -1892,6 +1892,47 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(imported.author_name, "Lan")
         self.assertEqual(imported.created_time, "2024-03-02")
 
+    def test_structured_name_and_counted_action_bar(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nLike · 4 · Reply\nEdited · 2d · Like\njust now · Reply · Like\n"
+                "Send · Like\nTranslate · See original\nCopy link · Share\n"
+                "Report · Block · Hide\nPin · Unpin\nMessage Mai\nXem thêm câu trả lời"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nMessage Mai about the soup tonight"], 5)
+        self.assertEqual(sentence[0].text, "Message Mai about the soup tonight")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\nLike · 4 · Reply\nPin · Unpin", author_name="Lan")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        html = (
+            '<script>{"__typename":"Comment","id":"4","body":{"text":"xin"},'
+            '"author":{"structured_name":{"text":"An"}},"createdTimeSeconds":1710000007}</script>'
+        )
+        found = comments_from_html(html)
+        self.assertEqual(found[0].author_name, "An")
+        self.assertEqual(found[0].created_time, "1710000007")
+        named = _one({"text": "xin", "commenterHandle": "lan", "id": "3"})
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "lan")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/marketplace/item/123456789/"),
+            "123456789",
+        )
+        imported = _from_mapping({"Text comment": "xin", "User handle": "lan", "Created seconds": "1710000009"})
+        self.assertIsNotNone(imported)
+        assert imported is not None
+        self.assertEqual(imported.text, "xin")
+        self.assertEqual(imported.author_name, "lan")
+        self.assertEqual(imported.created_time, "1710000009")
+
 
 if __name__ == "__main__":
     unittest.main()

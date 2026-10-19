@@ -225,6 +225,8 @@ def _one(row: Any) -> PublicComment | None:
         "alternate_name",
         "localized_name",
         "user_handle",
+        "commenter_handle",
+        "profile_handle",
         "author_sort_name",
         "page_name",
         "actor",
