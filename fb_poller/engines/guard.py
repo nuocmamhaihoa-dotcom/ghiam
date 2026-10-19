@@ -74,7 +74,7 @@ def comment_id(value: object) -> str | None:
 def first_comment_id(row: dict[str, object]) -> str | None:
     """The first real id. A bool ``id`` must not hide ``legacy_fbid``."""
     folded = {fold_key(key): value for key, value in row.items()}
-    for key in ("id", "legacy_fbid", "comment_id", "comment_fbid", "feedback_id"):
+    for key in ("id", "legacy_fbid", "legacy_comment_id", "comment_id", "comment_fbid", "feedback_id"):
         found = _id_value(folded.get(fold_key(key)))
         if found:
             return comment_id_from_url(found) or found
@@ -93,7 +93,7 @@ def _id_value(value: object, depth: int = 0) -> str | None:
     if depth > 1 or not isinstance(value, dict):
         return None
     lowered = {fold_key(key): item for key, item in value.items()}
-    for key in ("id", "legacy_fbid", "comment_id", "comment_fbid", "feedback_id"):
+    for key in ("id", "legacy_fbid", "legacy_comment_id", "comment_id", "comment_fbid", "feedback_id"):
         folded_key = fold_key(key)
         if folded_key not in lowered:
             continue
@@ -212,6 +212,9 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "alternate_name",
             "localized_name",
             "structured_name",
+            "commenter_name",
+            "sort_name",
+            "author_sort_name",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -361,6 +364,8 @@ def timestamp_of(row: object) -> str | None:
         "creation_timestamp",
         "created_time_seconds",
         "created_time_ms",
+        "created_seconds",
+        "publish_time",
         "datetime",
         "date",
         "time",
