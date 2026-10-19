@@ -134,10 +134,16 @@ def person_name(value: object, depth: int = 0) -> str | None:
     return None
 
 
+def fold_key(key: object) -> str:
+    """Compare headers ignoring case, spaces, and underscores."""
+    return "".join(ch for ch in str(key).strip().lower() if ch.isalnum())
+
+
 def first_person_name(row: dict[str, object], keys: tuple[str, ...]) -> str | None:
     """Try each author field. An object without a name must not hide the next field."""
+    folded = {fold_key(key): value for key, value in row.items()}
     for key in keys:
-        found = person_name(row.get(key))
+        found = person_name(folded.get(fold_key(key)))
         if found:
             return found
     return None
@@ -163,10 +169,12 @@ def time_text(value: object, depth: int = 0) -> str | None:
     if plain:
         return plain
     if isinstance(value, dict):
+        folded = {fold_key(key): item for key, item in value.items()}
         for key in ("text", "message", "timestamp", "time", "date", "created_time", "created_at"):
-            if key not in value:
+            token = fold_key(key)
+            if token not in folded:
                 continue
-            found = time_text(value.get(key), depth + 1)
+            found = time_text(folded.get(token), depth + 1)
             if found:
                 return found
     return None

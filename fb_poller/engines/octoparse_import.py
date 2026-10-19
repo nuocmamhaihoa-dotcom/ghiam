@@ -10,6 +10,7 @@ from pathlib import Path
 from fb_poller.engines.guard import (
     first_comment_id,
     first_person_name,
+    fold_key,
     invalid_limit,
     nested_text,
     public_error,
@@ -20,7 +21,17 @@ from fb_poller.engines.types import EngineResult, PublicComment
 RANK = 8
 NAME = "octoparse"
 
-_TEXT_KEYS = ("text", "comment", "content", "message", "body", "nội dung", "binh luan", "bình luận")
+_TEXT_KEYS = (
+    "text",
+    "comment",
+    "comment_text",
+    "content",
+    "message",
+    "body",
+    "nội dung",
+    "binh luan",
+    "bình luận",
+)
 _AUTHOR_KEYS = (
     "author",
     "author_name",
@@ -28,10 +39,21 @@ _AUTHOR_KEYS = (
     "profile",
     "name",
     "user",
+    "user_name",
+    "username",
     "tác giả",
     "tac gia",
 )
-_TIME_KEYS = ("time", "date", "created_time", "created", "thời gian", "thoi gian")
+_TIME_KEYS = (
+    "time",
+    "date",
+    "created_time",
+    "created_at",
+    "created",
+    "comment_time",
+    "thời gian",
+    "thoi gian",
+)
 
 
 def comments_from_export(path: Path, limit: int = 500) -> list[PublicComment]:
@@ -131,17 +153,18 @@ def _from_csv(raw: str, limit: int) -> list[PublicComment]:
 
 
 def _pick_time(row: dict[str, object], keys: tuple[str, ...]) -> str | None:
+    folded = {fold_key(key): value for key, value in row.items()}
     for key in keys:
-        found = time_text(row.get(key))
+        found = time_text(folded.get(fold_key(key)))
         if found:
             return found
     return None
 
 
 def _pick(row: dict[str, object], keys: tuple[str, ...]) -> str | None:
-    lowered = {str(k).strip().lower(): v for k, v in row.items()}
+    folded = {fold_key(key): value for key, value in row.items()}
     for key in keys:
-        text = nested_text(lowered.get(key))
+        text = nested_text(folded.get(fold_key(key)))
         if text:
             return text
     return None

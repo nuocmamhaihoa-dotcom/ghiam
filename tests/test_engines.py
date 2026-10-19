@@ -6,14 +6,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from fb_poller.engines.apify_actor import _from_items
+from fb_poller.engines.apify_actor import _from_items, _one
 from fb_poller.engines.graph_ppca import accepted_object_id, comments_from_graph_payload, post_id_from_url
-from fb_poller.engines.guard import comment_id, first_comment_id, public_error, redact_text
+from fb_poller.engines.guard import comment_id, first_comment_id, public_error, redact_text, time_text
 from fb_poller.engines.guest_graphql import comments_from_html as graphql_from_html
 from fb_poller.engines.guest_graphql import comments_from_payload, merge_comments
 from fb_poller.engines.guest_ssr import comments_from_html
 from fb_poller.engines.managed_api import _comments_from_json, bright_dataset_id
-from fb_poller.engines.octoparse_import import comments_from_export
+from fb_poller.engines.octoparse_import import _from_mapping, comments_from_export
 from fb_poller.engines.pa1_newest import comments_from_articles
 from fb_poller.engines.registry import CATALOG, resolve, scan_each_independent, scan_one
 from fb_poller.engines.repair import heal_comments, heal_result
@@ -1057,6 +1057,44 @@ class EngineTests(unittest.TestCase):
             Path(export_path).unlink(missing_ok=True)
         self.assertEqual(imported[0].comment_id, "42")
         self.assertEqual(imported[0].text, "xin")
+
+    def test_relative_times_and_folded_headers(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan · a few seconds ago\nhello\nEdited · just now\nvài phút trước\n"
+                "hơn 1 giờ trước\nToday\n2w ago\n3:00 PM GMT\nView more replies\n"
+                "Top contributor\nLan · Follow"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nI saw this a few seconds ago"], 5)
+        self.assertEqual(sentence[0].text, "I saw this a few seconds ago")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\na few seconds ago\n2w ago\n3:00 PM GMT\nView more replies",
+                    author_name="Lan · vài phút trước",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertEqual(healed[0].author_name, "Lan")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertIn("strip_glued_chrome", codes)
+        item = _from_mapping({"Comment": "xin", "Profile Name": "Lan", "Comment Time": "2024-03-02"})
+        self.assertIsNotNone(item)
+        assert item is not None
+        self.assertEqual(item.author_name, "Lan")
+        self.assertEqual(item.created_time, "2024-03-02")
+        self.assertEqual(time_text({"Created_Time": "2024-03-02"}), "2024-03-02")
+        self.assertEqual(time_text({"createdAt": "2024-03-02T15:04:00Z"}), "2024-03-02T15:04:00Z")
+        named = _one({"text": "xin", "UserName": "Ha"})
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "Ha")
 
 
 if __name__ == "__main__":
