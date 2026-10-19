@@ -2504,6 +2504,86 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(imported.author_name, "lan")
         self.assertEqual(imported.created_time, "2025-04-05")
 
+    def test_photo_fbid_prefers_query_over_album_set(self) -> None:
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/photo/?fbid=111&set=a.222"),
+            "111",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/photo.php?fbid=333&set=a.444"),
+            "333",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=a.99887766"),
+            "99887766",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nAdd to your story\nCreate a reel\nGo live\n"
+                "Switch accounts\nContinue as guest\nDon't show again\n"
+                "Remind me later\nMaybe later\nNot now\nGive feedback\n"
+                "Help & support\nSettings & privacy\nSuper reaction\n"
+                "Raise hand\nAsk a question\nFriends except...\n"
+                "Embed post\nSave post\nTurn on notifications for this post\n"
+                "Share in Messenger\nSend as message\nOpen original post\n"
+                "View post insights\nBoost post\nEdit post\nDelete post\n"
+                "Change audience\nInvite friends\nJoined Facebook\n"
+                "Why am I seeing this ad?\nHide ad\nCan't go\n"
+                "Thêm vào tin của bạn\nTạo reel\nChuyển tài khoản"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nSave post for later when you cook"], 5)
+        self.assertEqual(sentence[0].text, "Save post for later when you cook")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\nSave post\nBoost post\nNot now", author_name="Lan")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        html = (
+            '<script>{"__typename":"Comment","fb_comment_id":"88","body":{"text":"xin"},'
+            '"author":{"preferred_name":"An"},"postedTimestamp":"1710000200"}</script>'
+        )
+        found = comments_from_html(html)
+        self.assertEqual(found[0].author_name, "An")
+        self.assertEqual(found[0].comment_id, "88")
+        self.assertEqual(found[0].created_time, "1710000200")
+        named = _one(
+            {"text": "xin", "author": {"commenter_alias": "Bo"}, "wrote_at": "2025-05-01"}
+        )
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "Bo")
+        self.assertEqual(named.created_time, "2025-05-01")
+        rows, err = comments_from_graph_payload(
+            {"data": [{"message": "xin", "signed_name": "An", "commented_on": "2025-05-02"}]},
+            5,
+        )
+        self.assertIsNone(err)
+        self.assertEqual(rows[0].author_name, "An")
+        self.assertEqual(rows[0].created_time, "2025-05-02")
+        managed = _comments_from_json(
+            {
+                "comments": [
+                    {"text": "xin", "credited_to": "bo", "cid": "77", "created_date": "2025-05-03"}
+                ]
+            },
+            5,
+        )
+        self.assertEqual(managed[0].author_name, "bo")
+        self.assertEqual(managed[0].comment_id, "77")
+        self.assertEqual(managed[0].created_time, "2025-05-03")
+        imported = _from_mapping(
+            {"Nội dung": "xin", "Preferred name": "lan", "Wrote at": "2025-05-05"}
+        )
+        self.assertIsNotNone(imported)
+        assert imported is not None
+        self.assertEqual(imported.author_name, "lan")
+        self.assertEqual(imported.created_time, "2025-05-05")
+
 
 if __name__ == "__main__":
     unittest.main()

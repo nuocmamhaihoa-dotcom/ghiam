@@ -153,6 +153,14 @@ def _append_rows(
                         "author_display",
                         "person_name",
                         "handle",
+                        "commenter_alias",
+                        "author_handle",
+                        "profile_alias",
+                        "preferred_name",
+                        "real_name",
+                        "signed_name",
+                        "credited_to",
+                        "owner_label",
                     ),
                 )
             )
@@ -194,6 +202,14 @@ def _append_rows(
                             "author_display",
                             "person_name",
                             "handle",
+                            "commenter_alias",
+                            "author_handle",
+                            "profile_alias",
+                            "preferred_name",
+                            "real_name",
+                            "signed_name",
+                            "credited_to",
+                            "owner_label",
                         ),
                     )
                 )
@@ -261,6 +277,10 @@ def post_id_from_url(url: str) -> str | None:
     notes = re.search(r"/notes/(\d+)", raw, re.IGNORECASE)
     if notes:
         return accepted_object_id(notes.group(1))
+    # Prefer the photo/post fbid over the album set id when both appear.
+    query = re.search(r"(?:story_fbid|fbid|post_id)=([^&\s]+)", raw, re.IGNORECASE)
+    if query:
+        return accepted_object_id(unquote(query.group(1)).rstrip("="))
     media = re.search(r"[?&]set=a\.(\d+)", raw, re.IGNORECASE)
     if media:
         return accepted_object_id(media.group(1))
@@ -271,9 +291,6 @@ def post_id_from_url(url: str) -> str | None:
     )
     if path:
         return accepted_object_id(path.group(1))
-    query = re.search(r"(?:story_fbid|fbid|post_id)=([^&\s]+)", raw, re.IGNORECASE)
-    if query:
-        return accepted_object_id(unquote(query.group(1)).rstrip("="))
     watch = re.search(r"[?&]v=(\d+)", raw)
     if watch:
         return accepted_object_id(watch.group(1))

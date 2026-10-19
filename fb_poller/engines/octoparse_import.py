@@ -130,6 +130,14 @@ _AUTHOR_KEYS = (
     "author_display",
     "person_name",
     "handle",
+    "commenter_alias",
+    "author_handle",
+    "profile_alias",
+    "preferred_name",
+    "real_name",
+    "signed_name",
+    "credited_to",
+    "owner_label",
     "tác giả",
     "tac gia",
 )
@@ -203,6 +211,14 @@ _TIME_KEYS = (
     "written_time",
     "message_timestamp",
     "activity_time",
+    "posted_timestamp",
+    "comment_unix",
+    "created_date",
+    "post_date",
+    "commented_on",
+    "left_at",
+    "wrote_at",
+    "updated_at",
 )
 
 

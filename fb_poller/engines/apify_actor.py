@@ -303,6 +303,14 @@ def _one(row: Any) -> PublicComment | None:
         "author_display",
         "person_name",
         "handle",
+        "commenter_alias",
+        "author_handle",
+        "profile_alias",
+        "preferred_name",
+        "real_name",
+        "signed_name",
+        "credited_to",
+        "owner_label",
     )
     return PublicComment(
         text=text,
