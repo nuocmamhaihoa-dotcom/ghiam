@@ -91,9 +91,9 @@ class ApiTests(unittest.TestCase):
         with self.client.websocket_connect("/v1/workers/connect") as third:
             third.send_json(self.hello("pc"))
             self.assertEqual(third.receive_json()["type"], "hello_ok")
-        workers = self.client.get("/v1/workers", headers=AUTH).json()
-        self.assertEqual(len(workers), 1)
-        self.assertEqual(workers[0]["status"], "online")
+            workers = self.client.get("/v1/workers", headers=AUTH).json()
+            self.assertEqual(len(workers), 1)
+            self.assertEqual(workers[0]["status"], "online")
 
     def test_stale_or_detached_worker_is_offline(self) -> None:
         with self.client.websocket_connect("/v1/workers/connect") as socket:
@@ -272,10 +272,13 @@ class EndToEndTests(unittest.TestCase):
         self.env["AUTH_TOKEN"] = "user-token"
         self.env["WORKER_TOKEN"] = "worker-token"
         self.server = self.spawn_server()
+        self.worker_log = None
         self.wait_health()
 
     def tearDown(self) -> None:
         self.stop(self.server)
+        if self.worker_log is not None:
+            self.worker_log.close()
         self.tmp.cleanup()
 
     def spawn_server(self) -> subprocess.Popen:
