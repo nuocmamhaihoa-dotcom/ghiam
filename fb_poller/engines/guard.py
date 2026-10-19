@@ -38,19 +38,15 @@ def is_comment_typename(value: object) -> bool:
     return bool(lowered) and lowered.endswith("comment")
 
 
-_PLACEHOLDERS = {
-    "write a comment",
-    "write a comment…",
-    "write a public comment",
-    "write a public comment…",
-    "viết bình luận",
-    "viết bình luận…",
-    "viết bình luận công khai…",
-}
-
-
 def placeholder_text(text: str) -> bool:
-    return text.strip().lower() in _PLACEHOLDERS
+    """Composer hints, whether they end with an ellipsis or three dots."""
+    normalized = text.strip().lower().replace("…", "...").rstrip(".")
+    return normalized in {
+        "write a comment",
+        "write a public comment",
+        "viết bình luận",
+        "viết bình luận công khai",
+    }
 
 
 def comment_id(value: object) -> str | None:

@@ -281,6 +281,43 @@ class EngineTests(unittest.TestCase):
         with patch.dict(os.environ, {"BRIGHTDATA_DATASET_ID": "gd_abc123"}, clear=False):
             self.assertEqual(bright_dataset_id(), "gd_abc123")
 
+    def test_pa1_keeps_a_duration_written_in_the_comment(self) -> None:
+        block = "\n".join(["Lan", "I waited 2h", "Like", "Reply", "3"])
+        found = comments_from_articles([block], 5)
+        self.assertEqual(found[0].text, "I waited 2h")
+
+    def test_comment_that_mentions_reactions_is_kept(self) -> None:
+        comment = "\n".join(["Lan", "I clicked all reactions by accident", "Like", "Reply"])
+        post = "NASA\nrollout\nAll reactions:\n12K"
+        found = comments_from_articles([post, comment], 5)
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].text, "I clicked all reactions by accident")
+
+    def test_ascii_composer_hint_is_not_a_comment(self) -> None:
+        payload = {"__typename": "Comment", "body": {"text": "Write a comment..."}}
+        self.assertEqual(comments_from_payload(payload, 5), [])
+        kept = comments_from_payload({"__typename": "Comment", "body": {"text": "hello..."}}, 5)
+        self.assertEqual(kept[0].text, "hello...")
+
+    def test_semicolon_csv_keeps_a_comma_inside_the_header(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "semi.csv"
+            path.write_text('bình luận;"note, a, b";tác giả\nxin chào;hi;An\n', encoding="utf-8")
+            found = comments_from_export(path)
+        self.assertEqual(found[0].text, "xin chào")
+        self.assertEqual(found[0].author_name, "An")
+
+    def test_repeated_managed_id_is_kept_once(self) -> None:
+        payload = {
+            "text": "hello",
+            "id": "9",
+            "author": "An",
+            "data": {"text": "hello", "id": "9", "author": "An"},
+        }
+        found = _comments_from_json(payload, 5)
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].text, "hello")
+
     def test_octoparse_numeric_comment(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "nums.json"

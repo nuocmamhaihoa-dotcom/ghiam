@@ -30,7 +30,16 @@ _DROP_LINE = re.compile(
     re.IGNORECASE,
 )
 _COUNT_LINE = re.compile(r"^\d{1,7}$")
-_TAIL = re.compile(r"(?:\s+\d+\s*(?:s|m|h|d|w|y))+(?:\s+\d{1,7})?\s*$", re.IGNORECASE)
+_POST_LABELS = {"all reactions", "tất cả cảm xúc"}
+
+
+def _is_post_block(block: str) -> bool:
+    """The post article has a reaction label on its own line. A comment may mention the words."""
+    for line in block.splitlines():
+        label = line.strip().lower().rstrip(":").strip()
+        if label in _POST_LABELS:
+            return True
+    return False
 
 
 def comments_from_articles(blocks: list[str], limit: int) -> list[PublicComment]:
@@ -40,8 +49,7 @@ def comments_from_articles(blocks: list[str], limit: int) -> list[PublicComment]
     found: list[PublicComment] = []
     seen: set[str] = set()
     for block in blocks:
-        lowered = block.lower()
-        if "all reactions" in lowered or "tất cả cảm xúc" in lowered:
+        if _is_post_block(block):
             continue
         lines = [ln.strip() for ln in block.splitlines() if ln.strip() and not _DROP_LINE.match(ln.strip())]
         if len(lines) > 2 and _COUNT_LINE.match(lines[-1]):
@@ -49,7 +57,7 @@ def comments_from_articles(blocks: list[str], limit: int) -> list[PublicComment]
         if len(lines) < 2:
             continue
         author = lines[0]
-        text = _TAIL.sub("", " ".join(lines[1:])).strip()
+        text = " ".join(lines[1:]).strip()
         if len(author) < 1 or len(text) < 1 or _DROP_LINE.match(author) or placeholder_text(text):
             continue
         key = f"{author}|{text[:80]}"

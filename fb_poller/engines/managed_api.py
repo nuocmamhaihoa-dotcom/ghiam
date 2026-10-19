@@ -110,6 +110,7 @@ async def _bright_data(
 def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
     rows = _rows(payload)
     out: list[PublicComment] = []
+    seen: set[str] = set()
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -122,11 +123,17 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
         author = row.get("author") or row.get("author_name") or row.get("name") or row.get("user_name")
         if isinstance(author, dict):
             author = author.get("name")
+        author_name = scalar_text(author)
+        cid = comment_id(row.get("id"))
+        key = cid or f"{author_name}|{text}"
+        if key in seen:
+            continue
+        seen.add(key)
         out.append(
             PublicComment(
                 text=text,
-                author_name=scalar_text(author),
-                comment_id=comment_id(row.get("id")),
+                author_name=author_name,
+                comment_id=cid,
                 created_time=scalar_text(row.get("created_time")) or scalar_text(row.get("date")),
             )
         )

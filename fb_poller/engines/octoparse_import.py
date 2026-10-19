@@ -75,11 +75,29 @@ def _from_json(payload: object, limit: int, depth: int = 0) -> list[PublicCommen
     return out
 
 
+def _delimiter(header: str) -> str:
+    """Count separators outside quotes. A comma inside a header cell is not the delimiter."""
+    semicolons = 0
+    commas = 0
+    quoted = False
+    for char in header:
+        if char == '"':
+            quoted = not quoted
+            continue
+        if quoted:
+            continue
+        if char == ";":
+            semicolons += 1
+        elif char == ",":
+            commas += 1
+    return ";" if semicolons > commas else ","
+
+
 def _from_csv(raw: str, limit: int) -> list[PublicComment]:
     if not raw.strip():
         return []
     header = raw.splitlines()[0]
-    delimiter = ";" if header.count(";") > header.count(",") else ","
+    delimiter = _delimiter(header)
     reader = csv.DictReader(io.StringIO(raw), delimiter=delimiter)
     out: list[PublicComment] = []
     for row in reader:
