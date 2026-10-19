@@ -24,7 +24,10 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFile
+
+# ffmpeg đôi khi ghi khung thiếu vài byte cuối. Đọc phần còn lại, không hủy cả video.
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 from doc_video.frame import Contact, FrameRead, Layout, read_layout, row_at, scan_frame
 from doc_video.viet import weights_path
@@ -203,9 +206,15 @@ def extract_frames(video: Path, folder: Path, fps: float) -> list[tuple[Path, fl
     return [(path, index / fps) for index, path in enumerate(files)]
 
 
-def _thumb(path: Path) -> np.ndarray:
-    with Image.open(path) as image:
-        return np.asarray(image.convert("L").resize((90, 195), Image.Resampling.BOX), dtype=np.float32)
+def _thumb(path: Path) -> np.ndarray | None:
+    """Ảnh thu nhỏ để so khung trùng. Khung hỏng trả về None để video đọc tiếp các khung còn lại."""
+    try:
+        with Image.open(path) as image:
+            gray = image.convert("L").resize((90, 195), Image.Resampling.BOX)
+            return np.asarray(gray, dtype=np.float32)
+    except (OSError, ValueError) as exc:
+        print(f"Bỏ khung {path.name}: {exc}", flush=True)
+        return None
 
 
 def drop_repeats(frames: list[tuple[Path, float]]) -> list[tuple[Path, float]]:
@@ -213,6 +222,8 @@ def drop_repeats(frames: list[tuple[Path, float]]) -> list[tuple[Path, float]]:
     last: np.ndarray | None = None
     for path, at in frames:
         thumb = _thumb(path)
+        if thumb is None:
+            continue
         if last is not None and float(np.abs(thumb - last).mean()) < SAME_FRAME:
             continue
         kept.append((path, at))
@@ -550,7 +561,12 @@ def read_inputs(
                 folder = tempfile.TemporaryDirectory(prefix="docvideo-frames-", dir=work_dir)
                 temps.append(folder)
                 start = len(jobs)
-                frames = drop_repeats(extract_frames(path, Path(folder.name), fps))
+                extracted = extract_frames(path, Path(folder.name), fps)
+                frames = drop_repeats(extracted)
+                if extracted and not frames:
+                    raise RuntimeError(
+                        f"Không đọc được khung hình nào của {path.name}. File có thể bị cắt hoặc hỏng."
+                    )
                 jobs.extend((str(frame), at) for frame, at in frames)
                 if frames:
                     video_slices.append((path, start, len(jobs)))
