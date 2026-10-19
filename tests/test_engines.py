@@ -1841,6 +1841,57 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(imported.author_name, "Lan")
         self.assertEqual(imported.created_time, "2h")
 
+    def test_given_name_and_profile_chrome(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nSee Mai's profile\nAdd friend · Message\nNo results found\n"
+                "You're all caught up\nNew comments will appear here\nHide replies\n"
+                "Featured by the page\nMeta AI replied\nMost relevant · All comments"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nSee Mai's profile picture from the trip"], 5)
+        self.assertEqual(sentence[0].text, "See Mai's profile picture from the trip")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\nNo results found\nHide replies", author_name="Lan")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertEqual(person_name({"given_name": "Lan", "family_name": "Nguyen"}), "Lan Nguyen")
+        html = (
+            '<script>{"__typename":"Comment","id":"4","body":{"text":"xin"},'
+            '"author":{"localized_name":"An"},"created_time_seconds":1710000005}</script>'
+        )
+        found = comments_from_html(html)
+        self.assertEqual(found[0].author_name, "An")
+        self.assertEqual(found[0].created_time, "1710000005")
+        named = comments_from_payload(
+            {
+                "__typename": "Comment",
+                "id": "8",
+                "body": {"text": "xin"},
+                "author": {"given_name": "Lan", "family_name": "Nguyen"},
+            },
+            5,
+        )
+        self.assertEqual(named[0].author_name, "Lan Nguyen")
+        handle = _one({"text": "xin", "userHandle": "@lan", "id": "2"})
+        self.assertIsNotNone(handle)
+        assert handle is not None
+        self.assertEqual(handle.author_name, "@lan")
+        wrapped = _from_items({"comment": {"nodes": [{"text": "xin", "id": "11", "author": {"name": "Lan"}}]}}, 5)
+        self.assertEqual(wrapped[0].comment_id, "11")
+        self.assertEqual(post_id_from_url("https://www.facebook.com/events/555666/"), "555666")
+        imported = _from_mapping({"Nội dung comment": "xin", "Tên người dùng": "Lan", "Thời điểm": "2024-03-02"})
+        self.assertIsNotNone(imported)
+        assert imported is not None
+        self.assertEqual(imported.text, "xin")
+        self.assertEqual(imported.author_name, "Lan")
+        self.assertEqual(imported.created_time, "2024-03-02")
+
 
 if __name__ == "__main__":
     unittest.main()

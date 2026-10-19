@@ -210,6 +210,7 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "commenter_full_name",
             "i18n_name",
             "alternate_name",
+            "localized_name",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -218,9 +219,9 @@ def person_name(value: object, depth: int = 0) -> str | None:
             found = person_name(child, depth + 1) or nested_text(child)
             if found:
                 return found
-        given = person_name(lowered.get("firstname"), depth + 1)
+        given = person_name(lowered.get("firstname"), depth + 1) or person_name(lowered.get("givenname"), depth + 1)
         middle = person_name(lowered.get("middlename"), depth + 1)
-        family = person_name(lowered.get("lastname"), depth + 1)
+        family = person_name(lowered.get("lastname"), depth + 1) or person_name(lowered.get("familyname"), depth + 1)
         parts = [part for part in (given, middle, family) if part]
         if parts:
             return " ".join(parts)
@@ -357,6 +358,8 @@ def timestamp_of(row: object) -> str | None:
         "posted_time",
         "comment_create_time",
         "creation_timestamp",
+        "created_time_seconds",
+        "created_time_ms",
         "datetime",
         "date",
         "time",

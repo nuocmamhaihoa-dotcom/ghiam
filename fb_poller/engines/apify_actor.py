@@ -92,7 +92,7 @@ def _from_items(payload: Any, limit: int) -> list[PublicComment]:
         rows = payload
     elif isinstance(payload, dict):
         nested_rows: list[Any] | None = None
-        for key in ("items", "data", "comments", "comment_list", "commentList", "results", "result", "feedback"):
+        for key in ("items", "data", "comments", "comment", "comment_list", "commentList", "results", "result", "feedback"):
             value = payload.get(key)
             linked = connection_rows(value)
             if not linked and isinstance(value, dict):
@@ -223,6 +223,9 @@ def _one(row: Any) -> PublicComment | None:
         "commenter_full_name",
         "i18n_name",
         "alternate_name",
+        "localized_name",
+        "user_handle",
+        "author_sort_name",
         "page_name",
         "actor",
     )

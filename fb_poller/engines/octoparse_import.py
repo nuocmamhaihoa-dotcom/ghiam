@@ -36,6 +36,8 @@ _TEXT_KEYS = (
     "body_html",
     "nội dung bình luận",
     "noi dung binh luan",
+    "nội dung comment",
+    "noi dung comment",
 )
 _AUTHOR_KEYS = (
     "author",
@@ -71,6 +73,8 @@ _AUTHOR_KEYS = (
     "alternate_name",
     "biệt danh",
     "biet danh",
+    "tên người dùng",
+    "ten nguoi dung",
     "tác giả",
     "tac gia",
 )
@@ -97,6 +101,9 @@ _TIME_KEYS = (
     "ngày",
     "ngay",
     "time_text",
+    "thời điểm",
+    "thoi diem",
+    "created_time_seconds",
 )
 
 
