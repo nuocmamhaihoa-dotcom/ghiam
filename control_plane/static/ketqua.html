@@ -140,6 +140,8 @@
   var total = 0;
   var cursor = 0;
   var loadToken = 0;
+  var viewToken = 0;
+  var queryTimer = 0;
 
   function token() { return serverToken; }
 
@@ -331,10 +333,12 @@
     markSpan();
   }
 
-  async function loadSummary() {
+  async function loadSummary(mine) {
     var response = await api("/v1/results/summary" + (queryString("") ? "?" + queryString("") : ""));
-    if (!response.ok) return;
-    paintSummary(await response.json());
+    if (mine !== viewToken || !response.ok) return;
+    var body = await response.json();
+    if (mine !== viewToken) return;
+    paintSummary(body);
   }
 
   function paintRows() {
@@ -359,7 +363,8 @@
     more.style.display = cursor && shown.length < total ? "" : "none";
   }
 
-  async function loadPage(reset) {
+  async function loadPage(reset, view) {
+    if (view != null && view !== viewToken) return;
     var mine = ++loadToken;
     if (reset) {
       shown = [];
@@ -368,8 +373,9 @@
     }
     var extra = "limit=" + PAGE + (cursor ? "&before=" + cursor : "");
     var response = await api("/v1/results?" + queryString(extra));
-    if (mine !== loadToken || !response.ok) return;
+    if (mine !== loadToken || (view != null && view !== viewToken) || !response.ok) return;
     var page = await response.json();
+    if (mine !== loadToken || (view != null && view !== viewToken)) return;
     shown = shown.concat(page.items || []);
     total = page.total != null ? page.total : shown.length;
     cursor = page.before || 0;
@@ -377,8 +383,10 @@
   }
 
   async function reload() {
-    await loadSummary();
-    await loadPage(true);
+    var mine = ++viewToken;
+    await loadSummary(mine);
+    if (mine !== viewToken) return;
+    await loadPage(true, mine);
   }
 
   async function errorDetail(response, fallback) {
@@ -406,7 +414,10 @@
     window.location.href = body.url + (query ? "?" + query : "");
   }
 
-  document.getElementById("query").addEventListener("input", reload);
+  document.getElementById("query").addEventListener("input", function () {
+    clearTimeout(queryTimer);
+    queryTimer = setTimeout(reload, 400);
+  });
   document.getElementById("dayFrom").addEventListener("change", reload);
   document.getElementById("dayTo").addEventListener("change", reload);
   document.getElementById("reader").addEventListener("change", reload);

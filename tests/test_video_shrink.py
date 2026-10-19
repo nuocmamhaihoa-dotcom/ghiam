@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
-from control_plane.video_shrink import shrink, shrink_command
+from control_plane.video_shrink import SHRINK_TIMEOUT_SECONDS, shrink, shrink_command
 from control_plane.video_store import (
     SMALL_SUFFIX,
     adopt_shrunk,
@@ -25,7 +27,7 @@ from control_plane.video_store import (
     shrink_failed,
     shrink_totals,
 )
-from control_plane.video_worker import SHRINK_CRF_KEY, SHRINK_KEY, shrink_next, shrink_setting
+from control_plane.video_worker import SHRINK_CRF_KEY, SHRINK_KEY, _drop_old_parts, shrink_next, shrink_setting
 
 
 class ShrinkStoreTests(unittest.TestCase):
@@ -162,6 +164,66 @@ class ShrinkVideoTests(unittest.TestCase):
             self.assertFalse(shrink(Path(tmp) / "missing.mp4", Path(tmp) / "bad.mp4", nice=0))
             self.assertFalse((Path(tmp) / "bad.mp4").exists())
         self.assertIn("fps=2", shrink_command(Path("a"), Path("b")))
+
+
+class ShrinkPartTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_a_slow_shrink_file_outlives_the_upload_part_limit(self) -> None:
+        self.assertEqual(SHRINK_TIMEOUT_SECONDS, 3600)
+        folder = self.root
+        shrink_part = folder / "up-shrink-9.mp4"
+        upload_part = folder / "up-token.mov"
+        shrink_part.write_bytes(b"still-encoding")
+        upload_part.write_bytes(b"abandoned")
+        old = time.time() - 1800 - 5
+        os.utime(shrink_part, (old, old))
+        os.utime(upload_part, (old, old))
+        _drop_old_parts(folder)
+        self.assertEqual(shrink_part.read_bytes(), b"still-encoding")
+        self.assertFalse(upload_part.exists())
+
+    def test_an_abandoned_shrink_file_is_removed_after_the_encode_timeout(self) -> None:
+        shrink_part = self.root / "up-shrink-9.mp4"
+        shrink_part.write_bytes(b"left-behind")
+        very_old = time.time() - SHRINK_TIMEOUT_SECONDS - 300 - 5
+        os.utime(shrink_part, (very_old, very_old))
+        _drop_old_parts(self.root)
+        self.assertFalse(shrink_part.exists())
+
+    def test_sweep_during_shrink_does_not_mark_the_video_failed(self) -> None:
+        db = self.root / "video.db"
+        init_db(db)
+        for index in range(2):
+            other = begin_upload(db, name=f"ahead-{index}.mov", size_bytes=1000, sha256=f"ahead-{index}")
+            path = self.root / f"{int(other['id'])}.mov"
+            path.write_bytes(b"x" * 1000)
+            commit_upload(db, int(other["id"]), str(path))
+        created = begin_upload(db, name="slow.mov", size_bytes=1000, sha256="slow-1")
+        video_id = int(created["id"])
+        source = self.root / f"{video_id}.mov"
+        source.write_bytes(b"x" * 1000)
+        commit_upload(db, video_id, str(source))
+        set_meta(db, SHRINK_KEY, "on")
+
+        def fake(src: Path, dst: Path, crf: int) -> bool:
+            dst.write_bytes(b"tiny")
+            old = time.time() - 1900
+            os.utime(dst, (old, old))
+            _drop_old_parts(src.parent)
+            if not dst.is_file():
+                return False
+            return True
+
+        self.assertTrue(shrink_next(db, 18, fake))
+        with connect(db) as conn:
+            row = conn.execute("SELECT shrunk FROM videos WHERE id = ?", (video_id,)).fetchone()
+        self.assertEqual(row["shrunk"], 1)
 
 
 if __name__ == "__main__":

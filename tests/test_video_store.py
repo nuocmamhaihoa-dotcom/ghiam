@@ -32,6 +32,7 @@ from control_plane.video_store import (
     employee_report,
     employee_rows,
     fail,
+    fill_username_keys,
     finish,
     init_db,
     iter_backup,
@@ -271,6 +272,37 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual([item["phone"] for item in search_results(self.db, "@khac")], ["0332001753"])
         self.assertEqual(search_results(self.db, "0999"), [])
 
+    def test_username_case_is_one_id_and_search_ignores_case(self) -> None:
+        first = self._add("a.mp4", "a")
+        finish(self.db, first, Table(rows=[Row("0900000021", "Mot", "@DangTam")]))
+        second = self._add("b.mp4", "b")
+        finish(self.db, second, Table(rows=[Row("0900000022", "Mot lai", "@dangtam")]))
+        page = result_page(self.db, limit=10)
+        self.assertEqual([item["phone"] for item in page["items"]], ["0900000021"])
+        self.assertEqual(page["total"], 1)
+        for query in ("@dangtam", "@DangTam", "@DANGTAM", "dangtam"):
+            found = search_results(self.db, query)
+            self.assertEqual([item["phone"] for item in found], ["0900000021"], query)
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                INSERT INTO results (phone, name, username, bucket, video_id, created_at, updated_at)
+                VALUES ('0900000023', 'Ba', '@HaiTu', 1, ?, '2026-10-19T04:00:00+00:00', '2026-10-19T04:00:00+00:00')
+                """,
+                (first,),
+            )
+            conn.execute(
+                """
+                INSERT INTO results (phone, name, username, bucket, video_id, created_at, updated_at)
+                VALUES ('0900000024', 'Tu', '@haitu', 1, ?, '2026-10-19T05:00:00+00:00', '2026-10-19T05:00:00+00:00')
+                """,
+                (first,),
+            )
+        self.assertEqual([item["phone"] for item in search_results(self.db, "@haitu")], ["0900000024"])
+        self.assertEqual(fill_username_keys(self.db), 2)
+        self.assertEqual([item["phone"] for item in result_page(self.db, limit=10)["items"]], ["0900000023", "0900000021"])
+        self.assertEqual([item["phone"] for item in search_results(self.db, "@HAITU")], ["0900000023"])
+
     def test_result_page_lists_every_row_newest_first(self) -> None:
         first = self._add("a.mp4", "a")
         finish(self.db, first, Table(rows=[Row("0900000001", "Mot", "@mot")]))
@@ -356,6 +388,28 @@ class VideoStoreTests(unittest.TestCase):
             [item["phone"] for item in saved_rows_after(self.db, 0, 10)],
             ["0900000001", "0900000002", "0900000004"],
         )
+
+    def test_rewriting_a_username_updates_the_visible_total_immediately(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        finish(
+            self.db,
+            video_id,
+            Table(rows=[Row("0900000011", "Mot", "@mot"), Row("0900000012", "Hai", "@hai")]),
+        )
+        self.assertEqual(result_page(self.db, limit=10)["total"], 2)
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                UPDATE results
+                SET username = '@mot', updated_at = '2026-10-19T08:00:00+00:00'
+                WHERE phone = '0900000012'
+                """
+            )
+        page = result_page(self.db, limit=10)
+        self.assertEqual([item["phone"] for item in page["items"]], ["0900000011"])
+        self.assertEqual(page["total"], 1)
+        self.assertTrue(str(page["revision"]).startswith("1|"))
+        self.assertEqual(result_page(self.db, limit=10)["total"], 1)
 
     def test_finished_video_counts_phones_and_complete_rows(self) -> None:
         video_id = self._add("a.mp4", "a")
@@ -1042,6 +1096,19 @@ class VideoStoreTests(unittest.TestCase):
             Table(review=[Review("", "", "Phan Hưng Thar", "@dy8b4fvlmkx4", "đã mở hồ sơ nhưng không thấy số cùng tên")]),
         )
         self.assertEqual(stats(self.db)["review"], 0)
+
+    def test_orphan_profile_with_a_different_handle_is_kept(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        claim(self.db, 4)
+        finish(self.db, video_id, Table(rows=[Row("0917129188", "Mot", "@mot_dung")]))
+        second = self._add("b.mp4", "b")
+        claim(self.db, 4)
+        finish(
+            self.db,
+            second,
+            Table(review=[Review("", "", "Hai", "@hai_khac", "đã mở hồ sơ nhưng không thấy số cùng tên")]),
+        )
+        self.assertEqual(stats(self.db)["review"], 1)
 
     def test_disk_limit(self) -> None:
         gb = 1024 * 1024 * 1024

@@ -22,9 +22,11 @@ from doc_video.text import (
     clean_name,
     find_handle,
     fix_underscores,
+    handle_aliases,
     handle_from_read,
     handle_from_viet,
     handle_matches_name,
+    lookalike_handles,
     looks_like_phone,
     name_key,
     normalize_phone,
@@ -55,6 +57,15 @@ class TextTests(unittest.TestCase):
         self.assertTrue(looks_like_phone("0919 313 090"))
         self.assertFalse(looks_like_phone("Thoa 6736599813370"))
         self.assertEqual(find_handle("(@truc31798"), "@truc31798")
+        aliases = handle_aliases("@dy8b4fvimkx4")
+        self.assertIn("@dy8b4fvlmkx4", aliases)
+        self.assertNotIn("@dy8b4fvlmkx5", aliases)
+        self.assertIn("@ab_cd", handle_aliases("@ab__cd"))
+        self.assertIn("@ab__cd", handle_aliases("@ab_cd"))
+        self.assertNotIn("@a___b", handle_aliases("@a__b"))
+        for alias in aliases:
+            if alias != "@dy8b4fvimkx4":
+                self.assertTrue(lookalike_handles("@dy8b4fvimkx4", alias))
         self.assertEqual(find_handle("@ 07:49"), "")
         self.assertTrue(handle_matches_name("@thuvan99", "Thu Vân"))
         self.assertTrue(handle_matches_name("@thoa.6736599813370", "Thoa 6736599813370"))

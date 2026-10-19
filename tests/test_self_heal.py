@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -81,6 +82,50 @@ class SelfHealTests(unittest.TestCase):
         self.assertEqual(self._heal(), [])
         self.assertEqual(self._heal(), [])
 
+    def test_an_abandoned_partial_is_removed_and_a_live_piece_stays(self) -> None:
+        partial = self.videos / "partial"
+        partial.mkdir()
+        old = partial / "aabbccddeeff0011.part"
+        fresh = partial / "aabbccddeeff0022.part"
+        old_done = partial / "aabbccddeeff0033.done"
+        fresh_done = partial / "aabbccddeeff0044.done"
+        old_lock = partial / "aabbccddeeff0055.lock"
+        live_lock = partial / "aabbccddeeff0066.lock"
+        old.write_bytes(b"stale-video")
+        fresh.write_bytes(b"live")
+        old_done.write_text("{}", encoding="utf-8")
+        fresh_done.write_text("{}", encoding="utf-8")
+        old_lock.mkdir()
+        live_lock.mkdir()
+        now = time.time()
+        os.utime(old, (now - 7 * 3600, now - 7 * 3600))
+        os.utime(old_done, (now - 3 * 3600, now - 3 * 3600))
+        os.utime(old_lock, (now - 600, now - 600))
+        video_id, path = self._add("running", pid=os.getpid())
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                INSERT INTO results (phone, name, username, bucket, video_id, created_at)
+                VALUES ('0901000099', 'Giữ', '@giu', 1, ?, ?)
+                """,
+                (video_id, utcnow()),
+            )
+        notes = self._heal()
+        self.assertFalse(old.exists())
+        self.assertFalse(old_done.exists())
+        self.assertTrue(fresh.is_file())
+        self.assertEqual(fresh.read_bytes(), b"live")
+        self.assertTrue(fresh_done.is_file())
+        self.assertTrue(old_lock.is_dir())
+        self.assertTrue(live_lock.is_dir())
+        self.assertTrue(path.is_file())
+        self.assertEqual(self._status(video_id), "running")
+        with connect(self.db) as conn:
+            kept = conn.execute("SELECT COUNT(*) AS n FROM results").fetchone()
+        self.assertEqual(int(kept["n"]), 1)
+        self.assertTrue(any(note.startswith("Xóa 2 mảnh tải bỏ dở quá hạn") for note in notes))
+        self.assertEqual(self._heal(), [])
+
     def test_a_fresh_upload_stays_and_an_abandoned_one_is_dropped(self) -> None:
         fresh, _path = self._add("uploading", file=False)
         stale, _path = self._add("uploading", file=False, created="2020-01-01T00:00:00+00:00")
@@ -143,7 +188,7 @@ class SelfHealTests(unittest.TestCase):
         self.assertEqual(order[0], waiting)
         self.assertEqual(self._status(broken), "queued")
         self.assertEqual(self._status(unknown), "queued")
-        self.assertEqual(self._status(real), "error")
+        self.assertEqual(self._status(real), "queued")
         self.assertEqual(self._status(gone), "error")
         self.assertEqual(self._status(escaped), "error")
         with connect(self.db) as conn:
@@ -153,6 +198,7 @@ class SelfHealTests(unittest.TestCase):
         self.assertIn("truncated", escaped_error["error"])
         self.assertLess(order.index(waiting), order.index(broken))
         self.assertLess(order.index(waiting), order.index(unknown))
+        self.assertLess(order.index(waiting), order.index(real))
         with connect(self.db) as conn:
             priority = conn.execute(
                 "SELECT priority, started_at, progress_same_at FROM videos WHERE id = ?",
@@ -162,10 +208,22 @@ class SelfHealTests(unittest.TestCase):
         self.assertIsNone(priority["started_at"])
         self.assertIsNone(priority["progress_same_at"])
         self.assertTrue(any(f"Video {broken} lỗi vì một khung ảnh hỏng" in line for line in notes))
-        self.assertFalse(any(str(real) in line for line in notes))
+        self.assertTrue(any(f"Video {real} không mở được lần trước" in line for line in notes))
+        with connect(self.db) as conn:
+            tried = conn.execute("SELECT heal_tries, priority FROM videos WHERE id = ?", (real,)).fetchone()
+        self.assertEqual(int(tried["heal_tries"]), 1)
+        self.assertEqual(int(tried["priority"]), -1)
         self.assertTrue(any(f"Video {gone} lỗi đã biết nhưng file không còn" in line for line in notes))
         self.assertFalse(any(str(escaped) in line for line in notes))
         self.assertEqual(self._heal(), [])
+        with connect(self.db) as conn:
+            conn.execute(
+                "UPDATE videos SET status = 'error', error = 'Không mở được video' WHERE id = ?",
+                (real,),
+            )
+        again = self._heal()
+        self.assertEqual(self._status(real), "error")
+        self.assertFalse(any(str(real) in line for line in again))
 
     def test_a_disk_full_error_waits_behind_and_saved_rows_are_kept(self) -> None:
         waiting, _path = self._add("queued")
@@ -309,6 +367,211 @@ class SelfHealTests(unittest.TestCase):
         self.assertEqual(stats(self.db)["saved"], 1)
         self.assertTrue(notes)
         self.assertNotIn("@binh", " ".join(notes))
+
+    def test_each_known_failure_is_repaired_and_a_second_pass_is_quiet(self) -> None:
+        live, _path = self._add("running", pid=os.getpid())
+        waiting, _path = self._add("queued")
+        locked, _path = self._add("error", error="database is locked")
+        io_error, _path = self._add("error", error="disk I/O error")
+        stalled, _path = self._add("error", error="Một khung không đọc xong sau 120 giây.")
+        opened, _path = self._add("error", error="Không mở được video clip.mp4: Invalid data")
+        unread, _path = self._add("error", error="Không đọc được video.")
+        ffmpeg, _path = self._add("error", error="Cần cài ffmpeg để đọc video.")
+        letters, _path = self._add("error", error="Chưa cài tesseract. Ubuntu: sudo apt install tesseract-ocr")
+        kept, kept_path = self._add("error", error="database is locked")
+        blank, blank_path = self._add("queued")
+        blank_path.write_bytes(b"")
+        hollow, hollow_path = self._add("error", error="image file is truncated (0 bytes not processed)")
+        hollow_path.write_bytes(b"")
+        finished, finished_path = self._add("uploading", created="2020-01-01T00:00:00+00:00")
+        finished_path.write_bytes(b"0123456789")
+        fresh_done, fresh_path = self._add("uploading")
+        fresh_path.write_bytes(b"0123456789")
+        denied, _path = self._add("error", error="Permission denied")
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                INSERT INTO results (phone, name, username, bucket, video_id, created_at)
+                VALUES ('0900000003', 'Giu', '@giu', 1, ?, ?)
+                """,
+                (kept, utcnow()),
+            )
+            conn.execute(
+                """
+                INSERT INTO pcs (name, first_seen, last_seen, state, excluded)
+                VALUES ('MAY-LOAI', ?, ?, 'idle', 1)
+                """,
+                (utcnow(), utcnow()),
+            )
+        now = time.time()
+        stale_upload = self.videos / "up-stale.bin"
+        fresh_upload = self.videos / "up-fresh.bin"
+        young_shrink = self.videos / "up-shrink-1.mp4"
+        old_shrink = self.videos / "up-shrink-2.mp4"
+        for path, age, payload in (
+            (stale_upload, 2000, b"old"),
+            (fresh_upload, 10, b"new"),
+            (young_shrink, 1000, b"encoding"),
+            (old_shrink, 4000, b"abandoned"),
+        ):
+            path.write_bytes(payload)
+            os.utime(path, (now - age, now - age))
+        notes = self._heal()
+        order = queue_order(self.db)
+        self.assertEqual(self._status(live), "running")
+        self.assertEqual(order[0], waiting)
+        for video_id in (locked, io_error, stalled, opened, unread, denied):
+            self.assertEqual(self._status(video_id), "queued")
+            self.assertLess(order.index(waiting), order.index(video_id))
+        self.assertEqual(self._status(ffmpeg), "error")
+        self.assertEqual(self._status(letters), "error")
+        self.assertEqual(self._status(kept), "error")
+        self.assertEqual(kept_path.read_bytes(), b"video")
+        self.assertEqual(self._status(blank), "error")
+        self.assertEqual(self._status(hollow), "error")
+        with connect(self.db) as conn:
+            blank_error = conn.execute("SELECT error FROM videos WHERE id = ?", (blank,)).fetchone()
+            hollow_error = conn.execute("SELECT error, priority FROM videos WHERE id = ?", (hollow,)).fetchone()
+            opened_try = conn.execute("SELECT heal_tries, priority FROM videos WHERE id = ?", (opened,)).fetchone()
+            locked_try = conn.execute("SELECT heal_tries, priority FROM videos WHERE id = ?", (locked,)).fetchone()
+            finished_row = conn.execute("SELECT status, priority FROM videos WHERE id = ?", (finished,)).fetchone()
+            fresh_row = conn.execute("SELECT status FROM videos WHERE id = ?", (fresh_done,)).fetchone()
+            excluded = conn.execute("SELECT excluded, state FROM pcs WHERE name = 'MAY-LOAI'").fetchone()
+            saved = conn.execute("SELECT username FROM results WHERE video_id = ?", (kept,)).fetchone()
+        self.assertEqual(blank_error["error"], "File video rỗng.")
+        self.assertEqual(hollow_error["error"], "File video rỗng.")
+        self.assertEqual(int(hollow_error["priority"]), 0)
+        self.assertEqual(int(opened_try["heal_tries"]), 1)
+        self.assertEqual(int(opened_try["priority"]), -1)
+        self.assertEqual(int(locked_try["heal_tries"]), 0)
+        self.assertEqual(int(locked_try["priority"]), -1)
+        self.assertEqual(finished_row["status"], "queued")
+        self.assertEqual(int(finished_row["priority"]), 0)
+        self.assertEqual(fresh_row["status"], "uploading")
+        self.assertEqual(int(excluded["excluded"]), 1)
+        self.assertEqual(excluded["state"], "idle")
+        self.assertEqual(saved["username"], "@giu")
+        self.assertFalse(stale_upload.exists())
+        self.assertTrue(fresh_upload.is_file())
+        self.assertTrue(young_shrink.is_file())
+        self.assertFalse(old_shrink.exists())
+        self.assertTrue(any("lỗi tạm thời" in line for line in notes))
+        self.assertTrue(any("không mở được lần trước" in line for line in notes))
+        self.assertFalse(any("ffmpeg" in line.lower() for line in notes))
+        self.assertFalse(any("MAY-LOAI" in line for line in notes))
+        self.assertNotIn("@giu", " ".join(notes))
+        self.assertEqual(self._heal(), [])
+        with connect(self.db) as conn:
+            conn.execute(
+                "UPDATE videos SET status = 'error', error = 'disk I/O error' WHERE id = ?",
+                (io_error,),
+            )
+        retried = self._heal()
+        self.assertEqual(self._status(io_error), "queued")
+        self.assertTrue(any(f"Video {io_error} lỗi tạm thời" in line for line in retried))
+        self.assertEqual(self._heal(), [])
+
+    def test_a_file_that_comes_back_is_read_once_and_a_saved_row_stays(self) -> None:
+        waiting, _path = self._add("queued")
+        back, path = self._add("error", error="File video không còn trên máy chủ.")
+        claimed, _path = self._add("error", error="Không còn file video.")
+        saved, _path = self._add("error", error="File video không còn trên máy chủ.")
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                INSERT INTO results (phone, name, username, bucket, video_id, created_at)
+                VALUES ('0900000004', 'Con', '@con', 1, ?, ?)
+                """,
+                (saved, utcnow()),
+            )
+        notes = self._heal()
+        order = queue_order(self.db)
+        self.assertEqual(self._status(back), "queued")
+        self.assertEqual(self._status(claimed), "queued")
+        self.assertLess(order.index(waiting), order.index(back))
+        self.assertLess(order.index(waiting), order.index(claimed))
+        self.assertEqual(self._status(saved), "error")
+        self.assertTrue(path.is_file())
+        self.assertTrue(any(f"Video {back} được đánh mất nhưng file đã có lại" in line for line in notes))
+        self.assertFalse(any(str(saved) in line for line in notes))
+        self.assertEqual(self._heal(), [])
+        with connect(self.db) as conn:
+            conn.execute(
+                "UPDATE videos SET status = 'error', error = 'File video không còn trên máy chủ.' WHERE id = ?",
+                (back,),
+            )
+        self.assertEqual(self._heal(), [])
+        self.assertEqual(self._status(back), "error")
+
+    def test_disk_full_words_frames_and_a_file_that_grows_are_repaired(self) -> None:
+        waiting, _path = self._add("queued")
+        full, _path = self._add("error", error="sqlite3.OperationalError: database or disk is full")
+        memory, _path = self._add("error", error="out of memory")
+        broken_db, _path = self._add("error", error="database disk image is malformed")
+        grew, grew_path = self._add("error", error="File video rỗng.")
+        grew_path.write_bytes(b"video-now")
+        still_empty, empty_path = self._add("error", error="File video rỗng.")
+        empty_path.write_bytes(b"")
+        done, _path = self._add("done")
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                INSERT INTO results (phone, name, username, bucket, video_id, created_at)
+                VALUES ('0900000005', 'Xong', '@xong', 1, ?, ?)
+                """,
+                (done, utcnow()),
+            )
+            conn.execute(
+                "UPDATE videos SET started_at = ? WHERE id = ?",
+                (utcnow(), waiting),
+            )
+        frames = self.root / "frames"
+        frames.mkdir()
+        old = frames / "docvideo-frames-old"
+        live = frames / "docvideo-frames-live"
+        fresh = frames / "danhba-frames-fresh"
+        other = frames / "notes.txt"
+        old.mkdir()
+        live.mkdir()
+        fresh.mkdir()
+        other.write_text("giu", encoding="utf-8")
+        (old / "f.jpg").write_bytes(b"jpg")
+        now = time.time()
+        os.utime(old, (now - 3 * 3600, now - 3 * 3600))
+        os.utime(fresh, (now - 600, now - 600))
+        running, _path = self._add("running", pid=os.getpid())
+        with connect(self.db) as conn:
+            conn.execute(
+                "UPDATE videos SET started_at = ? WHERE id = ?",
+                ((datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat(), running),
+            )
+        moment = datetime.now(timezone.utc)
+        notes = heal_once(self.db, self.videos, now=moment, frames_dir=frames)
+        order = queue_order(self.db)
+        self.assertEqual(self._status(full), "queued")
+        self.assertEqual(self._status(memory), "queued")
+        self.assertLess(order.index(waiting), order.index(full))
+        self.assertEqual(self._status(broken_db), "error")
+        self.assertEqual(self._status(grew), "queued")
+        self.assertEqual(self._status(still_empty), "error")
+        self.assertEqual(self._status(running), "running")
+        self.assertFalse(old.exists())
+        self.assertTrue(live.is_dir())
+        self.assertTrue(fresh.is_dir())
+        self.assertEqual(other.read_text(encoding="utf-8"), "giu")
+        with connect(self.db) as conn:
+            counts = conn.execute(
+                "SELECT phone_count, full_count FROM videos WHERE id = ?",
+                (done,),
+            ).fetchone()
+        self.assertEqual(int(counts["phone_count"]), 1)
+        self.assertEqual(int(counts["full_count"]), 1)
+        self.assertTrue(any("thư mục khung" in line for line in notes))
+        self.assertTrue(any("Điền số đã đọc cho" in line for line in notes))
+        self.assertTrue(any(f"Video {grew} hết rỗng" in line for line in notes))
+        self.assertFalse(any(str(broken_db) in line for line in notes))
+        self.assertNotIn("@xong", " ".join(notes))
+        self.assertEqual(heal_once(self.db, self.videos, now=moment, frames_dir=frames), [])
 
     def _ids(self) -> set[int]:
         with connect(self.db) as conn:

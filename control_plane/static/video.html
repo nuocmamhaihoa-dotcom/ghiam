@@ -628,6 +628,7 @@
   }
 
   var refreshBusy = false;
+  var refreshPending = false;
   var STATS_KEY = "ghiam-stats";
 
   function rememberStats(body) {
@@ -761,13 +762,21 @@
   }
 
   async function refresh() {
-    if (refreshBusy) return;
+    if (refreshBusy) {
+      refreshPending = true;
+      return;
+    }
     refreshBusy = true;
     try {
-      loadEmployees();
-      await refreshStats();
-    } catch (error) {
-      if (!statsReady) showStatsMiss();
+      do {
+        refreshPending = false;
+        try {
+          loadEmployees();
+          await refreshStats();
+        } catch (error) {
+          if (!statsReady) showStatsMiss();
+        }
+      } while (refreshPending);
     } finally {
       refreshBusy = false;
     }
@@ -899,13 +908,36 @@
   var resultCache = null;
 
   function resultSig(items, total, capped) {
-    if (!items.length) return "0:" + total + ":" + (capped ? 1 : 0);
-    var first = items[0];
-    var last = items[items.length - 1];
-    var readers = items.map(function (item) {
-      return (item.video_id || 0) + ":" + (item.helper || "") + ":" + (item.checked || "") + ":" + (item.device || "") + ":" + (item.carrier || "");
-    }).join(",");
-    return items.length + ":" + first.id + ":" + last.id + ":" + first.phone + ":" + first.name + ":" + first.username + ":" + first.bucket + ":" + first.reason + ":" + readers + ":" + total + ":" + (capped ? 1 : 0);
+    var hash = 2166136261;
+    function mix(value) {
+      var text = value == null ? "" : String(value);
+      for (var i = 0; i < text.length; i++) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      hash ^= 124;
+      hash = Math.imul(hash, 16777619);
+    }
+    mix(items.length);
+    mix(total);
+    mix(capped ? 1 : 0);
+    items.forEach(function (item) {
+      mix(item.id);
+      mix(item.phone);
+      mix(item.normalized);
+      mix(item.name);
+      mix(item.username);
+      mix(item.bucket);
+      mix(item.reason);
+      mix(item.helper);
+      mix(item.checked);
+      mix(item.device);
+      mix(item.carrier);
+      mix(item.phone_note);
+      mix(item.video_id);
+      mix(item.created_at);
+    });
+    return (hash >>> 0).toString(16);
   }
 
   function resultFilters() {
@@ -1071,8 +1103,10 @@
       var arrived = newer.items || [];
       var revision = newer.revision || "";
       var total = newer.total != null ? newer.total : cached.total;
-      var editedInPlace = revision && cached.revision && revision !== cached.revision && !arrived.length;
-      if (!editedInPlace && total >= cached.items.length) {
+      // Sửa một dòng cũ làm đổi mốc revision. Có thêm dòng mới cùng lúc thì
+      // không ghép bản nhớ, kẻo dòng đã sửa nằm lại mãi.
+      var changed = revision && cached.revision && revision !== cached.revision;
+      if (!changed && total >= cached.items.length) {
         var items = arrived.concat(cached.items);
         if (items.length > RESULT_CAP) items = items.slice(0, RESULT_CAP);
         resultCache = {
@@ -1839,7 +1873,12 @@
     refresh();
   });
   document.getElementById("missingAll").addEventListener("click", function () { openMissing(""); });
-  document.getElementById("query").addEventListener("input", loadResults);
+  var resultTyping = 0;
+  function queueResultReload() {
+    clearTimeout(resultTyping);
+    resultTyping = setTimeout(function () { loadResults(true); }, 400);
+  }
+  document.getElementById("query").addEventListener("input", queueResultReload);
   ["dayFrom", "dayTo"].forEach(function (id) {
     document.getElementById(id).addEventListener("change", function () {
       followSpanDates = false;
@@ -1849,7 +1888,7 @@
   ["resultDevice", "resultBucket", "resultChecked"].forEach(function (id) {
     document.getElementById(id).addEventListener("change", loadResults);
   });
-  document.getElementById("resultVideo").addEventListener("input", loadResults);
+  document.getElementById("resultVideo").addEventListener("input", queueResultReload);
   document.getElementById("exportExcel").addEventListener("click", async function () {
     var note = document.getElementById("exportNote");
     note.textContent = "Đang tạo file Excel theo bộ lọc đang chọn...";

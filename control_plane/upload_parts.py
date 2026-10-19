@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -113,12 +114,17 @@ def reclaim_stale_partials(
     return freed
 
 
-def sweep_parts(root: Path, now: float | None = None) -> None:
-    """Xóa mảnh bỏ dở quá hạn và kết quả tạm đã trả cho trình duyệt."""
+def sweep_parts(root: Path, now: float | None = None, *, locks: bool = True) -> int:
+    """Xóa mảnh bỏ dở quá hạn và kết quả tạm đã trả cho trình duyệt.
+
+    locks=False giữ thư mục khóa. Lần tự sửa dùng cách đó: khóa đang giữ một
+    lần ghi dài không bị gỡ chỉ vì mtime chưa được làm mới.
+    """
     folder = root / "partial"
     if not folder.is_dir():
-        return
+        return 0
     moment = time.time() if now is None else now
+    removed = 0
     for path in folder.iterdir():
         try:
             age = moment - path.stat().st_mtime
@@ -126,20 +132,34 @@ def sweep_parts(root: Path, now: float | None = None) -> None:
             continue
         try:
             if path.is_dir():
-                if age > LOCK_STALE_SECONDS:
+                if locks and age > LOCK_STALE_SECONDS:
                     path.rmdir()
+                    removed += 1
                 continue
             if path.name.endswith(".done"):
                 if age > DONE_TTL_SECONDS:
                     path.unlink(missing_ok=True)
+                    removed += 1
             elif age > PARTIAL_TTL_SECONDS:
                 path.unlink(missing_ok=True)
+                removed += 1
         except OSError:
             continue
+    return removed
 
 
 @contextmanager
-def _hold(lock_dir: Path) -> Iterator[None]:
+def _hold(
+    lock_dir: Path,
+    *,
+    interval: float = 30,
+    keep: tuple[Path, ...] = (),
+) -> Iterator[None]:
+    """Giữ khóa thư mục trong lúc ghi mảnh.
+
+    Ghi và fsync một mảnh lớn có thể lâu hơn hạn khóa. Nhịp làm mới mtime của
+    khóa và file đang ghi, để lần dọn của yêu cầu khác không gỡ chúng giữa chừng.
+    """
     deadline = time.time() + 30
     while True:
         try:
@@ -155,9 +175,24 @@ def _hold(lock_dir: Path) -> Iterator[None]:
             if time.time() > deadline:
                 raise UploadRejected(503, "Máy chủ đang ghi mảnh này. Thử lại.") from None
             time.sleep(0.02)
+    stop = threading.Event()
+
+    def beat() -> None:
+        while not stop.wait(interval):
+            for path in (lock_dir, *keep):
+                try:
+                    if path.exists():
+                        os.utime(path, None)
+                except OSError:
+                    continue
+
+    thread = threading.Thread(target=beat, daemon=True)
+    thread.start()
     try:
         yield
     finally:
+        stop.set()
+        thread.join(timeout=1)
         try:
             lock_dir.rmdir()
         except OSError:
@@ -248,7 +283,7 @@ def write_part(
         raise UploadRejected(400, "Mảnh vượt quá độ dài file.")
     sweep_parts(root)
     part, meta_path, lock, done = _paths(root, upload_id)
-    with _hold(lock):
+    with _hold(lock, keep=(part, meta_path)):
         saved = _read_json(done)
         if saved is not None:
             saved["complete"] = True

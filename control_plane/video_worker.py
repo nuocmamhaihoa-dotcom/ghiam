@@ -26,7 +26,7 @@ from control_plane.results_out import webhook_loop
 from control_plane.self_heal import heal_once
 from control_plane.screen_table import Review, Row, Table, Unopened
 from control_plane.settings import settings
-from control_plane.video_shrink import DEFAULT_CRF, shrink
+from control_plane.video_shrink import DEFAULT_CRF, drop_stale_temps, shrink
 from control_plane.video_store import (
     adopt_shrunk,
     backfill_video_counts,
@@ -75,16 +75,8 @@ def scan_paths(
 
 
 def _drop_old_parts(folder: Path) -> None:
-    """File tạm của lần tải bị đứt hơn 30 phút. Lần tải đang chạy ghi tiếp vào file của nó, không đụng tới."""
-    if not folder.is_dir():
-        return
-    cutoff = time.time() - 1800
-    for path in folder.glob("up-*"):
-        try:
-            if path.stat().st_mtime < cutoff:
-                path.unlink(missing_ok=True)
-        except OSError:
-            continue
+    """File tạm của lần tải bị đứt hơn 30 phút. Bản thu nhỏ đang ghi sống hết hạn ffmpeg."""
+    drop_stale_temps(folder)
 
 
 def keep_newest_videos(db_path: Path) -> None:
@@ -359,7 +351,12 @@ def main() -> None:
             if now - last_sweep >= 60:
                 last_sweep = now
                 try:
-                    for line in heal_once(db_path, settings.video_dir, heartbeat_path()):
+                    for line in heal_once(
+                        db_path,
+                        settings.video_dir,
+                        heartbeat_path(),
+                        frames_dir=settings.data_dir / "frames",
+                    ):
                         print(line, flush=True)
                 except Exception as exc:
                     print(f"Chưa tự sửa được: {type(exc).__name__}", flush=True)
