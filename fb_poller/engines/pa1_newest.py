@@ -24,6 +24,8 @@ _DROP_LINE = re.compile(
     r"\d+\s*(?:s|m|h|d|w|y)|"
     r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)|"
     r"view all \d+ replies|xem tất cả \d+ phản hồi|\d+ replies|\d+ phản hồi|"
+    r"see translation|hide translation|xem bản dịch|ẩn bản dịch|"
+    r"edited|đã chỉnh sửa|"
     r"\d{1,7}"
     r")$",
     re.IGNORECASE,

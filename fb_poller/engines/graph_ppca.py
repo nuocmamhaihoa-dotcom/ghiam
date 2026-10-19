@@ -7,7 +7,9 @@ import re
 
 import httpx
 
-from fb_poller.engines.guard import invalid_limit, public_error
+from fb_poller.engines.guard import comment_id, invalid_limit, public_error, redact_text, scalar_text
+
+_VERSION = re.compile(r"^v\d+\.\d+$")
 from fb_poller.engines.types import EngineResult, PublicComment
 
 RANK = 6
@@ -50,6 +52,8 @@ async def scan(url: str, *, limit: int = 50, timeout: float = 30.0, **_: object)
             note="Needs a Page or system-user token with Page Public Content Access.",
         )
     version = graph_version()
+    if not _VERSION.match(version):
+        return EngineResult(NAME, RANK, False, error="invalid_GRAPH_VERSION")
     try:
         async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
             object_id = await _resolve_id(client, version, token, url)
@@ -75,7 +79,7 @@ async def scan(url: str, *, limit: int = 50, timeout: float = 30.0, **_: object)
     if resp.status_code >= 400 or "error" in data:
         err = data.get("error", {})
         message = err.get("message") if isinstance(err, dict) else resp.text[:200]
-        return EngineResult(NAME, RANK, False, error=str(message)[:300])
+        return EngineResult(NAME, RANK, False, error=redact_text(str(message), 300))
 
     comments: list[PublicComment] = []
     for row in data.get("data") or []:
@@ -88,9 +92,9 @@ async def scan(url: str, *, limit: int = 50, timeout: float = 30.0, **_: object)
         comments.append(
             PublicComment(
                 text=text.strip(),
-                author_name=str(author.get("name")) if author.get("name") else None,
-                comment_id=str(row["id"]) if row.get("id") else None,
-                created_time=str(row.get("created_time") or "") or None,
+                author_name=scalar_text(author.get("name")),
+                comment_id=comment_id(row.get("id")),
+                created_time=scalar_text(row.get("created_time")),
             )
         )
         if len(comments) >= limit:

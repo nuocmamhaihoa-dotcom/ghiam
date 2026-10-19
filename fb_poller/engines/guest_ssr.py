@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-import json
 import re
 from typing import Any
 
 import httpx
 
-from fb_poller.engines.guard import comment_id, invalid_limit, placeholder_text, public_error
+from fb_poller.engines.guard import (
+    comment_id,
+    invalid_limit,
+    objects_with_comments,
+    placeholder_text,
+    public_error,
+    redact_text,
+    scalar_text,
+)
 from fb_poller.engines.types import EngineResult, PublicComment
 
 RANK = 7
@@ -18,37 +25,28 @@ _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 )
-_LOGIN_MARKERS = ("log in to facebook", "đăng nhập facebook", "/login.php", "/login/")
-
-
 def comments_from_html(html: str, limit: int = 25) -> list[PublicComment]:
-    """Pull comment objects from script JSON. Skips ahead after each decoded value."""
+    """Pull comment objects from script JSON, including ones that sit after other values."""
     if limit < 1:
         return []
     found: list[PublicComment] = []
     seen: set[str] = set()
-    chunks = re.findall(r"<script\b[^>]*>(.*?)</script>", html, flags=re.IGNORECASE | re.DOTALL)
-    if not chunks:
-        chunks = [html]
-    decoder = json.JSONDecoder()
-    for chunk in chunks:
-        if "comment" not in chunk.lower():
-            continue
-        index = 0
-        attempts = 0
-        while index < len(chunk) and len(found) < limit and attempts < 400:
-            brace = chunk.find("{", index)
-            if brace < 0:
-                break
-            attempts += 1
-            try:
-                obj, end = decoder.raw_decode(chunk, brace)
-            except json.JSONDecodeError:
-                index = brace + 1
-                continue
-            _walk(obj, found, seen, limit)
-            index = max(end, brace + 1)
+    for obj in objects_with_comments(html):
+        if len(found) >= limit:
+            break
+        _walk(obj, found, seen, limit)
     return found
+
+
+def looks_like_login(final_url: str, body: str) -> bool:
+    """True when the response itself is a login page, not merely a page that links to login."""
+    url = final_url.lower()
+    if "/login" in url or "login.php" in url:
+        return True
+    title = re.search(r"<title>(.*?)</title>", body, flags=re.IGNORECASE | re.DOTALL)
+    if title and title.group(1).strip().lower() in {"log in to facebook", "đăng nhập facebook", "facebook login"}:
+        return True
+    return False
 
 
 def _walk(node: Any, found: list[PublicComment], seen: set[str], limit: int) -> None:
@@ -67,13 +65,13 @@ def _walk(node: Any, found: list[PublicComment], seen: set[str], limit: int) -> 
         key = cid or f"{author}|{text[:80]}"
         if key not in seen:
             seen.add(key)
-            created = node.get("created_time") or node.get("created_at")
+            created = scalar_text(node.get("created_time")) or scalar_text(node.get("created_at"))
             found.append(
                 PublicComment(
                     text=text,
                     author_name=author,
                     comment_id=cid,
-                    created_time=str(created) if created else None,
+                    created_time=created,
                 )
             )
     for value in node.values():
@@ -99,9 +97,8 @@ def _comment_text(node: dict[str, Any]) -> str | None:
 def _author(node: dict[str, Any]) -> str | None:
     author = node.get("author") or node.get("from") or node.get("user")
     if isinstance(author, dict):
-        name = author.get("name") or author.get("short_name")
-        return str(name) if name else None
-    return None
+        return scalar_text(author.get("name")) or scalar_text(author.get("short_name"))
+    return scalar_text(author)
 
 
 def _httpx_proxy(proxy: str) -> str | None:
@@ -149,17 +146,16 @@ async def scan(
             comments=comments,
             note="First server-rendered batch only (about 15–25 comments).",
         )
-    final_url = str(resp.url).lower()
-    lowered = body.lower()
+    final_url = str(resp.url)
     if resp.status_code >= 400:
         return EngineResult(
             NAME,
             RANK,
             False,
-            error=f"http_{resp.status_code}",
+            error=redact_text(f"http_{resp.status_code}: {body}", 220),
             note="Guest HTML from this IP did not include a public thread.",
         )
-    if any(mark in lowered for mark in _LOGIN_MARKERS) or any(mark in final_url for mark in _LOGIN_MARKERS):
+    if looks_like_login(final_url, body):
         return EngineResult(
             NAME,
             RANK,

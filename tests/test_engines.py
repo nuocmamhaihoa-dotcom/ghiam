@@ -1,8 +1,10 @@
 import asyncio
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fb_poller.engines.apify_actor import _from_items
 from fb_poller.engines.graph_ppca import post_id_from_url
@@ -147,6 +149,57 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(missing.error, "missing_url")
         bad = asyncio.run(scan_one("octoparse", "", limit=0, export_path="x.csv"))
         self.assertEqual(bad.error, "invalid_limit")
+
+    def test_comment_after_many_json_values_is_kept(self) -> None:
+        late = '{"__typename":"Comment","id":"9","body":{"text":"late"},"author":{"name":"An"}}'
+        html = "<script>" + ('{"a":1}' * 500) + late + "</script>"
+        found = comments_from_html(html)
+        self.assertEqual(found[0].text, "late")
+        self.assertEqual(found[0].author_name, "An")
+
+    def test_login_link_on_a_public_page_is_not_a_wall(self) -> None:
+        from fb_poller.engines.guest_ssr import looks_like_login
+
+        body = '<a href="/login.php">Log in</a><title>NASA</title>'
+        self.assertFalse(looks_like_login("https://www.facebook.com/NASA/posts/1", body))
+        self.assertTrue(looks_like_login("https://www.facebook.com/login.php", "<title>Facebook</title>"))
+
+    def test_empty_list_does_not_hide_later_comments(self) -> None:
+        rows = _comments_from_json({"data": [], "comments": [{"text": "kept", "author": "A"}]}, 5)
+        self.assertEqual(rows[0].text, "kept")
+        items = _from_items([{"text": "parent", "profileName": "P", "comments": []}], 5)
+        self.assertEqual(items[0].text, "parent")
+
+    def test_encoded_proxy_password_is_decoded_once(self) -> None:
+        parsed = parse_proxy_line("http://admin:pa%3Ass@1.2.3.4:8080")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed.password, "pa:ss")
+        self.assertEqual(parsed.as_httpx(), "http://admin:pa%3Ass@1.2.3.4:8080")
+
+    def test_translation_chrome_is_not_part_of_the_comment(self) -> None:
+        block = "\n".join(["Lan", "xin chào", "See translation", "2d"])
+        found = comments_from_articles([block], 5)
+        self.assertEqual(found[0].text, "xin chào")
+
+    def test_bad_provider_actor_and_graph_version_fail_before_network(self) -> None:
+        with patch.dict(os.environ, {"MANAGED_PROVIDER": "nope", "MANAGED_API_KEY": "k"}, clear=False):
+            managed = asyncio.run(scan_one("managed-api", "https://www.facebook.com/NASA/posts/1", limit=1))
+        self.assertEqual(managed.error, "unknown_provider")
+        with patch.dict(os.environ, {"APIFY_TOKEN": "t", "APIFY_ACTOR_ID": "bad actor"}, clear=False):
+            apify = asyncio.run(scan_one("apify", "https://www.facebook.com/NASA/posts/1", limit=1))
+        self.assertEqual(apify.error, "invalid_APIFY_ACTOR_ID")
+        with patch.dict(os.environ, {"GRAPH_ACCESS_TOKEN": "t", "GRAPH_VERSION": "not-a-version"}, clear=False):
+            graph = asyncio.run(scan_one("graph-ppca", "https://www.facebook.com/NASA/posts/1", limit=1))
+        self.assertEqual(graph.error, "invalid_GRAPH_VERSION")
+
+    def test_octoparse_numeric_comment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "nums.json"
+            path.write_text(json.dumps([{"message": 42, "name": "An"}]), encoding="utf-8")
+            found = comments_from_export(path)
+        self.assertEqual(found[0].text, "42")
+        self.assertEqual(found[0].author_name, "An")
 
 
 if __name__ == "__main__":

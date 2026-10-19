@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 from fb_poller.config import Settings
 from fb_poller.storage.db import session_scope
@@ -53,11 +53,13 @@ def parse_proxy_line(line: str) -> ProxyConfig | None:
             return None
         scheme = parsed.scheme or "http"
         server = f"{scheme}://{parsed.hostname}:{parsed.port}"
+        username = unquote(parsed.username) if parsed.username else None
+        password = unquote(parsed.password) if parsed.password else None
         return ProxyConfig(
             id=None,
             server=server,
-            username=parsed.username,
-            password=parsed.password,
+            username=username,
+            password=password,
             raw=line,
         )
 

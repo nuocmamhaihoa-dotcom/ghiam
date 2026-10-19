@@ -5,7 +5,14 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fb_poller.engines.guard import comment_id, invalid_limit, placeholder_text, public_error
+from fb_poller.engines.guard import (
+    comment_id,
+    invalid_limit,
+    objects_with_comments,
+    placeholder_text,
+    public_error,
+    scalar_text,
+)
 from fb_poller.engines.types import EngineResult, PublicComment
 
 RANK = 2
@@ -31,7 +38,7 @@ def comments_from_payload(payload: Any, limit: int) -> list[PublicComment]:
         typename = str(node.get("__typename") or "")
         if isinstance(text, str) and text.strip() and "comment" in typename.lower():
             author = node.get("author") if isinstance(node.get("author"), dict) else {}
-            name = author.get("name") if isinstance(author, dict) else None
+            name = scalar_text(author.get("name")) if isinstance(author, dict) else None
             text = text.strip()
             if placeholder_text(text):
                 for value in node.values():
@@ -42,13 +49,12 @@ def comments_from_payload(payload: Any, limit: int) -> list[PublicComment]:
             key = cid or text[:80]
             if key not in seen:
                 seen.add(key)
-                created = node.get("created_time")
                 found.append(
                     PublicComment(
                         text=text.strip(),
-                        author_name=str(name) if name else None,
+                        author_name=name,
                         comment_id=cid,
-                        created_time=str(created) if created else None,
+                        created_time=scalar_text(node.get("created_time")),
                     )
                 )
         for value in node.values():
@@ -61,37 +67,18 @@ def comments_from_payload(payload: Any, limit: int) -> list[PublicComment]:
 
 def comments_from_html(html: str, limit: int) -> list[PublicComment]:
     """Read comment objects embedded in the document the browser already received."""
-    import re
-
     if limit < 1:
         return []
-    chunks = re.findall(r"<script\b[^>]*>(.*?)</script>", html, flags=re.IGNORECASE | re.DOTALL)
-    if not chunks:
-        chunks = [html]
     found: list[PublicComment] = []
     seen: set[str] = set()
-    decoder = json.JSONDecoder()
-    for chunk in chunks:
-        if "comment" not in chunk.lower():
-            continue
-        index = 0
-        attempts = 0
-        while index < len(chunk) and len(found) < limit and attempts < 400:
-            brace = chunk.find("{", index)
-            if brace < 0:
-                break
-            attempts += 1
-            try:
-                obj, end = decoder.raw_decode(chunk, brace)
-            except json.JSONDecodeError:
-                index = brace + 1
-                continue
-            for item in comments_from_payload(obj, limit - len(found)):
-                key = item.comment_id or item.text
-                if key not in seen:
-                    seen.add(key)
-                    found.append(item)
-            index = max(end, brace + 1)
+    for obj in objects_with_comments(html):
+        if len(found) >= limit:
+            break
+        for item in comments_from_payload(obj, limit - len(found)):
+            key = item.comment_id or item.text
+            if key not in seen:
+                seen.add(key)
+                found.append(item)
     return found
 
 

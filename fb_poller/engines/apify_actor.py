@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 import httpx
 
-from fb_poller.engines.guard import invalid_limit, public_error
+from fb_poller.engines.guard import comment_id, invalid_limit, public_error, redact_text, scalar_text
 from fb_poller.engines.types import EngineResult, PublicComment
+
+_ACTOR_ID = re.compile(r"^[A-Za-z0-9_.~\-]{1,200}$")
 
 RANK = 4
 NAME = "apify"
@@ -18,9 +21,12 @@ def _token() -> str:
     return os.environ.get("APIFY_TOKEN", "").strip()
 
 
-def _actor() -> str:
+def _actor() -> str | None:
     raw = os.environ.get("APIFY_ACTOR_ID", "apify~facebook-comments-scraper").strip()
-    return raw.replace("/", "~")
+    raw = raw.replace("/", "~")
+    if not _ACTOR_ID.match(raw):
+        return None
+    return raw
 
 
 async def scan(url: str, *, limit: int = 50, timeout: float = 180.0, **_: object) -> EngineResult:
@@ -38,6 +44,8 @@ async def scan(url: str, *, limit: int = 50, timeout: float = 180.0, **_: object
             note="Create a run at Apify and set APIFY_TOKEN plus APIFY_ACTOR_ID.",
         )
     actor = _actor()
+    if actor is None:
+        return EngineResult(NAME, RANK, False, error="invalid_APIFY_ACTOR_ID")
     payload = {
         "startUrls": [{"url": url}],
         "resultsLimit": limit,
@@ -54,7 +62,7 @@ async def scan(url: str, *, limit: int = 50, timeout: float = 180.0, **_: object
         return EngineResult(NAME, RANK, False, error=public_error(exc))
 
     if resp.status_code >= 400:
-        return EngineResult(NAME, RANK, False, error=f"http_{resp.status_code}: {resp.text[:180]}")
+        return EngineResult(NAME, RANK, False, error=redact_text(f"http_{resp.status_code}: {resp.text}", 220))
     try:
         payload = resp.json()
     except Exception as exc:
@@ -87,7 +95,7 @@ def _from_items(payload: Any, limit: int) -> list[PublicComment]:
         if not isinstance(row, dict):
             continue
         nested = row.get("comments")
-        if isinstance(nested, list):
+        if isinstance(nested, list) and nested:
             for child in nested:
                 item = _one(child)
                 if item:
@@ -106,15 +114,15 @@ def _from_items(payload: Any, limit: int) -> list[PublicComment]:
 def _one(row: Any) -> PublicComment | None:
     if not isinstance(row, dict):
         return None
-    text = row.get("text") or row.get("message") or row.get("comment")
-    if not isinstance(text, str) or not text.strip():
+    text = scalar_text(row.get("text") or row.get("message") or row.get("comment"))
+    if not text:
         return None
     author = row.get("author") or row.get("profileName") or row.get("userName") or row.get("name")
     if isinstance(author, dict):
         author = author.get("name")
     return PublicComment(
-        text=text.strip(),
-        author_name=str(author) if author else None,
-        comment_id=str(row["id"]) if row.get("id") else None,
-        created_time=str(row.get("date") or row.get("created_time") or "") or None,
+        text=text,
+        author_name=scalar_text(author),
+        comment_id=comment_id(row.get("id")),
+        created_time=scalar_text(row.get("date")) or scalar_text(row.get("created_time")),
     )

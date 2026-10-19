@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from fb_poller.engines.guard import invalid_limit, public_error
+from fb_poller.engines.guard import comment_id, invalid_limit, public_error, redact_text, scalar_text
 from fb_poller.engines.types import EngineResult, PublicComment
 
 RANK = 3
@@ -26,6 +26,14 @@ async def scan(url: str, *, limit: int = 50, timeout: float = 60.0, **_: object)
     provider = _provider()
     key = os.environ.get("MANAGED_API_KEY", "").strip()
     endpoint = os.environ.get("MANAGED_COMMENTS_URL", "").strip()
+    if provider not in {"generic", "chocodata", "brightdata"}:
+        return EngineResult(
+            NAME,
+            RANK,
+            False,
+            error="unknown_provider",
+            note="Set MANAGED_PROVIDER=generic|chocodata|brightdata and the matching key.",
+        )
     if provider == "generic" and not endpoint:
         return EngineResult(
             NAME,
@@ -53,7 +61,7 @@ async def scan(url: str, *, limit: int = 50, timeout: float = 60.0, **_: object)
         return EngineResult(NAME, RANK, False, error=public_error(exc))
 
     if resp.status_code >= 400:
-        return EngineResult(NAME, RANK, False, error=f"http_{resp.status_code}: {resp.text[:180]}")
+        return EngineResult(NAME, RANK, False, error=redact_text(f"http_{resp.status_code}: {resp.text}", 220))
     try:
         payload = resp.json()
     except Exception as exc:
@@ -94,17 +102,18 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
         text = row.get("text") or row.get("message") or row.get("comment") or row.get("body")
         if isinstance(text, dict):
             text = text.get("text")
-        if not isinstance(text, str) or not text.strip():
+        text = scalar_text(text)
+        if not text or len(text) > 8000:
             continue
         author = row.get("author") or row.get("author_name") or row.get("name") or row.get("user_name")
         if isinstance(author, dict):
             author = author.get("name")
         out.append(
             PublicComment(
-                text=text.strip(),
-                author_name=str(author) if author else None,
-                comment_id=str(row["id"]) if row.get("id") else None,
-                created_time=str(row.get("created_time") or row.get("date") or "") or None,
+                text=text,
+                author_name=scalar_text(author),
+                comment_id=comment_id(row.get("id")),
+                created_time=scalar_text(row.get("created_time")) or scalar_text(row.get("date")),
             )
         )
         if len(out) >= limit:
@@ -119,7 +128,7 @@ def _rows(payload: Any) -> list[Any]:
         return []
     for key in ("comments", "data", "results", "items"):
         value = payload.get(key)
-        if isinstance(value, list):
+        if isinstance(value, list) and value:
             return value
         if isinstance(value, dict):
             nested = _rows(value)
