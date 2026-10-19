@@ -184,6 +184,26 @@ OPEN_SOURCES = (
     ("tldr-sed", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/sed.md"),
     ("tldr-awk", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/awk.md"),
     ("tldr-make", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/make.md"),
+    ("python-cmdline", f"{_PY}/using/cmdline.rst"),
+    ("python-howto-urllib", f"{_PY}/howto/urllib2.rst"),
+    ("python-howto-socket", f"{_PY}/howto/sockets.rst"),
+    ("python-howto-logging", f"{_PY}/howto/logging.rst"),
+    ("python-howto-regex", f"{_PY}/howto/regex.rst"),
+    ("python-howto-argparse", f"{_PY}/howto/argparse.rst"),
+    ("python-pdb", f"{_PY}/library/pdb.rst"),
+    ("python-venv-lib", f"{_PY}/library/venv.rst"),
+    ("python-ensurepip", f"{_PY}/library/ensurepip.rst"),
+    ("curl-manual", "https://raw.githubusercontent.com/curl/curl/master/docs/MANUAL.md"),
+    ("tldr-node", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/node.md"),
+    ("tldr-npm", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/npm.md"),
+    ("tldr-npx", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/npx.md"),
+    ("tldr-yarn", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/yarn.md"),
+    ("tldr-pnpm", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/pnpm.md"),
+    ("tldr-httpie", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/http.md"),
+    ("tldr-nc", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/nc.md"),
+    ("tldr-docker-compose", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/docker-compose.md"),
+    ("tldr-pytest", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/pytest.md"),
+    ("tldr-pip3", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/pip3.md"),
 )
 SKIP_FILES = {
     "da-hoc.md",
@@ -206,6 +226,7 @@ _LISTINGS = (
     ("https://api.github.com/repos/git/git/contents/Documentation?ref=master", "git-doc"),
     ("https://api.github.com/repos/tldr-pages/tldr/contents/pages/common?ref=main", "tldr"),
     ("https://api.github.com/repos/tldr-pages/tldr/contents/pages/linux?ref=main", "tldr-linux"),
+    ("https://api.github.com/repos/python/cpython/contents/Doc/using?ref=3.12", "py-using"),
 )
 _DOC_SUFFIX = (".rst", ".adoc", ".md")
 
@@ -958,6 +979,23 @@ def study_hours(root: Path, database: Path, ask, hours: float, fetch=fetch_text,
     return rounds
 
 
+def begin_hours(root: Path, hours: float, clock=time.time) -> dict:
+    (root / "learn").mkdir(parents=True, exist_ok=True)
+    state = load_progress(root)
+    now = float(clock())
+    need = float(hours) * 3600
+    offsets = state.setdefault("offsets", {})
+    for name in list(offsets):
+        offsets[name] = 0
+    state["cursor"] = 0
+    state["active_seconds"] = 0.0
+    state["need_seconds"] = need
+    state["started"] = now
+    state["deadline"] = now + need
+    save_progress(root, state)
+    return state
+
+
 def hours_done(root: Path, hours: float, slack: float = 30.0) -> bool:
     state = load_progress(root)
     need = float(state.get("need_seconds") or 0)
@@ -987,6 +1025,10 @@ def main() -> None:
     hours = 0.0
     if len(sys.argv) >= 3 and sys.argv[1] == "--hours":
         hours = float(sys.argv[2])
+    if len(sys.argv) >= 3 and sys.argv[1] == "--begin-hours":
+        begin_hours(root, float(sys.argv[2]))
+        print("bắt đầu phiên")
+        return
     if len(sys.argv) >= 3 and sys.argv[1] == "--check-hours":
         hours = float(sys.argv[2])
         if hours_done(root, hours):

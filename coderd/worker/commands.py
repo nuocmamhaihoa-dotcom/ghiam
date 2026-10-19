@@ -11,15 +11,17 @@ GROUPS = (
     ("mang", "Mạng — gọi một địa chỉ HTTP"),
     ("he-thong", "Hệ thống — dịch vụ và tiến trình"),
     ("docker", "Docker — chạy container"),
+    ("node", "Node — chạy JS, cài gói npm"),
 )
 
 _TOOLS = {
     "python": {"python", "python3", "pip", "pip3", "pytest", "pydoc"},
     "git": {"git"},
     "sqlite": {"sqlite3"},
-    "mang": {"curl", "wget", "ping", "nc", "netcat"},
+    "mang": {"curl", "wget", "ping", "nc", "netcat", "http", "https", "httpie"},
     "he-thong": {"systemctl", "journalctl", "ps", "kill", "pkill", "top", "htop", "df", "du", "free", "uname"},
     "docker": {"docker", "docker-compose", "podman"},
+    "node": {"node", "nodejs", "npm", "npx", "yarn", "pnpm"},
     "shell": {
         "ls",
         "cd",
@@ -157,6 +159,12 @@ _GLOSS = (
     ("docker ps", "Liệt kê container"),
     ("docker build", "Dựng image"),
     ("docker compose", "Chạy nhiều container"),
+    ("npm install", "Cài gói Node"),
+    ("npm run", "Chạy một script npm"),
+    ("npx", "Chạy một gói npm tạm"),
+    ("node", "Chạy JavaScript"),
+    ("yarn add", "Thêm gói bằng yarn"),
+    ("pnpm add", "Thêm gói bằng pnpm"),
     ("print(", "In một giá trị"),
     ("def ", "Khai báo một hàm"),
     ("class ", "Khai báo một lớp"),
@@ -225,6 +233,11 @@ SEED = (
     "df -h",
     "free -h",
     "docker ps",
+    "docker compose up -d",
+    "node file.js",
+    "npm install",
+    "npx --yes goi",
+    "curl -fsSL URL",
     "print(1)",
     "def ten():",
     "import os",
@@ -327,7 +340,7 @@ def _read_group(path: Path) -> list[tuple[str, str, str]]:
     return rows
 
 
-def store_commands(root: Path, text: str, source: str, limit: int = 2000) -> int:
+def store_commands(root: Path, text: str, source: str, limit: int = 5000) -> int:
     fresh = extract_commands(text)
     if not fresh:
         return 0

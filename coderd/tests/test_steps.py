@@ -27,6 +27,7 @@ from worker.agent import normalize_reply, parse_text_tools, run_turn, scripted_c
 from worker.commands import extract_commands, seed_commands, store_commands
 from worker.study import (  # noqa: E402
     OPEN_SOURCES,
+    begin_hours,
     discover_catalog,
     extract_examples,
     extract_notes,
@@ -480,6 +481,7 @@ class WorkerTests(unittest.TestCase):
         self.assertIn("git add", extract_commands("git-add                          porcelain\n"))
         self.assertIn("curl -I https://example.test", extract_commands("- `curl -I https://example.test`\n"))
         self.assertIn("docker ps", extract_commands("`docker ps`\n"))
+        self.assertIn("npm install", extract_commands("`npm install`\n"))
         self.assertFalse(hours_done(Path("/tmp"), 10))
 
     def test_catalog_keeps_open_sources_when_cache_exists(self) -> None:
@@ -507,7 +509,35 @@ class WorkerTests(unittest.TestCase):
             self.assertIn("Xem những file đã đổi", phrases)
             self.assertIn("git.md", (root / "learn" / "lenh" / "muc-luc.md").read_text(encoding="utf-8"))
             self.assertIn("docker.md", (root / "learn" / "lenh" / "muc-luc.md").read_text(encoding="utf-8"))
+            self.assertIn("node.md", (root / "learn" / "lenh" / "muc-luc.md").read_text(encoding="utf-8"))
             self.assertIn("curl", (root / "learn" / "lenh" / "mang.md").read_text(encoding="utf-8"))
+            self.assertIn("npm", (root / "learn" / "lenh" / "node.md").read_text(encoding="utf-8"))
+
+    def test_begin_hours_rewinds_and_resets_the_ten_hour_budget(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            learn = root / "learn"
+            learn.mkdir()
+            (learn / "tien-do.json").write_text(
+                json.dumps(
+                    {
+                        "cursor": 9,
+                        "active_seconds": 1000,
+                        "need_seconds": 1000,
+                        "offsets": {"a": -1},
+                        "deadline": 1,
+                        "started": 1,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            state = begin_hours(root, 10, clock=lambda: 5_000_000)
+            self.assertEqual(state["cursor"], 0)
+            self.assertEqual(state["active_seconds"], 0.0)
+            self.assertEqual(state["need_seconds"], 36_000)
+            self.assertEqual(state["offsets"]["a"], 0)
+            self.assertEqual(state["deadline"], 5_000_000 + 36_000)
+            self.assertFalse(hours_done(root, 10))
 
     def test_study_restarts_the_catalog_until_the_budget_is_spent(self) -> None:
         calls = {"n": 0}
