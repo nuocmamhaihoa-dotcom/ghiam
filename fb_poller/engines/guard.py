@@ -122,6 +122,49 @@ def comment_id_from_url(value: object) -> str | None:
     return comment_id(match.group(1))
 
 
+_PROFILE_HOST = re.compile(r"(?:^|\.)(?:facebook|fb)\.com$", re.IGNORECASE)
+_PROFILE_BLOCKED = {
+    "posts",
+    "photos",
+    "videos",
+    "reel",
+    "reels",
+    "watch",
+    "groups",
+    "share",
+    "login.php",
+    "story.php",
+    "permalink.php",
+    "photo.php",
+    "profile.php",
+    "people",
+}
+
+
+def _profile_slug(value: str) -> str | None:
+    """A single vanity slug from a Facebook profile URL."""
+    if "://" not in value:
+        return None
+    path = unquote(value.split("?", 1)[0].split("#", 1)[0]).rstrip("/")
+    parts = [part for part in path.split("/") if part]
+    host_at = None
+    for index, part in enumerate(parts):
+        if _PROFILE_HOST.search(part):
+            host_at = index
+            break
+    if host_at is None:
+        return None
+    slug_parts = parts[host_at + 1 :]
+    if len(slug_parts) != 1:
+        return None
+    slug = slug_parts[0]
+    if not slug or slug.isdigit() or slug.lower() in _PROFILE_BLOCKED:
+        return None
+    if re.fullmatch(r"[A-Za-z0-9.\-]+", slug) is None:
+        return None
+    return slug
+
+
 def person_name(value: object, depth: int = 0) -> str | None:
     """A display name, or the name inside an author object."""
     if depth > 2:
@@ -137,6 +180,9 @@ def person_name(value: object, depth: int = 0) -> str | None:
                 found = person_name(loaded, depth + 1)
                 if found:
                     return found
+        vanity = _profile_slug(plain)
+        if vanity:
+            return vanity
         return plain
     if isinstance(value, list):
         for item in value:
@@ -158,6 +204,8 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "actor",
             "page_name",
             "owner_name",
+            "author_title",
+            "user_full_name",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -293,6 +341,7 @@ def timestamp_of(row: object) -> str | None:
         "date_created",
         "posted_time",
         "comment_create_time",
+        "creation_timestamp",
         "datetime",
         "date",
         "time",

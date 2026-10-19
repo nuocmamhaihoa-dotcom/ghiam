@@ -1746,6 +1746,52 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(comet[0].text, "xin")
         self.assertEqual(comet[0].author_name, "An")
 
+    def test_author_title_and_pending_comment(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\njust now · Like\nSee less · Translate\nLoad 5 more comments\n"
+                "This comment is pending approval\nMarked as spam\nPinned by Mai\n"
+                "Author replied\nStop seeing this\nHide from timeline"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(
+            ["Lan\nThis comment is pending approval from the city council"],
+            5,
+        )
+        self.assertEqual(sentence[0].text, "This comment is pending approval from the city council")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\njust now · Like\nMarked as spam", author_name="Lan")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        titled = _one({"text": "xin", "authorTitle": "Lan", "id": "1"})
+        self.assertIsNotNone(titled)
+        assert titled is not None
+        self.assertEqual(titled.author_name, "Lan")
+        named = _one({"text": "xin", "userFullName": "Lan Nguyen", "profileUrl": "https://facebook.com/other", "id": "2"})
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "Lan Nguyen")
+        self.assertEqual(person_name("https://www.facebook.com/lan.nguyen"), "lan.nguyen")
+        html = (
+            '<script>{"__typename":"Comment","legacy_fbid":"5","message":{"text":"xin"},'
+            '"author":{"name":"An"},"creationTimestamp":1710000002}</script>'
+        )
+        self.assertEqual(comments_from_html(html)[0].created_time, "1710000002")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/story.php?story_fbid=pfbidABC%3D&id=1"),
+            "pfbidABC",
+        )
+        imported = _from_mapping({"Bình luận": "xin", "Người bình luận": "Lan", "Ngày": "2024-03-02"})
+        self.assertIsNotNone(imported)
+        assert imported is not None
+        self.assertEqual(imported.author_name, "Lan")
+        self.assertEqual(imported.created_time, "2024-03-02")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -112,7 +112,17 @@ def _append_rows(
                 or person_name(row.get("author"))
                 or first_person_name(
                     row,
-                    ("owner_name", "commenter_name", "profileName", "userName", "display_name", "full_name", "screen_name"),
+                    (
+                        "owner_name",
+                        "commenter_name",
+                        "profileName",
+                        "userName",
+                        "display_name",
+                        "full_name",
+                        "screen_name",
+                        "author_title",
+                        "user_full_name",
+                    ),
                 )
             )
             if author_name is None and from_inner and inner is not None:
@@ -190,7 +200,7 @@ def post_id_from_url(url: str) -> str | None:
         return accepted_object_id(path.group(1))
     query = re.search(r"(?:story_fbid|fbid|post_id)=([^&\s]+)", raw, re.IGNORECASE)
     if query:
-        return accepted_object_id(unquote(query.group(1)))
+        return accepted_object_id(unquote(query.group(1)).rstrip("="))
     watch = re.search(r"[?&]v=(\d+)", raw)
     if watch:
         return accepted_object_id(watch.group(1))

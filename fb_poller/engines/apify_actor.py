@@ -210,6 +210,9 @@ def _one(row: Any) -> PublicComment | None:
         "full_name",
         "screen_name",
         "short_name",
+        "author_title",
+        "user_full_name",
+        "profile_url",
         "page_name",
         "actor",
     )

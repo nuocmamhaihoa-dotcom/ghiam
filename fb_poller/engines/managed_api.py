@@ -143,6 +143,9 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
             "full_name",
             "screen_name",
             "short_name",
+            "author_title",
+            "user_full_name",
+            "profile_url",
             "page_name",
             "actor",
         )

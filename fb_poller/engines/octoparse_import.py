@@ -61,6 +61,10 @@ _AUTHOR_KEYS = (
     "short_name",
     "họ và tên",
     "ho va ten",
+    "người bình luận",
+    "nguoi binh luan",
+    "author_title",
+    "user_full_name",
     "tác giả",
     "tac gia",
 )
@@ -84,6 +88,8 @@ _TIME_KEYS = (
     "comment_create_time",
     "thời gian đăng",
     "thoi gian dang",
+    "ngày",
+    "ngay",
 )
 
 
