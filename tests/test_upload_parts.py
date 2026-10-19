@@ -10,8 +10,10 @@ from pathlib import Path
 
 from control_plane.upload_parts import (
     PARTIAL_TTL_SECONDS,
+    TIGHT_PARTIAL_SECONDS,
     UploadRejected,
     lookup_part,
+    reclaim_stale_partials,
     sweep_parts,
     write_part,
 )
@@ -127,3 +129,61 @@ class UploadPartTests(unittest.TestCase):
         sweep_parts(self.root)
         self.assertFalse(part.exists())
         self.assertFalse(meta.exists())
+
+    def _partial(self, upload_id: str, payload: bytes, age: float) -> Path:
+        write_part(
+            self.root,
+            upload_id=upload_id,
+            name="clip.mp4",
+            size=len(payload),
+            device="",
+            offset=0,
+            data=payload,
+            max_bytes=100,
+        )
+        moment = time.time() - age
+        folder = self.root / "partial"
+        for path in folder.iterdir():
+            if path.name.startswith(upload_id):
+                os.utime(path, (moment, moment))
+        return folder / f"{upload_id}.part"
+
+    def test_a_tight_disk_drops_quiet_partials_and_keeps_a_live_one(self) -> None:
+        old = self._partial("ab" * 16, b"old-bytes", TIGHT_PARTIAL_SECONDS + 5)
+        live = self._partial("cd" * 16, b"live", 5)
+        freed = reclaim_stale_partials(self.root)
+        self.assertGreaterEqual(freed, len(b"old-bytes"))
+        self.assertFalse(old.exists())
+        self.assertEqual(live.read_bytes(), b"live")
+
+    def test_prepare_upload_room_clears_old_partials_before_accepting(self) -> None:
+        from control_plane.video_api import prepare_upload_room
+
+        gb = 1024 * 1024 * 1024
+        old = self._partial("ef" * 16, b"stale", TIGHT_PARTIAL_SECONDS + 5)
+        seen = {"n": 0}
+
+        def measure() -> object:
+            seen["n"] += 1
+            if seen["n"] == 1:
+                return type("Usage", (), {"used": 90 * gb, "free": 10 * gb, "total": 100 * gb})()
+            return type("Usage", (), {"used": 70 * gb, "free": 30 * gb, "total": 100 * gb})()
+
+        detail = prepare_upload_room(1024, root=self.root, measure=measure)
+        self.assertIsNone(detail)
+        self.assertFalse(old.exists())
+
+    def test_prepare_upload_room_refuses_in_vietnamese_when_space_stays_gone(self) -> None:
+        from control_plane.video_api import prepare_upload_room
+
+        gb = 1024 * 1024 * 1024
+        self._partial("11" * 16, b"stale", TIGHT_PARTIAL_SECONDS + 5)
+
+        def measure() -> object:
+            return type("Usage", (), {"used": 95 * gb, "free": 5 * gb, "total": 100 * gb})()
+
+        detail = prepare_upload_room(1024, root=self.root, measure=measure)
+        self.assertIsNotNone(detail)
+        assert detail is not None
+        self.assertIn("Ổ đĩa", detail)
+        self.assertNotIn("parsing the body", detail)

@@ -24,12 +24,14 @@ from doc_video.pipeline import read_video
 from control_plane.results_out import webhook_loop
 from control_plane.screen_table import Review, Row, Table, Unopened
 from control_plane.settings import settings
+from control_plane.upload_parts import reclaim_stale_partials
 from control_plane.video_shrink import DEFAULT_CRF, shrink
 from control_plane.video_store import (
     adopt_shrunk,
     backfill_video_counts,
     claim,
     confirm_open_profiles,
+    disk_limit_bytes,
     drop_orphan_small,
     drop_stale_uploads,
     fail,
@@ -80,8 +82,12 @@ def _drop_old_parts(folder: Path) -> None:
 
 
 def keep_newest_videos(db_path: Path) -> None:
-    """Giữ video mới. Khi ổ đĩa vượt mức, xóa video cũ đã đọc xong. Không đụng video đang đọc."""
+    """Giữ video mới. Khi ổ đĩa vượt mức, xóa bản tải dở đã cũ và video đã đọc xong."""
     try:
+        usage = shutil.disk_usage(settings.video_dir)
+        limit = disk_limit_bytes(int(usage.total), settings.video_disk_percent)
+        if int(usage.used) > limit or int(usage.free) <= 2 * 1024 * 1024 * 1024:
+            reclaim_stale_partials(settings.video_dir)
         prune_old_videos(
             db_path,
             settings.video_dir,

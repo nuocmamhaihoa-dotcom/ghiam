@@ -19,11 +19,14 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
@@ -43,7 +46,7 @@ from control_plane.recordings import (
     steps_to_events,
 )
 from control_plane.settings import ROOT, settings
-from control_plane.video_api import router as video_router
+from control_plane.video_api import BROKEN_CHUNK_DETAIL, prepare_upload_room, router as video_router
 from control_plane.video_store import init_db as init_video_db
 from control_plane.video_store import merge_close_results
 
@@ -68,6 +71,14 @@ if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+_UPLOAD_PATHS = {"/v1/videos", "/v1/videos/chunks"}
+# FastAPI và Starlette đổi câu này theo phiên bản. Cả hai đều là mảnh bị đứt hoặc đĩa không ghi được.
+_BROKEN_BODY = {
+    "There was an error parsing the body",
+    "Invalid multipart data.",
+}
+
+
 class LimitUploadSizeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
         cl = request.headers.get("content-length")
@@ -75,7 +86,28 @@ class LimitUploadSizeMiddleware(BaseHTTPMiddleware):
             return JSONResponse({"detail": "Mảnh quá lớn."}, status_code=413)
         if cl and int(cl) > settings.max_upload_mb * 1024 * 1024:
             return JSONResponse({"detail": "upload too large"}, status_code=413)
+        if request.method == "POST" and request.url.path in _UPLOAD_PATHS:
+            incoming = int(cl) if cl and cl.isdigit() else 8 * 1024 * 1024
+            try:
+                detail = await run_in_threadpool(prepare_upload_room, incoming)
+            except OSError:
+                detail = "Ổ đĩa gần đầy. Đợi đọc xong video đang chờ rồi tải tiếp."
+            if detail:
+                return JSONResponse({"detail": detail}, status_code=507)
         return await call_next(request)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def upload_body_error(request: Request, exc: StarletteHTTPException) -> Response:
+    """Mảnh bị cắt giữa chừng không được tính là lỗi vĩnh viễn. Điện thoại gửi lại mảnh đó."""
+    if (
+        exc.status_code == 400
+        and exc.detail in _BROKEN_BODY
+        and request.method == "POST"
+        and request.url.path in _UPLOAD_PATHS
+    ):
+        return JSONResponse({"detail": BROKEN_CHUNK_DETAIL}, status_code=503)
+    return await http_exception_handler(request, exc)
 
 
 app.add_middleware(LimitUploadSizeMiddleware)
