@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import urllib.request
 from pathlib import Path
@@ -106,20 +107,48 @@ CACHE_TTL = 24 * 60 * 60
 OPEN_NOTE_LIMIT = 8
 
 
+def _clean_markup(line: str) -> str:
+    line = re.sub(r":[A-Za-z0-9-]+:`!?([^`]+)`", r"\1", line)
+    line = line.replace("`", "")
+    return re.sub(r"\s+", " ", line).strip()
+
+
+def _paragraphs(text: str) -> list[str]:
+    blocks: list[str] = []
+    buf: list[str] = []
+
+    def flush() -> None:
+        if buf:
+            blocks.append(_clean_markup(" ".join(buf)))
+            buf.clear()
+
+    for raw in text.splitlines():
+        if raw.startswith("   ") or raw.startswith("\t") or not raw.strip():
+            flush()
+            continue
+        line = raw.strip()
+        if line.startswith("..") or line.startswith("|") or line.startswith(":") or line.startswith("#"):
+            flush()
+            continue
+        if set(line) <= set("*-= ") or line.endswith("::"):
+            flush()
+            continue
+        if line.startswith("- ") or line.startswith("* "):
+            flush()
+            blocks.append(_clean_markup(line))
+            continue
+        buf.append(line)
+    flush()
+    return [item for item in blocks if item]
+
+
 def extract_notes(text: str, limit: int = 8) -> list[str]:
     notes: list[str] = []
     seen: set[str] = set()
-    for raw in text.splitlines():
-        if raw.startswith("   ") or raw.startswith("\t"):
-            continue
-        line = raw.strip()
-        if not line or line.startswith("..") or line.startswith("|") or line.startswith(":"):
-            continue
-        if set(line) <= set("*-= ") or line.endswith("::"):
-            continue
+    for line in _paragraphs(text):
         if line.startswith("- "):
             item = line[2:].strip()
-        elif 40 <= len(line) <= 220 and not line.startswith("["):
+        elif 40 <= len(line) <= 280 and not line.startswith("["):
             item = line
         else:
             continue
