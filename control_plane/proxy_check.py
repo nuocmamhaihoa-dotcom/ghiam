@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
 
@@ -42,18 +42,27 @@ def to_proxy_url(endpoint: str, *, user: str = "", password: str = "") -> str | 
             return None
         # If URL has no userinfo but shared auth provided, inject it
         if user and password and not parsed.username:
-            return f"{parsed.scheme}://{user}:{password}@{parsed.hostname}:{parsed.port}"
+            return f"{parsed.scheme}://{_userinfo(user, password)}@{parsed.hostname}:{parsed.port}"
         return ep
     parts = ep.split(":")
     if len(parts) == 2:
         host, port = parts
+        if not port.isdigit():
+            return None
         if user and password:
-            return f"http://{user}:{password}@{host}:{port}"
+            return f"http://{_userinfo(user, password)}@{host}:{port}"
         return f"http://{host}:{port}"
     if len(parts) == 4:
         host, port, u, p = parts
-        return f"http://{u}:{p}@{host}:{port}"
+        if not port.isdigit():
+            return None
+        return f"http://{_userinfo(u, p)}@{host}:{port}"
     return None
+
+
+def _userinfo(user: str, password: str) -> str:
+    """Ký tự @ và : trong mật khẩu không được cắt đôi địa chỉ proxy."""
+    return f"{quote(user, safe='')}:{quote(password, safe='')}"
 
 
 def _classify_http_error(code: int) -> str:

@@ -481,6 +481,13 @@
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
       })[c]);
     }
+    function safeUrl(value) {
+      const text = String(value ?? "").trim();
+      if (!text || /[\u0000-\u0020\u007f]/.test(text)) return "";
+      const head = text.slice(0, 8).toLowerCase();
+      if (head.startsWith("https://") || head.startsWith("http://")) return text;
+      return "";
+    }
     const kindLabel = {
       note: "Ghi chú",
       cli: "Lệnh",
@@ -594,8 +601,9 @@
         } else {
           $("rows").innerHTML = items.map((c) => {
             const when = c.created_time || c.first_seen_at || c.synced_at || "";
-            const post = c.post_url
-              ? `<a href="${esc(c.post_url)}" target="_blank" rel="noopener">bài viết</a>`
+            const href = safeUrl(c.post_url);
+            const post = href
+              ? `<a href="${esc(href)}" target="_blank" rel="noopener">bài viết</a>`
               : esc(c.post_id || "");
             return `<tr>
               <td class="meta">${esc(when)}</td>

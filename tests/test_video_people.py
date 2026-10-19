@@ -12,6 +12,8 @@ from control_plane.screen_read import _choose_name
 from control_plane.screen_table import (
     ContactHit,
     FrameObs,
+    Row,
+    Table,
     build_table,
     choose_phone,
     clean_username,
@@ -225,6 +227,16 @@ class MergeTests(unittest.TestCase):
             self.assertIn("0332001753", unopened)
             self.assertIn("khactam", unopened)
             self.assertEqual(len(written), 2)
+
+    def test_csv_formula_name_stays_text(self) -> None:
+        table = Table(rows=[Row("0982117072", "=HYPERLINK(\"http://e\")", "@dangtam.3")])
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder) / "bang.csv"
+            write_table(table, output)
+            text = output.read_text(encoding="utf-8-sig")
+            self.assertIn("'=HYPERLINK", text)
+            self.assertIn("@dangtam.3", text)
+            self.assertNotIn(",=HYPERLINK", text)
 
 
 class CloseNameTests(unittest.TestCase):
@@ -477,6 +489,8 @@ class TapSpotTests(unittest.TestCase):
 
 class VideoFailureTests(unittest.TestCase):
     def test_broken_frame_is_skipped_not_fatal(self) -> None:
+        from PIL import Image
+
         from control_plane.video_scan import read_frame_at, read_tap_at
 
         with tempfile.TemporaryDirectory() as folder:
@@ -485,6 +499,10 @@ class VideoFailureTests(unittest.TestCase):
             self.assertEqual(read_frame_at(str(broken), 1.5).kind, "unknown")
             self.assertEqual(read_frame_at(str(broken), 1.5).at, 1.5)
             self.assertEqual(read_tap_at([str(broken)], 2.0).kind, "unknown")
+            blank = Path(folder) / "f_000002.jpg"
+            Image.new("RGB", (40, 40), "white").save(blank)
+            # Khung hỏng đứng trước khung đọc được thì cửa sổ bấm vẫn kết thúc, không văng lỗi.
+            self.assertEqual(read_tap_at([str(broken), str(blank)], 3.0).kind, "unknown")
 
     def test_noisy_ffmpeg_does_not_hang_the_planner(self) -> None:
         import os

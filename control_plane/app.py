@@ -68,10 +68,33 @@ if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+# Phần đầu multipart (boundary, tên file) nằm ngoài dung lượng file. Chừa 1 MB để file đúng hạn mức vẫn tải được.
+_MULTIPART_SLACK = 1024 * 1024
+
+
+def upload_too_large(content_length: str | None, limit_bytes: int, content_type: str | None = None) -> bool:
+    """True khi Content-Length vượt hạn mức. Content-Length không phải số thì báo lỗi cho người gọi."""
+    if not content_length:
+        return False
+    try:
+        size = int(content_length)
+    except ValueError as exc:
+        raise ValueError("content-length không hợp lệ") from exc
+    slack = _MULTIPART_SLACK if content_type and "multipart/form-data" in content_type.lower() else 0
+    return size > limit_bytes + slack
+
+
 class LimitUploadSizeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
-        cl = request.headers.get("content-length")
-        if cl and int(cl) > settings.max_upload_mb * 1024 * 1024:
+        try:
+            too_large = upload_too_large(
+                request.headers.get("content-length"),
+                settings.max_upload_mb * 1024 * 1024,
+                request.headers.get("content-type"),
+            )
+        except ValueError:
+            return JSONResponse({"detail": "content-length không hợp lệ"}, status_code=400)
+        if too_large:
             return JSONResponse({"detail": "upload too large"}, status_code=413)
         return await call_next(request)
 
@@ -929,7 +952,15 @@ def clips_delete(clip_id: int, authorization: str | None = Header(default=None))
 def _public_scenario(item: dict[str, Any], clips: dict[int, list[dict[str, Any]]] | None = None) -> dict[str, Any]:
     parts = []
     for part in item["parts"]:
-        clip_id = int(part["clipId"])
+        raw_id = part.get("clipId") if isinstance(part, dict) else None
+        if isinstance(raw_id, bool):
+            continue
+        try:
+            clip_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if clip_id <= 0:
+            continue
         steps = (clips or {}).get(clip_id)
         blanks: list[dict[str, Any]] = []
         if steps is not None:
@@ -937,11 +968,12 @@ def _public_scenario(item: dict[str, Any], clips: dict[int, list[dict[str, Any]]
                 blanks = blanks_of(steps)
             except ValueError:
                 blanks = []
+        fills = part.get("fills")
         parts.append(
             {
                 "clipId": clip_id,
                 "clipName": part.get("clipName") or "",
-                "fills": part.get("fills") or {},
+                "fills": fills if isinstance(fills, dict) else {},
                 "blanks": blanks,
             }
         )

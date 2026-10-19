@@ -43,16 +43,18 @@ def run_job(db_path: Path, job: dict[str, object], scan=scan_paths) -> None:
     started = time.monotonic()
     try:
         table, frames = scan([path])
-        finish(db_path, video_id, table)
+        saved = finish(db_path, video_id, table, owner_pid=os.getpid())
     except BrokenExecutor:
         requeue(db_path, video_id)
         raise
     except Exception as exc:
         message = str(exc) or "Không đọc được video."
-        fail(db_path, video_id, message)
+        fail(db_path, video_id, message, owner_pid=os.getpid())
         print(f"Video {video_id} lỗi sau {time.monotonic() - started:.0f} giây: {message[:300]}", flush=True)
         return
-    path.unlink(missing_ok=True)
+    if not saved:
+        print(f"Video {video_id} đã được trả về hàng đợi, không ghi đè.", flush=True)
+        return
     print(
         f"Video {video_id} xong trong {time.monotonic() - started:.0f} giây, {len(frames)} khung: "
         f"{len(table.rows)} hàng đủ, {len(table.review)} cần xem, {len(table.unopened)} chưa mở hồ sơ.",
@@ -88,7 +90,7 @@ def main() -> None:
     db_path = settings.video_db_path
     init_db(db_path)
     merge_close_results(db_path)
-    requeue_running(db_path, os.getpid())
+    requeue_running(db_path)
     work_dir = settings.data_dir / "frames"
     shutil.rmtree(work_dir, ignore_errors=True)
     work_dir.mkdir(parents=True, exist_ok=True)

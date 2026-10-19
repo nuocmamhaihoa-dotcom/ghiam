@@ -23,6 +23,7 @@ from control_plane.video_store import (
     begin_upload,
     can_accept,
     commit_upload,
+    free_before_this_file,
     init_db,
     iter_backup,
     list_videos,
@@ -126,7 +127,7 @@ async def upload_video(
                 await run_in_threadpool(_write_chunk, handle, hasher, chunk)
         free = shutil.disk_usage(settings.video_dir).free
         used = await run_in_threadpool(queued_bytes, settings.video_db_path)
-        if not can_accept(used, size, _limit_bytes(), free):
+        if not can_accept(used, size, _limit_bytes(), free_before_this_file(free, size)):
             raise HTTPException(status_code=507, detail="Hàng đợi đã đầy. Đợi bớt video rồi thêm tiếp.")
         created = await run_in_threadpool(
             lambda: begin_upload(settings.video_db_path, name=original, size_bytes=size, sha256=hasher.hexdigest())
@@ -139,7 +140,9 @@ async def upload_video(
         old_path = str(created.pop("old_path", "") or "")
         if old_path and old_path != str(final):
             Path(old_path).unlink(missing_ok=True)
-        await run_in_threadpool(commit_upload, settings.video_db_path, video_id, str(final))
+        queued = await run_in_threadpool(commit_upload, settings.video_db_path, video_id, str(final))
+        if not queued:
+            raise HTTPException(status_code=409, detail="Video không còn ở trạng thái đang tải.")
         created["status"] = "queued"
         return created
     except Exception:
