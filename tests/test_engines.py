@@ -1161,6 +1161,57 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(graph[0][0].author_name, "Lan")
         self.assertEqual(graph[0][0].comment_id, "8")
 
+    def test_moment_ago_and_creation_time(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan · a moment ago\nhello\nEdited yesterday\nEdited · 1 mo\n"
+                "moments ago\nvừa mới\nYou like this\n1 người thích nội dung này\n"
+                "Be the first to comment\nNo comments yet\nOlder comments\n"
+                "See 1 more reply\nComment · 2h"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nI hope you like this photo"], 5)
+        self.assertEqual(sentence[0].text, "I hope you like this photo")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\na moment ago\nEdited yesterday\nOlder comments",
+                    author_name="Lan · moments ago",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertEqual(healed[0].author_name, "Lan")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertIn("strip_glued_chrome", codes)
+        self.assertEqual(first_comment_id({"comment_fbid": "42"}), "42")
+        named = _one({"text": "xin", "commenterName": "Lan", "creation_time": "2024-03-02"})
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "Lan")
+        self.assertEqual(named.created_time, "2024-03-02")
+        managed = _comments_from_json(
+            {"comments": [{"message": "xin", "from": {"name": "Lan"}, "creation_time": "2024-03-02"}]},
+            5,
+        )
+        self.assertEqual(managed[0].created_time, "2024-03-02")
+        graph = comments_from_graph_payload(
+            {"data": [{"message": "xin", "from": {"name": "Lan"}, "creation_time": "2024-03-02", "id": "7"}]},
+            5,
+        )
+        self.assertEqual(graph[0][0].created_time, "2024-03-02")
+        imported = _from_mapping(
+            {"Comment Text": "xin", "Commenter": "Lan", "Creation Time": "2024-03-02"}
+        )
+        self.assertIsNotNone(imported)
+        assert imported is not None
+        self.assertEqual(imported.author_name, "Lan")
+        self.assertEqual(imported.created_time, "2024-03-02")
+
 
 if __name__ == "__main__":
     unittest.main()

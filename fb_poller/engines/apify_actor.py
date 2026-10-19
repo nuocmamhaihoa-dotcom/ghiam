@@ -15,7 +15,7 @@ from fb_poller.engines.guard import (
     invalid_limit,
     nested_text,
     public_error,
-    time_text,
+    timestamp_of,
     redact_text,
 )
 from fb_poller.engines.types import EngineResult, PublicComment
@@ -155,14 +155,7 @@ def _connection_rows(value: object) -> list[Any]:
 
 
 def _row_time(row: dict[str, Any] | None) -> str | None:
-    if not row:
-        return None
-    return (
-        time_text(row.get("date"))
-        or time_text(row.get("created_time"))
-        or time_text(row.get("createdAt"))
-        or time_text(row.get("created_at"))
-    )
+    return timestamp_of(row)
 
 
 def _one(row: Any) -> PublicComment | None:
@@ -179,7 +172,18 @@ def _one(row: Any) -> PublicComment | None:
             break
     if not text:
         return None
-    author_keys = ("author", "profileName", "userName", "name", "from", "user", "profile", "owner")
+    author_keys = (
+        "author",
+        "profileName",
+        "userName",
+        "commenter_name",
+        "commenter",
+        "name",
+        "from",
+        "user",
+        "profile",
+        "owner",
+    )
     return PublicComment(
         text=text,
         author_name=first_person_name(row, author_keys)

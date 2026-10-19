@@ -18,7 +18,7 @@ from fb_poller.engines.guard import (
     public_error,
     redact_text,
     scalar_text,
-    time_text,
+    timestamp_of,
 )
 from fb_poller.engines.types import EngineResult, PublicComment
 
@@ -102,9 +102,9 @@ def _append_rows(
             author_name = person_name(row.get("from")) or person_name(row.get("author"))
             if author_name is None and from_inner and inner is not None:
                 author_name = person_name(inner.get("from")) or person_name(inner.get("author"))
-            created = time_text(row.get("created_time"))
+            created = timestamp_of(row)
             if created is None and from_inner and inner is not None:
-                created = time_text(inner.get("created_time")) or time_text(inner.get("createdAt"))
+                created = timestamp_of(inner)
             item = PublicComment(
                 text=text,
                 author_name=author_name,

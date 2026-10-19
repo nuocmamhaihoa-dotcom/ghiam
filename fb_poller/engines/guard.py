@@ -72,13 +72,13 @@ def comment_id(value: object) -> str | None:
 
 def first_comment_id(row: dict[str, object]) -> str | None:
     """The first real id. A bool ``id`` must not hide ``legacy_fbid``."""
-    lowered = {str(key).strip().lower(): value for key, value in row.items()}
-    for key in ("id", "legacy_fbid", "comment_id", "commentid"):
-        found = _id_value(lowered.get(key))
+    folded = {fold_key(key): value for key, value in row.items()}
+    for key in ("id", "legacy_fbid", "comment_id", "comment_fbid"):
+        found = _id_value(folded.get(fold_key(key)))
         if found:
             return comment_id_from_url(found) or found
-    for key in ("commenturl", "comment_url", "permalink_url", "permalinkurl"):
-        found = comment_id_from_url(lowered.get(key))
+    for key in ("comment_url", "permalink_url"):
+        found = comment_id_from_url(folded.get(fold_key(key)))
         if found:
             return found
     return None
@@ -91,8 +91,8 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         return found
     if depth > 1 or not isinstance(value, dict):
         return None
-    lowered = {str(key).strip().lower(): item for key, item in value.items()}
-    for key in ("id", "legacy_fbid", "comment_id", "commentid"):
+    lowered = {fold_key(key): item for key, item in value.items()}
+    for key in ("id", "legacy_fbid", "comment_id", "comment_fbid"):
         if key not in lowered:
             continue
         found = _id_value(lowered.get(key), depth + 1)
@@ -170,7 +170,7 @@ def time_text(value: object, depth: int = 0) -> str | None:
         return plain
     if isinstance(value, dict):
         folded = {fold_key(key): item for key, item in value.items()}
-        for key in ("text", "message", "timestamp", "time", "date", "created_time", "created_at"):
+        for key in ("text", "message", "timestamp", "time", "date", "created_time", "creation_time", "created_at"):
             token = fold_key(key)
             if token not in folded:
                 continue
@@ -217,6 +217,18 @@ def nested_text(value: object, depth: int = 0) -> str | None:
             found = nested_text(value.get(key), depth + 1)
             if found:
                 return found
+    return None
+
+
+def timestamp_of(row: object) -> str | None:
+    """A timestamp field on a row. The comment message is not a timestamp."""
+    if not isinstance(row, dict):
+        return None
+    folded = {fold_key(key): value for key, value in row.items()}
+    for key in ("created_time", "creation_time", "created_at", "date", "time", "timestamp"):
+        found = time_text(folded.get(fold_key(key)))
+        if found:
+            return found
     return None
 
 

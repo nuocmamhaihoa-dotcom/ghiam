@@ -15,7 +15,7 @@ from fb_poller.engines.guard import (
     invalid_limit,
     nested_text,
     public_error,
-    time_text,
+    timestamp_of,
     redact_text,
 )
 from fb_poller.engines.types import EngineResult, PublicComment
@@ -132,6 +132,8 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
             "from",
             "profileName",
             "user_name",
+            "commenter_name",
+            "commenter",
             "name",
             "user",
             "profile",
@@ -141,15 +143,7 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
             first_person_name(inner, author_keys) if inner else None
         )
         cid = first_comment_id(row) or (first_comment_id(inner) if inner else None)
-        created = (
-            time_text(row.get("created_time"))
-            or time_text(row.get("date"))
-            or time_text(row.get("createdAt"))
-            or time_text(row.get("created_at"))
-            or (time_text(inner.get("created_time")) if inner else None)
-            or (time_text(inner.get("createdAt")) if inner else None)
-            or (time_text(inner.get("created_at")) if inner else None)
-        )
+        created = timestamp_of(row) or (timestamp_of(inner) if inner else None)
         key = cid or f"{author_name}|{text}"
         if key in seen:
             continue
