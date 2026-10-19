@@ -43,6 +43,7 @@ _AUTHOR_KEYS = (
     "username",
     "commenter",
     "commenter_name",
+    "display_name",
     "tác giả",
     "tac gia",
 )

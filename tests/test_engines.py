@@ -8,7 +8,15 @@ from unittest.mock import patch
 
 from fb_poller.engines.apify_actor import _from_items, _one
 from fb_poller.engines.graph_ppca import accepted_object_id, comments_from_graph_payload, post_id_from_url
-from fb_poller.engines.guard import comment_id, first_comment_id, public_error, redact_text, time_text
+from fb_poller.engines.guard import (
+    comment_id,
+    first_comment_id,
+    person_name,
+    public_error,
+    redact_text,
+    time_text,
+    timestamp_of,
+)
 from fb_poller.engines.guest_graphql import comments_from_html as graphql_from_html
 from fb_poller.engines.guest_graphql import comments_from_payload, merge_comments
 from fb_poller.engines.guest_ssr import comments_from_html
@@ -1256,6 +1264,53 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(managed[0].comment_id, "77")
         self.assertEqual(managed[0].author_name, "Lan")
         self.assertEqual(managed[0].created_time, "2024-03-02")
+
+    def test_pinned_other_and_display_name(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan · một giờ trước\nhello\nLan and 1 other\nHide all replies\n"
+                "See all replies\nView all replies\nPinned\nPinned comment\n"
+                "See who liked this\n1 new comment\nComment hidden\n"
+                "… See more\nLoad more replies"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(
+            ["Lan\nI met Lan and 1 other friend"],
+            5,
+        )
+        self.assertEqual(sentence[0].text, "I met Lan and 1 other friend")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nPinned\nHide all replies\nand 1 other\nmột giờ trước\n… See more",
+                    author_name="Lan · một phút trước",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertEqual(healed[0].author_name, "Lan")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertIn("strip_glued_chrome", codes)
+        self.assertEqual(person_name({"displayName": "Lan"}), "Lan")
+        self.assertEqual(person_name({"Full Name": "Lan"}), "Lan")
+        self.assertEqual(person_name({"user_name": "Lan"}), "Lan")
+        self.assertEqual(person_name({"Short Name": "Lan"}), "Lan")
+        named = _one({"text": "xin", "author": {"displayName": "Lan"}, "commentTime": "2024-03-02"})
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "Lan")
+        self.assertEqual(named.created_time, "2024-03-02")
+        imported = _from_mapping({"Comment Text": "xin", "Display Name": "Lan"})
+        self.assertIsNotNone(imported)
+        assert imported is not None
+        self.assertEqual(imported.author_name, "Lan")
+        self.assertEqual(post_id_from_url("https://www.facebook.com/reels/999/"), "999")
+        self.assertEqual(post_id_from_url("https://www.facebook.com/reel/999/"), "999")
+        self.assertEqual(timestamp_of({"created": {"created": "2024-03-02"}}), "2024-03-02")
 
 
 if __name__ == "__main__":

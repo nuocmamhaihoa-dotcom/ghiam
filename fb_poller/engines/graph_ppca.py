@@ -152,7 +152,7 @@ def post_id_from_url(url: str) -> str | None:
     if photo:
         return accepted_object_id(photo.group(2))
     path = re.search(
-        r"(?:posts|permalink|videos|reel|photos)/(pfbid[A-Za-z0-9]+|\d+(?:_\d+)*)",
+        r"(?:posts|permalink|videos|reels?|photos)/(pfbid[A-Za-z0-9]+|\d+(?:_\d+)*)",
         raw,
         re.IGNORECASE,
     )

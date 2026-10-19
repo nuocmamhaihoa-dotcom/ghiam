@@ -28,8 +28,14 @@ _DROP_LINE = re.compile(
     r"comment as \S.{0,60}|reply as \S.{0,60}|bình luận với tư cách \S.{0,80}|"
     r"most relevant comments|relevant comments|newest comments|bình luận phù hợp nhất|bình luận mới nhất|"
     r"all replies|tất cả phản hồi|"
+    r"pinned(?:\s+comment)?|bình luận đã ghim|đã ghim|ghim|"
+    r"\d+\s+new\s+comments?|new comments|"
+    r"(?:this )?comment(?: is)? hidden|hidden comment|bình luận đã bị ẩn|"
+    r"load more repl(?:y|ies)|tải thêm phản hồi|"
+    r"see all comments|view all comments|"
+    r"(?:một|hai|ba)\s+(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"sponsored|được tài trợ|active now|đang hoạt động|"
-    r"[·•]+|"
+    r"[·•…]+|"
     r"all comments|tất cả bình luận|"
     r"top fan|rising fan|tác giả|author|admin|verified|đã xác minh|"
     r"just now|vừa xong|"
@@ -58,7 +64,7 @@ _DROP_LINE = re.compile(
     r"love|haha|wow|sad|angry|care|yêu thích|buồn|phẫn nộ|"
     r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*[kmb]?)\s+(?:likes?|reactions?|comments?|shares?|lượt thích|bình luận|chia sẻ)|"
-    r"view all \d+ replies|xem tất cả \d+ phản hồi|"
+    r"view all(?: \d+)? repl(?:y|ies)|see all repl(?:y|ies)|hide all repl(?:y|ies)|xem tất cả(?: \d+)? phản hồi|ẩn tất cả phản hồi|"
     r"view \d+ repl(?:y|ies)|"
     r"\d+\s+repl(?:y|ies)|\d+\s+phản hồi|"
     r"see previous comments|view previous comments|load more comments|"
@@ -66,10 +72,10 @@ _DROP_LINE = re.compile(
     r"show more|show less|"
     r"last\s+(?:week|month|year)|tuần trước|tháng trước|năm trước|hôm kia|"
     r"write a public comment(?:\.\.\.|…)?|viết bình luận công khai(?:\.\.\.|…)?|"
-    r"see who reacted(?:\s+to\s+this)?|xem ai đã thích(?:\s+nội\s+dung\s+này)?|"
+    r"see who reacted(?:\s+to\s+this)?|see who liked(?:\s+this)?|xem ai đã thích(?:\s+nội\s+dung\s+này)?|"
     r"(?:all|tất cả)\s+\d+\s+(?:comments?|bình luận)|"
-    r"(?:\S+\s+){1,2}and\s+\d+\s+others|(?:\S+\s+){1,2}và\s+\d+\s+người khác|"
-    r"and\s+\d+\s+others|và\s+\d+\s+người khác|"
+    r"(?:\S+\s+){1,2}and\s+\d+\s+others?|(?:\S+\s+){1,2}và\s+\d+\s+người khác|"
+    r"and\s+\d+\s+others?|và\s+\d+\s+người khác|"
     r"send|gửi|hide|ẩn|"
     r"(?:khoảng\s+)?(?:a\s+few|vài)\s+(?:seconds?|minutes?|hours?|days?|weeks?|giây|phút|giờ|ngày|tuần)(?:\s+(?:ago|trước))?|"
     r"less than (?:an?|\d+)\s+(?:second|minute|hour)s?(?:\s+ago)?|"
@@ -139,6 +145,7 @@ _AUTHOR_STAMP = re.compile(
     r"(?:ngày\s+)?\d{1,2}\s+tháng\s+\d{1,2}(?:\s+năm\s+\d{4})?(?:\s+(?:lúc|vào)\s+\d{1,2}(?:[:h]\d{2})?)?|"
     r"\d{1,2}\s+thg\s+\d{1,2}(?:,\s*\d{4})?(?:\s+(?:lúc|vào)\s+\d{1,2}(?:[:h]\d{2})?)?|"
     r"last\s+(?:week|month|year)|tuần trước|tháng trước|năm trước|hôm kia|"
+    r"(?:một|hai|ba)\s+(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"(?:khoảng\s+)?(?:a\s+few|vài)\s+(?:seconds?|minutes?|hours?|days?|weeks?|giây|phút|giờ|ngày|tuần)(?:\s+(?:ago|trước))?|"
     r"less than (?:an?|\d+)\s+(?:second|minute|hour)s?(?:\s+ago)?|"
     r"(?:a\s+moment|moments|seconds|minutes|hours)\s+ago|"
@@ -151,6 +158,15 @@ _AUTHOR_STAMP = re.compile(
     r"top fan|rising fan|verified|đã xác minh|tác giả|author|admin"
     r")"
     r")+$",
+    re.IGNORECASE,
+)
+_GLUED_TAIL = re.compile(
+    r"(?:\s+(?:"
+    r"see more|see less|xem thêm|"
+    r"see translation|hide translation|xem bản dịch|ẩn bản dịch|"
+    r"view all(?: \d+)? repl(?:y|ies)|see all repl(?:y|ies)|hide all repl(?:y|ies)|"
+    r"load more repl(?:y|ies)|tải thêm phản hồi"
+    r"))+$",
     re.IGNORECASE,
 )
 _COUNT_LINE = re.compile(
@@ -178,7 +194,15 @@ def comments_from_articles(blocks: list[str], limit: int) -> list[PublicComment]
     for block in blocks:
         if _is_post_block(block):
             continue
-        lines = [ln.strip() for ln in block.splitlines() if ln.strip() and not _DROP_LINE.match(ln.strip())]
+        lines: list[str] = []
+        for raw in block.splitlines():
+            line = raw.strip()
+            if not line or _DROP_LINE.match(line):
+                continue
+            unglued = _GLUED_TAIL.sub("", line).strip(" ·•…").strip()
+            if not unglued or _DROP_LINE.match(unglued):
+                continue
+            lines.append(unglued)
         if len(lines) > 2 and _COUNT_LINE.match(lines[-1]):
             lines.pop()
         if len(lines) < 2:

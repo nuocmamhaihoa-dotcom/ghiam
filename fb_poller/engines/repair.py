@@ -70,8 +70,14 @@ _CHROME_LINE = re.compile(
     r"comment as \S.{0,60}|reply as \S.{0,60}|bình luận với tư cách \S.{0,80}|"
     r"most relevant comments|relevant comments|newest comments|bình luận phù hợp nhất|bình luận mới nhất|"
     r"all replies|tất cả phản hồi|"
+    r"pinned(?:\s+comment)?|bình luận đã ghim|đã ghim|ghim|"
+    r"\d+\s+new\s+comments?|new comments|"
+    r"(?:this )?comment(?: is)? hidden|hidden comment|bình luận đã bị ẩn|"
+    r"load more repl(?:y|ies)|tải thêm phản hồi|"
+    r"see all comments|view all comments|"
+    r"(?:một|hai|ba)\s+(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"sponsored|được tài trợ|active now|đang hoạt động|"
-    r"[·•]+|"
+    r"[·•…]+|"
     r"all comments|tất cả bình luận|"
     r"top fan|rising fan|tác giả|author|admin|verified|đã xác minh|"
     r"just now|vừa xong|"
@@ -101,7 +107,7 @@ _CHROME_LINE = re.compile(
     r"\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*[kmb]|"
     r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*[kmb]?)\s+(?:likes?|reactions?|comments?|shares?|lượt thích|bình luận|chia sẻ)|"
-    r"view all \d+ replies|xem tất cả \d+ phản hồi|"
+    r"view all(?: \d+)? repl(?:y|ies)|see all repl(?:y|ies)|hide all repl(?:y|ies)|xem tất cả(?: \d+)? phản hồi|ẩn tất cả phản hồi|"
     r"view \d+ repl(?:y|ies)|"
     r"\d+\s+repl(?:y|ies)|\d+\s+phản hồi|"
     r"see previous comments|view previous comments|load more comments|"
@@ -109,10 +115,10 @@ _CHROME_LINE = re.compile(
     r"show more|show less|"
     r"last\s+(?:week|month|year)|tuần trước|tháng trước|năm trước|hôm kia|"
     r"write a public comment(?:\.\.\.|…)?|viết bình luận công khai(?:\.\.\.|…)?|"
-    r"see who reacted(?:\s+to\s+this)?|xem ai đã thích(?:\s+nội\s+dung\s+này)?|"
+    r"see who reacted(?:\s+to\s+this)?|see who liked(?:\s+this)?|xem ai đã thích(?:\s+nội\s+dung\s+này)?|"
     r"(?:all|tất cả)\s+\d+\s+(?:comments?|bình luận)|"
-    r"(?:\S+\s+){1,2}and\s+\d+\s+others|(?:\S+\s+){1,2}và\s+\d+\s+người khác|"
-    r"and\s+\d+\s+others|và\s+\d+\s+người khác|"
+    r"(?:\S+\s+){1,2}and\s+\d+\s+others?|(?:\S+\s+){1,2}và\s+\d+\s+người khác|"
+    r"and\s+\d+\s+others?|và\s+\d+\s+người khác|"
     r"send|gửi|hide|ẩn|"
     r"(?:khoảng\s+)?(?:a\s+few|vài)\s+(?:seconds?|minutes?|hours?|days?|weeks?|giây|phút|giờ|ngày|tuần)(?:\s+(?:ago|trước))?|"
     r"less than (?:an?|\d+)\s+(?:second|minute|hour)s?(?:\s+ago)?|"
@@ -177,7 +183,7 @@ _GLUED_CHROME = re.compile(
     r"see original(?:\s*\([^)\n]{0,80}\)|\s+in\s+\S.{0,40})?|hide original(?:\s*\([^)\n]{0,80}\)|\s+in\s+\S.{0,40})?|"
     r"xem bản gốc(?:\s*\([^)\n]{0,80}\))?|ẩn bản gốc(?:\s*\([^)\n]{0,80}\))?|"
     r"see more|see less|xem thêm|"
-    r"view all \d+ replies|xem tất cả \d+ phản hồi|"
+    r"view all(?: \d+)? repl(?:y|ies)|see all repl(?:y|ies)|hide all repl(?:y|ies)|xem tất cả(?: \d+)? phản hồi|ẩn tất cả phản hồi|"
     r"top fan|rising fan|"
     r"just now|vừa xong|"
     r"edited|đã chỉnh sửa|"
@@ -223,6 +229,7 @@ _AUTHOR_STAMP = re.compile(
     r"(?:ngày\s+)?\d{1,2}\s+tháng\s+\d{1,2}(?:\s+năm\s+\d{4})?(?:\s+(?:lúc|vào)\s+\d{1,2}(?:[:h]\d{2})?)?|"
     r"\d{1,2}\s+thg\s+\d{1,2}(?:,\s*\d{4})?(?:\s+(?:lúc|vào)\s+\d{1,2}(?:[:h]\d{2})?)?|"
     r"last\s+(?:week|month|year)|tuần trước|tháng trước|năm trước|hôm kia|"
+    r"(?:một|hai|ba)\s+(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"(?:khoảng\s+)?(?:a\s+few|vài)\s+(?:seconds?|minutes?|hours?|days?|weeks?|giây|phút|giờ|ngày|tuần)(?:\s+(?:ago|trước))?|"
     r"less than (?:an?|\d+)\s+(?:second|minute|hour)s?(?:\s+ago)?|"
     r"(?:a\s+moment|moments|seconds|minutes|hours)\s+ago|"
@@ -386,7 +393,7 @@ def _clean_text(text: str) -> tuple[str | None, list[str]]:
         unglued = _GLUED_CHROME.sub("", stripped).strip()
         if unglued != stripped:
             removed_glued = True
-            stripped = unglued
+            stripped = unglued.strip(" ·•…").strip()
         if not stripped:
             continue
         if _CHROME_LINE.match(stripped):

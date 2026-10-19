@@ -124,11 +124,12 @@ def person_name(value: object, depth: int = 0) -> str | None:
     if plain:
         return plain
     if isinstance(value, dict):
-        lowered = {str(key).strip().lower(): item for key, item in value.items()}
-        for key in ("name", "short_name", "full_name", "profilename", "profile_name", "username"):
-            if key not in lowered:
+        lowered = {fold_key(key): item for key, item in value.items()}
+        for key in ("name", "short_name", "full_name", "profile_name", "username", "display_name"):
+            token = fold_key(key)
+            if token not in lowered:
                 continue
-            child = lowered.get(key)
+            child = lowered.get(token)
             found = person_name(child, depth + 1) or nested_text(child)
             if found:
                 return found
@@ -171,7 +172,7 @@ def time_text(value: object, depth: int = 0) -> str | None:
         return plain
     if isinstance(value, dict):
         folded = {fold_key(key): item for key, item in value.items()}
-        for key in ("text", "message", "timestamp", "time", "date", "created_time", "creation_time", "created_at"):
+        for key in ("text", "message", "timestamp", "time", "date", "created_time", "creation_time", "created_at", "created"):
             token = fold_key(key)
             if token not in folded:
                 continue
@@ -226,7 +227,7 @@ def timestamp_of(row: object) -> str | None:
     if not isinstance(row, dict):
         return None
     folded = {fold_key(key): value for key, value in row.items()}
-    for key in ("created_time", "creation_time", "created_at", "created", "date", "time", "timestamp"):
+    for key in ("created_time", "creation_time", "created_at", "created", "comment_time", "date", "time", "timestamp"):
         found = time_text(folded.get(fold_key(key)))
         if found:
             return found
