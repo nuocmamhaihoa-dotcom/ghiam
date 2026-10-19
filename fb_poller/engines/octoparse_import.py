@@ -112,6 +112,11 @@ _AUTHOR_KEYS = (
     "account_name",
     "profile_display",
     "user_caption",
+    "byline",
+    "signed_by",
+    "handle_name",
+    "display_handle",
+    "credit",
     "tác giả",
     "tac gia",
 )
@@ -164,6 +169,9 @@ _TIME_KEYS = (
     "message_date",
     "post_time",
     "created_ms",
+    "authored_at",
+    "submitted_at",
+    "unix_ms",
 )
 
 

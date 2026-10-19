@@ -139,6 +139,9 @@ def _append_rows(
                         "publisher_name",
                         "account_name",
                         "profile_display",
+                        "byline",
+                        "signed_by",
+                        "handle_name",
                     ),
                 )
             )
@@ -168,6 +171,8 @@ def _append_rows(
                             "owner_title",
                             "publisher_name",
                             "account_name",
+                            "byline",
+                            "signed_by",
                         ),
                     )
                 )
