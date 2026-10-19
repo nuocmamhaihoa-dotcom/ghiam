@@ -23,7 +23,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import create_app  # noqa: E402
 from app import db as appdb
-from worker.agent import normalize_reply, parse_text_tools, run_turn, scripted_complete  # noqa: E402
+from worker.agent import normalize_reply, parse_text_tools, run_turn, scripted_complete, system_prompt  # noqa: E402
 from worker.tools import run_cmd, run_tool  # noqa: E402
 from worker.workspace import Workspace  # noqa: E402
 
@@ -326,6 +326,11 @@ class WorkerTests(unittest.TestCase):
             {"content": '{"exit_code": 0, "stdout": "4\\n", "stderr": ""}', "tool_calls": []}
         )
         self.assertEqual(echoed["content"], "4")
+        self.assertTrue((ROOT / "learn" / "muc-luc.md").is_file())
+        self.assertTrue((ROOT / "learn" / "nguon-api.md").is_file())
+        self.assertIn("nguon-api.md", (ROOT / "learn" / "muc-luc.md").read_text(encoding="utf-8"))
+        with TemporaryDirectory() as tmp:
+            self.assertIn("learn/muc-luc.md", system_prompt(Workspace(Path(tmp) / "work")))
         junk = normalize_reply({"content": '{"truncated": false}', "tool_calls": []})
         self.assertIsNone(junk["content"])
 
