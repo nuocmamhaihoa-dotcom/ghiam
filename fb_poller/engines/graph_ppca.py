@@ -63,31 +63,66 @@ def comments_from_graph_payload(data: object, limit: int) -> tuple[list[PublicCo
     else:
         return [], "unexpected_graph_payload"
     comments: list[PublicComment] = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        text = nested_text(row.get("message"))
-        if not text:
-            continue
-        comments.append(
-            PublicComment(
-                text=text,
-                author_name=person_name(row.get("from")),
-                comment_id=first_comment_id(row),
-                created_time=scalar_text(row.get("created_time")),
-            )
-        )
-        if len(comments) >= limit:
-            break
+    _append_rows(rows, comments, set(), limit, 0)
     if comments:
         return comments, None
     return [], "empty_comment_edge"
+
+
+def _append_rows(
+    rows: list[object],
+    comments: list[PublicComment],
+    seen: set[str],
+    limit: int,
+    depth: int,
+) -> None:
+    """Keep a comment and replies wrapped as ``comments: {data: [...]}``."""
+    if depth > 6 or len(comments) >= limit:
+        return
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        text = nested_text(row.get("message")) or nested_text(row.get("text"))
+        if text:
+            item = PublicComment(
+                text=text,
+                author_name=person_name(row.get("from")) or person_name(row.get("author")),
+                comment_id=first_comment_id(row),
+                created_time=scalar_text(row.get("created_time")),
+            )
+            key = item.comment_id or f"{item.author_name}|{item.text}"
+            if key not in seen:
+                seen.add(key)
+                comments.append(item)
+        if len(comments) >= limit:
+            return
+        for name in ("comments", "replies"):
+            nested = _connection_rows(row.get(name))
+            if nested:
+                _append_rows(nested, comments, seen, limit, depth + 1)
+            if len(comments) >= limit:
+                return
+
+
+def _connection_rows(value: object) -> list[object]:
+    """A Graph connection is ``{data: [...]}``. A bare list is the same list."""
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict):
+        data = value.get("data")
+        if isinstance(data, list):
+            return data
+    return []
 
 
 def _graph_rows(data: dict[str, object]) -> list[object]:
     value = data.get("data")
     if isinstance(value, list) and value:
         return list(value)
+    for name in ("comments", "replies"):
+        nested = _connection_rows(data.get(name))
+        if nested:
+            return nested
     message = data.get("message")
     if isinstance(message, dict) or scalar_text(message):
         return [data]

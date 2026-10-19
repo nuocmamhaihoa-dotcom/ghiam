@@ -129,14 +129,25 @@ def _collect(
                 out.append(item)
         if len(out) >= limit:
             return
-        for key in ("comments", "replies"):
-            nested = row.get(key)
-            if isinstance(nested, list) and nested:
+        for name in ("comments", "replies"):
+            nested = _connection_rows(row.get(name))
+            if nested:
                 _collect(nested, out, seen, limit, depth + 1)
-            elif isinstance(nested, dict) and nested:
-                _collect([nested], out, seen, limit, depth + 1)
             if len(out) >= limit:
                 return
+
+
+def _connection_rows(value: object) -> list[Any]:
+    """An empty list does not count. ``{data: [...]}`` is the list inside."""
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict):
+        data = value.get("data")
+        if isinstance(data, list):
+            return data
+        if nested_text(value.get("text")) or nested_text(value.get("message")) or nested_text(value.get("body")):
+            return [value]
+    return []
 
 
 def _one(row: Any) -> PublicComment | None:

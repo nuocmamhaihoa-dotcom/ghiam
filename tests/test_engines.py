@@ -569,6 +569,42 @@ class EngineTests(unittest.TestCase):
             found = comments_from_export(path)
         self.assertEqual(found[0].author_name, "Lan")
 
+    def test_graph_connection_keeps_nested_replies(self) -> None:
+        payload = {
+            "data": [],
+            "comments": {
+                "data": [
+                    {
+                        "message": "parent",
+                        "from": {"name": "P"},
+                        "id": "1",
+                        "comments": {
+                            "data": [{"message": "the reply", "from": {"short_name": "R"}, "id": "2"}]
+                        },
+                    }
+                ]
+            },
+        }
+        found, error = comments_from_graph_payload(payload, 5)
+        self.assertIsNone(error)
+        self.assertEqual([item.text for item in found], ["parent", "the reply"])
+        self.assertEqual(found[1].author_name, "R")
+        wrapped = _from_items(
+            [{"text": "parent", "profileName": "P", "replies": {"data": [{"text": "the reply", "profileName": "R"}]}}],
+            5,
+        )
+        self.assertEqual([item.text for item in wrapped], ["parent", "the reply"])
+        recovered = heal_result(
+            EngineResult(
+                "graph-ppca",
+                6,
+                False,
+                error='http_400: {"comments":{"data":[{"message":"xin","from":{"short_name":"An"}}]}}',
+            )
+        )
+        self.assertEqual(recovered.comments[0].text, "xin")
+        self.assertEqual(recovered.comments[0].author_name, "An")
+
 
 if __name__ == "__main__":
     unittest.main()
