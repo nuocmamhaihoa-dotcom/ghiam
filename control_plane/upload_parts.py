@@ -23,6 +23,8 @@ PARTIAL_TTL_SECONDS = 6 * 3600
 DONE_TTL_SECONDS = 2 * 3600
 LOCK_STALE_SECONDS = 120
 FINISH_STALE_SECONDS = 600
+# Khi đĩa chặt, bản tải dở lâu hơn mức này nhường chỗ. Bản mới hơn vẫn nối tiếp được.
+TIGHT_PARTIAL_SECONDS = 30 * 60
 
 
 class UploadRejected(Exception):
@@ -62,6 +64,53 @@ def _paths(root: Path, upload_id: str) -> tuple[Path, Path, Path, Path]:
         folder / f"{upload_id}.lock",
         folder / f"{upload_id}.done",
     )
+
+
+def _group_key(name: str) -> str:
+    key = name
+    for suffix in (".part", ".json", ".done", ".lock", ".tmp"):
+        if key.endswith(suffix):
+            return key[: -len(suffix)]
+    return key
+
+
+def reclaim_stale_partials(
+    root: Path,
+    *,
+    keep_seconds: int = TIGHT_PARTIAL_SECONDS,
+    now: float | None = None,
+) -> int:
+    """Xóa bản tải dở đã nằm im. Bản đang gửi trong keep_seconds được giữ để điện thoại nối tiếp."""
+    folder = root / "partial"
+    if not folder.is_dir():
+        return 0
+    moment = time.time() if now is None else now
+    groups: dict[str, list[Path]] = {}
+    for path in folder.iterdir():
+        groups.setdefault(_group_key(path.name), []).append(path)
+    freed = 0
+    for paths in groups.values():
+        newest = 0.0
+        sized: list[tuple[Path, int]] = []
+        for path in paths:
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            newest = max(newest, stat.st_mtime)
+            sized.append((path, stat.st_size if path.is_file() else 0))
+        if newest and moment - newest < keep_seconds:
+            continue
+        for path, size in sized:
+            try:
+                if path.is_dir():
+                    path.rmdir()
+                else:
+                    path.unlink(missing_ok=True)
+            except OSError:
+                continue
+            freed += size
+    return freed
 
 
 def sweep_parts(root: Path, now: float | None = None) -> None:

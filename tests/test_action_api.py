@@ -324,6 +324,24 @@ class ActionApiTests(unittest.TestCase):
         huge = self._chunk(upload_id, "big.mp4", b"ab", 0, settings.max_upload_mb * 1024 * 1024 + 1)
         self.assertEqual(huge.status_code, 413, huge.text)
 
+    def test_a_broken_chunk_body_asks_the_phone_to_send_it_again(self) -> None:
+        broken = self.client.post(
+            "/v1/videos/chunks",
+            headers={**self.headers, "content-type": "multipart/form-data; boundary=abc"},
+            content=b"this is not a multipart body",
+        )
+        self.assertEqual(broken.status_code, 503, broken.text)
+        self.assertNotIn("parsing the body", broken.text)
+        self.assertIn("Tải lại", broken.json()["detail"])
+
+    def test_a_full_disk_refuses_the_chunk_in_vietnamese(self) -> None:
+        import control_plane.app as hub
+
+        with patch.object(hub, "prepare_upload_room", return_value="Ổ đĩa gần đầy."):
+            refused = self._chunk("d4" * 16, "clip.mp4", b"abcd", 0, 4)
+        self.assertEqual(refused.status_code, 507, refused.text)
+        self.assertEqual(refused.json()["detail"], "Ổ đĩa gần đầy.")
+
     def test_same_video_after_it_is_read_is_read_again(self) -> None:
         from control_plane.video_store import connect
 

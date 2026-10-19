@@ -23,6 +23,7 @@ from control_plane.upload_parts import (
     UploadRejected,
     check_upload_id,
     lookup_part,
+    reclaim_stale_partials,
     release_finish,
     save_done,
     write_part,
@@ -173,6 +174,49 @@ def _disk_snapshot() -> tuple[int, int, int, int]:
     usage = shutil.disk_usage(settings.video_dir)
     limit = disk_limit_bytes(usage.total, settings.video_disk_percent)
     return usage.used, usage.free, usage.total, limit
+
+
+DISK_FULL_DETAIL = (
+    "Ổ đĩa gần đầy. Video chưa đọc vẫn nằm trên đĩa. "
+    "Đợi đọc xong hoặc nối thêm PC rồi tải tiếp."
+)
+BROKEN_CHUNK_DETAIL = "Mảnh vừa gửi bị đứt. Bấm Tải lại để nối tiếp phần đã lên."
+
+
+def _usage_numbers(usage: object) -> tuple[int, int, int]:
+    return int(getattr(usage, "used")), int(getattr(usage, "free")), int(getattr(usage, "total"))
+
+
+def prepare_upload_room(
+    incoming: int,
+    *,
+    root: Path | None = None,
+    measure: Any = None,
+    now: float | None = None,
+) -> str | None:
+    """Dọn bản tải dở đã cũ khi đĩa chặt. Trả câu tiếng Việt khi vẫn không đủ chỗ nhận mảnh này.
+
+    Gọi trước khi đọc thân yêu cầu. Đĩa đầy làm trình phân tích multipart trả lỗi tiếng Anh
+    và điện thoại dừng cả video.
+    """
+    folder = settings.video_dir if root is None else root
+    read = measure or (lambda: shutil.disk_usage(folder))
+    used, free, total = _usage_numbers(read())
+    limit = disk_limit_bytes(total, settings.video_disk_percent)
+    tight = used > limit or free <= 2 * 1024 * 1024 * 1024
+    if tight:
+        reclaim_stale_partials(folder, now=now)
+        if root is None:
+            prune_old_videos(
+                settings.video_db_path,
+                settings.video_dir,
+                percent=settings.video_disk_percent,
+                protect_newest=False,
+            )
+        used, free, total = _usage_numbers(read())
+    if free < max(int(incoming), 1) or not upload_room(used, free, total, settings.video_disk_percent):
+        return DISK_FULL_DETAIL
+    return None
 
 
 def _ticket_key(purpose: str = "backup-ticket") -> bytes:
@@ -360,13 +404,7 @@ async def _publish_file(src: Path, original: str, size: int, digest: str, device
     )
     used, free, total, _limit = _disk_snapshot()
     if not upload_room(used, free, total, settings.video_disk_percent):
-        raise HTTPException(
-            status_code=507,
-            detail=(
-                "Ổ đĩa gần đầy. Video chưa đọc vẫn nằm trên đĩa. "
-                "Đợi đọc xong hoặc nối thêm PC rồi tải tiếp."
-            ),
-        )
+        raise HTTPException(status_code=507, detail=DISK_FULL_DETAIL)
     created: dict[str, object] | None = None
     final: Path | None = None
     try:

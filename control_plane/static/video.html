@@ -1248,6 +1248,11 @@
         onProgress(file.size ? Math.floor((sent * 100) / file.size) : 0);
       });
       last = result;
+      var rawDetail = result.body && result.body.detail ? String(result.body.detail) : "";
+      if (rawDetail.indexOf("parsing the body") !== -1 || rawDetail.indexOf("Invalid multipart") !== -1) {
+        result = { ok: false, status: 503, body: { detail: "Mảnh vừa gửi bị đứt. Đang gửi lại." } };
+        last = result;
+      }
       if (result.ok && result.body.pending) {
         await sleep(700);
         continue;
