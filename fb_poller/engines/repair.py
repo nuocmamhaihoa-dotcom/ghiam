@@ -72,7 +72,11 @@ _CHROME_LINE = re.compile(
     r"just now|vừa xong|yesterday|hôm qua|"
     r"[·•]?\s*(?:about\s+|khoảng\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
     r"(?:khoảng\s+)?\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
-    r"\d+\s*(?:s|m|h|d|w|y)|"
+    r"\d+\s*(?:s|m|h|d|w|y)\s*[·•]?|"
+    r"see \d+ repl(?:y|ies)|xem \d+ phản hồi|"
+    r"translated from \S.{0,40}|được dịch từ \S.{0,60}|"
+    r"rate translation|đánh giá bản dịch|"
+    r"love|haha|wow|sad|angry|care|yêu thích|buồn|phẫn nộ|"
     r"\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*[kmb]|"
     r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*[kmb]?)\s+(?:likes?|reactions?|comments?|shares?|lượt thích|bình luận|chia sẻ)|"
@@ -81,6 +85,7 @@ _CHROME_LINE = re.compile(
     r"see original(?:\s*\([^)\n]{0,80}\))?|hide original(?:\s*\([^)\n]{0,80}\))?|"
     r"xem bản gốc(?:\s*\([^)\n]{0,80}\))?|ẩn bản gốc(?:\s*\([^)\n]{0,80}\))?|"
     r"edited(?:\s*[·•]\s*\d+\s*[smhdwy])?|đã chỉnh sửa(?:\s*[·•]\s*\d+\s*[smhdwy])?|"
+    r"\d+\s*[smhdwy]\s*[·•]\s*(?:edited|đã chỉnh sửa)?|"
     r"all reactions:?|tất cả cảm xúc:?"
     r")$",
     re.IGNORECASE,
@@ -103,7 +108,11 @@ _GLUED_CHROME = re.compile(
     r"edited|đã chỉnh sửa|"
     r"\d+\s+(?:likes?|reactions?|comments?|shares?|lượt thích|bình luận|chia sẻ)|"
     r"hide \d+ replies|ẩn \d+ phản hồi|"
-    r"view \d+ more comments|xem thêm \d+ bình luận"
+    r"view \d+ more comments|xem thêm \d+ bình luận|"
+    r"see \d+ repl(?:y|ies)|xem \d+ phản hồi|"
+    r"translated from \S.{0,40}|được dịch từ \S.{0,60}|"
+    r"rate translation|đánh giá bản dịch|"
+    r"\d+\s*[smhdwy]\s*[·•]\s*(?:edited|đã chỉnh sửa)?"
     r")"
     r"|"
     r"\s*[·•]\s*(?:"
@@ -111,7 +120,8 @@ _GLUED_CHROME = re.compile(
     r"(?:about\s+|khoảng\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
     r"\d+\s*(?:s|m|h|d|w|y)|"
     r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
-    r"\d+\s+(?:likes?|reactions?|comments?|shares?|lượt thích|bình luận|chia sẻ)"
+    r"\d+\s+(?:likes?|reactions?|comments?|shares?|lượt thích|bình luận|chia sẻ)|"
+    r"edited|đã chỉnh sửa"
     r")"
     r")+$",
     re.IGNORECASE,
@@ -366,7 +376,7 @@ def _loose_comments(payload: object, depth: int = 0) -> list[PublicComment]:
     if not isinstance(payload, dict):
         return []
     rendered = None
-    for key in ("text", "message", "comment", "body"):
+    for key in ("text", "message", "comment", "comment_text", "commentText", "body", "preferred_body"):
         rendered = nested_text(payload.get(key))
         if rendered:
             break

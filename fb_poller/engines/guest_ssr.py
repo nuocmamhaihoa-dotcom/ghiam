@@ -83,7 +83,11 @@ def _walk(node: Any, found: list[PublicComment], seen: set[str], limit: int) -> 
 
 
 def _comment_text(node: dict[str, Any]) -> str | None:
-    text = nested_text(node.get("body")) or nested_text(node.get("message"))
+    text = (
+        nested_text(node.get("body"))
+        or nested_text(node.get("preferred_body"))
+        or nested_text(node.get("message"))
+    )
     if not text or len(text) > 8000:
         return None
     if not is_comment_typename(node.get("__typename")) or placeholder_text(text):

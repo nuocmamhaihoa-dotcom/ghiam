@@ -24,7 +24,11 @@ NAME = "guest-graphql"
 
 def _node_text(node: dict[str, Any]) -> str | None:
     """Comment text, including a message object nested under body."""
-    return nested_text(node.get("body")) or nested_text(node.get("message"))
+    return (
+        nested_text(node.get("body"))
+        or nested_text(node.get("preferred_body"))
+        or nested_text(node.get("message"))
+    )
 
 
 def comments_from_payload(payload: Any, limit: int) -> list[PublicComment]:

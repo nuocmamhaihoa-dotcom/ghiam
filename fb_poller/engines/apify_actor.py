@@ -154,7 +154,7 @@ def _one(row: Any) -> PublicComment | None:
     if not isinstance(row, dict):
         return None
     text = None
-    for key in ("text", "message", "comment", "body"):
+    for key in ("text", "message", "comment", "commentText", "comment_text", "body", "preferred_body"):
         text = nested_text(row.get(key))
         if text:
             break

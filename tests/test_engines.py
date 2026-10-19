@@ -713,6 +713,33 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(parsed.server, "http://[2001:db8::1]:8080")
         self.assertEqual(parsed.as_httpx(), "http://user:pw@[2001:db8::1]:8080")
 
+    def test_preferred_body_and_see_one_reply(self) -> None:
+        graphql = comments_from_payload(
+            {"__typename": "Comment", "preferred_body": {"text": "xin"}, "author": {"name": "An"}},
+            5,
+        )
+        self.assertEqual(graphql[0].text, "xin")
+        html = '<script>{"__typename":"Comment","preferred_body":{"text":"xin"},"author":{"name":"An"}}</script>'
+        self.assertEqual(comments_from_html(html)[0].text, "xin")
+        managed = _comments_from_json({"comment_text": "xin", "author": "An"}, 5)
+        self.assertEqual(managed[0].text, "xin")
+        apify = _from_items([{"commentText": "xin", "profileName": "Ha"}], 5)
+        self.assertEqual(apify[0].text, "xin")
+        block = "\n".join(["Lan", "hello", "See 1 reply", "2d · Edited"])
+        self.assertEqual(comments_from_articles([block], 5)[0].text, "hello")
+        glued, codes = heal_comments([PublicComment(text="hello · Edited")])
+        self.assertEqual(glued[0].text, "hello")
+        self.assertIn("strip_glued_chrome", codes)
+        lines, line_codes = heal_comments(
+            [PublicComment(text="hello\nSee 1 reply\nTranslated from Vietnamese\nLove")]
+        )
+        self.assertEqual(lines[0].text, "hello")
+        self.assertIn("strip_chrome_lines", line_codes)
+        translated, _ = heal_comments([PublicComment(text="xin chào Translated from Vietnamese")])
+        self.assertEqual(translated[0].text, "xin chào")
+        sentence = "\n".join(["Lan", "I love this photo", "Like"])
+        self.assertEqual(comments_from_articles([sentence], 5)[0].text, "I love this photo")
+
 
 if __name__ == "__main__":
     unittest.main()

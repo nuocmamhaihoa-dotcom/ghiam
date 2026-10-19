@@ -32,14 +32,19 @@ _DROP_LINE = re.compile(
     r"just now|vừa xong|yesterday|hôm qua|"
     r"[·•]?\s*(?:about\s+|khoảng\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
     r"(?:khoảng\s+)?\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
-    r"\d+\s*(?:s|m|h|d|w|y)|"
+    r"\d+\s*(?:s|m|h|d|w|y)\s*[·•]?|"
+    r"see \d+ repl(?:y|ies)|xem \d+ phản hồi|"
+    r"translated from \S.{0,40}|được dịch từ \S.{0,60}|"
+    r"rate translation|đánh giá bản dịch|"
+    r"love|haha|wow|sad|angry|care|yêu thích|buồn|phẫn nộ|"
     r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*[kmb]?)\s+(?:likes?|reactions?|comments?|shares?|lượt thích|bình luận|chia sẻ)|"
     r"view all \d+ replies|xem tất cả \d+ phản hồi|\d+ replies|\d+ phản hồi|"
     r"see translation|hide translation|xem bản dịch|ẩn bản dịch|"
     r"see original(?:\s*\([^)\n]{0,80}\))?|hide original(?:\s*\([^)\n]{0,80}\))?|"
     r"xem bản gốc(?:\s*\([^)\n]{0,80}\))?|ẩn bản gốc(?:\s*\([^)\n]{0,80}\))?|"
-    r"edited(?:\s*[·•]\s*\d+\s*[smhdwy])?|đã chỉnh sửa(?:\s*[·•]\s*\d+\s*[smhdwy])?"
+    r"edited(?:\s*[·•]\s*\d+\s*[smhdwy])?|đã chỉnh sửa(?:\s*[·•]\s*\d+\s*[smhdwy])?|"
+    r"\d+\s*[smhdwy]\s*[·•]\s*(?:edited|đã chỉnh sửa)?"
     r")$",
     re.IGNORECASE,
 )
