@@ -111,7 +111,7 @@ def group_of(command: str) -> str:
     low = text.lower()
     if low.startswith(("select ", "insert ", "update ", "delete ", "create table")):
         return "sqlite"
-    if any(mark in text for mark in ("print(", "def ", "class ", "import ", "sqlite3.connect", "Path(", "subprocess.")):
+    if low.startswith(("print(", "def ", "class ", "import ", "from ", "sqlite3.connect", "path(")):
         return "python"
     return ""
 
@@ -157,7 +157,7 @@ def _read_group(path: Path) -> list[tuple[str, str, str]]:
         source = ""
         if "Nguồn:" in line:
             source = line.split("Nguồn:", 1)[1].strip()
-        if command:
+        if command and group_of(command):
             rows.append((command, gloss(command), source))
     return rows
 

@@ -451,12 +451,14 @@ class WorkerTests(unittest.TestCase):
             self.assertIn("Cách làm", (learn / "the" / "sqlite.md").read_text(encoding="utf-8"))
 
     def test_commands_are_grouped_for_vietnamese(self) -> None:
-        text = "Run `git status` then `python3 hello.py`.\nls -la\nSELECT id FROM t\n"
+        text = "Run `git status` then `python3 hello.py`.\nls -la\nSELECT id FROM t\nImports of the form `from __future__ import annotations`.\n"
         found = extract_commands(text)
         self.assertIn("git status", found)
         self.assertIn("python3 hello.py", found)
         self.assertIn("ls -la", found)
         self.assertIn("SELECT id FROM t", found)
+        self.assertIn("from __future__ import annotations", found)
+        self.assertFalse(any(item.lower().startswith("imports of") for item in found))
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "work"
             self.assertGreaterEqual(store_commands(root, text, "mau"), 4)
