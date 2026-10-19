@@ -55,7 +55,25 @@ def comments_from_payload(payload: Any, limit: int) -> list[PublicComment]:
     return found
 
 
-async def scan(url: str, *, limit: int = 50, timeout_ms: int = 25000, **_: object) -> EngineResult:
+def _browser_proxy(proxy: str) -> dict[str, str] | None:
+    if not proxy.strip():
+        return None
+    from fb_poller.workers.proxy_manager import parse_proxy_line
+
+    parsed = parse_proxy_line(proxy)
+    if parsed is None:
+        raise ValueError("proxy must be host:port, host:port:user:pass, or a URL")
+    return parsed.as_playwright()
+
+
+async def scan(
+    url: str,
+    *,
+    limit: int = 50,
+    timeout_ms: int = 60000,
+    proxy: str = "",
+    **_: object,
+) -> EngineResult:
     try:
         from playwright.async_api import async_playwright
     except ImportError as exc:
@@ -74,12 +92,19 @@ async def scan(url: str, *, limit: int = 50, timeout_ms: int = 25000, **_: objec
 
     try:
         async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True)
-            context = await browser.new_context(locale="en-US")
+            launch: dict[str, Any] = {"headless": True}
+            browser_proxy = _browser_proxy(proxy)
+            if browser_proxy:
+                launch["proxy"] = browser_proxy
+            browser = await pw.chromium.launch(**launch)
+            context = await browser.new_context(
+                locale="en-US",
+                viewport={"width": 1366, "height": 900},
+            )
             page = await context.new_page()
             page.on("response", on_response)
             await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-            await page.wait_for_timeout(1500)
+            await page.wait_for_timeout(4000)
             await context.close()
             await browser.close()
     except Exception as exc:

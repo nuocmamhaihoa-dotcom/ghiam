@@ -92,12 +92,31 @@ def _author(node: dict[str, Any]) -> str | None:
     return None
 
 
-async def scan(url: str, *, limit: int = 25, timeout: float = 20.0, **_: object) -> EngineResult:
+def _httpx_proxy(proxy: str) -> str | None:
+    if not proxy.strip():
+        return None
+    from fb_poller.workers.proxy_manager import parse_proxy_line
+
+    parsed = parse_proxy_line(proxy)
+    if parsed is None:
+        raise ValueError("proxy must be host:port, host:port:user:pass, or a URL")
+    return parsed.as_httpx()
+
+
+async def scan(
+    url: str,
+    *,
+    limit: int = 25,
+    timeout: float = 20.0,
+    proxy: str = "",
+    **_: object,
+) -> EngineResult:
     try:
         async with httpx.AsyncClient(
             timeout=timeout,
             follow_redirects=True,
             trust_env=False,
+            proxy=_httpx_proxy(proxy),
             headers={"User-Agent": _UA, "Accept-Language": "en-US,en;q=0.9"},
         ) as client:
             resp = await client.get(url)

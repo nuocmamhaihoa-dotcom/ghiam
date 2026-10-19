@@ -85,22 +85,22 @@ Each engine runs alone. `scan-independent` still starts a fresh client per engin
 
 ```bash
 fb-poller engines
-fb-poller scan guest-ssr --url "https://www.facebook.com/PAGE/posts/ID"
+fb-poller scan guest-ssr --url "https://www.facebook.com/PAGE/posts/ID" --proxy "host:port:user:pass"
 fb-poller scan graph-ppca --url "https://www.facebook.com/PAGE/posts/ID"   # GRAPH_ACCESS_TOKEN
 fb-poller scan apify --url "https://www.facebook.com/PAGE/posts/ID"        # APIFY_TOKEN
 fb-poller scan managed-api --url "https://www.facebook.com/PAGE/posts/ID"  # MANAGED_API_KEY
 fb-poller scan octoparse --file export.csv
-fb-poller scan-independent --url "https://www.facebook.com/PAGE/posts/ID" --file export.csv
+fb-poller scan-independent --url "https://www.facebook.com/PAGE/posts/ID" --proxy "host:port:user:pass" --file export.csv
 ```
 
 | Rank | Engine | Needs |
 |---|---|---|
-| 2 | `guest-graphql` | Chromium, public URL |
+| 2 | `guest-graphql` | Chromium, public URL, `--proxy` or `SCAN_PROXY` when the machine IP is blocked |
 | 3 | `managed-api` | `MANAGED_API_KEY`, optional `MANAGED_COMMENTS_URL` |
 | 4 | `apify` | `APIFY_TOKEN` |
-| 5 | `pa1-newest` | Chromium, public URL |
+| 5 | `pa1-newest` | Chromium, public URL, `--proxy` or `SCAN_PROXY` when the machine IP is blocked |
 | 6 | `graph-ppca` | `GRAPH_ACCESS_TOKEN` |
-| 7 | `guest-ssr` | public URL |
+| 7 | `guest-ssr` | public URL, optional `--proxy` |
 | 8 | `octoparse` | CSV/JSON exported from Octoparse |
 
 ## Probe guest-visible

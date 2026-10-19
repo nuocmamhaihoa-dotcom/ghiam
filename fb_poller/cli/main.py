@@ -312,19 +312,62 @@ def engines_cmd() -> None:
     console.print(table)
 
 
+def _scan_proxy(explicit: str) -> str:
+    import os
+
+    return explicit.strip() or os.environ.get("SCAN_PROXY", "").strip()
+
+
+def _print_scan_table(results: list[object]) -> None:
+    table = Table(title="Independent scan")
+    table.add_column("rank")
+    table.add_column("engine")
+    table.add_column("ok")
+    table.add_column("comments")
+    table.add_column("error")
+    for result in results:
+        table.add_row(
+            str(result.rank),  # type: ignore[attr-defined]
+            result.engine,  # type: ignore[attr-defined]
+            "yes" if result.ok else "no",  # type: ignore[attr-defined]
+            str(len(result.comments)),  # type: ignore[attr-defined]
+            result.error or "",  # type: ignore[attr-defined]
+        )
+    console.print(table)
+    for result in results:
+        comments = result.comments  # type: ignore[attr-defined]
+        if not comments:
+            continue
+        console.print(f"\n[bold]{result.engine}[/bold]")  # type: ignore[attr-defined]
+        for comment in comments[:5]:
+            author = comment.author_name or "?"
+            console.print(f"- {author}: {comment.text[:160]}")
+
+
 @app.command("scan")
 def scan_cmd(
     engine: str = typer.Argument(..., help="2–8 or engine name from `fb-poller engines`"),
     url: str = typer.Option("", "--url", help="Public post URL"),
     file: str = typer.Option("", "--file", help="Octoparse CSV/JSON export"),
     limit: int = typer.Option(25, help="Max comments for this engine"),
+    proxy: str = typer.Option(
+        "",
+        "--proxy",
+        help="Guest egress for ranks 2, 5, 7. host:port:user:pass or a URL. Defaults to SCAN_PROXY.",
+    ),
 ) -> None:
     """Run exactly one engine. It does not call the others."""
     from fb_poller.engines.registry import scan_one
 
     async def _run() -> None:
-        result = await scan_one(engine, url, limit=limit, export_path=file)
-        console.print(result.as_dict())
+        result = await scan_one(
+            engine,
+            url,
+            limit=limit,
+            export_path=file,
+            proxy=_scan_proxy(proxy),
+        )
+        _print_scan_table([result])
 
     asyncio.run(_run())
 
@@ -334,27 +377,23 @@ def scan_independent_cmd(
     url: str = typer.Option(..., "--url", help="Public post URL"),
     file: str = typer.Option("", "--file", help="Optional Octoparse export for rank 8"),
     limit: int = typer.Option(20, help="Max comments per engine"),
+    proxy: str = typer.Option(
+        "",
+        "--proxy",
+        help="Guest egress for ranks 2, 5, 7. host:port:user:pass or a URL. Defaults to SCAN_PROXY.",
+    ),
 ) -> None:
     """Run ranks 2–8 one after another. Each engine uses its own client."""
     from fb_poller.engines.registry import scan_each_independent
 
     async def _run() -> None:
-        results = await scan_each_independent(url, limit=limit, export_path=file)
-        table = Table(title="Independent scan")
-        table.add_column("rank")
-        table.add_column("engine")
-        table.add_column("ok")
-        table.add_column("comments")
-        table.add_column("error")
-        for result in results:
-            table.add_row(
-                str(result.rank),
-                result.engine,
-                "yes" if result.ok else "no",
-                str(len(result.comments)),
-                result.error or "",
-            )
-        console.print(table)
+        results = await scan_each_independent(
+            url,
+            limit=limit,
+            export_path=file,
+            proxy=_scan_proxy(proxy),
+        )
+        _print_scan_table(results)
 
     asyncio.run(_run())
 
