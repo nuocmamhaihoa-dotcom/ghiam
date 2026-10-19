@@ -31,6 +31,7 @@
     button:disabled { opacity: 0.55; cursor: default; }
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.55rem; }
     .stat { background: #f7f9fb; border-radius: 10px; padding: 0.7rem 0.75rem; }
+    a.stat { display: block; color: inherit; text-decoration: none; }
     .stat b { display: block; font-size: 1.35rem; }
     .stat span { color: var(--muted); font-size: 0.92rem; }
     table { width: 100%; border-collapse: collapse; }
@@ -72,6 +73,14 @@
           <option value="saved">Đã lưu</option>
           <option value="review">Cần xem</option>
           <option value="unopened">Chưa mở hồ sơ</option>
+        </select>
+      </label>
+      <label class="quiet">Kiểm
+        <select id="resultChecked">
+          <option value="">Mọi dòng</option>
+          <option value="ok">Khớp</option>
+          <option value="diff">Lệch</option>
+          <option value="none">Chưa kiểm</option>
         </select>
       </label>
     </div>
@@ -204,7 +213,8 @@
       day_from: document.getElementById("dayFrom").value,
       day_to: document.getElementById("dayTo").value,
       reader: document.getElementById("reader").value,
-      bucket: document.getElementById("resultBucket").value
+      bucket: document.getElementById("resultBucket").value,
+      checked: document.getElementById("resultChecked").value
     };
   }
 
@@ -216,8 +226,42 @@
     if (chosen.day_to) parts.push("day_to=" + encodeURIComponent(chosen.day_to));
     if (chosen.reader) parts.push("reader=" + encodeURIComponent(chosen.reader));
     if (chosen.bucket) parts.push("bucket=" + encodeURIComponent(chosen.bucket));
+    if (chosen.checked) parts.push("checked=" + encodeURIComponent(chosen.checked));
     if (extra) parts.push(extra);
     return parts.join("&");
+  }
+
+  function applyAddress() {
+    var params = new URLSearchParams(window.location.search);
+    var span = params.get("span") || "";
+    if (span === "today") {
+      var today = vnToday();
+      document.getElementById("dayFrom").value = today;
+      document.getElementById("dayTo").value = today;
+    } else if (span === "all") {
+      document.getElementById("dayFrom").value = "";
+      document.getElementById("dayTo").value = "";
+    }
+    var bucket = params.get("bucket") || "";
+    if (bucket === "saved" || bucket === "review" || bucket === "unopened") {
+      document.getElementById("resultBucket").value = bucket;
+    }
+    var checked = params.get("checked") || "";
+    if (checked === "ok" || checked === "diff" || checked === "none") {
+      document.getElementById("resultChecked").value = checked;
+    }
+    var reader = params.get("reader") || "";
+    if (reader) {
+      var select = document.getElementById("reader");
+      var option = document.createElement("option");
+      option.value = reader;
+      option.textContent = reader;
+      select.appendChild(option);
+      select.value = reader;
+    }
+    var q = params.get("q") || "";
+    if (q) document.getElementById("query").value = q;
+    markSpan();
   }
 
   function countHead() {
@@ -367,6 +411,7 @@
   document.getElementById("dayTo").addEventListener("change", reload);
   document.getElementById("reader").addEventListener("change", reload);
   document.getElementById("resultBucket").addEventListener("change", reload);
+  document.getElementById("resultChecked").addEventListener("change", reload);
   document.getElementById("spanToday").addEventListener("click", function () {
     var today = vnToday();
     document.getElementById("dayFrom").value = today;
@@ -422,6 +467,7 @@
     input.value = "";
     await reload();
   });
+  applyAddress();
   reload();
 </script>
 </body>
