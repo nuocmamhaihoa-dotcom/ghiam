@@ -9,9 +9,11 @@ import unittest
 from pathlib import Path
 
 from control_plane.upload_parts import (
+    LOCK_STALE_SECONDS,
     PARTIAL_TTL_SECONDS,
     TIGHT_PARTIAL_SECONDS,
     UploadRejected,
+    _hold,
     lookup_part,
     reclaim_stale_partials,
     sweep_parts,
@@ -187,3 +189,26 @@ class UploadPartTests(unittest.TestCase):
         assert detail is not None
         self.assertIn("Ổ đĩa", detail)
         self.assertNotIn("parsing the body", detail)
+
+    def test_a_held_lock_keeps_its_part_while_a_poll_sweeps(self) -> None:
+        upload_id = "b8" * 16
+        part = self._partial(upload_id, b"abc", LOCK_STALE_SECONDS + 30)
+        meta = part.with_name(f"{upload_id}.json")
+        lock = part.with_name(f"{upload_id}.lock")
+        with _hold(lock, interval=0.05, keep=(part, meta)):
+            time.sleep(0.2)
+            sweep_parts(self.root)
+            reclaim_stale_partials(self.root)
+            self.assertTrue(lock.is_dir())
+            self.assertEqual(part.read_bytes(), b"abc")
+        self.assertFalse(lock.exists())
+
+    def test_a_lock_left_by_a_dead_writer_is_removed(self) -> None:
+        folder = self.root / "partial"
+        folder.mkdir()
+        lock = folder / f"{'c9' * 16}.lock"
+        lock.mkdir()
+        old = time.time() - LOCK_STALE_SECONDS - 5
+        os.utime(lock, (old, old))
+        sweep_parts(self.root)
+        self.assertFalse(lock.exists())

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -139,7 +140,17 @@ def sweep_parts(root: Path, now: float | None = None) -> None:
 
 
 @contextmanager
-def _hold(lock_dir: Path) -> Iterator[None]:
+def _hold(
+    lock_dir: Path,
+    *,
+    interval: float = 30,
+    keep: tuple[Path, ...] = (),
+) -> Iterator[None]:
+    """Giữ khóa thư mục trong lúc ghi mảnh.
+
+    Ghi và fsync một mảnh lớn có thể lâu hơn hạn khóa. Nhịp làm mới mtime của
+    khóa và file đang ghi, để lần dọn của yêu cầu khác không gỡ chúng giữa chừng.
+    """
     deadline = time.time() + 30
     while True:
         try:
@@ -155,9 +166,24 @@ def _hold(lock_dir: Path) -> Iterator[None]:
             if time.time() > deadline:
                 raise UploadRejected(503, "Máy chủ đang ghi mảnh này. Thử lại.") from None
             time.sleep(0.02)
+    stop = threading.Event()
+
+    def beat() -> None:
+        while not stop.wait(interval):
+            for path in (lock_dir, *keep):
+                try:
+                    if path.exists():
+                        os.utime(path, None)
+                except OSError:
+                    continue
+
+    thread = threading.Thread(target=beat, daemon=True)
+    thread.start()
     try:
         yield
     finally:
+        stop.set()
+        thread.join(timeout=1)
         try:
             lock_dir.rmdir()
         except OSError:
@@ -248,7 +274,7 @@ def write_part(
         raise UploadRejected(400, "Mảnh vượt quá độ dài file.")
     sweep_parts(root)
     part, meta_path, lock, done = _paths(root, upload_id)
-    with _hold(lock):
+    with _hold(lock, keep=(part, meta_path)):
         saved = _read_json(done)
         if saved is not None:
             saved["complete"] = True

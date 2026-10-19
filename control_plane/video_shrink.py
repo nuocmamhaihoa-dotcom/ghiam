@@ -15,6 +15,8 @@ from pathlib import Path
 FPS = 2
 DEFAULT_CRF = 12
 DEFAULT_PRESET = "veryfast"
+# Hạn ffmpeg. File tạm up-shrink- phải sống lâu hơn hạn này, không dùng hạn 30 phút của file tải dở.
+SHRINK_TIMEOUT_SECONDS = 3600
 
 
 def shrink_command(src: Path, dst: Path, crf: int = DEFAULT_CRF, preset: str = DEFAULT_PRESET, threads: int = 2) -> list[str]:
@@ -56,7 +58,7 @@ def shrink(
     preset: str = DEFAULT_PRESET,
     threads: int = 2,
     nice: int = 15,
-    timeout: float = 3600,
+    timeout: float = SHRINK_TIMEOUT_SECONDS,
 ) -> bool:
     """Ghi bản thu nhỏ ra dst. Hỏng thì xoá dst và trả về False, file gốc không bị đụng."""
     if shutil.which("ffmpeg") is None:
