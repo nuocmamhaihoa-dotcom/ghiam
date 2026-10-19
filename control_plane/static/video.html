@@ -616,9 +616,11 @@
     markStatsReady("statsAll");
     markStatsReady("statsLive");
     statsReady = true;
-    document.getElementById("statScope").textContent = statSpan === "all"
+    var scope = statSpan === "all"
       ? "Bấm tiêu đề hoặc một ô số để mở báo cáo đó. Hàng đợi và bảng kết quả đang theo toàn bộ thời gian."
       : "Bấm tiêu đề hoặc một ô số để mở báo cáo đó. Hàng đợi và bảng kết quả đang theo hôm nay.";
+    if (body.stale) scope = "Số liệu vừa lưu. " + scope;
+    document.getElementById("statScope").textContent = scope;
     var queueScope = document.getElementById("queueScope");
     if (queueScope) {
       queueScope.textContent = statSpan === "all"

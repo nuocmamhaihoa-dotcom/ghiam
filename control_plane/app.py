@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,7 +48,7 @@ from control_plane.recordings import (
 )
 from control_plane.settings import ROOT, settings
 from control_plane.video_api import BROKEN_CHUNK_DETAIL, prepare_upload_room, router as video_router
-from control_plane.video_store import init_db as init_video_db
+from control_plane.video_store import guard_disk, init_db as init_video_db
 from control_plane.video_store import merge_close_results
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -164,12 +165,36 @@ def _remember_hub(kind: str, summary: str, detail: str | None = None, actor: str
         return
 
 
+_GUARD_LOCK = threading.Lock()
+_GUARD_STARTED = False
+
+
+def _guard_disk_loop() -> None:
+    """Dọn đĩa đều, kể cả khi không có điện thoại nào đang tải."""
+    while True:
+        try:
+            guard_disk(settings.video_db_path, settings.video_dir, percent=settings.video_disk_percent)
+        except Exception as exc:
+            print(f"Chưa dọn được đĩa: {exc.__class__.__name__}", flush=True)
+        time.sleep(30)
+
+
+def _start_disk_guard() -> None:
+    global _GUARD_STARTED
+    with _GUARD_LOCK:
+        if _GUARD_STARTED:
+            return
+        _GUARD_STARTED = True
+        threading.Thread(target=_guard_disk_loop, name="guard-disk", daemon=True).start()
+
+
 @app.on_event("startup")
 async def _startup() -> None:
     settings.ensure_dirs()
     db.init_db(settings.db_path)
     init_video_db(settings.video_db_path)
     merge_close_results(settings.video_db_path)
+    _start_disk_guard()
     # Import proxy list into DB immediately; live/die loop runs in background
     from control_plane.proxy_check import load_proxy_lines, start_background_checker
 

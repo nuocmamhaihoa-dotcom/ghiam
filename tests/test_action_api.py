@@ -7,6 +7,7 @@ import io
 import os
 import re
 import shutil
+import sqlite3
 import tempfile
 import threading
 import time
@@ -249,6 +250,20 @@ class ActionApiTests(unittest.TestCase):
         mine = next(item for item in phones["items"] if item["device"] == "Máy 1")
         self.assertGreaterEqual(mine["uploaded"], 1)
         self.assertEqual(mine["errors"], 0)
+
+    def test_stats_stay_visible_when_the_disk_cannot_be_written(self) -> None:
+        first = self.client.get("/v1/videos/stats", headers=self.headers)
+        self.assertEqual(first.status_code, 200, first.text)
+        today = first.json()["today"]["totals"]
+
+        def boom(*_args, **_kwargs):
+            raise sqlite3.OperationalError("disk I/O error")
+
+        with patch("control_plane.video_api.stats", side_effect=boom):
+            again = self.client.get("/v1/videos/stats", headers=self.headers)
+        self.assertEqual(again.status_code, 200, again.text)
+        self.assertTrue(again.json().get("stale"))
+        self.assertEqual(again.json()["today"]["totals"], today)
 
     def _chunk(
         self,
@@ -556,6 +571,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn('href="/ket-qua?span=all"', page.text)
         self.assertIn('id="hang-doi"', page.text)
         self.assertIn("Chưa tải được số liệu", page.text)
+        self.assertIn("Số liệu vừa lưu", page.text)
         self.assertIn("Tải bản sao lưu về PC", page.text)
         sample = self.client.get("/sample-people")
         self.assertEqual(sample.status_code, 200)

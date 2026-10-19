@@ -19,12 +19,14 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from doc_video.text import handle_matches_name, lookalike_handles
 
 from control_plane.phone_vn import carrier, normalize_vn, phone_columns
 from control_plane.screen_table import Review, Table, joined_name, pair_close_names
+from control_plane.upload_parts import TIGHT_PARTIAL_SECONDS, reclaim_stale_partials
 
 BUCKET_OK = 1
 BUCKET_REVIEW = 2
@@ -102,7 +104,21 @@ def feeder_count() -> int:
 
 
 @contextmanager
-def connect(db_path: Path) -> Iterator[sqlite3.Connection]:
+def connect(db_path: Path, *, readonly: bool = False) -> Iterator[sqlite3.Connection]:
+    if readonly:
+        # Đĩa đầy thì mở bình thường cũng thất bại: PRAGMA journal_mode phải ghi.
+        # Bản immutable chỉ đọc file chính, không tạo sổ phụ, nên trang thống kê vẫn mở được.
+        resolved = Path(db_path).resolve()
+        uri = "file:" + quote(str(resolved), safe="/") + "?immutable=1"
+        conn = sqlite3.connect(uri, uri=True, timeout=30)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA query_only=ON;")
+        conn.execute("PRAGMA temp_store=MEMORY;")
+        try:
+            yield conn
+        finally:
+            conn.close()
+        return
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), timeout=30, isolation_level=None)
     conn.row_factory = sqlite3.Row
@@ -486,6 +502,119 @@ def prune_old_videos(
     return len(removed)
 
 
+def free_finished_for_floor(db_path: Path, video_dir: Path, need_bytes: int) -> int:
+    """Xóa video đã đọc xong, cũ nhất trước, cho đến khi đủ số byte cần giải phóng.
+
+    Dùng khi phần trống xuống sàn, kể cả khi xóa hết video đã xong vẫn không đưa đĩa
+    xuống dưới mức phần trăm. Video đang chờ, đang đọc và đang tải không bị đụng.
+    Đường dẫn trỏ tới file đã mất được gỡ và không tính là đã giải phóng đĩa.
+    """
+    if need_bytes <= 0:
+        return 0
+    root = Path(video_dir).resolve()
+    removed: list[tuple[str, int]] = []
+    try:
+        with connect(db_path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT id, path FROM videos
+                    WHERE status IN ('done', 'error') AND path != ''
+                    ORDER BY created_at ASC, id ASC
+                    """
+                ).fetchall()
+                freed = 0
+                for row in rows:
+                    path = Path(str(row["path"]))
+                    if not _path_inside(path, root):
+                        continue
+                    try:
+                        size = path.stat().st_size
+                    except OSError:
+                        size = 0
+                    if size < 0:
+                        size = 0
+                    if size > 0 and freed >= need_bytes:
+                        continue
+                    cur = conn.execute(
+                        """
+                        UPDATE videos SET path = ''
+                        WHERE id = ? AND status IN ('done', 'error') AND path = ?
+                        """,
+                        (int(row["id"]), str(path)),
+                    )
+                    if cur.rowcount != 1:
+                        continue
+                    if size > 0:
+                        removed.append((str(path), size))
+                        freed += size
+                conn.execute("COMMIT")
+            except sqlite3.OperationalError:
+                conn.execute("ROLLBACK")
+                return 0
+    except sqlite3.OperationalError:
+        return 0
+    released = 0
+    for path, size in removed:
+        try:
+            Path(path).unlink(missing_ok=True)
+        except OSError:
+            continue
+        released += size
+    return released
+
+
+def guard_disk(
+    db_path: Path | None,
+    video_dir: Path,
+    *,
+    percent: int = 80,
+    floor: int = _FREE_FLOOR,
+    measure=None,
+    now: float | None = None,
+) -> int:
+    """Giữ phần trống trên đĩa cao hơn sàn.
+
+    Bản tải dở nằm im 30 phút bị xóa trước. Vẫn chặt thì xóa bản im hơn 2 phút.
+    Phần trống vẫn không quá sàn thì xóa video đã đọc xong, cũ nhất trước, cho đến khi đủ chỗ.
+    Video đang chờ và đang đọc không bị xóa. Mức phần trăm vẫn do prune_old_videos quyết định.
+    """
+    root = Path(video_dir)
+    read_disk = measure or (lambda: shutil.disk_usage(root))
+    try:
+        usage = read_disk()
+    except OSError:
+        return 0
+    used = int(usage.used)
+    free = int(usage.free)
+    total = int(usage.total)
+    limit = disk_limit_bytes(total, percent)
+    if free > floor and used <= limit:
+        return 0
+    freed = 0
+    try:
+        freed += int(reclaim_stale_partials(root, keep_seconds=TIGHT_PARTIAL_SECONDS, now=now))
+    except OSError:
+        pass
+    free += freed
+    used = max(0, used - freed)
+    if free <= floor or used > limit:
+        try:
+            quiet = int(reclaim_stale_partials(root, keep_seconds=120, now=now))
+        except OSError:
+            quiet = 0
+        freed += quiet
+        free += quiet
+        used = max(0, used - quiet)
+    if db_path is not None and free <= floor:
+        try:
+            freed += free_finished_for_floor(db_path, root, floor - free + 1)
+        except sqlite3.OperationalError:
+            return freed
+    return freed
+
+
 def begin_upload(
     db_path: Path, *, name: str, size_bytes: int, sha256: str, device: str = ""
 ) -> dict[str, object]:
@@ -562,8 +691,8 @@ def commit_upload(db_path: Path, video_id: int, path: str) -> None:
         )
 
 
-def get_meta(db_path: Path, key: str, default: str = "") -> str:
-    with connect(db_path) as conn:
+def get_meta(db_path: Path, key: str, default: str = "", *, readonly: bool = False) -> str:
+    with connect(db_path, readonly=readonly) as conn:
         row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
     return str(row["value"]) if row is not None else default
 
@@ -650,8 +779,8 @@ def shrink_failed(db_path: Path, video_id: int) -> None:
         conn.execute("UPDATE videos SET shrunk = 2 WHERE id = ? AND shrunk = 0", (video_id,))
 
 
-def shrink_totals(db_path: Path) -> dict[str, int]:
-    with connect(db_path) as conn:
+def shrink_totals(db_path: Path, *, readonly: bool = False) -> dict[str, int]:
+    with connect(db_path, readonly=readonly) as conn:
         row = conn.execute(
             """
             SELECT COUNT(*) AS n, COALESCE(SUM(upload_bytes - size_bytes), 0) AS saved
@@ -747,10 +876,10 @@ def list_videos(
     return items
 
 
-def stats(db_path: Path) -> dict[str, int]:
+def stats(db_path: Path, *, readonly: bool = False) -> dict[str, int]:
     counts = {"queued": 0, "running": 0, "done": 0, "error": 0, "uploading": 0, "pc": 0}
     buckets = {"saved": 0, "review": 0, "unopened": 0}
-    with connect(db_path) as conn:
+    with connect(db_path, readonly=readonly) as conn:
         for row in conn.execute("SELECT status, COUNT(*) AS n FROM videos GROUP BY status"):
             if row["status"] in counts:
                 counts[row["status"]] = int(row["n"])
@@ -800,7 +929,13 @@ def _phone_item(device: str) -> dict[str, object]:
     return item
 
 
-def device_day(db_path: Path, now: datetime | None = None, span: str = "today") -> dict[str, object]:
+def device_day(
+    db_path: Path,
+    now: datetime | None = None,
+    span: str = "today",
+    *,
+    readonly: bool = False,
+) -> dict[str, object]:
     """Số video và số dòng kết quả, theo từng điện thoại và theo tổng.
 
     span=today đếm theo ngày giờ Việt Nam. Đã tải là file đã vào hàng chờ trong ngày.
@@ -879,7 +1014,7 @@ def device_day(db_path: Path, now: datetime | None = None, span: str = "today") 
             start,
             end,
         )
-    with connect(db_path) as conn:
+    with connect(db_path, readonly=readonly) as conn:
         rows = conn.execute(
             f"""
             SELECT device,
