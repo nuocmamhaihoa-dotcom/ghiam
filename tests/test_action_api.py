@@ -32,6 +32,7 @@ from control_plane.pc_connector import bundle_sha256  # noqa: E402
 from control_plane.pc_fleet import update_pc  # noqa: E402
 from control_plane.pc_reader import connector_template_sha256  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
+from control_plane import video_api as stats_api  # noqa: E402
 from control_plane.video_api import PC_TICKET, PC_TICKET_SECONDS, ticket_ok  # noqa: E402
 from control_plane.video_store import begin_upload, commit_upload, connect, init_db, stats as video_stats  # noqa: E402
 
@@ -40,8 +41,16 @@ def tearDownModule() -> None:
     shutil.rmtree(_TMP, ignore_errors=True)
 
 
+def _forget_stats_snapshot() -> None:
+    """Số liệu nhớ trong tiến trình không được lẫn giữa hai test."""
+    stats_api._LAST_REPORT = None
+    stats_api._stats_at = 0.0
+    stats_api._stats_db = ""
+
+
 class ActionApiTests(unittest.TestCase):
     def setUp(self) -> None:
+        _forget_stats_snapshot()
         self._client_cm = TestClient(app)
         self.client = self._client_cm.__enter__()
         self.headers = {"Authorization": "Bearer test-token"}
@@ -259,11 +268,28 @@ class ActionApiTests(unittest.TestCase):
         def boom(*_args, **_kwargs):
             raise sqlite3.OperationalError("disk I/O error")
 
-        with patch("control_plane.video_api.stats", side_effect=boom):
+        with (
+            patch("control_plane.video_api.stats", side_effect=boom),
+            patch("control_plane.video_api._stats_at", 0.0),
+        ):
             again = self.client.get("/v1/videos/stats", headers=self.headers)
         self.assertEqual(again.status_code, 200, again.text)
         self.assertTrue(again.json().get("stale"))
         self.assertEqual(again.json()["today"]["totals"], today)
+
+        calls = {"n": 0}
+
+        def counting(*args, **kwargs):
+            calls["n"] += 1
+            raise AssertionError("bản vừa đọc phải trả ngay, không đọc lại đĩa")
+
+        stats_api._stats_at = time.monotonic()
+        with patch("control_plane.video_api.stats", side_effect=counting):
+            cached = self.client.get("/v1/videos/stats", headers=self.headers)
+        self.assertEqual(cached.status_code, 200, cached.text)
+        self.assertEqual(calls["n"], 0)
+        self.assertEqual(cached.json()["today"]["totals"], today)
+        self.assertFalse(cached.json().get("stale"))
 
     def _chunk(
         self,
@@ -572,6 +598,8 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn('id="hang-doi"', page.text)
         self.assertIn("Chưa tải được số liệu", page.text)
         self.assertIn("Số liệu vừa lưu", page.text)
+        self.assertIn("ghiam-stats", page.text)
+        self.assertIn("resultsBusy", page.text)
         self.assertIn("Tải bản sao lưu về PC", page.text)
         sample = self.client.get("/sample-people")
         self.assertEqual(sample.status_code, 200)
@@ -725,6 +753,7 @@ class ActionApiTests(unittest.TestCase):
 
 class PcReaderApiTests(unittest.TestCase):
     def setUp(self) -> None:
+        _forget_stats_snapshot()
         self._client_cm = TestClient(app)
         self.client = self._client_cm.__enter__()
         self.headers = {"Authorization": "Bearer test-token"}
