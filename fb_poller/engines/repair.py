@@ -13,7 +13,7 @@ import re
 from collections.abc import Iterable
 from urllib.parse import unquote
 
-from fb_poller.engines.guard import comment_id, placeholder_text, redact_text, scalar_text
+from fb_poller.engines.guard import comment_id, nested_text, placeholder_text, redact_text, scalar_text
 from fb_poller.engines.types import EngineResult, PublicComment
 
 # Codes the healer can emit. Each one corresponds to a defect already seen
@@ -309,11 +309,12 @@ def _loose_comments(payload: object, depth: int = 0) -> list[PublicComment]:
         return found
     if not isinstance(payload, dict):
         return []
-    text = payload.get("text") or payload.get("message") or payload.get("comment") or payload.get("body")
-    if isinstance(text, dict):
-        text = text.get("text") or text.get("message")
+    rendered = None
+    for key in ("text", "message", "comment", "body"):
+        rendered = nested_text(payload.get(key))
+        if rendered:
+            break
     own: list[PublicComment] = []
-    rendered = scalar_text(text)
     if rendered and not placeholder_text(rendered):
         author = (
             payload.get("author")

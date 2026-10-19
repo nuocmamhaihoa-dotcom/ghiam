@@ -7,7 +7,7 @@ import io
 import json
 from pathlib import Path
 
-from fb_poller.engines.guard import invalid_limit, public_error, scalar_text
+from fb_poller.engines.guard import invalid_limit, nested_text, public_error
 from fb_poller.engines.types import EngineResult, PublicComment
 
 RANK = 8
@@ -112,7 +112,7 @@ def _from_csv(raw: str, limit: int) -> list[PublicComment]:
 def _pick(row: dict[str, object], keys: tuple[str, ...]) -> str | None:
     lowered = {str(k).strip().lower(): v for k, v in row.items()}
     for key in keys:
-        text = scalar_text(lowered.get(key))
+        text = nested_text(lowered.get(key))
         if text:
             return text
     return None

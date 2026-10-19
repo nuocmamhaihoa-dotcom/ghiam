@@ -7,7 +7,14 @@ import re
 
 import httpx
 
-from fb_poller.engines.guard import comment_id, invalid_limit, public_error, redact_text, scalar_text
+from fb_poller.engines.guard import (
+    comment_id,
+    invalid_limit,
+    nested_text,
+    public_error,
+    redact_text,
+    scalar_text,
+)
 from fb_poller.engines.types import EngineResult, PublicComment
 
 _VERSION = re.compile(r"^v\d+\.\d+$")
@@ -58,10 +65,7 @@ def comments_from_graph_payload(data: object, limit: int) -> tuple[list[PublicCo
     for row in rows:
         if not isinstance(row, dict):
             continue
-        raw_message = row.get("message")
-        if isinstance(raw_message, dict):
-            raw_message = raw_message.get("text") or raw_message.get("message")
-        text = scalar_text(raw_message)
+        text = nested_text(row.get("message"))
         if not text:
             continue
         author = row.get("from")

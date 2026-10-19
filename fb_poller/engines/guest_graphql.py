@@ -9,6 +9,7 @@ from fb_poller.engines.guard import (
     comment_id,
     invalid_limit,
     is_comment_typename,
+    nested_text,
     objects_with_comments,
     placeholder_text,
     public_error,
@@ -21,21 +22,8 @@ NAME = "guest-graphql"
 
 
 def _node_text(node: dict[str, Any]) -> str | None:
-    """Comment text, including a message object instead of a plain string."""
-    body = node.get("body")
-    if isinstance(body, dict):
-        candidate = body.get("text") or body.get("message")
-    else:
-        candidate = body
-    if not isinstance(candidate, str) or not candidate.strip():
-        message = node.get("message")
-        if isinstance(message, dict):
-            candidate = message.get("text") or message.get("message")
-        else:
-            candidate = message
-    if isinstance(candidate, str) and candidate.strip():
-        return candidate
-    return None
+    """Comment text, including a message object nested under body."""
+    return nested_text(node.get("body")) or nested_text(node.get("message"))
 
 
 def comments_from_payload(payload: Any, limit: int) -> list[PublicComment]:

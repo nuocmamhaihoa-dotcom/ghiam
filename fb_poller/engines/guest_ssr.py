@@ -11,6 +11,7 @@ from fb_poller.engines.guard import (
     comment_id,
     invalid_limit,
     is_comment_typename,
+    nested_text,
     objects_with_comments,
     placeholder_text,
     public_error,
@@ -81,21 +82,8 @@ def _walk(node: Any, found: list[PublicComment], seen: set[str], limit: int) -> 
 
 
 def _comment_text(node: dict[str, Any]) -> str | None:
-    body = node.get("body")
-    if isinstance(body, dict):
-        text = body.get("text") or body.get("message")
-    else:
-        text = body
-    if not isinstance(text, str) or not text.strip():
-        message = node.get("message")
-        if isinstance(message, dict):
-            text = message.get("text") or message.get("message")
-        else:
-            text = message
-    if not isinstance(text, str):
-        return None
-    text = text.strip()
-    if len(text) < 1 or len(text) > 8000:
+    text = nested_text(node.get("body")) or nested_text(node.get("message"))
+    if not text or len(text) > 8000:
         return None
     if not is_comment_typename(node.get("__typename")) or placeholder_text(text):
         return None

@@ -74,6 +74,31 @@ def scalar_text(value: object) -> str | None:
     return None
 
 
+def nested_text(value: object, depth: int = 0) -> str | None:
+    """Plain comment text, or the text inside a nested message or body object.
+
+    Call this on one known field (``text``, ``message``, ``body``). Do not pass
+    a whole comment row: a wrapper ``content`` key can be the post, not the comment.
+    """
+    if depth > 3:
+        return None
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, dict):
+        for key in ("text", "message", "comment", "body", "content"):
+            if key not in value:
+                continue
+            found = nested_text(value.get(key), depth + 1)
+            if found:
+                return found
+    return None
+
+
 def objects_with_comments(html: str, max_hits: int = 80) -> list[Any]:
     """Decode JSON objects that contain a comment typename, even late in a large script."""
     if max_hits < 1:

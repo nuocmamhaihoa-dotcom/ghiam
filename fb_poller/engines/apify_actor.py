@@ -8,7 +8,14 @@ from typing import Any
 
 import httpx
 
-from fb_poller.engines.guard import comment_id, invalid_limit, public_error, redact_text, scalar_text
+from fb_poller.engines.guard import (
+    comment_id,
+    invalid_limit,
+    nested_text,
+    public_error,
+    redact_text,
+    scalar_text,
+)
 from fb_poller.engines.types import EngineResult, PublicComment
 
 _ACTOR_ID = re.compile(r"^[A-Za-z0-9_.~\-]{1,200}$")
@@ -117,7 +124,11 @@ def _from_items(payload: Any, limit: int) -> list[PublicComment]:
 def _one(row: Any) -> PublicComment | None:
     if not isinstance(row, dict):
         return None
-    text = scalar_text(row.get("text") or row.get("message") or row.get("comment"))
+    text = None
+    for key in ("text", "message", "comment"):
+        text = nested_text(row.get(key))
+        if text:
+            break
     if not text:
         return None
     author = row.get("author") or row.get("profileName") or row.get("userName") or row.get("name")

@@ -479,6 +479,49 @@ class EngineTests(unittest.TestCase):
         self.assertEqual([item.text for item in again_clean], [item.text for item in twice])
         self.assertEqual(second_codes, [])
 
+    def test_nested_message_object_is_kept(self) -> None:
+        managed = _comments_from_json({"body": {"message": "xin"}, "author": {"name": "An"}}, 5)
+        self.assertEqual(managed[0].text, "xin")
+        self.assertEqual(managed[0].author_name, "An")
+        hidden = _from_items(
+            [{"text": {"ranges": []}, "message": "real", "profileName": "Ha"}],
+            5,
+        )
+        self.assertEqual(hidden[0].text, "real")
+        nested = _from_items([{"text": {"message": "actor"}, "profileName": "Ha"}], 5)
+        self.assertEqual(nested[0].text, "actor")
+        deep, error = comments_from_graph_payload(
+            {"message": {"text": {"message": "deep"}}, "from": {"name": "An"}},
+            5,
+        )
+        self.assertIsNone(error)
+        self.assertEqual(deep[0].text, "deep")
+        graphql = comments_from_payload(
+            {"__typename": "Comment", "body": {"message": "xin"}, "author": {"name": "An"}},
+            5,
+        )
+        self.assertEqual(graphql[0].text, "xin")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "nested.json"
+            path.write_text(
+                json.dumps([{"body": {"message": "file"}, "name": "Lan"}]),
+                encoding="utf-8",
+            )
+            found = comments_from_export(path)
+        self.assertEqual(found[0].text, "file")
+        self.assertEqual(found[0].author_name, "Lan")
+        recovered = heal_result(
+            EngineResult(
+                "managed-api",
+                3,
+                False,
+                error='http_400: {"body":{"message":"xin"},"author":{"name":"An"}}',
+            )
+        )
+        self.assertTrue(recovered.ok)
+        self.assertEqual(recovered.comments[0].text, "xin")
+        self.assertEqual(recovered.comments[0].author_name, "An")
+
 
 if __name__ == "__main__":
     unittest.main()

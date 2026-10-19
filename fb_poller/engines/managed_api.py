@@ -8,7 +8,14 @@ from typing import Any
 
 import httpx
 
-from fb_poller.engines.guard import comment_id, invalid_limit, public_error, redact_text, scalar_text
+from fb_poller.engines.guard import (
+    comment_id,
+    invalid_limit,
+    nested_text,
+    public_error,
+    redact_text,
+    scalar_text,
+)
 from fb_poller.engines.types import EngineResult, PublicComment
 
 RANK = 3
@@ -114,10 +121,7 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
     for row in rows:
         if not isinstance(row, dict):
             continue
-        text = row.get("text") or row.get("message") or row.get("comment") or row.get("body")
-        if isinstance(text, dict):
-            text = text.get("text")
-        text = scalar_text(text)
+        text = _field_text(row)
         if not text or len(text) > 8000:
             continue
         author = row.get("author") or row.get("author_name") or row.get("name") or row.get("user_name")
@@ -142,11 +146,17 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
     return out
 
 
+def _field_text(row: dict[str, Any]) -> str | None:
+    """Read one text field. A dict in ``text`` must not hide a later string ``message``."""
+    for key in ("text", "message", "comment", "body"):
+        found = nested_text(row.get(key))
+        if found:
+            return found
+    return None
+
+
 def _own_text(row: dict[str, Any]) -> bool:
-    text = row.get("text") or row.get("message") or row.get("comment") or row.get("body")
-    if isinstance(text, dict):
-        text = text.get("text")
-    return bool(scalar_text(text))
+    return bool(_field_text(row))
 
 
 def _rows(payload: Any, depth: int = 0) -> list[Any]:
