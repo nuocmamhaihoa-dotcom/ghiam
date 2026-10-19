@@ -161,7 +161,7 @@
 
   <section>
     <h2>Kết quả đã lưu</h2>
-    <p class="note">Hiện mọi dòng đã quét. Dòng mới nhất ở trên. Cột Đọc bởi ghi video nào do PC nào đọc, video nào do VPS đọc. Số chuẩn và nhà mạng tính lúc hiện, số đã lưu giữ nguyên.</p>
+    <p class="note">@id là dữ liệu chính. Mỗi @id chỉ hiện một lần, là lần quét đầu trong toàn bộ thời gian. Đã từng quét được thì không hiện lại, kể cả khi lọc ngày mới. Dòng chưa có @id vẫn hiện. Dòng mới nhất ở trên. Cột Đọc bởi ghi video nào do PC nào đọc, video nào do VPS đọc. Số chuẩn và nhà mạng tính lúc hiện, số đã lưu giữ nguyên.</p>
     <p class="note"><a href="/ket-qua">Mở bảng kết quả đọc được</a>. Bảng đó có bộ lọc thống kê theo hôm nay, toàn bộ thời gian, ngày quét, máy quét và loại dòng, rồi tải hoặc nạp file.</p>
     <input id="query" type="search" placeholder="Đầu số, tên (không cần dấu), hoặc @username" />
     <div class="row" style="margin-top:0.55rem">
@@ -921,10 +921,12 @@
   var resultsBusy = false;
   var resultsPending = false;
 
-  async function loadResults() {
+  async function loadResults(force) {
     if (resultsBusy) {
       resultsPending = true;
-      resultsAsked += 1;
+      // Nhịp 4 giây chỉ xếp một lượt sau. Đổi bộ lọc mới hủy lượt đang tải,
+      // kẻo danh sách dài bị tải lại từ đầu và không kịp hiện.
+      if (force) resultsAsked += 1;
       return;
     }
     resultsBusy = true;

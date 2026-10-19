@@ -37,6 +37,19 @@ READER_SQL = (
     "CASE WHEN TRIM(COALESCE(NULLIF(r.reader, ''), v.helper, '')) = '' "
     "THEN 'VPS' ELSE TRIM(COALESCE(NULLIF(r.reader, ''), v.helper, '')) END"
 )
+# @id chỉ hiện ở dòng quét đầu tiên trên toàn bộ thời gian. Dòng không có @id giữ nguyên.
+# So trên mọi dòng đã lưu, không thu theo ngày hay video đang lọc.
+# earlier.username != '' bắt chỉ mục một phần idx_results_username_id. Thiếu điều kiện đó,
+# SQLite 3.31 quét khóa chính theo id và trang kết quả không trả lời.
+FRESH_USERNAME_SQL = """(
+  substr(r.username, 1, 1) != '@'
+  OR NOT EXISTS (
+    SELECT 1 FROM results earlier
+    WHERE earlier.username = r.username
+      AND earlier.username != ''
+      AND earlier.id < r.id
+  )
+)"""
 IMPORT_ROW_LIMIT = 100_000
 # PC giữ video ở trạng thái pc, không phải running. Bộ đọc trên máy chủ chỉ nhận queued
 # và chỉ thu hồi running, nên khởi động lại bộ đọc không cướp video PC đang đọc.
@@ -209,6 +222,9 @@ def init_db(db_path: Path) -> None:
         _ensure_reader_column(conn)
         _ensure_fleet_columns(conn)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_results_created ON results(created_at)")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_results_username_id ON results(username, id) WHERE username != ''"
+        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS api_keys (
@@ -2289,6 +2305,38 @@ def _result_where(filters: ResultFilter) -> tuple[str, list[object]]:
     return ("WHERE " + " AND ".join(parts), params) if parts else ("", [])
 
 
+def _visible_where(filters: ResultFilter) -> tuple[str, list[object]]:
+    """Bộ lọc người dùng, và chỉ giữ lần quét đầu của mỗi @id."""
+    where, params = _result_where(filters)
+    if where:
+        return f"{where} AND {FRESH_USERNAME_SQL}", params
+    return f"WHERE {FRESH_USERNAME_SQL}", params
+
+
+_VISIBLE_TOTALS: dict[tuple[object, ...], tuple[float, int]] = {}
+_VISIBLE_TOTAL_TTL = 3.0
+
+
+def _visible_total(conn: sqlite3.Connection, db_path: Path, where: str, params: list[object]) -> int:
+    """Đếm dòng đang hiện. Dòng mới làm đổi id lớn nhất thì đếm lại, không thì dùng số vừa đếm."""
+    stamp = int(conn.execute("SELECT COALESCE(MAX(id), 0) AS n FROM results").fetchone()["n"])
+    key = (str(Path(db_path).resolve()), where, tuple(params), stamp)
+    now = time.monotonic()
+    cached = _VISIBLE_TOTALS.get(key)
+    if cached is not None and now - cached[0] < _VISIBLE_TOTAL_TTL:
+        return cached[1]
+    total = int(
+        conn.execute(
+            f"SELECT COUNT(*) AS n FROM results r LEFT JOIN videos v ON v.id = r.video_id {where}",
+            params,
+        ).fetchone()["n"]
+    )
+    if len(_VISIBLE_TOTALS) > 32:
+        _VISIBLE_TOTALS.clear()
+    _VISIBLE_TOTALS[key] = (now, total)
+    return total
+
+
 def _with_fold(conn: sqlite3.Connection) -> sqlite3.Connection:
     conn.create_function("fold", 1, fold_text, deterministic=True)
     return conn
@@ -2308,9 +2356,13 @@ def result_page(
     Nếu cả hai cùng có thì after thắng. before trong kết quả là id dòng cuối
     khi trang đầy và đang đi xuống, để lấy trang kế. 0 nghĩa là hết trang.
     query là đầu số, đầu @username, hoặc một phần tên (không cần gõ dấu).
+
+    @id là dữ liệu chính. Mỗi @id chỉ hiện ở lần quét đầu trên toàn bộ thời gian.
+    Lần quét sau của cùng @id vẫn được lưu nhưng không hiện, kể cả khi đang lọc ngày mới.
+    Dòng chưa có @id vẫn hiện từng dòng.
     """
     chosen = filters if filters is not None else ResultFilter(query=query)
-    where, params = _result_where(chosen)
+    where, params = _visible_where(chosen)
     page_size = max(1, min(int(limit), 1000))
     cursor_sql = ""
     cursor_params: list[object] = []
@@ -2322,14 +2374,7 @@ def result_page(
         cursor_params = [int(before)]
     with connect(db_path) as conn:
         _with_fold(conn)
-        if where:
-            total = int(
-                conn.execute(
-                    f"SELECT COUNT(*) AS n FROM results r LEFT JOIN videos v ON v.id = r.video_id {where}", params
-                ).fetchone()["n"]
-            )
-        else:
-            total = int(conn.execute("SELECT COALESCE(SUM(n), 0) AS n FROM result_counts").fetchone()["n"])
+        total = _visible_total(conn, db_path, where, params)
         rows = conn.execute(
             f"""
             SELECT r.id, r.phone, r.name, r.username, r.bucket, r.reason, r.video_id, r.created_at,
@@ -2363,8 +2408,11 @@ def result_page(
 
 
 def iter_results(db_path: Path, filters: ResultFilter) -> Iterator[dict[str, object]]:
-    """Mọi dòng khớp bộ lọc, cũ trước mới sau, để xuất file. Đọc trong một lần chụp nhất quán."""
-    where, params = _result_where(filters)
+    """Mọi dòng đang hiện, cũ trước mới sau, để xuất file. Đọc trong một lần chụp nhất quán.
+
+    Cùng quy tắc với trang kết quả: mỗi @id chỉ ra một lần, là lần quét đầu.
+    """
+    where, params = _visible_where(filters)
     conn = _with_fold(sqlite3.connect(str(db_path), timeout=30, isolation_level=None))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA query_only=ON;")
@@ -2508,8 +2556,9 @@ def result_summary(db_path: Path, filters: ResultFilter) -> dict[str, object]:
 
     Danh sách máy là mọi máy từng đọc ra dòng, không thu hẹp theo bộ lọc,
     để đổi máy khi đang lọc ngày vẫn còn tên để chọn.
+    Số đếm theo dòng đang hiện: mỗi @id chỉ tính lần quét đầu.
     """
-    where, params = _result_where(filters)
+    where, params = _visible_where(filters)
     totals = _blank_counts()
     readers_map: dict[str, dict[str, int]] = defaultdict(_blank_counts)
     days_map: dict[str, dict[str, int]] = defaultdict(_blank_counts)

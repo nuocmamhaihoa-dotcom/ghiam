@@ -13,6 +13,7 @@ from unittest.mock import patch
 from datetime import datetime, timezone
 from pathlib import Path
 
+from control_plane.results_out import saved_rows_after
 from control_plane.screen_table import Review, Row, Table, Unopened
 from control_plane.video_store import (
     abort_upload,
@@ -52,7 +53,10 @@ from control_plane.video_store import (
     record_pc_result,
     requeue,
     requeue_running,
+    ResultFilter,
+    iter_results,
     result_page,
+    result_summary,
     retry,
     search_results,
     start_full_check,
@@ -286,6 +290,68 @@ class VideoStoreTests(unittest.TestCase):
         self.assertEqual([item["phone"] for item in prefix["items"]], ["0900000003", "0900000002"])
         self.assertEqual(prefix["total"], 3)
         self.assertEqual([item["phone"] for item in search_results(self.db, limit=10)], ["0900000003", "0900000002", "0900000001"])
+
+    def test_a_username_already_scanned_is_not_listed_again(self) -> None:
+        first = self._add("a.mp4", "a")
+        finish(
+            self.db,
+            first,
+            Table(rows=[Row("0900000001", "Mot", "@mot"), Row("0900000002", "Hai", "@hai")]),
+        )
+        second = self._add("b.mp4", "b")
+        finish(
+            self.db,
+            second,
+            Table(
+                rows=[Row("0900000003", "Mot lai", "@mot"), Row("0900000004", "Ba", "@ba")],
+                unopened=[Unopened("0900000005", "Chua")],
+            ),
+        )
+        with connect(self.db) as conn:
+            stored = int(conn.execute("SELECT COUNT(*) AS n FROM results").fetchone()["n"])
+            conn.execute(
+                """
+                UPDATE results SET created_at = '2020-01-01T03:00:00+00:00'
+                WHERE phone IN ('0900000001', '0900000002')
+                """
+            )
+            conn.execute(
+                """
+                UPDATE results SET created_at = '2026-10-19T03:00:00+00:00'
+                WHERE phone IN ('0900000003', '0900000004', '0900000005')
+                """
+            )
+        self.assertEqual(stored, 5)
+        self.assertEqual((stats(self.db)["saved"], stats(self.db)["unopened"]), (4, 1))
+        page = result_page(self.db, limit=2)
+        self.assertEqual([item["phone"] for item in page["items"]], ["0900000005", "0900000004"])
+        self.assertEqual(page["total"], 4)
+        older = result_page(self.db, limit=2, before=int(page["before"]))
+        self.assertEqual([item["phone"] for item in older["items"]], ["0900000002", "0900000001"])
+        self.assertEqual(older["total"], 4)
+        tail = result_page(self.db, limit=2, before=int(older["before"]))
+        self.assertEqual(tail["items"], [])
+        self.assertEqual(tail["before"], 0)
+        newest = int(page["items"][0]["id"])
+        self.assertEqual(result_page(self.db, limit=10, after=newest)["items"], [])
+        self.assertEqual([item["phone"] for item in search_results(self.db, "@mot")], ["0900000001"])
+        self.assertEqual(search_results(self.db, "0900000003"), [])
+        today = result_page(
+            self.db,
+            limit=10,
+            filters=ResultFilter(day_from="2026-10-19", day_to="2026-10-19"),
+        )
+        self.assertEqual([item["phone"] for item in today["items"]], ["0900000005", "0900000004"])
+        self.assertEqual(today["total"], 2)
+        self.assertEqual(
+            [item["phone"] for item in iter_results(self.db, ResultFilter())],
+            ["0900000001", "0900000002", "0900000004", "0900000005"],
+        )
+        self.assertEqual(result_summary(self.db, ResultFilter())["total"], 4)
+        self.assertEqual(
+            [item["phone"] for item in saved_rows_after(self.db, 0, 10)],
+            ["0900000001", "0900000002", "0900000004"],
+        )
 
     def test_finished_video_counts_phones_and_complete_rows(self) -> None:
         video_id = self._add("a.mp4", "a")
@@ -868,7 +934,7 @@ class VideoStoreTests(unittest.TestCase):
         path = Path(self._tmp.name) / f"{video_id}.mp4"
         path.write_bytes(payload)
         claim(self.db, 7)
-        finish(self.db, video_id, Table(rows=[Row(phone, name, "@id")]))
+        finish(self.db, video_id, Table(rows=[Row(phone, name, "@" + sha)]))
         with connect(self.db) as conn:
             conn.execute("UPDATE videos SET created_at = ? WHERE id = ?", (created_at, video_id))
         return video_id, path
