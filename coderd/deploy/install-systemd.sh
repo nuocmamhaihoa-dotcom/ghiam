@@ -16,7 +16,11 @@ if [[ "$(cd "$PREFIX" && pwd)" != "$ROOT" ]]; then
 fi
 
 if [[ ! -x "$PREFIX/.venv/bin/python" ]]; then
-  python3 -m venv "$PREFIX/.venv"
+  if command -v python3.12 >/dev/null 2>&1; then
+    python3.12 -m venv "$PREFIX/.venv"
+  else
+    python3 -m venv "$PREFIX/.venv"
+  fi
 fi
 "$PREFIX/.venv/bin/pip" install -q -r "$PREFIX/requirements.txt"
 
