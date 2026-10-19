@@ -183,6 +183,9 @@ def _field_source(row: dict[str, Any]) -> tuple[str | None, dict[str, Any] | Non
         "content",
         "message_text",
         "plain_body",
+        "plaintext",
+        "comment_message",
+        "body_html",
     ):
         value = row.get(key)
         found = nested_text(value)
@@ -209,7 +212,7 @@ def _rows(payload: Any, depth: int = 0) -> list[Any]:
     if not isinstance(payload, dict):
         return []
     nested: list[Any] = []
-    for key in ("comments", "replies", "comment_list", "data", "results", "items"):
+    for key in ("comments", "replies", "comment_list", "commentList", "data", "results", "result", "items"):
         value = payload.get(key)
         linked = connection_rows(value)
         if linked:

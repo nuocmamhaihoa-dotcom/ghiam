@@ -1592,6 +1592,56 @@ class EngineTests(unittest.TestCase):
         assert named is not None
         self.assertEqual(named.created_time, "2024-03-02")
 
+    def test_removed_comment_chrome_and_posted_time(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nThis comment was removed\nContent unavailable\nWas this helpful?\n"
+                "Seen by Mai\ncách đây một giờ\nHide post\nBan from group\nShare to story\n"
+                "Send in Messenger\nUnfollow Mai\nSnooze Mai for 30 days\nXem 1 phản hồi khác"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nThis comment was removed from my notes"], 5)
+        self.assertEqual(sentence[0].text, "This comment was removed from my notes")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\nThis comment was removed\nWas this helpful?", author_name="Lan")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertEqual(person_name({"first_name": "Lan", "last_name": "Nguyen"}), "Lan Nguyen")
+        html = (
+            '<script>{"__typename":"Comment","id":"1","body":{"text":"xin"},'
+            '"author":{"name":"An"},"posted_time":"2024-03-02"}</script>'
+        )
+        self.assertEqual(comments_from_html(html)[0].created_time, "2024-03-02")
+        created = comments_from_payload(
+            {
+                "__typename": "Comment",
+                "id": "2",
+                "plaintext": "xin",
+                "author": {"name": "An"},
+                "comment_create_time": 1710000001,
+            },
+            5,
+        )
+        self.assertEqual(created[0].text, "xin")
+        self.assertEqual(created[0].created_time, "1710000001")
+        listed = _from_items({"commentList": [{"text": "xin", "userName": "Lan", "id": "7"}]}, 5)
+        self.assertEqual(listed[0].comment_id, "7")
+        wrapped = _comments_from_json(
+            {"result": {"comments": [{"message": "xin", "from": {"name": "Lan"}, "id": "6"}]}},
+            5,
+        )
+        self.assertEqual(wrapped[0].comment_id, "6")
+        html_body = _one({"body_html": "<p>xin<br>chao</p>", "author": {"name": "Lan"}, "id": "4"})
+        self.assertIsNotNone(html_body)
+        assert html_body is not None
+        healed_html, _html_codes = heal_comments([html_body])
+        self.assertEqual(healed_html[0].text, "xin\nchao")
+
 
 if __name__ == "__main__":
     unittest.main()

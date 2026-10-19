@@ -92,8 +92,14 @@ def _from_items(payload: Any, limit: int) -> list[PublicComment]:
         rows = payload
     elif isinstance(payload, dict):
         nested_rows: list[Any] | None = None
-        for key in ("items", "data", "comments", "comment_list", "results"):
-            linked = connection_rows(payload.get(key))
+        for key in ("items", "data", "comments", "comment_list", "commentList", "results", "result"):
+            value = payload.get(key)
+            linked = connection_rows(value)
+            if not linked and isinstance(value, dict):
+                for inner_key in ("comments", "comment_list", "commentList", "items", "data", "results"):
+                    linked = connection_rows(value.get(inner_key))
+                    if linked:
+                        break
             if linked:
                 nested_rows = linked
                 break
@@ -176,6 +182,9 @@ def _one(row: Any) -> PublicComment | None:
         "content",
         "message_text",
         "plain_body",
+        "plaintext",
+        "comment_message",
+        "body_html",
     ):
         value = row.get(key)
         text = nested_text(value)

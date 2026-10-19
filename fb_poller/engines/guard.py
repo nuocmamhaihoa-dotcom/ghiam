@@ -161,6 +161,11 @@ def person_name(value: object, depth: int = 0) -> str | None:
             found = person_name(child, depth + 1) or nested_text(child)
             if found:
                 return found
+        given = person_name(lowered.get("firstname"), depth + 1)
+        family = person_name(lowered.get("lastname"), depth + 1)
+        parts = [part for part in (given, family) if part]
+        if parts:
+            return " ".join(parts)
     return None
 
 
@@ -253,6 +258,9 @@ def nested_text(value: object, depth: int = 0) -> str | None:
             "body_text",
             "message_text",
             "plain_body",
+            "plaintext",
+            "comment_message",
+            "body_html",
         ):
             if key not in value:
                 continue
@@ -277,6 +285,8 @@ def timestamp_of(row: object) -> str | None:
         "posted_at",
         "published_at",
         "date_created",
+        "posted_time",
+        "comment_create_time",
         "datetime",
         "date",
         "time",

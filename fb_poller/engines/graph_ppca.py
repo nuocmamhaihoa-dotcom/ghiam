@@ -97,6 +97,9 @@ def _append_rows(
             or nested_text(row.get("bodyText"))
             or nested_text(row.get("message_text"))
             or nested_text(row.get("plain_body"))
+            or nested_text(row.get("plaintext"))
+            or nested_text(row.get("comment_message"))
+            or nested_text(row.get("body_html"))
         )
         from_inner = False
         if text is None and inner is not None:

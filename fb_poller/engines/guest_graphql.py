@@ -33,6 +33,9 @@ def _node_text(node: dict[str, Any]) -> str | None:
         or nested_text(node.get("bodyText"))
         or nested_text(node.get("message_text"))
         or nested_text(node.get("plain_body"))
+        or nested_text(node.get("plaintext"))
+        or nested_text(node.get("comment_message"))
+        or nested_text(node.get("body_html"))
     )
 
 
