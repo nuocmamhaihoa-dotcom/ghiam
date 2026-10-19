@@ -97,6 +97,11 @@ _AUTHOR_KEYS = (
     "profile_title",
     "user_title",
     "author_label",
+    "sender_name",
+    "entity_name",
+    "commenter_title",
+    "profile_label",
+    "actor_title",
     "tác giả",
     "tac gia",
 )
@@ -136,6 +141,10 @@ _TIME_KEYS = (
     "posted_at_ms",
     "time_created",
     "edited_time",
+    "publish_at",
+    "comment_date",
+    "message_time",
+    "created_ts",
 )
 
 

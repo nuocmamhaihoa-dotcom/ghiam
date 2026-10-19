@@ -244,6 +244,11 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "profile_title",
             "user_title",
             "author_label",
+            "sender_name",
+            "entity_name",
+            "commenter_title",
+            "profile_label",
+            "actor_title",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -403,6 +408,10 @@ def timestamp_of(row: object) -> str | None:
         "posted_at_ms",
         "time_created",
         "edited_time",
+        "publish_at",
+        "comment_date",
+        "message_time",
+        "created_ts",
         "datetime",
         "date",
         "time",

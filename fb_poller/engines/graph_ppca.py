@@ -130,6 +130,9 @@ def _append_rows(
                         "writer_name",
                         "display_title",
                         "profile_title",
+                        "sender_name",
+                        "entity_name",
+                        "commenter_title",
                     ),
                 )
             )
@@ -153,6 +156,8 @@ def _append_rows(
                             "owner_full_name",
                             "writer_name",
                             "display_title",
+                            "sender_name",
+                            "entity_name",
                         ),
                     )
                 )
