@@ -126,7 +126,7 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
         if not text or len(text) > 8000:
             continue
         author_name = first_person_name(
-            row, ("author", "author_name", "from", "user_name", "name")
+            row, ("author", "author_name", "from", "profileName", "user_name", "name")
         )
         cid = first_comment_id(row)
         key = cid or f"{author_name}|{text}"

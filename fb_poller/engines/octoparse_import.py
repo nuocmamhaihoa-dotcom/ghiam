@@ -14,7 +14,16 @@ RANK = 8
 NAME = "octoparse"
 
 _TEXT_KEYS = ("text", "comment", "content", "message", "body", "nội dung", "binh luan", "bình luận")
-_AUTHOR_KEYS = ("author", "author_name", "name", "user", "tác giả", "tac gia")
+_AUTHOR_KEYS = (
+    "author",
+    "author_name",
+    "profileName",
+    "profile",
+    "name",
+    "user",
+    "tác giả",
+    "tac gia",
+)
 _TIME_KEYS = ("time", "date", "created_time", "created", "thời gian", "thoi gian")
 
 

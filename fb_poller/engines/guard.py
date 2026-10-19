@@ -56,8 +56,14 @@ def placeholder_text(text: str) -> bool:
 def comment_id(value: object) -> str | None:
     if isinstance(value, bool) or value is None:
         return None
-    if isinstance(value, (str, int)):
-        text = str(value).strip()
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if value.is_integer():
+            return str(int(value))
+        return None
+    if isinstance(value, str):
+        text = value.strip()
         return text or None
     return None
 

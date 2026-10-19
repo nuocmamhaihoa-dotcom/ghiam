@@ -649,6 +649,38 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(graph[0].author_name, "An")
         self.assertEqual(graph[0].created_time, "2020-01-01T00:00:00+0000")
 
+    def test_follow_button_soft_hyphen_and_dot_timestamp(self) -> None:
+        block = "\n".join(["Lan", "hello", "Follow", "an hour ago", "Like"])
+        self.assertEqual(comments_from_articles([block], 5)[0].text, "hello")
+        sentence = "\n".join(["Lan", "Please follow the instructions", "Like", "Reply"])
+        self.assertEqual(comments_from_articles([sentence], 5)[0].text, "Please follow the instructions")
+        soft, soft_codes = heal_comments([PublicComment(text="hel\u00adlo\u200e")])
+        self.assertEqual(soft[0].text, "hello")
+        self.assertIn("normalize_text", soft_codes)
+        dotted, dotted_codes = heal_comments([PublicComment(text="xin · 2h")])
+        self.assertEqual(dotted[0].text, "xin")
+        self.assertIn("strip_glued_chrome", dotted_codes)
+        about, about_codes = heal_comments([PublicComment(text="hello\nabout an hour ago")])
+        self.assertEqual(about[0].text, "hello")
+        self.assertIn("strip_chrome_lines", about_codes)
+        managed = _comments_from_json(
+            {"text": "xin", "id": 9.0, "profileName": "An"},
+            5,
+        )
+        self.assertEqual(managed[0].comment_id, "9")
+        self.assertEqual(managed[0].author_name, "An")
+        triple, triple_codes = heal_comments([PublicComment(text="Tom &amp;amp;amp; Jerry")])
+        self.assertEqual(triple[0].text, "Tom & Jerry")
+        self.assertIn("unescape_text", triple_codes)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.json"
+            path.write_text(
+                json.dumps([{"message": "file", "profile": {"name": "Lan"}}]),
+                encoding="utf-8",
+            )
+            found = comments_from_export(path)
+        self.assertEqual(found[0].author_name, "Lan")
+
 
 if __name__ == "__main__":
     unittest.main()

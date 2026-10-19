@@ -48,11 +48,12 @@ REPAIR_CODES = (
     "clear_null_time",
 )
 
-_ZERO_WIDTH = re.compile(r"[\u200b\u200c\u200d\u2060\ufeff]")
+_ZERO_WIDTH = re.compile(r"[\u200b\u200c\u200d\u200e\u200f\u2060\ufeff\u00ad]")
 _CONTROLS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _CHROME_LINE = re.compile(
     r"^(?:"
-    r"like|comment|share|reply|thích|bình luận|chia sẻ|trả lời|"
+    r"like|comment|share|reply|follow|message|"
+    r"thích|bình luận|chia sẻ|trả lời|theo dõi|nhắn tin|"
     r"most relevant|newest|most recent|mới nhất|phù hợp nhất|"
     r"see more|see less|xem thêm|"
     r"write a comment\.\.\.|write a comment…|write a comment|"
@@ -60,7 +61,7 @@ _CHROME_LINE = re.compile(
     r"all comments|tất cả bình luận|"
     r"top fan|rising fan|tác giả|author|"
     r"just now|vừa xong|yesterday|hôm qua|"
-    r"[·•]?\s*\d+\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
+    r"[·•]?\s*(?:about\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
     r"\d+\s*(?:s|m|h|d|w|y)|"
     r"\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*[kmb]|"
     r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
@@ -80,7 +81,8 @@ _PERCENT = re.compile(r"%[0-9A-Fa-f]{2}")
 _BREAK = re.compile(r"(?i)<br\s*/?>")
 _TAG = re.compile(r"</?[A-Za-z][^>\n]*>")
 _GLUED_CHROME = re.compile(
-    r"(?:\s+(?:"
+    r"(?:"
+    r"\s+(?:"
     r"see translation|hide translation|xem bản dịch|ẩn bản dịch|"
     r"see original(?:\s*\([^)\n]{0,80}\))?|hide original(?:\s*\([^)\n]{0,80}\))?|"
     r"xem bản gốc(?:\s*\([^)\n]{0,80}\))?|ẩn bản gốc(?:\s*\([^)\n]{0,80}\))?|"
@@ -89,13 +91,23 @@ _GLUED_CHROME = re.compile(
     r"top fan|rising fan|"
     r"just now|vừa xong|"
     r"edited|đã chỉnh sửa"
-    r"))+$",
+    r")"
+    r"|"
+    r"\s*[·•]\s*(?:"
+    r"just now|vừa xong|"
+    r"(?:about\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
+    r"\d+\s*(?:s|m|h|d|w|y)|"
+    r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?"
+    r")"
+    r")+$",
     re.IGNORECASE,
 )
 _CHROME_AUTHOR = {
     "like",
     "reply",
     "share",
+    "follow",
+    "message",
     "top fan",
     "rising fan",
     "author",
@@ -103,6 +115,8 @@ _CHROME_AUTHOR = {
     "thích",
     "trả lời",
     "chia sẻ",
+    "theo dõi",
+    "nhắn tin",
 }
 
 
@@ -203,7 +217,12 @@ def _clean_text(text: str) -> tuple[str | None, list[str]]:
         if decoded != cleaned:
             codes.append("decode_percent")
             cleaned = decoded
-    decoded = html.unescape(html.unescape(cleaned))
+    decoded = cleaned
+    for _ in range(5):
+        again = html.unescape(decoded)
+        if again == decoded:
+            break
+        decoded = again
     unescaped = decoded.replace("\u00a0", " ")
     if decoded != cleaned:
         codes.append("unescape_text")
