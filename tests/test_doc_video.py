@@ -845,7 +845,66 @@ class BrokenFrameTests(unittest.TestCase):
             junk.write_bytes(b"not-a-jpeg")
             kept = [path.name for path, _at in drop_repeats([(good, 0.0), (truncated, 0.5), (junk, 1.0)])]
             self.assertEqual(kept, ["f_000001.jpg", "f_000002.jpg"])
+            self.assertTrue(junk.is_file())
             self.assertEqual(_scan_file(str(junk), 1.0).kind, "other")
+
+    def test_a_dropped_duplicate_is_deleted_only_when_asked(self) -> None:
+        from doc_video.video import drop_repeats
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            first = root / "a.jpg"
+            second = root / "b.jpg"
+            third = root / "c.jpg"
+            Image.new("RGB", (80, 160), (10, 10, 10)).save(first, format="JPEG", quality=90)
+            second.write_bytes(first.read_bytes())
+            Image.new("RGB", (80, 160), (240, 240, 240)).save(third, format="JPEG", quality=90)
+            kept = [path.name for path, _at in drop_repeats([(first, 0.0), (second, 0.5), (third, 1.0)], unlink_dropped=True)]
+            self.assertEqual(kept, ["a.jpg", "c.jpg"])
+            self.assertTrue(first.is_file())
+            self.assertFalse(second.is_file())
+            self.assertTrue(third.is_file())
+
+
+class DiskRoomTests(unittest.TestCase):
+    def test_a_long_video_is_sliced_when_the_free_space_cannot_hold_it(self) -> None:
+        from doc_video.video import FRAME_BYTES, ROOM_FLOOR, disk_full, frame_budget, use_slices
+
+        budget = frame_budget(3600, 2.0)
+        self.assertEqual(budget, int(3600 * 2 * FRAME_BYTES) + 512 * 1024 * 1024)
+        self.assertFalse(use_slices(budget, budget + ROOM_FLOOR))
+        self.assertTrue(use_slices(budget, budget))
+        self.assertTrue(disk_full(OSError(28, "No space left on device")))
+        self.assertTrue(disk_full(RuntimeError("[Errno 28] No space left on device: '/opt/fb-poller/control_data/frames/docvideo-mid-x'")))
+        self.assertFalse(disk_full(RuntimeError("Không mở được video")))
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "không có ffmpeg")
+    def test_sliced_extract_keeps_a_frame(self) -> None:
+        from doc_video.video import _frames_for
+
+        with tempfile.TemporaryDirectory() as tmp:
+            video = Path(tmp) / "in.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=red:s=32x32:d=1:r=10",
+                    str(video),
+                ],
+                check=True,
+            )
+            folder = Path(tmp) / "frames"
+            folder.mkdir()
+            with patch("doc_video.video.use_slices", return_value=True):
+                frames = _frames_for(video, folder, 2.0, None)
+            self.assertGreaterEqual(len(frames), 1)
+            self.assertTrue(frames[0][0].is_file())
+            self.assertFalse(any(path.name.startswith("part-") for path in folder.iterdir()))
 
 
 ASSETS = Path("/home/ubuntu/.cursor/projects/workspace/assets")

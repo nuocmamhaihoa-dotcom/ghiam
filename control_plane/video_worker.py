@@ -20,6 +20,7 @@ from pathlib import Path
 
 from doc_video.frame import FrameRead
 from doc_video.pipeline import read_video
+from doc_video.video import disk_full
 
 from control_plane.results_out import webhook_loop
 from control_plane.screen_table import Review, Row, Table, Unopened
@@ -33,6 +34,7 @@ from control_plane.video_store import (
     drop_orphan_small,
     guard_disk,
     drop_stale_uploads,
+    defer_for_disk,
     fail,
     feeder_count,
     finish,
@@ -52,13 +54,19 @@ from control_plane.video_store import (
 
 
 def scan_paths(
-    paths: list[Path], submit=None, work_dir: Path | None = None, progress=None
+    paths: list[Path],
+    submit=None,
+    work_dir: Path | None = None,
+    progress=None,
+    make_room=None,
 ) -> tuple[Table, list[FrameRead]]:
     """Đọc bằng doc_video rồi đổi sang dạng bảng mà kho kết quả đang lưu."""
-    if progress is None:
-        result, frames = read_video(paths, submit=submit, work_dir=work_dir)
-    else:
-        result, frames = read_video(paths, submit=submit, work_dir=work_dir, progress=progress)
+    extra: dict[str, object] = {}
+    if progress is not None:
+        extra["progress"] = progress
+    if make_room is not None:
+        extra["make_room"] = make_room
+    result, frames = read_video(paths, submit=submit, work_dir=work_dir, **extra)
     table = Table(
         rows=[Row(row.phone, row.name, row.handle) for row in result.rows],
         review=[Review(item.phone, item.list_name, item.profile_name, item.handle, item.reason) for item in result.review],
@@ -96,6 +104,41 @@ def keep_newest_videos(db_path: Path) -> None:
 
 def heartbeat_path() -> Path:
     return settings.data_dir / "video-worker.heartbeat"
+
+
+# Chỗ trống cần có trước mỗi lần đọc, đủ cho video dài và thư mục khung giữa.
+FRAME_ROOM = 8 * 1024 * 1024 * 1024
+# Chung cho mọi luồng đọc: video vừa hết chỗ không bị nhận lại ngay.
+_disk_pause: dict[int, float] = {}
+_disk_pause_lock = threading.Lock()
+
+
+def _paused_for_disk(video_id: int) -> bool:
+    with _disk_pause_lock:
+        return _disk_pause.get(video_id, 0) > time.time()
+
+
+def _pause_for_disk(video_id: int) -> None:
+    with _disk_pause_lock:
+        _disk_pause[video_id] = time.time() + 60
+
+
+def _clear_disk_pause(video_id: int) -> None:
+    with _disk_pause_lock:
+        _disk_pause.pop(video_id, None)
+
+
+def _free_for_frames(db_path: Path, need: int) -> None:
+    """Xóa video đã đọc xong cho đến khi còn đủ chỗ cắt khung. Video đang chờ không bị xóa."""
+    try:
+        guard_disk(
+            db_path,
+            settings.video_dir,
+            percent=settings.video_disk_percent,
+            floor=max(int(need), 2 * 1024 * 1024 * 1024),
+        )
+    except Exception as exc:
+        print(f"Chưa giải phóng được chỗ cắt khung: {type(exc).__name__}", flush=True)
 
 
 # Công tắc trong video.db, mặc định tắt. Chỉ bật khi cổng chống lùi đạt với đúng mức nén này.
@@ -181,23 +224,41 @@ class ProgressWriter:
             pass
 
 
-def run_job(db_path: Path, job: dict[str, object], scan=scan_paths) -> None:
+def run_job(db_path: Path, job: dict[str, object], scan=scan_paths) -> str | None:
     video_id = int(job["id"])
     path = Path(str(job["path"]))
     lease = str(job.get("lease") or "") or None
     started = time.monotonic()
     try:
+        _free_for_frames(db_path, FRAME_ROOM)
         if scan is scan_paths or isinstance(scan, functools.partial) and scan.func is scan_paths:
-            table, frames = scan([path], progress=ProgressWriter(db_path, video_id, lease=lease or ""))
+            table, frames = scan(
+                [path],
+                progress=ProgressWriter(db_path, video_id, lease=lease or ""),
+                make_room=lambda need: _free_for_frames(db_path, need),
+            )
         else:
             table, frames = scan([path])
         if not finish(db_path, video_id, table, lease=lease):
             print(f"Video {video_id} không còn thuộc lượt đọc này. Không ghi đè kết quả.", flush=True)
-            return
+            return None
     except BrokenExecutor:
         requeue(db_path, video_id, lease)
         raise
     except Exception as exc:
+        if disk_full(exc):
+            _pause_for_disk(video_id)
+            _free_for_frames(db_path, FRAME_ROOM)
+            if defer_for_disk(db_path, video_id, lease):
+                print(f"Video {video_id} tạm nhường chỗ vì đĩa chặt. Sẽ đọc lại.", flush=True)
+                return "disk"
+            _clear_disk_pause(video_id)
+            print(
+                f"Video {video_id} hết chỗ ở lượt đọc cũ sau {time.monotonic() - started:.0f} giây, "
+                "video đã sang lượt khác nên không hoãn.",
+                flush=True,
+            )
+            return None
         message = str(exc) or "Không đọc được video."
         if fail(db_path, video_id, message, lease):
             print(f"Video {video_id} lỗi sau {time.monotonic() - started:.0f} giây: {message[:300]}", flush=True)
@@ -208,23 +269,29 @@ def run_job(db_path: Path, job: dict[str, object], scan=scan_paths) -> None:
                 flush=True,
             )
         keep_newest_videos(db_path)
-        return
+        return None
     keep_newest_videos(db_path)
     if job.get("check"):
         print(
             f"Video {video_id} kiểm xong trong {time.monotonic() - started:.0f} giây, {len(frames)} khung.",
             flush=True,
         )
-        return
+        return None
     print(
         f"Video {video_id} xong trong {time.monotonic() - started:.0f} giây, {len(frames)} khung: "
         f"{len(table.rows)} hàng đủ, {len(table.review)} cần xem, {len(table.unopened)} chưa mở hồ sơ.",
         flush=True,
     )
+    return None
 
 
 def _feed(db_path: Path, pool: ProcessPoolExecutor, work_dir: Path, stop: threading.Event, broken: threading.Event) -> None:
-    scan = functools.partial(scan_paths, submit=pool.submit, work_dir=work_dir)
+    scan = functools.partial(
+        scan_paths,
+        submit=pool.submit,
+        work_dir=work_dir,
+        make_room=lambda need: _free_for_frames(db_path, need),
+    )
     current: dict[str, object] | None = None
     try:
         while not stop.is_set():
@@ -233,13 +300,21 @@ def _feed(db_path: Path, pool: ProcessPoolExecutor, work_dir: Path, stop: thread
             if current is None:
                 stop.wait(1.0)
                 continue
+            video_id = int(current["id"])
+            if _paused_for_disk(video_id):
+                requeue(db_path, video_id, str(current.get("lease") or "") or None)
+                current = None
+                stop.wait(5)
+                continue
             try:
-                run_job(db_path, current, scan)
+                outcome = run_job(db_path, current, scan)
             except BrokenExecutor:
                 # run_job đã đưa video về hàng đợi.
                 current = None
                 broken.set()
                 return
+            if outcome == "disk":
+                _pause_for_disk(video_id)
             current = None
     finally:
         # Luồng nhận video chết giữa chừng mà tiến trình vẫn sống thì recover_dead không cứu được.

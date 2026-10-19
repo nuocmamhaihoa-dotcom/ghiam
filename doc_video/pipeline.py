@@ -21,9 +21,18 @@ def read_video(
     submit=None,
     work_dir: Path | None = None,
     progress=None,
+    make_room=None,
 ) -> tuple[Result, list[FrameRead]]:
-    """Đọc video hoặc ảnh và ghép bảng số, tên, id. progress chỉ để hiện tiến độ, không đổi kết quả."""
+    """Đọc video hoặc ảnh và ghép bảng số, tên, id. progress chỉ để hiện tiến độ, không đổi kết quả.
+
+    make_room được gọi khi đĩa chặt lúc tách khung. PC không truyền thì vẫn đọc như trước.
+    """
     frames = read_inputs(
-        paths, submit=submit, work_dir=work_dir, task_timeout=FRAME_TIMEOUT_SECONDS, progress=progress
+        paths,
+        submit=submit,
+        work_dir=work_dir,
+        task_timeout=FRAME_TIMEOUT_SECONDS,
+        progress=progress,
+        make_room=make_room,
     )
     return build(frames), frames

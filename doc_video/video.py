@@ -36,6 +36,14 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mkv", ".avi", ".webm"}
 # Hai hồ sơ khác nhau gần như cùng một màn hình trắng, nên chỉ bỏ khung gần như y hệt.
 SAME_FRAME = 0.6
+# Ước lượng chỗ đĩa cho một khung JPEG chất lượng cao. Khung thật thường nhỏ hơn,
+# nên video dài được cắt từng đoạn trước khi đĩa thực sự chạm đáy.
+FRAME_BYTES = 400 * 1024
+# Chừa chỗ này sau khi cắt khung, để hệ điều hành và khung giữa không làm đầy đĩa.
+ROOM_FLOOR = 2 * 1024 * 1024 * 1024
+SLICE_SECONDS = 20.0
+SLICE_OVERLAP = 1.0
+ONE_SHOT_CAP = 8 * 1024 * 1024 * 1024
 # Số khung đọc kỹ cho mỗi số điện thoại, và cho mỗi lần mở hồ sơ. Mỗi lần đọc
 # kỹ @id đã gồm sáu lần đọc ở nhiều cỡ rồi bỏ phiếu, nên hồ sơ cần ít khung hơn.
 READS_PER_PERSON = 3
@@ -176,11 +184,139 @@ def _unread(layout: Layout) -> FrameRead:
     return FrameRead(layout.kind, at=layout.at)
 
 
+def disk_full(exc: BaseException) -> bool:
+    """Đĩa không còn chỗ. Nhận cả Errno 28 và câu tiếng Anh mà Python hoặc ffmpeg in ra."""
+    if isinstance(exc, OSError) and exc.errno == 28:
+        return True
+    text = str(exc).lower()
+    return "no space left" in text or "errno 28" in text
+
+
+def _disk_text(text: str) -> bool:
+    lowered = text.lower()
+    return "no space left" in lowered or "errno 28" in lowered
+
+
+def _unlink_quiet(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _empty_dir(folder: Path) -> None:
+    if not folder.is_dir():
+        return
+    for child in folder.iterdir():
+        if child.is_dir():
+            shutil.rmtree(child, ignore_errors=True)
+        else:
+            _unlink_quiet(child)
+
+
+def _free_bytes(path: Path) -> int:
+    try:
+        return int(shutil.disk_usage(path).free)
+    except OSError:
+        return 0
+
+
+def probe_duration(video: Path) -> float | None:
+    """Độ dài video, giây. Không đọc được thì None để lần cắt cả video vẫn chạy."""
+    if shutil.which("ffprobe") is None:
+        return None
+    done = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(video),
+        ],
+        capture_output=True,
+        text=True,
+        errors="replace",
+    )
+    if done.returncode != 0:
+        return None
+    try:
+        value = float(done.stdout.strip())
+    except ValueError:
+        return None
+    if value <= 0 or not math.isfinite(value):
+        return None
+    return value
+
+
+def frame_budget(duration: float, fps: float) -> int:
+    """Chỗ đĩa ước lượng để cắt cả video một lần, cộng phần đệm."""
+    return int(duration * fps * FRAME_BYTES) + 512 * 1024 * 1024
+
+
+def use_slices(budget: int, free: int) -> bool:
+    """Cắt từng đoạn khi cả video không nhét vừa phần trống sau khi đã chừa sàn."""
+    return budget > free - ROOM_FLOOR
+
+
+def _ensure_room(path: Path, need: int, make_room: Callable[[int], None] | None) -> None:
+    """Nhờ bên ngoài xóa video đã đọc xong khi phần trống chưa đủ need byte."""
+    if make_room is None or _free_bytes(path) >= need:
+        return
+    try:
+        make_room(max(0, int(need)))
+    except Exception:
+        return
+
+
+def _open_work(
+    prefix: str,
+    work_dir: Path | None,
+    make_room: Callable[[int], None] | None,
+    need: int,
+) -> tempfile.TemporaryDirectory[str]:
+    """Tạo thư mục tạm. Hết chỗ thì giải phóng rồi thử một lần nữa."""
+    anchor = work_dir if work_dir is not None else Path.cwd()
+    if work_dir is not None:
+        try:
+            work_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            if not disk_full(exc):
+                raise
+            _ensure_room(anchor, need, make_room)
+            work_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        return tempfile.TemporaryDirectory(prefix=prefix, dir=work_dir)
+    except OSError as exc:
+        if not disk_full(exc):
+            raise
+        _ensure_room(anchor, need, make_room)
+        return tempfile.TemporaryDirectory(prefix=prefix, dir=work_dir)
+
+
+def _ffmpeg_frames(cmd: list[str], folder: Path, pattern: str) -> tuple[subprocess.CompletedProcess[str], list[Path]]:
+    try:
+        done = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+    except OSError as exc:
+        if disk_full(exc):
+            for path in folder.glob(pattern):
+                _unlink_quiet(path)
+        raise
+    files = sorted(folder.glob(pattern))
+    if _disk_text(done.stderr):
+        for path in files:
+            _unlink_quiet(path)
+        raise OSError(28, "No space left on device", str(folder))
+    return done, files
+
+
 def extract_frames(video: Path, folder: Path, fps: float) -> list[tuple[Path, float]]:
     if shutil.which("ffmpeg") is None:
         raise RuntimeError("Chưa cài ffmpeg. Ubuntu: sudo apt install ffmpeg")
     pattern = folder / "f_%06d.jpg"
-    done = subprocess.run(
+    done, files = _ffmpeg_frames(
         [
             "ffmpeg",
             "-hide_banner",
@@ -196,14 +332,47 @@ def extract_frames(video: Path, folder: Path, fps: float) -> list[tuple[Path, fl
             "2",
             str(pattern),
         ],
-        capture_output=True,
-        text=True,
-        errors="replace",
+        folder,
+        "f_*.jpg",
     )
-    files = sorted(folder.glob("f_*.jpg"))
     if done.returncode != 0 and not files:
         raise RuntimeError(f"Không mở được video {video.name}: {done.stderr.strip()[:300]}")
     return [(path, index / fps) for index, path in enumerate(files)]
+
+
+def _extract_span(
+    video: Path, folder: Path, fps: float, start: float, length: float
+) -> list[tuple[Path, float]]:
+    """Cắt một đoạn. -ss đứng trước -i; ffmpeg mặc định tua tới đúng thời điểm rồi mới ghi."""
+    if shutil.which("ffmpeg") is None:
+        raise RuntimeError("Chưa cài ffmpeg. Ubuntu: sudo apt install ffmpeg")
+    pattern = folder / "f_%06d.jpg"
+    done, files = _ffmpeg_frames(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-threads",
+            str(ffmpeg_thread_count()),
+            "-ss",
+            f"{start:.3f}",
+            "-i",
+            str(video),
+            "-t",
+            f"{length:.3f}",
+            "-vf",
+            f"fps={fps}",
+            "-q:v",
+            "2",
+            str(pattern),
+        ],
+        folder,
+        "f_*.jpg",
+    )
+    if done.returncode != 0 and not files:
+        raise RuntimeError(f"Không mở được video {video.name}: {done.stderr.strip()[:300]}")
+    return [(path, start + index / fps) for index, path in enumerate(files)]
 
 
 def _thumb(path: Path) -> np.ndarray | None:
@@ -217,17 +386,144 @@ def _thumb(path: Path) -> np.ndarray | None:
         return None
 
 
-def drop_repeats(frames: list[tuple[Path, float]]) -> list[tuple[Path, float]]:
+def _select_frames(
+    frames: list[tuple[Path, float]],
+    last: np.ndarray | None,
+    unlink_dropped: bool,
+) -> tuple[list[tuple[Path, float]], np.ndarray | None]:
     kept: list[tuple[Path, float]] = []
-    last: np.ndarray | None = None
     for path, at in frames:
         thumb = _thumb(path)
         if thumb is None:
+            if unlink_dropped:
+                _unlink_quiet(path)
             continue
         if last is not None and float(np.abs(thumb - last).mean()) < SAME_FRAME:
+            if unlink_dropped:
+                _unlink_quiet(path)
             continue
         kept.append((path, at))
         last = thumb
+    return kept, last
+
+
+def drop_repeats(
+    frames: list[tuple[Path, float]],
+    *,
+    unlink_dropped: bool = False,
+) -> list[tuple[Path, float]]:
+    kept, _last = _select_frames(frames, None, unlink_dropped)
+    return kept
+
+
+def _span_with_retry(
+    video: Path,
+    piece: Path,
+    fps: float,
+    start: float,
+    length: float,
+    anchor: Path,
+    need: int,
+    make_room: Callable[[int], None] | None,
+) -> list[tuple[Path, float]]:
+    try:
+        return _extract_span(video, piece, fps, start, length)
+    except OSError as exc:
+        if not disk_full(exc):
+            raise
+        _empty_dir(piece)
+        _ensure_room(anchor, need, make_room)
+        return _extract_span(video, piece, fps, start, length)
+
+
+def _replace_frame(
+    frame: Path,
+    dest: Path,
+    anchor: Path,
+    need: int,
+    make_room: Callable[[int], None] | None,
+) -> None:
+    try:
+        frame.replace(dest)
+    except OSError as exc:
+        if not disk_full(exc):
+            raise
+        _ensure_room(anchor, need, make_room)
+        frame.replace(dest)
+
+
+def _extract_slices(
+    video: Path,
+    folder: Path,
+    fps: float,
+    duration: float,
+    make_room: Callable[[int], None] | None,
+) -> list[tuple[Path, float]]:
+    """Cắt 20 giây một, xóa khung trùng ngay, chỉ giữ khung khác ảnh ở thư mục chính.
+
+    Đoạn sau chồng một giây lên đoạn trước để khung ở chỗ nối không bị mất.
+    """
+    kept: list[tuple[Path, float]] = []
+    last: np.ndarray | None = None
+    saw = False
+    start = 0.0
+    index = 0
+    seq = 0
+    while start < duration - 1e-3:
+        remaining = duration - start
+        extra = 0.0 if remaining <= SLICE_SECONDS else SLICE_OVERLAP
+        length = min(remaining, SLICE_SECONDS + extra)
+        need = int(length * fps * FRAME_BYTES) + 64 * 1024 * 1024
+        _ensure_room(folder, need, make_room)
+        piece = folder / f"part-{index:04d}"
+        try:
+            piece.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            if not disk_full(exc):
+                raise
+            _ensure_room(folder, need, make_room)
+            piece.mkdir(parents=True, exist_ok=True)
+        extracted = _span_with_retry(video, piece, fps, start, length, folder, need, make_room)
+        if extracted:
+            saw = True
+        chosen, last = _select_frames(extracted, last, True)
+        for frame, at in chosen:
+            seq += 1
+            dest = folder / f"f_{seq:06d}.jpg"
+            _replace_frame(frame, dest, folder, need, make_room)
+            kept.append((dest, at))
+        shutil.rmtree(piece, ignore_errors=True)
+        start += SLICE_SECONDS
+        index += 1
+    if saw and not kept:
+        raise RuntimeError(f"Không đọc được khung hình nào của {video.name}. File có thể bị cắt hoặc hỏng.")
+    return kept
+
+
+def _frames_for(
+    path: Path,
+    folder: Path,
+    fps: float,
+    make_room: Callable[[int], None] | None,
+) -> list[tuple[Path, float]]:
+    duration = probe_duration(path)
+    budget = frame_budget(duration, fps) if duration is not None else ONE_SHOT_CAP
+    need = min(budget, ONE_SHOT_CAP)
+    _ensure_room(folder, need, make_room)
+    if duration is not None and use_slices(budget, _free_bytes(folder)):
+        print(f"Tách khung từng đoạn {path.name} vì đĩa không đủ chỗ cho cả video.", flush=True)
+        return _extract_slices(path, folder, fps, duration, make_room)
+    try:
+        extracted = extract_frames(path, folder, fps)
+    except OSError as exc:
+        if not disk_full(exc) or duration is None:
+            raise
+        print(f"Tách khung từng đoạn {path.name} vì đĩa không đủ chỗ cho cả video.", flush=True)
+        _ensure_room(folder, need, make_room)
+        return _extract_slices(path, folder, fps, duration, make_room)
+    kept = drop_repeats(extracted, unlink_dropped=True)
+    if extracted and not kept:
+        raise RuntimeError(f"Không đọc được khung hình nào của {path.name}. File có thể bị cắt hoặc hỏng.")
     return kept
 
 
@@ -429,6 +725,10 @@ def extract_midpoints(video: Path, folder: Path, spans: list[tuple[float, float]
             errors="replace",
         )
         files = sorted(folder.glob("m_*.jpg"))
+        if _disk_text(done.stderr):
+            for path in files:
+                _unlink_quiet(path)
+            return []
         if done.returncode != 0 and not files:
             return []
         times = [float(item) for item in _PTS_TIME.findall(done.stderr)]
@@ -436,6 +736,8 @@ def extract_midpoints(video: Path, folder: Path, spans: list[tuple[float, float]
             return []
         return _closest_midpoints(list(zip(files, times[: len(files)])), spans)
     except (OSError, ValueError, subprocess.SubprocessError):
+        for path in folder.glob("m_*.jpg"):
+            _unlink_quiet(path)
         return []
 
 
@@ -472,6 +774,7 @@ def _insert_fast_frames(
     submit: Callable[..., Future] | None,
     task_timeout: float | None,
     on_done: Callable[[int, int], None] | None,
+    make_room: Callable[[int], None] | None = None,
 ) -> tuple[list[tuple[str, float]], list[Layout]]:
     """Quét thêm khung giữa các nhịp vuốt nhanh, rồi xếp lại theo thời gian của từng video."""
     if not video_slices:
@@ -492,12 +795,19 @@ def _insert_fast_frames(
         spans = fast_scroll_spans(segment_layouts)
         fresh: list[tuple[Path, float]] = []
         if spans:
-            folder = tempfile.TemporaryDirectory(prefix="docvideo-mid-", dir=work_dir)
-            temps.append(folder)
-            existing = [at for _, at in segment_jobs]
-            for frame, at in extract_midpoints(path, Path(folder.name), spans):
-                if all(abs(at - old) >= _MIDPOINT_GAP for old in existing):
-                    fresh.append((frame, at))
+            try:
+                folder = _open_work("docvideo-mid-", work_dir, make_room, 1024 * 1024 * 1024)
+            except OSError as exc:
+                if not disk_full(exc):
+                    raise
+                print("Bỏ khung giữa vì đĩa không còn chỗ. Video vẫn đọc tiếp.", flush=True)
+                folder = None
+            if folder is not None:
+                temps.append(folder)
+                existing = [at for _, at in segment_jobs]
+                for frame, at in extract_midpoints(path, Path(folder.name), spans):
+                    if all(abs(at - old) >= _MIDPOINT_GAP for old in existing):
+                        fresh.append((frame, at))
         extra: list[Layout] = []
         if fresh:
             extra = _run(
@@ -538,12 +848,14 @@ def read_inputs(
     work_dir: Path | None = None,
     task_timeout: float | None = None,
     progress: Callable[[str, int, int], None] | None = None,
+    make_room: Callable[[int], None] | None = None,
 ) -> list[FrameRead]:
     """Đọc ảnh và video theo đúng thứ tự đưa vào. Thứ tự này dùng để biết hồ sơ mở sau danh bạ nào.
 
     submit là executor.submit của một nhóm tiến trình có sẵn; không có thì tự mở nhóm riêng.
     task_timeout: chờ một khung lâu hơn chừng này giây thì coi nhóm tiến trình đã hỏng (BrokenExecutor).
     progress(bước, đã xong, tổng) chỉ để hiện tiến độ: extract, scan rồi read. Không đổi kết quả đọc.
+    make_room(số byte cần trống) được gọi khi đĩa chặt, trước khi cắt tiếp. Không có thì cắt với chỗ đang có.
     """
     jobs: list[tuple[str, float]] = []
     temps: list[tempfile.TemporaryDirectory[str]] = []
@@ -558,15 +870,10 @@ def read_inputs(
             elif suffix in VIDEO_SUFFIXES:
                 if extracting is not None:
                     extracting(0, 0)
-                folder = tempfile.TemporaryDirectory(prefix="docvideo-frames-", dir=work_dir)
+                folder = _open_work("docvideo-frames-", work_dir, make_room, ONE_SHOT_CAP)
                 temps.append(folder)
                 start = len(jobs)
-                extracted = extract_frames(path, Path(folder.name), fps)
-                frames = drop_repeats(extracted)
-                if extracted and not frames:
-                    raise RuntimeError(
-                        f"Không đọc được khung hình nào của {path.name}. File có thể bị cắt hoặc hỏng."
-                    )
+                frames = _frames_for(path, Path(folder.name), fps, make_room)
                 jobs.extend((str(frame), at) for frame, at in frames)
                 if frames:
                     video_slices.append((path, start, len(jobs)))
@@ -587,6 +894,7 @@ def read_inputs(
             submit,
             task_timeout,
             _reporter(progress, "scan"),
+            make_room,
         )
         resolve_taps(layouts)
         plan = plan_reads(layouts)

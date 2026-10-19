@@ -43,6 +43,8 @@ from control_plane.video_store import (
     prune_old_videos,
     pc_queue_ready,
     pc_video_path,
+    defer_for_disk,
+    queue_order,
     recover_dead,
     release_pc,
     release_stale_pc,
@@ -107,6 +109,20 @@ class VideoStoreTests(unittest.TestCase):
         self.assertTrue(again["duplicate"])
         self.assertEqual(again["id"], first)
         self.assertEqual(stats(self.db)["queued"], 1)
+
+    def test_a_full_disk_sends_the_video_behind_the_others(self) -> None:
+        first = self._add("a.mp4", "a")
+        second = self._add("b.mp4", "b")
+        job = claim(self.db, 7)
+        assert job is not None
+        self.assertEqual(job["id"], first)
+        self.assertTrue(defer_for_disk(self.db, first, str(job["lease"])))
+        self.assertFalse(defer_for_disk(self.db, first, str(job["lease"])))
+        self.assertEqual(queue_order(self.db), [second, first])
+        deferred = next(item for item in list_videos(self.db) if item["id"] == first)
+        self.assertEqual(deferred["status"], "queued")
+        self.assertEqual(deferred["priority"], -1)
+        self.assertEqual(deferred["error"], "")
 
     def test_two_workers_do_not_take_the_same_video(self) -> None:
         self._add("a.mp4", "a")
