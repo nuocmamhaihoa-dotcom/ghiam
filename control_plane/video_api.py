@@ -59,8 +59,10 @@ from control_plane.pc_reader import (
 from control_plane.results_out import (
     api_key_ok,
     create_api_key,
+    IMPORT_MAX_BYTES,
     export_xlsx,
     list_api_keys,
+    parse_import,
     revoke_api_key,
     save_webhook,
     saved_rows_after,
@@ -84,6 +86,7 @@ from control_plane.video_store import (
     get_meta,
     init_db,
     coverage_counts,
+    import_results,
     iter_backup,
     list_videos,
     missing_text,
@@ -97,6 +100,7 @@ from control_plane.video_store import (
     release_pc,
     release_stale_pc,
     result_page,
+    result_summary,
     retry,
     set_priority,
     shrink_totals,
@@ -566,8 +570,13 @@ def _filters(
     video: int = 0,
     bucket: str = "",
     checked: str = "",
+    reader: str = "",
 ) -> ResultFilter:
-    """Bộ lọc từ tham số trên đường dẫn. device có mặt nhưng rỗng là video chưa gắn tên điện thoại."""
+    """Bộ lọc từ tham số trên đường dẫn. device có mặt nhưng rỗng là video chưa gắn tên điện thoại.
+
+    reader rỗng là mọi máy quét. VPS là dòng không ghi máy, gồm dòng nạp để trống.
+    """
+    picked = clean_device(reader) if str(reader or "").strip() else ""
     chosen = ResultFilter(
         query=q,
         day_from=day_from.strip(),
@@ -576,6 +585,7 @@ def _filters(
         video_id=max(0, int(video or 0)),
         bucket=_BUCKETS.get(bucket, 0),
         checked=checked if checked in ("ok", "diff", "none") else "",
+        reader=picked or None,
     )
     try:
         _check_days(chosen)
@@ -603,14 +613,54 @@ def results(
     video: int = Query(default=0, ge=0),
     bucket: str = "",
     checked: str = "",
+    reader: str = "",
 ) -> dict[str, object]:
     _auth(authorization)
     init_db(settings.video_db_path)
-    chosen = _filters(q, day_from, day_to, device, video, bucket, checked)
+    chosen = _filters(q, day_from, day_to, device, video, bucket, checked, reader)
     page = result_page(settings.video_db_path, q, limit, before, after, filters=chosen)
     items = page["items"]
     page["count"] = len(items) if isinstance(items, list) else 0
     return page
+
+
+@router.get("/v1/results/summary")
+def results_board(
+    authorization: str | None = Header(default=None),
+    q: str = "",
+    day_from: str = "",
+    day_to: str = "",
+    device: str | None = Query(default=None),
+    video: int = Query(default=0, ge=0),
+    bucket: str = "",
+    checked: str = "",
+    reader: str = "",
+) -> dict[str, object]:
+    """Tổng hợp mọi dòng khớp bộ lọc, kèm danh sách máy quét để chọn."""
+    _auth(authorization)
+    init_db(settings.video_db_path)
+    chosen = _filters(q, day_from, day_to, device, video, bucket, checked, reader)
+    return result_summary(settings.video_db_path, chosen)
+
+
+@router.post("/v1/results/import")
+async def results_import(
+    authorization: str | None = Header(default=None),
+    file: UploadFile = File(...),
+) -> dict[str, int]:
+    """Nạp file Excel hoặc CSV vào bảng kết quả. Không ghi số, tên hay tên file ra nhật ký."""
+    _auth(authorization)
+    payload = await file.read(IMPORT_MAX_BYTES + 1)
+    try:
+        rows = parse_import(payload, file.filename or "")
+        outcome = await run_in_threadpool(import_results, settings.video_db_path, rows)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    print(
+        "Nạp kết quả: thêm {added}, cập nhật {updated}, bỏ qua {skipped}, không hợp lệ {invalid}.".format(**outcome),
+        flush=True,
+    )
+    return outcome
 
 
 EXPORT_TICKET = "export-ticket"
@@ -634,11 +684,12 @@ def export_download(
     video: int = Query(default=0, ge=0),
     bucket: str = "",
     checked: str = "",
+    reader: str = "",
 ) -> Response:
     if not ticket_ok(ticket, time.time(), EXPORT_TICKET):
         raise HTTPException(status_code=404, detail="Liên kết tải đã hết hạn. Bấm tải Excel lại.")
     init_db(settings.video_db_path)
-    chosen = _filters(q, day_from, day_to, device, video, bucket, checked)
+    chosen = _filters(q, day_from, day_to, device, video, bucket, checked, reader)
     payload = export_xlsx(settings.video_db_path, chosen)
     filename = time.strftime("ket-qua-%Y%m%d-%H%M.xlsx")
     return Response(

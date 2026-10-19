@@ -12,12 +12,14 @@ from xml.etree import ElementTree
 
 from control_plane.phone_vn import carrier, normalize_vn, phone_columns
 from control_plane.results_out import (
+    IMPORT_MAX_BYTES,
     WEBHOOK_BATCH,
     api_key_ok,
     check_public_url,
     create_api_key,
     export_xlsx,
     list_api_keys,
+    parse_import,
     post_json,
     revoke_api_key,
     save_webhook,
@@ -36,8 +38,10 @@ from control_plane.video_store import (
     connect,
     finish,
     fold_text,
+    import_results,
     init_db,
     result_page,
+    result_summary,
 )
 from control_plane.xlsx import workbook
 
@@ -155,7 +159,101 @@ class FilterExportTests(unittest.TestCase):
         self.assertEqual(phones, ["0901234567", "0961234567", "0912345678"])
         self.assertEqual(rows[1][2], "MobiFone")
         self.assertEqual(rows[1][8], "May A")
+        self.assertEqual(rows[1][9], "VPS")
         self.assertEqual(rows[3][5], "Chưa mở hồ sơ")
+
+    def test_summary_groups_reader_and_scan_day(self) -> None:
+        with connect(self.db) as conn:
+            conn.execute("UPDATE videos SET helper = 'May Doc' WHERE id = ?", (self.first,))
+            conn.execute("UPDATE results SET created_at = '2020-01-01T03:00:00+00:00' WHERE phone = '0961234567'")
+        whole = result_summary(self.db, ResultFilter())
+        self.assertEqual(whole["total"], 5)
+        self.assertEqual((whole["saved"], whole["review"], whole["unopened"]), (3, 1, 1))
+        by_reader = {item["reader"]: item["total"] for item in whole["by_reader"]}
+        self.assertEqual(by_reader["May Doc"], 3)
+        self.assertEqual(by_reader["VPS"], 2)
+        self.assertEqual(whole["readers"], ["May Doc", "VPS"])
+        one_day = result_summary(self.db, ResultFilter(day_from="2020-01-01", day_to="2020-01-01"))
+        self.assertEqual(one_day["total"], 1)
+        self.assertEqual(one_day["by_day"][0]["day"], "2020-01-01")
+        self.assertEqual(one_day["readers"], ["May Doc", "VPS"])
+        only_vps = result_page(self.db, limit=20, filters=ResultFilter(reader="VPS"))
+        self.assertEqual({item["phone"] for item in only_vps["items"]}, {"0981234567", "0921234567"})
+        self.assertTrue(all(item["helper"] == "VPS" for item in only_vps["items"]))
+        named = result_page(self.db, limit=20, filters=ResultFilter(reader="May Doc"))
+        self.assertEqual(named["total"], 3)
+
+    def test_import_adds_skips_saved_and_upgrades_unopened(self) -> None:
+        with connect(self.db) as conn:
+            conn.execute("UPDATE videos SET helper = 'May Doc' WHERE id = ?", (self.first,))
+            conn.execute(
+                "UPDATE results SET created_at = '2019-05-01T00:00:00+00:00' WHERE phone = '0912345678'"
+            )
+        first = (
+            "Số điện thoại,Tên,Username,Loại,Lý do,Đọc bởi,Đọc lúc (giờ VN)\n"
+            "0901111222,An,@an01,Đã lưu,,May Quet,01/01/2020 10:00\n"
+            "khong-phai-so,X,@x,Đã lưu,,,\n"
+            "0913333444,Be,,Chưa mở hồ sơ,,VPS,\n"
+            ",Chi,@chi,Đã lưu,,,\n"
+        )
+        added = import_results(self.db, parse_import(first.encode("utf-8-sig"), "nap.csv"))
+        self.assertEqual(added, {"added": 2, "updated": 0, "skipped": 0, "invalid": 2})
+        stored = result_page(self.db, limit=20, filters=ResultFilter(reader="May Quet"))
+        self.assertEqual(stored["items"][0]["helper"], "May Quet")
+        self.assertEqual(stored["items"][0]["video_id"], 0)
+        with connect(self.db) as conn:
+            blank = conn.execute("SELECT reader FROM results WHERE phone = '0913333444'").fetchone()
+        self.assertEqual(blank["reader"], "")
+        again = import_results(self.db, parse_import(first.encode("utf-8"), "nap.csv"))
+        self.assertEqual(again["added"], 0)
+        self.assertEqual(again["skipped"], 2)
+        self.assertEqual(again["invalid"], 2)
+        upgrade = (
+            "Số điện thoại;Tên;Username;Loại;Đọc bởi\n"
+            "0913333444;Bé Hai;@behai;Đã lưu;May Quet\n"
+            "0912345678;Tên mới;@moi;Đã lưu;Khac\n"
+            "0901234567;Tên đè;@de;Đã lưu;Khac\n"
+        )
+        changed = import_results(self.db, parse_import(upgrade.encode("utf-8"), "sua.csv"))
+        self.assertEqual(changed["updated"], 2)
+        self.assertEqual(changed["skipped"], 1)
+        opened = result_page(self.db, limit=5, filters=ResultFilter(query="0913333444"))["items"][0]
+        self.assertEqual(opened["bucket"], "Đã lưu")
+        self.assertEqual(opened["username"], "@behai")
+        self.assertEqual(opened["helper"], "May Quet")
+        kept_day = result_page(self.db, limit=5, filters=ResultFilter(query="0912345678"))["items"][0]
+        self.assertEqual(kept_day["created_at"], "2019-05-01T00:00:00+00:00")
+        self.assertEqual(kept_day["helper"], "May Doc")
+        self.assertEqual(kept_day["username"], "@moi")
+        untouched = result_page(self.db, limit=5, filters=ResultFilter(query="0901234567"))["items"][0]
+        self.assertEqual(untouched["name"], "Nguyễn Văn An")
+        self.assertEqual(untouched["username"], "@an_01")
+        scanned = result_page(self.db, limit=5, filters=ResultFilter(day_from="2020-01-01", day_to="2020-01-01"))
+        self.assertEqual([item["phone"] for item in scanned["items"]], ["0901111222"])
+
+    def test_xlsx_round_trip_and_shared_strings(self) -> None:
+        parsed = parse_import(export_xlsx(self.db, ResultFilter()), "ket-qua.xlsx")
+        phones = {row["phone"] for row in parsed}
+        self.assertIn("0901234567", phones)
+        self.assertIn("0912345678", phones)
+        outcome = import_results(self.db, parsed)
+        self.assertEqual(outcome["added"], 0)
+        shared = parse_import(_shared_sheet(), "chung.xlsx")
+        self.assertEqual(shared[0]["phone"], "933456789")
+        self.assertEqual(shared[0]["name"], "Lê Chung")
+        loaded = import_results(self.db, shared)
+        self.assertEqual(loaded["added"], 1)
+        row = result_page(self.db, limit=5, filters=ResultFilter(reader="May Chung"))["items"][0]
+        self.assertEqual(row["phone"], "0933456789")
+        self.assertEqual(row["name"], "Lê Chung")
+        self.assertEqual(row["helper"], "May Chung")
+
+    def test_import_rejects_a_huge_file_and_too_many_rows(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_import(b"x" * (IMPORT_MAX_BYTES + 1), "to.csv")
+        body = "Số điện thoại\n" + ("0912000111\n" * 100001)
+        with self.assertRaises(ValueError):
+            parse_import(body.encode("utf-8"), "nhieu.csv")
 
     def test_api_keys(self) -> None:
         made = create_api_key(self.db, "Phần mềm kế toán")
@@ -227,6 +325,37 @@ class FilterExportTests(unittest.TestCase):
             post_json("https://example.com/hook", {"rows": [1]}, resolve=public, exchange=inward)
         with self.assertRaises(ValueError):
             check_public_url("http://10.1.1.1/secret", public)
+
+
+def _shared_sheet() -> bytes:
+    shared = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<si><t>Số điện thoại</t></si>
+<si><t>Tên</t></si>
+<si><t>Username</t></si>
+<si><t>Loại</t></si>
+<si><t>Đọc bởi</t></si>
+<si><r><t>Lê </t></r><r><t>Chung</t></r></si>
+<si><t>@chung</t></si>
+<si><t>Đã lưu</t></si>
+<si><t>May Chung</t></si>
+</sst>"""
+    sheet = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetData>
+<row r="1">
+<c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c><c r="D1" t="s"><v>3</v></c><c r="E1" t="s"><v>4</v></c>
+</row>
+<row r="2">
+<c r="A2"><v>933456789</v></c><c r="B2" t="s"><v>5</v></c><c r="C2" t="s"><v>6</v></c><c r="D2" t="s"><v>7</v></c><c r="E2" t="s"><v>8</v></c>
+</row>
+</sheetData>
+</worksheet>"""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("xl/sharedStrings.xml", shared)
+        archive.writestr("xl/worksheets/sheet1.xml", sheet)
+    return buffer.getvalue()
 
 
 if __name__ == "__main__":

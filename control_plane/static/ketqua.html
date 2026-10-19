@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>Bảng kết quả đọc được</title>
+  <style>
+    :root { color-scheme: light; --ink: #17202a; --muted: #5c6770; --line: #e4e7ec; --bg: #f4f6f8; --card: #fff; --blue: #0b6bcb; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.45 "Segoe UI", system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+    main { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+    h1 { font-size: 1.7rem; margin: 0 0 0.25rem; }
+    h2 { font-size: 1.15rem; margin: 0 0 0.7rem; }
+    p { margin: 0; }
+    a { color: var(--blue); }
+    .lead { color: var(--muted); margin-bottom: 1rem; }
+    section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem; margin: 0 0 0.8rem; }
+    label { display: block; font-weight: 650; margin: 0 0 0.35rem; }
+    input[type="text"], input[type="search"], input[type="date"], select {
+      width: 100%; font: inherit; padding: 0.7rem 0.75rem; border: 1px solid #cfd5dc; border-radius: 10px; background: #fff;
+    }
+    label.quiet { font-weight: 550; font-size: 0.86rem; color: var(--muted); flex: 1 1 9.5rem; min-width: 8.5rem; }
+    label.quiet input, label.quiet select { margin-top: 0.2rem; color: var(--ink); font-size: 1rem; padding: 0.45rem 0.55rem; }
+    .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    button {
+      font: inherit; font-weight: 700; border: 0; border-radius: 10px; min-height: 46px; padding: 0 1rem; cursor: pointer;
+    }
+    button.primary { background: var(--blue); color: #fff; }
+    button.ghost { background: #eef1f4; color: var(--ink); }
+    button:disabled { opacity: 0.55; cursor: default; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.55rem; }
+    .stat { background: #f7f9fb; border-radius: 10px; padding: 0.7rem 0.75rem; }
+    .stat b { display: block; font-size: 1.35rem; }
+    .stat span { color: var(--muted); font-size: 0.92rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 0.45rem 0.3rem; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 0.95rem; }
+    th { color: var(--muted); font-weight: 650; }
+    .note { color: var(--muted); margin-top: 0.55rem; }
+    .warn { color: #8a2b2b; font-weight: 650; }
+    .ok { color: #0d6b3a; }
+    .split { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.8rem; }
+    .scroll { overflow-x: auto; }
+    tr.pick { cursor: pointer; }
+    tr.pick:hover td { background: #f3f7fb; }
+  </style>
+</head>
+<body>
+<main>
+  <p class="note"><a href="/">Về trang đọc video</a></p>
+  <h1>Bảng kết quả đọc được</h1>
+  <p class="lead">Gom mọi dòng đã đọc: đã lưu, cần xem và chưa mở hồ sơ. Bộ lọc thống kê đổi cả số tổng hợp và bảng từng dòng. Tải file lấy đủ dòng khớp bộ lọc. Nạp file đưa kết quả vào bảng hàng loạt.</p>
+
+  <section>
+    <h2>Bộ lọc thống kê</h2>
+    <p class="note">Hôm nay tính theo giờ Việt Nam. Bấm một máy hoặc một ngày ở bảng tổng hợp để lọc đúng phần đó.</p>
+    <div class="row" id="statSpan">
+      <button id="spanToday" class="ghost" type="button">Hôm nay</button>
+      <button id="spanAll" class="primary" type="button">Toàn bộ thời gian</button>
+    </div>
+    <div class="row" style="margin-top:0.55rem">
+      <label class="quiet">Từ ngày quét<input id="dayFrom" type="date" /></label>
+      <label class="quiet">Đến ngày quét<input id="dayTo" type="date" /></label>
+      <label class="quiet">Máy quét
+        <select id="reader">
+          <option value="">Mọi máy quét</option>
+        </select>
+      </label>
+      <label class="quiet">Loại
+        <select id="resultBucket">
+          <option value="">Mọi loại</option>
+          <option value="saved">Đã lưu</option>
+          <option value="review">Cần xem</option>
+          <option value="unopened">Chưa mở hồ sơ</option>
+        </select>
+      </label>
+    </div>
+    <input id="query" type="search" placeholder="Đầu số, tên, hoặc @username" style="margin-top:0.55rem" />
+  </section>
+
+  <section>
+    <h2>Tổng hợp theo bộ lọc</h2>
+    <div class="stats" id="totals"></div>
+    <p id="summaryNote" class="note"></p>
+    <div class="split" style="margin-top:0.8rem">
+      <div>
+        <h2>Theo máy quét</h2>
+        <div class="scroll" id="byReader"></div>
+      </div>
+      <div>
+        <h2>Theo ngày quét</h2>
+        <div class="scroll" id="byDay"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Tải kết quả</h2>
+    <p class="row">
+      <button id="downloadAll" class="primary" type="button">Tải toàn bộ kết quả</button>
+      <button id="downloadFiltered" class="ghost" type="button">Tải theo bộ lọc</button>
+    </p>
+    <p id="downloadNote" class="note"></p>
+  </section>
+
+  <section>
+    <h2>Nạp kết quả hàng loạt</h2>
+    <p>Chọn file Excel đã tải từ trang này, hoặc file CSV. Cột nhận: Số điện thoại, Tên, Username, Loại, Lý do, Đọc bởi, Đọc lúc (giờ VN).</p>
+    <p class="note">Dòng đã lưu đủ tên và username từ một video thì giữ nguyên. Dòng chưa mở hồ sơ hoặc cần xem được nâng lên đã lưu khi file có đủ số, tên và username. File tối đa 20 MB và 100000 dòng.</p>
+    <p class="row" style="margin-top:0.7rem">
+      <input id="importFile" type="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+      <button id="importResults" class="primary" type="button">Nạp kết quả hàng loạt</button>
+    </p>
+    <p id="importNote" class="note"></p>
+  </section>
+
+  <section>
+    <h2>Bảng kết quả đọc được</h2>
+    <p id="resultCount" class="note"></p>
+    <div class="scroll" id="results"></div>
+    <p class="row" style="margin-top:0.7rem">
+      <button id="more" class="ghost" type="button">Hiện thêm</button>
+    </p>
+  </section>
+</main>
+<script>
+  var serverToken = __CONTROL_TOKEN__;
+  var PAGE = 500;
+  var DAY_CAP = 90;
+  var shown = [];
+  var total = 0;
+  var cursor = 0;
+  var loadToken = 0;
+
+  function token() { return serverToken; }
+
+  async function api(path, options) {
+    var headers = options && options.headers ? options.headers : {};
+    if (token()) headers.Authorization = "Bearer " + token();
+    var response = await fetch(path, Object.assign({}, options || {}, { headers: headers }));
+    if (response.status === 401) {
+      var note = document.getElementById("summaryNote");
+      note.textContent = "Trang chưa kết nối được máy chủ.";
+      note.className = "note warn";
+    }
+    return response;
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value).replace(/[&<>"']/g, function (ch) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch];
+    });
+  }
+
+  function n(value) {
+    return Number(value || 0).toLocaleString("vi-VN");
+  }
+
+  function stat(value, label) {
+    return "<div class='stat'><b>" + n(value) + "</b><span>" + label + "</span></div>";
+  }
+
+  function dayLabel(iso) {
+    var parts = String(iso || "").split("-");
+    if (parts.length !== 3) return iso;
+    return parts[2] + "/" + parts[1] + "/" + parts[0];
+  }
+
+  function vnStamp(stamp) {
+    if (!stamp) return "";
+    var moment = new Date(stamp);
+    if (isNaN(moment.getTime())) return "";
+    return new Intl.DateTimeFormat("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).format(moment);
+  }
+
+  function vnToday() {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).format(new Date());
+  }
+
+  function markSpan() {
+    var today = vnToday();
+    var from = document.getElementById("dayFrom").value;
+    var to = document.getElementById("dayTo").value;
+    document.getElementById("spanAll").className = !from && !to ? "primary" : "ghost";
+    document.getElementById("spanToday").className = from === today && to === today ? "primary" : "ghost";
+  }
+
+  function filters() {
+    return {
+      q: document.getElementById("query").value.trim(),
+      day_from: document.getElementById("dayFrom").value,
+      day_to: document.getElementById("dayTo").value,
+      reader: document.getElementById("reader").value,
+      bucket: document.getElementById("resultBucket").value
+    };
+  }
+
+  function queryString(extra) {
+    var chosen = filters();
+    var parts = [];
+    if (chosen.q) parts.push("q=" + encodeURIComponent(chosen.q));
+    if (chosen.day_from) parts.push("day_from=" + encodeURIComponent(chosen.day_from));
+    if (chosen.day_to) parts.push("day_to=" + encodeURIComponent(chosen.day_to));
+    if (chosen.reader) parts.push("reader=" + encodeURIComponent(chosen.reader));
+    if (chosen.bucket) parts.push("bucket=" + encodeURIComponent(chosen.bucket));
+    if (extra) parts.push(extra);
+    return parts.join("&");
+  }
+
+  function countHead() {
+    return "<table><tr><th></th><th>Đã lưu</th><th>Cần xem</th><th>Chưa mở hồ sơ</th><th>Tổng</th></tr>";
+  }
+
+  function countCells(item) {
+    return "<td>" + n(item.saved) + "</td><td>" + n(item.review) + "</td><td>" + n(item.unopened) + "</td><td>" + n(item.total) + "</td>";
+  }
+
+  function fillReaders(names) {
+    var select = document.getElementById("reader");
+    if (document.activeElement === select) return;
+    var current = select.value;
+    var list = names || [];
+    if (current && list.indexOf(current) < 0) list = list.concat([current]).sort();
+    var sig = list.join("\n");
+    if (select.getAttribute("data-known") === sig) return;
+    select.setAttribute("data-known", sig);
+    var html = "<option value=\"\">Mọi máy quét</option>";
+    list.forEach(function (name) {
+      html += "<option value=\"" + escapeHtml(name) + "\">" + escapeHtml(name) + "</option>";
+    });
+    select.innerHTML = html;
+    select.value = current;
+    if (select.value !== current) select.value = "";
+  }
+
+  function paintSummary(body) {
+    document.getElementById("totals").innerHTML =
+      stat(body.saved, "Đã lưu") +
+      stat(body.review, "Cần xem") +
+      stat(body.unopened, "Chưa mở hồ sơ") +
+      stat(body.total, "Tổng dòng");
+    var readers = body.by_reader || [];
+    var readerBox = document.getElementById("byReader");
+    if (!readers.length) {
+      readerBox.innerHTML = "<p class='note'>Chưa có dòng nào trong bộ lọc này.</p>";
+    } else {
+      var html = countHead();
+      readers.forEach(function (item) {
+        var name = item.reader || "VPS";
+        html += "<tr class='pick' data-reader=\"" + escapeHtml(name) + "\"><td>" + escapeHtml(name) + "</td>" + countCells(item) + "</tr>";
+      });
+      readerBox.innerHTML = html + "</table>";
+    }
+    var days = body.by_day || [];
+    var dayBox = document.getElementById("byDay");
+    var note = document.getElementById("summaryNote");
+    if (!days.length) {
+      dayBox.innerHTML = "<p class='note'>Chưa có ngày nào trong bộ lọc này.</p>";
+      note.textContent = "Tổng phía trên tính mọi dòng khớp bộ lọc.";
+      note.className = "note";
+    } else {
+      var shownDays = days.slice(0, DAY_CAP);
+      var table = countHead();
+      shownDays.forEach(function (item) {
+        table += "<tr class='pick' data-day=\"" + escapeHtml(item.day) + "\"><td>" + escapeHtml(dayLabel(item.day)) + "</td>" + countCells(item) + "</tr>";
+      });
+      dayBox.innerHTML = table + "</table>";
+      note.textContent = days.length > DAY_CAP
+        ? "Bảng ngày hiện " + DAY_CAP + " ngày mới nhất. Tổng phía trên tính đủ " + n(days.length) + " ngày trong bộ lọc."
+        : "Tổng phía trên tính đủ mọi dòng trong bộ lọc, gồm " + n(days.length) + " ngày.";
+      note.className = "note";
+    }
+    fillReaders(body.readers || []);
+    markSpan();
+  }
+
+  async function loadSummary() {
+    var response = await api("/v1/results/summary" + (queryString("") ? "?" + queryString("") : ""));
+    if (!response.ok) return;
+    paintSummary(await response.json());
+  }
+
+  function paintRows() {
+    var note = document.getElementById("resultCount");
+    var box = document.getElementById("results");
+    var more = document.getElementById("more");
+    if (!shown.length) {
+      note.textContent = "0 dòng trong bộ lọc. Bảng hiện từng đợt " + PAGE + " dòng. Nút tải lấy mọi dòng, không chỉ phần đang hiện.";
+      box.innerHTML = "<p class='note'>Chưa có dòng nào.</p>";
+      more.style.display = "none";
+      return;
+    }
+    note.textContent = "Đang hiện " + n(shown.length) + " / " + n(total) + " dòng. Mỗi lần thêm " + PAGE + " dòng. Nút tải lấy đủ " + n(total) + " dòng khớp bộ lọc.";
+    var html = "<table><tr><th>Số điện thoại</th><th>Tên</th><th>Username</th><th>Loại</th><th>Máy quét</th><th>Đọc lúc</th><th>Video</th></tr>";
+    shown.forEach(function (item) {
+      var reason = item.reason ? "<div class='note'>" + escapeHtml(item.reason) + "</div>" : "";
+      var who = String(item.helper || "").trim() || "VPS";
+      var video = item.video_id ? String(item.video_id) : "";
+      html += "<tr><td>" + escapeHtml(item.phone) + "</td><td>" + escapeHtml(item.name) + "</td><td>" + escapeHtml(item.username) + "</td><td>" + escapeHtml(item.bucket) + reason + "</td><td>" + escapeHtml(who) + "</td><td>" + escapeHtml(vnStamp(item.created_at)) + "</td><td>" + escapeHtml(video) + "</td></tr>";
+    });
+    box.innerHTML = html + "</table>";
+    more.style.display = cursor && shown.length < total ? "" : "none";
+  }
+
+  async function loadPage(reset) {
+    var mine = ++loadToken;
+    if (reset) {
+      shown = [];
+      cursor = 0;
+      total = 0;
+    }
+    var extra = "limit=" + PAGE + (cursor ? "&before=" + cursor : "");
+    var response = await api("/v1/results?" + queryString(extra));
+    if (mine !== loadToken || !response.ok) return;
+    var page = await response.json();
+    shown = shown.concat(page.items || []);
+    total = page.total != null ? page.total : shown.length;
+    cursor = page.before || 0;
+    paintRows();
+  }
+
+  async function reload() {
+    await loadSummary();
+    await loadPage(true);
+  }
+
+  async function errorDetail(response, fallback) {
+    try {
+      var body = await response.json();
+      if (body && body.detail) return String(body.detail);
+    } catch (error) {}
+    return fallback;
+  }
+
+  async function download(filtered) {
+    var note = document.getElementById("downloadNote");
+    note.textContent = filtered ? "Đang tạo file theo bộ lọc..." : "Đang tạo file toàn bộ kết quả...";
+    note.className = "note";
+    var response = await api("/v1/results/export/ticket", { method: "POST" });
+    if (!response.ok) {
+      note.textContent = await errorDetail(response, "Chưa tải được. Thử lại sau vài giây.");
+      note.className = "note warn";
+      return;
+    }
+    var body = await response.json();
+    var query = filtered ? queryString("") : "";
+    note.textContent = "Trình duyệt đang tải file Excel.";
+    note.className = "note ok";
+    window.location.href = body.url + (query ? "?" + query : "");
+  }
+
+  document.getElementById("query").addEventListener("input", reload);
+  document.getElementById("dayFrom").addEventListener("change", reload);
+  document.getElementById("dayTo").addEventListener("change", reload);
+  document.getElementById("reader").addEventListener("change", reload);
+  document.getElementById("resultBucket").addEventListener("change", reload);
+  document.getElementById("spanToday").addEventListener("click", function () {
+    var today = vnToday();
+    document.getElementById("dayFrom").value = today;
+    document.getElementById("dayTo").value = today;
+    reload();
+  });
+  document.getElementById("spanAll").addEventListener("click", function () {
+    document.getElementById("dayFrom").value = "";
+    document.getElementById("dayTo").value = "";
+    reload();
+  });
+  document.getElementById("byReader").addEventListener("click", function (event) {
+    var row = event.target.closest("tr[data-reader]");
+    if (!row) return;
+    document.getElementById("reader").value = row.getAttribute("data-reader") || "";
+    reload();
+  });
+  document.getElementById("byDay").addEventListener("click", function (event) {
+    var row = event.target.closest("tr[data-day]");
+    if (!row) return;
+    var day = row.getAttribute("data-day") || "";
+    document.getElementById("dayFrom").value = day;
+    document.getElementById("dayTo").value = day;
+    reload();
+  });
+  document.getElementById("more").addEventListener("click", function () { loadPage(false); });
+  document.getElementById("downloadAll").addEventListener("click", function () { download(false); });
+  document.getElementById("downloadFiltered").addEventListener("click", function () { download(true); });
+  document.getElementById("importResults").addEventListener("click", async function () {
+    var note = document.getElementById("importNote");
+    var input = document.getElementById("importFile");
+    var button = document.getElementById("importResults");
+    if (!input.files || !input.files.length) {
+      note.textContent = "Chọn một file Excel hoặc CSV trước.";
+      note.className = "note warn";
+      return;
+    }
+    button.disabled = true;
+    note.textContent = "Đang nạp file...";
+    note.className = "note";
+    var data = new FormData();
+    data.append("file", input.files[0]);
+    var response = await api("/v1/results/import", { method: "POST", body: data });
+    button.disabled = false;
+    if (!response.ok) {
+      note.textContent = await errorDetail(response, "Chưa nạp được. Thử lại sau vài giây.");
+      note.className = "note warn";
+      return;
+    }
+    var body = await response.json();
+    note.textContent = "Đã nạp: thêm " + n(body.added) + ", cập nhật " + n(body.updated) + ", bỏ qua " + n(body.skipped) + ", không hợp lệ " + n(body.invalid) + ".";
+    note.className = "note ok";
+    input.value = "";
+    await reload();
+  });
+  reload();
+</script>
+</body>
+</html>

@@ -1,9 +1,11 @@
-"""Đưa kết quả ra ngoài: file Excel theo bộ lọc, gửi dòng mới tới webhook hoặc Google Sheets, khoá API chỉ đọc."""
+"""Đưa kết quả ra ngoài: file Excel theo bộ lọc, đọc file nạp lại, gửi dòng mới tới webhook hoặc Google Sheets, khoá API chỉ đọc."""
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import http.client
+import io
 import ipaddress
 import json
 import secrets
@@ -11,13 +13,17 @@ import socket
 import ssl
 import urllib.error
 import urllib.parse
+import zipfile
 from collections.abc import Callable, Iterator
 from datetime import datetime
 from pathlib import Path
+from xml.etree import ElementTree
 
 from control_plane.phone_vn import phone_columns
 from control_plane.video_store import (
     BUCKET_OK,
+    IMPORT_ROW_LIMIT,
+    READER_SQL,
     VN_TZ,
     ResultFilter,
     connect,
@@ -74,6 +80,126 @@ def export_rows(db_path: Path, filters: ResultFilter) -> Iterator[list[object]]:
 
 def export_xlsx(db_path: Path, filters: ResultFilter) -> bytes:
     return workbook("Ket qua", EXPORT_HEADER, export_rows(db_path, filters), EXPORT_WIDTHS)
+
+
+IMPORT_MAX_BYTES = 20 * 1024 * 1024
+_SHEET_NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+_SHEET_T = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}t"
+_IMPORT_FIELDS = {
+    "số điện thoại": "phone",
+    "phone": "phone",
+    "tên": "name",
+    "name": "name",
+    "username": "username",
+    "loại": "bucket",
+    "bucket": "bucket",
+    "lý do": "reason",
+    "reason": "reason",
+    "đọc bởi": "reader",
+    "helper": "reader",
+    "reader": "reader",
+    "đọc lúc (giờ vn)": "created_at",
+    "created_at": "created_at",
+}
+
+
+def _field_name(cell: str) -> str:
+    return _IMPORT_FIELDS.get(" ".join(str(cell or "").split()).casefold(), "")
+
+
+def _csv_grid(payload: bytes) -> list[list[str]]:
+    text = payload.decode("utf-8-sig")
+    first = text.splitlines()[0] if text else ""
+    delimiter = ";" if first.count(";") > first.count(",") else ","
+    return [list(row) for row in csv.reader(io.StringIO(text), delimiter=delimiter)]
+
+
+def _column_index(ref: str) -> int:
+    index = 0
+    for ch in ref:
+        if not ch.isalpha():
+            break
+        index = index * 26 + (ord(ch.upper()) - 64)
+    return index - 1
+
+
+def _shared_strings(archive: zipfile.ZipFile) -> list[str]:
+    if "xl/sharedStrings.xml" not in archive.namelist():
+        return []
+    root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
+    return ["".join(node.text or "" for node in item.iter(_SHEET_T)) for item in root.findall("m:si", _SHEET_NS)]
+
+
+def _cell_text(cell: ElementTree.Element, shared: list[str]) -> str:
+    kind = cell.get("t") or ""
+    if kind == "inlineStr":
+        return "".join(node.text or "" for node in cell.iter(_SHEET_T))
+    raw = cell.findtext("m:v", default="", namespaces=_SHEET_NS)
+    if kind == "s":
+        try:
+            return shared[int(raw)]
+        except (ValueError, IndexError):
+            return ""
+    if raw.endswith(".0") and raw[:-2].isdigit():
+        return raw[:-2]
+    return raw
+
+
+def _xlsx_grid(payload: bytes) -> list[list[str]]:
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        shared = _shared_strings(archive)
+        root = ElementTree.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+    grid: list[list[str]] = []
+    sheet = root.find("m:sheetData", _SHEET_NS)
+    if sheet is None:
+        return grid
+    for row in sheet.findall("m:row", _SHEET_NS):
+        parsed: list[str] = []
+        for cell in row.findall("m:c", _SHEET_NS):
+            index = _column_index(cell.get("r") or "")
+            if index < 0:
+                continue
+            while len(parsed) <= index:
+                parsed.append("")
+            parsed[index] = _cell_text(cell, shared).strip()
+        grid.append(parsed)
+    return grid
+
+
+def _rows_from_grid(grid: list[list[str]]) -> list[dict[str, str]]:
+    if not grid:
+        return []
+    header = [_field_name(cell) for cell in grid[0]]
+    if "phone" not in header:
+        raise ValueError("File thiếu cột số điện thoại.")
+    rows: list[dict[str, str]] = []
+    blank = {"phone": "", "name": "", "username": "", "bucket": "", "reason": "", "reader": "", "created_at": ""}
+    for cells in grid[1:]:
+        if not any(str(cell).strip() for cell in cells):
+            continue
+        item = dict(blank)
+        for index, key in enumerate(header):
+            if key and index < len(cells):
+                item[key] = str(cells[index]).strip()
+        rows.append(item)
+        if len(rows) > IMPORT_ROW_LIMIT:
+            raise ValueError("File vượt 100000 dòng.")
+    return rows
+
+
+def parse_import(payload: bytes, filename: str) -> list[dict[str, str]]:
+    """Đọc file Excel xuất ra hoặc CSV. Excel lưu lại bằng shared string và ô số đều đọc được."""
+    if len(payload) > IMPORT_MAX_BYTES:
+        raise ValueError("File quá 20 MB.")
+    suffix = Path(str(filename or "")).suffix.lower()
+    try:
+        if suffix == ".xlsx" or (suffix != ".csv" and payload[:2] == b"PK"):
+            grid = _xlsx_grid(payload)
+        else:
+            grid = _csv_grid(payload)
+    except (zipfile.BadZipFile, ElementTree.ParseError, UnicodeError) as exc:
+        raise ValueError("File không đọc được.") from exc
+    return _rows_from_grid(grid)
 
 
 # Khoá API chỉ đọc: chỉ lưu mã băm, khoá đầy đủ chỉ hiện một lần lúc tạo.
@@ -137,9 +263,9 @@ def saved_rows_after(db_path: Path, after_id: int, limit: int) -> list[dict[str,
     """Dòng đã lưu đủ số, tên và @id, id tăng dần, sau một id. Dùng cho khoá API và webhook."""
     with connect(db_path) as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT r.id, r.phone, r.name, r.username, r.video_id, r.created_at,
-                   COALESCE(v.device, '') AS device, COALESCE(v.helper, '') AS helper
+                   COALESCE(v.device, '') AS device, {READER_SQL} AS helper
             FROM results r
             LEFT JOIN videos v ON v.id = r.video_id
             WHERE r.id > ? AND r.bucket = ? AND r.phone != '' AND r.name != '' AND r.username != ''
