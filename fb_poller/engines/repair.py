@@ -198,9 +198,12 @@ def _clean_text(text: str) -> tuple[str | None, list[str]]:
         if decoded != cleaned:
             codes.append("decode_percent")
             cleaned = decoded
-    unescaped = html.unescape(html.unescape(cleaned))
-    if unescaped != cleaned:
+    decoded = html.unescape(html.unescape(cleaned))
+    unescaped = decoded.replace("\u00a0", " ")
+    if decoded != cleaned:
         codes.append("unescape_text")
+    if unescaped != decoded:
+        codes.append("normalize_text")
     cleaned = unescaped
     marked = _TAG.sub("", _BREAK.sub("\n", cleaned))
     if marked != cleaned:

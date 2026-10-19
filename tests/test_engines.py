@@ -605,6 +605,24 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(recovered.comments[0].text, "xin")
         self.assertEqual(recovered.comments[0].author_name, "An")
 
+    def test_nbsp_entity_and_late_typename_are_kept(self) -> None:
+        cleaned, codes = heal_comments([PublicComment(text="hello&nbsp;there")])
+        self.assertEqual(cleaned[0].text, "hello there")
+        self.assertIn("unescape_text", codes)
+        numbered, numbered_codes = heal_comments([PublicComment(text="hello&#160;there")])
+        self.assertEqual(numbered[0].text, "hello there")
+        self.assertIn("normalize_text", numbered_codes)
+        junk = ",".join(f'"k{i}":{{"a":1}}' for i in range(45))
+        html = (
+            '<script>{"id":"9","author":{"name":"An"},'
+            + junk
+            + ',"__typename":"Comment","body":{"text":"xin"}}</script>'
+        )
+        found = comments_from_html(html)
+        self.assertEqual(found[0].text, "xin")
+        self.assertEqual(found[0].author_name, "An")
+        self.assertEqual(found[0].comment_id, "9")
+
 
 if __name__ == "__main__":
     unittest.main()

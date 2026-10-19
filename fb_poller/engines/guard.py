@@ -153,7 +153,8 @@ def objects_with_comments(html: str, max_hits: int = 80) -> list[Any]:
             window = chunk[start:]
             relative = match.start() - start
             positions = [index for index, char in enumerate(window[:relative]) if char == "{"]
-            for pos in reversed(positions[-40:]):
+            # The opening brace can sit behind dozens of small objects (ranges, tracking).
+            for pos in reversed(positions[-250:]):
                 absolute = start + pos
                 if (chunk_index, absolute) in seen:
                     break
