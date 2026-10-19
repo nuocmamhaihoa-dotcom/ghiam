@@ -75,6 +75,10 @@ def first_comment_id(row: dict[str, object]) -> str | None:
     for key in ("id", "legacy_fbid", "comment_id", "commentId"):
         found = _id_value(row.get(key))
         if found:
+            return comment_id_from_url(found) or found
+    for key in ("commentUrl", "comment_url", "permalink_url"):
+        found = comment_id_from_url(row.get(key))
+        if found:
             return found
     return None
 
@@ -93,6 +97,20 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         if found:
             return found
     return None
+
+
+_COMMENT_IN_URL = re.compile(r"(?:comment_id|reply_comment_id)=([A-Za-z0-9_]+)")
+
+
+def comment_id_from_url(value: object) -> str | None:
+    """The comment id in a permalink. A post URL without one is not an id."""
+    text = scalar_text(value)
+    if text is None or "://" not in text:
+        return None
+    match = _COMMENT_IN_URL.search(text)
+    if match is None:
+        return None
+    return comment_id(match.group(1))
 
 
 def person_name(value: object, depth: int = 0) -> str | None:
@@ -170,8 +188,14 @@ def nested_text(value: object, depth: int = 0) -> str | None:
     if isinstance(value, list):
         parts: list[str] = []
         for item in value:
-            if isinstance(item, (dict, list)):
+            if isinstance(item, list):
                 return None
+            if isinstance(item, dict):
+                if any(
+                    key in item
+                    for key in ("author", "from", "author_name", "id", "comment_id", "commentId", "legacy_fbid")
+                ):
+                    return None
             found = nested_text(item, depth + 1)
             if found:
                 parts.append(found)

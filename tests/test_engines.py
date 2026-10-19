@@ -895,6 +895,52 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(exported[0].author_name, "An")
         self.assertEqual(exported[0].comment_id, "7")
 
+    def test_weekday_stamp_text_parts_and_comment_url(self) -> None:
+        self.assertEqual(post_id_from_url("https://www.facebook.com/NASA/videos/pcb.111/222"), "222")
+        article = comments_from_articles(
+            ["Lan · Monday at 3:00 PM\nhello\nToday at 1:05 PM\nTranslated by Google"],
+            5,
+        )
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nI said Monday at 3:00 PM"], 5)
+        self.assertEqual(sentence[0].text, "I said Monday at 3:00 PM")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nMonday at 3:00 PM\nTranslated by Google",
+                    author_name="Lan · Today at 1:05 PM",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertEqual(healed[0].author_name, "Lan")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertIn("strip_glued_chrome", codes)
+        parts = comments_from_payload(
+            {"__typename": "Comment", "message": [{"text": "xin"}], "author": {"name": "An"}},
+            5,
+        )
+        self.assertEqual(parts[0].text, "xin")
+        self.assertEqual(
+            comments_from_payload(
+                {"__typename": "Comment", "message": [{"text": "xin", "author": "An"}]},
+                5,
+            ),
+            [],
+        )
+        row = _from_items(
+            [
+                {
+                    "text": "xin",
+                    "profileName": "Ha",
+                    "commentUrl": "https://www.facebook.com/x/posts/1?comment_id=42",
+                }
+            ],
+            5,
+        )
+        self.assertEqual(row[0].comment_id, "42")
+
 
 if __name__ == "__main__":
     unittest.main()

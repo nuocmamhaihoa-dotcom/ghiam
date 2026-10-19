@@ -136,7 +136,7 @@ def post_id_from_url(url: str) -> str | None:
     raw = url.strip()
     if raw.isdigit() or ("_" in raw and raw.replace("_", "").isdigit()):
         return raw
-    photo = re.search(r"/photos/(?:a|pcb)\.(\d+)/(\d+)", raw, re.IGNORECASE)
+    photo = re.search(r"/(?:photos|videos)/(?:a|pcb)\.(\d+)/(\d+)", raw, re.IGNORECASE)
     if photo:
         return accepted_object_id(photo.group(2))
     path = re.search(
