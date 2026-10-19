@@ -1312,6 +1312,50 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(post_id_from_url("https://www.facebook.com/reel/999/"), "999")
         self.assertEqual(timestamp_of({"created": {"created": "2024-03-02"}}), "2024-03-02")
 
+    def test_menu_chrome_and_nickname(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan · Moderator\nhello\nReport comment\nCopy link\nSort by\n"
+                "Comments are turned off\nLog in to comment\nFollowed by Mai\n"
+                "Show translation\nView original\nAuto-translated\n"
+                "Was this translation helpful?\nSee insights\nTurn on notifications\n"
+                "Hide all comments\nUnhide\nWhy am I seeing this?\nManage comments\n"
+                "Who can comment?\nRising contributor\nGroup expert\nNew member\n"
+                "Just\u00a0now"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nI will report comment spam tomorrow"], 5)
+        self.assertEqual(sentence[0].text, "I will report comment spam tomorrow")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nReport comment\nSort by Newest\nxin Show translation",
+                    author_name="Lan · New member",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello\nxin")
+        self.assertEqual(healed[0].author_name, "Lan")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertIn("strip_glued_chrome", codes)
+        self.assertEqual(person_name({"nickname": "Lan"}), "Lan")
+        self.assertEqual(person_name({"screen_name": "Lan"}), "Lan")
+        self.assertEqual(person_name({"Nick Name": "Lan"}), "Lan")
+        named = _one({"text": "xin", "author": {"nickname": "Lan"}, "updated_time": "2024-03-02"})
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "Lan")
+        self.assertEqual(named.created_time, "2024-03-02")
+        imported = _from_mapping({"Comment Text": "xin", "Nick Name": "Lan", "Updated Time": "2024-03-02"})
+        self.assertIsNotNone(imported)
+        assert imported is not None
+        self.assertEqual(imported.author_name, "Lan")
+        self.assertEqual(imported.created_time, "2024-03-02")
+
 
 if __name__ == "__main__":
     unittest.main()

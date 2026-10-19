@@ -125,7 +125,16 @@ def person_name(value: object, depth: int = 0) -> str | None:
         return plain
     if isinstance(value, dict):
         lowered = {fold_key(key): item for key, item in value.items()}
-        for key in ("name", "short_name", "full_name", "profile_name", "username", "display_name"):
+        for key in (
+            "name",
+            "short_name",
+            "full_name",
+            "profile_name",
+            "username",
+            "display_name",
+            "nickname",
+            "screen_name",
+        ):
             token = fold_key(key)
             if token not in lowered:
                 continue
@@ -227,7 +236,17 @@ def timestamp_of(row: object) -> str | None:
     if not isinstance(row, dict):
         return None
     folded = {fold_key(key): value for key, value in row.items()}
-    for key in ("created_time", "creation_time", "created_at", "created", "comment_time", "date", "time", "timestamp"):
+    for key in (
+        "created_time",
+        "creation_time",
+        "created_at",
+        "created",
+        "comment_time",
+        "updated_time",
+        "date",
+        "time",
+        "timestamp",
+    ):
         found = time_text(folded.get(fold_key(key)))
         if found:
             return found

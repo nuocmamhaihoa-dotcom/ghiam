@@ -28,6 +28,21 @@ _DROP_LINE = re.compile(
     r"comment as \S.{0,60}|reply as \S.{0,60}|bình luận với tư cách \S.{0,80}|"
     r"most relevant comments|relevant comments|newest comments|bình luận phù hợp nhất|bình luận mới nhất|"
     r"all replies|tất cả phản hồi|"
+    r"report comment|báo cáo bình luận|"
+    r"copy link|sao chép liên kết|"
+    r"sort by(?:\s+\S.{0,40})?|sắp xếp theo(?:\s+\S.{0,40})?|"
+    r"comments are turned off|comments disabled|bình luận đã tắt|"
+    r"log in to comment|sign up to comment|đăng nhập để bình luận|"
+    r"followed by \S.{0,80}|"
+    r"see insights|"
+    r"turn on notifications|bật thông báo|tắt thông báo|"
+    r"hide all comments|ẩn tất cả bình luận|"
+    r"unhide|bỏ ẩn|"
+    r"why am i seeing this\??|"
+    r"manage comments|quản lý bình luận|"
+    r"who can comment\??|"
+    r"rising contributor|group expert|new member|thành viên mới|"
+    r"moderator|người kiểm duyệt|"
     r"pinned(?:\s+comment)?|bình luận đã ghim|đã ghim|ghim|"
     r"\d+\s+new\s+comments?|new comments|"
     r"(?:this )?comment(?: is)? hidden|hidden comment|bình luận đã bị ẩn|"
@@ -98,7 +113,7 @@ _DROP_LINE = re.compile(
     r"view previous replies|see previous replies|load previous comments|"
     r"comment\s*[·•]\s*\d+\s*[smhdwy]|"
     r"this comment is unavailable|comment removed|bình luận này không còn|"
-    r"see translation|hide translation|xem bản dịch|ẩn bản dịch|"
+    r"see translation|hide translation|show translation|view original|auto-translated|was this translation helpful\??|xem bản dịch|ẩn bản dịch|"
     r"see original(?:\s*\([^)\n]{0,80}\)|\s+in\s+\S.{0,40})?|hide original(?:\s*\([^)\n]{0,80}\)|\s+in\s+\S.{0,40})?|"
     r"xem bản gốc(?:\s*\([^)\n]{0,80}\))?|ẩn bản gốc(?:\s*\([^)\n]{0,80}\))?|"
     r"edited(?:(?:\s*[·•]\s*|\s+)(?:"
@@ -155,7 +170,7 @@ _AUTHOR_STAMP = re.compile(
     r"today|hôm nay|"
     r"follow|theo dõi|top contributor|"
     r"edited|đã chỉnh sửa|"
-    r"top fan|rising fan|verified|đã xác minh|tác giả|author|admin"
+    r"top fan|rising fan|rising contributor|group expert|new member|moderator|verified|đã xác minh|tác giả|author|admin"
     r")"
     r")+$",
     re.IGNORECASE,
@@ -163,7 +178,7 @@ _AUTHOR_STAMP = re.compile(
 _GLUED_TAIL = re.compile(
     r"(?:\s+(?:"
     r"see more|see less|xem thêm|"
-    r"see translation|hide translation|xem bản dịch|ẩn bản dịch|"
+    r"see translation|hide translation|show translation|view original|auto-translated|was this translation helpful\??|xem bản dịch|ẩn bản dịch|"
     r"view all(?: \d+)? repl(?:y|ies)|see all repl(?:y|ies)|hide all repl(?:y|ies)|"
     r"load more repl(?:y|ies)|tải thêm phản hồi"
     r"))+$",
@@ -196,7 +211,7 @@ def comments_from_articles(blocks: list[str], limit: int) -> list[PublicComment]
             continue
         lines: list[str] = []
         for raw in block.splitlines():
-            line = raw.strip()
+            line = raw.strip().replace("\u00a0", " ")
             if not line or _DROP_LINE.match(line):
                 continue
             unglued = _GLUED_TAIL.sub("", line).strip(" ·•…").strip()
