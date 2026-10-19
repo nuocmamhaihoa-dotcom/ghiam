@@ -1524,6 +1524,32 @@ class EngineTests(unittest.TestCase):
         )
         self.assertEqual(edges[0].comment_id, "6")
 
+    def test_see_less_translated_and_ngay_dang(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nDịch bởi Google\nSee less from Mai\nView less\nẨn bớt\n"
+                "Comment settings\nCài đặt bình luận\nWho can see this comment?\n"
+                "Ai có thể xem bình luận này?\nmột lúc trước\nvừa nãy\nEdited recently"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nDịch bởi Google Maps cho khách"], 5)
+        self.assertEqual(sentence[0].text, "Dịch bởi Google Maps cho khách")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\nDịch bởi Google\nEdited recently\nView less", author_name="Lan")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        imported = _from_mapping({"Nội dung": "xin", "Tên trang": "Lan", "Ngày đăng": "2024-03-02"})
+        self.assertIsNotNone(imported)
+        assert imported is not None
+        self.assertEqual(imported.text, "xin")
+        self.assertEqual(imported.author_name, "Lan")
+        self.assertEqual(imported.created_time, "2024-03-02")
+
 
 if __name__ == "__main__":
     unittest.main()
