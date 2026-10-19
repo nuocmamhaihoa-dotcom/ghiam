@@ -1096,6 +1096,71 @@ class EngineTests(unittest.TestCase):
         assert named is not None
         self.assertEqual(named.author_name, "Ha")
 
+    def test_short_ago_stamps_and_nested_comment(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan · 2 hrs ago\nhello\n1 min ago\nless than a minute ago\n"
+                "Edited · a few seconds ago\nEdited 2h\n1 mo\n2 mos\n1 yr\n"
+                "khoảng vài phút trước\nHide reply\n1 like this\nFilter\nLan · Author"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nI waited 2 hours"], 5)
+        self.assertEqual(sentence[0].text, "I waited 2 hours")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\n2 hrs ago\n1 mo\nless than a minute ago\nkhoảng vài phút trước",
+                    author_name="Lan · 1 yr",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertEqual(healed[0].author_name, "Lan")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertIn("strip_glued_chrome", codes)
+        nested = _one(
+            {
+                "comment": {
+                    "text": "xin",
+                    "author": {"name": "Lan"},
+                    "id": "9",
+                    "createdAt": "2024-03-02",
+                }
+            }
+        )
+        self.assertIsNotNone(nested)
+        assert nested is not None
+        self.assertEqual(nested.text, "xin")
+        self.assertEqual(nested.author_name, "Lan")
+        self.assertEqual(nested.comment_id, "9")
+        self.assertEqual(nested.created_time, "2024-03-02")
+        managed = _comments_from_json(
+            {"comments": [{"text": "xin", "author": "Lan", "createdAt": "2024-03-02"}]},
+            5,
+        )
+        self.assertEqual(managed[0].created_time, "2024-03-02")
+        graph = comments_from_graph_payload(
+            {
+                "data": [
+                    {
+                        "comment": {
+                            "message": "xin",
+                            "from": {"name": "Lan"},
+                            "id": "8",
+                            "created_time": "2024-03-02T00:00:00+0000",
+                        }
+                    }
+                ]
+            },
+            5,
+        )
+        self.assertEqual(graph[0][0].author_name, "Lan")
+        self.assertEqual(graph[0][0].comment_id, "8")
+
 
 if __name__ == "__main__":
     unittest.main()

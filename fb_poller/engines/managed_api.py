@@ -123,14 +123,33 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
     for row in rows:
         if not isinstance(row, dict):
             continue
-        text = _field_text(row)
+        text, inner = _field_source(row)
         if not text or len(text) > 8000:
             continue
-        author_name = first_person_name(
-            row,
-            ("author", "author_name", "from", "profileName", "user_name", "name", "user", "profile", "owner"),
+        author_keys = (
+            "author",
+            "author_name",
+            "from",
+            "profileName",
+            "user_name",
+            "name",
+            "user",
+            "profile",
+            "owner",
         )
-        cid = first_comment_id(row)
+        author_name = first_person_name(row, author_keys) or (
+            first_person_name(inner, author_keys) if inner else None
+        )
+        cid = first_comment_id(row) or (first_comment_id(inner) if inner else None)
+        created = (
+            time_text(row.get("created_time"))
+            or time_text(row.get("date"))
+            or time_text(row.get("createdAt"))
+            or time_text(row.get("created_at"))
+            or (time_text(inner.get("created_time")) if inner else None)
+            or (time_text(inner.get("createdAt")) if inner else None)
+            or (time_text(inner.get("created_at")) if inner else None)
+        )
         key = cid or f"{author_name}|{text}"
         if key in seen:
             continue
@@ -140,7 +159,7 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
                 text=text,
                 author_name=author_name,
                 comment_id=cid,
-                created_time=time_text(row.get("created_time")) or time_text(row.get("date")),
+                created_time=created,
             )
         )
         if len(out) >= limit:
@@ -150,11 +169,19 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
 
 def _field_text(row: dict[str, Any]) -> str | None:
     """Read one text field. A dict in ``text`` must not hide a later string ``message``."""
+    text, _inner = _field_source(row)
+    return text
+
+
+def _field_source(row: dict[str, Any]) -> tuple[str | None, dict[str, Any] | None]:
+    """Text, plus the nested object that held it when the field itself is an object."""
     for key in ("text", "message", "comment", "comment_text", "body", "preferred_body", "content"):
-        found = nested_text(row.get(key))
+        value = row.get(key)
+        found = nested_text(value)
         if found:
-            return found
-    return None
+            inner = value if isinstance(value, dict) else None
+            return found, inner
+    return None, None
 
 
 def _own_text(row: dict[str, Any]) -> bool:

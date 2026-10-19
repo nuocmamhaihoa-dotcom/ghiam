@@ -220,6 +220,15 @@ def nested_text(value: object, depth: int = 0) -> str | None:
     return None
 
 
+def text_carrier(row: dict[str, object]) -> dict[str, object] | None:
+    """A nested object that holds the comment text together with its author and id."""
+    for key in ("comment", "commentText", "comment_text", "message", "body", "text"):
+        value = row.get(key)
+        if isinstance(value, dict) and nested_text(value):
+            return value
+    return None
+
+
 def connection_rows(value: object) -> list[object]:
     """A list, ``{data: [...]}``, or ``{edges: [{node: ...}]}``. An empty list is empty."""
     if isinstance(value, list):

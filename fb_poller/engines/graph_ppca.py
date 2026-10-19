@@ -14,6 +14,7 @@ from fb_poller.engines.guard import (
     connection_rows,
     nested_text,
     person_name,
+    text_carrier,
     public_error,
     redact_text,
     scalar_text,
@@ -85,6 +86,7 @@ def _append_rows(
     for row in rows:
         if not isinstance(row, dict):
             continue
+        inner = text_carrier(row)
         text = (
             nested_text(row.get("message"))
             or nested_text(row.get("text"))
@@ -92,12 +94,22 @@ def _append_rows(
             or nested_text(row.get("preferred_body"))
             or nested_text(row.get("content"))
         )
+        from_inner = False
+        if text is None and inner is not None:
+            text = nested_text(inner)
+            from_inner = text is not None
         if text:
+            author_name = person_name(row.get("from")) or person_name(row.get("author"))
+            if author_name is None and from_inner and inner is not None:
+                author_name = person_name(inner.get("from")) or person_name(inner.get("author"))
+            created = time_text(row.get("created_time"))
+            if created is None and from_inner and inner is not None:
+                created = time_text(inner.get("created_time")) or time_text(inner.get("createdAt"))
             item = PublicComment(
                 text=text,
-                author_name=person_name(row.get("from")) or person_name(row.get("author")),
-                comment_id=first_comment_id(row),
-                created_time=time_text(row.get("created_time")),
+                author_name=author_name,
+                comment_id=first_comment_id(row) or (first_comment_id(inner) if from_inner and inner else None),
+                created_time=created,
             )
             key = item.comment_id or f"{item.author_name}|{item.text}"
             if key not in seen:

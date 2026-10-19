@@ -154,24 +154,36 @@ def _connection_rows(value: object) -> list[Any]:
     return []
 
 
+def _row_time(row: dict[str, Any] | None) -> str | None:
+    if not row:
+        return None
+    return (
+        time_text(row.get("date"))
+        or time_text(row.get("created_time"))
+        or time_text(row.get("createdAt"))
+        or time_text(row.get("created_at"))
+    )
+
+
 def _one(row: Any) -> PublicComment | None:
     if not isinstance(row, dict):
         return None
     text = None
+    inner = None
     for key in ("text", "message", "comment", "commentText", "comment_text", "body", "preferred_body", "content"):
-        text = nested_text(row.get(key))
+        value = row.get(key)
+        text = nested_text(value)
         if text:
+            if isinstance(value, dict):
+                inner = value
             break
     if not text:
         return None
+    author_keys = ("author", "profileName", "userName", "name", "from", "user", "profile", "owner")
     return PublicComment(
         text=text,
-        author_name=first_person_name(
-            row, ("author", "profileName", "userName", "name", "from", "user", "profile", "owner")
-        ),
-        comment_id=first_comment_id(row),
-        created_time=time_text(row.get("date"))
-        or time_text(row.get("created_time"))
-        or time_text(row.get("createdAt"))
-        or time_text(row.get("created_at")),
+        author_name=first_person_name(row, author_keys)
+        or (first_person_name(inner, author_keys) if inner else None),
+        comment_id=first_comment_id(row) or (first_comment_id(inner) if inner else None),
+        created_time=_row_time(row) or (_row_time(inner) if inner else None),
     )
