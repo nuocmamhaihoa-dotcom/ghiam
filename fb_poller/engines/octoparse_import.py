@@ -52,6 +52,7 @@ _AUTHOR_KEYS = (
     "ten trang",
     "nickname",
     "screen_name",
+    "owner_name",
     "tác giả",
     "tac gia",
 )

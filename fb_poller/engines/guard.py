@@ -162,8 +162,9 @@ def person_name(value: object, depth: int = 0) -> str | None:
             if found:
                 return found
         given = person_name(lowered.get("firstname"), depth + 1)
+        middle = person_name(lowered.get("middlename"), depth + 1)
         family = person_name(lowered.get("lastname"), depth + 1)
-        parts = [part for part in (given, family) if part]
+        parts = [part for part in (given, middle, family) if part]
         if parts:
             return " ".join(parts)
     return None

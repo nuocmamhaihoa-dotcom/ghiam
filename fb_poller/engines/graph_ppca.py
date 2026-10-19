@@ -13,6 +13,7 @@ from fb_poller.engines.guard import (
     invalid_limit,
     connection_rows,
     nested_text,
+    first_person_name,
     person_name,
     text_carrier,
     public_error,
@@ -106,9 +107,17 @@ def _append_rows(
             text = nested_text(inner)
             from_inner = text is not None
         if text:
-            author_name = person_name(row.get("from")) or person_name(row.get("author"))
+            author_name = (
+                person_name(row.get("from"))
+                or person_name(row.get("author"))
+                or first_person_name(row, ("owner_name", "commenter_name", "profileName", "userName"))
+            )
             if author_name is None and from_inner and inner is not None:
-                author_name = person_name(inner.get("from")) or person_name(inner.get("author"))
+                author_name = (
+                    person_name(inner.get("from"))
+                    or person_name(inner.get("author"))
+                    or first_person_name(inner, ("owner_name", "commenter_name", "profileName", "userName"))
+                )
             created = timestamp_of(row)
             if created is None and from_inner and inner is not None:
                 created = timestamp_of(inner)
@@ -165,7 +174,7 @@ def post_id_from_url(url: str) -> str | None:
     )
     if path:
         return accepted_object_id(path.group(1))
-    query = re.search(r"(?:story_fbid|fbid)=([^&\s]+)", raw, re.IGNORECASE)
+    query = re.search(r"(?:story_fbid|fbid|post_id)=([^&\s]+)", raw, re.IGNORECASE)
     if query:
         return accepted_object_id(unquote(query.group(1)))
     watch = re.search(r"[?&]v=(\d+)", raw)

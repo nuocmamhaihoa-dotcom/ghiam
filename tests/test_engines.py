@@ -1642,6 +1642,49 @@ class EngineTests(unittest.TestCase):
         healed_html, _html_codes = heal_comments([html_body])
         self.assertEqual(healed_html[0].text, "xin\nchao")
 
+    def test_owner_name_and_replying_chrome(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nEdited · 2 phút trước\nReplying to Mai\nĐang trả lời Mai\n"
+                "See more replies from Mai\n1 like · Reply\nLan and Mai like this\n"
+                "Share comment\nEdited by author\nGroup admin\nViết câu trả lời\n"
+                "Dịch sang tiếng Việt\nMake top comment"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nReplying to Mai was the best part"], 5)
+        self.assertEqual(sentence[0].text, "Replying to Mai was the best part")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\nEdited · 2 phút trước\nShare comment", author_name="Lan")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertEqual(
+            person_name({"first_name": "Lan", "middle_name": "Thi", "last_name": "Nguyen"}),
+            "Lan Thi Nguyen",
+        )
+        named = _one({"text": "xin", "ownerName": "Lan", "id": "3"})
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "Lan")
+        managed = _comments_from_json(
+            {"comments": [{"message": "xin", "ownerName": "Lan", "id": "8"}]},
+            5,
+        )
+        self.assertEqual(managed[0].author_name, "Lan")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/groups/1/?post_id=pfbidABC123"),
+            "pfbidABC123",
+        )
+        graph = comments_from_graph_payload(
+            {"data": [{"message": "xin", "ownerName": "Lan", "id": "4"}]},
+            5,
+        )
+        self.assertEqual(graph[0][0].author_name, "Lan")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -205,6 +205,7 @@ def _one(row: Any) -> PublicComment | None:
         "user",
         "profile",
         "owner",
+        "owner_name",
         "page_name",
         "actor",
     )
