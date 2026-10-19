@@ -33,7 +33,8 @@ def bare_path() -> Path:
 def require_user(request: Request) -> None:
     expected = os.environ.get("AUTH_TOKEN", "")
     header = request.headers.get("authorization", "")
-    if not expected or header != f"Bearer {expected}":
+    cookie = request.cookies.get("coderd_token", "")
+    if not expected or (header != f"Bearer {expected}" and cookie != expected):
         raise HTTPException(status_code=401, detail="thiếu token")
 
 
@@ -57,8 +58,19 @@ def create_app() -> FastAPI:
         return {"ok": True}
 
     @application.get("/", response_class=HTMLResponse)
-    def home() -> str:
-        return PAGE.read_text(encoding="utf-8")
+    def home() -> HTMLResponse:
+        response = HTMLResponse(PAGE.read_text(encoding="utf-8"))
+        token = os.environ.get("AUTH_TOKEN", "")
+        if token:
+            response.set_cookie(
+                "coderd_token",
+                token,
+                max_age=60 * 60 * 24 * 365,
+                httponly=True,
+                samesite="lax",
+                path="/",
+            )
+        return response
 
     @application.get("/v1/sessions")
     def get_sessions(request: Request) -> list[dict]:

@@ -54,6 +54,14 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertIn("Đoạn chat mới", page.text)
         self.assertIn('id="composer"', page.text)
+        self.assertNotIn("user-token", page.text)
+
+    def test_home_cookie_opens_the_api(self) -> None:
+        page = self.client.get("/")
+        self.assertEqual(page.cookies.get("coderd_token"), "user-token")
+        opened = self.client.get("/v1/sessions")
+        self.assertEqual(opened.status_code, 200)
+        self.assertEqual(opened.json(), [])
 
     def test_message_stays_queued_across_restart(self) -> None:
         session = self.client.post("/v1/sessions", headers=AUTH).json()

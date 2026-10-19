@@ -201,10 +201,10 @@ let sessionId = localStorage.getItem("coderd.session") || "";
 let runningId = "";
 
 function headers() {
-  return {
-    "Authorization": "Bearer " + localStorage.getItem("coderd.token"),
-    "Content-Type": "application/json"
-  };
+  const result = {"Content-Type": "application/json"};
+  const token = localStorage.getItem("coderd.token");
+  if (token) result.Authorization = "Bearer " + token;
+  return result;
 }
 
 function showError(text) {
@@ -225,7 +225,7 @@ document.querySelector("#gate-form").onsubmit = (event) => {
   enter();
 };
 
-if (localStorage.getItem("coderd.token")) enter();
+enter();
 
 function renderSessions(items) {
   sessionsEl.textContent = "";
@@ -320,7 +320,9 @@ async function refreshSessions() {
   const response = await fetch("/v1/sessions", {headers: headers()});
   if (response.status === 401) {
     localStorage.removeItem("coderd.token");
-    location.reload();
+    gate.hidden = false;
+    app.classList.remove("open");
+    showError("Token không đúng.");
     return [];
   }
   if (!response.ok) return [];
