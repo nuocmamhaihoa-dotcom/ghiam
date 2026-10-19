@@ -7,6 +7,7 @@ import urllib.error
 import urllib.request
 
 from worker.tools import run_tool, schemas
+from worker.use import use_context, vietnamese_lessons
 from worker.workspace import Workspace
 
 
@@ -18,8 +19,8 @@ SYSTEM = (
     "Tool hợp lệ: list_dir, read_file, write_file, run_cmd. "
     "Khi được bảo chạy lệnh, gọi run_cmd đúng một lần rồi trả lời tiếng Việt, không in JSON. "
     "Mọi path nằm trong workspace. "
-    "Khi người dùng nói tiếng Việt và cần một lệnh, đọc learn/lenh/tieng-viet.md rồi đúng một file trong learn/lenh/ (python, git, shell, sqlite, mang, he-thong, docker, node). "
-    "Khi thiếu kiến thức khác, đọc learn/chi-muc.md rồi đọc đúng một file trong learn/the/. "
+    "Khi người dùng nói tiếng Việt và cần lập trình, đọc learn/dung.md rồi đúng một file trong learn/lenh/ và khi cần đúng một file trong learn/the/. "
+    "Nhóm lệnh: python, git, shell, sqlite, mang, he-thong, docker, node. "
     "Để nhớ một việc cho lần sau, ghi đè file .coderd/memory.md."
 )
 
@@ -169,7 +170,7 @@ def complete_from_env():
     raise RuntimeError("chưa cấu hình MODEL_BASE_URL")
 
 
-def system_prompt(workspace: Workspace) -> str:
+def system_prompt(workspace: Workspace, question: str = "") -> str:
     text = SYSTEM
     try:
         memory = workspace.resolve(".coderd/memory.md")
@@ -182,11 +183,15 @@ def system_prompt(workspace: Workspace) -> str:
     try:
         lessons = workspace.resolve("learn/kinh-nghiem.md")
     except PermissionError:
-        return text
-    if lessons.is_file():
-        note = lessons.read_text(encoding="utf-8", errors="replace")[-800:].strip()
-        if note:
-            text += "\nĐã học:\n" + note
+        lessons = None
+    else:
+        if lessons.is_file():
+            note = vietnamese_lessons(lessons.read_text(encoding="utf-8", errors="replace"))
+            if note:
+                text += "\nĐã học:\n" + note
+    linked = use_context(workspace.root, question)
+    if linked:
+        text += "\nDùng ngay:\n" + linked
     return text
 
 
@@ -207,7 +212,7 @@ def run_turn(
             before_terminal()
         emit(kind, payload)
 
-    messages: list[dict] = [{"role": "system", "content": system_prompt(workspace)}]
+    messages: list[dict] = [{"role": "system", "content": system_prompt(workspace, text)}]
     for item in history or []:
         role = item.get("role")
         content = str(item.get("content") or "")

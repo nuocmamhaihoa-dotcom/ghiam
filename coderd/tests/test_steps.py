@@ -25,6 +25,7 @@ from app.main import create_app  # noqa: E402
 from app import db as appdb
 from worker.agent import normalize_reply, parse_text_tools, run_turn, scripted_complete, system_prompt
 from worker.commands import extract_commands, seed_commands, store_commands
+from worker.use import link_learned, use_context
 from worker.study import (  # noqa: E402
     OPEN_SOURCES,
     begin_hours,
@@ -512,6 +513,20 @@ class WorkerTests(unittest.TestCase):
             self.assertIn("node.md", (root / "learn" / "lenh" / "muc-luc.md").read_text(encoding="utf-8"))
             self.assertIn("curl", (root / "learn" / "lenh" / "mang.md").read_text(encoding="utf-8"))
             self.assertIn("npm", (root / "learn" / "lenh" / "node.md").read_text(encoding="utf-8"))
+            linked = link_learned(root)
+            dung = linked.read_text(encoding="utf-8")
+            self.assertIn("Xem những file đã đổi", dung)
+            self.assertIn("learn/lenh/git.md", dung)
+            self.assertIn("Dùng kiến thức đã học", dung)
+            (root / "learn" / "the").mkdir()
+            (root / "learn" / "the" / "git-status.md").write_text(
+                "# git-status\n\n## Cách làm\n- git status xem những file đã đổi trong kho\n",
+                encoding="utf-8",
+            )
+            used = use_context(root, "xem những file đã đổi rồi ghi commit")
+            self.assertIn("git status", used)
+            self.assertIn("learn/lenh/git.md", used)
+            self.assertIn("the/git-status.md", used)
 
     def test_begin_hours_rewinds_and_resets_the_ten_hour_budget(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -621,6 +636,14 @@ class WorkerTests(unittest.TestCase):
             (root / "learn").mkdir()
             (root / "learn" / "kinh-nghiem.md").write_text("- đã biết phép cộng\n", encoding="utf-8")
             self.assertIn("đã biết phép cộng", system_prompt(workspace))
+            (root / "learn" / "lenh").mkdir()
+            (root / "learn" / "lenh" / "git.md").write_text(
+                "# Git\n\n- `git status` — Xem những file đã đổi\n",
+                encoding="utf-8",
+            )
+            asked = system_prompt(workspace, "xem những file đã đổi")
+            self.assertIn("git status", asked)
+            self.assertIn("Dùng ngay", asked)
         junk = normalize_reply({"content": '{"truncated": false}', "tool_calls": []})
         self.assertIsNone(junk["content"])
 

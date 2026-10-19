@@ -214,6 +214,7 @@ SKIP_FILES = {
     "on-tap.md",
     "suy-ngam.md",
     "dong-chay.md",
+    "dung.md",
 }
 CACHE_TTL = 24 * 60 * 60
 OPEN_NOTE_LIMIT = 8
@@ -781,15 +782,24 @@ def write_skill(root: Path, name: str, url: str, notes: list[str], lessons: list
 def rebuild_index(root: Path) -> dict[str, set[str]]:
     folder = root / "learn" / "the"
     index: dict[str, set[str]] = {}
-    lines = ["# Chỉ mục kỹ năng", "", "Đọc đúng một file trong learn/the/.", ""]
+    clusters: dict[str, list[str]] = {}
+    lines = ["# Chỉ mục kỹ năng", "", "Đọc learn/dung.md rồi đúng một file trong learn/the/.", ""]
     if folder.is_dir():
         for path in sorted(folder.glob("*.md")):
             terms = sorted(_terms(path.read_text(encoding="utf-8")))[:8]
             index[path.stem] = set(terms)
-            if terms:
-                lines.append(f"- {path.stem}: {', '.join(terms[:6])}")
+            key = path.stem.split("-")[0]
+            clusters.setdefault(key, []).append(path.stem)
+    for key, names in clusters.items():
+        lines.append(f"- {key}: {', '.join(names[:12])}")
     (root / "learn").mkdir(parents=True, exist_ok=True)
     (root / "learn" / "chi-muc.md").write_text("\n".join(lines[:250]).rstrip() + "\n", encoding="utf-8")
+    try:
+        from worker.use import link_learned
+
+        link_learned(root)
+    except Exception as exc:
+        print(f"chưa liên kết: {exc}")
     return index
 
 
@@ -1025,6 +1035,12 @@ def main() -> None:
     hours = 0.0
     if len(sys.argv) >= 3 and sys.argv[1] == "--hours":
         hours = float(sys.argv[2])
+    if len(sys.argv) >= 2 and sys.argv[1] == "--link":
+        from worker.use import link_learned
+
+        path = link_learned(root)
+        print(path)
+        return
     if len(sys.argv) >= 3 and sys.argv[1] == "--begin-hours":
         begin_hours(root, float(sys.argv[2]))
         print("bắt đầu phiên")

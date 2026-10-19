@@ -11,8 +11,9 @@
 - kinh-nghiem.md: bài học ngắn đưa vào mỗi lượt chat.
 - da-hoc.md: kho đầy đủ vừa học. Đừng đọc cả file này.
 - lenh/muc-luc.md: lệnh lập trình chia theo nhóm.
-- lenh/tieng-viet.md: câu tiếng Việt đổi thành lệnh. Đọc file này trước khi lập trình.
-- chi-muc.md: từ khóa trỏ tới một kỹ năng. Đọc file này trước khi đọc learn/the/.
+- dung.md: tổng hợp việc tiếng Việt → lệnh → file nhóm → file kỹ năng. Đọc file này trước khi lập trình.
+- lenh/tieng-viet.md: câu tiếng Việt đổi thành lệnh.
+- chi-muc.md: kỹ năng gom theo nhóm. Đọc learn/dung.md trước.
 - the/: mỗi kỹ năng một file, gồm sự kiện, cách làm và ví dụ. Đọc đúng một file.
 - sach/: câu đã trích từ tài liệu. Đọc khi file trong the/ chưa đủ.
 
