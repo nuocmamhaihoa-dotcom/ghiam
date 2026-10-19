@@ -137,9 +137,9 @@ def post_id_from_url(url: str) -> str | None:
     match = re.search(r"(?:posts|permalink|videos|reel)/(\d+)", raw)
     if match:
         return match.group(1)
-    query = re.search(r"(?:story_fbid|fbid)=(\d+)", raw)
+    query = re.search(r"(?:story_fbid|fbid)=([^&\s]+)", raw)
     if query:
-        return query.group(1)
+        return accepted_object_id(query.group(1))
     return None
 
 

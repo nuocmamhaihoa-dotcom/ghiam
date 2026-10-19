@@ -52,7 +52,10 @@ def parse_proxy_line(line: str) -> ProxyConfig | None:
         if not parsed.hostname or not parsed.port:
             return None
         scheme = parsed.scheme or "http"
-        server = f"{scheme}://{parsed.hostname}:{parsed.port}"
+        host = parsed.hostname
+        if ":" in host:
+            host = f"[{host}]"
+        server = f"{scheme}://{host}:{parsed.port}"
         username = unquote(parsed.username) if parsed.username else None
         password = unquote(parsed.password) if parsed.password else None
         return ProxyConfig(

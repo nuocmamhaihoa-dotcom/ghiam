@@ -64,6 +64,8 @@ def comment_id(value: object) -> str | None:
         return None
     if isinstance(value, str):
         text = value.strip()
+        if re.fullmatch(r"\d+\.0+", text):
+            return text.split(".", 1)[0]
         return text or None
     return None
 

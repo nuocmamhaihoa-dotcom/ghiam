@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from fb_poller.engines.apify_actor import _from_items
 from fb_poller.engines.graph_ppca import accepted_object_id, comments_from_graph_payload, post_id_from_url
-from fb_poller.engines.guard import public_error, redact_text
+from fb_poller.engines.guard import comment_id, public_error, redact_text
 from fb_poller.engines.guest_graphql import comments_from_html as graphql_from_html
 from fb_poller.engines.guest_graphql import comments_from_payload, merge_comments
 from fb_poller.engines.guest_ssr import comments_from_html
@@ -691,6 +691,27 @@ class EngineTests(unittest.TestCase):
         self.assertIn("strip_glued_chrome", codes)
         kept, _codes = heal_comments([PublicComment(text="I left 1 comment yesterday in the thread")])
         self.assertEqual(kept[0].text, "I left 1 comment yesterday in the thread")
+
+    def test_reply_button_pfbid_and_ipv6_proxy(self) -> None:
+        block = "\n".join(
+            ["Lan", "hello", "Reply to Lan", "Hide 2 replies", "1,234 comments", "Sponsored", "·"]
+        )
+        self.assertEqual(comments_from_articles([block], 5)[0].text, "hello")
+        sentence = "\n".join(["Lan", "I will reply to Lan tomorrow", "Like"])
+        self.assertEqual(comments_from_articles([sentence], 5)[0].text, "I will reply to Lan tomorrow")
+        glued, codes = heal_comments([PublicComment(text="hello Hide 2 replies")])
+        self.assertEqual(glued[0].text, "hello")
+        self.assertIn("strip_glued_chrome", codes)
+        self.assertEqual(comment_id("9.0"), "9")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/permalink.php?story_fbid=pfbid0abc&id=1"),
+            "pfbid0abc",
+        )
+        parsed = parse_proxy_line("http://user:pw@[2001:db8::1]:8080")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed.server, "http://[2001:db8::1]:8080")
+        self.assertEqual(parsed.as_httpx(), "http://user:pw@[2001:db8::1]:8080")
 
 
 if __name__ == "__main__":

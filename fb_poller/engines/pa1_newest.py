@@ -21,6 +21,12 @@ _DROP_LINE = re.compile(
     r"write a comment\.\.\.|write a comment|viết bình luận\.\.\.|"
     r"write a reply\.\.\.|write a reply|viết phản hồi\.\.\.|viết phản hồi|"
     r"view more comments|xem thêm bình luận|"
+    r"view \d+ more comments|xem thêm \d+ bình luận|"
+    r"hide \d+ replies|ẩn \d+ phản hồi|"
+    r"reply to \S.{0,60}|trả lời \S.{0,60}|"
+    r"most relevant comments|newest comments|bình luận phù hợp nhất|bình luận mới nhất|"
+    r"sponsored|được tài trợ|active now|đang hoạt động|"
+    r"[·•]+|"
     r"all comments|tất cả bình luận|"
     r"top fan|rising fan|tác giả|author|admin|verified|đã xác minh|"
     r"just now|vừa xong|yesterday|hôm qua|"
@@ -28,12 +34,12 @@ _DROP_LINE = re.compile(
     r"(?:khoảng\s+)?\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"\d+\s*(?:s|m|h|d|w|y)|"
     r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
-    r"\d+(?:\.\d+)?\s*[kmb]?\s+(?:likes?|reactions?|comments?|shares?|lượt thích|bình luận|chia sẻ)|"
+    r"(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*[kmb]?)\s+(?:likes?|reactions?|comments?|shares?|lượt thích|bình luận|chia sẻ)|"
     r"view all \d+ replies|xem tất cả \d+ phản hồi|\d+ replies|\d+ phản hồi|"
     r"see translation|hide translation|xem bản dịch|ẩn bản dịch|"
     r"see original(?:\s*\([^)\n]{0,80}\))?|hide original(?:\s*\([^)\n]{0,80}\))?|"
     r"xem bản gốc(?:\s*\([^)\n]{0,80}\))?|ẩn bản gốc(?:\s*\([^)\n]{0,80}\))?|"
-    r"edited|đã chỉnh sửa"
+    r"edited(?:\s*[·•]\s*\d+\s*[smhdwy])?|đã chỉnh sửa(?:\s*[·•]\s*\d+\s*[smhdwy])?"
     r")$",
     re.IGNORECASE,
 )
