@@ -941,6 +941,33 @@ class EngineTests(unittest.TestCase):
         )
         self.assertEqual(row[0].comment_id, "42")
 
+    def test_clock_date_and_more_comment(self) -> None:
+        article = comments_from_articles(
+            ["Lan · 3:00 PM\nhello\nMarch 2 at 3:00 PM\nSee 1 more comment"],
+            5,
+        )
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nThe meeting is at 3:00 PM"], 5)
+        self.assertEqual(sentence[0].text, "The meeting is at 3:00 PM")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\n15:04\nMar 2, 2024\nSee 1 more comment",
+                    author_name="Lan · 3:00 PM",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertEqual(healed[0].author_name, "Lan")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertIn("strip_glued_chrome", codes)
+        glued, _ = heal_comments([PublicComment(text="hello See 1 more comment")])
+        self.assertEqual(glued[0].text, "hello")
+        kept, _ = heal_comments([PublicComment(text="The meeting is at 3:00 PM", author_name="Lan · Nguyen")])
+        self.assertEqual(kept[0].text, "The meeting is at 3:00 PM")
+        self.assertEqual(kept[0].author_name, "Lan · Nguyen")
+
 
 if __name__ == "__main__":
     unittest.main()
