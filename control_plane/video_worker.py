@@ -351,7 +351,12 @@ def main() -> None:
             if now - last_sweep >= 60:
                 last_sweep = now
                 try:
-                    for line in heal_once(db_path, settings.video_dir, heartbeat_path()):
+                    for line in heal_once(
+                        db_path,
+                        settings.video_dir,
+                        heartbeat_path(),
+                        frames_dir=settings.data_dir / "frames",
+                    ):
                         print(line, flush=True)
                 except Exception as exc:
                     print(f"Chưa tự sửa được: {type(exc).__name__}", flush=True)

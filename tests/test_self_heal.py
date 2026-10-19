@@ -503,6 +503,76 @@ class SelfHealTests(unittest.TestCase):
         self.assertEqual(self._heal(), [])
         self.assertEqual(self._status(back), "error")
 
+    def test_disk_full_words_frames_and_a_file_that_grows_are_repaired(self) -> None:
+        waiting, _path = self._add("queued")
+        full, _path = self._add("error", error="sqlite3.OperationalError: database or disk is full")
+        memory, _path = self._add("error", error="out of memory")
+        broken_db, _path = self._add("error", error="database disk image is malformed")
+        grew, grew_path = self._add("error", error="File video rỗng.")
+        grew_path.write_bytes(b"video-now")
+        still_empty, empty_path = self._add("error", error="File video rỗng.")
+        empty_path.write_bytes(b"")
+        done, _path = self._add("done")
+        with connect(self.db) as conn:
+            conn.execute(
+                """
+                INSERT INTO results (phone, name, username, bucket, video_id, created_at)
+                VALUES ('0900000005', 'Xong', '@xong', 1, ?, ?)
+                """,
+                (done, utcnow()),
+            )
+            conn.execute(
+                "UPDATE videos SET started_at = ? WHERE id = ?",
+                (utcnow(), waiting),
+            )
+        frames = self.root / "frames"
+        frames.mkdir()
+        old = frames / "docvideo-frames-old"
+        live = frames / "docvideo-frames-live"
+        fresh = frames / "danhba-frames-fresh"
+        other = frames / "notes.txt"
+        old.mkdir()
+        live.mkdir()
+        fresh.mkdir()
+        other.write_text("giu", encoding="utf-8")
+        (old / "f.jpg").write_bytes(b"jpg")
+        now = time.time()
+        os.utime(old, (now - 3 * 3600, now - 3 * 3600))
+        os.utime(fresh, (now - 600, now - 600))
+        running, _path = self._add("running", pid=os.getpid())
+        with connect(self.db) as conn:
+            conn.execute(
+                "UPDATE videos SET started_at = ? WHERE id = ?",
+                ((datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat(), running),
+            )
+        moment = datetime.now(timezone.utc)
+        notes = heal_once(self.db, self.videos, now=moment, frames_dir=frames)
+        order = queue_order(self.db)
+        self.assertEqual(self._status(full), "queued")
+        self.assertEqual(self._status(memory), "queued")
+        self.assertLess(order.index(waiting), order.index(full))
+        self.assertEqual(self._status(broken_db), "error")
+        self.assertEqual(self._status(grew), "queued")
+        self.assertEqual(self._status(still_empty), "error")
+        self.assertEqual(self._status(running), "running")
+        self.assertFalse(old.exists())
+        self.assertTrue(live.is_dir())
+        self.assertTrue(fresh.is_dir())
+        self.assertEqual(other.read_text(encoding="utf-8"), "giu")
+        with connect(self.db) as conn:
+            counts = conn.execute(
+                "SELECT phone_count, full_count FROM videos WHERE id = ?",
+                (done,),
+            ).fetchone()
+        self.assertEqual(int(counts["phone_count"]), 1)
+        self.assertEqual(int(counts["full_count"]), 1)
+        self.assertTrue(any("thư mục khung" in line for line in notes))
+        self.assertTrue(any("Điền số đã đọc cho" in line for line in notes))
+        self.assertTrue(any(f"Video {grew} hết rỗng" in line for line in notes))
+        self.assertFalse(any(str(broken_db) in line for line in notes))
+        self.assertNotIn("@xong", " ".join(notes))
+        self.assertEqual(heal_once(self.db, self.videos, now=moment, frames_dir=frames), [])
+
     def _ids(self) -> set[int]:
         with connect(self.db) as conn:
             return {int(row["id"]) for row in conn.execute("SELECT id FROM videos")}

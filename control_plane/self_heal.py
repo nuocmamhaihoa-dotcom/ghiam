@@ -18,6 +18,9 @@ Mỗi lỗi đã gặp có một cách sửa, và lần sau gặp lại thì là
 - File nằm ngoài thư mục video: không đọc lại và không nói là file đã mất.
 - Đã có dòng kết quả: không đọc lại.
 - Mảnh tải quá hạn, file tạm up- hết hạn, bản thu nhỏ không ai dùng: xóa. Khóa và file đang ghi giữ.
+- Thư mục khung của lần đọc đã chết: xóa khi cũ hơn lần đọc đang chạy, hoặc khi không có ai đọc và đã quá hạn một khung. Thư mục đang ghi giữ.
+- Sổ phụ SQLite quá lớn: chốt kiểu không chặn người đang ghi.
+- Video đã xong mà còn trống số điện thoại đã đọc: điền lại từ dòng kết quả.
 - @id cũ chưa có khóa chữ thường: gắn từng cụm, không đổi ngày sửa của dòng.
 
 PC bị loại sau nhiều lần hỏng không được tự mở lại. Người dùng bấm cho đọc lại trên trang.
@@ -25,6 +28,8 @@ PC bị loại sau nhiều lần hỏng không được tự mở lại. Ngườ
 
 from __future__ import annotations
 
+import shutil
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -33,6 +38,7 @@ from control_plane.upload_parts import sweep_parts
 from control_plane.video_shrink import drop_stale_temps
 from control_plane.video_store import (
     connect,
+    backfill_video_counts,
     drop_orphan_small,
     drop_stale_uploads,
     fill_username_keys,
@@ -44,7 +50,7 @@ from control_plane.video_store import (
 # Một khung JPEG hỏng. Bộ đọc hiện bỏ khung đó và đọc tiếp.
 _BAD_FRAME = ("image file is truncated", "cannot identify image file")
 # Đĩa đầy phải hoãn, không để video nằm ở trạng thái lỗi.
-_DISK_FULL = ("no space left", "errno 28")
+_DISK_FULL = ("no space left", "errno 28", "disk is full")
 # Lỗi của lúc đó, không của file. Hết thì đọc lại được.
 _BUSY = (
     "database is locked",
@@ -62,6 +68,15 @@ _BUSY = (
     "cannot allocate memory",
     "memoryerror",
     "input/output error",
+    "out of memory",
+    "timed out",
+    "connection reset",
+    "broken pipe",
+    "deadlock",
+    "database schema has changed",
+    "interrupted system call",
+    "device or resource busy",
+    "stale file handle",
 )
 # File có thể chưa ghi xong lúc ffmpeg mở. Đọc lại một lần. Hỏng thật thì dừng.
 _ONCE = (
@@ -82,7 +97,13 @@ _TOOL = (
 _MISSING = "File video không còn trên máy chủ."
 _EMPTY = "File video rỗng."
 # Máy chủ đã đánh mất file. Nếu file có lại thì đọc một lần, không lặp khi đường dẫn nhấp nháy.
-_RETURNED = (_MISSING, "Không còn file video.")
+_RETURNED = (_MISSING, "Không còn file video.", _EMPTY)
+# Thư mục khung ffmpeg để lại khi tiến trình đọc bị tắt giữa chừng.
+_FRAME_PREFIXES = ("docvideo-frames-", "danhba-frames-", "docvideo-", "ocr-")
+# Hạn một khung là 15 phút. Thư mục không có lần đọc nào đang chạy phải cũ hơn hạn đó mới xóa.
+_FRAME_KEEP_SECONDS = 900 + 300
+# Sổ phụ lớn hơn mức này thì chốt, để đĩa không đầy vì WAL. Không chốt sổ nhỏ mỗi phút.
+_WAL_BYTES = 64 * 1024 * 1024
 # Đã chốt. Không xếp lại.
 _TERMINAL = (
     "file video không còn trên máy chủ.",
@@ -240,7 +261,10 @@ def _restore_returned_files(db_path: Path, video_dir: Path) -> list[str]:
                 (video_id,),
             )
             if cur.rowcount == 1:
-                notes.append(f"Video {video_id} được đánh mất nhưng file đã có lại. Xếp sau hàng chờ để đọc một lần.")
+                if str(row["error"] or "") == _EMPTY:
+                    notes.append(f"Video {video_id} hết rỗng. Xếp sau hàng chờ để đọc một lần.")
+                else:
+                    notes.append(f"Video {video_id} được đánh mất nhưng file đã có lại. Xếp sau hàng chờ để đọc một lần.")
     return notes
 
 
@@ -379,6 +403,77 @@ def _rest_abandoned_pcs(db_path: Path, now: datetime, offline_seconds: float) ->
     return notes
 
 
+def _parse_time(raw: object) -> datetime | None:
+    try:
+        seen = datetime.fromisoformat(str(raw or ""))
+    except ValueError:
+        return None
+    if seen.tzinfo is None:
+        seen = seen.replace(tzinfo=timezone.utc)
+    return seen
+
+
+def drop_abandoned_frames(frames_dir: Path | None, db_path: Path, now: datetime) -> int:
+    """Xóa thư mục khung của lần đọc đã chết.
+
+    Còn video đang đọc thì chỉ xóa thư mục cũ hơn giờ video đó bắt đầu.
+    Không còn ai đọc thì chỉ xóa thư mục đã quá hạn một khung. Thư mục đang ghi giữ.
+    """
+    if frames_dir is None or not frames_dir.is_dir():
+        return 0
+    root = frames_dir.resolve()
+    earliest: datetime | None = None
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT started_at FROM videos WHERE status = 'running'").fetchall()
+    for row in rows:
+        started = _parse_time(row["started_at"])
+        if started is None:
+            continue
+        if earliest is None or started < earliest:
+            earliest = started
+    removed = 0
+    try:
+        children = list(frames_dir.iterdir())
+    except OSError:
+        return 0
+    for child in children:
+        if not child.name.startswith(_FRAME_PREFIXES) or not child.is_dir():
+            continue
+        try:
+            if not child.resolve().is_relative_to(root):
+                continue
+            mtime = datetime.fromtimestamp(child.stat().st_mtime, timezone.utc)
+        except OSError:
+            continue
+        if earliest is not None:
+            if mtime >= earliest:
+                continue
+        elif (now - mtime).total_seconds() < _FRAME_KEEP_SECONDS:
+            continue
+        shutil.rmtree(child, ignore_errors=True)
+        if not child.exists():
+            removed += 1
+    return removed
+
+
+def _checkpoint_wal(db_path: Path, min_bytes: int = _WAL_BYTES) -> bool:
+    """Chốt sổ phụ khi nó đã lớn. PASSIVE không chặn người đang ghi. Không ghi chú nếu không nhỏ lại."""
+    wal = Path(str(db_path) + "-wal")
+    try:
+        before = wal.stat().st_size
+    except OSError:
+        return False
+    if before < min_bytes:
+        return False
+    try:
+        with connect(db_path) as conn:
+            conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+        after = wal.stat().st_size if wal.is_file() else 0
+    except (OSError, sqlite3.Error):
+        return False
+    return after < before
+
+
 def heal_once(
     db_path: Path,
     video_dir: Path,
@@ -388,6 +483,8 @@ def heal_once(
     alive=None,
     upload_stale_seconds: float = 1800,
     pc_offline_seconds: float = ONLINE_SECONDS,
+    frames_dir: Path | None = None,
+    wal_bytes: int = _WAL_BYTES,
 ) -> list[str]:
     """Sửa những gì các lần trước đã học, rồi trả về câu đã làm. Lần sau không còn gì thì trả về rỗng.
 
@@ -421,6 +518,14 @@ def heal_once(
     temps = drop_stale_temps(video_dir)
     if temps:
         notes.append(f"Xóa {temps} file tạm đã hết hạn. File đang tải và bản đang thu nhỏ không bị đụng.")
+    frames = drop_abandoned_frames(frames_dir, db_path, moment)
+    if frames:
+        notes.append(f"Xóa {frames} thư mục khung của lần đọc đã chết. Lần đọc đang chạy không bị đụng.")
+    if _checkpoint_wal(db_path, wal_bytes):
+        notes.append("Chốt sổ phụ để trả chỗ trên đĩa.")
+    filled = backfill_video_counts(db_path)
+    if filled:
+        notes.append(f"Điền số đã đọc cho {filled} video đã xong.")
     keyed = fill_username_keys(db_path)
     if keyed:
         notes.append(f"Gắn khóa @id cho {keyed} dòng cũ. @id khác hoa thường không hiện thêm.")
