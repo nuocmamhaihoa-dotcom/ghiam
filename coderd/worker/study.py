@@ -65,6 +65,83 @@ def merge_lessons(existing: str, fresh: list[str], limit: int = LIMIT) -> str:
     return "\n".join(f"- {item}" for item in kept) + "\n"
 
 
+OPEN_SOURCES = (
+    ("python-nhap-mon", "https://raw.githubusercontent.com/python/cpython/3.12/Doc/tutorial/introduction.rst"),
+    ("python-dieu-khien", "https://raw.githubusercontent.com/python/cpython/3.12/Doc/tutorial/controlflow.rst"),
+    ("git-init", "https://raw.githubusercontent.com/git/git/master/Documentation/git-init.adoc"),
+)
+SKIP_FILES = {"da-hoc.md", "kinh-nghiem.md", "muc-luc.md"}
+
+
+def extract_notes(text: str, limit: int = 8) -> list[str]:
+    notes: list[str] = []
+    seen: set[str] = set()
+    for raw in text.splitlines():
+        if raw.startswith("   ") or raw.startswith("\t"):
+            continue
+        line = raw.strip()
+        if not line or line.startswith("..") or line.startswith("|") or line.startswith(":"):
+            continue
+        if set(line) <= set("*-= ") or line.endswith("::"):
+            continue
+        if line.startswith("- "):
+            item = line[2:].strip()
+        elif 40 <= len(line) <= 220 and not line.startswith("["):
+            item = line
+        else:
+            continue
+        if not keep_lesson(item) or item.lower() in seen:
+            continue
+        seen.add(item.lower())
+        notes.append(item[:240])
+        if len(notes) >= limit:
+            break
+    return notes
+
+
+def fetch_text(url: str) -> str:
+    request = urllib.request.Request(url, headers={"User-Agent": "coderd-study"})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        data = response.read(100_000)
+    return data.decode("utf-8", "replace")
+
+
+def ingest_sources(root: Path, fetch=fetch_text) -> int:
+    learn = root / "learn"
+    learn.mkdir(parents=True, exist_ok=True)
+    sections: list[tuple[str, str, list[str]]] = []
+    if learn.is_dir():
+        for path in sorted(learn.glob("*.md")):
+            if path.name in SKIP_FILES:
+                continue
+            notes = extract_notes(path.read_text(encoding="utf-8"), limit=30)
+            if notes:
+                sections.append((path.name, "", notes))
+    for name, url in OPEN_SOURCES:
+        try:
+            notes = extract_notes(fetch(url), limit=6)
+        except Exception as exc:
+            print(f"không tải {name}: {exc}")
+            continue
+        if notes:
+            sections.append((name, url, notes))
+    lines = ["# Kho đã học", ""]
+    flat: list[str] = []
+    for name, url, notes in sections:
+        lines.append(f"## {name}")
+        if url:
+            lines.append(f"nguồn: {url}")
+        for note in notes:
+            lines.append(f"- {note}")
+            flat.append(note)
+        lines.append("")
+    (learn / "da-hoc.md").write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    path = lesson_file(root)
+    existing = path.read_text(encoding="utf-8") if path.is_file() else ""
+    path.write_text(merge_lessons(existing, flat), encoding="utf-8")
+    return len(flat)
+
+
 def lesson_file(root: Path) -> Path:
     path = root / "learn" / "kinh-nghiem.md"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -131,10 +208,12 @@ def main() -> None:
     database = Path(os.environ.get("CODERD_DB") or "/opt/coderd/var/coderd.db")
     root = Path(os.environ.get("WORKSPACE_ROOT") or "/opt/coderd/var/workspace")
     try:
+        ingested = ingest_sources(root)
         count = study_once(database, root, ask_model)
     except Exception as exc:
         print(f"vòng học dừng: {exc}")
         return
+    print(f"nguồn {ingested}")
     print(f"học {count}")
 
 

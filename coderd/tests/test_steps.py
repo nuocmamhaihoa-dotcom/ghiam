@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app import db as appdb
 from worker.agent import normalize_reply, parse_text_tools, run_turn, scripted_complete, system_prompt
-from worker.study import merge_lessons, parse_lessons, study_once  # noqa: E402
+from worker.study import extract_notes, ingest_sources, merge_lessons, parse_lessons, study_once  # noqa: E402
 from worker.tools import run_cmd, run_tool  # noqa: E402
 from worker.workspace import Workspace  # noqa: E402
 
@@ -311,6 +311,31 @@ class WorkerTests(unittest.TestCase):
             self.assertIn("2 cộng 2 bằng 4", lesson)
             self.assertEqual(study_once(database, root / "work", ask), 0)
             self.assertIn("OnUnitActiveSec=3min", (ROOT / "deploy" / "coderd-learn.timer").read_text(encoding="utf-8"))
+
+    def test_ingest_saves_local_and_open_sources(self) -> None:
+        sample = (
+            "In the following examples, input and output are distinguished by the presence or\n"
+            "Comments in Python start with the hash character.\n"
+        )
+        notes = extract_notes(sample, limit=4)
+        self.assertTrue(any("hash character" in note for note in notes))
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "work"
+            learn = root / "learn"
+            learn.mkdir(parents=True)
+            (learn / "python.md").write_text("- print in ra màn hình\n- int đổi chữ thành số\n", encoding="utf-8")
+
+            def fetch(_url: str) -> str:
+                return "Comments in Python start with the hash character, and extend to the end.\n"
+
+            count = ingest_sources(root, fetch)
+            saved = (learn / "da-hoc.md").read_text(encoding="utf-8")
+            self.assertGreaterEqual(count, 2)
+            self.assertIn("print in ra màn hình", saved)
+            self.assertIn("hash character", saved)
+            self.assertIn("python-nhap-mon", saved)
+            short = (learn / "kinh-nghiem.md").read_text(encoding="utf-8")
+            self.assertIn("print in ra màn hình", short)
 
     def test_text_tool_line_writes_a_file(self) -> None:
         def complete(messages, _tools):
