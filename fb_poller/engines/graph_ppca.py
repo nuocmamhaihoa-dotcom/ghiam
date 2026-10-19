@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import os
-from urllib.parse import quote
+import re
 
 import httpx
 
+from fb_poller.engines.guard import invalid_limit, public_error
 from fb_poller.engines.types import EngineResult, PublicComment
 
 RANK = 6
@@ -21,7 +22,24 @@ def access_token() -> str:
     return os.environ.get("GRAPH_ACCESS_TOKEN", "").strip()
 
 
+def post_id_from_url(url: str) -> str | None:
+    raw = url.strip()
+    if raw.isdigit() or ("_" in raw and raw.replace("_", "").isdigit()):
+        return raw
+    match = re.search(r"(?:posts|permalink|videos|reel)/(\d+)", raw)
+    if match:
+        return match.group(1)
+    query = re.search(r"(?:story_fbid|fbid)=(\d+)", raw)
+    if query:
+        return query.group(1)
+    return None
+
+
 async def scan(url: str, *, limit: int = 50, timeout: float = 30.0, **_: object) -> EngineResult:
+    if not url.strip():
+        return EngineResult(NAME, RANK, False, error="missing_url")
+    if invalid_limit(limit):
+        return EngineResult(NAME, RANK, False, error="invalid_limit")
     token = access_token()
     if not token:
         return EngineResult(
@@ -46,9 +64,14 @@ async def scan(url: str, *, limit: int = 50, timeout: float = 30.0, **_: object)
                 },
             )
     except Exception as exc:
-        return EngineResult(NAME, RANK, False, error=f"{type(exc).__name__}: {exc}")
+        return EngineResult(NAME, RANK, False, error=public_error(exc))
 
-    data = resp.json()
+    try:
+        data = resp.json()
+    except Exception as exc:
+        return EngineResult(NAME, RANK, False, error=public_error(exc))
+    if not isinstance(data, dict):
+        return EngineResult(NAME, RANK, False, error="unexpected_graph_payload")
     if resp.status_code >= 400 or "error" in data:
         err = data.get("error", {})
         message = err.get("message") if isinstance(err, dict) else resp.text[:200]
@@ -83,19 +106,19 @@ async def scan(url: str, *, limit: int = 50, timeout: float = 30.0, **_: object)
 
 
 async def _resolve_id(client: httpx.AsyncClient, version: str, token: str, url: str) -> str | None:
-    raw = url.strip()
-    if raw.isdigit() or ("_" in raw and raw.replace("_", "").isdigit()):
-        return raw
+    direct = post_id_from_url(url)
     resp = await client.get(
         f"https://graph.facebook.com/{version}/",
-        params={"id": raw, "access_token": token},
+        params={"id": url.strip(), "access_token": token},
     )
-    if resp.status_code >= 400:
-        return None
-    body = resp.json()
-    og = body.get("og_object") if isinstance(body, dict) else None
-    if isinstance(og, dict) and og.get("id"):
-        return str(og["id"])
-    if isinstance(body, dict) and body.get("id") and "error" not in body:
-        return str(body["id"])
-    return quote(raw, safe="")
+    if resp.status_code < 400:
+        try:
+            body = resp.json()
+        except Exception:
+            body = None
+        og = body.get("og_object") if isinstance(body, dict) else None
+        if isinstance(og, dict) and og.get("id"):
+            return str(og["id"])
+        if isinstance(body, dict) and body.get("id") and "error" not in body:
+            return str(body["id"])
+    return direct

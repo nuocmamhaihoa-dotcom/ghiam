@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 
+from fb_poller.engines.guard import invalid_limit, public_error
 from fb_poller.engines.types import EngineResult, PublicComment
 
 RANK = 4
@@ -23,6 +24,10 @@ def _actor() -> str:
 
 
 async def scan(url: str, *, limit: int = 50, timeout: float = 180.0, **_: object) -> EngineResult:
+    if not url.strip():
+        return EngineResult(NAME, RANK, False, error="missing_url")
+    if invalid_limit(limit):
+        return EngineResult(NAME, RANK, False, error="invalid_limit")
     token = _token()
     if not token:
         return EngineResult(
@@ -46,11 +51,15 @@ async def scan(url: str, *, limit: int = 50, timeout: float = 180.0, **_: object
                 json=payload,
             )
     except Exception as exc:
-        return EngineResult(NAME, RANK, False, error=f"{type(exc).__name__}: {exc}")
+        return EngineResult(NAME, RANK, False, error=public_error(exc))
 
     if resp.status_code >= 400:
         return EngineResult(NAME, RANK, False, error=f"http_{resp.status_code}: {resp.text[:180]}")
-    comments = _from_items(resp.json(), limit)
+    try:
+        payload = resp.json()
+    except Exception as exc:
+        return EngineResult(NAME, RANK, False, error=public_error(exc))
+    comments = _from_items(payload, limit)
     return EngineResult(
         NAME,
         RANK,
@@ -62,7 +71,17 @@ async def scan(url: str, *, limit: int = 50, timeout: float = 180.0, **_: object
 
 
 def _from_items(payload: Any, limit: int) -> list[PublicComment]:
-    rows = payload if isinstance(payload, list) else []
+    if isinstance(payload, list):
+        rows = payload
+    elif isinstance(payload, dict):
+        rows = []
+        for key in ("items", "data", "comments", "results"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                rows = value
+                break
+    else:
+        rows = []
     out: list[PublicComment] = []
     for row in rows:
         if not isinstance(row, dict):

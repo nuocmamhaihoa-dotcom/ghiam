@@ -64,9 +64,14 @@ def parse_proxy_line(line: str) -> ProxyConfig | None:
     parts = line.split(":")
     if len(parts) == 2:
         host, port = parts
+        if not port.isdigit():
+            return None
         return ProxyConfig(id=None, server=f"http://{host}:{port}", raw=line)
-    if len(parts) == 4:
-        host, port, user, password = parts
+    if len(parts) >= 4 and parts[1].isdigit():
+        host, port, user = parts[0], parts[1], parts[2]
+        password = ":".join(parts[3:])
+        if not host or not user:
+            return None
         return ProxyConfig(
             id=None,
             server=f"http://{host}:{port}",

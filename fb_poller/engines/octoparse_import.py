@@ -6,6 +6,7 @@ import csv
 import json
 from pathlib import Path
 
+from fb_poller.engines.guard import invalid_limit, public_error
 from fb_poller.engines.types import EngineResult, PublicComment
 
 RANK = 8
@@ -17,10 +18,30 @@ _TIME_KEYS = ("time", "date", "created_time", "created", "thời gian", "thoi gi
 
 
 def comments_from_export(path: Path, limit: int = 500) -> list[PublicComment]:
+    if limit < 1:
+        return []
     raw = path.read_text(encoding="utf-8-sig")
-    if path.suffix.lower() == ".json" or raw.lstrip().startswith(("{", "[")):
-        return _from_json(json.loads(raw), limit)
+    stripped = raw.lstrip()
+    if path.suffix.lower() == ".json" or stripped.startswith(("{", "[")):
+        try:
+            return _from_json(json.loads(raw), limit)
+        except json.JSONDecodeError:
+            return _from_json_lines(raw, limit)
+    if stripped.startswith("{") is False and "\n{" in raw:
+        lined = _from_json_lines(raw, limit)
+        if lined:
+            return lined
     return _from_csv(raw, limit)
+
+
+def _from_json_lines(raw: str, limit: int) -> list[PublicComment]:
+    rows: list[object] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        rows.append(json.loads(line))
+    return _from_json(rows, limit)
 
 
 def _from_json(payload: object, limit: int) -> list[PublicComment]:
@@ -28,7 +49,15 @@ def _from_json(payload: object, limit: int) -> list[PublicComment]:
     if isinstance(payload, list):
         rows = payload
     elif isinstance(payload, dict):
-        rows = payload.get("comments") or payload.get("data") or [payload]  # type: ignore[assignment]
+        for key in ("comments", "data", "results", "items"):
+            if key not in payload:
+                continue
+            value = payload[key]
+            if isinstance(value, list):
+                return _from_json(value, limit)
+            if isinstance(value, dict):
+                return _from_json(value, limit)
+        rows = [payload]
     else:
         return []
     out: list[PublicComment] = []
@@ -44,7 +73,12 @@ def _from_json(payload: object, limit: int) -> list[PublicComment]:
 
 
 def _from_csv(raw: str, limit: int) -> list[PublicComment]:
-    reader = csv.DictReader(raw.splitlines())
+    lines = raw.splitlines()
+    if not lines:
+        return []
+    header = lines[0]
+    delimiter = ";" if header.count(";") > header.count(",") else ","
+    reader = csv.DictReader(lines, delimiter=delimiter)
     out: list[PublicComment] = []
     for row in reader:
         item = _from_mapping(row)
@@ -77,6 +111,8 @@ def _from_mapping(row: dict[str, object]) -> PublicComment | None:
 
 async def scan(url: str = "", *, limit: int = 500, export_path: str = "", **_: object) -> EngineResult:
     del url  # Octoparse already fetched; this engine only imports the file.
+    if invalid_limit(limit):
+        return EngineResult(NAME, RANK, False, error="invalid_limit")
     if not export_path:
         return EngineResult(
             NAME,
@@ -91,7 +127,7 @@ async def scan(url: str = "", *, limit: int = 500, export_path: str = "", **_: o
     try:
         comments = comments_from_export(path, limit=limit)
     except Exception as exc:
-        return EngineResult(NAME, RANK, False, error=f"{type(exc).__name__}: {exc}")
+        return EngineResult(NAME, RANK, False, error=public_error(exc))
     return EngineResult(
         NAME,
         RANK,

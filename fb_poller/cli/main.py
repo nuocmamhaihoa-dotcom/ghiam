@@ -319,7 +319,8 @@ def _scan_proxy(explicit: str) -> str:
 
 
 def _print_scan_table(results: list[object]) -> None:
-    table = Table(title="Independent scan")
+    title = "Independent scan" if len(results) != 1 else str(getattr(results[0], "engine", "scan"))
+    table = Table(title=title)
     table.add_column("rank")
     table.add_column("engine")
     table.add_column("ok")
@@ -360,13 +361,17 @@ def scan_cmd(
     from fb_poller.engines.registry import scan_one
 
     async def _run() -> None:
-        result = await scan_one(
-            engine,
-            url,
-            limit=limit,
-            export_path=file,
-            proxy=_scan_proxy(proxy),
-        )
+        try:
+            result = await scan_one(
+                engine,
+                url,
+                limit=limit,
+                export_path=file,
+                proxy=_scan_proxy(proxy),
+            )
+        except KeyError as exc:
+            console.print(str(exc))
+            raise typer.Exit(code=1) from exc
         _print_scan_table([result])
 
     asyncio.run(_run())

@@ -2,14 +2,60 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
+from fb_poller.engines.guard import invalid_limit, placeholder_text, public_error
 from fb_poller.engines.types import EngineResult, PublicComment
 
 RANK = 5
 NAME = "pa1-newest"
 
 _NEWEST_LABELS = ("Newest", "Mới nhất", "Most recent")
+_DROP_LINE = re.compile(
+    r"^(?:"
+    r"like|comment|share|reply|thích|bình luận|chia sẻ|trả lời|"
+    r"most relevant|newest|most recent|mới nhất|phù hợp nhất|"
+    r"see more|see less|xem thêm|"
+    r"write a comment\.\.\.|write a comment|viết bình luận\.\.\.|"
+    r"all comments|tất cả bình luận|"
+    r"top fan|rising fan|tác giả|author|"
+    r"just now|vừa xong|"
+    r"\d+\s*(?:s|m|h|d|w|y)|"
+    r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)|"
+    r"view all \d+ replies|xem tất cả \d+ phản hồi|\d+ replies|\d+ phản hồi|"
+    r"\d{1,7}"
+    r")$",
+    re.IGNORECASE,
+)
+_TAIL = re.compile(r"(?:\s+\d+\s*(?:s|m|h|d|w|y))+(?:\s+\d{1,7})?\s*$", re.IGNORECASE)
+
+
+def comments_from_articles(blocks: list[str], limit: int) -> list[PublicComment]:
+    """Turn visible article text into comments. Drops the post and UI chrome."""
+    if limit < 1:
+        return []
+    found: list[PublicComment] = []
+    seen: set[str] = set()
+    for block in blocks:
+        lowered = block.lower()
+        if "all reactions" in lowered or "tất cả cảm xúc" in lowered:
+            continue
+        lines = [ln.strip() for ln in block.splitlines() if ln.strip() and not _DROP_LINE.match(ln.strip())]
+        if len(lines) < 2:
+            continue
+        author = lines[0]
+        text = _TAIL.sub("", " ".join(lines[1:])).strip()
+        if len(author) < 1 or len(text) < 1 or _DROP_LINE.match(author) or placeholder_text(text):
+            continue
+        key = f"{author}|{text[:80]}"
+        if key in seen:
+            continue
+        seen.add(key)
+        found.append(PublicComment(text=text[:2000], author_name=author))
+        if len(found) >= limit:
+            break
+    return found
 
 
 def _browser_proxy(proxy: str) -> dict[str, str] | None:
@@ -41,6 +87,10 @@ async def scan(
     proxy: str = "",
     **_: object,
 ) -> EngineResult:
+    if not url.strip():
+        return EngineResult(NAME, RANK, False, error="missing_url")
+    if invalid_limit(limit):
+        return EngineResult(NAME, RANK, False, error="invalid_limit")
     try:
         from playwright.async_api import async_playwright
     except ImportError as exc:
@@ -75,22 +125,9 @@ async def scan(
             texts = await page.locator('[role="article"]').all_inner_texts()
             await browser.close()
     except Exception as exc:
-        return EngineResult(NAME, RANK, False, error=f"{type(exc).__name__}: {exc}"[:300])
+        return EngineResult(NAME, RANK, False, error=public_error(exc))
 
-    comments: list[PublicComment] = []
-    for block in texts:
-        lowered = block.lower()
-        if "all reactions" in lowered or "tất cả cảm xúc" in lowered:
-            continue
-        lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
-        if len(lines) < 2:
-            continue
-        author, text = lines[0], " ".join(lines[1:])[:2000]
-        if len(text) < 1:
-            continue
-        comments.append(PublicComment(text=text, author_name=author))
-        if len(comments) >= limit:
-            break
+    comments = comments_from_articles(texts, limit)
     return EngineResult(
         NAME,
         RANK,

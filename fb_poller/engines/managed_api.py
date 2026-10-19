@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 
+from fb_poller.engines.guard import invalid_limit, public_error
 from fb_poller.engines.types import EngineResult, PublicComment
 
 RANK = 3
@@ -18,6 +19,10 @@ def _provider() -> str:
 
 
 async def scan(url: str, *, limit: int = 50, timeout: float = 60.0, **_: object) -> EngineResult:
+    if not url.strip():
+        return EngineResult(NAME, RANK, False, error="missing_url")
+    if invalid_limit(limit):
+        return EngineResult(NAME, RANK, False, error="invalid_limit")
     provider = _provider()
     key = os.environ.get("MANAGED_API_KEY", "").strip()
     endpoint = os.environ.get("MANAGED_COMMENTS_URL", "").strip()
@@ -45,11 +50,15 @@ async def scan(url: str, *, limit: int = 50, timeout: float = 60.0, **_: object)
                     headers={"Authorization": f"Bearer {key}"},
                 )
     except Exception as exc:
-        return EngineResult(NAME, RANK, False, error=f"{type(exc).__name__}: {exc}")
+        return EngineResult(NAME, RANK, False, error=public_error(exc))
 
     if resp.status_code >= 400:
         return EngineResult(NAME, RANK, False, error=f"http_{resp.status_code}: {resp.text[:180]}")
-    comments = _comments_from_json(resp.json(), limit)
+    try:
+        payload = resp.json()
+    except Exception as exc:
+        return EngineResult(NAME, RANK, False, error=public_error(exc))
+    comments = _comments_from_json(payload, limit)
     return EngineResult(
         NAME,
         RANK,
@@ -112,4 +121,10 @@ def _rows(payload: Any) -> list[Any]:
         value = payload.get(key)
         if isinstance(value, list):
             return value
+        if isinstance(value, dict):
+            nested = _rows(value)
+            if nested:
+                return nested
+    if any(key in payload for key in ("text", "message", "comment", "body")):
+        return [payload]
     return []

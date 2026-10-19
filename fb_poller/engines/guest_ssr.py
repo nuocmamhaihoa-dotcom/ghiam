@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 
+from fb_poller.engines.guard import comment_id, invalid_limit, placeholder_text, public_error
 from fb_poller.engines.types import EngineResult, PublicComment
 
 RANK = 7
@@ -17,22 +18,36 @@ _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 )
-_LOGIN_MARKERS = ("login.php", "log in to facebook", "đăng nhập facebook")
+_LOGIN_MARKERS = ("log in to facebook", "đăng nhập facebook", "/login.php", "/login/")
 
 
 def comments_from_html(html: str, limit: int = 25) -> list[PublicComment]:
-    """Pull comment-like objects from embedded JSON. Stops at the first page."""
+    """Pull comment objects from script JSON. Skips ahead after each decoded value."""
+    if limit < 1:
+        return []
     found: list[PublicComment] = []
     seen: set[str] = set()
+    chunks = re.findall(r"<script\b[^>]*>(.*?)</script>", html, flags=re.IGNORECASE | re.DOTALL)
+    if not chunks:
+        chunks = [html]
     decoder = json.JSONDecoder()
-    for match in re.finditer(r"\{", html):
-        if len(found) >= limit:
-            break
-        try:
-            obj, _ = decoder.raw_decode(html, match.start())
-        except json.JSONDecodeError:
+    for chunk in chunks:
+        if "comment" not in chunk.lower():
             continue
-        _walk(obj, found, seen, limit)
+        index = 0
+        attempts = 0
+        while index < len(chunk) and len(found) < limit and attempts < 400:
+            brace = chunk.find("{", index)
+            if brace < 0:
+                break
+            attempts += 1
+            try:
+                obj, end = decoder.raw_decode(chunk, brace)
+            except json.JSONDecodeError:
+                index = brace + 1
+                continue
+            _walk(obj, found, seen, limit)
+            index = max(end, brace + 1)
     return found
 
 
@@ -48,7 +63,7 @@ def _walk(node: Any, found: list[PublicComment], seen: set[str], limit: int) -> 
     text = _comment_text(node)
     if text:
         author = _author(node)
-        cid = str(node.get("id") or node.get("legacy_fbid") or "") or None
+        cid = comment_id(node.get("id")) or comment_id(node.get("legacy_fbid"))
         key = cid or f"{author}|{text[:80]}"
         if key not in seen:
             seen.add(key)
@@ -76,10 +91,7 @@ def _comment_text(node: dict[str, Any]) -> str | None:
     if len(text) < 1 or len(text) > 8000:
         return None
     typename = str(node.get("__typename") or "")
-    looks = typename in {"Comment", "FeedbackComment", "XFBComment"} or (
-        "author" in node and isinstance(body, dict)
-    )
-    if not looks and "comment" not in typename.lower():
+    if "comment" not in typename.lower() or placeholder_text(text):
         return None
     return text
 
@@ -111,6 +123,10 @@ async def scan(
     proxy: str = "",
     **_: object,
 ) -> EngineResult:
+    if not url.strip():
+        return EngineResult(NAME, RANK, False, error="missing_url")
+    if invalid_limit(limit):
+        return EngineResult(NAME, RANK, False, error="invalid_limit")
     try:
         async with httpx.AsyncClient(
             timeout=timeout,
@@ -121,19 +137,36 @@ async def scan(
         ) as client:
             resp = await client.get(url)
     except Exception as exc:
-        return EngineResult(NAME, RANK, False, error=f"{type(exc).__name__}: {exc}")
+        return EngineResult(NAME, RANK, False, error=public_error(exc))
 
     body = resp.text or ""
+    comments = comments_from_html(body, limit=limit) if resp.status_code < 400 else []
+    if comments:
+        return EngineResult(
+            NAME,
+            RANK,
+            True,
+            comments=comments,
+            note="First server-rendered batch only (about 15–25 comments).",
+        )
+    final_url = str(resp.url).lower()
     lowered = body.lower()
-    if resp.status_code >= 400 or any(mark in lowered for mark in _LOGIN_MARKERS):
+    if resp.status_code >= 400:
         return EngineResult(
             NAME,
             RANK,
             False,
-            error=f"http_{resp.status_code}" if resp.status_code >= 400 else "login_wall",
+            error=f"http_{resp.status_code}",
             note="Guest HTML from this IP did not include a public thread.",
         )
-    comments = comments_from_html(body, limit=limit)
+    if any(mark in lowered for mark in _LOGIN_MARKERS) or any(mark in final_url for mark in _LOGIN_MARKERS):
+        return EngineResult(
+            NAME,
+            RANK,
+            False,
+            error="login_wall",
+            note="Guest HTML from this IP did not include a public thread.",
+        )
     return EngineResult(
         NAME,
         RANK,
