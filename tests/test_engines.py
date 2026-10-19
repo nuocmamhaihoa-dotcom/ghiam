@@ -2264,6 +2264,67 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(imported.author_name, "lan")
         self.assertEqual(imported.created_time, "2024-12-04")
 
+    def test_publisher_name_and_composer_chrome(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nStart the conversation\nAdd a comment...\nAdd a public comment\n"
+                "Switch to your profile\nUse Page identity\nPosting as Lan\nAlso comment as Page\n"
+                "Double tap to like\nChoose a reaction\nUnlike · Reply\nSee likes\n"
+                "People who reacted\n4 people reacted\n4 likes · 2 replies\n"
+                "2 comments · 1 share\n3 shares · Like\nOpen thread\nView full thread\n"
+                "Previous comments\nRefresh comments\nTop comments · Live"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nStart the conversation about the soup tonight"], 5)
+        self.assertEqual(sentence[0].text, "Start the conversation about the soup tonight")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\nStart the conversation\nUnlike · Reply", author_name="Lan")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        html = (
+            '<script>{"__typename":"Comment","id":"4","body":{"text":"xin"},'
+            '"author":{"publisher_name":"An"},"writtenAt":"2025-01-01"}</script>'
+        )
+        found = comments_from_html(html)
+        self.assertEqual(found[0].author_name, "An")
+        self.assertEqual(found[0].created_time, "2025-01-01")
+        named = _one(
+            {"text": "xin", "commentKey": "66", "author": {"account_name": "Bo"}, "post_time": "2025-01-04"}
+        )
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "Bo")
+        self.assertEqual(named.comment_id, "66")
+        self.assertEqual(named.created_time, "2025-01-04")
+        rows, err = comments_from_graph_payload(
+            {"data": [{"message": "xin", "publisher_name": "An", "written_at": "2025-01-01"}]},
+            5,
+        )
+        self.assertIsNone(err)
+        self.assertEqual(rows[0].author_name, "An")
+        self.assertEqual(rows[0].created_time, "2025-01-01")
+        managed = _comments_from_json(
+            {"comments": [{"text": "xin", "profile_display": "Bo", "created_ms": "1710000050"}]},
+            5,
+        )
+        self.assertEqual(managed[0].author_name, "Bo")
+        self.assertEqual(managed[0].created_time, "1710000050")
+        threaded = _from_items({"payload": {"comment_thread": {"nodes": [{"text": "xin", "id": "15"}]}}}, 5)
+        self.assertEqual(threaded[0].comment_id, "15")
+        imported = _from_mapping(
+            {"Comment body text": "xin", "Publisher name": "lan", "Written at": "2025-01-05"}
+        )
+        self.assertIsNotNone(imported)
+        assert imported is not None
+        self.assertEqual(imported.text, "xin")
+        self.assertEqual(imported.author_name, "lan")
+        self.assertEqual(imported.created_time, "2025-01-05")
+
 
 if __name__ == "__main__":
     unittest.main()

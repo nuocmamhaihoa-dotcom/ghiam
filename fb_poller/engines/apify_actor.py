@@ -103,6 +103,7 @@ def _from_items(payload: Any, limit: int) -> list[PublicComment]:
             "results",
             "result",
             "feedback",
+            "payload",
         ):
             value = payload.get(key)
             linked = connection_rows(value)
@@ -279,6 +280,10 @@ def _one(row: Any) -> PublicComment | None:
         "user_label",
         "commenter_label",
         "author_text",
+        "publisher_name",
+        "account_name",
+        "profile_display",
+        "user_caption",
     )
     return PublicComment(
         text=text,

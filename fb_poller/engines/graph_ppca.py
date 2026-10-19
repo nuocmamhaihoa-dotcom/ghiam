@@ -136,6 +136,9 @@ def _append_rows(
                         "creator_name",
                         "owner_title",
                         "user_label",
+                        "publisher_name",
+                        "account_name",
+                        "profile_display",
                     ),
                 )
             )
@@ -163,6 +166,8 @@ def _append_rows(
                             "entity_name",
                             "creator_name",
                             "owner_title",
+                            "publisher_name",
+                            "account_name",
                         ),
                     )
                 )
