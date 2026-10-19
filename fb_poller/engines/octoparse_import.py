@@ -67,6 +67,7 @@ _TIME_KEYS = (
     "thoi gian",
     "ngày đăng",
     "ngay dang",
+    "date_created",
 )
 
 

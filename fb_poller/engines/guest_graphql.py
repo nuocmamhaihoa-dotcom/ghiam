@@ -14,7 +14,7 @@ from fb_poller.engines.guard import (
     person_name,
     placeholder_text,
     public_error,
-    time_text,
+    timestamp_of,
 )
 from fb_poller.engines.types import EngineResult, PublicComment
 
@@ -68,8 +68,7 @@ def comments_from_payload(payload: Any, limit: int) -> list[PublicComment]:
                         text=text.strip(),
                         author_name=name,
                         comment_id=cid,
-                        created_time=time_text(node.get("created_time"))
-                        or time_text(node.get("created_at")),
+                        created_time=timestamp_of(node),
                     )
                 )
         for value in node.values():

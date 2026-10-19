@@ -1550,6 +1550,48 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(imported.author_name, "Lan")
         self.assertEqual(imported.created_time, "2024-03-02")
 
+    def test_creation_time_and_comment_menus(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\njust now · Edited\nHide or report this comment\nComment options\n"
+                "Unpin comment\nNew contributor\nLimited profile\nCommenting as Mai\n"
+                "Write a public reply\nView 1 more reply\nHide 1 reply\nShow 2 more comments\n"
+                "No replies yet\nBe the first to reply\nkhoảng một phút trước\n"
+                "Ẩn hoặc báo cáo bình luận này\nViết phản hồi công khai"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nHide or report this comment later tonight"], 5)
+        self.assertEqual(sentence[0].text, "Hide or report this comment later tonight")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\njust now · Edited\nComment options", author_name="Lan")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        found = comments_from_payload(
+            {
+                "__typename": "Comment",
+                "legacy_fbid": "9",
+                "body": {"text": "xin"},
+                "author": {"name": "An"},
+                "creation_time": 1710000000,
+            },
+            5,
+        )
+        self.assertEqual(found[0].created_time, "1710000000")
+        html = (
+            '<script>{"__typename":"Comment","id":"8","body":{"text":"xin"},'
+            '"author":{"name":"An"},"creation_time":1710000000}</script>'
+        )
+        self.assertEqual(comments_from_html(html)[0].created_time, "1710000000")
+        named = _one({"text": "xin", "profileName": "Lan", "date_created": "2024-03-02"})
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.created_time, "2024-03-02")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -17,7 +17,7 @@ from fb_poller.engines.guard import (
     placeholder_text,
     public_error,
     redact_text,
-    time_text,
+    timestamp_of,
 )
 from fb_poller.engines.types import EngineResult, PublicComment
 
@@ -68,7 +68,7 @@ def _walk(node: Any, found: list[PublicComment], seen: set[str], limit: int) -> 
         key = cid or f"{author}|{text[:80]}"
         if key not in seen:
             seen.add(key)
-            created = time_text(node.get("created_time")) or time_text(node.get("created_at"))
+            created = timestamp_of(node)
             found.append(
                 PublicComment(
                     text=text,
