@@ -94,20 +94,19 @@ def _from_items(payload: Any, limit: int) -> list[PublicComment]:
     for row in rows:
         if not isinstance(row, dict):
             continue
-        nested = row.get("comments")
-        if isinstance(nested, list) and nested:
-            for child in nested:
-                item = _one(child)
-                if item:
-                    out.append(item)
-                if len(out) >= limit:
-                    return out
-            continue
         item = _one(row)
         if item:
             out.append(item)
         if len(out) >= limit:
             break
+        nested = row.get("comments")
+        if isinstance(nested, list):
+            for child in nested:
+                child_item = _one(child)
+                if child_item:
+                    out.append(child_item)
+                if len(out) >= limit:
+                    return out
     return out
 
 

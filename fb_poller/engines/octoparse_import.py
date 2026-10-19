@@ -41,37 +41,37 @@ def _from_json_lines(raw: str, limit: int) -> list[PublicComment]:
         line = line.strip()
         if not line:
             continue
-        rows.append(json.loads(line))
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
     return _from_json(rows, limit)
 
 
 def _from_json(payload: object, limit: int, depth: int = 0) -> list[PublicComment]:
-    if depth > 6:
+    if depth > 6 or limit < 1:
         return []
-    rows: list[object]
     if isinstance(payload, list):
-        rows = payload
-    elif isinstance(payload, dict):
-        for key in ("comments", "data", "results", "items"):
-            if key not in payload:
-                continue
-            value = payload[key]
-            if isinstance(value, list):
-                return _from_json(value, limit, depth + 1)
-            if isinstance(value, dict):
-                return _from_json(value, limit, depth + 1)
-        rows = [payload]
-    else:
+        out: list[PublicComment] = []
+        for row in payload:
+            out.extend(_from_json(row, limit - len(out), depth + 1))
+            if len(out) >= limit:
+                break
+        return out
+    if not isinstance(payload, dict):
         return []
-    out: list[PublicComment] = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        item = _from_mapping({str(k): v for k, v in row.items()})
-        if item:
-            out.append(item)
-        if len(out) >= limit:
-            break
+    out = []
+    item = _from_mapping({str(k): v for k, v in payload.items()})
+    if item:
+        out.append(item)
+    if len(out) >= limit:
+        return out
+    for key in ("comments", "data", "results", "items"):
+        value = payload.get(key)
+        if isinstance(value, (list, dict)) and value:
+            out.extend(_from_json(value, limit - len(out), depth + 1))
+            if len(out) >= limit:
+                break
     return out
 
 

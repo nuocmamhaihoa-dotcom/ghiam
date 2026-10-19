@@ -65,6 +65,27 @@ def comments_from_payload(payload: Any, limit: int) -> list[PublicComment]:
     return found
 
 
+def merge_comments(groups: list[list[PublicComment]], limit: int) -> list[PublicComment]:
+    """Keep the first sighting of each comment. A later copy with the same id replaces a shorter one."""
+    if limit < 1:
+        return []
+    chosen: dict[str, PublicComment] = {}
+    order: list[str] = []
+    for group in groups:
+        for item in group:
+            key = item.comment_id or item.text
+            if not key:
+                continue
+            current = chosen.get(key)
+            if current is None:
+                chosen[key] = item
+                order.append(key)
+                continue
+            if len(item.text) > len(current.text):
+                chosen[key] = item
+    return [chosen[key] for key in order][:limit]
+
+
 def comments_from_html(html: str, limit: int) -> list[PublicComment]:
     """Read comment objects embedded in the document the browser already received."""
     if limit < 1:
@@ -164,23 +185,9 @@ async def scan(
     except Exception as exc:
         return EngineResult(NAME, RANK, False, error=public_error(exc))
 
-    comments: list[PublicComment] = []
-    seen: set[str] = set()
-    for item in comments_from_html(html, limit):
-        key = item.comment_id or item.text
-        if key not in seen:
-            seen.add(key)
-            comments.append(item)
-    for blob in blobs:
-        for item in comments_from_payload(blob, limit):
-            key = item.comment_id or item.text
-            if key in seen:
-                continue
-            seen.add(key)
-            comments.append(item)
-            if len(comments) >= limit:
-                break
-    # Also parse inline JSON the document already shipped
+    groups = [comments_from_html(html, limit)]
+    groups.extend(comments_from_payload(blob, limit) for blob in blobs)
+    comments = merge_comments(groups, limit)
     return EngineResult(
         NAME,
         RANK,

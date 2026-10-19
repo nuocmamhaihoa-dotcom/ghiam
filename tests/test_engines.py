@@ -10,13 +10,13 @@ from fb_poller.engines.apify_actor import _from_items
 from fb_poller.engines.graph_ppca import accepted_object_id, post_id_from_url
 from fb_poller.engines.guard import public_error
 from fb_poller.engines.guest_graphql import comments_from_html as graphql_from_html
-from fb_poller.engines.guest_graphql import comments_from_payload
+from fb_poller.engines.guest_graphql import comments_from_payload, merge_comments
 from fb_poller.engines.guest_ssr import comments_from_html
-from fb_poller.engines.managed_api import _comments_from_json
+from fb_poller.engines.managed_api import _comments_from_json, bright_dataset_id
 from fb_poller.engines.octoparse_import import comments_from_export
 from fb_poller.engines.pa1_newest import comments_from_articles
 from fb_poller.engines.registry import CATALOG, resolve, scan_each_independent, scan_one
-from fb_poller.engines.types import EngineResult
+from fb_poller.engines.types import EngineResult, PublicComment
 from fb_poller.workers.proxy_manager import parse_proxy_line
 
 
@@ -249,6 +249,37 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(accepted_object_id("1426466738848698"), "1426466738848698")
         self.assertIsNone(accepted_object_id("https://evil.example/comments"))
         self.assertIsNone(accepted_object_id(True))
+
+    def test_parent_comment_is_kept_when_replies_are_nested(self) -> None:
+        managed = _comments_from_json(
+            {"text": "parent", "author": "P", "comments": [{"text": "reply", "author": "R"}]},
+            5,
+        )
+        self.assertEqual([item.text for item in managed], ["parent", "reply"])
+        apify = _from_items(
+            [{"text": "parent", "profileName": "P", "comments": [{"text": "reply", "profileName": "R"}]}],
+            5,
+        )
+        self.assertEqual([item.text for item in apify], ["parent", "reply"])
+
+    def test_octoparse_skips_a_broken_jsonl_line(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "rows.jsonl"
+            path.write_text('{"message":"a","name":"A"}\nNOT JSON\n{"message":"b","name":"B"}\n', encoding="utf-8")
+            found = comments_from_export(path)
+        self.assertEqual([item.text for item in found], ["a", "b"])
+
+    def test_longer_copy_of_the_same_comment_replaces_a_short_one(self) -> None:
+        short = PublicComment(text="hi", comment_id="1", author_name="An")
+        long = PublicComment(text="hi there", comment_id="1", author_name="An")
+        merged = merge_comments([[short], [long]], 5)
+        self.assertEqual(merged[0].text, "hi there")
+
+    def test_brightdata_dataset_id_cannot_add_query_parameters(self) -> None:
+        with patch.dict(os.environ, {"BRIGHTDATA_DATASET_ID": "gd_ok&format=csv"}, clear=False):
+            self.assertIsNone(bright_dataset_id())
+        with patch.dict(os.environ, {"BRIGHTDATA_DATASET_ID": "gd_abc123"}, clear=False):
+            self.assertEqual(bright_dataset_id(), "gd_abc123")
 
     def test_octoparse_numeric_comment(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

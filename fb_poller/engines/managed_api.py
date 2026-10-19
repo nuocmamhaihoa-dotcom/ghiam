@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 import httpx
@@ -12,6 +13,7 @@ from fb_poller.engines.types import EngineResult, PublicComment
 
 RANK = 3
 NAME = "managed-api"
+_DATASET_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
 def _provider() -> str:
@@ -77,17 +79,29 @@ async def scan(url: str, *, limit: int = 50, timeout: float = 60.0, **_: object)
     )
 
 
+def bright_dataset_id() -> str | None:
+    """Dataset id safe to send as one query parameter."""
+    dataset = os.environ.get("BRIGHTDATA_DATASET_ID", "").strip()
+    if _DATASET_ID.fullmatch(dataset):
+        return dataset
+    return None
+
+
 async def _bright_data(
     client: httpx.AsyncClient,
     url: str,
     key: str,
     limit: int,
 ) -> httpx.Response:
-    dataset = os.environ.get("BRIGHTDATA_DATASET_ID", "").strip()
-    if not dataset:
+    raw = os.environ.get("BRIGHTDATA_DATASET_ID", "").strip()
+    dataset = bright_dataset_id()
+    if not raw:
         raise RuntimeError("missing_BRIGHTDATA_DATASET_ID")
+    if dataset is None:
+        raise RuntimeError("invalid_BRIGHTDATA_DATASET_ID")
     return await client.post(
-        f"https://api.brightdata.com/datasets/v3/scrape?dataset_id={dataset}&format=json",
+        "https://api.brightdata.com/datasets/v3/scrape",
+        params={"dataset_id": dataset, "format": "json"},
         headers={"Authorization": f"Bearer {key}"},
         json=[{"url": url, "limit": limit}],
     )
@@ -121,19 +135,29 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
     return out
 
 
-def _rows(payload: Any) -> list[Any]:
+def _own_text(row: dict[str, Any]) -> bool:
+    text = row.get("text") or row.get("message") or row.get("comment") or row.get("body")
+    if isinstance(text, dict):
+        text = text.get("text")
+    return bool(scalar_text(text))
+
+
+def _rows(payload: Any, depth: int = 0) -> list[Any]:
+    """Keep a comment and the replies nested under it. An empty list does not hide a later list."""
+    if depth > 6:
+        return []
     if isinstance(payload, list):
-        return payload
+        out: list[Any] = []
+        for item in payload:
+            out.extend(_rows(item, depth + 1))
+        return out
     if not isinstance(payload, dict):
         return []
-    for key in ("comments", "data", "results", "items"):
+    nested: list[Any] = []
+    for key in ("comments", "replies", "data", "results", "items"):
         value = payload.get(key)
-        if isinstance(value, list) and value:
-            return value
-        if isinstance(value, dict):
-            nested = _rows(value)
-            if nested:
-                return nested
-    if any(key in payload for key in ("text", "message", "comment", "body")):
-        return [payload]
-    return []
+        if isinstance(value, (list, dict)):
+            nested.extend(_rows(value, depth + 1))
+    if _own_text(payload):
+        return [payload, *nested]
+    return nested
