@@ -1356,6 +1356,53 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(imported.author_name, "Lan")
         self.assertEqual(imported.created_time, "2024-03-02")
 
+    def test_nodes_connection_and_pin_menu(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan∙just now\nhello\nTop comments\nPin comment\nEdit comment\n"
+                "Mark as spam\nNotify me\nFollowing\nTurn off notifications for this comment\n"
+                "edited 2 hours ago\nđã chỉnh sửa 2 giờ trước\nView 1 comment\n1 người khác"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nI will edit comment later"], 5)
+        self.assertEqual(sentence[0].text, "I will edit comment later")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nTop comments\nedited 2 hours ago\nhello View 1 comment",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello\nhello")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertIn("strip_glued_chrome", codes)
+        graph = comments_from_graph_payload(
+            {"comments": {"nodes": [{"message": "xin", "from": [{"name": "Lan"}], "id": "9"}]}},
+            5,
+        )
+        self.assertEqual(graph[0][0].text, "xin")
+        self.assertEqual(graph[0][0].author_name, "Lan")
+        self.assertEqual(graph[0][0].comment_id, "9")
+        managed = _comments_from_json(
+            {"comments": {"nodes": [{"commentBody": "xin", "authorName": "Lan", "id": "8"}]}},
+            5,
+        )
+        self.assertEqual(managed[0].text, "xin")
+        self.assertEqual(managed[0].comment_id, "8")
+        named = _one({"bodyText": "xin", "from": [{"name": "Lan"}]})
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.text, "xin")
+        self.assertEqual(named.author_name, "Lan")
+        found = _from_items({"comments": {"nodes": [{"text": "xin", "profileName": "Lan", "id": "4"}]}}, 5)
+        self.assertEqual(found[0].comment_id, "4")
+        self.assertEqual(found[0].author_name, "Lan")
+
 
 if __name__ == "__main__":
     unittest.main()

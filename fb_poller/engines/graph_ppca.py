@@ -93,6 +93,8 @@ def _append_rows(
             or nested_text(row.get("body"))
             or nested_text(row.get("preferred_body"))
             or nested_text(row.get("content"))
+            or nested_text(row.get("commentBody"))
+            or nested_text(row.get("bodyText"))
         )
         from_inner = False
         if text is None and inner is not None:

@@ -169,7 +169,17 @@ def _field_text(row: dict[str, Any]) -> str | None:
 
 def _field_source(row: dict[str, Any]) -> tuple[str | None, dict[str, Any] | None]:
     """Text, plus the nested object that held it when the field itself is an object."""
-    for key in ("text", "message", "comment", "comment_text", "body", "preferred_body", "content"):
+    for key in (
+        "text",
+        "message",
+        "comment",
+        "comment_text",
+        "commentBody",
+        "body",
+        "bodyText",
+        "preferred_body",
+        "content",
+    ):
         value = row.get(key)
         found = nested_text(value)
         if found:

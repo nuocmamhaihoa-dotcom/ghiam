@@ -123,6 +123,12 @@ def person_name(value: object, depth: int = 0) -> str | None:
     plain = scalar_text(value)
     if plain:
         return plain
+    if isinstance(value, list):
+        for item in value:
+            found = person_name(item, depth + 1)
+            if found:
+                return found
+        return None
     if isinstance(value, dict):
         lowered = {fold_key(key): item for key, item in value.items()}
         for key in (
@@ -222,7 +228,7 @@ def nested_text(value: object, depth: int = 0) -> str | None:
                 parts.append(found)
         return " ".join(parts) if parts else None
     if isinstance(value, dict):
-        for key in ("text", "message", "comment", "body", "content"):
+        for key in ("text", "message", "comment", "body", "content", "commentBody", "comment_body", "bodyText", "body_text"):
             if key not in value:
                 continue
             found = nested_text(value.get(key), depth + 1)
@@ -268,7 +274,7 @@ def connection_rows(value: object) -> list[object]:
         return [_unwrap_node(item) for item in value]
     if not isinstance(value, dict):
         return []
-    for key in ("data", "edges"):
+    for key in ("data", "edges", "nodes"):
         child = value.get(key)
         if isinstance(child, list) and child:
             return [_unwrap_node(item) for item in child]
@@ -282,7 +288,7 @@ def _unwrap_node(item: object) -> object:
     node = item.get("node")
     if not isinstance(node, dict):
         return item
-    for key in ("text", "message", "comment", "comment_text", "commentText", "body", "preferred_body"):
+    for key in ("text", "message", "comment", "comment_text", "commentText", "commentBody", "body", "bodyText", "preferred_body"):
         if nested_text(item.get(key)):
             return item
     return node

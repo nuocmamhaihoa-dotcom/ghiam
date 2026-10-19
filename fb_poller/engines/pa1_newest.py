@@ -22,11 +22,18 @@ _DROP_LINE = re.compile(
     r"write a comment(?:\.\.\.|…)?|viết bình luận(?:\.\.\.|…)?|"
     r"write a reply(?:\.\.\.|…)?|viết phản hồi(?:\.\.\.|…)?|"
     r"view more comments|xem thêm bình luận|"
-    r"view \d+ more comments?|xem thêm \d+ bình luận|"
+    r"view \d+(?: more)? comments?|xem thêm \d+ bình luận|"
     r"hide \d+ replies|hide repl(?:y|ies)|ẩn \d+ phản hồi|ẩn phản hồi|"
     r"reply to \S.{0,60}|trả lời \S.{0,60}|"
     r"comment as \S.{0,60}|reply as \S.{0,60}|bình luận với tư cách \S.{0,80}|"
     r"most relevant comments|relevant comments|newest comments|bình luận phù hợp nhất|bình luận mới nhất|"
+    r"top comments|bình luận hàng đầu|newest first|"
+    r"pin comment|ghim bình luận|edit comment|chỉnh sửa bình luận|"
+    r"mark as spam|đánh dấu là spam|"
+    r"notify me|thông báo cho tôi|"
+    r"following|đang theo dõi|"
+    r"turn off notifications(?:\s+for\s+\S.{0,60})?|tắt thông báo(?:\s+cho\s+\S.{0,80})?|"
+    r"\d+\s+người khác|"
     r"all replies|tất cả phản hồi|"
     r"report comment|báo cáo bình luận|"
     r"copy link|sao chép liên kết|"
@@ -50,7 +57,7 @@ _DROP_LINE = re.compile(
     r"see all comments|view all comments|"
     r"(?:một|hai|ba)\s+(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"sponsored|được tài trợ|active now|đang hoạt động|"
-    r"[·•…]+|"
+    r"[·•∙‧⋅…]+|"
     r"all comments|tất cả bình luận|"
     r"top fan|rising fan|tác giả|author|admin|verified|đã xác minh|"
     r"just now|vừa xong|"
@@ -60,13 +67,13 @@ _DROP_LINE = re.compile(
     r"hôm nay(?:\s+(?:lúc|vào)\s+\d{1,2}:\d{2})|"
     r"thứ\s+(?:hai|ba|tư|năm|sáu|bảy|nhật)(?:\s+(?:lúc|vào)\s+\d{1,2}:\d{2})|"
     r"translated by \S.{0,40}|được dịch bởi \S.{0,40}|"
-    r"[·•]?\s*(?:about\s+|khoảng\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
+    r"[·•∙‧⋅]?\s*(?:about\s+|khoảng\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
     r"(?:khoảng\s+)?\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
-    r"\d+\s*(?:s|m|h|d|w|y)\s*[·•]?|"
+    r"\d+\s*(?:s|m|h|d|w|y)\s*[·•∙‧⋅]?|"
     r"\d+\s*(?:secs?|mins?|hrs?|mos?|yrs?|wks?|seconds?|minutes?|hours?|months?|years?|weeks?)(?:\s+ago)?|"
     r"\d+\s*(?:days?|weeks?|months?|years?)(?:\s+ago)?|"
-    r"[·•]?\s*\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?(?:\s*(?:gmt|utc))?|"
-    r"[·•]?\s*\d{1,2}h\d{2}|"
+    r"[·•∙‧⋅]?\s*\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?(?:\s*(?:gmt|utc))?|"
+    r"[·•∙‧⋅]?\s*\d{1,2}h\d{2}|"
     r"\d{4}-\d{2}-\d{2}(?:[t ]\d{1,2}:\d{2}(?::\d{2})?(?:z|[+-]\d{2}:?\d{2})?)?|"
     r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:,\s*\d{4})?(?:\s+at\s+\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?)?|"
     r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|"
@@ -102,7 +109,7 @@ _DROP_LINE = re.compile(
     r"view more replies|see more replies|xem thêm phản hồi|"
     r"see attachment|view attachment|xem tệp đính kèm|"
     r"top contributor|"
-    r"\S.{0,60}\s*[·•]\s*(?:follow|theo dõi|top fan|rising fan|top contributor|verified|đã xác minh|author|admin|tác giả)|"
+    r"\S.{0,60}\s*[·•∙‧⋅]\s*(?:follow|theo dõi|top fan|rising fan|top contributor|verified|đã xác minh|author|admin|tác giả)|"
     r"filter|lọc|"
     r"(?:\d+|one|you|bạn)\s+likes?\s+this|"
     r"\d+\s+người\s+thích(?:\s+nội\s+dung\s+này)?|"
@@ -111,12 +118,12 @@ _DROP_LINE = re.compile(
     r"no comments yet|chưa có bình luận(?:\s+nào)?|"
     r"older comments|bình luận cũ hơn|"
     r"view previous replies|see previous replies|load previous comments|"
-    r"comment\s*[·•]\s*\d+\s*[smhdwy]|"
+    r"comment\s*[·•∙‧⋅]\s*\d+\s*[smhdwy]|"
     r"this comment is unavailable|comment removed|bình luận này không còn|"
     r"see translation|hide translation|show translation|view original|auto-translated|was this translation helpful\??|xem bản dịch|ẩn bản dịch|"
     r"see original(?:\s*\([^)\n]{0,80}\)|\s+in\s+\S.{0,40})?|hide original(?:\s*\([^)\n]{0,80}\)|\s+in\s+\S.{0,40})?|"
     r"xem bản gốc(?:\s*\([^)\n]{0,80}\))?|ẩn bản gốc(?:\s*\([^)\n]{0,80}\))?|"
-    r"edited(?:(?:\s*[·•]\s*|\s+)(?:"
+    r"edited(?:(?:\s*[·•∙‧⋅]\s*|\s+)(?:"
     r"just now|vừa xong|"
     r"yesterday(?:\s+at\s+\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?)?|hôm qua|"
     r"(?:a\s+moment|moments)\s+ago|"
@@ -126,6 +133,7 @@ _DROP_LINE = re.compile(
     r"(?:a\s+moment|moments|seconds|minutes|hours)\s+ago|"
     r"vừa mới(?:\s+xong)?|"
     r"\d+\s*[smhdwy]|"
+    r"\d+\s+(?:seconds?|minutes?|hours?|days?|weeks?|months?|years?)\s+ago|"
     r"\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?|"
     r"\d{1,2}h\d{2}|"
     r"\d{4}-\d{2}-\d{2}|"
@@ -133,14 +141,14 @@ _DROP_LINE = re.compile(
     r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:,\s*\d{4})?|"
     r"\d{1,2}\s+thg\s+\d{1,2}"
     r"))?|"
-    r"đã chỉnh sửa(?:\s*[·•]\s*(?:\d+\s*[smhdwy]|\d{1,2}:\d{2}|\d{1,2}h\d{2}|\d{1,2}\s+thg\s+\d{1,2}))?|"
-    r"\d+\s*[smhdwy]\s*[·•]\s*(?:edited|đã chỉnh sửa)?"
+    r"đã chỉnh sửa(?:(?:\s*[·•∙‧⋅]\s*|\s+)(?:\d+\s*[smhdwy]|\d+\s+(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|\d{1,2}:\d{2}|\d{1,2}h\d{2}|\d{1,2}\s+thg\s+\d{1,2}))?|"
+    r"\d+\s*[smhdwy]\s*[·•∙‧⋅]\s*(?:edited|đã chỉnh sửa)?"
     r")$",
     re.IGNORECASE,
 )
 _AUTHOR_STAMP = re.compile(
     r"(?:"
-    r"\s*[·•]\s*(?:"
+    r"\s*[·•∙‧⋅]\s*(?:"
     r"just now|vừa xong|"
     r"yesterday(?:\s+at\s+\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?)?|"
     r"hôm qua(?:\s+(?:lúc|vào)\s+\d{1,2}:\d{2})?|"
@@ -152,8 +160,8 @@ _AUTHOR_STAMP = re.compile(
     r"\d+\s*(?:s|m|h|d|w|y)|"
     r"\d+\s*(?:secs?|mins?|hrs?|mos?|yrs?|wks?|seconds?|minutes?|hours?|months?|years?|weeks?)(?:\s+ago)?|"
     r"\d+\s*(?:days?|weeks?|months?|years?)(?:\s+ago)?|"
-    r"[·•]?\s*\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?(?:\s*(?:gmt|utc))?|"
-    r"[·•]?\s*\d{1,2}h\d{2}|"
+    r"[·•∙‧⋅]?\s*\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?(?:\s*(?:gmt|utc))?|"
+    r"[·•∙‧⋅]?\s*\d{1,2}h\d{2}|"
     r"\d{4}-\d{2}-\d{2}(?:[t ]\d{1,2}:\d{2}(?::\d{2})?(?:z|[+-]\d{2}:?\d{2})?)?|"
     r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:,\s*\d{4})?(?:\s+at\s+\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?)?|"
     r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|"
@@ -214,7 +222,7 @@ def comments_from_articles(blocks: list[str], limit: int) -> list[PublicComment]
             line = raw.strip().replace("\u00a0", " ")
             if not line or _DROP_LINE.match(line):
                 continue
-            unglued = _GLUED_TAIL.sub("", line).strip(" ·•…").strip()
+            unglued = _GLUED_TAIL.sub("", line).strip(" ·•∙‧⋅…").strip()
             if not unglued or _DROP_LINE.match(unglued):
                 continue
             lines.append(unglued)
@@ -222,7 +230,7 @@ def comments_from_articles(blocks: list[str], limit: int) -> list[PublicComment]
             lines.pop()
         if len(lines) < 2:
             continue
-        author = _AUTHOR_STAMP.sub("", lines[0]).strip(" ·•")
+        author = _AUTHOR_STAMP.sub("", lines[0]).strip(" ·•∙‧⋅")
         text = " ".join(lines[1:]).strip()
         if len(author) < 1 or len(text) < 1 or _DROP_LINE.match(author) or placeholder_text(text):
             continue

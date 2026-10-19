@@ -64,11 +64,18 @@ _CHROME_LINE = re.compile(
     r"write a reply\.\.\.|write a reply…|write a reply|"
     r"viết phản hồi\.\.\.|viết phản hồi…|viết phản hồi|"
     r"view more comments|xem thêm bình luận|"
-    r"view \d+ more comments?|xem thêm \d+ bình luận|"
+    r"view \d+(?: more)? comments?|xem thêm \d+ bình luận|"
     r"hide \d+ replies|hide repl(?:y|ies)|ẩn \d+ phản hồi|ẩn phản hồi|"
     r"reply to \S.{0,60}|trả lời \S.{0,60}|"
     r"comment as \S.{0,60}|reply as \S.{0,60}|bình luận với tư cách \S.{0,80}|"
     r"most relevant comments|relevant comments|newest comments|bình luận phù hợp nhất|bình luận mới nhất|"
+    r"top comments|bình luận hàng đầu|newest first|"
+    r"pin comment|ghim bình luận|edit comment|chỉnh sửa bình luận|"
+    r"mark as spam|đánh dấu là spam|"
+    r"notify me|thông báo cho tôi|"
+    r"following|đang theo dõi|"
+    r"turn off notifications(?:\s+for\s+\S.{0,60})?|tắt thông báo(?:\s+cho\s+\S.{0,80})?|"
+    r"\d+\s+người khác|"
     r"all replies|tất cả phản hồi|"
     r"report comment|báo cáo bình luận|"
     r"copy link|sao chép liên kết|"
@@ -92,7 +99,7 @@ _CHROME_LINE = re.compile(
     r"see all comments|view all comments|"
     r"(?:một|hai|ba)\s+(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
     r"sponsored|được tài trợ|active now|đang hoạt động|"
-    r"[·•…]+|"
+    r"[·•∙‧⋅…]+|"
     r"all comments|tất cả bình luận|"
     r"top fan|rising fan|tác giả|author|admin|verified|đã xác minh|"
     r"just now|vừa xong|"
@@ -102,13 +109,13 @@ _CHROME_LINE = re.compile(
     r"hôm nay(?:\s+(?:lúc|vào)\s+\d{1,2}:\d{2})|"
     r"thứ\s+(?:hai|ba|tư|năm|sáu|bảy|nhật)(?:\s+(?:lúc|vào)\s+\d{1,2}:\d{2})|"
     r"translated by \S.{0,40}|được dịch bởi \S.{0,40}|"
-    r"[·•]?\s*(?:about\s+|khoảng\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
+    r"[·•∙‧⋅]?\s*(?:about\s+|khoảng\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
     r"(?:khoảng\s+)?\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
-    r"\d+\s*(?:s|m|h|d|w|y)\s*[·•]?|"
+    r"\d+\s*(?:s|m|h|d|w|y)\s*[·•∙‧⋅]?|"
     r"\d+\s*(?:secs?|mins?|hrs?|mos?|yrs?|wks?|seconds?|minutes?|hours?|months?|years?|weeks?)(?:\s+ago)?|"
     r"\d+\s*(?:days?|weeks?|months?|years?)(?:\s+ago)?|"
-    r"[·•]?\s*\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?(?:\s*(?:gmt|utc))?|"
-    r"[·•]?\s*\d{1,2}h\d{2}|"
+    r"[·•∙‧⋅]?\s*\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?(?:\s*(?:gmt|utc))?|"
+    r"[·•∙‧⋅]?\s*\d{1,2}h\d{2}|"
     r"\d{4}-\d{2}-\d{2}(?:[t ]\d{1,2}:\d{2}(?::\d{2})?(?:z|[+-]\d{2}:?\d{2})?)?|"
     r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:,\s*\d{4})?(?:\s+at\s+\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?)?|"
     r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|"
@@ -145,7 +152,7 @@ _CHROME_LINE = re.compile(
     r"view more replies|see more replies|xem thêm phản hồi|"
     r"see attachment|view attachment|xem tệp đính kèm|"
     r"top contributor|"
-    r"\S.{0,60}\s*[·•]\s*(?:follow|theo dõi|top fan|rising fan|top contributor|verified|đã xác minh|author|admin|tác giả)|"
+    r"\S.{0,60}\s*[·•∙‧⋅]\s*(?:follow|theo dõi|top fan|rising fan|top contributor|verified|đã xác minh|author|admin|tác giả)|"
     r"filter|lọc|"
     r"(?:\d+|one|you|bạn)\s+likes?\s+this|"
     r"\d+\s+người\s+thích(?:\s+nội\s+dung\s+này)?|"
@@ -154,12 +161,12 @@ _CHROME_LINE = re.compile(
     r"no comments yet|chưa có bình luận(?:\s+nào)?|"
     r"older comments|bình luận cũ hơn|"
     r"view previous replies|see previous replies|load previous comments|"
-    r"comment\s*[·•]\s*\d+\s*[smhdwy]|"
+    r"comment\s*[·•∙‧⋅]\s*\d+\s*[smhdwy]|"
     r"this comment is unavailable|comment removed|bình luận này không còn|"
     r"see translation|hide translation|show translation|view original|auto-translated|was this translation helpful\??|xem bản dịch|ẩn bản dịch|"
     r"see original(?:\s*\([^)\n]{0,80}\)|\s+in\s+\S.{0,40})?|hide original(?:\s*\([^)\n]{0,80}\)|\s+in\s+\S.{0,40})?|"
     r"xem bản gốc(?:\s*\([^)\n]{0,80}\))?|ẩn bản gốc(?:\s*\([^)\n]{0,80}\))?|"
-    r"edited(?:(?:\s*[·•]\s*|\s+)(?:"
+    r"edited(?:(?:\s*[·•∙‧⋅]\s*|\s+)(?:"
     r"just now|vừa xong|"
     r"yesterday(?:\s+at\s+\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?)?|hôm qua|"
     r"(?:a\s+moment|moments)\s+ago|"
@@ -169,6 +176,7 @@ _CHROME_LINE = re.compile(
     r"(?:a\s+moment|moments|seconds|minutes|hours)\s+ago|"
     r"vừa mới(?:\s+xong)?|"
     r"\d+\s*[smhdwy]|"
+    r"\d+\s+(?:seconds?|minutes?|hours?|days?|weeks?|months?|years?)\s+ago|"
     r"\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?|"
     r"\d{1,2}h\d{2}|"
     r"\d{4}-\d{2}-\d{2}|"
@@ -176,8 +184,8 @@ _CHROME_LINE = re.compile(
     r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:,\s*\d{4})?|"
     r"\d{1,2}\s+thg\s+\d{1,2}"
     r"))?|"
-    r"đã chỉnh sửa(?:\s*[·•]\s*(?:\d+\s*[smhdwy]|\d{1,2}:\d{2}|\d{1,2}h\d{2}|\d{1,2}\s+thg\s+\d{1,2}))?|"
-    r"\d+\s*[smhdwy]\s*[·•]\s*(?:edited|đã chỉnh sửa)?|"
+    r"đã chỉnh sửa(?:(?:\s*[·•∙‧⋅]\s*|\s+)(?:\d+\s*[smhdwy]|\d+\s+(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|\d{1,2}:\d{2}|\d{1,2}h\d{2}|\d{1,2}\s+thg\s+\d{1,2}))?|"
+    r"\d+\s*[smhdwy]\s*[·•∙‧⋅]\s*(?:edited|đã chỉnh sửa)?|"
     r"all reactions:?|tất cả cảm xúc:?"
     r")$",
     re.IGNORECASE,
@@ -204,14 +212,14 @@ _GLUED_CHROME = re.compile(
     r"edited|đã chỉnh sửa|"
     r"\d+\s+(?:likes?|reactions?|comments?|shares?|lượt thích|bình luận|chia sẻ)|"
     r"hide \d+ replies|ẩn \d+ phản hồi|"
-    r"view \d+ more comments?|see \d+ more comments?|xem thêm \d+ bình luận|"
+    r"view \d+(?: more)? comments?|see \d+ more comments?|xem thêm \d+ bình luận|"
     r"see \d+ repl(?:y|ies)|xem \d+ phản hồi|"
     r"translated from \S.{0,40}|được dịch từ \S.{0,60}|"
     r"rate (?:this )?translation|đánh giá bản dịch|"
-    r"\d+\s*[smhdwy]\s*[·•]\s*(?:edited|đã chỉnh sửa)?"
+    r"\d+\s*[smhdwy]\s*[·•∙‧⋅]\s*(?:edited|đã chỉnh sửa)?"
     r")"
     r"|"
-    r"\s*[·•]\s*(?:"
+    r"\s*[·•∙‧⋅]\s*(?:"
     r"just now|vừa xong|"
     r"(?:about\s+|khoảng\s+)?(?:an?|one|\d+)\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
     r"\d+\s*(?:s|m|h|d|w|y)|"
@@ -224,7 +232,7 @@ _GLUED_CHROME = re.compile(
 )
 _AUTHOR_STAMP = re.compile(
     r"(?:"
-    r"\s*[·•]\s*(?:"
+    r"\s*[·•∙‧⋅]\s*(?:"
     r"just now|vừa xong|"
     r"yesterday(?:\s+at\s+\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?)?|"
     r"hôm qua(?:\s+(?:lúc|vào)\s+\d{1,2}:\d{2})?|"
@@ -236,8 +244,8 @@ _AUTHOR_STAMP = re.compile(
     r"\d+\s*(?:s|m|h|d|w|y)|"
     r"\d+\s*(?:secs?|mins?|hrs?|mos?|yrs?|wks?|seconds?|minutes?|hours?|months?|years?|weeks?)(?:\s+ago)?|"
     r"\d+\s*(?:days?|weeks?|months?|years?)(?:\s+ago)?|"
-    r"[·•]?\s*\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?(?:\s*(?:gmt|utc))?|"
-    r"[·•]?\s*\d{1,2}h\d{2}|"
+    r"[·•∙‧⋅]?\s*\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?(?:\s*(?:gmt|utc))?|"
+    r"[·•∙‧⋅]?\s*\d{1,2}h\d{2}|"
     r"\d{4}-\d{2}-\d{2}(?:[t ]\d{1,2}:\d{2}(?::\d{2})?(?:z|[+-]\d{2}:?\d{2})?)?|"
     r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:,\s*\d{4})?(?:\s+at\s+\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?)?|"
     r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|"
@@ -408,7 +416,7 @@ def _clean_text(text: str) -> tuple[str | None, list[str]]:
         unglued = _GLUED_CHROME.sub("", stripped).strip()
         if unglued != stripped:
             removed_glued = True
-            stripped = unglued.strip(" ·•…").strip()
+            stripped = unglued.strip(" ·•∙‧⋅…").strip()
         if not stripped:
             continue
         if _CHROME_LINE.match(stripped):
@@ -442,7 +450,7 @@ def _clean_author(author: str | None) -> tuple[str | None, list[str]]:
     if visible.lower() in _CHROME_AUTHOR or _CHROME_LINE.match(visible):
         codes.append("clear_chrome_author")
         return None, codes
-    unstamped = _AUTHOR_STAMP.sub("", visible).strip(" ·•")
+    unstamped = _AUTHOR_STAMP.sub("", visible).strip(" ·•∙‧⋅")
     if unstamped != visible:
         codes.append("strip_glued_chrome")
         visible = unstamped

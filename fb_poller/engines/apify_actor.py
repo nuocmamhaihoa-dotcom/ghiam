@@ -163,7 +163,18 @@ def _one(row: Any) -> PublicComment | None:
         return None
     text = None
     inner = None
-    for key in ("text", "message", "comment", "commentText", "comment_text", "body", "preferred_body", "content"):
+    for key in (
+        "text",
+        "message",
+        "comment",
+        "commentText",
+        "comment_text",
+        "commentBody",
+        "body",
+        "bodyText",
+        "preferred_body",
+        "content",
+    ):
         value = row.get(key)
         text = nested_text(value)
         if text:
