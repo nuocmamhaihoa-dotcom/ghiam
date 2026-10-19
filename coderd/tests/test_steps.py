@@ -410,6 +410,7 @@ class WorkerTests(unittest.TestCase):
         notes = ["SQLite is a C library that provides a lightweight disk-based database."]
         self.assertTrue(grounded("SQLite là cơ sở dữ liệu nhẹ trên đĩa", notes))
         self.assertFalse(grounded("the weather is sunny today", notes))
+        self.assertFalse(grounded("colorsys is used in computer vision", notes))
         sample = "Intro\n\n    conn = sqlite3.connect('tutorial.db')\n    cur = conn.cursor()\n"
         self.assertTrue(any("connect" in item for item in extract_examples(sample)))
 

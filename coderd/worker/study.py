@@ -535,22 +535,66 @@ def distill_notes(ask, name: str, notes: list[str]) -> list[str]:
     return [item for item in parse_lessons(str(ask(prompt) or "")) if grounded(item, notes)]
 
 
+_GENERIC = {
+    "python",
+    "library",
+    "module",
+    "source",
+    "description",
+    "example",
+    "import",
+    "using",
+    "used",
+    "code",
+    "class",
+    "function",
+    "package",
+    "section",
+    "tools",
+    "provides",
+    "useful",
+    "different",
+    "between",
+    "this",
+    "that",
+    "with",
+    "from",
+    "have",
+    "will",
+    "your",
+    "into",
+    "than",
+    "then",
+    "them",
+}
+
+
 def _terms(text: str) -> set[str]:
-    skip = {"this", "that", "with", "from", "have", "will", "your", "into", "than", "then", "them"}
     return {
         word.lower()
         for word in re.findall(r"[A-Za-z_][A-Za-z0-9_]{3,}", text)
-        if word.lower() not in skip
+        if word.lower() not in _GENERIC
     }
+
+
+def _claims(text: str) -> set[str]:
+    found: set[str] = set()
+    for word in re.findall(r"[A-Za-z_][A-Za-z0-9_]{3,}", text):
+        low = word.lower()
+        if low in _GENERIC:
+            continue
+        technical = "_" in word or any(ch.isdigit() for ch in word) or any(ch.isupper() for ch in word[1:])
+        if technical or len(low) >= 6:
+            found.add(low)
+    return found
 
 
 def grounded(lesson: str, notes: list[str]) -> bool:
     if not keep_lesson(lesson):
         return False
-    blob = " ".join(notes).lower()
-    tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]{2,}", lesson)
-    if any(token.lower() in blob for token in tokens):
-        return True
+    claimed = _claims(lesson)
+    if claimed:
+        return claimed <= _terms(" ".join(notes))
     return re.search(r"[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]", lesson.lower()) is not None
 
 
@@ -563,7 +607,10 @@ def extract_examples(text: str, limit: int = 3) -> list[str]:
             buf.clear()
             return
         snippet = " ".join(buf)
-        if 8 <= len(snippet) <= 180 and any(mark in snippet for mark in "()=:"):
+        if snippet.startswith(":") or "doctest" in snippet or ":class:" in snippet or ":synopsis:" in snippet:
+            buf.clear()
+            return
+        if 8 <= len(snippet) <= 180 and any(mark in snippet for mark in "=("):
             found.append(snippet[:180])
         buf.clear()
 
