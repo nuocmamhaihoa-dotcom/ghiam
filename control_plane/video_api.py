@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import json
 import os
 import secrets
 import shutil
+import sqlite3
 import time
 import zlib
 from pathlib import Path
@@ -23,7 +25,6 @@ from control_plane.upload_parts import (
     UploadRejected,
     check_upload_id,
     lookup_part,
-    reclaim_stale_partials,
     release_finish,
     save_done,
     write_part,
@@ -82,6 +83,7 @@ from control_plane.video_store import (
     commit_upload,
     device_day,
     disk_limit_bytes,
+    guard_disk,
     upload_room,
     finish,
     get_meta,
@@ -205,7 +207,13 @@ def prepare_upload_room(
     limit = disk_limit_bytes(total, settings.video_disk_percent)
     tight = used > limit or free <= 2 * 1024 * 1024 * 1024
     if tight:
-        reclaim_stale_partials(folder, now=now)
+        guard_disk(
+            None if root is not None else settings.video_db_path,
+            folder,
+            percent=settings.video_disk_percent,
+            measure=lambda: type("Usage", (), {"used": used, "free": free, "total": total})(),
+            now=now,
+        )
         if root is None:
             prune_old_videos(
                 settings.video_db_path,
@@ -325,27 +333,108 @@ class InviteBody(BaseModel):
     label: str = ""
 
 
-@router.get("/v1/videos/stats")
-def video_stats(
-    authorization: str | None = Header(default=None),
-    span: str = Query(default="today"),
-) -> dict[str, object]:
-    """span=today đếm video theo ngày giờ Việt Nam. span=all đếm toàn bộ thời gian."""
-    _auth(authorization)
-    init_db(settings.video_db_path)
-    release_stale_pc(settings.video_db_path)
-    body = stats(settings.video_db_path)
+_LAST_REPORT: dict[str, object] | None = None
+_STATS_CACHE = "ghiam-video-stats.json"
+
+
+def _stats_cache_paths() -> list[Path]:
+    paths = [settings.video_db_path.with_name("stats-cache.json")]
+    shared = Path("/dev/shm")
+    if shared.is_dir():
+        paths.append(shared / _STATS_CACHE)
+    return paths
+
+
+def _remember_report(body: dict[str, object]) -> None:
+    """Giữ bản thống kê vừa đọc được. Lần sau đĩa không ghi được vẫn trả bản này."""
+    global _LAST_REPORT
+    stored = {key: value for key, value in body.items() if key != "stale"}
+    _LAST_REPORT = stored
+    try:
+        payload = json.dumps(stored, ensure_ascii=False).encode("utf-8")
+    except (TypeError, ValueError):
+        return
+    for path in _stats_cache_paths():
+        try:
+            temporary = path.with_name(path.name + ".tmp")
+            temporary.write_bytes(payload)
+            temporary.replace(path)
+        except OSError:
+            continue
+
+
+def _recall_report() -> dict[str, object] | None:
+    if _LAST_REPORT is not None:
+        return dict(_LAST_REPORT)
+    best: tuple[float, dict[str, object]] | None = None
+    for path in _stats_cache_paths():
+        try:
+            stamp = path.stat().st_mtime
+            parsed = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            continue
+        if isinstance(parsed, dict) and (best is None or stamp > best[0]):
+            best = (stamp, parsed)
+    return dict(best[1]) if best is not None else None
+
+
+def _report(readonly: bool, span: str) -> dict[str, object]:
+    db_path = settings.video_db_path
+    body = stats(db_path, readonly=readonly)
     body["workers"] = worker_count()
     body["reader_alive"] = reader_alive(settings.data_dir / "video-worker.heartbeat")
     used, _free, _total, limit = _disk_snapshot()
     body["disk_used_bytes"] = used
     body["disk_limit_bytes"] = limit
-    today_phones = device_day(settings.video_db_path, span="today")
-    all_phones = device_day(settings.video_db_path, span="all")
+    today_phones = device_day(db_path, span="today", readonly=readonly)
+    all_phones = device_day(db_path, span="all", readonly=readonly)
     body["today"] = today_phones
     body["all"] = all_phones
     body["phones"] = all_phones if span == "all" else today_phones
-    body["shrink"] = {**shrink_totals(settings.video_db_path), "on": get_meta(settings.video_db_path, "video_shrink", "off") == "on"}
+    body["shrink"] = {
+        **shrink_totals(db_path, readonly=readonly),
+        "on": get_meta(db_path, "video_shrink", "off", readonly=readonly) == "on",
+    }
+    return body
+
+
+def _quiet(action) -> None:
+    try:
+        action()
+    except (sqlite3.OperationalError, OSError):
+        return
+
+
+@router.get("/v1/videos/stats")
+def video_stats(
+    authorization: str | None = Header(default=None),
+    span: str = Query(default="today"),
+) -> dict[str, object]:
+    """span=today đếm video theo ngày giờ Việt Nam. span=all đếm toàn bộ thời gian.
+
+    Đĩa đầy làm SQLite không ghi được. Khi đó trả bản thống kê vừa đọc, vẫn là 200,
+    để điện thoại không để trống các ô.
+    """
+    _auth(authorization)
+    _quiet(lambda: init_db(settings.video_db_path))
+    _quiet(lambda: release_stale_pc(settings.video_db_path))
+    _quiet(lambda: guard_disk(settings.video_db_path, settings.video_dir, percent=settings.video_disk_percent))
+    try:
+        body = _report(False, span)
+    except (sqlite3.OperationalError, OSError):
+        try:
+            body = _report(True, span)
+        except (sqlite3.OperationalError, OSError):
+            recalled = _recall_report()
+            if recalled is None:
+                raise HTTPException(status_code=503, detail="Chưa tải được số liệu. Đang thử lại.") from None
+            recalled["stale"] = True
+            recalled["phones"] = recalled.get("all") if span == "all" else recalled.get("today")
+            return recalled
+        body["stale"] = True
+        _remember_report(body)
+        return body
+    _remember_report(body)
     return body
 
 

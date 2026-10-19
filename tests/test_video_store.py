@@ -7,6 +7,7 @@ import os
 import sqlite3
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 from datetime import datetime, timezone
@@ -36,6 +37,7 @@ from control_plane.video_store import (
     merge_close_results,
     queued_bytes,
     disk_limit_bytes,
+    guard_disk,
     upload_room,
     drop_stale_uploads,
     prune_old_videos,
@@ -900,6 +902,60 @@ class VideoStoreTests(unittest.TestCase):
         removed = prune_old_videos(self.db, Path(self._tmp.name), percent=80, protect_newest=False, measure=measure)
         self.assertEqual(removed, 0)
         self.assertTrue(old_path.exists())
+
+    def test_a_tight_disk_deletes_oldest_finished_videos_down_to_the_free_floor(self) -> None:
+        old_id, old_path = self._finish_kept("cu.mp4", "floor-old", "2020-01-01T00:00:00+00:00", b"a" * 40, "0900000001")
+        new_id, new_path = self._finish_kept("moi.mp4", "floor-new", "2026-01-01T00:00:00+00:00", b"b" * 80, "0900000002")
+        waiting = self._add("cho.mp4", "floor-wait")
+        running = self._add("doc.mp4", "floor-run")
+        claim(self.db, 11)
+
+        def measure():
+            return type("Usage", (), {"used": 950, "free": 10, "total": 1000})()
+
+        # Xóa cả hai file đã xong vẫn để đĩa trên mức 80%, nên luật cũ giữ nguyên file.
+        removed = prune_old_videos(self.db, Path(self._tmp.name), percent=80, protect_newest=False, measure=measure)
+        self.assertEqual(removed, 0)
+        freed = guard_disk(self.db, Path(self._tmp.name), percent=80, floor=40, measure=measure)
+        self.assertGreaterEqual(freed, 40)
+        self.assertLess(freed, 120)
+        self.assertFalse(old_path.exists())
+        self.assertTrue(new_path.exists())
+        self.assertTrue((Path(self._tmp.name) / f"{waiting}.mp4").exists())
+        self.assertTrue((Path(self._tmp.name) / f"{running}.mp4").exists())
+        with connect(self.db) as conn:
+            old = conn.execute("SELECT path, status FROM videos WHERE id = ?", (old_id,)).fetchone()
+            kept = conn.execute("SELECT path, status FROM videos WHERE id = ?", (new_id,)).fetchone()
+            states = {int(row["id"]): row["status"] for row in conn.execute("SELECT id, status FROM videos")}
+        self.assertEqual(old["path"], "")
+        self.assertEqual(old["status"], "done")
+        self.assertEqual(kept["path"], str(new_path))
+        self.assertEqual(sorted((states[waiting], states[running])), ["queued", "running"])
+        saved = {item["phone"]: item["name"] for item in search_results(self.db, limit=10)}
+        self.assertEqual(saved["0900000001"], "cu.mp4")
+
+    def test_quiet_partials_go_before_a_finished_video(self) -> None:
+        _video_id, kept = self._finish_kept("giu.mp4", "floor-keep", "2020-01-01T00:00:00+00:00", b"a" * 40, "0900000001")
+        folder = Path(self._tmp.name) / "partial"
+        folder.mkdir()
+        old = folder / ("ab" * 16 + ".part")
+        old.write_bytes(b"p" * 80)
+        moment = time.time() - (31 * 60)
+        os.utime(old, (moment, moment))
+
+        def measure():
+            return type("Usage", (), {"used": 950, "free": 10, "total": 1000})()
+
+        freed = guard_disk(self.db, Path(self._tmp.name), percent=80, floor=50, measure=measure)
+        self.assertGreaterEqual(freed, 80)
+        self.assertFalse(old.exists())
+        self.assertTrue(kept.exists())
+
+    def test_readonly_stats_read_a_checkpointed_database(self) -> None:
+        self._add("a.mp4", "readonly")
+        with connect(self.db) as conn:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        self.assertGreaterEqual(stats(self.db, readonly=True)["queued"], 1)
 
     def test_a_missing_file_is_not_counted_as_freed_disk(self) -> None:
         ghost_id, ghost_path = self._finish_kept("ma.mp4", "ghost", "2020-01-01T00:00:00+00:00", b"a" * 500, "0900000001")
