@@ -16,7 +16,7 @@ from doc_video.frame import Contact, FrameRead
 from doc_video.join import build
 from doc_video import ocr
 from doc_video.ocr import TextLine, _run, _run_cli
-from doc_video.frame import Layout, ListRow
+from doc_video.frame import Layout, ListRow, chosen_tap
 from doc_video.video import extract_midpoints, fast_scroll_spans, plan_reads, resolve_taps
 from doc_video.text import (
     clean_name,
@@ -29,6 +29,7 @@ from doc_video.text import (
     name_key,
     normalize_phone,
     vote_chars,
+    vote_digits,
     vote_is_tied,
 )
 
@@ -498,6 +499,24 @@ class JoinTests(unittest.TestCase):
         self.assertIn("id đọc chưa chắc", [item.reason for item in result.review])
 
 
+class TapChoiceTests(unittest.TestCase):
+    def _rows(self, covered: set[str]) -> list[ListRow]:
+        line = TextLine("Lan", 0, 0, 10, 10)
+        phones = ["0900000001", "0900000002", "0900000003"]
+        return [ListRow(phone, line, phone not in covered, 100 + 230 * index) for index, phone in enumerate(phones)]
+
+    def test_one_covered_row_is_the_tap_when_nothing_else_marks_it(self) -> None:
+        self.assertEqual(chosen_tap(self._rows({"0900000002"}), "", -1.0, 230.0), "0900000002")
+
+    def test_two_covered_rows_are_not_a_tap(self) -> None:
+        self.assertEqual(chosen_tap(self._rows({"0900000001", "0900000003"}), "", -1.0, 230.0), "")
+
+    def test_a_highlight_or_tap_center_wins_over_a_covered_row(self) -> None:
+        rows = self._rows({"0900000002"})
+        self.assertEqual(chosen_tap(rows, "0900000001", -1.0, 230.0), "0900000001")
+        self.assertEqual(chosen_tap(rows, "", 100.0, 230.0), "0900000001")
+
+
 def list_layout(phones: list[str], tap_y: float = -1.0, clear: bool = True) -> Layout:
     line = TextLine("x", 0, 0, 10, 10)
     rows = [ListRow(phone, line, clear, 100 + 230 * index) for index, phone in enumerate(phones)]
@@ -624,6 +643,30 @@ class EngineTests(unittest.TestCase):
             run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
             _run_cli([image], "eng", 7, "", False)
         self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
+
+    def test_a_throwing_reader_is_dropped_and_the_command_reads_instead(self) -> None:
+        image = Image.new("L", (8, 8), 255)
+        key = ("eng", 7, ocr.DIGITS, None)
+        saved_engines = dict(ocr._ENGINES)
+        had_lib = "lib" in ocr._ENGINE
+        saved_lib = ocr._ENGINE.get("lib")
+        ocr._ENGINES[key] = 1
+        ocr._ENGINE["lib"] = None
+        try:
+            with (
+                patch("doc_video.ocr._recognize", side_effect=RuntimeError("bộ đọc hỏng")),
+                patch("doc_video.ocr._run_cli", return_value=[[["dòng"]]]) as command,
+            ):
+                self.assertEqual(_run([image], "eng", 7, ocr.DIGITS, False), [[["dòng"]]])
+            command.assert_called_once()
+            self.assertNotIn(key, ocr._ENGINES)
+        finally:
+            ocr._ENGINES.clear()
+            ocr._ENGINES.update(saved_engines)
+            if had_lib:
+                ocr._ENGINE["lib"] = saved_lib
+            else:
+                ocr._ENGINE.pop("lib", None)
 
     def test_windows_does_not_load_a_tesseract_dll(self) -> None:
         ocr._ENGINE.pop("lib", None)
@@ -803,6 +846,30 @@ class EarlyReadTests(unittest.TestCase):
             patch("doc_video.frame.read_digit_line", return_value="0912345678"),
         ):
             self.assertEqual(_read_phones(screen, [(blank, name)]), ["0912345678"])
+
+    def test_scattered_digit_errors_rebuild_the_number_and_a_tie_does_not(self) -> None:
+        self.assertEqual(
+            vote_digits(["0912300000", "0912030000", "0912003000", "0912000300"]),
+            "0912000000",
+        )
+        self.assertEqual(vote_digits(["0912345678", "0912345679"]), "0912345678")
+        self.assertEqual(vote_digits(["0912345678", "84912345678"]), "0912345678")
+        self.assertEqual(vote_digits(["", ""]), "")
+
+        from doc_video.frame import _read_phones
+
+        screen = Image.new("RGB", (80, 60), (255, 255, 255))
+        name = TextLine("Lan", 2, 24, 40, 40)
+        phone = TextLine("0912003000", 2, 2, 70, 20)
+
+        def scattered(batch, lang, whitelist="", best=True):
+            return ["0912300000" if best else "0912030000"]
+
+        with (
+            patch("doc_video.frame.ocr.read_texts", side_effect=scattered),
+            patch("doc_video.frame.read_digit_line", return_value="0912000300"),
+        ):
+            self.assertEqual(_read_phones(screen, [(phone, name)]), ["0912000000"])
 
 
 class DigitTests(unittest.TestCase):
