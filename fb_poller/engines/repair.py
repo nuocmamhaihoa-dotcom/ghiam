@@ -7,6 +7,7 @@ parser is corrected before the table is printed.
 
 from __future__ import annotations
 
+import ast
 import html
 import json
 import re
@@ -334,7 +335,50 @@ def _json_payload(text: str) -> object | None:
     try:
         return json.loads(stripped)
     except json.JSONDecodeError:
+        return _literal_payload(stripped)
+
+
+def _literal_payload(text: str) -> object | None:
+    """A Python repr such as ``{'message': 'xin'}`` is not JSON."""
+    snippet = _balanced_literal(text[:8000])
+    if snippet is None:
         return None
+    try:
+        return ast.literal_eval(snippet)
+    except (SyntaxError, ValueError, MemoryError):
+        return None
+
+
+def _balanced_literal(text: str) -> str | None:
+    if not text or text[0] not in "{[":
+        return None
+    pairs = {"{": "}", "[": "]"}
+    stack: list[str] = []
+    quote: str | None = None
+    escape = False
+    for index, char in enumerate(text):
+        if quote is not None:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            continue
+        if char in pairs:
+            stack.append(pairs[char])
+            continue
+        if stack and char == stack[-1]:
+            stack.pop()
+            if not stack:
+                return text[: index + 1]
+            continue
+        if char in "}]":
+            return None
+    return None
 
 
 def _expand_json_text(text: str) -> list[PublicComment] | None:
@@ -358,6 +402,8 @@ def _recover_from_error(error: str) -> list[PublicComment]:
         try:
             payload, _end = decoder.raw_decode(error[index:])
         except json.JSONDecodeError:
+            payload = _literal_payload(error[index:])
+        if payload is None:
             continue
         rows = _loose_comments(payload)
         if rows:

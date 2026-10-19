@@ -740,6 +740,38 @@ class EngineTests(unittest.TestCase):
         sentence = "\n".join(["Lan", "I love this photo", "Like"])
         self.assertEqual(comments_from_articles([sentence], 5)[0].text, "I love this photo")
 
+    def test_compound_post_id_and_python_repr(self) -> None:
+        self.assertEqual(post_id_from_url("https://www.facebook.com/NASA/posts/111_222"), "111_222")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/NASA/posts/pfbid0abcXYZ12/"),
+            "pfbid0abcXYZ12",
+        )
+        self.assertEqual(post_id_from_url("https://www.facebook.com/watch/?v=998877"), "998877")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/permalink.php?story_fbid=pfbid0abc%5F1&id=9"),
+            "pfbid0abc_1",
+        )
+        self.assertIsNone(post_id_from_url("https://www.facebook.com/NASA/photos/a.111/222"))
+        self.assertIsNone(post_id_from_url("https://www.facebook.com/share/p/abcXYZ12/"))
+        long_pfbid = "pfbid" + ("a" * 140)
+        self.assertEqual(
+            post_id_from_url(f"https://www.facebook.com/NASA/posts/{long_pfbid}"),
+            long_pfbid,
+        )
+        expanded, codes = heal_comments([PublicComment(text="{'message': 'xin', 'author': 'An'}")])
+        self.assertEqual(expanded[0].text, "xin")
+        self.assertEqual(expanded[0].author_name, "An")
+        self.assertIn("expand_json_text", codes)
+        recovered = heal_result(
+            EngineResult("graph-ppca", 6, False, error="{'message': 'xin', 'author': 'An'}")
+        )
+        self.assertEqual(recovered.comments[0].text, "xin")
+        self.assertTrue(recovered.ok)
+        self.assertIsNone(recovered.error)
+        plain = heal_result(EngineResult("graph-ppca", 6, False, error="missing_GRAPH_ACCESS_TOKEN"))
+        self.assertEqual(plain.comments, [])
+        self.assertEqual(plain.error, "missing_GRAPH_ACCESS_TOKEN")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from urllib.parse import unquote
 
 import httpx
 
@@ -20,7 +21,7 @@ from fb_poller.engines.guard import (
 from fb_poller.engines.types import EngineResult, PublicComment
 
 _VERSION = re.compile(r"^v\d+\.\d+$")
-_OBJECT_ID = re.compile(r"^[A-Za-z0-9_]{1,128}$")
+_OBJECT_ID = re.compile(r"^[A-Za-z0-9_]{1,200}$")
 
 RANK = 6
 NAME = "graph-ppca"
@@ -134,12 +135,19 @@ def post_id_from_url(url: str) -> str | None:
     raw = url.strip()
     if raw.isdigit() or ("_" in raw and raw.replace("_", "").isdigit()):
         return raw
-    match = re.search(r"(?:posts|permalink|videos|reel)/(\d+)", raw)
-    if match:
-        return match.group(1)
-    query = re.search(r"(?:story_fbid|fbid)=([^&\s]+)", raw)
+    path = re.search(
+        r"(?:posts|permalink|videos|reel|photos)/(pfbid[A-Za-z0-9]+|\d+(?:_\d+)*)",
+        raw,
+        re.IGNORECASE,
+    )
+    if path:
+        return accepted_object_id(path.group(1))
+    query = re.search(r"(?:story_fbid|fbid)=([^&\s]+)", raw, re.IGNORECASE)
     if query:
-        return accepted_object_id(query.group(1))
+        return accepted_object_id(unquote(query.group(1)))
+    watch = re.search(r"[?&]v=(\d+)", raw)
+    if watch:
+        return accepted_object_id(watch.group(1))
     return None
 
 
