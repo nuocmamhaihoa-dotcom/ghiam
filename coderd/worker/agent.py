@@ -18,7 +18,7 @@ SYSTEM = (
     "Tool hợp lệ: list_dir, read_file, write_file, run_cmd. "
     "Khi được bảo chạy lệnh, gọi run_cmd đúng một lần rồi trả lời tiếng Việt, không in JSON. "
     "Mọi path nằm trong workspace. "
-    "Khi thiếu kiến thức, đọc learn/muc-luc.md rồi đọc đúng một file nó chỉ. "
+    "Khi thiếu kiến thức, đọc learn/muc-luc.md rồi đọc đúng một file trong learn/sach/. "
     "Để nhớ một việc cho lần sau, ghi đè file .coderd/memory.md."
 )
 

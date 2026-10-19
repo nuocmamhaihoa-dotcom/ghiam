@@ -4,6 +4,7 @@ After=coderd.service coderd-model.service
 
 [Service]
 Type=oneshot
+TimeoutStartSec=420
 User=coder
 WorkingDirectory=/opt/coderd
 Environment=HOME=/opt/coderd/var/home

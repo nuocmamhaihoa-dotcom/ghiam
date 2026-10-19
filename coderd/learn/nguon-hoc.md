@@ -30,7 +30,15 @@ Giấy phép từng model đọc trên trang Hugging Face trước khi dùng.
 
 Công cụ huấn luyện khi có GPU: LLaMA-Factory, Unsloth, Axolotl.
 
-## Tài liệu để đọc, không chép nguyên văn vào repo
+## Đang học mỗi vòng, lưu đoạn ngắn kèm URL
+
+Vòng học tải các file thô dưới đây, giữ vài câu mỗi file trong `learn/da-hoc.md` và `learn/sach/`, cache 24 giờ. Không chép nguyên văn vào git.
+
+- Tutorial Python 3.12: introduction, controlflow, datastructures, modules, inputoutput, errors, classes, stdlib, venv
+- Thư viện chuẩn: json, pathlib, sqlite3, urllib.request, subprocess, argparse, unittest
+- Lệnh git: init, clone, status, add, commit, diff, log, show, branch, restore, merge, fetch, pull, push, remote
+
+## Tài liệu chỉ để đọc thêm, không tải cả site
 
 - docs.python.org
 - git-scm.com/docs

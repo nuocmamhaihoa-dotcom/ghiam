@@ -9,6 +9,7 @@
 - git.md: git trên máy này.
 - cac-ai.md: cách các AI khác học, và vòng học của coderd.
 - kinh-nghiem.md: bài học ngắn đưa vào mỗi lượt chat.
-- da-hoc.md: kho đầy đủ vừa học từ file nội bộ và tài liệu mở.
+- da-hoc.md: kho đầy đủ vừa học. Đừng đọc cả file này.
+- sach/: mỗi chủ đề một file. Khi cần, đọc đúng một file trong thư mục này.
 
 Việc cần nhớ cho lần sau thì ghi vào `.coderd/memory.md`.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.request
 from pathlib import Path
 
@@ -65,12 +66,44 @@ def merge_lessons(existing: str, fresh: list[str], limit: int = LIMIT) -> str:
     return "\n".join(f"- {item}" for item in kept) + "\n"
 
 
+_PY = "https://raw.githubusercontent.com/python/cpython/3.12/Doc"
+_GIT = "https://raw.githubusercontent.com/git/git/master/Documentation"
 OPEN_SOURCES = (
-    ("python-nhap-mon", "https://raw.githubusercontent.com/python/cpython/3.12/Doc/tutorial/introduction.rst"),
-    ("python-dieu-khien", "https://raw.githubusercontent.com/python/cpython/3.12/Doc/tutorial/controlflow.rst"),
-    ("git-init", "https://raw.githubusercontent.com/git/git/master/Documentation/git-init.adoc"),
+    ("python-nhap-mon", f"{_PY}/tutorial/introduction.rst"),
+    ("python-dieu-khien", f"{_PY}/tutorial/controlflow.rst"),
+    ("python-du-lieu", f"{_PY}/tutorial/datastructures.rst"),
+    ("python-module", f"{_PY}/tutorial/modules.rst"),
+    ("python-file", f"{_PY}/tutorial/inputoutput.rst"),
+    ("python-loi", f"{_PY}/tutorial/errors.rst"),
+    ("python-lop", f"{_PY}/tutorial/classes.rst"),
+    ("python-stdlib", f"{_PY}/tutorial/stdlib.rst"),
+    ("python-venv", f"{_PY}/tutorial/venv.rst"),
+    ("python-json", f"{_PY}/library/json.rst"),
+    ("python-pathlib", f"{_PY}/library/pathlib.rst"),
+    ("python-sqlite", f"{_PY}/library/sqlite3.rst"),
+    ("python-urllib", f"{_PY}/library/urllib.request.rst"),
+    ("python-subprocess", f"{_PY}/library/subprocess.rst"),
+    ("python-argparse", f"{_PY}/library/argparse.rst"),
+    ("python-unittest", f"{_PY}/library/unittest.rst"),
+    ("git-init", f"{_GIT}/git-init.adoc"),
+    ("git-clone", f"{_GIT}/git-clone.adoc"),
+    ("git-status", f"{_GIT}/git-status.adoc"),
+    ("git-add", f"{_GIT}/git-add.adoc"),
+    ("git-commit", f"{_GIT}/git-commit.adoc"),
+    ("git-diff", f"{_GIT}/git-diff.adoc"),
+    ("git-log", f"{_GIT}/git-log.adoc"),
+    ("git-show", f"{_GIT}/git-show.adoc"),
+    ("git-branch", f"{_GIT}/git-branch.adoc"),
+    ("git-restore", f"{_GIT}/git-restore.adoc"),
+    ("git-merge", f"{_GIT}/git-merge.adoc"),
+    ("git-fetch", f"{_GIT}/git-fetch.adoc"),
+    ("git-pull", f"{_GIT}/git-pull.adoc"),
+    ("git-push", f"{_GIT}/git-push.adoc"),
+    ("git-remote", f"{_GIT}/git-remote.adoc"),
 )
 SKIP_FILES = {"da-hoc.md", "kinh-nghiem.md", "muc-luc.md"}
+CACHE_TTL = 24 * 60 * 60
+OPEN_NOTE_LIMIT = 8
 
 
 def extract_notes(text: str, limit: int = 8) -> list[str]:
@@ -101,9 +134,57 @@ def extract_notes(text: str, limit: int = 8) -> list[str]:
 
 def fetch_text(url: str) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": "coderd-study"})
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with urllib.request.urlopen(request, timeout=12) as response:
         data = response.read(100_000)
     return data.decode("utf-8", "replace")
+
+
+def load_source(root: Path, name: str, url: str, fetch) -> str:
+    cache = root / "learn" / "cache" / f"{name}.txt"
+    if cache.is_file() and time.time() - cache.stat().st_mtime < CACHE_TTL:
+        cached = cache.read_text(encoding="utf-8")
+        if cached.strip():
+            return cached
+    text = fetch(url)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(text, encoding="utf-8")
+    return text
+
+
+def _bullets(text: str) -> list[str]:
+    found: list[str] = []
+    seen: set[str] = set()
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("- "):
+            continue
+        item = stripped[2:].strip()
+        key = item.lower()
+        if item and key not in seen:
+            seen.add(key)
+            found.append(item)
+    return found
+
+
+def remember(existing: str, highlights: list[str], limit: int = LIMIT) -> str:
+    old = _bullets(existing)
+    keys = {item.lower() for item in highlights}
+    chat = [item for item in old if item.lower() not in keys][-20:]
+    picked: list[str] = []
+    seen = {item.lower() for item in chat}
+    room = max(limit - len(chat), 0)
+    for item in highlights:
+        key = item.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        picked.append(item)
+        if len(picked) >= room:
+            break
+    kept = picked + chat
+    if not kept:
+        return ""
+    return "\n".join(f"- {item}" for item in kept[:limit]) + "\n"
 
 
 def ingest_sources(root: Path, fetch=fetch_text) -> int:
@@ -119,27 +200,38 @@ def ingest_sources(root: Path, fetch=fetch_text) -> int:
                 sections.append((path.name, "", notes))
     for name, url in OPEN_SOURCES:
         try:
-            notes = extract_notes(fetch(url), limit=6)
+            text = load_source(root, name, url, fetch)
+            notes = extract_notes(text, limit=OPEN_NOTE_LIMIT)
         except Exception as exc:
             print(f"không tải {name}: {exc}")
             continue
         if notes:
             sections.append((name, url, notes))
     lines = ["# Kho đã học", ""]
-    flat: list[str] = []
+    sach = learn / "sach"
+    sach.mkdir(parents=True, exist_ok=True)
+    highlights: list[str] = []
+    total = 0
     for name, url, notes in sections:
         lines.append(f"## {name}")
         if url:
             lines.append(f"nguồn: {url}")
+        topic = [f"# {name}", ""]
+        if url:
+            topic.append(f"nguồn: {url}")
+            topic.append("")
         for note in notes:
             lines.append(f"- {note}")
-            flat.append(note)
+            topic.append(f"- {note}")
+            total += 1
         lines.append("")
+        (sach / f"{name}.md").write_text("\n".join(topic).rstrip() + "\n", encoding="utf-8")
+        highlights.append(notes[0])
     (learn / "da-hoc.md").write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     path = lesson_file(root)
     existing = path.read_text(encoding="utf-8") if path.is_file() else ""
-    path.write_text(merge_lessons(existing, flat), encoding="utf-8")
-    return len(flat)
+    path.write_text(remember(existing, highlights), encoding="utf-8")
+    return total
 
 
 def lesson_file(root: Path) -> Path:

@@ -325,15 +325,24 @@ class WorkerTests(unittest.TestCase):
             learn.mkdir(parents=True)
             (learn / "python.md").write_text("- print in ra màn hình\n- int đổi chữ thành số\n", encoding="utf-8")
 
+            calls = {"n": 0}
+
             def fetch(_url: str) -> str:
+                calls["n"] += 1
                 return "Comments in Python start with the hash character, and extend to the end.\n"
 
             count = ingest_sources(root, fetch)
             saved = (learn / "da-hoc.md").read_text(encoding="utf-8")
+            topic = (learn / "sach" / "python-nhap-mon.md").read_text(encoding="utf-8")
             self.assertGreaterEqual(count, 2)
             self.assertIn("print in ra màn hình", saved)
             self.assertIn("hash character", saved)
             self.assertIn("python-nhap-mon", saved)
+            self.assertIn("hash character", topic)
+            self.assertGreater(calls["n"], 0)
+            again = calls["n"]
+            ingest_sources(root, fetch)
+            self.assertEqual(calls["n"], again)
             short = (learn / "kinh-nghiem.md").read_text(encoding="utf-8")
             self.assertIn("print in ra màn hình", short)
 
