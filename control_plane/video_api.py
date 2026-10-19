@@ -82,6 +82,7 @@ from control_plane.video_store import (
     clean_device,
     commit_upload,
     device_day,
+    employee_report,
     disk_limit_bytes,
     guard_disk,
     upload_room,
@@ -467,6 +468,54 @@ async def video_stats(
             return _for_span(saved, span, stale=True)
         _remember_report(body)
         return _for_span(body, span)
+
+
+_EMPLOYEE_TTL = 3.0
+_EMPLOYEE_CACHE: dict[tuple[str, str, str, str], tuple[float, dict[str, object]]] = {}
+
+
+def _employee_body(span: str, day_from: str, day_to: str) -> dict[str, object]:
+    """Bản nhân viên riêng, không đi chung đường thống kê nhanh.
+
+    Cache 3 giây theo khoảng đang lọc. Không giữ khóa thống kê và không tạo bảng.
+    """
+    chosen = "all" if span == "all" else "today"
+    key = (str(settings.video_db_path), chosen, day_from.strip(), day_to.strip())
+    cached = _EMPLOYEE_CACHE.get(key)
+    now = time.monotonic()
+    if cached is not None and (now - cached[0]) < _EMPLOYEE_TTL:
+        return dict(cached[1])
+    body = employee_report(
+        settings.video_db_path,
+        span=chosen,
+        day_from=day_from,
+        day_to=day_to,
+        readonly=True,
+    )
+    _EMPLOYEE_CACHE[key] = (now, body)
+    if len(_EMPLOYEE_CACHE) > 32:
+        oldest = min(_EMPLOYEE_CACHE, key=lambda item: _EMPLOYEE_CACHE[item][0])
+        _EMPLOYEE_CACHE.pop(oldest, None)
+    return dict(body)
+
+
+@router.get("/v1/videos/employees")
+def video_employees(
+    authorization: str | None = Header(default=None),
+    span: str = Query(default="today"),
+    day_from: str = Query(default=""),
+    day_to: str = Query(default=""),
+) -> dict[str, object]:
+    """Video đã tải và kết quả mới theo nhân viên.
+
+    span=today là hôm nay, span=all là toàn bộ thời gian. day_from và day_to
+    là ngày giờ Việt Nam, tính cả hai đầu. @id chỉ tính lần quét đầu.
+    """
+    _auth(authorization)
+    try:
+        return _employee_body(span, day_from, day_to)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Ngày không đúng. Chọn lại ngày.") from None
 
 
 @router.get("/v1/videos")

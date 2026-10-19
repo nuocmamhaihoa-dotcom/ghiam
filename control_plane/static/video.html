@@ -73,6 +73,7 @@
     .pcbtns input { width: 8.5rem; padding: 0.4rem 0.5rem; font: inherit; font-size: 0.9rem; border: 1px solid #cfd5dc; border-radius: 8px; }
     .small { font-size: 0.86rem; color: var(--muted); }
     #employees td.num { font-weight: 750; font-size: 1.2rem; }
+    #employeeSpan input { padding: 0.4rem 0.5rem; font: inherit; font-size: 0.9rem; border: 1px solid #cfd5dc; border-radius: 8px; }
     /* iPhone hủy sự kiện change nếu input bị display:none và khung chọn ảnh mở lâu (vài chục video). */
     #file { position: fixed; top: -9999px; left: -9999px; width: 48px; height: 48px; }
   </style>
@@ -83,8 +84,14 @@
   <p class="lead">Nhiều điện thoại mở trang này cùng lúc. Mỗi máy chọn một tên, rồi chọn bao nhiêu video cũng được. Nhiều danh sách trên một máy cũng tải lên cùng lúc. Video đã vào hàng chờ thì máy chủ đọc từng video một, kể cả khi tắt trang.</p>
 
   <section>
-    <h2>Nhân viên hôm nay</h2>
-    <p class="note">Chữ đầu trên tên iPhone là tên nhân viên, số cuối là số máy. Ly14 và Ly2 là một người. Video đã tải là video đã vào hàng chờ hôm nay. Kết quả đã quét là mọi dòng đọc được hôm nay từ các máy của người đó.</p>
+    <h2>Nhân viên</h2>
+    <div class="row" id="employeeSpan" style="margin-bottom:0.7rem">
+      <button type="button" class="primary" data-employee-span="today" id="employeeToday">Hôm nay</button>
+      <button type="button" class="ghost" data-employee-span="all" id="employeeAll">Toàn bộ thời gian</button>
+      <label class="small">Từ ngày <input type="date" id="employeeFrom"></label>
+      <label class="small">Đến ngày <input type="date" id="employeeTo"></label>
+    </div>
+    <p class="note">Chữ đầu trên tên iPhone là tên nhân viên, số cuối là số máy. Ly14 và Ly2 là một người. Mỗi @id chỉ tính một lần, là lần quét đầu trên toàn bộ thời gian. @id đã quét trước đó thì lần sau không tính, kể cả khi lọc ngày mới. Dòng chưa có @id vẫn tính.</p>
     <div id="employees"></div>
   </section>
 
@@ -583,7 +590,7 @@
     }
     box.setAttribute("data-ready", "1");
     if (!people.length) {
-      box.innerHTML = "<p class='note'>Hôm nay chưa có nhân viên nào tải video.</p>";
+      box.innerHTML = "<p class='note'>Chưa có nhân viên nào trong khoảng thời gian này.</p>";
       return;
     }
     var html = "<table><tr><th>Nhân viên</th><th>Video đã tải</th><th>Kết quả đã quét</th></tr>";
@@ -616,10 +623,6 @@
     if (board && !board.querySelector("button")) {
       board.innerHTML = "<p class='note warn'>Chưa tải được danh sách điện thoại. Đang thử lại.</p>";
     }
-    var employees = document.getElementById("employees");
-    if (employees && employees.getAttribute("data-ready") !== "1") {
-      employees.innerHTML = "<p class='note warn'>Chưa tải được số liệu nhân viên. Đang thử lại.</p>";
-    }
     var waiting = document.querySelector("#thisPhone[data-mode='wait'] .note");
     if (waiting) waiting.textContent = "Chưa tải được số liệu của máy này. Đang thử lại.";
   }
@@ -639,7 +642,6 @@
     phoneToday = todayReport.items || [];
     phoneAll = allReport.items || [];
     phoneItems = phones.items || [];
-    renderEmployees(todayReport);
     document.getElementById("statsToday").innerHTML = periodTiles(todayReport.totals, "today");
     document.getElementById("statsAll").innerHTML = periodTiles(allReport.totals, "all");
     document.getElementById("statsLive").innerHTML =
@@ -681,10 +683,88 @@
     renderThisPhone();
   }
 
+  var employeeSpan = "today";
+  var employeeTicket = 0;
+
+  function paintEmployeeButtons() {
+    var today = document.getElementById("employeeToday");
+    var all = document.getElementById("employeeAll");
+    if (today) today.className = employeeSpan === "today" ? "primary" : "ghost";
+    if (all) all.className = employeeSpan === "all" ? "primary" : "ghost";
+  }
+
+  function markEmployeeLoading() {
+    var box = document.getElementById("employees");
+    if (!box) return;
+    box.removeAttribute("data-ready");
+    box.innerHTML = "<p class='note'>Đang tải số liệu nhân viên.</p>";
+  }
+
+  function employeeQuery() {
+    var from = document.getElementById("employeeFrom");
+    var to = document.getElementById("employeeTo");
+    if (employeeSpan === "range") {
+      var params = [];
+      if (from && from.value) params.push("day_from=" + encodeURIComponent(from.value));
+      if (to && to.value) params.push("day_to=" + encodeURIComponent(to.value));
+      return params.join("&");
+    }
+    return "span=" + encodeURIComponent(employeeSpan);
+  }
+
+  function loadEmployees() {
+    var ticket = ++employeeTicket;
+    var box = document.getElementById("employees");
+    var path = "/v1/videos/employees?" + employeeQuery();
+    api(path).then(function (response) {
+      if (ticket !== employeeTicket) return null;
+      if (!response.ok) {
+        if (box && response.status === 400) {
+          box.innerHTML = "<p class='note warn'>Ngày không đúng. Chọn lại ngày.</p>";
+        } else if (box && box.getAttribute("data-ready") !== "1") {
+          box.innerHTML = "<p class='note warn'>Chưa tải được số liệu nhân viên. Đang thử lại.</p>";
+        }
+        return null;
+      }
+      return response.json();
+    }).then(function (body) {
+      if (!body || ticket !== employeeTicket) return;
+      renderEmployees(body);
+    }).catch(function () {
+      if (ticket !== employeeTicket || !box) return;
+      if (box.getAttribute("data-ready") !== "1") {
+        box.innerHTML = "<p class='note warn'>Chưa tải được số liệu nhân viên. Đang thử lại.</p>";
+      }
+    });
+  }
+
+  function chooseEmployeeSpan(next) {
+    if (next !== "today" && next !== "all") return;
+    employeeSpan = next;
+    var from = document.getElementById("employeeFrom");
+    var to = document.getElementById("employeeTo");
+    if (from) from.value = "";
+    if (to) to.value = "";
+    paintEmployeeButtons();
+    markEmployeeLoading();
+    loadEmployees();
+  }
+
+  function chooseEmployeeDates() {
+    var from = document.getElementById("employeeFrom");
+    var to = document.getElementById("employeeTo");
+    var hasDate = (from && from.value) || (to && to.value);
+    employeeSpan = hasDate ? "range" : "today";
+    paintEmployeeButtons();
+    markEmployeeLoading();
+    loadEmployees();
+  }
+
   async function refresh() {
     if (refreshBusy) return;
     refreshBusy = true;
     try {
+      loadEmployees();
       await refreshStats();
     } catch (error) {
       if (!statsReady) showStatsMiss();
@@ -1074,6 +1154,14 @@
   document.getElementById("statSpan").addEventListener("click", chooseSpan);
   document.getElementById("statSpanQueue").addEventListener("click", chooseSpan);
   paintSpanButtons();
+  document.getElementById("employeeSpan").addEventListener("click", function (event) {
+    var button = event.target.closest("button");
+    if (!button) return;
+    chooseEmployeeSpan(button.getAttribute("data-employee-span"));
+  });
+  document.getElementById("employeeFrom").addEventListener("change", chooseEmployeeDates);
+  document.getElementById("employeeTo").addEventListener("change", chooseEmployeeDates);
+  paintEmployeeButtons();
 
   function phoneLabel(name) { return name ? name : "Chưa gắn máy"; }
 
