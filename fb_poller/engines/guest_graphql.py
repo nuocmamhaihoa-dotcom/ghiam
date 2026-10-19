@@ -104,7 +104,16 @@ async def scan(
             page = await context.new_page()
             page.on("response", on_response)
             await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-            await page.wait_for_timeout(4000)
+            await page.wait_for_timeout(2500)
+            for label in ("Newest", "Mới nhất", "Most relevant", "Phù hợp nhất"):
+                loc = page.get_by_text(label, exact=True)
+                if await loc.count():
+                    try:
+                        await loc.first.click(timeout=2000)
+                        await page.wait_for_timeout(2500)
+                    except Exception:
+                        pass
+                    break
             await context.close()
             await browser.close()
     except Exception as exc:

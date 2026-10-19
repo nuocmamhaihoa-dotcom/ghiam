@@ -79,6 +79,9 @@ async def scan(
 
     comments: list[PublicComment] = []
     for block in texts:
+        lowered = block.lower()
+        if "all reactions" in lowered or "tất cả cảm xúc" in lowered:
+            continue
         lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
         if len(lines) < 2:
             continue
