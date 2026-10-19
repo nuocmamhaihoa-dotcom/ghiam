@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import tempfile
 import unittest
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -825,6 +827,25 @@ class DigitTests(unittest.TestCase):
             letters = Image.new("L", (200, 80), 255)
             ImageDraw.Draw(letters).text((8, 8), "abcdefghij", fill=0, font=font)
             self.assertEqual(read_digit_line(letters), "")
+
+
+class BrokenFrameTests(unittest.TestCase):
+    def test_unreadable_frame_is_skipped_and_truncated_frame_is_kept(self) -> None:
+        from doc_video.video import _scan_file, drop_repeats
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            good = root / "f_000001.jpg"
+            Image.new("RGB", (80, 160), (12, 18, 24)).save(good, format="JPEG", quality=90)
+            other = BytesIO()
+            Image.new("RGB", (80, 160), (220, 20, 20)).save(other, format="JPEG", quality=90)
+            truncated = root / "f_000002.jpg"
+            truncated.write_bytes(other.getvalue()[:-40])
+            junk = root / "f_000003.jpg"
+            junk.write_bytes(b"not-a-jpeg")
+            kept = [path.name for path, _at in drop_repeats([(good, 0.0), (truncated, 0.5), (junk, 1.0)])]
+            self.assertEqual(kept, ["f_000001.jpg", "f_000002.jpg"])
+            self.assertEqual(_scan_file(str(junk), 1.0).kind, "other")
 
 
 ASSETS = Path("/home/ubuntu/.cursor/projects/workspace/assets")
