@@ -1452,6 +1452,46 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(graph[0][0].text, "xin")
         self.assertEqual(graph[0][0].author_name, "Lan")
 
+    def test_zero_width_space_and_page_name(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nJust\u200bnow\nLi\u200bke\nDelete comment\nBlock this person\n"
+                "Translate comment\nSee more from Mai\n1 reply from Lan"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nSee more from the album later"], 5)
+        self.assertEqual(sentence[0].text, "See more from the album later")
+        healed, _codes = heal_comments(
+            [PublicComment(text="hello\nJust\u200bnow\nLi\u200bke", author_name="Lan")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertEqual(
+            first_comment_id({"url": "https://www.facebook.com/x/posts/1/?comment_id=42"}),
+            "42",
+        )
+        self.assertEqual(person_name({"actor": {"name": "Lan"}}), "Lan")
+        named = _one({"text": "xin", "page_name": "Lan", "postedAt": "2024-03-02"})
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "Lan")
+        self.assertEqual(named.created_time, "2024-03-02")
+        managed = _comments_from_json(
+            {"comment_list": [{"message_text": "xin", "page_name": "Lan", "published_at": "2024-03-02"}]},
+            5,
+        )
+        self.assertEqual(managed[0].text, "xin")
+        self.assertEqual(managed[0].author_name, "Lan")
+        self.assertEqual(managed[0].created_time, "2024-03-02")
+        imported = _from_mapping({"Comment Text": "xin", "Page Name": "Lan", "Posted At": "2024-03-02"})
+        self.assertIsNotNone(imported)
+        assert imported is not None
+        self.assertEqual(imported.author_name, "Lan")
+        self.assertEqual(imported.created_time, "2024-03-02")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -44,6 +44,7 @@ _AUTHOR_KEYS = (
     "commenter",
     "commenter_name",
     "display_name",
+    "page_name",
     "nickname",
     "screen_name",
     "tác giả",
@@ -58,6 +59,8 @@ _TIME_KEYS = (
     "comment_time",
     "creation_time",
     "updated_time",
+    "posted_at",
+    "published_at",
     "thời gian",
     "thoi gian",
 )

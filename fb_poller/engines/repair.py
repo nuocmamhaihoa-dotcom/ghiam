@@ -80,6 +80,10 @@ _CHROME_LINE = re.compile(
     r"view post|go to post|đi tới bài viết|"
     r"link copied|đã sao chép liên kết|"
     r"joined the conversation|đã tham gia cuộc trò chuyện|"
+    r"delete comment|xóa bình luận|remove comment|gỡ bình luận|"
+    r"block this person|chặn người này|mute this conversation|"
+    r"translate comment|dịch bình luận|"
+    r"see more from \S+|"
     r"all replies|tất cả phản hồi|"
     r"report comment|báo cáo bình luận|"
     r"copy link|sao chép liên kết|"
@@ -135,7 +139,7 @@ _CHROME_LINE = re.compile(
     r"(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*[kmb]?)\s+(?:likes?|reactions?|comments?|shares?|lượt thích|bình luận|chia sẻ)|"
     r"view all(?: \d+)? repl(?:y|ies)|see all repl(?:y|ies)|hide all repl(?:y|ies)|xem tất cả(?: \d+)? phản hồi|ẩn tất cả phản hồi|"
     r"view \d+ repl(?:y|ies)|"
-    r"\d+\s+repl(?:y|ies)|\d+\s+phản hồi|"
+    r"\d+\s+repl(?:y|ies)(?:\s+from\s+\S+)?|\d+\s+phản hồi(?:\s+từ\s+\S+)?|"
     r"see previous comments|view previous comments|load more comments|"
     r"xem bình luận trước|xem các bình luận trước|tải thêm bình luận|"
     r"show more|show less|"
@@ -382,8 +386,9 @@ def heal_comments(comments: list[PublicComment]) -> tuple[list[PublicComment], l
 def _clean_text(text: str) -> tuple[str | None, list[str]]:
     codes: list[str] = []
     cleaned = text.replace("\u00a0", " ")
-    without_hidden = _ZERO_WIDTH.sub("", cleaned)
-    without_hidden = _CONTROLS.sub("", without_hidden)
+    spaced = cleaned.replace("\u200b", " ")
+    without_hidden = _CONTROLS.sub("", _ZERO_WIDTH.sub("", cleaned))
+    spaced = _CONTROLS.sub("", _ZERO_WIDTH.sub("", spaced))
     if without_hidden != cleaned:
         codes.append("normalize_text")
     cleaned = without_hidden
@@ -408,23 +413,34 @@ def _clean_text(text: str) -> tuple[str | None, list[str]]:
     if marked != cleaned:
         codes.append("strip_markup")
     cleaned = marked
+    spaced = _TAG.sub("", _BREAK.sub("\n", html.unescape(spaced).replace("\u00a0", " ")))
     kept: list[str] = []
     removed_chrome = False
     removed_glued = False
-    for line in cleaned.splitlines():
+    collapsed_lines = cleaned.splitlines()
+    spaced_lines = spaced.splitlines()
+    if len(spaced_lines) != len(collapsed_lines):
+        spaced_lines = collapsed_lines
+    for line, spaced_line in zip(collapsed_lines, spaced_lines):
         stripped = line.strip()
-        if not stripped:
+        spaced_stripped = spaced_line.strip()
+        if not stripped and not spaced_stripped:
             continue
-        if _CHROME_LINE.match(stripped):
+        if (stripped and _CHROME_LINE.match(stripped)) or (
+            spaced_stripped and _CHROME_LINE.match(spaced_stripped)
+        ):
             removed_chrome = True
             continue
         unglued = _GLUED_CHROME.sub("", stripped).strip()
-        if unglued != stripped:
+        unglued_spaced = _GLUED_CHROME.sub("", spaced_stripped).strip()
+        if unglued != stripped or unglued_spaced != spaced_stripped:
             removed_glued = True
             stripped = unglued.strip(" ·•∙‧⋅…").strip()
+            if len(unglued_spaced.strip(" ·•∙‧⋅…").strip()) < len(stripped):
+                stripped = unglued_spaced.strip(" ·•∙‧⋅…").strip()
         if not stripped:
             continue
-        if _CHROME_LINE.match(stripped):
+        if _CHROME_LINE.match(stripped) or _CHROME_LINE.match(spaced_stripped):
             removed_chrome = True
             continue
         kept.append(stripped)

@@ -92,7 +92,7 @@ def _from_items(payload: Any, limit: int) -> list[PublicComment]:
         rows = payload
     elif isinstance(payload, dict):
         nested_rows: list[Any] | None = None
-        for key in ("items", "data", "comments", "results"):
+        for key in ("items", "data", "comments", "comment_list", "results"):
             value = payload.get(key)
             if isinstance(value, list) and value:
                 nested_rows = value
@@ -196,6 +196,8 @@ def _one(row: Any) -> PublicComment | None:
         "user",
         "profile",
         "owner",
+        "page_name",
+        "actor",
     )
     return PublicComment(
         text=text,

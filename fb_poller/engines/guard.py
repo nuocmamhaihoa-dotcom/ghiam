@@ -78,7 +78,7 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         found = _id_value(folded.get(fold_key(key)))
         if found:
             return comment_id_from_url(found) or found
-    for key in ("comment_url", "permalink_url", "permalink"):
+    for key in ("comment_url", "permalink_url", "permalink", "url", "link"):
         found = comment_id_from_url(folded.get(fold_key(key)))
         if found:
             return found
@@ -150,6 +150,9 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "display_name",
             "nickname",
             "screen_name",
+            "actor",
+            "page_name",
+            "owner_name",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -271,6 +274,8 @@ def timestamp_of(row: object) -> str | None:
         "created",
         "comment_time",
         "updated_time",
+        "posted_at",
+        "published_at",
         "date",
         "time",
         "timestamp",

@@ -10,6 +10,7 @@ from fb_poller.engines.types import EngineResult, PublicComment
 
 RANK = 5
 NAME = "pa1-newest"
+_ZERO_WIDTH = re.compile(r"[\u200b\u200c\u200d\u200e\u200f\u2060\ufeff\u00ad]")
 
 _NEWEST_LABELS = ("Newest", "Mới nhất", "Most recent")
 _DROP_LINE = re.compile(
@@ -38,6 +39,10 @@ _DROP_LINE = re.compile(
     r"view post|go to post|đi tới bài viết|"
     r"link copied|đã sao chép liên kết|"
     r"joined the conversation|đã tham gia cuộc trò chuyện|"
+    r"delete comment|xóa bình luận|remove comment|gỡ bình luận|"
+    r"block this person|chặn người này|mute this conversation|"
+    r"translate comment|dịch bình luận|"
+    r"see more from \S+|"
     r"all replies|tất cả phản hồi|"
     r"report comment|báo cáo bình luận|"
     r"copy link|sao chép liên kết|"
@@ -92,7 +97,7 @@ _DROP_LINE = re.compile(
     r"(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*[kmb]?)\s+(?:likes?|reactions?|comments?|shares?|lượt thích|bình luận|chia sẻ)|"
     r"view all(?: \d+)? repl(?:y|ies)|see all repl(?:y|ies)|hide all repl(?:y|ies)|xem tất cả(?: \d+)? phản hồi|ẩn tất cả phản hồi|"
     r"view \d+ repl(?:y|ies)|"
-    r"\d+\s+repl(?:y|ies)|\d+\s+phản hồi|"
+    r"\d+\s+repl(?:y|ies)(?:\s+from\s+\S+)?|\d+\s+phản hồi(?:\s+từ\s+\S+)?|"
     r"see previous comments|view previous comments|load more comments|"
     r"xem bình luận trước|xem các bình luận trước|tải thêm bình luận|"
     r"show more|show less|"
@@ -225,10 +230,13 @@ def comments_from_articles(blocks: list[str], limit: int) -> list[PublicComment]
         lines: list[str] = []
         for raw in block.splitlines():
             line = raw.strip().replace("\u00a0", " ")
-            if not line or _DROP_LINE.match(line):
+            collapsed = _ZERO_WIDTH.sub("", line).strip()
+            spaced = _ZERO_WIDTH.sub("", line.replace("\u200b", " ")).strip()
+            if not collapsed or _DROP_LINE.match(collapsed) or _DROP_LINE.match(spaced):
                 continue
-            unglued = _GLUED_TAIL.sub("", line).strip(" ·•∙‧⋅…").strip()
-            if not unglued or _DROP_LINE.match(unglued):
+            unglued = _GLUED_TAIL.sub("", collapsed).strip(" ·•∙‧⋅…").strip()
+            unglued_spaced = _GLUED_TAIL.sub("", spaced).strip(" ·•∙‧⋅…").strip()
+            if not unglued or _DROP_LINE.match(unglued) or _DROP_LINE.match(unglued_spaced):
                 continue
             lines.append(unglued)
         if len(lines) > 2 and _COUNT_LINE.match(lines[-1]):

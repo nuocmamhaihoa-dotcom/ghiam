@@ -138,6 +138,8 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
             "user",
             "profile",
             "owner",
+            "page_name",
+            "actor",
         )
         author_name = first_person_name(row, author_keys) or (
             first_person_name(inner, author_keys) if inner else None
@@ -207,7 +209,7 @@ def _rows(payload: Any, depth: int = 0) -> list[Any]:
     if not isinstance(payload, dict):
         return []
     nested: list[Any] = []
-    for key in ("comments", "replies", "data", "results", "items"):
+    for key in ("comments", "replies", "comment_list", "data", "results", "items"):
         value = payload.get(key)
         linked = connection_rows(value)
         if linked:
