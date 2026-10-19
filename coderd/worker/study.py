@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import re
+import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -102,9 +104,17 @@ OPEN_SOURCES = (
     ("git-push", f"{_GIT}/git-push.adoc"),
     ("git-remote", f"{_GIT}/git-remote.adoc"),
 )
-SKIP_FILES = {"da-hoc.md", "kinh-nghiem.md", "muc-luc.md"}
+SKIP_FILES = {"da-hoc.md", "kinh-nghiem.md", "muc-luc.md", "nhat-ky.md"}
 CACHE_TTL = 24 * 60 * 60
 OPEN_NOTE_LIMIT = 8
+CHUNK = 8
+_LISTINGS = (
+    ("https://api.github.com/repos/python/cpython/contents/Doc/tutorial?ref=3.12", "py-tut"),
+    ("https://api.github.com/repos/python/cpython/contents/Doc/library?ref=3.12", "py-lib"),
+    ("https://api.github.com/repos/python/cpython/contents/Doc/howto?ref=3.12", "py-howto"),
+    ("https://api.github.com/repos/python/cpython/contents/Doc/faq?ref=3.12", "py-faq"),
+    ("https://api.github.com/repos/git/git/contents/Documentation?ref=master", "git-doc"),
+)
 
 
 def _clean_markup(line: str) -> str:
@@ -182,9 +192,10 @@ def extract_notes(text: str, limit: int = 8) -> list[str]:
 
 
 def fetch_text(url: str) -> str:
+    cap = 2_000_000 if "api.github.com" in url else 100_000
     request = urllib.request.Request(url, headers={"User-Agent": "coderd-study"})
     with urllib.request.urlopen(request, timeout=12) as response:
-        data = response.read(100_000)
+        data = response.read(cap)
     return data.decode("utf-8", "replace")
 
 
@@ -236,51 +247,92 @@ def remember(existing: str, highlights: list[str], limit: int = LIMIT) -> str:
     return "\n".join(f"- {item}" for item in kept[:limit]) + "\n"
 
 
-def ingest_sources(root: Path, fetch=fetch_text) -> int:
+def _topic_path(root: Path, name: str) -> Path:
+    return root / "learn" / "sach" / f"{name}.md"
+
+
+def _topic_url(text: str) -> str:
+    for line in text.splitlines():
+        if line.startswith("nguồn: "):
+            return line.split(": ", 1)[1].strip()
+    return ""
+
+
+def write_topic(root: Path, name: str, url: str, notes: list[str]) -> None:
+    path = _topic_path(root, name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [f"# {name}", ""]
+    if url:
+        lines += [f"nguồn: {url}", ""]
+    lines += [f"- {note}" for note in notes]
+    path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+
+def keep_deeper(root: Path, name: str, notes: list[str]) -> list[str]:
+    path = _topic_path(root, name)
+    if not path.is_file():
+        return notes
+    old = _bullets(path.read_text(encoding="utf-8"))
+    if len(old) > len(notes):
+        return old
+    return notes
+
+
+def render_store(root: Path) -> int:
     learn = root / "learn"
     learn.mkdir(parents=True, exist_ok=True)
     sections: list[tuple[str, str, list[str]]] = []
-    if learn.is_dir():
-        for path in sorted(learn.glob("*.md")):
-            if path.name in SKIP_FILES:
-                continue
-            notes = extract_notes(path.read_text(encoding="utf-8"), limit=30)
-            if notes:
-                sections.append((path.name, "", notes))
-    for name, url in OPEN_SOURCES:
-        try:
-            text = load_source(root, name, url, fetch)
-            notes = extract_notes(text, limit=OPEN_NOTE_LIMIT)
-        except Exception as exc:
-            print(f"không tải {name}: {exc}")
+    for path in sorted(learn.glob("*.md")):
+        if path.name in SKIP_FILES:
             continue
+        notes = extract_notes(path.read_text(encoding="utf-8"), limit=30)
         if notes:
-            sections.append((name, url, notes))
-    lines = ["# Kho đã học", ""]
+            sections.append((path.name, "", notes))
     sach = learn / "sach"
-    sach.mkdir(parents=True, exist_ok=True)
-    highlights: list[str] = []
+    if sach.is_dir():
+        for path in sorted(sach.glob("*.md")):
+            text = path.read_text(encoding="utf-8")
+            notes = _bullets(text)
+            if notes:
+                sections.append((path.stem, _topic_url(text), notes))
+    lines = ["# Kho đã học", ""]
     total = 0
+    highlights: list[str] = []
     for name, url, notes in sections:
         lines.append(f"## {name}")
         if url:
             lines.append(f"nguồn: {url}")
-        topic = [f"# {name}", ""]
-        if url:
-            topic.append(f"nguồn: {url}")
-            topic.append("")
         for note in notes:
             lines.append(f"- {note}")
-            topic.append(f"- {note}")
             total += 1
         lines.append("")
-        (sach / f"{name}.md").write_text("\n".join(topic).rstrip() + "\n", encoding="utf-8")
-        highlights.append(notes[0])
+        if notes:
+            highlights.append(notes[0])
     (learn / "da-hoc.md").write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     path = lesson_file(root)
     existing = path.read_text(encoding="utf-8") if path.is_file() else ""
     path.write_text(remember(existing, highlights), encoding="utf-8")
     return total
+
+
+def ingest_sources(root: Path, fetch=fetch_text) -> int:
+    learn = root / "learn"
+    learn.mkdir(parents=True, exist_ok=True)
+    (learn / "sach").mkdir(parents=True, exist_ok=True)
+    for name, url in OPEN_SOURCES:
+        try:
+            text = load_source(root, name, url, fetch)
+            notes = keep_deeper(root, name, extract_notes(text, limit=OPEN_NOTE_LIMIT))
+        except Exception as exc:
+            print(f"không tải {name}: {exc}")
+            continue
+        if notes:
+            url_now = url
+            existing = _topic_path(root, name)
+            if existing.is_file() and len(_bullets(existing.read_text(encoding="utf-8"))) == len(notes):
+                url_now = _topic_url(existing.read_text(encoding="utf-8")) or url
+            write_topic(root, name, url_now, notes)
+    return render_store(root)
 
 
 def lesson_file(root: Path) -> Path:
@@ -343,19 +395,231 @@ def ask_model(prompt: str) -> str:
     return str(data["choices"][0]["message"].get("content") or "")
 
 
+def _safe_name(prefix: str, filename: str) -> str:
+    stem = Path(filename).stem.lower().replace(".", "-")
+    cleaned = re.sub(r"[^a-z0-9-]+", "-", f"{prefix}-{stem}").strip("-")
+    return cleaned[:80] or "nguon"
+
+
+def discover_catalog(root: Path, fetch) -> list[tuple[str, str]]:
+    cache = root / "learn" / "cache" / "catalog.json"
+    if cache.is_file() and time.time() - cache.stat().st_mtime < CACHE_TTL:
+        try:
+            data = json.loads(cache.read_text(encoding="utf-8"))
+            if isinstance(data, list) and data:
+                return [(str(name), str(url)) for name, url in data]
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            pass
+    found: list[tuple[str, str]] = []
+    seen: set[str] = set()
+
+    def add(name: str, url: str) -> None:
+        if not url or url in seen:
+            return
+        seen.add(url)
+        found.append((name, url))
+
+    for name, url in OPEN_SOURCES:
+        add(name, url)
+    for api, prefix in _LISTINGS:
+        try:
+            payload = json.loads(fetch(api))
+        except Exception as exc:
+            print(f"không liệt kê {prefix}: {exc}")
+            continue
+        if not isinstance(payload, list):
+            continue
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            filename = str(item.get("name") or "")
+            if not (filename.endswith(".rst") or filename.endswith(".adoc")):
+                continue
+            add(_safe_name(prefix, filename), str(item.get("download_url") or ""))
+    if found:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps(found, ensure_ascii=False), encoding="utf-8")
+    return found
+
+
+def load_progress(root: Path) -> dict:
+    path = root / "learn" / "tien-do.json"
+    if path.is_file():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                data.setdefault("offsets", {})
+                return data
+        except (OSError, json.JSONDecodeError):
+            pass
+    return {"cursor": 0, "offsets": {}}
+
+
+def save_progress(root: Path, state: dict) -> None:
+    (root / "learn").mkdir(parents=True, exist_ok=True)
+    (root / "learn" / "tien-do.json").write_text(json.dumps(state), encoding="utf-8")
+
+
+def absorb_next(root: Path, catalog: list[tuple[str, str]], state: dict, fetch) -> tuple[str, list[str]]:
+    if not catalog:
+        return "", []
+    offsets = state.setdefault("offsets", {})
+    count = len(catalog)
+    cursor = int(state.get("cursor") or 0) % count
+    for step in range(count):
+        index = (cursor + step) % count
+        name, url = catalog[index]
+        if int(offsets.get(name) or 0) < 0:
+            continue
+        try:
+            text = load_source(root, name, url, fetch)
+        except Exception as exc:
+            print(f"không tải {name}: {exc}")
+            offsets[name] = -1
+            continue
+        offset = int(offsets.get(name) or 0)
+        fresh = extract_notes(text, limit=offset + CHUNK)[offset:offset + CHUNK]
+        if not fresh:
+            offsets[name] = -1
+            continue
+        path = _topic_path(root, name)
+        current = _bullets(path.read_text(encoding="utf-8")) if path.is_file() else []
+        seen = {item.lower() for item in current}
+        for item in fresh:
+            if item.lower() not in seen:
+                seen.add(item.lower())
+                current.append(item)
+        write_topic(root, name, url, current)
+        offsets[name] = offset + len(fresh)
+        state["cursor"] = (index + 1) % count
+        return name, fresh
+    state["cursor"] = 0
+    return "", []
+
+
+def next_saved(root: Path, state: dict) -> tuple[str, list[str]]:
+    sach = root / "learn" / "sach"
+    if not sach.is_dir():
+        return "", []
+    files = sorted(sach.glob("*.md"))
+    if not files:
+        return "", []
+    index = int(state.get("recap") or 0) % len(files)
+    state["recap"] = index + 1
+    notes = _bullets(files[index].read_text(encoding="utf-8"))
+    return files[index].stem, notes[-CHUNK:]
+
+
+def distill_notes(ask, name: str, notes: list[str]) -> list[str]:
+    if not notes:
+        return []
+    prompt = (
+        "Viết tối đa 3 bài học tiếng Việt, mỗi bài một dòng bắt đầu bằng '- '. "
+        "Chỉ dùng ý có trong ghi chú. Nếu không có gì mới, trả lời '- không có'.\n"
+        f"Chủ đề: {name}\n" + "\n".join(f"- {note}" for note in notes[:CHUNK])
+    )
+    return parse_lessons(str(ask(prompt) or ""))
+
+
+def study_hours(root: Path, database: Path, ask, hours: float, fetch=fetch_text, clock=time.time, catalog=None) -> int:
+    (root / "learn").mkdir(parents=True, exist_ok=True)
+    state = load_progress(root)
+    begun = float(clock())
+    stored = float(state.get("deadline") or 0)
+    deadline = stored if stored > begun else begun + float(hours) * 3600
+    state["deadline"] = deadline
+    state["started"] = state.get("started") or begun
+    if catalog is None:
+        catalog = discover_catalog(root, fetch)
+    rounds = 0
+    added = 0
+    while True:
+        if float(clock()) >= deadline:
+            break
+        rounds += 1
+        fresh: list[str] = []
+        name = ""
+        try:
+            name, fresh = absorb_next(root, catalog, state, fetch)
+        except Exception as exc:
+            print(f"nạp: {exc}")
+        if fresh:
+            added += len(fresh)
+            try:
+                render_store(root)
+            except Exception as exc:
+                print(f"ghi kho: {exc}")
+        else:
+            name, fresh = next_saved(root, state)
+        lessons: list[str] = []
+        if fresh:
+            try:
+                lessons = distill_notes(ask, name, fresh)
+            except Exception as exc:
+                print(f"chưa rút được {name}: {exc}")
+        if lessons:
+            path = lesson_file(root)
+            existing = path.read_text(encoding="utf-8") if path.is_file() else ""
+            path.write_text(merge_lessons(existing, lessons), encoding="utf-8")
+        try:
+            study_once(database, root, ask)
+        except Exception as exc:
+            print(f"chat: {exc}")
+        save_progress(root, state)
+        line = f"vòng {rounds} {name or 'trống'} +{len(fresh)} bài {len(lessons)}"
+        (root / "learn" / "nhat-ky.md").write_text(
+            "# Nhật ký học\n\n" + f"- hạn {int(deadline)}\n- {line}\n- bài mới {added}\n",
+            encoding="utf-8",
+        )
+        print(line, flush=True)
+    print(f"hết giờ sau {rounds} vòng, bài mới {added}", flush=True)
+    return rounds
+
+
+def acquire_lock(root: Path):
+    learn = root / "learn"
+    learn.mkdir(parents=True, exist_ok=True)
+    handle = (learn / "study.lock").open("a", encoding="utf-8")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.close()
+        return None
+    return handle
+
+
 def main() -> None:
     load_env()
     load_env_file(Path("/opt/coderd/coderd.env"))
     database = Path(os.environ.get("CODERD_DB") or "/opt/coderd/var/coderd.db")
     root = Path(os.environ.get("WORKSPACE_ROOT") or "/opt/coderd/var/workspace")
-    try:
-        ingested = ingest_sources(root)
-        count = study_once(database, root, ask_model)
-    except Exception as exc:
-        print(f"vòng học dừng: {exc}")
+    hours = 0.0
+    if len(sys.argv) >= 3 and sys.argv[1] == "--hours":
+        hours = float(sys.argv[2])
+    lock = acquire_lock(root)
+    if lock is None:
+        print("đang có vòng học khác")
+        if hours > 0:
+            sys.exit(75)
         return
-    print(f"nguồn {ingested}")
-    print(f"học {count}")
+    try:
+        if hours > 0:
+            try:
+                ingest_sources(root)
+            except Exception as exc:
+                print(f"nạp nguồn: {exc}")
+            study_hours(root, database, ask_model, hours)
+            return
+        try:
+            ingested = ingest_sources(root)
+            count = study_once(database, root, ask_model)
+        except Exception as exc:
+            print(f"vòng học dừng: {exc}")
+            return
+        print(f"nguồn {ingested}")
+        print(f"học {count}")
+    finally:
+        lock.close()
 
 
 if __name__ == "__main__":

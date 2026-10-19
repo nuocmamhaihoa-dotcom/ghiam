@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app import db as appdb
 from worker.agent import normalize_reply, parse_text_tools, run_turn, scripted_complete, system_prompt
-from worker.study import extract_notes, ingest_sources, merge_lessons, parse_lessons, study_once  # noqa: E402
+from worker.study import extract_notes, ingest_sources, merge_lessons, parse_lessons, study_hours, study_once  # noqa: E402
 from worker.tools import run_cmd, run_tool  # noqa: E402
 from worker.workspace import Workspace  # noqa: E402
 
@@ -345,6 +345,53 @@ class WorkerTests(unittest.TestCase):
             self.assertEqual(calls["n"], again)
             short = (learn / "kinh-nghiem.md").read_text(encoding="utf-8")
             self.assertIn("print in ra màn hình", short)
+
+    def test_six_hour_study_does_not_pause_between_rounds(self) -> None:
+        calls = {"n": 0}
+
+        def clock() -> float:
+            calls["n"] += 1
+            return 1_000_000 + calls["n"] * 10
+
+        def fetch(url: str) -> str:
+            if url.endswith("a"):
+                return "Alpha keeps a namespace so a later lookup finds the same object.\n"
+            return "Beta writes the buffer to disk before the next reader opens it.\n"
+
+        def ask(prompt: str) -> str:
+            if "namespace" in prompt or "Alpha" in prompt:
+                return "- giữ tên trong không gian tên"
+            return "- ghi bộ đệm xuống đĩa"
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "work"
+            database = root / "coderd.db"
+            rounds = study_hours(
+                root,
+                database,
+                ask,
+                35 / 3600,
+                fetch=fetch,
+                clock=clock,
+                catalog=(("alpha", "https://example.test/a"), ("beta", "https://example.test/b")),
+            )
+            self.assertGreaterEqual(rounds, 3)
+            saved = (root / "learn" / "da-hoc.md").read_text(encoding="utf-8")
+            self.assertIn("namespace", saved)
+            self.assertIn("buffer", saved)
+            lesson = (root / "learn" / "kinh-nghiem.md").read_text(encoding="utf-8")
+            self.assertIn("không gian tên", lesson)
+            self.assertIn("vòng 3", (root / "learn" / "nhat-ky.md").read_text(encoding="utf-8"))
+            deep = (root / "learn" / "sach" / "alpha.md").read_text(encoding="utf-8")
+            deep += "\n- một bài đào sâu đủ dài để không bị rút ngắn\n"
+            (root / "learn" / "sach" / "alpha.md").write_text(deep, encoding="utf-8")
+            ingest_sources(root, fetch)
+            kept = (root / "learn" / "sach" / "alpha.md").read_text(encoding="utf-8")
+            self.assertIn("đào sâu", kept)
+        unit = (ROOT / "deploy" / "coderd-learn-6h.service").read_text(encoding="utf-8")
+        self.assertIn("--hours 6", unit)
+        self.assertIn("TimeoutStartSec=infinity", unit)
+        self.assertIn("coderd-learn.timer", unit)
 
     def test_text_tool_line_writes_a_file(self) -> None:
         def complete(messages, _tools):
