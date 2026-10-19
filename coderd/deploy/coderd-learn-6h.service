@@ -1,5 +1,5 @@
 [Unit]
-Description=coderd study without pause for six hours
+Description=coderd study without pause for ten hours
 After=coderd-model.service
 StartLimitIntervalSec=0
 
@@ -14,5 +14,5 @@ Environment=HOME=/opt/coderd/var/home
 EnvironmentFile=/opt/coderd/worker.env
 ExecStartPre=+/bin/systemctl stop coderd-learn.timer
 ExecStartPre=+/bin/systemctl stop coderd-learn.service
-ExecStart=/opt/coderd/.venv/bin/python -m worker.study --hours 6
+ExecStart=/opt/coderd/.venv/bin/python -m worker.study --hours 10
 ExecStopPost=+/bin/systemctl start coderd-learn.timer

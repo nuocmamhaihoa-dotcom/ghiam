@@ -24,6 +24,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app import db as appdb
 from worker.agent import normalize_reply, parse_text_tools, run_turn, scripted_complete, system_prompt
+from worker.commands import extract_commands, store_commands
 from worker.study import (  # noqa: E402
     extract_examples,
     extract_notes,
@@ -402,7 +403,7 @@ class WorkerTests(unittest.TestCase):
             kept = (root / "learn" / "sach" / "alpha.md").read_text(encoding="utf-8")
             self.assertIn("đào sâu", kept)
         unit = (ROOT / "deploy" / "coderd-learn-6h.service").read_text(encoding="utf-8")
-        self.assertIn("--hours 6", unit)
+        self.assertIn("--hours 10", unit)
         self.assertIn("TimeoutStartSec=infinity", unit)
         self.assertIn("coderd-learn.timer", unit)
 
@@ -448,6 +449,59 @@ class WorkerTests(unittest.TestCase):
             state = json.loads((learn / "tien-do.json").read_text(encoding="utf-8"))
             self.assertGreaterEqual(state["active_seconds"], 25)
             self.assertIn("Cách làm", (learn / "the" / "sqlite.md").read_text(encoding="utf-8"))
+
+    def test_commands_are_grouped_for_vietnamese(self) -> None:
+        text = "Run `git status` then `python3 hello.py`.\nls -la\nSELECT id FROM t\n"
+        found = extract_commands(text)
+        self.assertIn("git status", found)
+        self.assertIn("python3 hello.py", found)
+        self.assertIn("ls -la", found)
+        self.assertIn("SELECT id FROM t", found)
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "work"
+            self.assertGreaterEqual(store_commands(root, text, "mau"), 4)
+            git = (root / "learn" / "lenh" / "git.md").read_text(encoding="utf-8")
+            self.assertIn("git status", git)
+            self.assertIn("Xem những file đã đổi", git)
+            index = (root / "learn" / "lenh" / "muc-luc.md").read_text(encoding="utf-8")
+            self.assertIn("tiếng Việt", index)
+            self.assertIn("python.md", index)
+
+    def test_study_restarts_the_catalog_until_the_budget_is_spent(self) -> None:
+        calls = {"n": 0}
+
+        def clock() -> float:
+            calls["n"] += 1
+            return 2_000_000 + calls["n"] * 10
+
+        def fetch(_url: str) -> str:
+            return "Run `git status` before you edit the tracked files in this repository.\n"
+
+        def ask(_prompt: str) -> str:
+            return "- git status xem file đã đổi"
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "work"
+            learn = root / "learn"
+            learn.mkdir(parents=True)
+            (learn / "tien-do.json").write_text(
+                json.dumps({"deadline": 1, "started": 1, "active_seconds": 0, "need_seconds": 45, "offsets": {}}),
+                encoding="utf-8",
+            )
+            study_hours(
+                root,
+                root / "coderd.db",
+                ask,
+                10,
+                fetch=fetch,
+                clock=clock,
+                catalog=(("git-status", "https://example.test/git-status"),),
+            )
+            state = json.loads((learn / "tien-do.json").read_text(encoding="utf-8"))
+            self.assertGreaterEqual(int(state.get("passes") or 1), 2)
+            self.assertGreaterEqual(state["active_seconds"], 45)
+            grouped = (learn / "lenh" / "git.md").read_text(encoding="utf-8")
+            self.assertIn("git status", grouped)
 
     def test_text_tool_line_writes_a_file(self) -> None:
         def complete(messages, _tools):

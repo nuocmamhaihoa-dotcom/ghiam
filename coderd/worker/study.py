@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from app import db
+from worker.commands import harvest_saved, store_commands
 from worker.connect import load_env, load_env_file
 
 SKIP = {"không có", "khong co", "không có gì mới", "khong co gi moi"}
@@ -488,7 +489,7 @@ def absorb_next(root: Path, catalog: list[tuple[str, str]], state: dict, fetch) 
             text = load_source(root, name, url, fetch)
         except Exception as exc:
             print(f"không tải {name}: {exc}")
-            offsets[name] = -1
+            offsets[name] = -2
             continue
         offset = int(offsets.get(name) or 0)
         fresh = extract_notes(text, limit=offset + CHUNK)[offset:offset + CHUNK]
@@ -508,6 +509,22 @@ def absorb_next(root: Path, catalog: list[tuple[str, str]], state: dict, fetch) 
         return name, fresh
     state["cursor"] = 0
     return "", []
+
+
+def _pass_done(state: dict, catalog: list[tuple[str, str]]) -> bool:
+    if not catalog:
+        return False
+    offsets = state.get("offsets") or {}
+    return all(int(offsets.get(name) or 0) < 0 for name, _url in catalog)
+
+
+def _rewind(state: dict) -> None:
+    offsets = state.setdefault("offsets", {})
+    for name, value in list(offsets.items()):
+        if int(value) == -1:
+            offsets[name] = 0
+    state["cursor"] = 0
+    state["passes"] = int(state.get("passes") or 1) + 1
 
 
 def next_saved(root: Path, state: dict) -> tuple[str, list[str]]:
@@ -769,6 +786,10 @@ def study_hours(root: Path, database: Path, ask, hours: float, fetch=fetch_text,
     if catalog is None:
         catalog = discover_catalog(root, fetch)
     catalog = extend_catalog(root, catalog)
+    try:
+        harvest_saved(root)
+    except Exception as exc:
+        print(f"gom lệnh: {exc}")
     rounds = 0
     added = 0
     last = begun
@@ -786,6 +807,12 @@ def study_hours(root: Path, database: Path, ask, hours: float, fetch=fetch_text,
             name, fresh = absorb_next(root, catalog, state, fetch)
         except Exception as exc:
             print(f"nạp: {exc}")
+        if not fresh and _pass_done(state, catalog):
+            _rewind(state)
+            try:
+                name, fresh = absorb_next(root, catalog, state, fetch)
+            except Exception as exc:
+                print(f"nạp lại: {exc}")
         if fresh:
             added += len(fresh)
             try:
@@ -809,9 +836,13 @@ def study_hours(root: Path, database: Path, ask, hours: float, fetch=fetch_text,
         cache = root / "learn" / "cache" / f"{name}.txt"
         if name and cache.is_file():
             try:
-                examples = extract_examples(cache.read_text(encoding="utf-8"))
+                cached = cache.read_text(encoding="utf-8")
+                examples = extract_examples(cached)
+                store_commands(root, cached, name)
             except OSError:
                 examples = []
+        elif name and fresh:
+            store_commands(root, "\n".join(fresh), name)
         if name and fresh:
             write_skill(root, name, _source_url(catalog, root, name), fresh, lessons, examples)
         index = rebuild_index(root)

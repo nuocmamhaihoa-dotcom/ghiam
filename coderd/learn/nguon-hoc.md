@@ -34,7 +34,7 @@ Công cụ huấn luyện khi có GPU: LLaMA-Factory, Unsloth, Axolotl.
 
 Vòng học tải các file thô dưới đây, giữ vài câu mỗi file trong `learn/da-hoc.md` và `learn/sach/`, cache 24 giờ. Không chép nguyên văn vào git.
 
-Vòng học sâu chạy liên tục đủ số giờ đã hẹn. Mỗi vòng đọc một đoạn mới, ghi kỹ năng vào `learn/the/`, nối chủ đề liên quan, ôn kỹ năng cũ, rồi rút bài từ chat. Câu của model chỉ được giữ khi bám được ghi chú gốc. Thời gian đã học nằm trong `learn/tien-do.json`. Nếu chưa đủ giờ thì chạy tiếp, không mở một hạn mới đè lên hạn cũ.
+Vòng học sâu chạy liên tục đủ số giờ đã hẹn. Lệnh tìm được được xếp vào `learn/lenh/` theo nhóm Python, git, shell, SQLite, mạng và hệ thống, kèm câu tiếng Việt. Hết một lượt tài liệu thì đọc lại từ đầu cho đến khi đủ giờ.
 
 - Tutorial Python 3.12: introduction, controlflow, datastructures, modules, inputoutput, errors, classes, stdlib, venv
 - Thư viện chuẩn: json, pathlib, sqlite3, urllib.request, subprocess, argparse, unittest
