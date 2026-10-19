@@ -63,6 +63,8 @@ class TxtReader:
 def _split_txt(text: str, delimiter: str) -> list[str]:
     if text.startswith("\ufeff"):
         text = text.lstrip("\ufeff")
+    if delimiter == "":
+        return [text]
     return text.split(delimiter)
 
 

@@ -342,7 +342,7 @@
       $("stats").innerHTML = "<div class=\"stat\"><b>" + data.total + "</b>số trong kho</div>";
       $("books").innerHTML = data.books.map((book) => {
         const state = book.downloaded_at ? ("Đã tải " + book.downloaded_at) : "Chưa tải";
-        return "<tr><td>" + book.name + "</td><td>" + book.count + "</td><td>" + state +
+        return "<tr><td>" + escapeHtml(book.name) + "</td><td>" + book.count + "</td><td>" + escapeHtml(state) +
           "</td><td><button class=\"book-btn\" type=\"button\" data-id=\"" + book.id + "\">Tải về</button> " +
           "<a class=\"book-btn\" href=\"" + iphoneFile(book.id) + "\">Tải iPhone</a></td></tr>";
       }).join("");

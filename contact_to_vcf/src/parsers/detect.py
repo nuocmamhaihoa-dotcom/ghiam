@@ -9,6 +9,7 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 from models.records import FileInspection, JobConfig
+from parsers.column_suggest import looks_like_phone
 from parsers.csv_parser import CsvReader
 from parsers.txt_parser import TxtReader
 from parsers.xlsx_parser import XlsxReader
@@ -113,11 +114,16 @@ def inspect_source(
         if header and estimated:
             estimated = max(0, estimated - 1)
     else:
-        header = (resolved_format == "csv") if has_header is None else has_header
         if delimiter in (None, "", "auto"):
             resolved_delimiter = sniff_delimiter(path, resolved_encoding)
         else:
             resolved_delimiter = delimiter
+        if has_header is None:
+            header = _header_from_first_row(
+                path, resolved_format, resolved_delimiter, resolved_encoding
+            )
+        else:
+            header = has_header
         if resolved_format == "csv":
             reader = CsvReader(path, resolved_delimiter, header, resolved_encoding)
         else:
@@ -127,12 +133,18 @@ def inspect_source(
             estimated = max(0, estimated - 1)
     columns = reader.column_names()
     samples: list[tuple[str, ...]] = []
-    for record in reader.iter_stream(0, 1):
-        if record.error:
-            continue
-        samples.append(record.columns)
-        if len(samples) >= 5:
-            break
+    stream = reader.iter_stream(0, 1)
+    try:
+        for record in stream:
+            if record.error:
+                continue
+            samples.append(record.columns)
+            if len(samples) >= 5:
+                break
+    finally:
+        close = getattr(stream, "close", None)
+        if callable(close):
+            close()
     size, fingerprint = file_fingerprint(path)
     return FileInspection(
         path=path,
@@ -146,6 +158,25 @@ def inspect_source(
         fingerprint=fingerprint,
         estimated_rows=estimated,
     )
+
+
+def _header_from_first_row(
+    path: Path, file_format: str, delimiter: str, encoding: str
+) -> bool:
+    """A CSV title row has no phone. A phone on row 1 means there is no title."""
+    if file_format == "txt":
+        return False
+    reader = CsvReader(path, delimiter, False, encoding)
+    stream = reader.iter_stream(0, 1)
+    try:
+        first = next(stream, None)
+    finally:
+        close = getattr(stream, "close", None)
+        if callable(close):
+            close()
+    if first is None or first.error or not first.columns:
+        return True
+    return not any(looks_like_phone(cell) for cell in first.columns)
 
 
 def _looks_like_xlsx(path: Path) -> bool:

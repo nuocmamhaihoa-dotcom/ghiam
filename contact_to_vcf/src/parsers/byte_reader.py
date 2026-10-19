@@ -57,9 +57,19 @@ class ByteRecordReader:
                 byte = self._buffer[index]
                 if self.quote_aware and byte == 0x22:
                     in_quotes = not in_quotes
-                elif byte == 0x0A and not in_quotes:
-                    raw = self._buffer[:index]
+                    index += 1
+                    continue
+                if not in_quotes and byte in (0x0A, 0x0D):
                     consumed = index + 1
+                    if byte == 0x0D and consumed >= len(self._buffer):
+                        self._fill()
+                    if (
+                        byte == 0x0D
+                        and consumed < len(self._buffer)
+                        and self._buffer[consumed] == 0x0A
+                    ):
+                        consumed += 1
+                    raw = self._buffer[:index]
                     self._buffer = self._buffer[consumed:]
                     self._position += consumed
                     return self._decode(raw), self._position
@@ -75,7 +85,9 @@ class ByteRecordReader:
     def _decode(self, raw: bytes) -> str | None:
         if raw.endswith(b"\r"):
             raw = raw[:-1]
-        try:
-            return raw.decode(self.encoding)
-        except UnicodeDecodeError:
-            return None
+        for encoding in (self.encoding, "cp1258", "latin-1"):
+            try:
+                return raw.decode(encoding)
+            except UnicodeDecodeError:
+                continue
+        return None

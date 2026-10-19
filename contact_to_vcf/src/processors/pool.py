@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
@@ -245,7 +246,7 @@ class _Pool:
         self._room = 0
         self._unflushed = 0
         self.filled_ids: list[int] = []
-        self.connection.execute("BEGIN")
+        self.connection.execute("BEGIN IMMEDIATE")
 
     def add_many(self, phones: list[str], source_name: str) -> tuple[int, int]:
         """Insert many phones. Returns ``(added, duplicate)``."""
@@ -414,15 +415,34 @@ class _Pool:
 
     def _commit_open(self) -> None:
         self.connection.commit()
-        self.connection.execute("BEGIN")
+        self.connection.execute("BEGIN IMMEDIATE")
         self._pending = 0
+        self._book_id = None
+        self._room = 0
+
+
+def _set_wal(connection: sqlite3.Connection) -> None:
+    """Turn on WAL. A second import can arrive while the first still holds the file."""
+    last_error: sqlite3.OperationalError | None = None
+    for _ in range(40):
+        try:
+            row = connection.execute("PRAGMA journal_mode=WAL").fetchone()
+        except sqlite3.OperationalError as exc:
+            last_error = exc
+            time.sleep(0.05)
+            continue
+        if row is not None and str(row[0]).lower() == "wal":
+            return
+    if last_error is not None:
+        raise last_error
+    raise sqlite3.OperationalError("Không bật được chế độ ghi an toàn cho kho số")
 
 
 def _connect(path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(path, timeout=600)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA busy_timeout=600000")
-    connection.execute("PRAGMA journal_mode=WAL")
+    _set_wal(connection)
     connection.execute("PRAGMA synchronous=NORMAL")
     connection.execute("PRAGMA temp_store=MEMORY")
     connection.execute("PRAGMA cache_size=-65536")
