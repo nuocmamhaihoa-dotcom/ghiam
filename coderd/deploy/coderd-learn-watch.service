@@ -1,0 +1,8 @@
+[Unit]
+Description=coderd restart study if the ten hour session stopped early
+After=coderd-model.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/bin/sh /opt/coderd/deploy/watch-study.sh

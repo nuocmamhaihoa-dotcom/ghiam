@@ -126,6 +126,9 @@ def extract_commands(text: str) -> list[str]:
             command = command[2:].strip()
         if command.startswith(">>> ") or command.startswith("... "):
             command = command[4:].strip()
+        parts = command.split()
+        if parts and re.match(r"^git-[a-z0-9-]+$", parts[0]):
+            command = "git " + parts[0][4:]
         if not command or len(command) > 180 or len(command.split()) > 18:
             return
         if not group_of(command):
@@ -141,7 +144,7 @@ def extract_commands(text: str) -> list[str]:
     for raw in text.splitlines():
         if raw.startswith("    ") or raw.startswith("\t") or raw.strip().startswith(("`", "$", ">>>", "...")):
             add(raw)
-        elif group_of(raw):
+        elif group_of(raw) or raw.strip().startswith("git-"):
             add(raw)
     return found
 
@@ -190,7 +193,21 @@ def store_commands(root: Path, text: str, source: str, limit: int = 500) -> int:
     for name, title in GROUPS:
         index.append(f"- {name}.md: {title}")
     (folder / "muc-luc.md").write_text("\n".join(index) + "\n", encoding="utf-8")
+    write_phrases(folder)
     return added
+
+
+def write_phrases(folder: Path) -> None:
+    lines = [
+        "# Nói tiếng Việt",
+        "",
+        "Người dùng nói tiếng Việt. Đổi thành lệnh, rồi mở đúng nhóm.",
+        "",
+    ]
+    for prefix, meaning in _GLOSS:
+        lines.append(f"- {meaning}: `{prefix.strip()}`")
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "tieng-viet.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def harvest_saved(root: Path) -> int:

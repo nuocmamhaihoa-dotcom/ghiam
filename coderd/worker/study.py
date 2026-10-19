@@ -105,6 +105,15 @@ OPEN_SOURCES = (
     ("git-pull", f"{_GIT}/git-pull.adoc"),
     ("git-push", f"{_GIT}/git-push.adoc"),
     ("git-remote", f"{_GIT}/git-remote.adoc"),
+    ("git-danh-sach", "https://raw.githubusercontent.com/git/git/master/command-list.txt"),
+    ("python-os", f"{_PY}/library/os.rst"),
+    ("python-shutil", f"{_PY}/library/shutil.rst"),
+    ("python-tempfile", f"{_PY}/library/tempfile.rst"),
+    ("python-re", f"{_PY}/library/re.rst"),
+    ("python-datetime", f"{_PY}/library/datetime.rst"),
+    ("python-logging", f"{_PY}/library/logging.rst"),
+    ("python-typing", f"{_PY}/library/typing.rst"),
+    ("python-http", f"{_PY}/library/http.client.rst"),
 )
 SKIP_FILES = {
     "da-hoc.md",
@@ -869,6 +878,15 @@ def study_hours(root: Path, database: Path, ask, hours: float, fetch=fetch_text,
     return rounds
 
 
+def hours_done(root: Path, hours: float, slack: float = 30.0) -> bool:
+    state = load_progress(root)
+    need = float(state.get("need_seconds") or 0)
+    if need <= 0:
+        need = float(hours) * 3600
+    active = float(state.get("active_seconds") or 0)
+    return active + slack >= need
+
+
 def acquire_lock(root: Path):
     learn = root / "learn"
     learn.mkdir(parents=True, exist_ok=True)
@@ -889,6 +907,13 @@ def main() -> None:
     hours = 0.0
     if len(sys.argv) >= 3 and sys.argv[1] == "--hours":
         hours = float(sys.argv[2])
+    if len(sys.argv) >= 3 and sys.argv[1] == "--check-hours":
+        hours = float(sys.argv[2])
+        if hours_done(root, hours):
+            print("đủ giờ")
+            return
+        print("chưa đủ giờ")
+        sys.exit(1)
     lock = acquire_lock(root)
     if lock is None:
         print("đang có vòng học khác")
@@ -902,12 +927,14 @@ def main() -> None:
             except Exception as exc:
                 print(f"nạp nguồn: {exc}")
             study_hours(root, database, ask_model, hours)
+            if not hours_done(root, hours):
+                sys.exit(1)
             return
         try:
             ingested = ingest_sources(root)
             count = study_once(database, root, ask_model)
-        except Exception as exc:
-            print(f"vòng học dừng: {exc}")
+        except Exception as extra:
+            print(f"vòng học dừng: {extra}")
             return
         print(f"nguồn {ingested}")
         print(f"học {count}")

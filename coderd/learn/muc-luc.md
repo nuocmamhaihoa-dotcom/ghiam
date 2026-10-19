@@ -10,7 +10,8 @@
 - cac-ai.md: cách các AI khác học, và vòng học của coderd.
 - kinh-nghiem.md: bài học ngắn đưa vào mỗi lượt chat.
 - da-hoc.md: kho đầy đủ vừa học. Đừng đọc cả file này.
-- lenh/muc-luc.md: lệnh lập trình chia theo nhóm. Đọc file này khi người dùng nói tiếng Việt và cần một lệnh.
+- lenh/muc-luc.md: lệnh lập trình chia theo nhóm.
+- lenh/tieng-viet.md: câu tiếng Việt đổi thành lệnh. Đọc file này trước khi lập trình.
 - chi-muc.md: từ khóa trỏ tới một kỹ năng. Đọc file này trước khi đọc learn/the/.
 - the/: mỗi kỹ năng một file, gồm sự kiện, cách làm và ví dụ. Đọc đúng một file.
 - sach/: câu đã trích từ tài liệu. Đọc khi file trong the/ chưa đủ.

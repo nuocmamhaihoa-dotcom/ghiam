@@ -29,6 +29,7 @@ from worker.study import (  # noqa: E402
     extract_examples,
     extract_notes,
     grounded,
+    hours_done,
     ingest_sources,
     merge_lessons,
     parse_lessons,
@@ -403,9 +404,11 @@ class WorkerTests(unittest.TestCase):
             kept = (root / "learn" / "sach" / "alpha.md").read_text(encoding="utf-8")
             self.assertIn("đào sâu", kept)
         unit = (ROOT / "deploy" / "coderd-learn-6h.service").read_text(encoding="utf-8")
-        self.assertIn("--hours 10", unit)
+        self.assertIn("study-until.sh", unit)
+        self.assertIn("CODERD_STUDY_HOURS=10", unit)
         self.assertIn("TimeoutStartSec=infinity", unit)
-        self.assertIn("coderd-learn.timer", unit)
+        self.assertIn("coderd-learn.timer", (ROOT / "deploy" / "after-study.sh").read_text(encoding="utf-8"))
+        self.assertIn("OnUnitActiveSec=2min", (ROOT / "deploy" / "coderd-learn-watch.timer").read_text(encoding="utf-8"))
 
     def test_lesson_must_match_the_source(self) -> None:
         notes = ["SQLite is a C library that provides a lightweight disk-based database."]
@@ -468,6 +471,10 @@ class WorkerTests(unittest.TestCase):
             index = (root / "learn" / "lenh" / "muc-luc.md").read_text(encoding="utf-8")
             self.assertIn("tiếng Việt", index)
             self.assertIn("python.md", index)
+            phrases = (root / "learn" / "lenh" / "tieng-viet.md").read_text(encoding="utf-8")
+            self.assertIn("Xem những file đã đổi", phrases)
+        self.assertIn("git add", extract_commands("git-add                          porcelain\n"))
+        self.assertFalse(hours_done(Path("/tmp"), 10))
 
     def test_study_restarts_the_catalog_until_the_budget_is_spent(self) -> None:
         calls = {"n": 0}
