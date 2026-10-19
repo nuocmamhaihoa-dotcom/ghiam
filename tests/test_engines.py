@@ -968,6 +968,44 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(kept[0].text, "The meeting is at 3:00 PM")
         self.assertEqual(kept[0].author_name, "Lan · Nguyen")
 
+    def test_liked_by_and_numeric_dates(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nLiked by Lan and 3 others\nLiked\nWrite a reply…\n"
+                "02/03/2024\nngày 2 tháng 3\n2 thg 3\n· 3:00 PM\nEdited · 3:00 PM"
+            ],
+            5,
+        )
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(
+            ["Lan\nI have 1 like already\ncall me on 02/03/2024"],
+            5,
+        )
+        self.assertEqual(sentence[0].text, "I have 1 like already call me on 02/03/2024")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text=(
+                        "hello\nLiked by Lan and 3 others\n02/03/2024\nngày 2 tháng 3\n"
+                        "· 3:00 PM\nEdited · 3:00 PM\nWrite a reply…"
+                    ),
+                    author_name="Lan · 02/03/2024",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertEqual(healed[0].author_name, "Lan")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertIn("strip_glued_chrome", codes)
+        glued, _ = heal_comments([PublicComment(text="hello Write a reply…")])
+        self.assertEqual(glued[0].text, "hello")
+        kept, _ = heal_comments(
+            [PublicComment(text="I have 1 like already", author_name="Lan · Nguyen")]
+        )
+        self.assertEqual(kept[0].text, "I have 1 like already")
+        self.assertEqual(kept[0].author_name, "Lan · Nguyen")
+
 
 if __name__ == "__main__":
     unittest.main()
