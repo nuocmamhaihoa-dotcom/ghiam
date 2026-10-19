@@ -206,6 +206,10 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "owner_name",
             "author_title",
             "user_full_name",
+            "author_nickname",
+            "commenter_full_name",
+            "i18n_name",
+            "alternate_name",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -259,7 +263,18 @@ def time_text(value: object, depth: int = 0) -> str | None:
         return plain
     if isinstance(value, dict):
         folded = {fold_key(key): item for key, item in value.items()}
-        for key in ("text", "message", "timestamp", "time", "date", "created_time", "creation_time", "created_at", "created"):
+        for key in (
+            "text",
+            "message",
+            "timestamp",
+            "time",
+            "date",
+            "relative",
+            "created_time",
+            "creation_time",
+            "created_at",
+            "created",
+        ):
             token = fold_key(key)
             if token not in folded:
                 continue

@@ -65,6 +65,12 @@ _AUTHOR_KEYS = (
     "nguoi binh luan",
     "author_title",
     "user_full_name",
+    "author_nickname",
+    "commenter_full_name",
+    "i18n_name",
+    "alternate_name",
+    "biệt danh",
+    "biet danh",
     "tác giả",
     "tac gia",
 )
@@ -90,6 +96,7 @@ _TIME_KEYS = (
     "thoi gian dang",
     "ngày",
     "ngay",
+    "time_text",
 )
 
 

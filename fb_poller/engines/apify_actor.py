@@ -96,8 +96,14 @@ def _from_items(payload: Any, limit: int) -> list[PublicComment]:
             value = payload.get(key)
             linked = connection_rows(value)
             if not linked and isinstance(value, dict):
-                for inner_key in ("comments", "comment_list", "commentList", "items", "data", "results"):
-                    linked = connection_rows(value.get(inner_key))
+                for inner_key in ("comments", "comment_list", "commentList", "items", "data", "results", "feedback"):
+                    child = value.get(inner_key)
+                    linked = connection_rows(child)
+                    if not linked and isinstance(child, dict):
+                        for deeper in ("comments", "comment_list", "commentList", "items", "data", "nodes"):
+                            linked = connection_rows(child.get(deeper))
+                            if linked:
+                                break
                     if linked:
                         break
             if linked:
@@ -213,6 +219,10 @@ def _one(row: Any) -> PublicComment | None:
         "author_title",
         "user_full_name",
         "profile_url",
+        "author_nickname",
+        "commenter_full_name",
+        "i18n_name",
+        "alternate_name",
         "page_name",
         "actor",
     )

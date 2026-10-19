@@ -1792,6 +1792,55 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(imported.author_name, "Lan")
         self.assertEqual(imported.created_time, "2024-03-02")
 
+    def test_nickname_and_reaction_bar(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nReply · Like · Share\n2w · Like\nEdited · Like\nSee more · Translate\n"
+                "View 3 more replies from Mai\nShow 4 earlier comments\nFeatured comment\n"
+                "1 reaction · Reply\nWhy am I seeing this comment?\nTagged you in a comment"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(
+            ["Lan\nWhy am I seeing this comment on my feed today"],
+            5,
+        )
+        self.assertEqual(sentence[0].text, "Why am I seeing this comment on my feed today")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\nReply · Like · Share\n2w · Like", author_name="Lan")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        nick = _one({"text": "xin", "authorNickname": "Lan", "id": "1"})
+        self.assertIsNotNone(nick)
+        assert nick is not None
+        self.assertEqual(nick.author_name, "Lan")
+        full = _one({"text": "xin", "commenterFullName": "Lan Nguyen", "id": "2"})
+        self.assertIsNotNone(full)
+        assert full is not None
+        self.assertEqual(full.author_name, "Lan Nguyen")
+        html = (
+            '<script>{"__typename":"Comment","id":"4","body":{"text":"xin"},'
+            '"author":{"i18n_name":"An"},"creation_timestamp":1710000004}</script>'
+        )
+        found = comments_from_html(html)
+        self.assertEqual(found[0].author_name, "An")
+        self.assertEqual(timestamp_of({"created_time": {"relative": "2h"}}), "2h")
+        wrapped = _from_items(
+            {"data": {"feedback": {"comments": {"nodes": [{"message": "xin", "id": "9", "author": {"name": "Lan"}}]}}}},
+            5,
+        )
+        self.assertEqual(wrapped[0].comment_id, "9")
+        self.assertEqual(wrapped[0].author_name, "Lan")
+        imported = _from_mapping({"Comment": "xin", "Biệt danh": "Lan", "Time text": "2h"})
+        self.assertIsNotNone(imported)
+        assert imported is not None
+        self.assertEqual(imported.author_name, "Lan")
+        self.assertEqual(imported.created_time, "2h")
+
 
 if __name__ == "__main__":
     unittest.main()
