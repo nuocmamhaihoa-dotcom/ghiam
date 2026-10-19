@@ -72,6 +72,7 @@
     .pcbtns button { min-height: 36px; padding: 0 0.7rem; font-size: 0.9rem; }
     .pcbtns input { width: 8.5rem; padding: 0.4rem 0.5rem; font: inherit; font-size: 0.9rem; border: 1px solid #cfd5dc; border-radius: 8px; }
     .small { font-size: 0.86rem; color: var(--muted); }
+    #employees td.num { font-weight: 750; font-size: 1.2rem; }
     /* iPhone hủy sự kiện change nếu input bị display:none và khung chọn ảnh mở lâu (vài chục video). */
     #file { position: fixed; top: -9999px; left: -9999px; width: 48px; height: 48px; }
   </style>
@@ -80,6 +81,12 @@
 <main>
   <h1>Đọc video danh bạ</h1>
   <p class="lead">Nhiều điện thoại mở trang này cùng lúc. Mỗi máy chọn một tên, rồi chọn bao nhiêu video cũng được. Nhiều danh sách trên một máy cũng tải lên cùng lúc. Video đã vào hàng chờ thì máy chủ đọc từng video một, kể cả khi tắt trang.</p>
+
+  <section>
+    <h2>Nhân viên hôm nay</h2>
+    <p class="note">Chữ đầu trên tên iPhone là tên nhân viên, số cuối là số máy. Ly14 và Ly2 là một người. Video đã tải là video đã vào hàng chờ hôm nay. Kết quả đã quét là mọi dòng đọc được hôm nay từ các máy của người đó.</p>
+    <div id="employees"></div>
+  </section>
 
   <section>
     <h2>Báo cáo nhanh</h2>
@@ -105,7 +112,7 @@
 
   <section>
     <h2>Điện thoại này</h2>
-    <p class="note">Chọn tên một lần. Mọi video tải từ máy này mang tên đó. Xóa dữ liệu trình duyệt thì chọn lại đúng tên cũ để số liệu vẫn vào máy đó.</p>
+    <p class="note">Chọn tên một lần. Mọi video tải từ máy này mang tên đó. Xóa dữ liệu trình duyệt thì chọn lại đúng tên cũ để số liệu vẫn vào máy đó. Đặt chữ đầu là tên nhân viên và số cuối là số máy, ví dụ Ly14.</p>
     <div id="thisPhone"></div>
   </section>
 
@@ -565,6 +572,32 @@
       stat(row.differed || 0, "Lệch", reportLink(span, "checked=diff"));
   }
 
+  function renderEmployees(report) {
+    var box = document.getElementById("employees");
+    if (!box) return;
+    var people = report && report.employees;
+    if (!people) {
+      if (box.getAttribute("data-ready") === "1") return;
+      box.innerHTML = "<p class='note'>Đang tải số liệu nhân viên.</p>";
+      return;
+    }
+    box.setAttribute("data-ready", "1");
+    if (!people.length) {
+      box.innerHTML = "<p class='note'>Hôm nay chưa có nhân viên nào tải video.</p>";
+      return;
+    }
+    var html = "<table><tr><th>Nhân viên</th><th>Video đã tải</th><th>Kết quả đã quét</th></tr>";
+    people.forEach(function (item) {
+      var phones = item.phones || [];
+      var extra = phones.length
+        ? "<div class='small'>" + phones.map(escapeHtml).join(", ") + "</div>"
+        : "";
+      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td class='num'>" + item.uploaded
+        + "</td><td class='num'>" + item.results + "</td></tr>";
+    });
+    box.innerHTML = html + "</table>";
+  }
+
   function markStatsReady(id) {
     var box = document.getElementById(id);
     box.setAttribute("data-ready", "1");
@@ -582,6 +615,10 @@
     var board = document.getElementById("phoneBoard");
     if (board && !board.querySelector("button")) {
       board.innerHTML = "<p class='note warn'>Chưa tải được danh sách điện thoại. Đang thử lại.</p>";
+    }
+    var employees = document.getElementById("employees");
+    if (employees && employees.getAttribute("data-ready") !== "1") {
+      employees.innerHTML = "<p class='note warn'>Chưa tải được số liệu nhân viên. Đang thử lại.</p>";
     }
     var waiting = document.querySelector("#thisPhone[data-mode='wait'] .note");
     if (waiting) waiting.textContent = "Chưa tải được số liệu của máy này. Đang thử lại.";
@@ -602,6 +639,7 @@
     phoneToday = todayReport.items || [];
     phoneAll = allReport.items || [];
     phoneItems = phones.items || [];
+    renderEmployees(todayReport);
     document.getElementById("statsToday").innerHTML = periodTiles(todayReport.totals, "today");
     document.getElementById("statsAll").innerHTML = periodTiles(allReport.totals, "all");
     document.getElementById("statsLive").innerHTML =
@@ -1137,7 +1175,7 @@
       html += "<button type='button' data-use='" + escapeHtml(name) + "'>" + escapeHtml(name) + "</button>";
     });
     html += "</div><div class='row' style='margin-top:0.7rem'>"
-      + "<input id='newPhone' type='text' maxlength='40' placeholder='Tên mới, ví dụ Máy 1' />"
+      + "<input id='newPhone' type='text' maxlength='40' placeholder='Tên mới, ví dụ Ly14' />"
       + "<button class='primary' type='button' id='savePhone'>Dùng tên này</button></div>";
     box.innerHTML = html;
     box.querySelectorAll("[data-use]").forEach(function (button) {
