@@ -522,6 +522,53 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(recovered.comments[0].text, "xin")
         self.assertEqual(recovered.comments[0].author_name, "An")
 
+    def test_empty_reply_list_short_name_and_relative_time(self) -> None:
+        managed = _comments_from_json(
+            {"text": "xin", "id": True, "legacy_fbid": "99", "author": {"short_name": "An"}},
+            5,
+        )
+        self.assertEqual(managed[0].text, "xin")
+        self.assertEqual(managed[0].author_name, "An")
+        self.assertEqual(managed[0].comment_id, "99")
+        replies = _from_items(
+            [
+                {
+                    "text": "parent",
+                    "profileName": "P",
+                    "comments": [],
+                    "replies": [
+                        {
+                            "text": "the reply",
+                            "author": {"short_name": "R"},
+                            "replies": [{"body": {"message": "again"}, "name": "Q"}],
+                        }
+                    ],
+                }
+            ],
+            5,
+        )
+        self.assertEqual([item.text for item in replies], ["parent", "the reply", "again"])
+        self.assertEqual(replies[1].author_name, "R")
+        block = "\n".join(["Lan", "hello there", "2 hours ago", "62 likes", "Like", "Reply"])
+        self.assertEqual(comments_from_articles([block], 5)[0].text, "hello there")
+        sentence = "\n".join(["Lan", "I replied 2 hours ago", "Like", "Reply"])
+        self.assertEqual(comments_from_articles([sentence], 5)[0].text, "I replied 2 hours ago")
+        cleaned, codes = heal_comments(
+            [PublicComment(text="hello there\n2 giờ trước\n3 lượt thích", author_name="Lan")]
+        )
+        self.assertEqual(cleaned[0].text, "hello there")
+        self.assertIn("strip_chrome_lines", codes)
+        kept, _kept_codes = heal_comments([PublicComment(text="I replied 2 hours ago")])
+        self.assertEqual(kept[0].text, "I replied 2 hours ago")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "author.json"
+            path.write_text(
+                json.dumps([{"message": "file", "author": {"short_name": "Lan"}}]),
+                encoding="utf-8",
+            )
+            found = comments_from_export(path)
+        self.assertEqual(found[0].author_name, "Lan")
+
 
 if __name__ == "__main__":
     unittest.main()

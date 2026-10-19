@@ -13,7 +13,15 @@ import re
 from collections.abc import Iterable
 from urllib.parse import unquote
 
-from fb_poller.engines.guard import comment_id, nested_text, placeholder_text, redact_text, scalar_text
+from fb_poller.engines.guard import (
+    comment_id,
+    first_comment_id,
+    first_person_name,
+    nested_text,
+    placeholder_text,
+    redact_text,
+    scalar_text,
+)
 from fb_poller.engines.types import EngineResult, PublicComment
 
 # Codes the healer can emit. Each one corresponds to a defect already seen
@@ -50,10 +58,12 @@ _CHROME_LINE = re.compile(
     r"viết bình luận\.\.\.|viết bình luận…|viết bình luận|"
     r"all comments|tất cả bình luận|"
     r"top fan|rising fan|tác giả|author|"
-    r"just now|vừa xong|"
+    r"just now|vừa xong|yesterday|hôm qua|"
+    r"[·•]?\s*\d+\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
     r"\d+\s*(?:s|m|h|d|w|y)|"
     r"\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*[kmb]|"
-    r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)|"
+    r"\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm)(?:\s+trước)?|"
+    r"\d+(?:\.\d+)?\s*[kmb]?\s+(?:likes?|reactions?|lượt thích)|"
     r"view all \d+ replies|xem tất cả \d+ phản hồi|\d+ replies|\d+ phản hồi|"
     r"see translation|hide translation|xem bản dịch|ẩn bản dịch|"
     r"edited|đã chỉnh sửa|"
@@ -316,21 +326,14 @@ def _loose_comments(payload: object, depth: int = 0) -> list[PublicComment]:
             break
     own: list[PublicComment] = []
     if rendered and not placeholder_text(rendered):
-        author = (
-            payload.get("author")
-            or payload.get("author_name")
-            or payload.get("from")
-            or payload.get("profileName")
-            or payload.get("user_name")
-            or payload.get("name")
-        )
-        if isinstance(author, dict):
-            author = author.get("name") or author.get("short_name")
         own.append(
             PublicComment(
                 text=rendered,
-                author_name=scalar_text(author),
-                comment_id=comment_id(payload.get("id")) or comment_id(payload.get("legacy_fbid")),
+                author_name=first_person_name(
+                    payload,
+                    ("author", "author_name", "from", "profileName", "user_name", "name"),
+                ),
+                comment_id=first_comment_id(payload),
                 created_time=scalar_text(payload.get("created_time"))
                 or scalar_text(payload.get("created_at"))
                 or scalar_text(payload.get("date")),

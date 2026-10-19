@@ -9,7 +9,8 @@ from typing import Any
 import httpx
 
 from fb_poller.engines.guard import (
-    comment_id,
+    first_comment_id,
+    first_person_name,
     invalid_limit,
     nested_text,
     public_error,
@@ -124,11 +125,10 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
         text = _field_text(row)
         if not text or len(text) > 8000:
             continue
-        author = row.get("author") or row.get("author_name") or row.get("name") or row.get("user_name")
-        if isinstance(author, dict):
-            author = author.get("name")
-        author_name = scalar_text(author)
-        cid = comment_id(row.get("id"))
+        author_name = first_person_name(
+            row, ("author", "author_name", "from", "user_name", "name")
+        )
+        cid = first_comment_id(row)
         key = cid or f"{author_name}|{text}"
         if key in seen:
             continue

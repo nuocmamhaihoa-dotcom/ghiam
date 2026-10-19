@@ -8,11 +8,12 @@ from typing import Any
 import httpx
 
 from fb_poller.engines.guard import (
-    comment_id,
+    first_comment_id,
     invalid_limit,
     is_comment_typename,
     nested_text,
     objects_with_comments,
+    person_name,
     placeholder_text,
     public_error,
     redact_text,
@@ -63,7 +64,7 @@ def _walk(node: Any, found: list[PublicComment], seen: set[str], limit: int) -> 
     text = _comment_text(node)
     if text:
         author = _author(node)
-        cid = comment_id(node.get("id")) or comment_id(node.get("legacy_fbid"))
+        cid = first_comment_id(node)
         key = cid or f"{author}|{text[:80]}"
         if key not in seen:
             seen.add(key)
@@ -91,10 +92,11 @@ def _comment_text(node: dict[str, Any]) -> str | None:
 
 
 def _author(node: dict[str, Any]) -> str | None:
-    author = node.get("author") or node.get("from") or node.get("user")
-    if isinstance(author, dict):
-        return scalar_text(author.get("name")) or scalar_text(author.get("short_name"))
-    return scalar_text(author)
+    for key in ("author", "from", "user"):
+        found = person_name(node.get(key))
+        if found:
+            return found
+    return None
 
 
 def _httpx_proxy(proxy: str) -> str | None:

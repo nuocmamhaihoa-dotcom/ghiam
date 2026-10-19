@@ -62,6 +62,42 @@ def comment_id(value: object) -> str | None:
     return None
 
 
+def first_comment_id(row: dict[str, object]) -> str | None:
+    """The first real id. A bool ``id`` must not hide ``legacy_fbid``."""
+    for key in ("id", "legacy_fbid", "comment_id", "commentId"):
+        found = comment_id(row.get(key))
+        if found:
+            return found
+    return None
+
+
+def person_name(value: object, depth: int = 0) -> str | None:
+    """A display name, or the name inside an author object."""
+    if depth > 2:
+        return None
+    plain = scalar_text(value)
+    if plain:
+        return plain
+    if isinstance(value, dict):
+        lowered = {str(key).strip().lower(): item for key, item in value.items()}
+        for key in ("name", "short_name", "full_name", "profilename", "profile_name", "username"):
+            if key not in lowered:
+                continue
+            found = person_name(lowered.get(key), depth + 1)
+            if found:
+                return found
+    return None
+
+
+def first_person_name(row: dict[str, object], keys: tuple[str, ...]) -> str | None:
+    """Try each author field. An object without a name must not hide the next field."""
+    for key in keys:
+        found = person_name(row.get(key))
+        if found:
+            return found
+    return None
+
+
 def scalar_text(value: object) -> str | None:
     """Keep plain names and timestamps. Do not stringify objects."""
     if isinstance(value, bool) or value is None:

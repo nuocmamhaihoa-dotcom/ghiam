@@ -8,9 +8,10 @@ import re
 import httpx
 
 from fb_poller.engines.guard import (
-    comment_id,
+    first_comment_id,
     invalid_limit,
     nested_text,
+    person_name,
     public_error,
     redact_text,
     scalar_text,
@@ -68,14 +69,11 @@ def comments_from_graph_payload(data: object, limit: int) -> tuple[list[PublicCo
         text = nested_text(row.get("message"))
         if not text:
             continue
-        author = row.get("from")
-        if isinstance(author, dict):
-            author = author.get("name")
         comments.append(
             PublicComment(
                 text=text,
-                author_name=scalar_text(author),
-                comment_id=comment_id(row.get("id")),
+                author_name=person_name(row.get("from")),
+                comment_id=first_comment_id(row),
                 created_time=scalar_text(row.get("created_time")),
             )
         )

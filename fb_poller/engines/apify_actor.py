@@ -9,7 +9,8 @@ from typing import Any
 import httpx
 
 from fb_poller.engines.guard import (
-    comment_id,
+    first_comment_id,
+    first_person_name,
     invalid_limit,
     nested_text,
     public_error,
@@ -102,41 +103,55 @@ def _from_items(payload: Any, limit: int) -> list[PublicComment]:
     else:
         rows = []
     out: list[PublicComment] = []
+    seen: set[str] = set()
+    _collect(rows, out, seen, limit, 0)
+    return out
+
+
+def _collect(
+    rows: list[Any],
+    out: list[PublicComment],
+    seen: set[str],
+    limit: int,
+    depth: int,
+) -> None:
+    """Keep a comment and replies nested under it. An empty list does not hide a later list."""
+    if depth > 6 or len(out) >= limit:
+        return
     for row in rows:
         if not isinstance(row, dict):
             continue
         item = _one(row)
         if item:
-            out.append(item)
+            key = item.comment_id or f"{item.author_name}|{item.text}"
+            if key not in seen:
+                seen.add(key)
+                out.append(item)
         if len(out) >= limit:
-            break
-        nested = row.get("comments")
-        if isinstance(nested, list):
-            for child in nested:
-                child_item = _one(child)
-                if child_item:
-                    out.append(child_item)
-                if len(out) >= limit:
-                    return out
-    return out
+            return
+        for key in ("comments", "replies"):
+            nested = row.get(key)
+            if isinstance(nested, list) and nested:
+                _collect(nested, out, seen, limit, depth + 1)
+            elif isinstance(nested, dict) and nested:
+                _collect([nested], out, seen, limit, depth + 1)
+            if len(out) >= limit:
+                return
 
 
 def _one(row: Any) -> PublicComment | None:
     if not isinstance(row, dict):
         return None
     text = None
-    for key in ("text", "message", "comment"):
+    for key in ("text", "message", "comment", "body"):
         text = nested_text(row.get(key))
         if text:
             break
     if not text:
         return None
-    author = row.get("author") or row.get("profileName") or row.get("userName") or row.get("name")
-    if isinstance(author, dict):
-        author = author.get("name")
     return PublicComment(
         text=text,
-        author_name=scalar_text(author),
-        comment_id=comment_id(row.get("id")),
+        author_name=first_person_name(row, ("author", "profileName", "userName", "name", "from")),
+        comment_id=first_comment_id(row),
         created_time=scalar_text(row.get("date")) or scalar_text(row.get("created_time")),
     )

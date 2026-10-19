@@ -6,11 +6,12 @@ import json
 from typing import Any
 
 from fb_poller.engines.guard import (
-    comment_id,
+    first_comment_id,
     invalid_limit,
     is_comment_typename,
     nested_text,
     objects_with_comments,
+    person_name,
     placeholder_text,
     public_error,
     scalar_text,
@@ -42,17 +43,14 @@ def comments_from_payload(payload: Any, limit: int) -> list[PublicComment]:
         text = _node_text(node)
         if isinstance(text, str) and text.strip() and is_comment_typename(node.get("__typename")):
             author_node = node.get("author") if node.get("author") is not None else node.get("from")
-            if isinstance(author_node, dict):
-                name = scalar_text(author_node.get("name")) or scalar_text(author_node.get("short_name"))
-            else:
-                name = scalar_text(author_node)
+            name = person_name(author_node)
             text = text.strip()
             if placeholder_text(text):
                 for value in node.values():
                     if isinstance(value, (dict, list)):
                         walk(value)
                 return
-            cid = comment_id(node.get("id")) or comment_id(node.get("legacy_fbid"))
+            cid = first_comment_id(node)
             key = cid or text[:80]
             if key not in seen:
                 seen.add(key)
