@@ -486,6 +486,7 @@ def _ensure_fleet_columns(conn: sqlite3.Connection) -> None:
         ("file_sha256", "TEXT NOT NULL DEFAULT ''"),
         ("shrunk", "INTEGER NOT NULL DEFAULT 0"),
         ("upload_bytes", "INTEGER"),
+        ("heal_tries", "INTEGER NOT NULL DEFAULT 0"),
     ):
         if name not in columns:
             _add_column(conn, "videos", name, kind)
@@ -773,7 +774,7 @@ def begin_upload(
                     pid = NULL, started_at = NULL, finished_at = NULL, created_at = ?,
                     phone_count = NULL, full_count = NULL, device = ?,
                     file_sha256 = '', shrunk = 0, upload_bytes = NULL,
-                    pc_fails = 0, pc_last_fail = '', priority = 0,
+                    pc_fails = 0, pc_last_fail = '', priority = 0, heal_tries = 0,
                     check_pass = 0, check_from = '', check_error = '',
                     lease = '', lease_at = NULL, helper = '',
                     progress_stage = '', progress_done = 0, progress_total = 0,
@@ -2373,7 +2374,7 @@ def retry(db_path: Path, video_id: int) -> bool:
             SET status = 'queued', error = '', finished_at = NULL, pid = NULL,
                 phone_count = NULL, full_count = NULL,
                 helper = '', lease = '', lease_at = NULL, check_pass = 0,
-                check_from = '', check_error = ''
+                check_from = '', check_error = '', heal_tries = 0
             WHERE id = ? AND status IN ('error', 'done')
             """,
             (video_id,),

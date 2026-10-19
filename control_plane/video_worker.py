@@ -26,7 +26,7 @@ from control_plane.results_out import webhook_loop
 from control_plane.self_heal import heal_once
 from control_plane.screen_table import Review, Row, Table, Unopened
 from control_plane.settings import settings
-from control_plane.video_shrink import DEFAULT_CRF, SHRINK_TIMEOUT_SECONDS, shrink
+from control_plane.video_shrink import DEFAULT_CRF, drop_stale_temps, shrink
 from control_plane.video_store import (
     adopt_shrunk,
     backfill_video_counts,
@@ -74,29 +74,9 @@ def scan_paths(
     return table, frames
 
 
-# File tải một mạch tên up-<mã>. Bản thu nhỏ tên up-shrink- và được phép chạy hết hạn ffmpeg.
-_UPLOAD_PART_SECONDS = 1800
-_SHRINK_PART_PREFIX = "up-shrink-"
-
-
 def _drop_old_parts(folder: Path) -> None:
-    """File tạm của lần tải bị đứt hơn 30 phút. Lần tải đang chạy ghi tiếp vào file của nó, không đụng tới.
-
-    Bản thu nhỏ đang ghi không dùng hạn đó. Xóa file up-shrink- khi ffmpeg còn chạy thì lần thu nhỏ
-    bị coi là hỏng, và video đó không được thu nhỏ lại.
-    """
-    if not folder.is_dir():
-        return
-    now = time.time()
-    upload_cutoff = now - _UPLOAD_PART_SECONDS
-    shrink_cutoff = now - (SHRINK_TIMEOUT_SECONDS + 300)
-    for path in folder.glob("up-*"):
-        try:
-            cutoff = shrink_cutoff if path.name.startswith(_SHRINK_PART_PREFIX) else upload_cutoff
-            if path.stat().st_mtime < cutoff:
-                path.unlink(missing_ok=True)
-        except OSError:
-            continue
+    """File tạm của lần tải bị đứt hơn 30 phút. Bản thu nhỏ đang ghi sống hết hạn ffmpeg."""
+    drop_stale_temps(folder)
 
 
 def keep_newest_videos(db_path: Path) -> None:
