@@ -182,6 +182,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Đọc video danh bạ", response.text)
         self.assertIn("Thêm video", response.text)
         self.assertIn("Tải bản sao lưu về PC", response.text)
+        self.assertIn("Nhân viên hôm nay", response.text)
         self.assertIn("Báo cáo nhanh", response.text)
         self.assertIn("Thống kê hôm nay", response.text)
         self.assertIn("Thống kê toàn bộ thời gian", response.text)

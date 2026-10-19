@@ -8,6 +8,7 @@ Một dòng khoảng vài trăm byte. Một trăm triệu dòng nằm trong vài
 from __future__ import annotations
 
 import os
+import re
 import secrets
 import shutil
 import sqlite3
@@ -73,6 +74,86 @@ def utcnow() -> str:
 
 
 VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+
+
+# Số cuối tên iPhone là số máy. Chữ phía trước là tên nhân viên: Ly14 và Ly 2 cùng là Ly.
+_EMPLOYEE_MACHINE = re.compile(r"^(?P<name>.*?)(?:\s+)?(?P<machine>[0-9]+)$")
+
+
+def employee_name(device: str) -> str:
+    """Tên nhân viên trên tên iPhone. Không có số cuối thì cả tên là tên nhân viên."""
+    text = " ".join(str(device or "").split())
+    match = _EMPLOYEE_MACHINE.match(text)
+    if match is None:
+        return text
+    name = match.group("name").strip()
+    return name or text
+
+
+def employee_machine(device: str) -> int | None:
+    """Số thứ tự máy ở cuối tên iPhone. Không có số thì None."""
+    text = " ".join(str(device or "").split())
+    match = _EMPLOYEE_MACHINE.match(text)
+    if match is None or not match.group("name").strip():
+        return None
+    return int(match.group("machine"))
+
+
+def employee_rows(items: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Gom các iPhone cùng một nhân viên. Video đã tải và mọi dòng kết quả được cộng lại."""
+    grouped: dict[str, dict[str, object]] = {}
+    for item in items:
+        device = str(item.get("device") or "")
+        name = employee_name(device)
+        if not name:
+            continue
+        uploaded = int(item.get("uploaded") or 0)
+        results = (
+            int(item.get("saved") or 0)
+            + int(item.get("unnamed") or 0)
+            + int(item.get("review") or 0)
+            + int(item.get("unopened") or 0)
+        )
+        key = name.casefold()
+        slot = grouped.get(key)
+        if slot is None:
+            slot = {
+                "name": name,
+                "uploaded": 0,
+                "results": 0,
+                "phones": [],
+                "_name_uploaded": uploaded,
+            }
+            grouped[key] = slot
+        elif uploaded > int(slot["_name_uploaded"]):
+            slot["name"] = name
+            slot["_name_uploaded"] = uploaded
+        slot["uploaded"] = int(slot["uploaded"]) + uploaded
+        slot["results"] = int(slot["results"]) + results
+        phones = slot["phones"]
+        if isinstance(phones, list):
+            phones.append(device)
+    rows: list[dict[str, object]] = []
+    for slot in grouped.values():
+        uploaded = int(slot["uploaded"])
+        results = int(slot["results"])
+        if uploaded == 0 and results == 0:
+            continue
+        phones = slot["phones"]
+        listed = sorted(
+            {str(phone) for phone in phones},
+            key=lambda phone: (employee_machine(phone) is None, employee_machine(phone) or 0, phone.casefold()),
+        ) if isinstance(phones, list) else []
+        rows.append(
+            {
+                "name": str(slot["name"]),
+                "uploaded": uploaded,
+                "results": results,
+                "phones": listed,
+            }
+        )
+    rows.sort(key=lambda row: (-int(row["uploaded"]), -int(row["results"]), str(row["name"]).casefold()))
+    return rows
 
 
 def clean_device(raw: str) -> str:
@@ -1085,6 +1166,7 @@ def device_day(
         "span": "all" if whole else "today",
         "known": known,
         "items": items,
+        "employees": employee_rows(items),
         "totals": totals,
     }
 

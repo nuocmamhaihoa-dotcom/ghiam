@@ -27,6 +27,9 @@ from control_plane.video_store import (
     confirm_open_profiles,
     connect,
     device_day,
+    employee_machine,
+    employee_name,
+    employee_rows,
     fail,
     finish,
     init_db,
@@ -489,6 +492,64 @@ class VideoStoreTests(unittest.TestCase):
             {item["name"] for item in list_videos(self.db, device="Máy 2")},
             {"may-2.mp4", "dang.mp4"},
         )
+
+    def test_phones_with_the_same_employee_name_are_one_row(self) -> None:
+        self.assertEqual(employee_name("Ly14"), "Ly")
+        self.assertEqual(employee_name("Ly 2"), "Ly")
+        self.assertEqual(employee_name("nghĩa 2"), "nghĩa")
+        self.assertEqual(employee_name("An"), "An")
+        self.assertEqual(employee_name("2"), "2")
+        self.assertEqual(employee_name(""), "")
+        self.assertEqual(employee_machine("Ly14"), 14)
+        self.assertIsNone(employee_machine("An"))
+        rows = employee_rows(
+            [
+                {"device": "Ly14", "uploaded": 3, "saved": 10, "unnamed": 1, "review": 2, "unopened": 4},
+                {"device": "ly2", "uploaded": 1, "saved": 5, "unnamed": 0, "review": 0, "unopened": 1},
+                {"device": "nghĩa 1", "uploaded": 4, "saved": 8, "unnamed": 0, "review": 1, "unopened": 0},
+                {"device": "", "uploaded": 9, "saved": 9, "unnamed": 0, "review": 0, "unopened": 0},
+                {"device": "An", "uploaded": 0, "saved": 0, "unnamed": 0, "review": 0, "unopened": 0},
+            ]
+        )
+        self.assertEqual(
+            [(row["name"], row["uploaded"], row["results"], row["phones"]) for row in rows],
+            [
+                ("Ly", 4, 23, ["ly2", "Ly14"]),
+                ("nghĩa", 4, 9, ["nghĩa 1"]),
+            ],
+        )
+        now = datetime(2026, 10, 19, 8, 0, tzinfo=timezone.utc)
+        today = "2026-10-19T02:00:00+00:00"
+        first = self._add("ly-a.mp4", "emp-ly-a")
+        second = self._add("ly-b.mp4", "emp-ly-b")
+        third = self._add("nghia.mp4", "emp-nghia")
+        with connect(self.db) as conn:
+            conn.execute(
+                "UPDATE videos SET device = 'Ly14', status = 'done', created_at = ?, finished_at = ? WHERE id = ?",
+                (today, today, first),
+            )
+            conn.execute(
+                "UPDATE videos SET device = 'Ly2', status = 'done', created_at = ?, finished_at = ? WHERE id = ?",
+                (today, today, second),
+            )
+            conn.execute(
+                "UPDATE videos SET device = 'nghĩa 1', status = 'queued', created_at = ? WHERE id = ?",
+                (today, third),
+            )
+            conn.execute(
+                """
+                INSERT INTO results (phone, name, username, bucket, video_id, created_at)
+                VALUES ('0901000001', 'A', '@a', 1, ?, ?),
+                       ('0901000002', 'B', '@b', 2, ?, ?)
+                """,
+                (first, today, second, today),
+            )
+        people = {row["name"]: row for row in device_day(self.db, now)["employees"]}
+        self.assertEqual(people["Ly"]["uploaded"], 2)
+        self.assertEqual(people["Ly"]["results"], 2)
+        self.assertEqual(people["Ly"]["phones"], ["Ly2", "Ly14"])
+        self.assertEqual(people["nghĩa"]["uploaded"], 1)
+        self.assertEqual(people["nghĩa"]["results"], 0)
 
     def test_a_queued_file_keeps_the_phone_that_uploaded_it_first(self) -> None:
         first = begin_upload(self.db, name="a.mp4", size_bytes=10, sha256="same-phone", device="Máy 1")
