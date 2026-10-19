@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+cd /opt/coderd
 if systemctl is-active --quiet coderd-learn-6h.service; then
   exit 0
 fi

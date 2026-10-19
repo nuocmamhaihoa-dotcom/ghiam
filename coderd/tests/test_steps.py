@@ -24,8 +24,10 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app import db as appdb
 from worker.agent import normalize_reply, parse_text_tools, run_turn, scripted_complete, system_prompt
-from worker.commands import extract_commands, store_commands
+from worker.commands import extract_commands, seed_commands, store_commands
 from worker.study import (  # noqa: E402
+    OPEN_SOURCES,
+    discover_catalog,
     extract_examples,
     extract_notes,
     grounded,
@@ -408,6 +410,8 @@ class WorkerTests(unittest.TestCase):
         self.assertIn("CODERD_STUDY_HOURS=10", unit)
         self.assertIn("TimeoutStartSec=infinity", unit)
         self.assertIn("coderd-learn.timer", (ROOT / "deploy" / "after-study.sh").read_text(encoding="utf-8"))
+        self.assertIn("cd /opt/coderd", (ROOT / "deploy" / "watch-study.sh").read_text(encoding="utf-8"))
+        self.assertIn("cd /opt/coderd", (ROOT / "deploy" / "after-study.sh").read_text(encoding="utf-8"))
         self.assertIn("OnUnitActiveSec=2min", (ROOT / "deploy" / "coderd-learn-watch.timer").read_text(encoding="utf-8"))
 
     def test_lesson_must_match_the_source(self) -> None:
@@ -474,7 +478,36 @@ class WorkerTests(unittest.TestCase):
             phrases = (root / "learn" / "lenh" / "tieng-viet.md").read_text(encoding="utf-8")
             self.assertIn("Xem những file đã đổi", phrases)
         self.assertIn("git add", extract_commands("git-add                          porcelain\n"))
+        self.assertIn("curl -I https://example.test", extract_commands("- `curl -I https://example.test`\n"))
+        self.assertIn("docker ps", extract_commands("`docker ps`\n"))
         self.assertFalse(hours_done(Path("/tmp"), 10))
+
+    def test_catalog_keeps_open_sources_when_cache_exists(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cache = root / "learn" / "cache"
+            cache.mkdir(parents=True)
+            (cache / "catalog.json").write_text(
+                json.dumps([["old", "https://example.test/old.txt"]]),
+                encoding="utf-8",
+            )
+            found = discover_catalog(root, lambda _url: "[]")
+            names = {name for name, _url in found}
+            self.assertIn("python-nhap-mon", names)
+            self.assertIn("tldr-curl", names)
+            self.assertIn(OPEN_SOURCES[0][0], names)
+            urls = {url for _name, url in found}
+            self.assertIn("https://example.test/old.txt", urls)
+
+    def test_seed_commands_are_grouped_in_vietnamese(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "work"
+            self.assertGreater(seed_commands(root), 10)
+            phrases = (root / "learn" / "lenh" / "tieng-viet.md").read_text(encoding="utf-8")
+            self.assertIn("Xem những file đã đổi", phrases)
+            self.assertIn("git.md", (root / "learn" / "lenh" / "muc-luc.md").read_text(encoding="utf-8"))
+            self.assertIn("docker.md", (root / "learn" / "lenh" / "muc-luc.md").read_text(encoding="utf-8"))
+            self.assertIn("curl", (root / "learn" / "lenh" / "mang.md").read_text(encoding="utf-8"))
 
     def test_study_restarts_the_catalog_until_the_budget_is_spent(self) -> None:
         calls = {"n": 0}

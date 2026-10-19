@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from app import db
-from worker.commands import harvest_saved, store_commands
+from worker.commands import harvest_saved, seed_commands, store_commands
 from worker.connect import load_env, load_env_file
 
 SKIP = {"không có", "khong co", "không có gì mới", "khong co gi moi"}
@@ -114,6 +114,76 @@ OPEN_SOURCES = (
     ("python-logging", f"{_PY}/library/logging.rst"),
     ("python-typing", f"{_PY}/library/typing.rst"),
     ("python-http", f"{_PY}/library/http.client.rst"),
+    ("python-sys", f"{_PY}/library/sys.rst"),
+    ("python-io", f"{_PY}/library/io.rst"),
+    ("python-collections", f"{_PY}/library/collections.rst"),
+    ("python-itertools", f"{_PY}/library/itertools.rst"),
+    ("python-functools", f"{_PY}/library/functools.rst"),
+    ("python-asyncio", f"{_PY}/library/asyncio.rst"),
+    ("python-threading", f"{_PY}/library/threading.rst"),
+    ("python-csv", f"{_PY}/library/csv.rst"),
+    ("python-hashlib", f"{_PY}/library/hashlib.rst"),
+    ("python-glob", f"{_PY}/library/glob.rst"),
+    ("python-pickle", f"{_PY}/library/pickle.rst"),
+    ("python-socket", f"{_PY}/library/socket.rst"),
+    ("python-http-server", f"{_PY}/library/http.server.rst"),
+    ("python-traceback", f"{_PY}/library/traceback.rst"),
+    ("python-dataclasses", f"{_PY}/library/dataclasses.rst"),
+    ("python-enum", f"{_PY}/library/enum.rst"),
+    ("python-copy", f"{_PY}/library/copy.rst"),
+    ("python-math", f"{_PY}/library/math.rst"),
+    ("python-time", f"{_PY}/library/time.rst"),
+    ("python-secrets", f"{_PY}/library/secrets.rst"),
+    ("python-gzip", f"{_PY}/library/gzip.rst"),
+    ("python-concurrent", f"{_PY}/library/concurrent.futures.rst"),
+    ("python-multiprocessing", f"{_PY}/library/multiprocessing.rst"),
+    ("python-queue", f"{_PY}/library/queue.rst"),
+    ("python-signal", f"{_PY}/library/signal.rst"),
+    ("python-inspect", f"{_PY}/library/inspect.rst"),
+    ("python-base64", f"{_PY}/library/base64.rst"),
+    ("python-uuid", f"{_PY}/library/uuid.rst"),
+    ("python-random", f"{_PY}/library/random.rst"),
+    ("python-configparser", f"{_PY}/library/configparser.rst"),
+    ("python-urllib-parse", f"{_PY}/library/urllib.parse.rst"),
+    ("git-reset", f"{_GIT}/git-reset.adoc"),
+    ("git-stash", f"{_GIT}/git-stash.adoc"),
+    ("git-tag", f"{_GIT}/git-tag.adoc"),
+    ("git-rebase", f"{_GIT}/git-rebase.adoc"),
+    ("git-config", f"{_GIT}/git-config.adoc"),
+    ("git-rm", f"{_GIT}/git-rm.adoc"),
+    ("git-mv", f"{_GIT}/git-mv.adoc"),
+    ("git-blame", f"{_GIT}/git-blame.adoc"),
+    ("git-grep", f"{_GIT}/git-grep.adoc"),
+    ("git-switch", f"{_GIT}/git-switch.adoc"),
+    ("git-clean", f"{_GIT}/git-clean.adoc"),
+    ("git-bisect", f"{_GIT}/git-bisect.adoc"),
+    ("git-reflog", f"{_GIT}/git-reflog.adoc"),
+    ("git-cherry-pick", f"{_GIT}/git-cherry-pick.adoc"),
+    ("git-revert", f"{_GIT}/git-revert.adoc"),
+    ("git-worktree", f"{_GIT}/git-worktree.adoc"),
+    ("git-submodule", f"{_GIT}/git-submodule.adoc"),
+    ("tldr-git", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/git.md"),
+    ("tldr-python", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/python.md"),
+    ("tldr-python3", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/python3.md"),
+    ("tldr-pip", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/pip.md"),
+    ("tldr-curl", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/curl.md"),
+    ("tldr-wget", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/wget.md"),
+    ("tldr-sqlite3", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/sqlite3.md"),
+    ("tldr-systemctl", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/linux/systemctl.md"),
+    ("tldr-journalctl", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/linux/journalctl.md"),
+    ("tldr-ls", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/ls.md"),
+    ("tldr-mkdir", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/mkdir.md"),
+    ("tldr-rm", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/rm.md"),
+    ("tldr-grep", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/grep.md"),
+    ("tldr-find", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/find.md"),
+    ("tldr-chmod", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/chmod.md"),
+    ("tldr-ssh", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/ssh.md"),
+    ("tldr-tar", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/tar.md"),
+    ("tldr-rsync", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/rsync.md"),
+    ("tldr-docker", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/docker.md"),
+    ("tldr-sed", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/sed.md"),
+    ("tldr-awk", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/awk.md"),
+    ("tldr-make", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/make.md"),
 )
 SKIP_FILES = {
     "da-hoc.md",
@@ -134,7 +204,10 @@ _LISTINGS = (
     ("https://api.github.com/repos/python/cpython/contents/Doc/howto?ref=3.12", "py-howto"),
     ("https://api.github.com/repos/python/cpython/contents/Doc/faq?ref=3.12", "py-faq"),
     ("https://api.github.com/repos/git/git/contents/Documentation?ref=master", "git-doc"),
+    ("https://api.github.com/repos/tldr-pages/tldr/contents/pages/common?ref=main", "tldr"),
+    ("https://api.github.com/repos/tldr-pages/tldr/contents/pages/linux?ref=main", "tldr-linux"),
 )
+_DOC_SUFFIX = (".rst", ".adoc", ".md")
 
 
 def _clean_markup(line: str) -> str:
@@ -425,14 +498,6 @@ def _safe_name(prefix: str, filename: str) -> str:
 
 
 def discover_catalog(root: Path, fetch) -> list[tuple[str, str]]:
-    cache = root / "learn" / "cache" / "catalog.json"
-    if cache.is_file() and time.time() - cache.stat().st_mtime < CACHE_TTL:
-        try:
-            data = json.loads(cache.read_text(encoding="utf-8"))
-            if isinstance(data, list) and data:
-                return [(str(name), str(url)) for name, url in data]
-        except (OSError, json.JSONDecodeError, TypeError, ValueError):
-            pass
     found: list[tuple[str, str]] = []
     seen: set[str] = set()
 
@@ -444,6 +509,20 @@ def discover_catalog(root: Path, fetch) -> list[tuple[str, str]]:
 
     for name, url in OPEN_SOURCES:
         add(name, url)
+    cache = root / "learn" / "cache" / "catalog.json"
+    cached: list[tuple[str, str]] = []
+    if cache.is_file() and time.time() - cache.stat().st_mtime < CACHE_TTL:
+        try:
+            data = json.loads(cache.read_text(encoding="utf-8"))
+            if isinstance(data, list) and data:
+                cached = [(str(name), str(url)) for name, url in data]
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            cached = []
+    if cached:
+        for name, url in cached:
+            add(name, url)
+        if any("tldr-pages/tldr" in url for _name, url in cached):
+            return found
     for api, prefix in _LISTINGS:
         try:
             payload = json.loads(fetch(api))
@@ -456,7 +535,7 @@ def discover_catalog(root: Path, fetch) -> list[tuple[str, str]]:
             if not isinstance(item, dict):
                 continue
             filename = str(item.get("name") or "")
-            if not (filename.endswith(".rst") or filename.endswith(".adoc")):
+            if not filename.endswith(_DOC_SUFFIX):
                 continue
             add(_safe_name(prefix, filename), str(item.get("download_url") or ""))
     if found:
@@ -796,6 +875,7 @@ def study_hours(root: Path, database: Path, ask, hours: float, fetch=fetch_text,
         catalog = discover_catalog(root, fetch)
     catalog = extend_catalog(root, catalog)
     try:
+        seed_commands(root)
         harvest_saved(root)
     except Exception as exc:
         print(f"gom lệnh: {exc}")
