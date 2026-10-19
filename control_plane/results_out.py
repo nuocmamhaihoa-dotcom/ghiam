@@ -25,6 +25,7 @@ from control_plane.video_store import (
     IMPORT_ROW_LIMIT,
     READER_SQL,
     VN_TZ,
+    FRESH_USERNAME_SQL,
     ResultFilter,
     connect,
     get_meta,
@@ -260,7 +261,10 @@ def api_key_ok(db_path: Path, key: str) -> bool:
 
 
 def saved_rows_after(db_path: Path, after_id: int, limit: int) -> list[dict[str, object]]:
-    """Dòng đã lưu đủ số, tên và @id, id tăng dần, sau một id. Dùng cho khoá API và webhook."""
+    """Dòng đã lưu đủ số, tên và @id, id tăng dần, sau một id. Dùng cho khoá API và webhook.
+
+    @id đã có ở một dòng cũ hơn thì không gửi lại.
+    """
     with connect(db_path) as conn:
         rows = conn.execute(
             f"""
@@ -269,6 +273,7 @@ def saved_rows_after(db_path: Path, after_id: int, limit: int) -> list[dict[str,
             FROM results r
             LEFT JOIN videos v ON v.id = r.video_id
             WHERE r.id > ? AND r.bucket = ? AND r.phone != '' AND r.name != '' AND r.username != ''
+              AND {FRESH_USERNAME_SQL}
             ORDER BY r.id
             LIMIT ?
             """,
@@ -342,9 +347,10 @@ def webhook_settings(db_path: Path) -> dict[str, object]:
     last = int(get_meta(db_path, WEBHOOK_LAST, "0") or 0)
     with connect(db_path) as conn:
         waiting = conn.execute(
-            """
-            SELECT COUNT(*) AS n FROM results
-            WHERE id > ? AND bucket = ? AND phone != '' AND name != '' AND username != ''
+            f"""
+            SELECT COUNT(*) AS n FROM results r
+            WHERE r.id > ? AND r.bucket = ? AND r.phone != '' AND r.name != '' AND r.username != ''
+              AND {FRESH_USERNAME_SQL}
             """,
             (last, BUCKET_OK),
         ).fetchone()

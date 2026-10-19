@@ -193,7 +193,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(response.headers["cache-control"], "no-cache, no-store, must-revalidate")
         self.assertIn('data-span="all"', response.text)
         self.assertIn('data-span="today"', response.text)
-        self.assertIn("Hiện mọi dòng đã quét. Dòng mới nhất ở trên.", response.text)
+        self.assertIn("Mỗi @id chỉ hiện một lần, là lần quét đầu trong toàn bộ thời gian.", response.text)
         self.assertIn("Không giới hạn số video", response.text)
         self.assertIn("Nhiều danh sách trên một máy cũng tải lên cùng lúc.", response.text)
         self.assertIn("Vài video lên máy chủ cùng lúc.", response.text)
