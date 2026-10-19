@@ -35,10 +35,10 @@ def _match_skills(command: str, stems: list[str]) -> list[str]:
     for stem in stems:
         if stem in seen:
             continue
-        if tool and (stem == f"tldr-{tool}" or stem.startswith(f"{tool}-")):
+        if stem == f"tldr-{tool}":
             seen.add(stem)
             hits.append(stem)
-        if len(hits) >= 6:
+        if len(hits) >= 4:
             break
     return hits[:4]
 
@@ -99,11 +99,13 @@ def link_learned(root: Path) -> Path:
             if stem == name
             or stem.startswith(name + "-")
             or stem.startswith("tldr-" + name)
-            or (name == "python" and stem.startswith("py-"))
+            or (name == "python" and (stem.startswith("py-") or stem.startswith("python")))
             or (name == "mang" and stem in {"tldr-curl", "tldr-wget", "tldr-httpie", "tldr-nc", "curl-manual"})
             or (name == "he-thong" and stem.startswith("tldr-system"))
+            or (name == "shell" and stem in {"tldr-ls", "tldr-mkdir", "tldr-rm", "tldr-grep", "tldr-find", "tldr-chmod", "tldr-ssh", "tldr-tar", "tldr-rsync", "tldr-sed", "tldr-awk", "tldr-make"})
             or (name == "node" and stem in {"tldr-node", "tldr-npm", "tldr-npx", "tldr-yarn", "tldr-pnpm"})
         ]
+        matching.sort(key=lambda stem: (0 if stem.startswith(name) or stem.startswith("tldr-" + name) else 1, stem))
         shown = ", ".join(matching[:8]) if matching else "chưa có kỹ năng"
         lines.append(f"- {title}: `learn/lenh/{name}.md` ({count} lệnh). Kỹ năng: {shown}")
     lines += [
