@@ -298,5 +298,66 @@ def sync_push_cmd(
     asyncio.run(_run())
 
 
+@app.command("engines")
+def engines_cmd() -> None:
+    """List independent public-comment engines (ranks 2–8)."""
+    from fb_poller.engines.registry import CATALOG
+
+    table = Table(title="Independent engines")
+    table.add_column("rank")
+    table.add_column("name")
+    table.add_column("summary")
+    for item in CATALOG:
+        table.add_row(str(item["rank"]), str(item["name"]), str(item["summary"]))
+    console.print(table)
+
+
+@app.command("scan")
+def scan_cmd(
+    engine: str = typer.Argument(..., help="2–8 or engine name from `fb-poller engines`"),
+    url: str = typer.Option("", "--url", help="Public post URL"),
+    file: str = typer.Option("", "--file", help="Octoparse CSV/JSON export"),
+    limit: int = typer.Option(25, help="Max comments for this engine"),
+) -> None:
+    """Run exactly one engine. It does not call the others."""
+    from fb_poller.engines.registry import scan_one
+
+    async def _run() -> None:
+        result = await scan_one(engine, url, limit=limit, export_path=file)
+        console.print(result.as_dict())
+
+    asyncio.run(_run())
+
+
+@app.command("scan-independent")
+def scan_independent_cmd(
+    url: str = typer.Option(..., "--url", help="Public post URL"),
+    file: str = typer.Option("", "--file", help="Optional Octoparse export for rank 8"),
+    limit: int = typer.Option(20, help="Max comments per engine"),
+) -> None:
+    """Run ranks 2–8 one after another. Each engine uses its own client."""
+    from fb_poller.engines.registry import scan_each_independent
+
+    async def _run() -> None:
+        results = await scan_each_independent(url, limit=limit, export_path=file)
+        table = Table(title="Independent scan")
+        table.add_column("rank")
+        table.add_column("engine")
+        table.add_column("ok")
+        table.add_column("comments")
+        table.add_column("error")
+        for result in results:
+            table.add_row(
+                str(result.rank),
+                result.engine,
+                "yes" if result.ok else "no",
+                str(len(result.comments)),
+                result.error or "",
+            )
+        console.print(table)
+
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     app()
