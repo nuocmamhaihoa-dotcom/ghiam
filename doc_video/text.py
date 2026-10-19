@@ -156,6 +156,36 @@ def lookalike_handles(left: str, right: str) -> bool:
     return len(diffs) == 1 and any(diffs[0][0] in group and diffs[0][1] in group for group in _LOOKALIKE)
 
 
+def handle_aliases(handle: str) -> set[str]:
+    """Chính @id này và các dạng lookalike_handles lệch tối đa một ký tự.
+
+    Dùng để hỏi chỉ mục, thay vì đọc mọi @id cùng độ dài rồi so trong Python.
+    """
+    found = {handle}
+    chars = list(handle)
+    candidates: list[str] = []
+    for index, char in enumerate(chars):
+        for group in _LOOKALIKE:
+            if char not in group:
+                continue
+            for alt in group:
+                if alt == char:
+                    continue
+                trial = chars.copy()
+                trial[index] = alt
+                candidates.append("".join(trial))
+    collapsed = handle.replace("__", "_")
+    if abs(len(collapsed) - len(handle)) == 1:
+        candidates.append(collapsed)
+    for index, char in enumerate(handle):
+        if char == "_":
+            candidates.append(handle[:index] + "_" + handle[index:])
+    for candidate in candidates:
+        if candidate != handle and abs(len(candidate) - len(handle)) <= 1 and lookalike_handles(handle, candidate):
+            found.add(candidate)
+    return found
+
+
 def fix_underscores(handle: str, strokes: list[tuple[float, float]]) -> str:
     """Sửa số gạch dưới của @id theo các nét ngang đo trên ảnh (xem frame._underscore_strokes).
 

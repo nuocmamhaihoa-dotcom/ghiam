@@ -1043,6 +1043,19 @@ class VideoStoreTests(unittest.TestCase):
         )
         self.assertEqual(stats(self.db)["review"], 0)
 
+    def test_orphan_profile_with_a_different_handle_is_kept(self) -> None:
+        video_id = self._add("a.mp4", "a")
+        claim(self.db, 4)
+        finish(self.db, video_id, Table(rows=[Row("0917129188", "Mot", "@mot_dung")]))
+        second = self._add("b.mp4", "b")
+        claim(self.db, 4)
+        finish(
+            self.db,
+            second,
+            Table(review=[Review("", "", "Hai", "@hai_khac", "đã mở hồ sơ nhưng không thấy số cùng tên")]),
+        )
+        self.assertEqual(stats(self.db)["review"], 1)
+
     def test_disk_limit(self) -> None:
         gb = 1024 * 1024 * 1024
         self.assertTrue(can_accept(0, 100, 80 * gb, 10 * gb))

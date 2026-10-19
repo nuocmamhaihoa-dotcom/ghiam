@@ -23,7 +23,7 @@ from typing import Iterator
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
-from doc_video.text import handle_matches_name, lookalike_handles
+from doc_video.text import handle_aliases, handle_matches_name
 
 from control_plane.phone_vn import carrier, normalize_vn, phone_columns
 from control_plane.screen_table import Review, Table, joined_name, pair_close_names
@@ -3041,12 +3041,18 @@ def _put_review(conn: sqlite3.Connection, item: Review, video_id: int) -> None:
         return
     if not item.username:
         return
-    nearby = conn.execute(
-        "SELECT username FROM results WHERE username != '' AND length(username) BETWEEN ? AND ?",
-        (len(item.username) - 1, len(item.username) + 1),
-    ).fetchall()
     # Đã có @id này, hoặc @id chỉ khác một ký tự dễ đọc nhầm (l với i, _ với __): không thêm dòng mồ côi.
-    if any(row["username"] == item.username or lookalike_handles(row["username"], item.username) for row in nearby):
+    # Hỏi đúng các dạng đó qua chỉ mục. Không đọc cả bảng trong lúc đang giữ khóa ghi.
+    aliases = sorted(handle_aliases(item.username))
+    hit = conn.execute(
+        f"""
+        SELECT 1 FROM results
+        WHERE username != '' AND username IN ({",".join("?" * len(aliases))})
+        LIMIT 1
+        """,
+        aliases,
+    ).fetchone()
+    if hit is not None:
         return
     now = utcnow()
     conn.execute(
