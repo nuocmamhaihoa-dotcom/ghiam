@@ -2,5 +2,6 @@
 __pycache__/
 *.py[cod]
 .env
+coderd.env
 var/
 worker.env

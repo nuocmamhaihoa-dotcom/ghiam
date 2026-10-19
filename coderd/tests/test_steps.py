@@ -241,7 +241,68 @@ class DeployTests(unittest.TestCase):
         self.assertGreaterEqual(compose.count("unless-stopped"), 2)
         subprocess.run(["bash", "-n", str(ROOT / "deploy" / "backup.sh")], check=True)
         subprocess.run(["bash", "-n", str(ROOT / "deploy" / "install-vps.sh")], check=True)
+        subprocess.run(["bash", "-n", str(ROOT / "deploy" / "install-systemd.sh")], check=True)
         subprocess.run(["bash", "-n", str(ROOT / "worker" / "install-linux.sh")], check=True)
+
+    def test_systemd_install_serves_health_and_session(self) -> None:
+        import urllib.error
+
+        with TemporaryDirectory() as tmp:
+            prefix = Path(tmp) / "coderd"
+            env = os.environ.copy()
+            env["CODERD_PREFIX"] = str(prefix)
+            env["APP_HOST"] = "127.0.0.1"
+            env["APP_PORT"] = "8091"
+            env["CODERD_START"] = "0"
+            env["CODERD_SKIP_SYSTEMD"] = "1"
+            subprocess.run(["bash", str(ROOT / "deploy" / "install-systemd.sh")], cwd=ROOT, env=env, check=True)
+            env_file = prefix / "coderd.env"
+            self.assertEqual(env_file.stat().st_mode & 0o777, 0o600)
+            values = dict(line.split("=", 1) for line in env_file.read_text(encoding="utf-8").splitlines() if "=" in line)
+            self.assertGreater(len(values["AUTH_TOKEN"]), 8)
+            self.assertGreater(len(values["WORKER_TOKEN"]), 8)
+            unit = (prefix / "coderd.service").read_text(encoding="utf-8")
+            self.assertIn("Restart=always", unit)
+            self.assertIn("python -m app", unit)
+            self.assertNotIn("8088", unit)
+            proc_env = os.environ.copy()
+            proc_env.update(values)
+            proc = subprocess.Popen(
+                [str(prefix / ".venv" / "bin" / "python"), "-m", "app"],
+                cwd=prefix,
+                env=proc_env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            try:
+                base = "http://127.0.0.1:8091"
+                for _ in range(50):
+                    try:
+                        with urllib.request.urlopen(base + "/health", timeout=0.5) as response:
+                            if response.status == 200:
+                                break
+                    except Exception:
+                        time.sleep(0.1)
+                else:
+                    self.fail("bản cài không lên")
+                opener = urllib.request.Request(
+                    base + "/v1/sessions",
+                    method="POST",
+                    headers={"Authorization": "Bearer " + values["AUTH_TOKEN"]},
+                )
+                with urllib.request.urlopen(opener, timeout=5) as response:
+                    body = json.loads(response.read().decode("utf-8"))
+                self.assertTrue(body["id"])
+                denied = urllib.request.Request(base + "/v1/sessions", method="POST")
+                with self.assertRaises(urllib.error.HTTPError) as caught:
+                    urllib.request.urlopen(denied, timeout=5)
+                self.assertEqual(caught.exception.code, 401)
+            finally:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
 
     def test_linux_install_writes_user_service(self) -> None:
         with TemporaryDirectory() as tmp:

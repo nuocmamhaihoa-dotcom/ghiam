@@ -14,10 +14,15 @@ Path(".env").write_text(text)
 PY
 fi
 chmod 600 .env
-if command -v ufw >/dev/null 2>&1; then
-  ufw allow 22/tcp || true
-  ufw allow 80/tcp || true
-  ufw allow 443/tcp || true
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  if command -v ufw >/dev/null 2>&1; then
+    ufw allow 22/tcp || true
+    ufw allow 80/tcp || true
+    ufw allow 443/tcp || true
+  fi
+  docker compose up -d --build
+  docker compose ps
+else
+  echo "Không có Docker. Cài bằng systemd, cổng ${APP_PORT:-8090}, không dùng cổng 8088 của hub."
+  exec bash "$(dirname "$0")/install-systemd.sh"
 fi
-docker compose up -d --build
-docker compose ps
