@@ -23,6 +23,7 @@ from doc_video.pipeline import read_video
 from doc_video.video import disk_full
 
 from control_plane.results_out import webhook_loop
+from control_plane.self_heal import heal_once
 from control_plane.screen_table import Review, Row, Table, Unopened
 from control_plane.settings import settings
 from control_plane.video_shrink import DEFAULT_CRF, shrink
@@ -33,7 +34,6 @@ from control_plane.video_store import (
     confirm_open_profiles,
     drop_orphan_small,
     guard_disk,
-    drop_stale_uploads,
     defer_for_disk,
     fail,
     feeder_count,
@@ -43,7 +43,6 @@ from control_plane.video_store import (
     merge_close_results,
     next_to_shrink,
     prune_old_videos,
-    release_stale_pc,
     report_progress,
     requeue,
     requeue_running,
@@ -359,8 +358,11 @@ def main() -> None:
             now = time.monotonic()
             if now - last_sweep >= 60:
                 last_sweep = now
-                drop_stale_uploads(db_path)
-                release_stale_pc(db_path)
+                try:
+                    for line in heal_once(db_path, settings.video_dir, heartbeat_path()):
+                        print(line, flush=True)
+                except Exception as exc:
+                    print(f"Chưa tự sửa được: {type(exc).__name__}", flush=True)
                 _drop_old_parts(settings.video_dir)
                 keep_newest_videos(db_path)
                 backfill_video_counts(db_path)
