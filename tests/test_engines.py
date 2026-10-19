@@ -623,6 +623,32 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(found[0].author_name, "An")
         self.assertEqual(found[0].comment_id, "9")
 
+    def test_original_button_and_wrapped_name_are_kept(self) -> None:
+        block = "\n".join(["Lan", "xin chào", "See original (Vietnamese)", "2d"])
+        self.assertEqual(comments_from_articles([block], 5)[0].text, "xin chào")
+        sentence = "\n".join(["Lan", "See original photos in the album", "Like", "Reply"])
+        self.assertEqual(comments_from_articles([sentence], 5)[0].text, "See original photos in the album")
+        glued, glued_codes = heal_comments([PublicComment(text="xin chào See original")])
+        self.assertEqual(glued[0].text, "xin chào")
+        self.assertIn("strip_glued_chrome", glued_codes)
+        managed = _comments_from_json(
+            {
+                "text": "xin",
+                "author": {"name": {"text": "An"}},
+                "created_time": {"timestamp": 1600000000},
+            },
+            5,
+        )
+        self.assertEqual(managed[0].author_name, "An")
+        self.assertEqual(managed[0].created_time, "1600000000")
+        graph, error = comments_from_graph_payload(
+            {"message": "xin", "from": {"name": {"text": "An"}}, "created_time": {"text": "2020-01-01T00:00:00+0000"}},
+            5,
+        )
+        self.assertIsNone(error)
+        self.assertEqual(graph[0].author_name, "An")
+        self.assertEqual(graph[0].created_time, "2020-01-01T00:00:00+0000")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -14,8 +14,8 @@ from fb_poller.engines.guard import (
     invalid_limit,
     nested_text,
     public_error,
+    time_text,
     redact_text,
-    scalar_text,
 )
 from fb_poller.engines.types import EngineResult, PublicComment
 
@@ -164,5 +164,5 @@ def _one(row: Any) -> PublicComment | None:
         text=text,
         author_name=first_person_name(row, ("author", "profileName", "userName", "name", "from")),
         comment_id=first_comment_id(row),
-        created_time=scalar_text(row.get("date")) or scalar_text(row.get("created_time")),
+        created_time=time_text(row.get("date")) or time_text(row.get("created_time")),
     )

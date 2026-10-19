@@ -18,6 +18,7 @@ from fb_poller.engines.guard import (
     first_comment_id,
     first_person_name,
     nested_text,
+    time_text,
     placeholder_text,
     redact_text,
     scalar_text,
@@ -66,6 +67,8 @@ _CHROME_LINE = re.compile(
     r"\d+(?:\.\d+)?\s*[kmb]?\s+(?:likes?|reactions?|lượt thích)|"
     r"view all \d+ replies|xem tất cả \d+ phản hồi|\d+ replies|\d+ phản hồi|"
     r"see translation|hide translation|xem bản dịch|ẩn bản dịch|"
+    r"see original(?:\s*\([^)\n]{0,80}\))?|hide original(?:\s*\([^)\n]{0,80}\))?|"
+    r"xem bản gốc(?:\s*\([^)\n]{0,80}\))?|ẩn bản gốc(?:\s*\([^)\n]{0,80}\))?|"
     r"edited|đã chỉnh sửa|"
     r"all reactions:?|tất cả cảm xúc:?"
     r")$",
@@ -79,6 +82,8 @@ _TAG = re.compile(r"</?[A-Za-z][^>\n]*>")
 _GLUED_CHROME = re.compile(
     r"(?:\s+(?:"
     r"see translation|hide translation|xem bản dịch|ẩn bản dịch|"
+    r"see original(?:\s*\([^)\n]{0,80}\))?|hide original(?:\s*\([^)\n]{0,80}\))?|"
+    r"xem bản gốc(?:\s*\([^)\n]{0,80}\))?|ẩn bản gốc(?:\s*\([^)\n]{0,80}\))?|"
     r"see more|see less|xem thêm|"
     r"view all \d+ replies|xem tất cả \d+ phản hồi|"
     r"top fan|rising fan|"
@@ -337,9 +342,9 @@ def _loose_comments(payload: object, depth: int = 0) -> list[PublicComment]:
                     ("author", "author_name", "from", "profileName", "user_name", "name"),
                 ),
                 comment_id=first_comment_id(payload),
-                created_time=scalar_text(payload.get("created_time"))
-                or scalar_text(payload.get("created_at"))
-                or scalar_text(payload.get("date")),
+                created_time=time_text(payload.get("created_time"))
+                or time_text(payload.get("created_at"))
+                or time_text(payload.get("date")),
             )
         )
     nested: list[PublicComment] = []

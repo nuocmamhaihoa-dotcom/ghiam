@@ -83,7 +83,8 @@ def person_name(value: object, depth: int = 0) -> str | None:
         for key in ("name", "short_name", "full_name", "profilename", "profile_name", "username"):
             if key not in lowered:
                 continue
-            found = person_name(lowered.get(key), depth + 1)
+            child = lowered.get(key)
+            found = person_name(child, depth + 1) or nested_text(child)
             if found:
                 return found
     return None
@@ -107,6 +108,23 @@ def scalar_text(value: object) -> str | None:
         return text or None
     if isinstance(value, (int, float)):
         return str(value)
+    return None
+
+
+def time_text(value: object, depth: int = 0) -> str | None:
+    """A timestamp string or number, including one wrapped as text or timestamp."""
+    if depth > 2:
+        return None
+    plain = scalar_text(value)
+    if plain:
+        return plain
+    if isinstance(value, dict):
+        for key in ("text", "message", "timestamp", "time", "date", "created_time", "created_at"):
+            if key not in value:
+                continue
+            found = time_text(value.get(key), depth + 1)
+            if found:
+                return found
     return None
 
 

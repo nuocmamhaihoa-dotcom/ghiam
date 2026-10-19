@@ -27,6 +27,8 @@ _DROP_LINE = re.compile(
     r"\d+(?:\.\d+)?\s*[kmb]?\s+(?:likes?|reactions?|lượt thích)|"
     r"view all \d+ replies|xem tất cả \d+ phản hồi|\d+ replies|\d+ phản hồi|"
     r"see translation|hide translation|xem bản dịch|ẩn bản dịch|"
+    r"see original(?:\s*\([^)\n]{0,80}\))?|hide original(?:\s*\([^)\n]{0,80}\))?|"
+    r"xem bản gốc(?:\s*\([^)\n]{0,80}\))?|ẩn bản gốc(?:\s*\([^)\n]{0,80}\))?|"
     r"edited|đã chỉnh sửa"
     r")$",
     re.IGNORECASE,

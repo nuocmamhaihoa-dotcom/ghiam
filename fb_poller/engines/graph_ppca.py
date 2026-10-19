@@ -15,6 +15,7 @@ from fb_poller.engines.guard import (
     public_error,
     redact_text,
     scalar_text,
+    time_text,
 )
 from fb_poller.engines.types import EngineResult, PublicComment
 
@@ -88,7 +89,7 @@ def _append_rows(
                 text=text,
                 author_name=person_name(row.get("from")) or person_name(row.get("author")),
                 comment_id=first_comment_id(row),
-                created_time=scalar_text(row.get("created_time")),
+                created_time=time_text(row.get("created_time")),
             )
             key = item.comment_id or f"{item.author_name}|{item.text}"
             if key not in seen:

@@ -14,8 +14,8 @@ from fb_poller.engines.guard import (
     invalid_limit,
     nested_text,
     public_error,
+    time_text,
     redact_text,
-    scalar_text,
 )
 from fb_poller.engines.types import EngineResult, PublicComment
 
@@ -138,7 +138,7 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
                 text=text,
                 author_name=author_name,
                 comment_id=cid,
-                created_time=scalar_text(row.get("created_time")) or scalar_text(row.get("date")),
+                created_time=time_text(row.get("created_time")) or time_text(row.get("date")),
             )
         )
         if len(out) >= limit:

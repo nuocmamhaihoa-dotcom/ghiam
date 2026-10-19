@@ -7,7 +7,7 @@ import io
 import json
 from pathlib import Path
 
-from fb_poller.engines.guard import first_person_name, invalid_limit, nested_text, public_error
+from fb_poller.engines.guard import first_person_name, invalid_limit, nested_text, public_error, time_text
 from fb_poller.engines.types import EngineResult, PublicComment
 
 RANK = 8
@@ -109,6 +109,14 @@ def _from_csv(raw: str, limit: int) -> list[PublicComment]:
     return out
 
 
+def _pick_time(row: dict[str, object], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        found = time_text(row.get(key))
+        if found:
+            return found
+    return None
+
+
 def _pick(row: dict[str, object], keys: tuple[str, ...]) -> str | None:
     lowered = {str(k).strip().lower(): v for k, v in row.items()}
     for key in keys:
@@ -126,7 +134,7 @@ def _from_mapping(row: dict[str, object]) -> PublicComment | None:
     return PublicComment(
         text=text,
         author_name=first_person_name(lowered, _AUTHOR_KEYS),
-        created_time=_pick(lowered, _TIME_KEYS),
+        created_time=_pick_time(lowered, _TIME_KEYS),
     )
 
 
