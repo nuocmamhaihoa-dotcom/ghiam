@@ -88,6 +88,10 @@ _AUTHOR_KEYS = (
     "ten hien thi",
     "from_name",
     "actor_name",
+    "poster_name",
+    "owner_full_name",
+    "user_display_name",
+    "comment_author",
     "tác giả",
     "tac gia",
 )
@@ -123,6 +127,8 @@ _TIME_KEYS = (
     "ngay tao",
     "comment_timestamp",
     "published_time",
+    "created_unix",
+    "posted_at_ms",
 )
 
 

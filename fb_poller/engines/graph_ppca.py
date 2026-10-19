@@ -124,6 +124,9 @@ def _append_rows(
                         "user_full_name",
                         "from_name",
                         "actor_name",
+                        "poster_name",
+                        "owner_full_name",
+                        "user_display_name",
                     ),
                 )
             )
@@ -143,6 +146,8 @@ def _append_rows(
                             "screen_name",
                             "from_name",
                             "actor_name",
+                            "poster_name",
+                            "owner_full_name",
                         ),
                     )
                 )
@@ -204,7 +209,7 @@ def post_id_from_url(url: str) -> str | None:
     shop = re.search(r"/shop/product/(\d+)", raw, re.IGNORECASE)
     if shop:
         return accepted_object_id(shop.group(1))
-    share = re.search(r"/share/[pv]/(\d+)", raw, re.IGNORECASE)
+    share = re.search(r"/share/[pvr]/(\d+)", raw, re.IGNORECASE)
     if share:
         return accepted_object_id(share.group(1))
     path = re.search(

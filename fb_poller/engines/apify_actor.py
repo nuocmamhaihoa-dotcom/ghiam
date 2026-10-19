@@ -260,6 +260,10 @@ def _one(row: Any) -> PublicComment | None:
         "actor",
         "actor_name",
         "from_name",
+        "poster_name",
+        "owner_full_name",
+        "user_display_name",
+        "comment_author",
     )
     return PublicComment(
         text=text,
