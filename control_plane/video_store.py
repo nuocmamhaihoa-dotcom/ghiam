@@ -39,11 +39,15 @@ READER_SQL = (
 )
 # @id chỉ hiện ở dòng quét đầu tiên trên toàn bộ thời gian. Dòng không có @id giữ nguyên.
 # So trên mọi dòng đã lưu, không thu theo ngày hay video đang lọc.
+# earlier.username != '' bắt chỉ mục một phần idx_results_username_id. Thiếu điều kiện đó,
+# SQLite 3.31 quét khóa chính theo id và trang kết quả không trả lời.
 FRESH_USERNAME_SQL = """(
   substr(r.username, 1, 1) != '@'
   OR NOT EXISTS (
     SELECT 1 FROM results earlier
-    WHERE earlier.username = r.username AND earlier.id < r.id
+    WHERE earlier.username = r.username
+      AND earlier.username != ''
+      AND earlier.id < r.id
   )
 )"""
 IMPORT_ROW_LIMIT = 100_000
