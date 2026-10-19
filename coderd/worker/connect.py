@@ -93,19 +93,22 @@ async def run_once() -> None:
         busy = False
         pending: asyncio.Queue = asyncio.Queue()
 
-        async def start(message_id: str, text: str) -> None:
+        async def start(incoming: dict) -> None:
             nonlocal busy, task
             busy = True
             cancel.clear()
-            task = asyncio.create_task(work(message_id, text))
+            task = asyncio.create_task(work(incoming))
 
         async def beats() -> None:
             while True:
                 await asyncio.sleep(interval)
                 await socket.send(json.dumps({"type": "heartbeat", **machine_stats()}))
 
-        async def work(message_id: str, text: str) -> None:
+        async def work(incoming: dict) -> None:
             nonlocal busy
+            message_id = str(incoming.get("message_id") or "")
+            text = str(incoming.get("text") or "")
+            history = incoming.get("history") if isinstance(incoming.get("history"), list) else []
             loop = asyncio.get_running_loop()
 
             def emit(kind: str, payload: str) -> None:
@@ -117,7 +120,12 @@ async def run_once() -> None:
                 future.result(timeout=30)
 
             def before_terminal() -> None:
-                if publish(workspace, lambda bundle: post_bundle(base, token, bundle)):
+                try:
+                    pushed = publish(workspace, lambda bundle: post_bundle(base, token, bundle))
+                except Exception as exc:
+                    emit("tool", json.dumps({"name": "git", "result": {"error": str(exc)[:200]}}, ensure_ascii=False))
+                    return
+                if pushed:
                     emit("tool", json.dumps({"name": "git", "result": {"pushed": True}}, ensure_ascii=False))
 
             def turn() -> None:
@@ -130,6 +138,7 @@ async def run_once() -> None:
                         cancel,
                         procs,
                         before_terminal,
+                        history,
                     )
                 except Exception as exc:
                     emit("error", str(exc)[:500])
@@ -140,8 +149,7 @@ async def run_once() -> None:
                 busy = False
                 cancel.clear()
                 if not pending.empty():
-                    incoming_next = pending.get_nowait()
-                    await start(str(incoming_next.get("message_id")), str(incoming_next.get("text") or ""))
+                    await start(pending.get_nowait())
 
         beater = asyncio.create_task(beats())
         task: asyncio.Task | None = None
@@ -153,7 +161,7 @@ async def run_once() -> None:
                     if busy:
                         pending.put_nowait(incoming)
                     else:
-                        await start(str(incoming.get("message_id")), str(incoming.get("text") or ""))
+                        await start(incoming)
                 elif incoming.get("type") == "cancel":
                     cancel.set()
                     proc = procs.get("proc")

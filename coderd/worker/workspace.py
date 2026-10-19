@@ -11,7 +11,12 @@ class Workspace:
     def ensure(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
         if not (self.root / ".git").exists():
-            subprocess.run(["git", "init", "-b", "main", str(self.root)], check=True, capture_output=True)
+            subprocess.run(["git", "init", str(self.root)], check=True, capture_output=True)
+            subprocess.run(
+                ["git", "-C", str(self.root), "symbolic-ref", "HEAD", "refs/heads/main"],
+                check=True,
+                capture_output=True,
+            )
         subprocess.run(["git", "-C", str(self.root), "config", "user.email", "coderd@localhost"], check=True)
         subprocess.run(["git", "-C", str(self.root), "config", "user.name", "coderd"], check=True)
 

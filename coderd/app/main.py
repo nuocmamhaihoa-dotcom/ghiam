@@ -127,7 +127,11 @@ def create_app() -> FastAPI:
         bare = bare_path()
         bare.parent.mkdir(parents=True, exist_ok=True)
         if not (bare / "HEAD").exists():
-            subprocess.run(["git", "init", "--bare", "-b", "main", str(bare)], check=True)
+            subprocess.run(["git", "init", "--bare", str(bare)], check=True)
+            subprocess.run(
+                ["git", "--git-dir", str(bare), "symbolic-ref", "HEAD", "refs/heads/main"],
+                check=True,
+            )
         handle, name = tempfile.mkstemp(suffix=".bundle")
         try:
             os.write(handle, data)

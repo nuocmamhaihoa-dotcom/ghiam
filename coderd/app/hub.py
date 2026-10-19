@@ -34,6 +34,7 @@ class Hub:
                 "message_id": message["id"],
                 "session_id": message["session_id"],
                 "text": message["body"],
+                "history": db.prior_dialogue(self.database, message["session_id"], message["id"]),
                 "workspace_id": "default",
             }
         try:

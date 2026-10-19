@@ -164,6 +164,20 @@ def list_messages(path: Path, session_id: str) -> list[dict]:
     return items
 
 
+def prior_dialogue(path: Path, session_id: str, before_id: str, limit: int = 8) -> list[dict]:
+    dialogue: list[dict] = []
+    for item in list_messages(path, session_id):
+        if item["id"] == before_id:
+            break
+        dialogue.append({"role": "user", "content": str(item["body"])[:2000]})
+        texts = [event["payload"] for event in item["events"] if event["kind"] == "text" and event["payload"]]
+        if texts:
+            dialogue.append({"role": "assistant", "content": "\n".join(texts)[:2000]})
+    if limit > 0:
+        dialogue = dialogue[-limit * 2 :]
+    return dialogue
+
+
 def oldest_queued(path: Path) -> dict | None:
     with session(path) as conn:
         row = conn.execute(

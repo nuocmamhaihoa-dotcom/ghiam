@@ -281,7 +281,8 @@ function renderMessages(messages) {
           if (parsed.name === "git" && result.pushed) {
             label = "git\nđã đẩy lên VPS";
           } else {
-            const detail = result.stdout || result.error || result.path || "";
+            const names = Array.isArray(result.names) ? result.names.join(" ") : "";
+            const detail = result.stdout || result.content || result.error || names || result.path || "";
             label = parsed.name + (detail ? "\n" + String(detail).slice(0, 400) : "");
           }
         } catch (err) {}

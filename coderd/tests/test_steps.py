@@ -22,7 +22,8 @@ os.environ.setdefault("WORKER_TOKEN", "worker-token")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import create_app  # noqa: E402
-from worker.agent import run_turn, scripted_complete  # noqa: E402
+from app import db as appdb
+from worker.agent import normalize_reply, parse_text_tools, run_turn, scripted_complete  # noqa: E402
 from worker.tools import run_cmd, run_tool  # noqa: E402
 from worker.workspace import Workspace  # noqa: E402
 
@@ -137,6 +138,8 @@ class ApiTests(unittest.TestCase):
             socket.send_json({"type": "event", "message_id": assigned["message_id"], "kind": "done", "payload": ""})
             nxt = socket.receive_json()
             self.assertEqual(nxt["text"], "hai")
+            self.assertEqual(nxt["history"][0]["content"], "một")
+            self.assertIn("xong một", nxt["history"][1]["content"])
 
     def test_cancel_queued_message(self) -> None:
         session = self.client.post("/v1/sessions", headers=AUTH).json()
@@ -148,6 +151,23 @@ class ApiTests(unittest.TestCase):
         cancelled = self.client.post(f"/v1/messages/{message['id']}/cancel", headers=AUTH)
         self.assertEqual(cancelled.status_code, 200)
         self.assertEqual(cancelled.json()["state"], "cancelled")
+
+    def test_prior_dialogue_stops_before_current_message(self) -> None:
+        session = self.client.post("/v1/sessions", headers=AUTH).json()
+        first = self.client.post(
+            f"/v1/sessions/{session['id']}/messages",
+            headers=AUTH,
+            json={"text": "câu trước"},
+        ).json()
+        second = self.client.post(
+            f"/v1/sessions/{session['id']}/messages",
+            headers=AUTH,
+            json={"text": "câu sau"},
+        ).json()
+        appdb.add_event(Path(os.environ["CODERD_DB"]), first["id"], "text", "đã trả lời")
+        dialogue = appdb.prior_dialogue(Path(os.environ["CODERD_DB"]), session["id"], second["id"])
+        self.assertEqual(dialogue[0]["content"], "câu trước")
+        self.assertEqual(dialogue[1]["content"], "đã trả lời")
 
 
 class WorkerTests(unittest.TestCase):
@@ -196,14 +216,15 @@ class WorkerTests(unittest.TestCase):
             self.assertEqual(result["error"], "quá thời gian")
 
     def test_stops_after_20_rounds(self) -> None:
-        def always(_messages, _tools):
+        def always(messages, _tools):
+            step = sum(1 for item in messages if item.get("role") == "tool")
             return {
                 "content": None,
                 "tool_calls": [
                     {
                         "id": "x",
                         "type": "function",
-                        "function": {"name": "list_dir", "arguments": "{\"path\": \".\"}"},
+                        "function": {"name": "list_dir", "arguments": json.dumps({"path": str(step)})},
                     }
                 ],
             }
@@ -219,6 +240,86 @@ class WorkerTests(unittest.TestCase):
                 {},
             )
             self.assertEqual(events[-1], ("error", "hết 20 vòng"))
+
+    def test_repeated_tool_stops_with_stdout(self) -> None:
+        def complete(messages, _tools):
+            if not any(item.get("role") == "tool" for item in messages):
+                return {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "w",
+                            "type": "function",
+                            "function": {
+                                "name": "write_file",
+                                "arguments": json.dumps({"path": "hello.py", "content": "print(2 + 2)\n"}),
+                            },
+                        }
+                    ],
+                }
+            return {
+                "content": '{"name": "run_cmd", "arguments": {"command": "python3 hello.py"}}',
+                "tool_calls": [
+                    {
+                        "id": "r",
+                        "type": "function",
+                        "function": {"name": "run_cmd", "arguments": json.dumps({"command": "python3 hello.py"})},
+                    }
+                ],
+            }
+
+        with TemporaryDirectory() as tmp:
+            events: list[tuple[str, str]] = []
+            run_turn(
+                Workspace(Path(tmp) / "work"),
+                "chạy",
+                complete,
+                lambda kind, payload: events.append((kind, payload)),
+                threading.Event(),
+                {},
+            )
+            self.assertEqual(events[-1][0], "done")
+            self.assertLess(sum(1 for kind, _payload in events if kind == "tool"), 6)
+            self.assertTrue(any(kind == "text" and "4" in payload for kind, payload in events))
+
+    def test_text_tool_line_writes_a_file(self) -> None:
+        def complete(messages, _tools):
+            if any(item.get("role") == "tool" for item in messages):
+                return {"content": "đã ghi", "tool_calls": []}
+            return {
+                "content": 'TOOL {"name":"write_file","arguments":{"path":"a.txt","content":"hi"}}',
+                "tool_calls": [],
+            }
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "work"
+            events: list[tuple[str, str]] = []
+            run_turn(
+                Workspace(root),
+                "ghi file",
+                complete,
+                lambda kind, payload: events.append((kind, payload)),
+                threading.Event(),
+                {},
+            )
+            self.assertEqual((root / "a.txt").read_text(encoding="utf-8"), "hi")
+            self.assertEqual(events[-1], ("done", ""))
+            shown = [payload for kind, payload in events if kind == "text"]
+            self.assertEqual(shown, ["đã ghi"])
+
+    def test_parse_text_tools_keeps_normal_lines(self) -> None:
+        cleaned, calls = parse_text_tools('xin chào\nTOOL {"name":"list_dir","arguments":{"path":"."}}')
+        self.assertEqual(cleaned, "xin chào")
+        self.assertEqual(calls[0]["function"]["name"], "list_dir")
+        plain = normalize_reply({"content": "chỉ nói", "tool_calls": []})
+        self.assertEqual(plain["content"], "chỉ nói")
+        self.assertEqual(plain["tool_calls"], [])
+        echoed = normalize_reply(
+            {"content": '{"exit_code": 0, "stdout": "4\\n", "stderr": ""}', "tool_calls": []}
+        )
+        self.assertEqual(echoed["content"], "4")
+        junk = normalize_reply({"content": '{"truncated": false}', "tool_calls": []})
+        self.assertIsNone(junk["content"])
 
 
 class DeployTests(unittest.TestCase):
@@ -245,6 +346,7 @@ class DeployTests(unittest.TestCase):
         subprocess.run(["bash", "-n", str(ROOT / "deploy" / "backup.sh")], check=True)
         subprocess.run(["bash", "-n", str(ROOT / "deploy" / "install-vps.sh")], check=True)
         subprocess.run(["bash", "-n", str(ROOT / "deploy" / "install-systemd.sh")], check=True)
+        subprocess.run(["bash", "-n", str(ROOT / "deploy" / "install-model.sh")], check=True)
         subprocess.run(["bash", "-n", str(ROOT / "worker" / "install-linux.sh")], check=True)
 
     def test_systemd_install_serves_health_and_session(self) -> None:
