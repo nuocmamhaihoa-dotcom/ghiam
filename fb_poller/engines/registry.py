@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from fb_poller.engines.guard import public_error
 from fb_poller.engines.types import EngineResult
 
 EngineFn = Callable[..., Awaitable[EngineResult]]
@@ -47,8 +48,13 @@ async def scan_one(name: str, url: str, **kwargs: Any) -> EngineResult:
 
 
 async def scan_each_independent(url: str, **kwargs: Any) -> list[EngineResult]:
-    """Run every engine in sequence. Each opens and closes its own client."""
+    """Run every engine in sequence. One failure is recorded and the rest still run."""
     results: list[EngineResult] = []
     for item in CATALOG:
-        results.append(await scan_one(str(item["name"]), url, **kwargs))
+        name = str(item["name"])
+        rank = int(item["rank"])
+        try:
+            results.append(await scan_one(name, url, **kwargs))
+        except Exception as exc:
+            results.append(EngineResult(name, rank, False, error=public_error(exc)))
     return results

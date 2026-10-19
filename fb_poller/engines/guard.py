@@ -30,6 +30,14 @@ def invalid_limit(limit: int) -> bool:
     return limit < 1
 
 
+def is_comment_typename(value: object) -> bool:
+    """True for comment objects. A count or composer that merely contains the word is not one."""
+    if not isinstance(value, str):
+        return False
+    lowered = value.strip().lower()
+    return bool(lowered) and lowered.endswith("comment")
+
+
 _PLACEHOLDERS = {
     "write a comment",
     "write a comment…",

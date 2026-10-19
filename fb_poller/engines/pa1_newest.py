@@ -44,7 +44,7 @@ def comments_from_articles(blocks: list[str], limit: int) -> list[PublicComment]
         if "all reactions" in lowered or "tất cả cảm xúc" in lowered:
             continue
         lines = [ln.strip() for ln in block.splitlines() if ln.strip() and not _DROP_LINE.match(ln.strip())]
-        if lines and _COUNT_LINE.match(lines[-1]):
+        if len(lines) > 2 and _COUNT_LINE.match(lines[-1]):
             lines.pop()
         if len(lines) < 2:
             continue

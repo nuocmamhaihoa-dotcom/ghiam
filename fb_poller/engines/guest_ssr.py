@@ -10,6 +10,7 @@ import httpx
 from fb_poller.engines.guard import (
     comment_id,
     invalid_limit,
+    is_comment_typename,
     objects_with_comments,
     placeholder_text,
     public_error,
@@ -88,8 +89,7 @@ def _comment_text(node: dict[str, Any]) -> str | None:
     text = text.strip()
     if len(text) < 1 or len(text) > 8000:
         return None
-    typename = str(node.get("__typename") or "")
-    if "comment" not in typename.lower() or placeholder_text(text):
+    if not is_comment_typename(node.get("__typename")) or placeholder_text(text):
         return None
     return text
 

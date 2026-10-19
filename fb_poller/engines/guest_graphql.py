@@ -8,6 +8,7 @@ from typing import Any
 from fb_poller.engines.guard import (
     comment_id,
     invalid_limit,
+    is_comment_typename,
     objects_with_comments,
     placeholder_text,
     public_error,
@@ -35,8 +36,7 @@ def comments_from_payload(payload: Any, limit: int) -> list[PublicComment]:
         body = node.get("body")
         text = body.get("text") if isinstance(body, dict) else None
         text = text or node.get("message")
-        typename = str(node.get("__typename") or "")
-        if isinstance(text, str) and text.strip() and "comment" in typename.lower():
+        if isinstance(text, str) and text.strip() and is_comment_typename(node.get("__typename")):
             author = node.get("author") if isinstance(node.get("author"), dict) else {}
             name = scalar_text(author.get("name")) if isinstance(author, dict) else None
             text = text.strip()

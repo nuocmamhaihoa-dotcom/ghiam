@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fb_poller.engines.apify_actor import _from_items
-from fb_poller.engines.graph_ppca import post_id_from_url
+from fb_poller.engines.graph_ppca import accepted_object_id, post_id_from_url
 from fb_poller.engines.guard import public_error
 from fb_poller.engines.guest_graphql import comments_from_html as graphql_from_html
 from fb_poller.engines.guest_graphql import comments_from_payload
@@ -15,7 +15,8 @@ from fb_poller.engines.guest_ssr import comments_from_html
 from fb_poller.engines.managed_api import _comments_from_json
 from fb_poller.engines.octoparse_import import comments_from_export
 from fb_poller.engines.pa1_newest import comments_from_articles
-from fb_poller.engines.registry import CATALOG, resolve, scan_one
+from fb_poller.engines.registry import CATALOG, resolve, scan_each_independent, scan_one
+from fb_poller.engines.types import EngineResult
 from fb_poller.workers.proxy_manager import parse_proxy_line
 
 
@@ -215,6 +216,39 @@ class EngineTests(unittest.TestCase):
             found = comments_from_export(path)
         self.assertEqual(found[0].text, "line one\nline two")
         self.assertEqual(found[0].author_name, "Lan")
+
+    def test_comment_count_is_not_a_comment(self) -> None:
+        payload = {"__typename": "CommentCount", "body": {"text": "12"}, "id": "1"}
+        self.assertEqual(comments_from_payload(payload, 5), [])
+        kept = comments_from_payload(
+            {"__typename": "FeedbackComment", "body": {"text": "ok"}, "author": {"name": "An"}},
+            5,
+        )
+        self.assertEqual(kept[0].text, "ok")
+
+    def test_pa1_keeps_a_comment_that_is_only_a_number(self) -> None:
+        block = "\n".join(["Lan", "404", "Like", "Reply"])
+        found = comments_from_articles([block], 5)
+        self.assertEqual(found[0].text, "404")
+
+    def test_one_engine_error_does_not_stop_the_others(self) -> None:
+        async def flaky(name: str, url: str, **kwargs: object) -> EngineResult:
+            if name == "guest-graphql":
+                raise RuntimeError("boom token=super-secret")
+            return EngineResult(name, 0, False, error="skipped")
+
+        with patch("fb_poller.engines.registry.scan_one", flaky):
+            results = asyncio.run(scan_each_independent("https://www.facebook.com/NASA/posts/1", limit=1))
+        self.assertEqual(len(results), 7)
+        self.assertEqual(results[0].engine, "guest-graphql")
+        self.assertFalse(results[0].ok)
+        self.assertNotIn("super-secret", results[0].error or "")
+        self.assertEqual(results[1].error, "skipped")
+
+    def test_graph_rejects_an_object_id_that_would_break_the_path(self) -> None:
+        self.assertEqual(accepted_object_id("1426466738848698"), "1426466738848698")
+        self.assertIsNone(accepted_object_id("https://evil.example/comments"))
+        self.assertIsNone(accepted_object_id(True))
 
     def test_octoparse_numeric_comment(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

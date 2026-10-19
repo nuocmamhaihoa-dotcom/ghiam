@@ -8,9 +8,10 @@ import re
 import httpx
 
 from fb_poller.engines.guard import comment_id, invalid_limit, public_error, redact_text, scalar_text
+from fb_poller.engines.types import EngineResult, PublicComment
 
 _VERSION = re.compile(r"^v\d+\.\d+$")
-from fb_poller.engines.types import EngineResult, PublicComment
+_OBJECT_ID = re.compile(r"^[A-Za-z0-9_]{1,128}$")
 
 RANK = 6
 NAME = "graph-ppca"
@@ -22,6 +23,21 @@ def graph_version() -> str:
 
 def access_token() -> str:
     return os.environ.get("GRAPH_ACCESS_TOKEN", "").strip()
+
+
+def accepted_object_id(value: object) -> str | None:
+    """Graph path segment. Only a plain id is inserted into the comments URL."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        text = str(value)
+    elif isinstance(value, str):
+        text = value.strip()
+    else:
+        return None
+    if _OBJECT_ID.match(text):
+        return text
+    return None
 
 
 def post_id_from_url(url: str) -> str | None:
@@ -56,7 +72,7 @@ async def scan(url: str, *, limit: int = 50, timeout: float = 30.0, **_: object)
         return EngineResult(NAME, RANK, False, error="invalid_GRAPH_VERSION")
     try:
         async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
-            object_id = await _resolve_id(client, version, token, url)
+            object_id = accepted_object_id(await _resolve_id(client, version, token, url))
             if not object_id:
                 return EngineResult(NAME, RANK, False, error="unresolved_post_id")
             resp = await client.get(
@@ -121,8 +137,12 @@ async def _resolve_id(client: httpx.AsyncClient, version: str, token: str, url: 
         except Exception:
             body = None
         og = body.get("og_object") if isinstance(body, dict) else None
-        if isinstance(og, dict) and og.get("id"):
-            return str(og["id"])
-        if isinstance(body, dict) and body.get("id") and "error" not in body:
-            return str(body["id"])
-    return direct
+        if isinstance(og, dict):
+            found = accepted_object_id(og.get("id"))
+            if found:
+                return found
+        if isinstance(body, dict) and "error" not in body:
+            found = accepted_object_id(body.get("id"))
+            if found:
+                return found
+    return accepted_object_id(direct)
