@@ -82,12 +82,16 @@ def _from_items(payload: Any, limit: int) -> list[PublicComment]:
     if isinstance(payload, list):
         rows = payload
     elif isinstance(payload, dict):
-        rows = []
+        nested_rows: list[Any] | None = None
         for key in ("items", "data", "comments", "results"):
             value = payload.get(key)
-            if isinstance(value, list):
-                rows = value
+            if isinstance(value, list) and value:
+                nested_rows = value
                 break
+        if _one(payload) or nested_rows is None:
+            rows = [payload]
+        else:
+            rows = nested_rows
     else:
         rows = []
     out: list[PublicComment] = []

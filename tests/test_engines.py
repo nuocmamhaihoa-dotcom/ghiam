@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fb_poller.engines.apify_actor import _from_items
-from fb_poller.engines.graph_ppca import accepted_object_id, post_id_from_url
+from fb_poller.engines.graph_ppca import accepted_object_id, comments_from_graph_payload, post_id_from_url
 from fb_poller.engines.guard import public_error
 from fb_poller.engines.guest_graphql import comments_from_html as graphql_from_html
 from fb_poller.engines.guest_graphql import comments_from_payload, merge_comments
@@ -16,6 +16,7 @@ from fb_poller.engines.managed_api import _comments_from_json, bright_dataset_id
 from fb_poller.engines.octoparse_import import comments_from_export
 from fb_poller.engines.pa1_newest import comments_from_articles
 from fb_poller.engines.registry import CATALOG, resolve, scan_each_independent, scan_one
+from fb_poller.engines.repair import heal_comments, heal_result
 from fb_poller.engines.types import EngineResult, PublicComment
 from fb_poller.workers.proxy_manager import parse_proxy_line
 
@@ -325,6 +326,92 @@ class EngineTests(unittest.TestCase):
             found = comments_from_export(path)
         self.assertEqual(found[0].text, "42")
         self.assertEqual(found[0].author_name, "An")
+
+
+    def test_graphql_accepts_a_string_author(self) -> None:
+        found = comments_from_payload(
+            {"__typename": "Comment", "message": "xin", "from": "An", "created_at": "2020-01-01"},
+            5,
+        )
+        self.assertEqual(found[0].author_name, "An")
+        self.assertEqual(found[0].created_time, "2020-01-01")
+
+    def test_apify_single_object_and_empty_list(self) -> None:
+        single = _from_items({"text": "solo", "profileName": "Ha"}, 5)
+        self.assertEqual(single[0].text, "solo")
+        hidden = _from_items({"comments": [], "results": [{"text": "kept", "profileName": "Ha"}]}, 5)
+        self.assertEqual(hidden[0].text, "kept")
+
+    def test_graph_list_and_error_with_comments(self) -> None:
+        listed, error = comments_from_graph_payload(
+            [{"message": "hi", "from": "Ann", "id": "1"}],
+            5,
+        )
+        self.assertIsNone(error)
+        self.assertEqual(listed[0].author_name, "Ann")
+        kept, warning = comments_from_graph_payload(
+            {"error": {"message": "token=secret"}, "data": [{"message": "kept", "id": "2"}]},
+            5,
+        )
+        self.assertIsNone(warning)
+        self.assertEqual(kept[0].text, "kept")
+        failed, message = comments_from_graph_payload({"error": {"message": "token=secret"}}, 5)
+        self.assertEqual(failed, [])
+        self.assertNotIn("secret", message or "")
+
+    def test_healer_replays_known_defects(self) -> None:
+        duration = PublicComment(text="I waited 2h\n40w\nSee translation", author_name="Lan")
+        mention = PublicComment(text="I clicked all reactions by accident", author_name="Lan")
+        number = PublicComment(text="The code is\n404", author_name="Lan")
+        placeholder = PublicComment(text="Write a comment...", author_name="Lan")
+        cleaned, codes = heal_comments([duration, mention, number, placeholder])
+        self.assertEqual([item.text for item in cleaned], ["I waited 2h", "I clicked all reactions by accident", "The code is\n404"])
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertIn("drop_placeholder", codes)
+
+        short = PublicComment(text="hi", comment_id="9", author_name="An")
+        long = PublicComment(text="hi there", comment_id="9", author_name="An")
+        again = PublicComment(text="hi there", comment_id="9", author_name="An")
+        merged, merge_codes = heal_comments([short, long, again])
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0].text, "hi there")
+        self.assertIn("prefer_longer_text", merge_codes)
+        self.assertIn("dedupe_comment_id", merge_codes)
+
+        encoded = PublicComment(text="Tom &amp;amp; Jerry\u200b", comment_id="True", author_name="Top fan")
+        plain, plain_codes = heal_comments([encoded])
+        self.assertEqual(plain[0].text, "Tom & Jerry")
+        self.assertIsNone(plain[0].comment_id)
+        self.assertIsNone(plain[0].author_name)
+        self.assertIn("unescape_text", plain_codes)
+        self.assertIn("clear_bool_id", plain_codes)
+        self.assertIn("clear_chrome_author", plain_codes)
+
+        blob = PublicComment(
+            text='{"text":"parent","author":"P","comments":[{"text":"the reply","author":"R"}]}'
+        )
+        expanded, expand_codes = heal_comments([blob])
+        self.assertEqual([item.text for item in expanded], ["parent", "the reply"])
+        self.assertIn("expand_json_text", expand_codes)
+
+        recovered = heal_result(
+            EngineResult(
+                "managed-api",
+                3,
+                False,
+                error='http_400: {"comments":[{"message":"xin","name":"An"}]} token=super-secret',
+            )
+        )
+        self.assertTrue(recovered.ok)
+        self.assertIsNone(recovered.error)
+        self.assertEqual(recovered.comments[0].text, "xin")
+        self.assertNotIn("super-secret", recovered.note or "")
+        self.assertIn("recover_comments_from_error", recovered.note or "")
+
+        twice, _first = heal_comments(cleaned)
+        again_clean, second_codes = heal_comments(twice)
+        self.assertEqual([item.text for item in again_clean], [item.text for item in twice])
+        self.assertEqual(second_codes, [])
 
 
 if __name__ == "__main__":

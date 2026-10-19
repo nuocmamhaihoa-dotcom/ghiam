@@ -40,6 +40,54 @@ def accepted_object_id(value: object) -> str | None:
     return None
 
 
+def comments_from_graph_payload(data: object, limit: int) -> tuple[list[PublicComment], str | None]:
+    """Read a Graph comments payload. A bare list is accepted. Comments win over an error object."""
+    if limit < 1:
+        return [], "invalid_limit"
+    if isinstance(data, list):
+        rows: list[object] = data
+    elif isinstance(data, dict):
+        rows = _graph_rows(data)
+        if not rows and "error" in data:
+            err = data.get("error")
+            message = err.get("message") if isinstance(err, dict) else err
+            return [], redact_text(str(message), 300)
+    else:
+        return [], "unexpected_graph_payload"
+    comments: list[PublicComment] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        text = scalar_text(row.get("message"))
+        if not text:
+            continue
+        author = row.get("from")
+        if isinstance(author, dict):
+            author = author.get("name")
+        comments.append(
+            PublicComment(
+                text=text,
+                author_name=scalar_text(author),
+                comment_id=comment_id(row.get("id")),
+                created_time=scalar_text(row.get("created_time")),
+            )
+        )
+        if len(comments) >= limit:
+            break
+    if comments:
+        return comments, None
+    return [], "empty_comment_edge"
+
+
+def _graph_rows(data: dict[str, object]) -> list[object]:
+    value = data.get("data")
+    if isinstance(value, list) and value:
+        return list(value)
+    if scalar_text(data.get("message")):
+        return [data]
+    return []
+
+
 def post_id_from_url(url: str) -> str | None:
     raw = url.strip()
     if raw.isdigit() or ("_" in raw and raw.replace("_", "").isdigit()):
@@ -90,37 +138,17 @@ async def scan(url: str, *, limit: int = 50, timeout: float = 30.0, **_: object)
         data = resp.json()
     except Exception as exc:
         return EngineResult(NAME, RANK, False, error=public_error(exc))
-    if not isinstance(data, dict):
-        return EngineResult(NAME, RANK, False, error="unexpected_graph_payload")
-    if resp.status_code >= 400 or "error" in data:
-        err = data.get("error", {})
-        message = err.get("message") if isinstance(err, dict) else resp.text[:200]
-        return EngineResult(NAME, RANK, False, error=redact_text(str(message), 300))
-
-    comments: list[PublicComment] = []
-    for row in data.get("data") or []:
-        if not isinstance(row, dict):
-            continue
-        text = row.get("message")
-        if not isinstance(text, str) or not text.strip():
-            continue
-        author = row.get("from") if isinstance(row.get("from"), dict) else {}
-        comments.append(
-            PublicComment(
-                text=text.strip(),
-                author_name=scalar_text(author.get("name")),
-                comment_id=comment_id(row.get("id")),
-                created_time=scalar_text(row.get("created_time")),
-            )
-        )
-        if len(comments) >= limit:
-            break
+    comments, error = comments_from_graph_payload(data, limit)
+    if resp.status_code >= 400 and not comments:
+        if error in {None, "empty_comment_edge", "unexpected_graph_payload"}:
+            error = redact_text(f"http_{resp.status_code}: {resp.text}", 220)
+        return EngineResult(NAME, RANK, False, error=error)
     return EngineResult(
         NAME,
         RANK,
         bool(comments),
         comments=comments,
-        error=None if comments else "empty_comment_edge",
+        error=None if comments else error,
         note="PPCA may omit commenter ids unless the token can moderate the Page.",
     )
 

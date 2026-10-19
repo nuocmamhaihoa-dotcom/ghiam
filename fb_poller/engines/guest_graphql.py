@@ -37,8 +37,11 @@ def comments_from_payload(payload: Any, limit: int) -> list[PublicComment]:
         text = body.get("text") if isinstance(body, dict) else None
         text = text or node.get("message")
         if isinstance(text, str) and text.strip() and is_comment_typename(node.get("__typename")):
-            author = node.get("author") if isinstance(node.get("author"), dict) else {}
-            name = scalar_text(author.get("name")) if isinstance(author, dict) else None
+            author_node = node.get("author") if node.get("author") is not None else node.get("from")
+            if isinstance(author_node, dict):
+                name = scalar_text(author_node.get("name")) or scalar_text(author_node.get("short_name"))
+            else:
+                name = scalar_text(author_node)
             text = text.strip()
             if placeholder_text(text):
                 for value in node.values():
@@ -54,7 +57,8 @@ def comments_from_payload(payload: Any, limit: int) -> list[PublicComment]:
                         text=text.strip(),
                         author_name=name,
                         comment_id=cid,
-                        created_time=scalar_text(node.get("created_time")),
+                        created_time=scalar_text(node.get("created_time"))
+                        or scalar_text(node.get("created_at")),
                     )
                 )
         for value in node.values():
