@@ -1656,6 +1656,30 @@ def pc_video_path(db_path: Path, video_id: int, lease: str, root: Path) -> Path 
     return path
 
 
+def defer_for_disk(db_path: Path, video_id: int, lease: str | None = None) -> bool:
+    """Đưa video đang đọc về cuối hàng chờ vì đĩa chưa đủ chỗ cắt khung. Không đánh lỗi.
+
+    priority −1 đứng sau video thường và video gấp. Đọc xong thì cờ này trở về 0.
+    """
+    where = "WHERE id = ? AND status = 'running'"
+    params: list[object] = [video_id]
+    if lease is not None:
+        where += " AND lease = ?"
+        params.append(lease)
+    with connect(db_path) as conn:
+        cur = conn.execute(
+            f"""
+            UPDATE videos
+            SET status = 'queued', pid = NULL, started_at = NULL, priority = -1, error = '',
+                lease = '', lease_at = NULL, helper = '',
+                progress_stage = '', progress_done = 0, progress_total = 0, progress_at = NULL
+            {where}
+            """,
+            params,
+        )
+        return cur.rowcount == 1
+
+
 def requeue(db_path: Path, video_id: int, lease: str | None = None) -> bool:
     """Đưa video đang đọc về hàng chờ. Có phiếu thì không đụng lượt đọc khác đã nhận video này."""
     where = "WHERE id = ? AND status = 'running'"

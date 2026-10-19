@@ -314,7 +314,7 @@ class QueueOrderTests(unittest.TestCase):
             item = list_videos(self.db)[0]
             seen.append((item["progress_stage"], item["progress_done"]))
 
-        def fake_read(paths, submit=None, work_dir=None, progress=None):
+        def fake_read(paths, submit=None, work_dir=None, progress=None, make_room=None):
             progress("scan", 1, 3)
             progress("scan", 2, 3)
             snapshot()
@@ -326,6 +326,43 @@ class QueueOrderTests(unittest.TestCase):
             run_job(self.db, job, functools.partial(scan_paths, work_dir=self.root))
         self.assertEqual(seen, [("scan", 1), ("read", 3)])
         self.assertEqual(list_videos(self.db)[0]["status"], "done")
+
+    def test_a_full_disk_goes_back_to_the_queue(self) -> None:
+        video_id = self._add("full", "May A")
+        job = claim(self.db, 4)
+        assert job is not None
+
+        def boom(paths, submit=None, work_dir=None, progress=None, make_room=None):
+            raise OSError(28, "No space left on device", "/opt/fb-poller/control_data/frames/docvideo-mid-x")
+
+        with (
+            patch("control_plane.video_worker.guard_disk", return_value=0),
+            patch("control_plane.video_worker.read_video", side_effect=boom),
+        ):
+            outcome = run_job(self.db, job, functools.partial(scan_paths, work_dir=self.root))
+        self.assertEqual(outcome, "disk")
+        item = next(row for row in list_videos(self.db) if row["id"] == video_id)
+        self.assertEqual(item["status"], "queued")
+        self.assertEqual(item["priority"], -1)
+        self.assertEqual(item["error"], "")
+
+    def test_a_real_read_error_is_still_marked_failed(self) -> None:
+        video_id = self._add("bad", "May A")
+        job = claim(self.db, 5)
+        assert job is not None
+
+        def boom(paths, submit=None, work_dir=None, progress=None, make_room=None):
+            raise RuntimeError("Không mở được video bad.mp4")
+
+        with (
+            patch("control_plane.video_worker.guard_disk", return_value=0),
+            patch("control_plane.video_worker.read_video", side_effect=boom),
+        ):
+            outcome = run_job(self.db, job, functools.partial(scan_paths, work_dir=self.root))
+        self.assertIsNone(outcome)
+        item = next(row for row in list_videos(self.db) if row["id"] == video_id)
+        self.assertEqual(item["status"], "error")
+        self.assertIn("Không mở được", item["error"])
 
 
 if __name__ == "__main__":
