@@ -73,7 +73,7 @@ def comment_id(value: object) -> str | None:
 def first_comment_id(row: dict[str, object]) -> str | None:
     """The first real id. A bool ``id`` must not hide ``legacy_fbid``."""
     folded = {fold_key(key): value for key, value in row.items()}
-    for key in ("id", "legacy_fbid", "comment_id", "comment_fbid"):
+    for key in ("id", "legacy_fbid", "comment_id", "comment_fbid", "feedback_id"):
         found = _id_value(folded.get(fold_key(key)))
         if found:
             return comment_id_from_url(found) or found
@@ -92,10 +92,11 @@ def _id_value(value: object, depth: int = 0) -> str | None:
     if depth > 1 or not isinstance(value, dict):
         return None
     lowered = {fold_key(key): item for key, item in value.items()}
-    for key in ("id", "legacy_fbid", "comment_id", "comment_fbid"):
-        if key not in lowered:
+    for key in ("id", "legacy_fbid", "comment_id", "comment_fbid", "feedback_id"):
+        folded_key = fold_key(key)
+        if folded_key not in lowered:
             continue
-        found = _id_value(lowered.get(key), depth + 1)
+        found = _id_value(lowered.get(folded_key), depth + 1)
         if found:
             return found
     return None
@@ -225,7 +226,7 @@ def timestamp_of(row: object) -> str | None:
     if not isinstance(row, dict):
         return None
     folded = {fold_key(key): value for key, value in row.items()}
-    for key in ("created_time", "creation_time", "created_at", "date", "time", "timestamp"):
+    for key in ("created_time", "creation_time", "created_at", "created", "date", "time", "timestamp"):
         found = time_text(folded.get(fold_key(key)))
         if found:
             return found

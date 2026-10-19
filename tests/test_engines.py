@@ -1212,6 +1212,51 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(imported.author_name, "Lan")
         self.assertEqual(imported.created_time, "2024-03-02")
 
+    def test_relevant_replies_and_feedback_id(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nRelevant comments\nAll replies\nSee who reacted to this\n"
+                "Unfollow\nSee original in Vietnamese\nRate this translation"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nSee original photos in the album"], 5)
+        self.assertEqual(sentence[0].text, "See original photos in the album")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text=(
+                        "hello\nRelevant comments\nAll replies\nUnfollow\n"
+                        "xin See original in Vietnamese\nxin Rate this translation"
+                    ),
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello\nxin\nxin")
+        self.assertIn("strip_chrome_lines", codes)
+        self.assertIn("strip_glued_chrome", codes)
+        self.assertEqual(first_comment_id({"feedbackId": "77"}), "77")
+        self.assertEqual(first_comment_id({"id": {"feedback_id": "88"}}), "88")
+        named = _one(
+            {"text": "xin", "commenter": {"name": "Lan"}, "created": "2024-03-02", "feedbackId": "77"}
+        )
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "Lan")
+        self.assertEqual(named.created_time, "2024-03-02")
+        self.assertEqual(named.comment_id, "77")
+        managed = _comments_from_json(
+            {"comments": [{"text": "xin", "authorName": "Lan", "feedbackId": "77", "created": "2024-03-02"}]},
+            5,
+        )
+        self.assertEqual(managed[0].comment_id, "77")
+        self.assertEqual(managed[0].author_name, "Lan")
+        self.assertEqual(managed[0].created_time, "2024-03-02")
+
 
 if __name__ == "__main__":
     unittest.main()
