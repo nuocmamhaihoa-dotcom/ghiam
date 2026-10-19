@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="vi">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>coderd</title>
+<style>
+  body { font: 16px/1.4 sans-serif; margin: 24px; max-width: 760px; }
+  label { display: block; margin: 12px 0 4px; }
+  input, textarea, button { font: inherit; }
+  input, textarea { width: 100%; box-sizing: border-box; }
+  textarea { min-height: 80px; }
+  .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+  button { padding: 6px 10px; }
+  .msg { border-top: 1px solid #ccc; padding: 8px 0; }
+  .state { font-weight: 600; }
+  pre { white-space: pre-wrap; background: #f6f6f6; padding: 8px; }
+  .err { color: #8a1f11; }
+</style>
+<h1>coderd</h1>
+<p id="worker">PC: chưa rõ</p>
+<label for="token">Token</label>
+<input id="token" autocomplete="off">
+<div class="row">
+  <button id="new-session" type="button">Phiên mới</button>
+  <span id="session"></span>
+</div>
+<div id="messages"></div>
+<label for="text">Tin nhắn</label>
+<textarea id="text"></textarea>
+<div class="row">
+  <button id="send" type="button">Gửi</button>
+  <button id="stop" type="button">Dừng</button>
+</div>
+<p id="error" class="err"></p>
+<script>
+const tokenEl = document.querySelector("#token");
+const sessionEl = document.querySelector("#session");
+const messagesEl = document.querySelector("#messages");
+const textEl = document.querySelector("#text");
+const errorEl = document.querySelector("#error");
+const workerEl = document.querySelector("#worker");
+tokenEl.value = localStorage.getItem("coderd.token") || "";
+let sessionId = localStorage.getItem("coderd.session") || "";
+sessionEl.textContent = sessionId;
+
+function headers() {
+  return {
+    "Authorization": "Bearer " + tokenEl.value.trim(),
+    "Content-Type": "application/json"
+  };
+}
+
+function remember() {
+  localStorage.setItem("coderd.token", tokenEl.value.trim());
+  if (sessionId) localStorage.setItem("coderd.session", sessionId);
+}
+
+function showError(text) {
+  errorEl.textContent = text || "";
+}
+
+function render(messages) {
+  messagesEl.textContent = "";
+  for (const message of messages) {
+    const box = document.createElement("div");
+    box.className = "msg";
+    const title = document.createElement("div");
+    const state = document.createElement("span");
+    state.className = "state";
+    state.textContent = message.state;
+    title.append(state, " " + message.body);
+    box.append(title);
+    for (const event of message.events || []) {
+      if (event.kind !== "text" && event.kind !== "tool") continue;
+      const pre = document.createElement("pre");
+      pre.textContent = event.payload;
+      box.append(pre);
+    }
+    if (message.state === "running") box.dataset.running = message.id;
+    messagesEl.append(box);
+  }
+}
+
+async function refresh() {
+  if (!tokenEl.value.trim() || !sessionId) return;
+  const response = await fetch("/v1/sessions/" + sessionId + "/messages", {headers: headers()});
+  if (response.status === 401) {
+    showError("token không đúng");
+    return;
+  }
+  if (!response.ok) return;
+  showError("");
+  render(await response.json());
+}
+
+async function refreshWorker() {
+  if (!tokenEl.value.trim()) return;
+  const response = await fetch("/v1/workers", {headers: headers()});
+  if (!response.ok) return;
+  const workers = await response.json();
+  if (!workers.length) {
+    workerEl.textContent = "PC: offline";
+    return;
+  }
+  const worker = workers[0];
+  const ram = Math.round(worker.ram_bytes / 1024 / 1024);
+  workerEl.textContent = "PC: " + worker.status + " · " + worker.hostname + " · " + worker.cpu_count + " CPU · " + ram + " MB";
+}
+
+document.querySelector("#new-session").onclick = async () => {
+  remember();
+  const response = await fetch("/v1/sessions", {method: "POST", headers: headers()});
+  if (!response.ok) {
+    showError("không tạo được phiên");
+    return;
+  }
+  sessionId = (await response.json()).id;
+  remember();
+  sessionEl.textContent = sessionId;
+  await refresh();
+};
+
+document.querySelector("#send").onclick = async () => {
+  remember();
+  if (!sessionId) {
+    showError("hãy tạo phiên");
+    return;
+  }
+  const response = await fetch("/v1/sessions/" + sessionId + "/messages", {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({text: textEl.value})
+  });
+  if (!response.ok) {
+    showError("không gửi được");
+    return;
+  }
+  textEl.value = "";
+  await refresh();
+};
+
+document.querySelector("#stop").onclick = async () => {
+  const running = messagesEl.querySelector("[data-running]");
+  if (!running) return;
+  await fetch("/v1/messages/" + running.dataset.running + "/cancel", {method: "POST", headers: headers()});
+  await refresh();
+};
+
+tokenEl.onchange = remember;
+refresh();
+refreshWorker();
+setInterval(() => { refresh(); refreshWorker(); }, 1000);
+</script>
