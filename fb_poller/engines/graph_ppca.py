@@ -359,6 +359,25 @@ def _append_rows(
                         "threads_author",
                         "listing_reporter",
                         "live_scheduler",
+                        "người quyên góp",
+                        "nguoi quyen gop",
+                        "người tạo quỹ",
+                        "nguoi tao quy",
+                        "người bình chọn",
+                        "nguoi binh chon",
+                        "người tạo thăm dò",
+                        "nguoi tao tham do",
+                        "người tưởng niệm",
+                        "nguoi tuong niem",
+                        "người gửi quà",
+                        "nguoi gui qua",
+                        "người chơi game",
+                        "nguoi choi game",
+                        "fundraiser_author",
+                        "poll_voter",
+                        "memorial_author",
+                        "gift_sender",
+                        "game_player",
                     ),
                 )
             )
@@ -606,6 +625,25 @@ def _append_rows(
                             "threads_author",
                             "listing_reporter",
                             "live_scheduler",
+                            "người quyên góp",
+                            "nguoi quyen gop",
+                            "người tạo quỹ",
+                            "nguoi tao quy",
+                            "người bình chọn",
+                            "nguoi binh chon",
+                            "người tạo thăm dò",
+                            "nguoi tao tham do",
+                            "người tưởng niệm",
+                            "nguoi tuong niem",
+                            "người gửi quà",
+                            "nguoi gui qua",
+                            "người chơi game",
+                            "nguoi choi game",
+                            "fundraiser_author",
+                            "poll_voter",
+                            "memorial_author",
+                            "gift_sender",
+                            "game_player",
                         ),
                     )
                 )
@@ -860,6 +898,36 @@ def post_id_from_url(url: str) -> str | None:
     privacy_tags = re.search(r"/privacy/tags/\?id=(\d+)", raw, re.IGNORECASE)
     if privacy_tags:
         return accepted_object_id(privacy_tags.group(1))
+    gaming_tournament = re.search(r"/gaming/tournament/\?id=(\d+)", raw, re.IGNORECASE)
+    if gaming_tournament:
+        return accepted_object_id(gaming_tournament.group(1))
+    jobs_job = re.search(r"/jobs/job/\?id=(\d+)", raw, re.IGNORECASE)
+    if jobs_job:
+        return accepted_object_id(jobs_job.group(1))
+    fundraisers_q = re.search(r"/fundraisers/\?id=(\d+)", raw, re.IGNORECASE)
+    if fundraisers_q:
+        return accepted_object_id(fundraisers_q.group(1))
+    donate_fundraiser = re.search(r"/donate/\?fundraiser_id=(\d+)", raw, re.IGNORECASE)
+    if donate_fundraiser:
+        return accepted_object_id(donate_fundraiser.group(1))
+    polls = re.search(r"/polls/\?id=(\d+)", raw, re.IGNORECASE)
+    if polls:
+        return accepted_object_id(polls.group(1))
+    memorial = re.search(r"/memorial/\?id=(\d+)", raw, re.IGNORECASE)
+    if memorial:
+        return accepted_object_id(memorial.group(1))
+    share_messenger = re.search(r"/share/messenger/\?id=(\d+)", raw, re.IGNORECASE)
+    if share_messenger:
+        return accepted_object_id(share_messenger.group(1))
+    share_whatsapp = re.search(r"/share/whatsapp/\?id=(\d+)", raw, re.IGNORECASE)
+    if share_whatsapp:
+        return accepted_object_id(share_whatsapp.group(1))
+    soundbites = re.search(r"/soundbites/\?id=(\d+)", raw, re.IGNORECASE)
+    if soundbites:
+        return accepted_object_id(soundbites.group(1))
+    podcasts = re.search(r"/podcasts/\?id=(\d+)", raw, re.IGNORECASE)
+    if podcasts:
+        return accepted_object_id(podcasts.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

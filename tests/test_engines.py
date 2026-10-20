@@ -5471,6 +5471,164 @@ class EngineTests(unittest.TestCase):
             "Share to Threads only after you finish editing the caption",
         )
 
+    def test_fundraiser_poll_memorial_reel_share_vn_keys_and_urls(self) -> None:
+        donor = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người quyên góp": "Lan Donor",
+                "thời gian quyên góp": "6h",
+            }
+        )
+        self.assertIsNotNone(donor)
+        assert donor is not None
+        self.assertEqual(donor.author_name, "Lan Donor")
+        self.assertEqual(donor.created_time, "6h")
+        voter = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người bình chọn": "Minh",
+                "ngày bình chọn": "hôm nay",
+                "poll_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(voter)
+        assert voter is not None
+        self.assertEqual(voter.author_name, "Minh")
+        self.assertEqual(voter.created_time, "hôm nay")
+        self.assertEqual(voter.comment_id, "1357")
+        memorial = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người tưởng niệm": "Bo",
+                "donated_at": "05:45",
+                "memorial_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(memorial)
+        assert memorial is not None
+        self.assertEqual(memorial.author_name, "Bo")
+        self.assertEqual(memorial.created_time, "05:45")
+        self.assertEqual(memorial.comment_id, "2468")
+        gamer = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người chơi game": "An",
+                "ngày tưởng niệm": "2025-01-01T03:00:00Z",
+                "game_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(gamer)
+        assert gamer is not None
+        self.assertEqual(gamer.author_name, "An")
+        self.assertEqual(gamer.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(gamer.comment_id, "9753")
+        self.assertEqual(person_name({"fundraiser_author": "Lan"}), "Lan")
+        self.assertEqual(person_name({"poll_voter": "Bo"}), "Bo")
+        self.assertEqual(person_name({"memorial_author": "Minh"}), "Minh")
+        self.assertEqual(person_name({"gift_sender": "An"}), "An")
+        self.assertEqual(person_name({"game_player": "Ha"}), "Ha")
+        self.assertEqual(person_name({"người tạo quỹ": "Vy"}), "Vy")
+        self.assertEqual(person_name({"người tạo thăm dò": "Tu"}), "Tu")
+        self.assertEqual(person_name({"người gửi quà": "My"}), "My")
+        self.assertEqual(timestamp_of({"voted_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"memorialized_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"gifted_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"played_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"fundraiser_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"gift_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/gaming/tournament/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/jobs/job/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/fundraisers/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/donate/?fundraiser_id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/polls/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/memorial/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/share/messenger/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/share/whatsapp/?id=565656"),
+            "565656",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/soundbites/?id=787878"),
+            "787878",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/podcasts/?id=909090"),
+            "909090",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nSave reel\nShare reel\nRemix reel\n"
+                "Mute conversation\nChange cover photo\n"
+                "Update profile picture\nAsk for more info\n"
+                "Send in WhatsApp\nOpen in browser\nCreate ad\n"
+                "Edit privacy\nAudience restrictions\nContent preferences\n"
+                "Follow back\nEdit public details\nManage sections\n"
+                "Add life event\nPlay game\nXem cùng nhau\n"
+                "Bắt đầu xem cùng nhau\nEnd poll\n"
+                "Say happy birthday\nFriend suggestions\n"
+                "Write a reply\nMost relevant\nComment as\n"
+                "Go to memorial\nLeave a tribute\nSee tribute\n"
+                "Continue fundraiser\nStop fundraiser\n"
+                "Lưu Reels\nChia sẻ Reels\nPhối lại Reels\n"
+                "Tắt tiếng cuộc trò chuyện\nĐổi ảnh bìa\n"
+                "Cập nhật ảnh đại diện\nHỏi thêm thông tin\n"
+                "Gửi trong WhatsApp\nMở trong trình duyệt\n"
+                "Tạo quảng cáo\nChỉnh sửa quyền riêng tư\n"
+                "Hạn chế đối tượng\nTuỳ chọn nội dung\n"
+                "Theo dõi lại\nChỉnh sửa chi tiết công khai\n"
+                "Quản lý các phần\nThêm sự kiện trong đời\n"
+                "Chơi game\nKết thúc thăm dò\n"
+                "Chúc mừng sinh nhật\nGợi ý bạn bè\n"
+                "Viết trả lời\nLiên quan nhất\n"
+                "Bình luận với tư cách\nĐến tưởng niệm\n"
+                "Để lại lời tưởng niệm\nXem lời tưởng niệm\n"
+                "Tiếp tục gây quỹ\nDừng gây quỹ"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nSave reel\nPlay game\nLưu Reels\nChơi game",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nSave reel only after you finish editing the caption"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Save reel only after you finish editing the caption",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

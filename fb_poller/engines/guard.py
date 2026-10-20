@@ -164,6 +164,11 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "threads_comment_id",
         "tag_comment_id",
         "live_comment_id",
+        "fundraiser_comment_id",
+        "poll_comment_id",
+        "memorial_comment_id",
+        "gift_comment_id",
+        "game_comment_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -273,6 +278,11 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "threads_comment_id",
         "tag_comment_id",
         "live_comment_id",
+        "fundraiser_comment_id",
+        "poll_comment_id",
+        "memorial_comment_id",
+        "gift_comment_id",
+        "game_comment_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -695,6 +705,25 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "threads_author",
             "listing_reporter",
             "live_scheduler",
+            "người quyên góp",
+            "nguoi quyen gop",
+            "người tạo quỹ",
+            "nguoi tao quy",
+            "người bình chọn",
+            "nguoi binh chon",
+            "người tạo thăm dò",
+            "nguoi tao tham do",
+            "người tưởng niệm",
+            "nguoi tuong niem",
+            "người gửi quà",
+            "nguoi gui qua",
+            "người chơi game",
+            "nguoi choi game",
+            "fundraiser_author",
+            "poll_voter",
+            "memorial_author",
+            "gift_sender",
+            "game_player",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -1108,6 +1137,17 @@ def timestamp_of(row: object) -> str | None:
         "crossposted_at",
         "tag_reviewed_at",
         "live_scheduled_at",
+        "thời gian quyên góp",
+        "thoi gian quyen gop",
+        "ngày bình chọn",
+        "ngay binh chon",
+        "ngày tưởng niệm",
+        "ngay tuong niem",
+        "donated_at",
+        "voted_at",
+        "memorialized_at",
+        "gifted_at",
+        "played_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:
