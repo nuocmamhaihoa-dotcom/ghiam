@@ -353,6 +353,16 @@ _AUTHOR_KEYS = (
     "duet_partner",
     "family_supervisor",
     "verified_subscriber",
+    "người đánh giá",
+    "nguoi danh gia",
+    "người trả hàng",
+    "nguoi tra hang",
+    "người làm quiz",
+    "nguoi lam quiz",
+    "quiz_author",
+    "insights_viewer",
+    "goal_setter",
+    "reviewer_name",
 )
 _TIME_KEYS = (
     "time",
@@ -619,6 +629,13 @@ _TIME_KEYS = (
     "supervised_at",
     "verified_at",
     "dueted_at",
+    "thời gian đánh giá",
+    "thoi gian danh gia",
+    "ngày trả hàng",
+    "ngay tra hang",
+    "reviewed_at",
+    "returned_at",
+    "quizzed_at",
 )
 
 

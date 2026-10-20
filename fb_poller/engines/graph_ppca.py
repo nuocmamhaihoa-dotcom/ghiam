@@ -330,6 +330,16 @@ def _append_rows(
                         "duet_partner",
                         "family_supervisor",
                         "verified_subscriber",
+                        "người đánh giá",
+                        "nguoi danh gia",
+                        "người trả hàng",
+                        "nguoi tra hang",
+                        "người làm quiz",
+                        "nguoi lam quiz",
+                        "quiz_author",
+                        "insights_viewer",
+                        "goal_setter",
+                        "reviewer_name",
                     ),
                 )
             )
@@ -548,6 +558,16 @@ def _append_rows(
                             "duet_partner",
                             "family_supervisor",
                             "verified_subscriber",
+                            "người đánh giá",
+                            "nguoi danh gia",
+                            "người trả hàng",
+                            "nguoi tra hang",
+                            "người làm quiz",
+                            "nguoi lam quiz",
+                            "quiz_author",
+                            "insights_viewer",
+                            "goal_setter",
+                            "reviewer_name",
                         ),
                     )
                 )
@@ -766,6 +786,18 @@ def post_id_from_url(url: str) -> str | None:
     meta_verified = re.search(r"/meta_verified/\?id=(\d+)", raw, re.IGNORECASE)
     if meta_verified:
         return accepted_object_id(meta_verified.group(1))
+    review = re.search(r"[?&]review_id=(\d+)", raw, re.IGNORECASE)
+    if review:
+        return accepted_object_id(review.group(1))
+    shipment = re.search(r"/commerce/shipments/\?id=(\d+)", raw, re.IGNORECASE)
+    if shipment:
+        return accepted_object_id(shipment.group(1))
+    quiz = re.search(r"/quiz/\?id=(\d+)", raw, re.IGNORECASE)
+    if quiz:
+        return accepted_object_id(quiz.group(1))
+    insights = re.search(r"/reels/insights/\?id=(\d+)", raw, re.IGNORECASE)
+    if insights:
+        return accepted_object_id(insights.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
@@ -780,7 +812,7 @@ def post_id_from_url(url: str) -> str | None:
     if stories:
         return accepted_object_id(stories.group(1))
     media = re.search(
-        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb|n|q|v|y|i|z|u|w|x|k|d|m|l)\.(\d+)",
+        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb|n|q|v|y|i|z|u|w|x|k|d|m|l|b)\.(\d+)",
         raw,
         re.IGNORECASE,
     )

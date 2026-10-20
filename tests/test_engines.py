@@ -5104,6 +5104,125 @@ class EngineTests(unittest.TestCase):
             "Get Meta Verified only after you confirm the billing plan",
         )
 
+    def test_reviews_quiz_chrome_reviewer_vn_keys_and_shipment_urls(self) -> None:
+        reviewer = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người đánh giá": "Lan Review",
+                "thời gian đánh giá": "6h",
+            }
+        )
+        self.assertIsNotNone(reviewer)
+        assert reviewer is not None
+        self.assertEqual(reviewer.author_name, "Lan Review")
+        self.assertEqual(reviewer.created_time, "6h")
+        returner = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người trả hàng": "Minh",
+                "ngày trả hàng": "hôm nay",
+                "review_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(returner)
+        assert returner is not None
+        self.assertEqual(returner.author_name, "Minh")
+        self.assertEqual(returner.created_time, "hôm nay")
+        self.assertEqual(returner.comment_id, "1357")
+        quizzer = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người làm quiz": "Bo",
+                "reviewed_at": "05:45",
+                "return_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(quizzer)
+        assert quizzer is not None
+        self.assertEqual(quizzer.author_name, "Bo")
+        self.assertEqual(quizzer.created_time, "05:45")
+        self.assertEqual(quizzer.comment_id, "2468")
+        donor = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "quiz_author": "An",
+                "returned_at": "2025-01-01T03:00:00Z",
+            }
+        )
+        self.assertIsNotNone(donor)
+        assert donor is not None
+        self.assertEqual(donor.author_name, "An")
+        self.assertEqual(donor.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(person_name({"insights_viewer": "Lan"}), "Lan")
+        self.assertEqual(person_name({"goal_setter": "Bo"}), "Bo")
+        self.assertEqual(person_name({"người đánh giá": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"quizzed_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ngày trả hàng": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"reviewed_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"review_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"return_comment_id": "44"}), "44")
+        self.assertEqual(first_comment_id({"quiz_comment_id": "11"}), "11")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reviews/?review_id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/commerce/shipments/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/quiz/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/insights/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=b.777888"),
+            "777888",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nRequest a return\nTrack shipment\nConfirm delivery\n"
+                "Edit your review\nDelete your review\nHelpful review\n"
+                "See reel insights\nAudience insights\nReach and impressions\n"
+                "Average watch time\nTraffic sources\nCreate a quiz\n"
+                "Add a question\nSee quiz results\nEnd quiz\n"
+                "Set a goal\nUpdate goal\nThank donors\n"
+                "Yêu cầu trả hàng\nTheo dõi lô hàng\nXác nhận đã nhận\n"
+                "Chỉnh sửa đánh giá của bạn\nXóa đánh giá của bạn\n"
+                "Đánh giá hữu ích\nXem thống kê reel\nThống kê đối tượng\n"
+                "Phạm vi và số lần hiển thị\nThời gian xem trung bình\n"
+                "Nguồn lưu lượng\nTạo câu đố\nThêm câu hỏi\n"
+                "Xem kết quả câu đố\nKết thúc câu đố\nĐặt mục tiêu\n"
+                "Cập nhật mục tiêu\nCảm ơn người quyên góp"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nRequest a return\nCreate a quiz\n"
+                    "Yêu cầu trả hàng",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nRequest a return only after you open the package carefully"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Request a return only after you open the package carefully",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
