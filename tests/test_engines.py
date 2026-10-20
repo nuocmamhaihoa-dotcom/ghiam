@@ -6395,5 +6395,203 @@ class EngineTests(unittest.TestCase):
         )
 
 
+    def test_ads_notifications_search_security_vn_keys_and_urls(self) -> None:
+        advertiser = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người tạo quảng cáo": "Lan Ad",
+                "thời gian tạo quảng cáo": "6h",
+            }
+        )
+        self.assertIsNotNone(advertiser)
+        assert advertiser is not None
+        self.assertEqual(advertiser.author_name, "Lan Ad")
+        self.assertEqual(advertiser.created_time, "6h")
+        searcher = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người tìm kiếm": "Minh",
+                "ngày tìm kiếm": "hôm nay",
+                "search_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(searcher)
+        assert searcher is not None
+        self.assertEqual(searcher.author_name, "Minh")
+        self.assertEqual(searcher.created_time, "hôm nay")
+        self.assertEqual(searcher.comment_id, "1357")
+        downloader = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người tải dữ liệu": "Bo",
+                "budgeted_at": "05:45",
+                "data_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(downloader)
+        assert downloader is not None
+        self.assertEqual(downloader.author_name, "Bo")
+        self.assertEqual(downloader.created_time, "05:45")
+        self.assertEqual(downloader.comment_id, "2468")
+        legacy = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người liên hệ di sản": "An",
+                "ngày tải dữ liệu": "2025-01-01T03:00:00Z",
+                "legacy_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(legacy)
+        assert legacy is not None
+        self.assertEqual(legacy.author_name, "An")
+        self.assertEqual(legacy.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(legacy.comment_id, "9753")
+        self.assertEqual(person_name({"ad_creator": "Lan"}), "Lan")
+        self.assertEqual(person_name({"budget_setter": "Bo"}), "Bo")
+        self.assertEqual(person_name({"audience_builder": "Minh"}), "Minh")
+        self.assertEqual(person_name({"notif_viewer": "An"}), "An")
+        self.assertEqual(person_name({"searcher": "Ha"}), "Ha")
+        self.assertEqual(person_name({"data_downloader": "Vy"}), "Vy")
+        self.assertEqual(person_name({"legacy_contact": "Tu"}), "Tu")
+        self.assertEqual(person_name({"người đặt ngân sách": "My"}), "My")
+        self.assertEqual(person_name({"người tạo đối tượng": "Na"}), "Na")
+        self.assertEqual(person_name({"người xem thông báo": "Ki"}), "Ki")
+        self.assertEqual(timestamp_of({"ad_created_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"searched_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"downloaded_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"notif_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(timestamp_of({"legacy_at": "2024-01-05"}), "2024-01-05")
+        self.assertEqual(first_comment_id({"ad_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"audience_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/ad_center/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/adsmanager/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/ads/audience/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/ads/billing/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/notifications/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/notifications/settings/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/search/recent/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/search/posts/?id=565656"),
+            "565656",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/activity_log/?id=787878"),
+            "787878",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/dyi/?id=909090"),
+            "909090",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/your_information/?id=101010"),
+            "101010",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/settings/apps/?id=202020"),
+            "202020",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/settings/security/?id=303030"),
+            "303030",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/legacy/?id=404040"),
+            "404040",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/trusted_contacts/?id=505050"),
+            "505050",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/security_checkup/?id=606060"),
+            "606060",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nAd center\nBoost a post\nBoost a page\nAd budget\n"
+                "Set budget\nDaily budget\nLifetime budget\nAd audience\n"
+                "Create audience\nSaved audiences\nCustom audience\n"
+                "Lookalike audience\nAd placements\nAutomatic placements\n"
+                "Manual placements\nAd preview\nReview ad\nPublish ad\n"
+                "Pause ad\nResume ad\nDuplicate ad\nAd insights\n"
+                "See ad results\nBilling threshold\n"
+                "See previous notifications\n"
+                "Turn on notifications for post\n"
+                "Turn off notifications for post\nSearch Facebook\n"
+                "Clear recent searches\nFilter by people\nFilter by posts\n"
+                "Filter by groups\nFilter by pages\nFilter by events\n"
+                "See all results\nSee all mentions\nTransfer a copy\n"
+                "Manage your information\nData about you\nRemove app\n"
+                "Active sessions\nRecognize device\nDon't recognize\n"
+                "Security checkup\nRun security checkup\n"
+                "Choose friends to contact\nTrusted contacts\n"
+                "Legacy contact\nChoose a legacy contact\n"
+                "Trung tâm quảng cáo\nQuảng cáo bài viết\nQuảng cáo Trang\n"
+                "Ngân sách quảng cáo\nĐặt ngân sách\nNgân sách hàng ngày\n"
+                "Ngân sách tổng\nĐối tượng quảng cáo\nTạo đối tượng\n"
+                "Đối tượng đã lưu\nĐối tượng tùy chỉnh\nĐối tượng tương tự\n"
+                "Vị trí quảng cáo\nVị trí tự động\nVị trí thủ công\n"
+                "Xem trước quảng cáo\nXem lại quảng cáo\nĐăng quảng cáo\n"
+                "Tạm dừng quảng cáo\nTiếp tục quảng cáo\nNhân bản quảng cáo\n"
+                "Thông tin chi tiết quảng cáo\nXem kết quả quảng cáo\n"
+                "Ngưỡng thanh toán\nXem thông báo trước\n"
+                "Bật thông báo cho bài viết\nTắt thông báo cho bài viết\n"
+                "Tìm trên Facebook\nXóa tìm kiếm gần đây\nLọc theo người\n"
+                "Lọc theo bài viết\nLọc theo nhóm\nLọc theo Trang\n"
+                "Lọc theo sự kiện\nXem tất cả kết quả\n"
+                "Xem tất cả lần nhắc đến\nChuyển bản sao\n"
+                "Quản lý thông tin của bạn\nDữ liệu về bạn\nGỡ ứng dụng\n"
+                "Phiên đang hoạt động\nNhận dạng thiết bị\nKhông nhận dạng\n"
+                "Kiểm tra bảo mật\nChạy kiểm tra bảo mật\n"
+                "Chọn bạn để liên hệ\nLiên hệ đáng tin\nLiên hệ di sản\n"
+                "Chọn liên hệ di sản"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nAd center\nSecurity checkup\n"
+                    "Trung tâm quảng cáo\nKiểm tra bảo mật",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nAd center only after you finish editing the caption"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Ad center only after you finish editing the caption",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

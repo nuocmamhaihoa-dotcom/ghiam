@@ -467,6 +467,27 @@ def _append_rows(
                         "page_admin",
                         "inbox_replier",
                         "close_friend",
+                        "người tạo quảng cáo",
+                        "nguoi tao quang cao",
+                        "người đặt ngân sách",
+                        "nguoi dat ngan sach",
+                        "người tạo đối tượng",
+                        "nguoi tao doi tuong",
+                        "người xem thông báo",
+                        "nguoi xem thong bao",
+                        "người tìm kiếm",
+                        "nguoi tim kiem",
+                        "người tải dữ liệu",
+                        "nguoi tai du lieu",
+                        "người liên hệ di sản",
+                        "nguoi lien he di san",
+                        "ad_creator",
+                        "budget_setter",
+                        "audience_builder",
+                        "notif_viewer",
+                        "searcher",
+                        "data_downloader",
+                        "legacy_contact",
                     ),
                 )
             )
@@ -822,6 +843,27 @@ def _append_rows(
                             "page_admin",
                             "inbox_replier",
                             "close_friend",
+                            "người tạo quảng cáo",
+                            "nguoi tao quang cao",
+                            "người đặt ngân sách",
+                            "nguoi dat ngan sach",
+                            "người tạo đối tượng",
+                            "nguoi tao doi tuong",
+                            "người xem thông báo",
+                            "nguoi xem thong bao",
+                            "người tìm kiếm",
+                            "nguoi tim kiem",
+                            "người tải dữ liệu",
+                            "nguoi tai du lieu",
+                            "người liên hệ di sản",
+                            "nguoi lien he di san",
+                            "ad_creator",
+                            "budget_setter",
+                            "audience_builder",
+                            "notif_viewer",
+                            "searcher",
+                            "data_downloader",
+                            "legacy_contact",
                         ),
                     )
                 )
@@ -1307,6 +1349,52 @@ def post_id_from_url(url: str) -> str | None:
     icebreakers = re.search(r"/icebreakers/\?id=(\d+)", raw, re.IGNORECASE)
     if icebreakers:
         return accepted_object_id(icebreakers.group(1))
+
+    ad_center = re.search(r"/ad_center/\?id=(\d+)", raw, re.IGNORECASE)
+    if ad_center:
+        return accepted_object_id(ad_center.group(1))
+    adsmanager = re.search(r"/adsmanager/\?id=(\d+)", raw, re.IGNORECASE)
+    if adsmanager:
+        return accepted_object_id(adsmanager.group(1))
+    ads_audience = re.search(r"/ads/audience/\?id=(\d+)", raw, re.IGNORECASE)
+    if ads_audience:
+        return accepted_object_id(ads_audience.group(1))
+    ads_billing = re.search(r"/ads/billing/\?id=(\d+)", raw, re.IGNORECASE)
+    if ads_billing:
+        return accepted_object_id(ads_billing.group(1))
+    notifications = re.search(r"/notifications/(?:settings/)?\?id=(\d+)", raw, re.IGNORECASE)
+    if notifications:
+        return accepted_object_id(notifications.group(1))
+    search_recent = re.search(r"/search/(?:recent|posts)/\?id=(\d+)", raw, re.IGNORECASE)
+    if search_recent:
+        return accepted_object_id(search_recent.group(1))
+    activity_log = re.search(r"/activity_log/\?id=(\d+)", raw, re.IGNORECASE)
+    if activity_log:
+        return accepted_object_id(activity_log.group(1))
+    dyi = re.search(r"/dyi/\?id=(\d+)", raw, re.IGNORECASE)
+    if dyi:
+        return accepted_object_id(dyi.group(1))
+    your_information = re.search(r"/your_information/\?id=(\d+)", raw, re.IGNORECASE)
+    if your_information:
+        return accepted_object_id(your_information.group(1))
+    settings_apps = re.search(r"/settings/apps/\?id=(\d+)", raw, re.IGNORECASE)
+    if settings_apps:
+        return accepted_object_id(settings_apps.group(1))
+    settings_security = re.search(r"/settings/security/\?id=(\d+)", raw, re.IGNORECASE)
+    if settings_security:
+        return accepted_object_id(settings_security.group(1))
+    settings_sessions = re.search(r"/settings/sessions/\?id=(\d+)", raw, re.IGNORECASE)
+    if settings_sessions:
+        return accepted_object_id(settings_sessions.group(1))
+    legacy = re.search(r"/legacy/\?id=(\d+)", raw, re.IGNORECASE)
+    if legacy:
+        return accepted_object_id(legacy.group(1))
+    trusted_contacts = re.search(r"/trusted_contacts/\?id=(\d+)", raw, re.IGNORECASE)
+    if trusted_contacts:
+        return accepted_object_id(trusted_contacts.group(1))
+    security_checkup = re.search(r"/security_checkup/\?id=(\d+)", raw, re.IGNORECASE)
+    if security_checkup:
+        return accepted_object_id(security_checkup.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
