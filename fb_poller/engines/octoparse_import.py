@@ -625,6 +625,19 @@ _AUTHOR_KEYS = (
     "collaborator",
     "caption_editor",
     "template_user",
+    "người phê duyệt đăng nhập",
+    "nguoi phe duyet dang nhap",
+    "người đăng ký bản tin",
+    "nguoi dang ky ban tin",
+    "người gắn thẻ",
+    "nguoi gan the",
+    "người xem tình bạn",
+    "nguoi xem tinh ban",
+    "login_approver",
+    "newsletter_subscriber",
+    "tag_reviewer",
+    "friendship_viewer",
+    "security_key_user",
 )
 _TIME_KEYS = (
     "time",
@@ -1067,6 +1080,16 @@ _TIME_KEYS = (
     "collabed_at",
     "captioned_at",
     "template_used_at",
+    "ngày phê duyệt đăng nhập",
+    "ngay phe duyet dang nhap",
+    "thời gian đăng ký bản tin",
+    "thoi gian dang ky ban tin",
+    "ngày xem tình bạn",
+    "ngay xem tinh ban",
+    "login_approved_at",
+    "newsletter_subscribed_at",
+    "tagged_at",
+    "friendship_viewed_at",
 )
 
 

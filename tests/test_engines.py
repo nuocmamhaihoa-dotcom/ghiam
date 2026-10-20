@@ -7728,6 +7728,139 @@ class EngineTests(unittest.TestCase):
             "Open WhatsApp only after you finish the product review",
         )
 
+    def test_security_newsletter_tags_friendship_vn_keys_and_urls(self) -> None:
+        security = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người phê duyệt đăng nhập": "Lan Sec",
+                "ngày phê duyệt đăng nhập": "6h",
+            }
+        )
+        self.assertIsNotNone(security)
+        assert security is not None
+        self.assertEqual(security.author_name, "Lan Sec")
+        self.assertEqual(security.created_time, "6h")
+        subscriber = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người đăng ký bản tin": "Minh",
+                "thời gian đăng ký bản tin": "hôm nay",
+                "newsletter_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(subscriber)
+        assert subscriber is not None
+        self.assertEqual(subscriber.author_name, "Minh")
+        self.assertEqual(subscriber.created_time, "hôm nay")
+        self.assertEqual(subscriber.comment_id, "1357")
+        tagger = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người gắn thẻ": "Bo",
+                "tagged_at": "05:45",
+                "tag_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(tagger)
+        assert tagger is not None
+        self.assertEqual(tagger.author_name, "Bo")
+        self.assertEqual(tagger.created_time, "05:45")
+        self.assertEqual(tagger.comment_id, "2468")
+        friend = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người xem tình bạn": "An",
+                "ngày xem tình bạn": "2025-01-01T03:00:00Z",
+                "friendship_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(friend)
+        assert friend is not None
+        self.assertEqual(friend.author_name, "An")
+        self.assertEqual(friend.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(friend.comment_id, "9753")
+        self.assertEqual(person_name({"login_approver": "Lan"}), "Lan")
+        self.assertEqual(person_name({"newsletter_subscriber": "Bo"}), "Bo")
+        self.assertEqual(person_name({"tag_reviewer": "Minh"}), "Minh")
+        self.assertEqual(person_name({"friendship_viewer": "An"}), "An")
+        self.assertEqual(person_name({"người gắn thẻ": "Ha"}), "Ha")
+        self.assertEqual(person_name({"security_key_user": "Vy"}), "Vy")
+        self.assertEqual(timestamp_of({"login_approved_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"newsletter_subscribed_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"tagged_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"friendship_viewed_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"security_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"friendship_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/security/login/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/login_alerts/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/newsletters/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/newsletters/subscribe/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/tags/review/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/friendship/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/privacy_checkup/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/avatars/?id=565656"),
+            "565656",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nUse security key\nGenerate codes\nApprove login\n"
+                "This wasn't me\nSubscribe to newsletter\nUnsubscribe from newsletter\n"
+                "Bulletin home\nExpress yourself\nWho are you with\nPhoto tags\n"
+                "Claim Page\nSee Page insights\nConfirm friend\nFriends since\n"
+                "Review privacy\n"
+                "Dùng khóa bảo mật\nTạo mã\nPhê duyệt đăng nhập\n"
+                "Đây không phải tôi\nĐăng ký bản tin\nHủy đăng ký bản tin\n"
+                "Trang chủ Bulletin\nThể hiện bản thân\nBạn đang ở cùng ai\n"
+                "Thẻ ảnh\nYêu cầu quyền Page\nXem thông tin chi tiết Page\n"
+                "Xác nhận bạn bè\nBạn bè từ\nXem lại quyền riêng tư"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nApprove login\nPhoto tags\n"
+                    "Phê duyệt đăng nhập\nThẻ ảnh",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nApprove login only after you finish verifying the device"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Approve login only after you finish verifying the device",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

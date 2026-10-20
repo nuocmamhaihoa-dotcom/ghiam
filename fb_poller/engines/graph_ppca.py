@@ -602,6 +602,19 @@ def _append_rows(
                         "collaborator",
                         "caption_editor",
                         "template_user",
+                        "người phê duyệt đăng nhập",
+                        "nguoi phe duyet dang nhap",
+                        "người đăng ký bản tin",
+                        "nguoi dang ky ban tin",
+                        "người gắn thẻ",
+                        "nguoi gan the",
+                        "người xem tình bạn",
+                        "nguoi xem tinh ban",
+                        "login_approver",
+                        "newsletter_subscriber",
+                        "tag_reviewer",
+                        "friendship_viewer",
+                        "security_key_user",
                     ),
                 )
             )
@@ -1092,6 +1105,19 @@ def _append_rows(
                             "collaborator",
                             "caption_editor",
                             "template_user",
+                            "người phê duyệt đăng nhập",
+                            "nguoi phe duyet dang nhap",
+                            "người đăng ký bản tin",
+                            "nguoi dang ky ban tin",
+                            "người gắn thẻ",
+                            "nguoi gan the",
+                            "người xem tình bạn",
+                            "nguoi xem tinh ban",
+                            "login_approver",
+                            "newsletter_subscriber",
+                            "tag_reviewer",
+                            "friendship_viewer",
+                            "security_key_user",
                         ),
                     )
                 )
@@ -1837,6 +1863,27 @@ def post_id_from_url(url: str) -> str | None:
     templates_browse = re.search(r"/templates/(?:browse/)?\?id=(\d+)", raw, re.IGNORECASE)
     if templates_browse:
         return accepted_object_id(templates_browse.group(1))
+    security_login = re.search(r"/security/login/\?id=(\d+)", raw, re.IGNORECASE)
+    if security_login:
+        return accepted_object_id(security_login.group(1))
+    login_alerts = re.search(r"/login_alerts/\?id=(\d+)", raw, re.IGNORECASE)
+    if login_alerts:
+        return accepted_object_id(login_alerts.group(1))
+    newsletters = re.search(r"/newsletters/(?:subscribe/)?\?id=(\d+)", raw, re.IGNORECASE)
+    if newsletters:
+        return accepted_object_id(newsletters.group(1))
+    tags_review = re.search(r"/tags/review/\?id=(\d+)", raw, re.IGNORECASE)
+    if tags_review:
+        return accepted_object_id(tags_review.group(1))
+    friendship = re.search(r"/friendship/\?id=(\d+)", raw, re.IGNORECASE)
+    if friendship:
+        return accepted_object_id(friendship.group(1))
+    privacy_checkup = re.search(r"/privacy_checkup/\?id=(\d+)", raw, re.IGNORECASE)
+    if privacy_checkup:
+        return accepted_object_id(privacy_checkup.group(1))
+    avatars = re.search(r"/avatars/\?id=(\d+)", raw, re.IGNORECASE)
+    if avatars:
+        return accepted_object_id(avatars.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
