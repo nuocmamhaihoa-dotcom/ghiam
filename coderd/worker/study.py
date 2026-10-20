@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from app import db
-from worker.commands import harvest_saved, seed_commands, store_commands
+from worker.commands import harvest_saved, seed_commands, store_commands, tool_names
 from worker.connect import load_env, load_env_file
 
 SKIP = {"không có", "khong co", "không có gì mới", "khong co gi moi"}
@@ -289,6 +289,9 @@ OPEN_SOURCES = (
     ("tldr-kustomize", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/kustomize.md"),
     ("tldr-apache2ctl", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/linux/apache2ctl.md"),
     ("tldr-apachectl", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/linux/apachectl.md"),
+    ("art-of-command-line", "https://raw.githubusercontent.com/jlevy/the-art-of-command-line/master/README.md"),
+    ("kubectl-cheatsheet", "https://raw.githubusercontent.com/kubernetes/website/main/content/en/docs/reference/kubectl/cheatsheet.md"),
+    ("composer-cli", "https://raw.githubusercontent.com/composer/composer/main/doc/03-cli.md"),
 )
 SKIP_FILES = {
     "da-hoc.md",
@@ -313,6 +316,9 @@ _LISTINGS = (
     ("https://api.github.com/repos/tldr-pages/tldr/contents/pages/common?ref=main", "tldr"),
     ("https://api.github.com/repos/tldr-pages/tldr/contents/pages/linux?ref=main", "tldr-linux"),
     ("https://api.github.com/repos/python/cpython/contents/Doc/using?ref=3.12", "py-using"),
+    ("https://api.github.com/repos/chubin/cheat.sheets/contents/sheets?ref=master", "cheat"),
+    ("https://api.github.com/repos/docker/cli/contents/docs/reference/commandline?ref=master", "docker-ref"),
+    ("https://api.github.com/repos/git/git/contents/Documentation/howto?ref=master", "git-howto"),
 )
 _DOC_SUFFIX = (".rst", ".adoc", ".md")
 
@@ -604,7 +610,7 @@ def _safe_name(prefix: str, filename: str) -> str:
     return cleaned[:80] or "nguon"
 
 
-def discover_catalog(root: Path, fetch) -> list[tuple[str, str]]:
+def discover_catalog(root: Path, fetch, refresh: bool = False) -> list[tuple[str, str]]:
     found: list[tuple[str, str]] = []
     seen: set[str] = set()
 
@@ -618,7 +624,7 @@ def discover_catalog(root: Path, fetch) -> list[tuple[str, str]]:
         add(name, url)
     cache = root / "learn" / "cache" / "catalog.json"
     cached: list[tuple[str, str]] = []
-    if cache.is_file() and time.time() - cache.stat().st_mtime < CACHE_TTL:
+    if cache.is_file():
         try:
             data = json.loads(cache.read_text(encoding="utf-8"))
             if isinstance(data, list) and data:
@@ -628,7 +634,10 @@ def discover_catalog(root: Path, fetch) -> list[tuple[str, str]]:
     if cached:
         for name, url in cached:
             add(name, url)
-        if any("tldr-pages/tldr" in url for _name, url in cached):
+        fresh = time.time() - cache.stat().st_mtime < CACHE_TTL
+        has_tldr = any("tldr-pages/tldr" in url for _name, url in cached)
+        has_cheat = any("cheat.sheets" in url for _name, url in cached)
+        if (not refresh) and fresh and has_tldr and has_cheat:
             return found
     for api, prefix in _LISTINGS:
         try:
@@ -641,10 +650,18 @@ def discover_catalog(root: Path, fetch) -> list[tuple[str, str]]:
         for item in payload:
             if not isinstance(item, dict):
                 continue
+            if str(item.get("type") or "file") not in {"file", ""}:
+                continue
             filename = str(item.get("name") or "")
+            url = str(item.get("download_url") or "")
+            if prefix == "cheat":
+                if not filename or "." in filename:
+                    continue
+                add(_safe_name(prefix, filename), url)
+                continue
             if not filename.endswith(_DOC_SUFFIX):
                 continue
-            add(_safe_name(prefix, filename), str(item.get("download_url") or ""))
+            add(_safe_name(prefix, filename), url)
     if found:
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.write_text(json.dumps(found, ensure_ascii=False), encoding="utf-8")
@@ -785,7 +802,8 @@ _DEEP = frozenset(
         "ipaddress",
     }
 )
-_DEEP_PREFIX = ("py-", "python", "git-doc", "git-")
+_DEEP_PREFIX = ("py-", "python", "git-doc", "git-", "cheat-", "docker-ref", "kubectl")
+_TOOL_TOKENS = tool_names()
 
 
 def _deep_name(name: str) -> bool:
@@ -793,11 +811,16 @@ def _deep_name(name: str) -> bool:
     if low.startswith(_DEEP_PREFIX):
         return True
     tokens = {part for part in re.split(r"[^a-z0-9+]+", low) if part}
-    return bool(tokens & _DEEP)
+    if tokens & _DEEP or tokens & _TOOL_TOKENS:
+        return True
+    rest = low[5:] if low.startswith("tldr-") else low
+    if rest.startswith("linux-"):
+        rest = rest[6:]
+    return rest in _TOOL_TOKENS or rest in _DEEP
 
 
-def prefetch_catalog(root: Path, fetch=fetch_text, limit: int = 2500, deep_only: bool = True) -> int:
-    catalog = discover_catalog(root, fetch)
+def prefetch_catalog(root: Path, fetch=fetch_text, limit: int = 2500, deep_only: bool = True, refresh: bool = False) -> int:
+    catalog = discover_catalog(root, fetch, refresh=refresh)
     catalog = sorted(catalog, key=lambda item: (0 if _deep_name(item[0]) else 1, item[0]))
     loaded = 0
     for name, url in catalog:
@@ -1298,7 +1321,7 @@ def main() -> None:
     if len(sys.argv) >= 2 and sys.argv[1] == "--fill":
         from worker.use import link_learned
 
-        loaded = prefetch_catalog(root)
+        loaded = prefetch_catalog(root, refresh=True, limit=2500)
         added = harvest_saved(root)
         link_learned(root)
         print(f"tải {loaded} gom {added}")

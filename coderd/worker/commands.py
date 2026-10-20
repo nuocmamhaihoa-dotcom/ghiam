@@ -155,13 +155,115 @@ _TOOLS = {
         "hatch",
         "pyright",
         "sphinx-build",
+        "pipx",
+        "coverage",
+        "isort",
+        "bandit",
+        "pip-compile",
     },
     "git": {"git", "gh"},
     "sqlite": {"sqlite3"},
-    "mang": {"curl", "wget", "ping", "nc", "netcat", "http", "https", "httpie", "jq", "yq", "dig", "nslookup", "ss", "ip", "traceroute"},
-    "he-thong": {"systemctl", "journalctl", "ps", "kill", "pkill", "top", "htop", "df", "du", "free", "uname", "lsof", "strace", "perf", "dmesg", "vmstat", "iostat"},
-    "docker": {"docker", "docker-compose", "podman", "nerdctl", "buildah", "skopeo", "ctr"},
-    "node": {"node", "nodejs", "npm", "npx", "yarn", "pnpm", "bun", "deno", "vite", "webpack", "eslint", "prettier", "tsc", "nuxi"},
+    "mang": {
+        "curl",
+        "wget",
+        "ping",
+        "nc",
+        "netcat",
+        "http",
+        "https",
+        "httpie",
+        "jq",
+        "yq",
+        "dig",
+        "nslookup",
+        "ss",
+        "ip",
+        "traceroute",
+        "nmap",
+        "socat",
+        "ncat",
+        "netstat",
+        "whois",
+        "mtr",
+        "iperf3",
+        "nmcli",
+        "resolvectl",
+        "tcpdump",
+    },
+    "he-thong": {
+        "systemctl",
+        "journalctl",
+        "ps",
+        "kill",
+        "pkill",
+        "top",
+        "htop",
+        "df",
+        "du",
+        "free",
+        "uname",
+        "lsof",
+        "strace",
+        "perf",
+        "dmesg",
+        "vmstat",
+        "iostat",
+        "apt",
+        "apt-get",
+        "apt-cache",
+        "dpkg",
+        "snap",
+        "yum",
+        "dnf",
+        "pacman",
+        "apk",
+        "brew",
+        "nix",
+        "nix-shell",
+        "nix-env",
+        "crontab",
+        "tmux",
+        "screen",
+        "lscpu",
+        "lsblk",
+        "mount",
+        "umount",
+        "sysctl",
+        "hostnamectl",
+        "useradd",
+        "usermod",
+        "passwd",
+        "ufw",
+        "iptables",
+        "nft",
+        "lscpu",
+    },
+    "docker": {"docker", "docker-compose", "podman", "nerdctl", "buildah", "skopeo", "ctr", "buildx", "dive", "crane", "compose"},
+    "node": {
+        "node",
+        "nodejs",
+        "npm",
+        "npx",
+        "yarn",
+        "pnpm",
+        "bun",
+        "deno",
+        "vite",
+        "webpack",
+        "eslint",
+        "prettier",
+        "tsc",
+        "nuxi",
+        "nest",
+        "next",
+        "prisma",
+        "pm2",
+        "nodemon",
+        "tsx",
+        "ts-node",
+        "corepack",
+        "gulp",
+    },
     "go": {"go", "gofmt", "gotest"},
     "rust": {"cargo", "rustc", "rustup", "rustfmt", "clippy-driver"},
     "java": {"java", "javac", "mvn", "gradle", "gradlew", "ant", "kotlin", "kotlinc", "groovy"},
@@ -189,6 +291,12 @@ _TOOLS = {
         "ldd",
         "strip",
         "readelf",
+        "ccache",
+        "ranlib",
+        "addr2line",
+        "objcopy",
+        "nasm",
+        "yasm",
     },
     "csdl": {
         "psql",
@@ -201,6 +309,12 @@ _TOOLS = {
         "clickhouse-client",
         "cqlsh",
         "sqlite",
+        "createdb",
+        "dropdb",
+        "pg_dump",
+        "pg_restore",
+        "mysqladmin",
+        "redis-server",
     },
     "php": {"php", "composer", "phpunit", "phpstan", "psalm", "laravel", "artisan", "pecl"},
     "ruby": {"ruby", "gem", "bundle", "bundler", "rails", "rake", "irb", "rspec", "puma"},
@@ -285,6 +399,8 @@ _TOOLS = {
         "sops",
         "cfssl",
         "mkcert",
+        "ssh-keyscan",
+        "gpg-agent",
     },
     "dam-may": {
         "aws",
@@ -360,6 +476,44 @@ _TOOLS = {
         "gunzip",
         "zip",
         "unzip",
+        "seq",
+        "yes",
+        "paste",
+        "join",
+        "comm",
+        "split",
+        "nl",
+        "od",
+        "hexdump",
+        "xxd",
+        "md5sum",
+        "sha1sum",
+        "sha256sum",
+        "sha512sum",
+        "timeout",
+        "watch",
+        "parallel",
+        "tree",
+        "rg",
+        "ripgrep",
+        "fd",
+        "fzf",
+        "bat",
+        "eza",
+        "exa",
+        "tldr",
+        "mktemp",
+        "rmdir",
+        "column",
+        "strings",
+        "iconv",
+        "vim",
+        "nvim",
+        "nano",
+        "emacs",
+        "cmp",
+        "tac",
+        "rev",
     },
 }
 
@@ -630,6 +784,63 @@ SEED = (
 )
 
 
+def tool_names() -> frozenset[str]:
+    names: set[str] = set()
+    for tools in _TOOLS.values():
+        names.update(tools)
+    return frozenset(names)
+
+
+_PLACEHOLDER = re.compile(r"\{\{([^{}]+)\}\}")
+
+
+def _placeholder_choices(inner: str) -> list[str]:
+    text = inner.strip()
+    if text.startswith("[") and text.endswith("]"):
+        text = text[1:-1].strip()
+    if "|" in text:
+        parts = [part.strip() for part in text.split("|") if part.strip()]
+        return parts[:8] or [text]
+    return [text] if text else [""]
+
+
+def expand_placeholders(command: str, limit: int = 12) -> list[str]:
+    if "{{" not in command:
+        return [command]
+    variants = [command]
+    round_no = 0
+    while round_no < 8 and any("{{" in item for item in variants):
+        round_no += 1
+        nxt: list[str] = []
+        seen: set[str] = set()
+        for item in variants:
+            match = _PLACEHOLDER.search(item)
+            if not match:
+                key = item.lower()
+                if key not in seen:
+                    seen.add(key)
+                    nxt.append(item)
+                continue
+            for choice in _placeholder_choices(match.group(1)):
+                built = (item[: match.start()] + choice + item[match.end() :]).strip()
+                built = " ".join(built.split())
+                key = built.lower()
+                if not built or key in seen:
+                    continue
+                seen.add(key)
+                nxt.append(built)
+                if len(nxt) >= limit:
+                    break
+            if len(nxt) >= limit:
+                break
+        variants = nxt or variants
+    clean = [item for item in variants if "{{" not in item]
+    if clean:
+        return clean
+    stripped = _PLACEHOLDER.sub(lambda match: _placeholder_choices(match.group(1))[0], command)
+    return [" ".join(stripped.split())]
+
+
 def gloss(command: str) -> str:
     low = command.lower()
     for prefix, text in _GLOSS:
@@ -666,6 +877,23 @@ def extract_commands(text: str) -> list[str]:
     found: list[str] = []
     seen: set[str] = set()
 
+    def keep(command: str) -> None:
+        if not command or len(command) > 220 or len(command.split()) > 24:
+            return
+        if command.endswith("\\"):
+            return
+        if not group_of(command):
+            return
+        first = command.split()[0].lower()
+        if first in {"this", "with", "from", "imports", "using", "see", "the", "for", "and"}:
+            if not command.lower().startswith("from "):
+                return
+        key = command.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        found.append(command)
+
     def add(raw: str) -> None:
         command = " ".join(raw.strip().split())
         if command.startswith("$ "):
@@ -683,24 +911,14 @@ def extract_commands(text: str) -> list[str]:
             head = command.split(" - ", 1)[0].strip()
             if group_of(head):
                 command = head
-        if not command or len(command) > 220 or len(command.split()) > 24:
-            return
-        if command.endswith("\\"):
-            return
-        if not group_of(command):
-            return
-        first = command.split()[0].lower()
-        if first in {"this", "with", "from", "imports", "using", "see", "the", "for", "and"}:
-            if not command.lower().startswith("from "):
-                return
-        key = command.lower()
-        if key in seen:
-            return
-        seen.add(key)
-        found.append(command)
+        for item in expand_placeholders(command):
+            keep(item)
 
     for match in re.findall(r"`([^`\n]{2,180})`", text):
         add(match)
+    for block in re.findall(r"```(?:[a-zA-Z0-9+-]*)\n(.*?)```", text, re.S):
+        for line in block.splitlines():
+            add(line)
     for raw in text.splitlines():
         stripped = raw.strip()
         if stripped.startswith("- `") or stripped.startswith("* `"):
