@@ -528,6 +528,22 @@ def _append_rows(
                         "beta_tester",
                         "upload_retrier",
                         "offline_poster",
+                        "người hỏi Meta AI",
+                        "nguoi hoi Meta AI",
+                        "người tạo ảnh AI",
+                        "nguoi tao anh AI",
+                        "người viết lại AI",
+                        "nguoi viet lai AI",
+                        "người gắn nhãn AI",
+                        "nguoi gan nhan AI",
+                        "người thử đồ AI",
+                        "nguoi thu do AI",
+                        "meta_ai_user",
+                        "ai_image_creator",
+                        "ai_rewriter",
+                        "ai_labeler",
+                        "ai_try_on_user",
+                        "ai_video_creator",
                     ),
                 )
             )
@@ -944,6 +960,22 @@ def _append_rows(
                             "beta_tester",
                             "upload_retrier",
                             "offline_poster",
+                            "người hỏi Meta AI",
+                            "nguoi hoi Meta AI",
+                            "người tạo ảnh AI",
+                            "nguoi tao anh AI",
+                            "người viết lại AI",
+                            "nguoi viet lai AI",
+                            "người gắn nhãn AI",
+                            "nguoi gan nhan AI",
+                            "người thử đồ AI",
+                            "nguoi thu do AI",
+                            "meta_ai_user",
+                            "ai_image_creator",
+                            "ai_rewriter",
+                            "ai_labeler",
+                            "ai_try_on_user",
+                            "ai_video_creator",
                         ),
                     )
                 )
@@ -1414,6 +1446,9 @@ def post_id_from_url(url: str) -> str | None:
     close_friends = re.search(r"/close_friends/\?id=(\d+)", raw, re.IGNORECASE)
     if close_friends:
         return accepted_object_id(close_friends.group(1))
+    ai_stickers = re.search(r"/ai/stickers/\?id=(\d+)", raw, re.IGNORECASE)
+    if ai_stickers:
+        return accepted_object_id(ai_stickers.group(1))
     stickers = re.search(r"/stickers/\?id=(\d+)", raw, re.IGNORECASE)
     if stickers:
         return accepted_object_id(stickers.group(1))
@@ -1561,6 +1596,37 @@ def post_id_from_url(url: str) -> str | None:
     composer_retry = re.search(r"/composer/retry/\?id=(\d+)", raw, re.IGNORECASE)
     if composer_retry:
         return accepted_object_id(composer_retry.group(1))
+
+    meta_ai = re.search(r"/meta_ai/(?:chat/|imagine/)?\?id=(\d+)", raw, re.IGNORECASE)
+    if meta_ai:
+        return accepted_object_id(meta_ai.group(1))
+    ai_rewrite = re.search(r"/ai/rewrite/\?id=(\d+)", raw, re.IGNORECASE)
+    if ai_rewrite:
+        return accepted_object_id(ai_rewrite.group(1))
+    ai_edit = re.search(r"/ai/edit/\?id=(\d+)", raw, re.IGNORECASE)
+    if ai_edit:
+        return accepted_object_id(ai_edit.group(1))
+    ai_video = re.search(r"/ai/video/\?id=(\d+)", raw, re.IGNORECASE)
+    if ai_video:
+        return accepted_object_id(ai_video.group(1))
+    ai_voice = re.search(r"/ai/voice/\?id=(\d+)", raw, re.IGNORECASE)
+    if ai_voice:
+        return accepted_object_id(ai_voice.group(1))
+    ai_try_on = re.search(r"/ai/try_on/\?id=(\d+)", raw, re.IGNORECASE)
+    if ai_try_on:
+        return accepted_object_id(ai_try_on.group(1))
+    ai_search = re.search(r"/ai/search/\?id=(\d+)", raw, re.IGNORECASE)
+    if ai_search:
+        return accepted_object_id(ai_search.group(1))
+    ai_label = re.search(r"/ai/label/\?id=(\d+)", raw, re.IGNORECASE)
+    if ai_label:
+        return accepted_object_id(ai_label.group(1))
+    edits_ai = re.search(r"/edits/ai/\?id=(\d+)", raw, re.IGNORECASE)
+    if edits_ai:
+        return accepted_object_id(edits_ai.group(1))
+    imagine_me = re.search(r"/imagine_me/\?id=(\d+)", raw, re.IGNORECASE)
+    if imagine_me:
+        return accepted_object_id(imagine_me.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

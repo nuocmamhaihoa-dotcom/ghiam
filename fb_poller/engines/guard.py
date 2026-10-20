@@ -208,6 +208,12 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "alt_text_comment_id",
         "beta_comment_id",
         "upload_comment_id",
+        "meta_ai_comment_id",
+        "ai_image_comment_id",
+        "ai_rewrite_comment_id",
+        "ai_label_comment_id",
+        "ai_try_on_comment_id",
+        "ai_video_comment_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -361,6 +367,12 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "alt_text_comment_id",
         "beta_comment_id",
         "upload_comment_id",
+        "meta_ai_comment_id",
+        "ai_image_comment_id",
+        "ai_rewrite_comment_id",
+        "ai_label_comment_id",
+        "ai_try_on_comment_id",
+        "ai_video_comment_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -952,6 +964,22 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "beta_tester",
             "upload_retrier",
             "offline_poster",
+            "người hỏi Meta AI",
+            "nguoi hoi Meta AI",
+            "người tạo ảnh AI",
+            "nguoi tao anh AI",
+            "người viết lại AI",
+            "nguoi viet lai AI",
+            "người gắn nhãn AI",
+            "nguoi gan nhan AI",
+            "người thử đồ AI",
+            "nguoi thu do AI",
+            "meta_ai_user",
+            "ai_image_creator",
+            "ai_rewriter",
+            "ai_labeler",
+            "ai_try_on_user",
+            "ai_video_creator",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -1295,6 +1323,18 @@ def timestamp_of(row: object) -> str | None:
         "alt_texted_at",
         "upload_retried_at",
         "offline_at",
+        "thời gian hỏi Meta AI",
+        "thoi gian hoi Meta AI",
+        "ngày tạo ảnh AI",
+        "ngay tao anh AI",
+        "ngày viết lại AI",
+        "ngay viet lai AI",
+        "meta_ai_at",
+        "ai_imaged_at",
+        "ai_rewrote_at",
+        "ai_labeled_at",
+        "ai_tried_on_at",
+        "ai_videoed_at",
         "mirrored_at",
         "copied_at",
         "backed_up_at",
@@ -1508,6 +1548,18 @@ def timestamp_of(row: object) -> str | None:
         "alt_texted_at",
         "upload_retried_at",
         "offline_at",
+        "thời gian hỏi Meta AI",
+        "thoi gian hoi Meta AI",
+        "ngày tạo ảnh AI",
+        "ngay tao anh AI",
+        "ngày viết lại AI",
+        "ngay viet lai AI",
+        "meta_ai_at",
+        "ai_imaged_at",
+        "ai_rewrote_at",
+        "ai_labeled_at",
+        "ai_tried_on_at",
+        "ai_videoed_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:

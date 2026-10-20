@@ -6972,5 +6972,184 @@ class EngineTests(unittest.TestCase):
         )
 
 
+    def test_meta_ai_imagine_rewrite_try_on_vn_keys_and_urls(self) -> None:
+        asker = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người hỏi Meta AI": "Lan AI",
+                "thời gian hỏi Meta AI": "6h",
+            }
+        )
+        self.assertIsNotNone(asker)
+        assert asker is not None
+        self.assertEqual(asker.author_name, "Lan AI")
+        self.assertEqual(asker.created_time, "6h")
+        imager = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người tạo ảnh AI": "Minh",
+                "ngày tạo ảnh AI": "hôm nay",
+                "ai_image_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(imager)
+        assert imager is not None
+        self.assertEqual(imager.author_name, "Minh")
+        self.assertEqual(imager.created_time, "hôm nay")
+        self.assertEqual(imager.comment_id, "1357")
+        rewriter = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người viết lại AI": "Bo",
+                "ai_labeled_at": "05:45",
+                "ai_rewrite_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(rewriter)
+        assert rewriter is not None
+        self.assertEqual(rewriter.author_name, "Bo")
+        self.assertEqual(rewriter.created_time, "05:45")
+        self.assertEqual(rewriter.comment_id, "2468")
+        tryer = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người thử đồ AI": "An",
+                "ngày viết lại AI": "2025-01-01T03:00:00Z",
+                "ai_try_on_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(tryer)
+        assert tryer is not None
+        self.assertEqual(tryer.author_name, "An")
+        self.assertEqual(tryer.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(tryer.comment_id, "9753")
+        self.assertEqual(person_name({"meta_ai_user": "Lan"}), "Lan")
+        self.assertEqual(person_name({"ai_image_creator": "Bo"}), "Bo")
+        self.assertEqual(person_name({"ai_rewriter": "Minh"}), "Minh")
+        self.assertEqual(person_name({"ai_labeler": "An"}), "An")
+        self.assertEqual(person_name({"ai_try_on_user": "Ha"}), "Ha")
+        self.assertEqual(person_name({"ai_video_creator": "Vy"}), "Vy")
+        self.assertEqual(person_name({"người gắn nhãn AI": "Tu"}), "Tu")
+        self.assertEqual(timestamp_of({"meta_ai_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ai_imaged_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"ai_rewrote_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"ai_tried_on_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(timestamp_of({"ai_videoed_at": "2024-01-05"}), "2024-01-05")
+        self.assertEqual(first_comment_id({"meta_ai_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"ai_video_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/meta_ai/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/meta_ai/chat/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/meta_ai/imagine/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/ai/stickers/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/ai/rewrite/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/ai/edit/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/ai/video/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/ai/voice/?id=565656"),
+            "565656",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/ai/try_on/?id=787878"),
+            "787878",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/ai/search/?id=909090"),
+            "909090",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/ai/label/?id=101010"),
+            "101010",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/edits/ai/?id=202020"),
+            "202020",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/imagine_me/?id=303030"),
+            "303030",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nChat with Meta AI\nImagine with Meta AI\n"
+                "Ask Meta AI\nSearch with Meta AI\nGenerate image\n"
+                "Edit with AI\nAI stickers\nCreate AI sticker\n"
+                "Rewrite with AI\nShorten with AI\nExpand with AI\n"
+                "Change tone\nMore formal\nMore casual\nFix spelling\n"
+                "AI writing assistant\nSuggested replies\nSmart replies\n"
+                "Translate with AI\nSummarize thread\nGenerated with AI\n"
+                "This was made with AI\nLabel AI content\nEdits with AI\n"
+                "Background restyle\nExpand image\nErase object\n"
+                "Restyle image\nAI voice\nClone voice\nText to video\n"
+                "AI video\nGenerate video\nImagine me\nYour AI look\n"
+                "Try on with AI\nVirtual try-on\nShop with AI\n"
+                "Ask about this product\nFind similar with AI\nAI search\n"
+                "See sources\nAI may make mistakes\nFeedback on AI\n"
+                "Good response\nBad response\nStop generating\n"
+                "Continue generating\n"
+                "Trò chuyện với Meta AI\nTưởng tượng với Meta AI\n"
+                "Hỏi Meta AI\nTìm bằng Meta AI\nTạo hình ảnh\n"
+                "Chỉnh sửa bằng AI\nNhãn dán AI\nTạo nhãn dán AI\n"
+                "Viết lại bằng AI\nRút ngắn bằng AI\nMở rộng bằng AI\n"
+                "Đổi giọng điệu\nTrang trọng hơn\nThoải mái hơn\n"
+                "Sửa chính tả\nTrợ lý viết AI\nGợi ý trả lời\n"
+                "Trả lời thông minh\nDịch bằng AI\nTóm tắt chuỗi\n"
+                "Được tạo bằng AI\nNội dung này được tạo bằng AI\n"
+                "Gắn nhãn nội dung AI\nChỉnh sửa với AI\n"
+                "Đổi phong cách nền\nMở rộng ảnh\nXóa đối tượng\n"
+                "Đổi phong cách ảnh\nGiọng AI\nNhân bản giọng nói\n"
+                "Chữ thành video\nVideo AI\nTạo video\nTưởng tượng tôi\n"
+                "Diện mạo AI của bạn\nThử đồ bằng AI\nThử ảo\n"
+                "Mua sắm bằng AI\nHỏi về sản phẩm này\n"
+                "Tìm tương tự bằng AI\nTìm kiếm AI\nXem nguồn\n"
+                "AI có thể sai\nPhản hồi về AI\nPhản hồi tốt\n"
+                "Phản hồi kém\nDừng tạo\nTiếp tục tạo"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nChat with Meta AI\nRewrite with AI\n"
+                    "Trò chuyện với Meta AI\nViết lại bằng AI",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nChat with Meta AI only after you finish editing the caption"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Chat with Meta AI only after you finish editing the caption",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
