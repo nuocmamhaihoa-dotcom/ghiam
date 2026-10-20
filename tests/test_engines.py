@@ -5817,6 +5817,204 @@ class EngineTests(unittest.TestCase):
             "Scan QR code only after you finish editing the caption",
         )
 
+    def test_events_dating_community_safety_vn_keys_and_urls(self) -> None:
+        goer = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người tham gia sự kiện": "Lan Goer",
+                "thời gian tham gia sự kiện": "6h",
+            }
+        )
+        self.assertIsNotNone(goer)
+        assert goer is not None
+        self.assertEqual(goer.author_name, "Lan Goer")
+        self.assertEqual(goer.created_time, "6h")
+        buyer = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người mua vé": "Minh",
+                "ngày mua vé": "hôm nay",
+                "ticket_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(buyer)
+        assert buyer is not None
+        self.assertEqual(buyer.author_name, "Minh")
+        self.assertEqual(buyer.created_time, "hôm nay")
+        self.assertEqual(buyer.comment_id, "1357")
+        matcher = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người hẹn hò": "Bo",
+                "matched_at": "05:45",
+                "dating_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(matcher)
+        assert matcher is not None
+        self.assertEqual(matcher.author_name, "Bo")
+        self.assertEqual(matcher.created_time, "05:45")
+        self.assertEqual(matcher.comment_id, "2468")
+        safer = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người đánh dấu an toàn": "An",
+                "ngày hẹn hò": "2025-01-01T03:00:00Z",
+                "safety_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(safer)
+        assert safer is not None
+        self.assertEqual(safer.author_name, "An")
+        self.assertEqual(safer.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(safer.comment_id, "9753")
+        self.assertEqual(person_name({"event_goer": "Lan"}), "Lan")
+        self.assertEqual(person_name({"ticket_buyer": "Bo"}), "Bo")
+        self.assertEqual(person_name({"group_requester": "Minh"}), "Minh")
+        self.assertEqual(person_name({"dating_matcher": "An"}), "An")
+        self.assertEqual(person_name({"blood_donor": "Ha"}), "Ha")
+        self.assertEqual(person_name({"safety_marker": "Vy"}), "Vy")
+        self.assertEqual(person_name({"event_host": "Tu"}), "Tu")
+        self.assertEqual(person_name({"climate_viewer": "My"}), "My")
+        self.assertEqual(person_name({"người quan tâm sự kiện": "Na"}), "Na")
+        self.assertEqual(person_name({"người tổ chức sự kiện": "Ki"}), "Ki")
+        self.assertEqual(person_name({"người xin vào nhóm": "Ly"}), "Ly")
+        self.assertEqual(person_name({"người hiến máu": "Do"}), "Do")
+        self.assertEqual(timestamp_of({"rsvped_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ticketed_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"donated_blood_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"marked_safe_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(timestamp_of({"joined_group_at": "2024-01-05"}), "2024-01-05")
+        self.assertEqual(first_comment_id({"event_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"blood_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/events/going/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/events/interested/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/events/create/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/tickets/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/groups/join/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/groups/rules/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/dating/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/dating/matches/?id=565656"),
+            "565656",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/climate/?id=787878"),
+            "787878",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/communityhelp/?id=909090"),
+            "909090",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/blooddonations/?id=101010"),
+            "101010",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/votinginformation/?id=202020"),
+            "202020",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/townhall/?id=303030"),
+            "303030",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/safetycheck/?id=404040"),
+            "404040",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/crisisresponse/?id=505050"),
+            "505050",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/workrooms/?id=606060"),
+            "606060",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/horizon/home/?id=707070"),
+            "707070",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/immersive/?id=808080"),
+            "808080",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nInvite friends to event\nShare event\nSee ticket\n"
+                "Transfer ticket\nCo-hosted by\nHosted by\nEvent details\n"
+                "Upcoming events\nCancel event\nEdit event\nDuplicate event\n"
+                "Export event\nGroup rules\nSee group rules\n"
+                "Agree to group rules\nCreate announcement\nDating profile\n"
+                "Send a like\nIt's a match\nKeep swiping\nHidden likes\n"
+                "Your turns\nSee climate info\nCommunity Help\nOffer help\n"
+                "Ask for help\nFind a blood drive\nI'm interested in donating\n"
+                "Voting Information Center\nRegister to vote\n"
+                "Check your registration\nFind your polling place\n"
+                "Town Hall\nSafety Check\nMark yourself safe\nGet support\n"
+                "Give support\nJoin Workrooms\nHorizon Worlds\nVisit world\n"
+                "Create world\nEnter immersive\n"
+                "Mời bạn bè đến sự kiện\nChia sẻ sự kiện\nXem vé\nChuyển vé\n"
+                "Đồng tổ chức bởi\nĐược tổ chức bởi\nChi tiết sự kiện\n"
+                "Sự kiện sắp tới\nHủy sự kiện\nChỉnh sửa sự kiện\n"
+                "Nhân bản sự kiện\nXuất sự kiện\nNội quy nhóm\n"
+                "Xem nội quy nhóm\nĐồng ý với nội quy nhóm\nTạo thông báo\n"
+                "Hồ sơ Hẹn hò\nGửi lượt thích\nĐó là một cặp đôi\n"
+                "Tiếp tục vuốt\nLượt thích ẩn\nLượt của bạn\n"
+                "Xem thông tin khí hậu\nTrợ giúp cộng đồng\n"
+                "Đề nghị giúp đỡ\nXin giúp đỡ\nTìm điểm hiến máu\n"
+                "Tôi muốn hiến máu\nTrung tâm Thông tin Bầu cử\n"
+                "Đăng ký bỏ phiếu\nKiểm tra đăng ký của bạn\n"
+                "Tìm địa điểm bỏ phiếu\nĐối thoại\nKiểm tra An toàn\n"
+                "Đánh dấu bạn an toàn\nNhận hỗ trợ\nĐưa hỗ trợ\n"
+                "Tham gia Workrooms\nThăm thế giới\nTạo thế giới\n"
+                "Vào chế độ đắm chìm"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nShare event\nSafety Check\nChia sẻ sự kiện\n"
+                    "Kiểm tra An toàn",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nShare event only after you finish editing the caption"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Share event only after you finish editing the caption",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

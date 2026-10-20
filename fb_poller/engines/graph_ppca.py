@@ -402,6 +402,30 @@ def _append_rows(
                         "caption_editor",
                         "filter_user",
                         "profile_locker",
+                        "người tham gia sự kiện",
+                        "nguoi tham gia su kien",
+                        "người quan tâm sự kiện",
+                        "nguoi quan tam su kien",
+                        "người tổ chức sự kiện",
+                        "nguoi to chuc su kien",
+                        "người mua vé",
+                        "nguoi mua ve",
+                        "người xin vào nhóm",
+                        "nguoi xin vao nhom",
+                        "người hẹn hò",
+                        "nguoi hen ho",
+                        "người hiến máu",
+                        "nguoi hien mau",
+                        "người đánh dấu an toàn",
+                        "nguoi danh dau an toan",
+                        "event_goer",
+                        "ticket_buyer",
+                        "group_requester",
+                        "dating_matcher",
+                        "blood_donor",
+                        "safety_marker",
+                        "event_host",
+                        "climate_viewer",
                     ),
                 )
             )
@@ -692,6 +716,30 @@ def _append_rows(
                             "caption_editor",
                             "filter_user",
                             "profile_locker",
+                            "người tham gia sự kiện",
+                            "nguoi tham gia su kien",
+                            "người quan tâm sự kiện",
+                            "nguoi quan tam su kien",
+                            "người tổ chức sự kiện",
+                            "nguoi to chuc su kien",
+                            "người mua vé",
+                            "nguoi mua ve",
+                            "người xin vào nhóm",
+                            "nguoi xin vao nhom",
+                            "người hẹn hò",
+                            "nguoi hen ho",
+                            "người hiến máu",
+                            "nguoi hien mau",
+                            "người đánh dấu an toàn",
+                            "nguoi danh dau an toan",
+                            "event_goer",
+                            "ticket_buyer",
+                            "group_requester",
+                            "dating_matcher",
+                            "blood_donor",
+                            "safety_marker",
+                            "event_host",
+                            "climate_viewer",
                         ),
                     )
                 )
@@ -1018,6 +1066,64 @@ def post_id_from_url(url: str) -> str | None:
     spark_ar = re.search(r"/spark_?ar/\?id=(\d+)", raw, re.IGNORECASE)
     if spark_ar:
         return accepted_object_id(spark_ar.group(1))
+
+    events_going = re.search(r"/events/going/\?id=(\d+)", raw, re.IGNORECASE)
+    if events_going:
+        return accepted_object_id(events_going.group(1))
+    events_interested = re.search(r"/events/interested/\?id=(\d+)", raw, re.IGNORECASE)
+    if events_interested:
+        return accepted_object_id(events_interested.group(1))
+    events_create = re.search(r"/events/create/\?id=(\d+)", raw, re.IGNORECASE)
+    if events_create:
+        return accepted_object_id(events_create.group(1))
+    events_calendar = re.search(r"/events/calendar/\?id=(\d+)", raw, re.IGNORECASE)
+    if events_calendar:
+        return accepted_object_id(events_calendar.group(1))
+    tickets = re.search(r"/tickets/\?id=(\d+)", raw, re.IGNORECASE)
+    if tickets:
+        return accepted_object_id(tickets.group(1))
+    groups_join = re.search(r"/groups/join/\?id=(\d+)", raw, re.IGNORECASE)
+    if groups_join:
+        return accepted_object_id(groups_join.group(1))
+    groups_rules = re.search(r"/groups/rules/\?id=(\d+)", raw, re.IGNORECASE)
+    if groups_rules:
+        return accepted_object_id(groups_rules.group(1))
+    groups_announcements = re.search(r"/groups/announcements/\?id=(\d+)", raw, re.IGNORECASE)
+    if groups_announcements:
+        return accepted_object_id(groups_announcements.group(1))
+    dating = re.search(r"/dating/(?:matches/)?\?id=(\d+)", raw, re.IGNORECASE)
+    if dating:
+        return accepted_object_id(dating.group(1))
+    climate = re.search(r"/climate/\?id=(\d+)", raw, re.IGNORECASE)
+    if climate:
+        return accepted_object_id(climate.group(1))
+    communityhelp = re.search(r"/communityhelp/\?id=(\d+)", raw, re.IGNORECASE)
+    if communityhelp:
+        return accepted_object_id(communityhelp.group(1))
+    blooddonations = re.search(r"/blooddonations/\?id=(\d+)", raw, re.IGNORECASE)
+    if blooddonations:
+        return accepted_object_id(blooddonations.group(1))
+    votinginformation = re.search(r"/votinginformation/\?id=(\d+)", raw, re.IGNORECASE)
+    if votinginformation:
+        return accepted_object_id(votinginformation.group(1))
+    townhall = re.search(r"/townhall/\?id=(\d+)", raw, re.IGNORECASE)
+    if townhall:
+        return accepted_object_id(townhall.group(1))
+    safetycheck = re.search(r"/safetycheck/\?id=(\d+)", raw, re.IGNORECASE)
+    if safetycheck:
+        return accepted_object_id(safetycheck.group(1))
+    crisisresponse = re.search(r"/crisisresponse/\?id=(\d+)", raw, re.IGNORECASE)
+    if crisisresponse:
+        return accepted_object_id(crisisresponse.group(1))
+    workrooms = re.search(r"/workrooms/\?id=(\d+)", raw, re.IGNORECASE)
+    if workrooms:
+        return accepted_object_id(workrooms.group(1))
+    horizon_home = re.search(r"/horizon/home/\?id=(\d+)", raw, re.IGNORECASE)
+    if horizon_home:
+        return accepted_object_id(horizon_home.group(1))
+    immersive = re.search(r"/immersive/\?id=(\d+)", raw, re.IGNORECASE)
+    if immersive:
+        return accepted_object_id(immersive.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

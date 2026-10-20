@@ -174,6 +174,11 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "subscription_comment_id",
         "collab_comment_id",
         "filter_comment_id",
+        "event_comment_id",
+        "ticket_comment_id",
+        "dating_comment_id",
+        "blood_comment_id",
+        "safety_comment_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -293,6 +298,11 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "subscription_comment_id",
         "collab_comment_id",
         "filter_comment_id",
+        "event_comment_id",
+        "ticket_comment_id",
+        "dating_comment_id",
+        "blood_comment_id",
+        "safety_comment_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -758,6 +768,30 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "caption_editor",
             "filter_user",
             "profile_locker",
+            "người tham gia sự kiện",
+            "nguoi tham gia su kien",
+            "người quan tâm sự kiện",
+            "nguoi quan tam su kien",
+            "người tổ chức sự kiện",
+            "nguoi to chuc su kien",
+            "người mua vé",
+            "nguoi mua ve",
+            "người xin vào nhóm",
+            "nguoi xin vao nhom",
+            "người hẹn hò",
+            "nguoi hen ho",
+            "người hiến máu",
+            "nguoi hien mau",
+            "người đánh dấu an toàn",
+            "nguoi danh dau an toan",
+            "event_goer",
+            "ticket_buyer",
+            "group_requester",
+            "dating_matcher",
+            "blood_donor",
+            "safety_marker",
+            "event_host",
+            "climate_viewer",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -1194,6 +1228,18 @@ def timestamp_of(row: object) -> str | None:
         "collabed_at",
         "filtered_at",
         "locked_at",
+        "thời gian tham gia sự kiện",
+        "thoi gian tham gia su kien",
+        "ngày mua vé",
+        "ngay mua ve",
+        "ngày hẹn hò",
+        "ngay hen ho",
+        "rsvped_at",
+        "ticketed_at",
+        "matched_at",
+        "donated_blood_at",
+        "marked_safe_at",
+        "joined_group_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:
