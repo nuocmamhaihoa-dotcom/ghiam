@@ -179,6 +179,11 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "dating_comment_id",
         "blood_comment_id",
         "safety_comment_id",
+        "offer_comment_id",
+        "job_comment_id",
+        "listing_comment_id",
+        "mutual_comment_id",
+        "favorite_comment_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -303,6 +308,11 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "dating_comment_id",
         "blood_comment_id",
         "safety_comment_id",
+        "offer_comment_id",
+        "job_comment_id",
+        "listing_comment_id",
+        "mutual_comment_id",
+        "favorite_comment_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -792,6 +802,26 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "safety_marker",
             "event_host",
             "climate_viewer",
+            "người đưa đề nghị",
+            "nguoi dua de nghi",
+            "người bán marketplace",
+            "nguoi ban marketplace",
+            "người mua marketplace",
+            "nguoi mua marketplace",
+            "người ứng tuyển việc",
+            "nguoi ung tuyen viec",
+            "người lưu việc",
+            "nguoi luu viec",
+            "người thêm trường",
+            "nguoi them truong",
+            "người bạn chung",
+            "nguoi ban chung",
+            "offer_maker",
+            "job_applicant",
+            "mutual_friend",
+            "listing_seller",
+            "favorite_owner",
+            "listing_buyer",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -1240,6 +1270,18 @@ def timestamp_of(row: object) -> str | None:
         "donated_blood_at",
         "marked_safe_at",
         "joined_group_at",
+        "thời gian đề nghị mua",
+        "thoi gian de nghi mua",
+        "ngày ứng tuyển",
+        "ngay ung tuyen",
+        "ngày lưu việc",
+        "ngay luu viec",
+        "offered_buy_at",
+        "applied_at",
+        "job_saved_at",
+        "friended_mutual_at",
+        "favorited_at",
+        "listed_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:

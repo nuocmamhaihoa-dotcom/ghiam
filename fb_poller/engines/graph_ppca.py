@@ -426,6 +426,26 @@ def _append_rows(
                         "safety_marker",
                         "event_host",
                         "climate_viewer",
+                        "người đưa đề nghị",
+                        "nguoi dua de nghi",
+                        "người bán marketplace",
+                        "nguoi ban marketplace",
+                        "người mua marketplace",
+                        "nguoi mua marketplace",
+                        "người ứng tuyển việc",
+                        "nguoi ung tuyen viec",
+                        "người lưu việc",
+                        "nguoi luu viec",
+                        "người thêm trường",
+                        "nguoi them truong",
+                        "người bạn chung",
+                        "nguoi ban chung",
+                        "offer_maker",
+                        "job_applicant",
+                        "mutual_friend",
+                        "listing_seller",
+                        "favorite_owner",
+                        "listing_buyer",
                     ),
                 )
             )
@@ -740,6 +760,26 @@ def _append_rows(
                             "safety_marker",
                             "event_host",
                             "climate_viewer",
+                            "người đưa đề nghị",
+                            "nguoi dua de nghi",
+                            "người bán marketplace",
+                            "nguoi ban marketplace",
+                            "người mua marketplace",
+                            "nguoi mua marketplace",
+                            "người ứng tuyển việc",
+                            "nguoi ung tuyen viec",
+                            "người lưu việc",
+                            "nguoi luu viec",
+                            "người thêm trường",
+                            "nguoi them truong",
+                            "người bạn chung",
+                            "nguoi ban chung",
+                            "offer_maker",
+                            "job_applicant",
+                            "mutual_friend",
+                            "listing_seller",
+                            "favorite_owner",
+                            "listing_buyer",
                         ),
                     )
                 )
@@ -1124,6 +1164,55 @@ def post_id_from_url(url: str) -> str | None:
     immersive = re.search(r"/immersive/\?id=(\d+)", raw, re.IGNORECASE)
     if immersive:
         return accepted_object_id(immersive.group(1))
+
+    marketplace_create = re.search(r"/marketplace/create/\?id=(\d+)", raw, re.IGNORECASE)
+    if marketplace_create:
+        return accepted_object_id(marketplace_create.group(1))
+    marketplace_selling = re.search(r"/marketplace/you/selling/\?id=(\d+)", raw, re.IGNORECASE)
+    if marketplace_selling:
+        return accepted_object_id(marketplace_selling.group(1))
+    marketplace_buying = re.search(r"/marketplace/you/buying/\?id=(\d+)", raw, re.IGNORECASE)
+    if marketplace_buying:
+        return accepted_object_id(marketplace_buying.group(1))
+    marketplace_item = re.search(r"/marketplace/item/\?id=(\d+)", raw, re.IGNORECASE)
+    if marketplace_item:
+        return accepted_object_id(marketplace_item.group(1))
+    marketplace_category = re.search(r"/marketplace/category/\?id=(\d+)", raw, re.IGNORECASE)
+    if marketplace_category:
+        return accepted_object_id(marketplace_category.group(1))
+    marketplace_vehicles = re.search(r"/marketplace/vehicles/\?id=(\d+)", raw, re.IGNORECASE)
+    if marketplace_vehicles:
+        return accepted_object_id(marketplace_vehicles.group(1))
+    marketplace_property = re.search(r"/marketplace/property/\?id=(\d+)", raw, re.IGNORECASE)
+    if marketplace_property:
+        return accepted_object_id(marketplace_property.group(1))
+    marketplace_offers = re.search(r"/marketplace/offers/\?id=(\d+)", raw, re.IGNORECASE)
+    if marketplace_offers:
+        return accepted_object_id(marketplace_offers.group(1))
+    jobs = re.search(r"/jobs/(?:application/|saved/)?\?id=(\d+)", raw, re.IGNORECASE)
+    if jobs:
+        return accepted_object_id(jobs.group(1))
+    profile_education = re.search(r"/profile/education/\?id=(\d+)", raw, re.IGNORECASE)
+    if profile_education:
+        return accepted_object_id(profile_education.group(1))
+    profile_work = re.search(r"/profile/work/\?id=(\d+)", raw, re.IGNORECASE)
+    if profile_work:
+        return accepted_object_id(profile_work.group(1))
+    profile_relationship = re.search(r"/profile/relationship/\?id=(\d+)", raw, re.IGNORECASE)
+    if profile_relationship:
+        return accepted_object_id(profile_relationship.group(1))
+    friends_mutual = re.search(r"/friends/mutual/\?id=(\d+)", raw, re.IGNORECASE)
+    if friends_mutual:
+        return accepted_object_id(friends_mutual.group(1))
+    favorites = re.search(r"/favorites/\?id=(\d+)", raw, re.IGNORECASE)
+    if favorites:
+        return accepted_object_id(favorites.group(1))
+    shortcuts = re.search(r"/shortcuts/\?id=(\d+)", raw, re.IGNORECASE)
+    if shortcuts:
+        return accepted_object_id(shortcuts.group(1))
+    feed_preferences = re.search(r"/feed/preferences/\?id=(\d+)", raw, re.IGNORECASE)
+    if feed_preferences:
+        return accepted_object_id(feed_preferences.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

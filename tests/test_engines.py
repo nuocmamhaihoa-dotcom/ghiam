@@ -6015,6 +6015,183 @@ class EngineTests(unittest.TestCase):
             "Share event only after you finish editing the caption",
         )
 
+    def test_marketplace_jobs_profile_favorites_vn_keys_and_urls(self) -> None:
+        offerer = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người đưa đề nghị": "Lan Offer",
+                "thời gian đề nghị mua": "6h",
+            }
+        )
+        self.assertIsNotNone(offerer)
+        assert offerer is not None
+        self.assertEqual(offerer.author_name, "Lan Offer")
+        self.assertEqual(offerer.created_time, "6h")
+        applicant = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người ứng tuyển việc": "Minh",
+                "ngày ứng tuyển": "hôm nay",
+                "job_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(applicant)
+        assert applicant is not None
+        self.assertEqual(applicant.author_name, "Minh")
+        self.assertEqual(applicant.created_time, "hôm nay")
+        self.assertEqual(applicant.comment_id, "1357")
+        seller = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người bán marketplace": "Bo",
+                "applied_at": "05:45",
+                "listing_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(seller)
+        assert seller is not None
+        self.assertEqual(seller.author_name, "Bo")
+        self.assertEqual(seller.created_time, "05:45")
+        self.assertEqual(seller.comment_id, "2468")
+        mutual = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người bạn chung": "An",
+                "ngày lưu việc": "2025-01-01T03:00:00Z",
+                "mutual_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(mutual)
+        assert mutual is not None
+        self.assertEqual(mutual.author_name, "An")
+        self.assertEqual(mutual.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(mutual.comment_id, "9753")
+        self.assertEqual(person_name({"offer_maker": "Lan"}), "Lan")
+        self.assertEqual(person_name({"job_applicant": "Bo"}), "Bo")
+        self.assertEqual(person_name({"mutual_friend": "Minh"}), "Minh")
+        self.assertEqual(person_name({"listing_seller": "An"}), "An")
+        self.assertEqual(person_name({"favorite_owner": "Ha"}), "Ha")
+        self.assertEqual(person_name({"listing_buyer": "Vy"}), "Vy")
+        self.assertEqual(person_name({"người mua marketplace": "Tu"}), "Tu")
+        self.assertEqual(person_name({"người lưu việc": "My"}), "My")
+        self.assertEqual(person_name({"người thêm trường": "Na"}), "Na")
+        self.assertEqual(timestamp_of({"offered_buy_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"job_saved_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"friended_mutual_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"favorited_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(timestamp_of({"listed_at": "2024-01-05"}), "2024-01-05")
+        self.assertEqual(first_comment_id({"offer_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"favorite_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/marketplace/create/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/marketplace/you/selling/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/marketplace/you/buying/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/marketplace/item/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/marketplace/offers/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/jobs/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/jobs/application/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/jobs/saved/?id=565656"),
+            "565656",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/profile/education/?id=787878"),
+            "787878",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/profile/work/?id=909090"),
+            "909090",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/friends/mutual/?id=101010"),
+            "101010",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/favorites/?id=202020"),
+            "202020",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/feed/preferences/?id=303030"),
+            "303030",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nMake an offer\nCounteroffer\nOffer details\n"
+                "Pending offers\nSold items\nMark as pending\nShare listing\n"
+                "Message about listing\nSeller information\nBuyer information\n"
+                "Preferred meetup\nPublic meetup\nShipping available\n"
+                "Local pickup\nCondition: New\nCondition: Used\n"
+                "Price reduced\nFree stuff\nProperty rentals\n"
+                "Jobs on Marketplace\nJob alerts\nSee company\n"
+                "About the job\nJob details\nRequired qualifications\n"
+                "Preferred qualifications\nWork location\nFull-time\n"
+                "Part-time\nAdd school\nAdd college\nStudied at\n"
+                "Works at\nLives in\nMarried to\nIn a relationship with\n"
+                "Engaged to\nMutual friends\nSee mutual friends\n"
+                "Add to favorites\nRemove from favorites\nEdit shortcuts\n"
+                "Pin to top\nUnpin from top\nSee feed preferences\n"
+                "Đưa ra đề nghị mua\nĐề nghị lại\nChi tiết đề nghị\n"
+                "Đề nghị đang chờ\nMặt hàng đã bán\nĐánh dấu đang chờ\n"
+                "Chia sẻ tin đăng\nNhắn tin về tin đăng\n"
+                "Thông tin người bán\nThông tin người mua\n"
+                "Nơi gặp mặt ưa thích\nGặp mặt công cộng\nCó giao hàng\n"
+                "Nhận tại chỗ\nTình trạng: Mới\nTình trạng: Đã dùng\n"
+                "Đã giảm giá\nĐồ miễn phí\nCho thuê nhà\n"
+                "Việc làm trên Marketplace\nThông báo việc làm\n"
+                "Xem công ty\nVề việc làm\nChi tiết việc làm\n"
+                "Trình độ yêu cầu\nTrình độ ưu tiên\nNơi làm việc\n"
+                "Toàn thời gian\nBán thời gian\nThêm trường\n"
+                "Thêm đại học\nHọc tại\nLàm việc tại\nSống tại\n"
+                "Kết hôn với\nĐang hẹn hò với\nĐính hôn với\n"
+                "Bạn chung\nXem bạn chung\nThêm vào yêu thích\n"
+                "Xóa khỏi yêu thích\nChỉnh sửa lối tắt\nGhim lên đầu\n"
+                "Bỏ ghim khỏi đầu\nXem tùy chọn bảng tin"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nShare listing\nJob alerts\nChia sẻ tin đăng\n"
+                    "Thông báo việc làm",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nShare listing only after you finish editing the caption"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Share listing only after you finish editing the caption",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
