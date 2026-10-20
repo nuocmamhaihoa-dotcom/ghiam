@@ -9296,6 +9296,134 @@ class EngineTests(unittest.TestCase):
             "Flash sale only after you finish checking the real product",
         )
 
+    def test_education_drafts_dashboard_language_vn_keys_and_urls(self) -> None:
+        draft = _from_mapping(
+            {
+                "bình luận": "Bản nháp này ổn rồi",
+                "người viết bản nháp": "Lan Draft",
+                "ngày viết bản nháp": "5h",
+            }
+        )
+        self.assertIsNotNone(draft)
+        assert draft is not None
+        self.assertEqual(draft.author_name, "Lan Draft")
+        self.assertEqual(draft.created_time, "5h")
+        edu = _from_mapping(
+            {
+                "Nội dung": "Mình vừa thêm trường mới",
+                "người chỉnh học vấn": "Minh",
+                "thời gian chỉnh học vấn": "hôm nay",
+                "education_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(edu)
+        assert edu is not None
+        self.assertEqual(edu.author_name, "Minh")
+        self.assertEqual(edu.created_time, "hôm nay")
+        self.assertEqual(edu.comment_id, "1357")
+        dash = _from_mapping(
+            {
+                "text": "insights hôm nay tăng",
+                "người xem bảng điều khiển": "Bo",
+                "dashboard_viewed_at": "05:45",
+                "dashboard_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(dash)
+        assert dash is not None
+        self.assertEqual(dash.author_name, "Bo")
+        self.assertEqual(dash.created_time, "05:45")
+        self.assertEqual(dash.comment_id, "2468")
+        lang = _from_mapping(
+            {
+                "message": "đã đổi sang tiếng việt",
+                "người đổi ngôn ngữ": "An",
+                "language_changed_at": "2025-01-01T03:00:00Z",
+                "language_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(lang)
+        assert lang is not None
+        self.assertEqual(lang.author_name, "An")
+        self.assertEqual(lang.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(lang.comment_id, "9753")
+        self.assertEqual(person_name({"draft_author": "Lan"}), "Lan")
+        self.assertEqual(person_name({"education_editor": "Bo"}), "Bo")
+        self.assertEqual(person_name({"dashboard_viewer": "Minh"}), "Minh")
+        self.assertEqual(person_name({"language_user": "An"}), "An")
+        self.assertEqual(person_name({"người viết bản nháp": "Ha"}), "Ha")
+        self.assertEqual(timestamp_of({"draft_saved_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"education_edited_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"dashboard_viewed_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"language_changed_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"draft_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"language_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/translations/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/language/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/education/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/professional_dashboard/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/content_library/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/scheduled_posts/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/drafts/?id=343434"),
+            "343434",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nAuto-translate\nFormer employee\nInternship\n"
+                "Volunteer experience\nAdd work experience\nContent insights\n"
+                "Scheduled posts\nUnpublished posts\nReuse post\nCrossposting\n"
+                "Share to reel\nFilter by\nSort results\nClear all\n"
+                "Suggested searches\nDrafts\nClass of\n"
+                "Tự động dịch\nCựu nhân viên\nThực tập\nKinh nghiệm tình nguyện\n"
+                "Thêm kinh nghiệm làm việc\nThông tin chi tiết về nội dung\n"
+                "Bài viết đã lên lịch\nBài viết chưa xuất bản\nTái sử dụng bài viết\n"
+                "Đăng chéo\nChia sẻ lên reel\nLọc theo\nSắp xếp kết quả\n"
+                "Xóa tất cả\nTìm kiếm đề xuất\nBản nháp\nKhóa tốt nghiệp"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nDrafts\nScheduled posts\n"
+                    "Bản nháp\nBài viết đã lên lịch",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nDrafts only after you finish writing the real caption"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Drafts only after you finish writing the real caption",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -754,6 +754,18 @@ def _append_rows(
                         "commerce_manager_user",
                         "catalog_editor",
                         "coupon_user",
+                        "người viết bản nháp",
+                        "nguoi viet ban nhap",
+                        "người chỉnh học vấn",
+                        "nguoi chinh hoc van",
+                        "người xem bảng điều khiển",
+                        "nguoi xem bang dieu khien",
+                        "người đổi ngôn ngữ",
+                        "nguoi doi ngon ngu",
+                        "draft_author",
+                        "education_editor",
+                        "dashboard_viewer",
+                        "language_user",
                     ),
                 )
             )
@@ -1396,6 +1408,18 @@ def _append_rows(
                             "commerce_manager_user",
                             "catalog_editor",
                             "coupon_user",
+                            "người viết bản nháp",
+                            "nguoi viet ban nhap",
+                            "người chỉnh học vấn",
+                            "nguoi chinh hoc van",
+                            "người xem bảng điều khiển",
+                            "nguoi xem bang dieu khien",
+                            "người đổi ngôn ngữ",
+                            "nguoi doi ngon ngu",
+                            "draft_author",
+                            "education_editor",
+                            "dashboard_viewer",
+                            "language_user",
                         ),
                     )
                 )
@@ -2398,6 +2422,27 @@ def post_id_from_url(url: str) -> str | None:
     coupons = re.search(r"/coupons/\?id=(\d+)", raw, re.IGNORECASE)
     if coupons:
         return accepted_object_id(coupons.group(1))
+    translations = re.search(r"/translations/\?id=(\d+)", raw, re.IGNORECASE)
+    if translations:
+        return accepted_object_id(translations.group(1))
+    language = re.search(r"/language/\?id=(\d+)", raw, re.IGNORECASE)
+    if language:
+        return accepted_object_id(language.group(1))
+    education = re.search(r"/education/\?id=(\d+)", raw, re.IGNORECASE)
+    if education:
+        return accepted_object_id(education.group(1))
+    professional_dashboard = re.search(r"/professional_dashboard/\?id=(\d+)", raw, re.IGNORECASE)
+    if professional_dashboard:
+        return accepted_object_id(professional_dashboard.group(1))
+    content_library = re.search(r"/content_library/\?id=(\d+)", raw, re.IGNORECASE)
+    if content_library:
+        return accepted_object_id(content_library.group(1))
+    scheduled_posts = re.search(r"/scheduled_posts/\?id=(\d+)", raw, re.IGNORECASE)
+    if scheduled_posts:
+        return accepted_object_id(scheduled_posts.group(1))
+    drafts = re.search(r"/drafts/\?id=(\d+)", raw, re.IGNORECASE)
+    if drafts:
+        return accepted_object_id(drafts.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

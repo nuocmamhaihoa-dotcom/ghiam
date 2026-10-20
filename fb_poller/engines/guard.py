@@ -280,6 +280,10 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "commerce_comment_id",
         "catalog_comment_id",
         "coupon_comment_id",
+        "draft_comment_id",
+        "education_comment_id",
+        "dashboard_comment_id",
+        "language_comment_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -505,6 +509,10 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "commerce_comment_id",
         "catalog_comment_id",
         "coupon_comment_id",
+        "draft_comment_id",
+        "education_comment_id",
+        "dashboard_comment_id",
+        "language_comment_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -1322,6 +1330,18 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "commerce_manager_user",
             "catalog_editor",
             "coupon_user",
+            "người viết bản nháp",
+            "nguoi viet ban nhap",
+            "người chỉnh học vấn",
+            "nguoi chinh hoc van",
+            "người xem bảng điều khiển",
+            "nguoi xem bang dieu khien",
+            "người đổi ngôn ngữ",
+            "nguoi doi ngon ngu",
+            "draft_author",
+            "education_editor",
+            "dashboard_viewer",
+            "language_user",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -1845,6 +1865,16 @@ def timestamp_of(row: object) -> str | None:
         "commerce_managed_at",
         "catalog_edited_at",
         "coupon_applied_at",
+        "ngày viết bản nháp",
+        "ngay viet ban nhap",
+        "thời gian chỉnh học vấn",
+        "thoi gian chinh hoc van",
+        "ngày xem bảng điều khiển",
+        "ngay xem bang dieu khien",
+        "draft_saved_at",
+        "education_edited_at",
+        "dashboard_viewed_at",
+        "language_changed_at",
         "mirrored_at",
         "copied_at",
         "backed_up_at",
@@ -2238,6 +2268,16 @@ def timestamp_of(row: object) -> str | None:
         "commerce_managed_at",
         "catalog_edited_at",
         "coupon_applied_at",
+        "ngày viết bản nháp",
+        "ngay viet ban nhap",
+        "thời gian chỉnh học vấn",
+        "thoi gian chinh hoc van",
+        "ngày xem bảng điều khiển",
+        "ngay xem bang dieu khien",
+        "draft_saved_at",
+        "education_edited_at",
+        "dashboard_viewed_at",
+        "language_changed_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:
