@@ -3400,6 +3400,111 @@ class EngineTests(unittest.TestCase):
             "Please confirm your identity with the shop later",
         )
 
+    def test_live_room_chrome_reply_vn_keys_and_tagged_sets(self) -> None:
+        reply = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người phản hồi": "Lan Nguyen",
+                "thời gian crawl": "2h",
+            }
+        )
+        self.assertIsNotNone(reply)
+        assert reply is not None
+        self.assertEqual(reply.author_name, "Lan Nguyen")
+        self.assertEqual(reply.created_time, "2h")
+        profile = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "tên profile": "Minh",
+                "thời điểm comment": "hôm qua",
+                "comment_xid": "1133",
+            }
+        )
+        self.assertIsNotNone(profile)
+        assert profile is not None
+        self.assertEqual(profile.author_name, "Minh")
+        self.assertEqual(profile.created_time, "hôm qua")
+        self.assertEqual(profile.comment_id, "1133")
+        nick = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "tên nick": "Bo",
+                "timestamp comment": "09:00",
+                "fb_feedback_id": "2244",
+            }
+        )
+        self.assertIsNotNone(nick)
+        assert nick is not None
+        self.assertEqual(nick.author_name, "Bo")
+        self.assertEqual(nick.created_time, "09:00")
+        self.assertEqual(nick.comment_id, "2244")
+        writer = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "writer_display": "An",
+                "scraped_time": "2024-09-01T07:00:00Z",
+            }
+        )
+        self.assertIsNotNone(writer)
+        assert writer is not None
+        self.assertEqual(writer.author_name, "An")
+        self.assertEqual(writer.created_time, "2024-09-01T07:00:00Z")
+        self.assertEqual(person_name({"owner_display": "Lan"}), "Lan")
+        self.assertEqual(person_name({"người phản hồi": "Bo"}), "Bo")
+        self.assertEqual(person_name({"tên nick": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"fetch_time": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"thời điểm comment": "1h"}), "1h")
+        self.assertEqual(timestamp_of({"scan_time": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"comment_xid": "11"}), "11")
+        self.assertEqual(first_comment_id({"fb_feedback_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"interaction_id": "33"}), "33")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=t.12345"),
+            "12345",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=go.998877"),
+            "998877",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nRoom settings\nInvite to room\nShare screen\n"
+                "Live settings\nSee live video\nEnd live video\n"
+                "Start watch party\nInvite to watch party\nEnd watch party\n"
+                "See poll results\nEnd poll\nCaptions settings\n"
+                "Show captions\nHide captions\nQuality settings\n"
+                "Open camera\nTake photo\nUpload photo\nCrop photo\n"
+                "Business integrations\nContact uploading\nAuthorized logins\n"
+                "Get alerts about unrecognized logins\nAdd to Watch later\n"
+                "Cài đặt phòng\nMời vào phòng\nChia sẻ màn hình\n"
+                "Cài đặt trực tiếp\nXem video trực tiếp\n"
+                "Xem kết quả bình chọn\nCài đặt phụ đề\nHiện phụ đề\n"
+                "Mở máy ảnh\nChụp ảnh\nTải ảnh lên\nTích hợp doanh nghiệp"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nRoom settings\nLive settings\nCài đặt phòng",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nAlways translate comments carefully for guests"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Always translate comments carefully for guests",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

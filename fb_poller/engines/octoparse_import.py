@@ -209,6 +209,16 @@ _AUTHOR_KEYS = (
     "sender_display",
     "creator_display",
     "actor_display",
+    "người phản hồi",
+    "nguoi phan hoi",
+    "tên profile",
+    "ten profile",
+    "tên nick",
+    "ten nick",
+    "writer_display",
+    "owner_display",
+    "member_title",
+    "author_string",
 )
 _TIME_KEYS = (
     "time",
@@ -350,6 +360,16 @@ _TIME_KEYS = (
     "retrieved_at",
     "snapshot_time",
     "batch_time",
+    "thời gian crawl",
+    "thoi gian crawl",
+    "thời điểm comment",
+    "thoi diem comment",
+    "timestamp comment",
+    "scraped_time",
+    "crawl_at",
+    "fetch_time",
+    "import_time",
+    "scan_time",
 )
 
 
