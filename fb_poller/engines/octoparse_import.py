@@ -597,6 +597,19 @@ _AUTHOR_KEYS = (
     "podcast_listener",
     "album_creator",
     "collection_saver",
+    "người gửi thẻ quà",
+    "nguoi gui the qua",
+    "người tham gia chat cộng đồng",
+    "nguoi tham gia chat cong dong",
+    "người bật chế độ yên tĩnh",
+    "nguoi bat che do yen tinh",
+    "người giám sát",
+    "nguoi giam sat",
+    "gift_sender",
+    "chat_member",
+    "quiet_mode_user",
+    "supervisor",
+    "parent_dashboard_user",
 )
 _TIME_KEYS = (
     "time",
@@ -1015,6 +1028,18 @@ _TIME_KEYS = (
     "podcast_listened_at",
     "album_created_at",
     "collection_saved_at",
+    "ngày gửi thẻ quà",
+    "ngay gui the qua",
+    "thời gian tham gia chat",
+    "thoi gian tham gia chat",
+    "ngày bật chế độ yên tĩnh",
+    "ngay bat che do yen tinh",
+    "ngày giám sát",
+    "ngay giam sat",
+    "gift_sent_at",
+    "chat_joined_at",
+    "quiet_mode_at",
+    "supervised_at",
 )
 
 

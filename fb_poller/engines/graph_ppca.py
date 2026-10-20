@@ -574,6 +574,19 @@ def _append_rows(
                         "podcast_listener",
                         "album_creator",
                         "collection_saver",
+                        "người gửi thẻ quà",
+                        "nguoi gui the qua",
+                        "người tham gia chat cộng đồng",
+                        "nguoi tham gia chat cong dong",
+                        "người bật chế độ yên tĩnh",
+                        "nguoi bat che do yen tinh",
+                        "người giám sát",
+                        "nguoi giam sat",
+                        "gift_sender",
+                        "chat_member",
+                        "quiet_mode_user",
+                        "supervisor",
+                        "parent_dashboard_user",
                     ),
                 )
             )
@@ -1036,6 +1049,19 @@ def _append_rows(
                             "podcast_listener",
                             "album_creator",
                             "collection_saver",
+                            "người gửi thẻ quà",
+                            "nguoi gui the qua",
+                            "người tham gia chat cộng đồng",
+                            "nguoi tham gia chat cong dong",
+                            "người bật chế độ yên tĩnh",
+                            "nguoi bat che do yen tinh",
+                            "người giám sát",
+                            "nguoi giam sat",
+                            "gift_sender",
+                            "chat_member",
+                            "quiet_mode_user",
+                            "supervisor",
+                            "parent_dashboard_user",
                         ),
                     )
                 )
@@ -1742,6 +1768,27 @@ def post_id_from_url(url: str) -> str | None:
     saved_collections = re.search(r"/saved/collections/\?id=(\d+)", raw, re.IGNORECASE)
     if saved_collections:
         return accepted_object_id(saved_collections.group(1))
+    giftcards = re.search(r"/giftcards/(?:send/)?\?id=(\d+)", raw, re.IGNORECASE)
+    if giftcards:
+        return accepted_object_id(giftcards.group(1))
+    communitychats = re.search(r"/communitychats/\?id=(\d+)", raw, re.IGNORECASE)
+    if communitychats:
+        return accepted_object_id(communitychats.group(1))
+    chats = re.search(r"/chats/\?id=(\d+)", raw, re.IGNORECASE)
+    if chats:
+        return accepted_object_id(chats.group(1))
+    quiet_mode = re.search(r"/quiet_mode/\?id=(\d+)", raw, re.IGNORECASE)
+    if quiet_mode:
+        return accepted_object_id(quiet_mode.group(1))
+    teen_accounts = re.search(r"/teen_accounts/\?id=(\d+)", raw, re.IGNORECASE)
+    if teen_accounts:
+        return accepted_object_id(teen_accounts.group(1))
+    supervision = re.search(r"/supervision/\?id=(\d+)", raw, re.IGNORECASE)
+    if supervision:
+        return accepted_object_id(supervision.group(1))
+    take_a_break = re.search(r"/take_a_break/\?id=(\d+)", raw, re.IGNORECASE)
+    if take_a_break:
+        return accepted_object_id(take_a_break.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

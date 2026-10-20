@@ -7463,6 +7463,140 @@ class EngineTests(unittest.TestCase):
             "Listen now only after you finish writing the review",
         )
 
+    def test_gift_cards_community_chat_quiet_mode_vn_keys_and_urls(self) -> None:
+        gifter = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người gửi thẻ quà": "Lan Gift",
+                "ngày gửi thẻ quà": "6h",
+            }
+        )
+        self.assertIsNotNone(gifter)
+        assert gifter is not None
+        self.assertEqual(gifter.author_name, "Lan Gift")
+        self.assertEqual(gifter.created_time, "6h")
+        chatter = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người tham gia chat cộng đồng": "Minh",
+                "thời gian tham gia chat": "hôm nay",
+                "chat_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(chatter)
+        assert chatter is not None
+        self.assertEqual(chatter.author_name, "Minh")
+        self.assertEqual(chatter.created_time, "hôm nay")
+        self.assertEqual(chatter.comment_id, "1357")
+        quieter = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người bật chế độ yên tĩnh": "Bo",
+                "quiet_mode_at": "05:45",
+                "quiet_mode_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(quieter)
+        assert quieter is not None
+        self.assertEqual(quieter.author_name, "Bo")
+        self.assertEqual(quieter.created_time, "05:45")
+        self.assertEqual(quieter.comment_id, "2468")
+        supervisor = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người giám sát": "An",
+                "ngày giám sát": "2025-01-01T03:00:00Z",
+                "supervision_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(supervisor)
+        assert supervisor is not None
+        self.assertEqual(supervisor.author_name, "An")
+        self.assertEqual(supervisor.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(supervisor.comment_id, "9753")
+        self.assertEqual(person_name({"gift_sender": "Lan"}), "Lan")
+        self.assertEqual(person_name({"chat_member": "Bo"}), "Bo")
+        self.assertEqual(person_name({"quiet_mode_user": "Minh"}), "Minh")
+        self.assertEqual(person_name({"supervisor": "An"}), "An")
+        self.assertEqual(person_name({"người gửi thẻ quà": "Ha"}), "Ha")
+        self.assertEqual(person_name({"parent_dashboard_user": "Vy"}), "Vy")
+        self.assertEqual(timestamp_of({"gift_sent_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"chat_joined_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"quiet_mode_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"supervised_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"gift_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"supervision_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/giftcards/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/giftcards/send/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/communitychats/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/chats/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/quiet_mode/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/teen_accounts/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/supervision/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/take_a_break/?id=565656"),
+            "565656",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nBuy gift card\nRedeem gift card\nSend gift card\n"
+                "Community chat\nChat settings\nMute chat\nLeave chat\n"
+                "Invite to chat\nTurn on Quiet mode\nTurn off Quiet mode\n"
+                "Schedule Quiet mode\nTeen Accounts\nSupervision tools\n"
+                "Parent dashboard\nManage your time\nDaily limit\nReminder set\n"
+                "Mua thẻ quà\nĐổi thẻ quà\nGửi thẻ quà\n"
+                "Chat cộng đồng\nCài đặt chat\nTắt tiếng chat\nRời chat\n"
+                "Mời vào chat\nBật chế độ yên tĩnh\nTắt chế độ yên tĩnh\n"
+                "Lên lịch chế độ yên tĩnh\nTài khoản thanh thiếu niên\n"
+                "Công cụ giám sát\nBảng điều khiển phụ huynh\n"
+                "Quản lý thời gian của bạn\nGiới hạn hàng ngày\nĐã đặt lời nhắc"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nCommunity chat\nTurn on Quiet mode\n"
+                    "Chat cộng đồng\nBật chế độ yên tĩnh",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nCommunity chat only after you finish the group review"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Community chat only after you finish the group review",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
