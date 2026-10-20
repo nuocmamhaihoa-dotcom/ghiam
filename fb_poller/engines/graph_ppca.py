@@ -185,6 +185,9 @@ def _append_rows(
                         "artist_name",
                         "moderator_name",
                         "admin_name",
+                        "speaker_name",
+                        "page_owner",
+                        "channel_name",
                     ),
                 )
             )
@@ -258,6 +261,9 @@ def _append_rows(
                             "artist_name",
                             "moderator_name",
                             "admin_name",
+                            "speaker_name",
+                            "page_owner",
+                            "channel_name",
                         ),
                     )
                 )
@@ -338,6 +344,15 @@ def post_id_from_url(url: str) -> str | None:
     raw = url.strip()
     if raw.isdigit() or ("_" in raw and raw.replace("_", "").isdigit()):
         return raw
+    # Unwrap Facebook click-tracking redirects before matching post ids.
+    if re.search(r"/l\.php\?", raw, re.IGNORECASE):
+        wrapped = re.search(r"[?&]u=([^&\s#]+)", raw, re.IGNORECASE)
+        if wrapped:
+            inner = unquote(wrapped.group(1)).strip()
+            if inner and inner != raw:
+                found = post_id_from_url(inner)
+                if found:
+                    return found
     photo = re.search(r"/(?:photos|videos)/(?:a|pcb)\.(\d+)/(\d+)", raw, re.IGNORECASE)
     if photo:
         return accepted_object_id(photo.group(2))

@@ -2959,6 +2959,120 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(imported.author_name, "lan")
         self.assertEqual(imported.created_time, "2025-09-05")
 
+    def test_octoparse_vn_keys_settings_chrome_and_lphp(self) -> None:
+        named = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "tên tác giả": "Lan Nguyen",
+                "thời gian tạo": "2024-01-01",
+            }
+        )
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "Lan Nguyen")
+        self.assertEqual(named.created_time, "2024-01-01")
+        poster = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người đăng": "Minh",
+                "ngày giờ": "2 giờ",
+            }
+        )
+        self.assertIsNotNone(poster)
+        assert poster is not None
+        self.assertEqual(poster.author_name, "Minh")
+        self.assertEqual(poster.created_time, "2 giờ")
+        scraped = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "speaker_name": "Bo",
+                "thời điểm đăng": "hôm qua",
+                "root_comment_id": "9911",
+            }
+        )
+        self.assertIsNotNone(scraped)
+        assert scraped is not None
+        self.assertEqual(scraped.author_name, "Bo")
+        self.assertEqual(scraped.created_time, "hôm qua")
+        self.assertEqual(scraped.comment_id, "9911")
+        fetched = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "page_owner": "Shop ABC",
+                "fetched_at": "2024-05-01T10:00:00Z",
+            }
+        )
+        self.assertIsNotNone(fetched)
+        assert fetched is not None
+        self.assertEqual(fetched.author_name, "Shop ABC")
+        self.assertEqual(fetched.created_time, "2024-05-01T10:00:00Z")
+        channel = _from_mapping(
+            {
+                "body": "long enough comment text here",
+                "channel_name": "Channel X",
+                "scraped_at": "2024-05-02T11:00:00Z",
+            }
+        )
+        self.assertIsNotNone(channel)
+        assert channel is not None
+        self.assertEqual(channel.author_name, "Channel X")
+        self.assertEqual(channel.created_time, "2024-05-02T11:00:00Z")
+        self.assertEqual(person_name({"speaker_name": "Lan"}), "Lan")
+        self.assertEqual(person_name({"page_owner": "Shop"}), "Shop")
+        self.assertEqual(person_name({"channel_name": "Ch"}), "Ch")
+        self.assertEqual(timestamp_of({"fetched_at": "2024-01-01"}), "2024-01-01")
+        self.assertEqual(timestamp_of({"imported_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"server_time": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"root_comment_id": "111"}), "111")
+        self.assertEqual(first_comment_id({"top_level_comment_id": "222"}), "222")
+        self.assertEqual(first_comment_id({"comment_object_id": "333"}), "333")
+        self.assertEqual(
+            post_id_from_url(
+                "https://l.facebook.com/l.php?u=https%3A%2F%2Fwww.facebook.com"
+                "%2Fpermalink.php%3Fstory_fbid%3D123456789%26id%3D456"
+            ),
+            "123456789",
+        )
+        self.assertEqual(
+            post_id_from_url(
+                "https://lm.facebook.com/l.php?u=https%3A%2F%2Fwww.facebook.com"
+                "%2Fphoto.php%3Ffbid%3D999888777"
+            ),
+            "999888777",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nAccount settings\nPrivacy settings\nNotification settings\n"
+                "Your time on Facebook\nFind friends\nCreate a group\nBrowse Marketplace\n"
+                "Saved items\nAds Manager\nMeta Business Suite\nProfessional dashboard\n"
+                "Creator Studio\nSee more profiles\nCài đặt tài khoản\n"
+                "Cài đặt quyền riêng tư\nTìm bạn bè\nQuản lý quảng cáo\n"
+                "Manage your account\nEdit profile picture\nPayment methods"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nAccount settings\nAds Manager\nCài đặt tài khoản",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        sentence = comments_from_articles(
+            ["Lan\nI changed my account settings last night for privacy"],
+            5,
+        )
+        self.assertEqual(
+            sentence[0].text,
+            "I changed my account settings last night for privacy",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

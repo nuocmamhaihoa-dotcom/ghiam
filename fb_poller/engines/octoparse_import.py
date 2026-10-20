@@ -164,6 +164,13 @@ _AUTHOR_KEYS = (
     "admin_name",
     "tác giả",
     "tac gia",
+    "tên tác giả",
+    "ten tac gia",
+    "người đăng",
+    "nguoi dang",
+    "speaker_name",
+    "page_owner",
+    "channel_name",
 )
 _TIME_KEYS = (
     "time",
@@ -262,6 +269,16 @@ _TIME_KEYS = (
     "comment_ts",
     "posted_ts",
     "update_time",
+    "thời gian tạo",
+    "thoi gian tao",
+    "ngày giờ",
+    "ngay gio",
+    "thời điểm đăng",
+    "thoi diem dang",
+    "fetched_at",
+    "scraped_at",
+    "imported_at",
+    "server_time",
 )
 
 
