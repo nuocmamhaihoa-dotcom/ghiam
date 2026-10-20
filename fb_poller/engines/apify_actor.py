@@ -441,6 +441,16 @@ def _one(row: Any) -> PublicComment | None:
         "sticker_sender",
         "order_buyer",
         "payer_name",
+        "người sáng tạo",
+        "nguoi sang tao",
+        "người hợp tác",
+        "nguoi hop tac",
+        "người kiếm tiền",
+        "nguoi kiem tien",
+        "brand_partner",
+        "voiceover_author",
+        "draft_owner",
+        "creator_name",
     )
     return PublicComment(
         text=text,

@@ -4474,6 +4474,133 @@ class EngineTests(unittest.TestCase):
             "Use this effect only when the lighting looks good",
         )
 
+    def test_creator_security_chrome_creator_vn_keys_and_collab_urls(self) -> None:
+        creator = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người sáng tạo": "Lan Creator",
+                "thời gian bản nháp": "6h",
+            }
+        )
+        self.assertIsNotNone(creator)
+        assert creator is not None
+        self.assertEqual(creator.author_name, "Lan Creator")
+        self.assertEqual(creator.created_time, "6h")
+        collab = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người hợp tác": "Minh",
+                "ngày kiếm tiền": "hôm nay",
+                "creator_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(collab)
+        assert collab is not None
+        self.assertEqual(collab.author_name, "Minh")
+        self.assertEqual(collab.created_time, "hôm nay")
+        self.assertEqual(collab.comment_id, "1357")
+        earner = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người kiếm tiền": "Bo",
+                "drafted_at": "05:45",
+                "collab_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(earner)
+        assert earner is not None
+        self.assertEqual(earner.author_name, "Bo")
+        self.assertEqual(earner.created_time, "05:45")
+        self.assertEqual(earner.comment_id, "2468")
+        voice = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "brand_partner": "An",
+                "monetized_at": "2025-01-01T03:00:00Z",
+            }
+        )
+        self.assertIsNotNone(voice)
+        assert voice is not None
+        self.assertEqual(voice.author_name, "An")
+        self.assertEqual(voice.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(person_name({"voiceover_author": "Lan"}), "Lan")
+        self.assertEqual(person_name({"draft_owner": "Bo"}), "Bo")
+        self.assertEqual(person_name({"người sáng tạo": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"collab_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ngày kiếm tiền": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"drafted_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"creator_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"collab_comment_id": "44"}), "44")
+        self.assertEqual(first_comment_id({"draft_comment_id": "11"}), "11")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/brandedcontent/111222/"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/stars/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/drafts/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=i.333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=z.777888"),
+            "777888",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nContent library\nStars balance\nFan subscriptions\n"
+                "Bonus program\nIn-stream ads\nBrand collabs\n"
+                "Request a collab\nApply to brand\nSee earnings\n"
+                "Payout settings\nTrim video\nAdd text overlay\n"
+                "Change thumbnail\nReorder clips\nGreen screen\n"
+                "Align mode\nSave draft\nDiscard draft\n"
+                "Unrecognized login\nThis wasn't me\nSecure your account\n"
+                "Review login\nLog out of all sessions\n"
+                "Paid partnership with\nEvent by\n"
+                "Where you're logged in\n"
+                "Thư viện nội dung\nSố dư Stars\nGói đăng ký fan\n"
+                "Chương trình thưởng\nQuảng cáo trong luồng\n"
+                "Hợp tác thương hiệu\nYêu cầu hợp tác\n"
+                "Ứng tuyển thương hiệu\nXem thu nhập\n"
+                "Cắt video\nThêm chữ chồng\nĐổi ảnh thu nhỏ\n"
+                "Sắp xếp lại clip\nPhông xanh\nChế độ căn chỉnh\n"
+                "Lưu bản nháp\nHủy bản nháp\n"
+                "Đăng nhập không nhận dạng\nĐây không phải tôi\n"
+                "Bảo mật tài khoản của bạn\nXem lại đăng nhập\n"
+                "Đăng xuất tất cả phiên\nHợp tác trả phí với\n"
+                "Sự kiện của\nNơi bạn đang đăng nhập"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nRequest a collab\nSecure your account\n"
+                    "Yêu cầu hợp tác",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nRequest a collab only after you finish the brand brief"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Request a collab only after you finish the brand brief",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

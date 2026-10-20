@@ -303,6 +303,16 @@ _AUTHOR_KEYS = (
     "sticker_sender",
     "order_buyer",
     "payer_name",
+    "người sáng tạo",
+    "nguoi sang tao",
+    "người hợp tác",
+    "nguoi hop tac",
+    "người kiếm tiền",
+    "nguoi kiem tien",
+    "brand_partner",
+    "voiceover_author",
+    "draft_owner",
+    "creator_name",
 )
 _TIME_KEYS = (
     "time",
@@ -534,6 +544,13 @@ _TIME_KEYS = (
     "ordered_at",
     "paid_at",
     "effect_created_at",
+    "thời gian bản nháp",
+    "thoi gian ban nhap",
+    "ngày kiếm tiền",
+    "ngay kiem tien",
+    "drafted_at",
+    "monetized_at",
+    "collab_at",
 )
 
 

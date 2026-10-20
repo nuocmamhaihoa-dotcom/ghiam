@@ -280,6 +280,16 @@ def _append_rows(
                         "sticker_sender",
                         "order_buyer",
                         "payer_name",
+                        "người sáng tạo",
+                        "nguoi sang tao",
+                        "người hợp tác",
+                        "nguoi hop tac",
+                        "người kiếm tiền",
+                        "nguoi kiem tien",
+                        "brand_partner",
+                        "voiceover_author",
+                        "draft_owner",
+                        "creator_name",
                     ),
                 )
             )
@@ -448,6 +458,16 @@ def _append_rows(
                             "sticker_sender",
                             "order_buyer",
                             "payer_name",
+                            "người sáng tạo",
+                            "nguoi sang tao",
+                            "người hợp tác",
+                            "nguoi hop tac",
+                            "người kiếm tiền",
+                            "nguoi kiem tien",
+                            "brand_partner",
+                            "voiceover_author",
+                            "draft_owner",
+                            "creator_name",
                         ),
                     )
                 )
@@ -618,6 +638,15 @@ def post_id_from_url(url: str) -> str | None:
     coupon = re.search(r"/coupon/(\d+)", raw, re.IGNORECASE)
     if coupon:
         return accepted_object_id(coupon.group(1))
+    branded = re.search(r"/brandedcontent/(\d+)", raw, re.IGNORECASE)
+    if branded:
+        return accepted_object_id(branded.group(1))
+    stars = re.search(r"/stars/\?id=(\d+)", raw, re.IGNORECASE)
+    if stars:
+        return accepted_object_id(stars.group(1))
+    drafts = re.search(r"/reels/drafts/\?id=(\d+)", raw, re.IGNORECASE)
+    if drafts:
+        return accepted_object_id(drafts.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
@@ -632,7 +661,7 @@ def post_id_from_url(url: str) -> str | None:
     if stories:
         return accepted_object_id(stories.group(1))
     media = re.search(
-        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb|n|q|v|y)\.(\d+)",
+        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb|n|q|v|y|i|z)\.(\d+)",
         raw,
         re.IGNORECASE,
     )
