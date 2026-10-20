@@ -270,7 +270,7 @@ _TOOLS = {
         "oc",
         "openshift",
     },
-    "web": {"nginx", "caddy", "apache2", "httpd", "traefik", "haproxy", "envoy"},
+    "web": {"nginx", "caddy", "apache2", "apache2ctl", "apachectl", "httpd", "traefik", "haproxy", "envoy"},
     "bao-mat": {
         "openssl",
         "gpg",

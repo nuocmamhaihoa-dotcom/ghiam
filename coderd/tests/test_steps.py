@@ -512,6 +512,8 @@ class WorkerTests(unittest.TestCase):
             self.assertIn("tldr-kubectl", names)
             self.assertIn("tldr-php", names)
             self.assertIn("tldr-openssl", names)
+            self.assertIn("tldr-certbot", names)
+            self.assertIn("tldr-apache2ctl", names)
             self.assertIn(OPEN_SOURCES[0][0], names)
             urls = {url for _name, url in found}
             self.assertIn("https://example.test/old.txt", urls)

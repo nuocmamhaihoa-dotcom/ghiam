@@ -113,7 +113,7 @@ def link_learned(root: Path) -> Path:
             or (name == "ruby" and stem in {"tldr-ruby", "tldr-gem", "tldr-bundle", "tldr-rails", "tldr-rake"})
             or (name == "ngon-ngu" and stem in {"tldr-perl", "tldr-lua", "tldr-dart", "tldr-flutter", "tldr-dotnet", "tldr-zig", "tldr-elixir", "tldr-mix", "tldr-julia", "tldr-scala", "tldr-sbt", "tldr-swift"})
             or (name == "devops" and (stem.startswith("tldr-kube") or stem.startswith("tldr-helm") or stem.startswith("tldr-terraform") or stem.startswith("tldr-ansible") or stem in {"tldr-minikube", "tldr-kind", "tldr-kustomize", "tldr-istioctl", "tldr-vagrant", "tldr-packer", "tldr-pulumi"}))
-            or (name == "web" and stem in {"tldr-nginx", "tldr-caddy", "tldr-apache2", "tldr-httpd", "tldr-traefik"})
+            or (name == "web" and stem in {"tldr-nginx", "tldr-caddy", "tldr-apache2", "tldr-apache2ctl", "tldr-apachectl", "tldr-httpd", "tldr-traefik"})
             or (name == "bao-mat" and stem in {"tldr-openssl", "tldr-gpg", "tldr-ssh-keygen", "tldr-certbot"})
             or (name == "dam-may" and stem in {"tldr-aws", "tldr-gcloud", "tldr-az", "tldr-wrangler", "tldr-heroku", "tldr-vercel", "tldr-doctl"})
         ]
