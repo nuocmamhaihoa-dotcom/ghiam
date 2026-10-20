@@ -313,6 +313,16 @@ _AUTHOR_KEYS = (
     "voiceover_author",
     "draft_owner",
     "creator_name",
+    "người quảng cáo",
+    "nguoi quang cao",
+    "người quản lý trang",
+    "nguoi quan ly trang",
+    "người gửi tin nhắn",
+    "nguoi gui tin nhan",
+    "page_promoter",
+    "alt_text_editor",
+    "inbox_agent",
+    "advertiser_name",
 )
 _TIME_KEYS = (
     "time",
@@ -551,6 +561,13 @@ _TIME_KEYS = (
     "drafted_at",
     "monetized_at",
     "collab_at",
+    "thời gian quảng cáo",
+    "thoi gian quang cao",
+    "ngày boost",
+    "ngay boost",
+    "boosted_at",
+    "promoted_at",
+    "captioned_at",
 )
 
 

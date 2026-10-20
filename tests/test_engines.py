@@ -4601,6 +4601,136 @@ class EngineTests(unittest.TestCase):
             "Request a collab only after you finish the brand brief",
         )
 
+    def test_boost_inbox_chrome_advertiser_vn_keys_and_boost_urls(self) -> None:
+        advertiser = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người quảng cáo": "Lan Ads",
+                "thời gian quảng cáo": "6h",
+            }
+        )
+        self.assertIsNotNone(advertiser)
+        assert advertiser is not None
+        self.assertEqual(advertiser.author_name, "Lan Ads")
+        self.assertEqual(advertiser.created_time, "6h")
+        page_mgr = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người quản lý trang": "Minh",
+                "ngày boost": "hôm nay",
+                "boost_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(page_mgr)
+        assert page_mgr is not None
+        self.assertEqual(page_mgr.author_name, "Minh")
+        self.assertEqual(page_mgr.created_time, "hôm nay")
+        self.assertEqual(page_mgr.comment_id, "1357")
+        messenger = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người gửi tin nhắn": "Bo",
+                "boosted_at": "05:45",
+                "inbox_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(messenger)
+        assert messenger is not None
+        self.assertEqual(messenger.author_name, "Bo")
+        self.assertEqual(messenger.created_time, "05:45")
+        self.assertEqual(messenger.comment_id, "2468")
+        captioner = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "page_promoter": "An",
+                "promoted_at": "2025-01-01T03:00:00Z",
+            }
+        )
+        self.assertIsNotNone(captioner)
+        assert captioner is not None
+        self.assertEqual(captioner.author_name, "An")
+        self.assertEqual(captioner.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(person_name({"alt_text_editor": "Lan"}), "Lan")
+        self.assertEqual(person_name({"inbox_agent": "Bo"}), "Bo")
+        self.assertEqual(person_name({"người quảng cáo": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"captioned_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ngày boost": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"boosted_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"boost_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"inbox_comment_id": "44"}), "44")
+        self.assertEqual(first_comment_id({"promo_comment_id": "11"}), "11")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/boost/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/yearinreview/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=u.555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=w.333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=x.777888"),
+            "777888",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nYour memories\nSee your year in review\n"
+                "Manage activity\nClear activity\nDownload activity\n"
+                "Filter by date\nFilter by category\nPage transparency\n"
+                "See Page info\nPage settings\nInvite people to like Page\n"
+                "Promote Page\nCreate a promotion\nBoost again\n"
+                "See promotion results\nAd manager\nBilling and payments\n"
+                "Payment history\nFiltered messages\nMessage requests\n"
+                "Spam folder\nArchived chats\nChat themes\n"
+                "Quick replies\nAway message\nIcebreakers\n"
+                "Greeting message\nAutomatic alternative text\n"
+                "Generate alt text\nEdit alt text\nAccessibility settings\n"
+                "Kỷ niệm của bạn\nXem tổng kết năm của bạn\n"
+                "Quản lý hoạt động\nXóa hoạt động\nTải nhật ký hoạt động\n"
+                "Lọc theo ngày\nLọc theo danh mục\nMinh bạch trang\n"
+                "Xem thông tin Trang\nCài đặt Trang\n"
+                "Mời mọi người thích Trang\nQuảng cáo Trang\n"
+                "Tạo chiến dịch quảng cáo\nQuảng cáo lại\n"
+                "Xem kết quả quảng cáo\nTrình quản lý quảng cáo\n"
+                "Thanh toán và hóa đơn\nLịch sử thanh toán\n"
+                "Tin nhắn đã lọc\nYêu cầu tin nhắn\nThư mục spam\n"
+                "Đoạn chat đã lưu trữ\nChủ đề chat\nTrả lời nhanh\n"
+                "Tin nhắn vắng mặt\nCâu mở đầu\nTin nhắn chào mừng\n"
+                "Văn bản thay thế tự động\nTạo văn bản thay thế\n"
+                "Chỉnh sửa văn bản thay thế\nCài đặt trợ năng"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nPromote Page\nGenerate alt text\n"
+                    "Quảng cáo Trang",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nPromote Page only after you finish the creative brief"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Promote Page only after you finish the creative brief",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -290,6 +290,16 @@ def _append_rows(
                         "voiceover_author",
                         "draft_owner",
                         "creator_name",
+                        "người quảng cáo",
+                        "nguoi quang cao",
+                        "người quản lý trang",
+                        "nguoi quan ly trang",
+                        "người gửi tin nhắn",
+                        "nguoi gui tin nhan",
+                        "page_promoter",
+                        "alt_text_editor",
+                        "inbox_agent",
+                        "advertiser_name",
                     ),
                 )
             )
@@ -468,6 +478,16 @@ def _append_rows(
                             "voiceover_author",
                             "draft_owner",
                             "creator_name",
+                            "người quảng cáo",
+                            "nguoi quang cao",
+                            "người quản lý trang",
+                            "nguoi quan ly trang",
+                            "người gửi tin nhắn",
+                            "nguoi gui tin nhan",
+                            "page_promoter",
+                            "alt_text_editor",
+                            "inbox_agent",
+                            "advertiser_name",
                         ),
                     )
                 )
@@ -647,6 +667,12 @@ def post_id_from_url(url: str) -> str | None:
     drafts = re.search(r"/reels/drafts/\?id=(\d+)", raw, re.IGNORECASE)
     if drafts:
         return accepted_object_id(drafts.group(1))
+    boost = re.search(r"/boost/\?id=(\d+)", raw, re.IGNORECASE)
+    if boost:
+        return accepted_object_id(boost.group(1))
+    year_review = re.search(r"/yearinreview/\?id=(\d+)", raw, re.IGNORECASE)
+    if year_review:
+        return accepted_object_id(year_review.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
@@ -661,7 +687,7 @@ def post_id_from_url(url: str) -> str | None:
     if stories:
         return accepted_object_id(stories.group(1))
     media = re.search(
-        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb|n|q|v|y|i|z)\.(\d+)",
+        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb|n|q|v|y|i|z|u|w|x)\.(\d+)",
         raw,
         re.IGNORECASE,
     )
