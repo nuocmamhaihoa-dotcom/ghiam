@@ -390,6 +390,17 @@ def _one(row: Any) -> PublicComment | None:
         "employer_name",
         "recruiter_name",
         "matcher_name",
+        "tên cửa hàng",
+        "ten cua hang",
+        "chủ quán",
+        "chu quan",
+        "người check in",
+        "nguoi check in",
+        "checkin_author",
+        "place_owner",
+        "business_owner",
+        "venue_owner",
+        "merchant_name",
     )
     return PublicComment(
         text=text,

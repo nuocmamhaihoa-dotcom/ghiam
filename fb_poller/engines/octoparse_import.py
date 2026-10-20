@@ -252,6 +252,17 @@ _AUTHOR_KEYS = (
     "employer_name",
     "recruiter_name",
     "matcher_name",
+    "tên cửa hàng",
+    "ten cua hang",
+    "chủ quán",
+    "chu quan",
+    "người check in",
+    "nguoi check in",
+    "checkin_author",
+    "place_owner",
+    "business_owner",
+    "venue_owner",
+    "merchant_name",
 )
 _TIME_KEYS = (
     "time",
@@ -435,6 +446,17 @@ _TIME_KEYS = (
     "duplicated_at",
     "transferred_at",
     "moved_at",
+    "thời gian check in",
+    "thoi gian check in",
+    "ngày check in",
+    "ngay check in",
+    "lúc ghé",
+    "luc ghe",
+    "geo_tagged_at",
+    "located_at",
+    "checked_in_at",
+    "visited_at",
+    "arrived_at",
 )
 
 

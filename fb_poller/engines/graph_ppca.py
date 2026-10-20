@@ -229,6 +229,17 @@ def _append_rows(
                         "employer_name",
                         "recruiter_name",
                         "matcher_name",
+                        "tên cửa hàng",
+                        "ten cua hang",
+                        "chủ quán",
+                        "chu quan",
+                        "người check in",
+                        "nguoi check in",
+                        "checkin_author",
+                        "place_owner",
+                        "business_owner",
+                        "venue_owner",
+                        "merchant_name",
                     ),
                 )
             )
@@ -346,6 +357,17 @@ def _append_rows(
                             "employer_name",
                             "recruiter_name",
                             "matcher_name",
+                            "tên cửa hàng",
+                            "ten cua hang",
+                            "chủ quán",
+                            "chu quan",
+                            "người check in",
+                            "nguoi check in",
+                            "checkin_author",
+                            "place_owner",
+                            "business_owner",
+                            "venue_owner",
+                            "merchant_name",
                         ),
                     )
                 )
@@ -465,6 +487,12 @@ def post_id_from_url(url: str) -> str | None:
     clips = re.search(r"/clips/(?:play/)?(\d+)", raw, re.IGNORECASE)
     if clips:
         return accepted_object_id(clips.group(1))
+    place = re.search(r"/(?:places/thing/\?id=|place/)(\d+)", raw, re.IGNORECASE)
+    if place:
+        return accepted_object_id(place.group(1))
+    local = re.search(r"/local/lists/(\d+)", raw, re.IGNORECASE)
+    if local:
+        return accepted_object_id(local.group(1))
     share = re.search(r"/share/[pvr]/(pfbid[A-Za-z0-9]+|\d+)", raw, re.IGNORECASE)
     if share:
         return accepted_object_id(share.group(1))
@@ -481,7 +509,7 @@ def post_id_from_url(url: str) -> str | None:
     stories = re.search(r"/stories/(\d+)", raw, re.IGNORECASE)
     if stories:
         return accepted_object_id(stories.group(1))
-    media = re.search(r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c)\.(\d+)", raw, re.IGNORECASE)
+    media = re.search(r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e)\.(\d+)", raw, re.IGNORECASE)
     if media:
         return accepted_object_id(media.group(1))
     path = re.search(

@@ -124,6 +124,10 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "provider_comment_id",
         "upstream_comment_id",
         "origin_comment_id",
+        "place_comment_id",
+        "location_comment_id",
+        "checkin_comment_id",
+        "venue_comment_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -193,6 +197,10 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "provider_comment_id",
         "upstream_comment_id",
         "origin_comment_id",
+        "place_comment_id",
+        "location_comment_id",
+        "checkin_comment_id",
+        "venue_comment_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -485,6 +493,17 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "employer_name",
             "recruiter_name",
             "matcher_name",
+            "tên cửa hàng",
+            "ten cua hang",
+            "chủ quán",
+            "chu quan",
+            "người check in",
+            "nguoi check in",
+            "checkin_author",
+            "place_owner",
+            "business_owner",
+            "venue_owner",
+            "merchant_name",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -794,6 +813,17 @@ def timestamp_of(row: object) -> str | None:
         "duplicated_at",
         "transferred_at",
         "moved_at",
+        "thời gian check in",
+        "thoi gian check in",
+        "ngày check in",
+        "ngay check in",
+        "lúc ghé",
+        "luc ghe",
+        "geo_tagged_at",
+        "located_at",
+        "checked_in_at",
+        "visited_at",
+        "arrived_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:

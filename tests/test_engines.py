@@ -3831,6 +3831,113 @@ class EngineTests(unittest.TestCase):
             "Please play now with friends after dinner tonight",
         )
 
+    def test_location_business_chrome_shop_vn_keys_and_place_urls(self) -> None:
+        shop = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "tên cửa hàng": "Lan Shop",
+                "thời gian check in": "6h",
+            }
+        )
+        self.assertIsNotNone(shop)
+        assert shop is not None
+        self.assertEqual(shop.author_name, "Lan Shop")
+        self.assertEqual(shop.created_time, "6h")
+        owner = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "chủ quán": "Minh",
+                "ngày check in": "hôm nay",
+                "place_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(owner)
+        assert owner is not None
+        self.assertEqual(owner.author_name, "Minh")
+        self.assertEqual(owner.created_time, "hôm nay")
+        self.assertEqual(owner.comment_id, "1357")
+        checkin = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người check in": "Bo",
+                "lúc ghé": "05:45",
+                "checkin_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(checkin)
+        assert checkin is not None
+        self.assertEqual(checkin.author_name, "Bo")
+        self.assertEqual(checkin.created_time, "05:45")
+        self.assertEqual(checkin.comment_id, "2468")
+        merchant = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "merchant_name": "An",
+                "checked_in_at": "2025-01-01T03:00:00Z",
+            }
+        )
+        self.assertIsNotNone(merchant)
+        assert merchant is not None
+        self.assertEqual(merchant.author_name, "An")
+        self.assertEqual(merchant.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(person_name({"business_owner": "Lan"}), "Lan")
+        self.assertEqual(person_name({"venue_owner": "Bo"}), "Bo")
+        self.assertEqual(person_name({"chủ quán": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"visited_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ngày check in": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"arrived_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"location_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"venue_comment_id": "44"}), "44")
+        self.assertEqual(first_comment_id({"place_comment_id": "11"}), "11")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/places/thing/?id=12345"),
+            "12345",
+        )
+        self.assertEqual(
+            post_id_from_url("https://m.facebook.com/place/998877/"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/local/lists/555666/"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=e.111222"),
+            "111222",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nWeather forecast\nSevere weather alert\n"
+                "Traffic update\nShare location\nLive location\n"
+                "Nearby places\nTemporarily closed\nPermanently closed\n"
+                "Reserve a table\nOrder delivery\nOrder pickup\n"
+                "Xem dự báo thời tiết\nChia sẻ vị trí\nĐịa điểm gần đây\n"
+                "Đang đóng cửa tạm thời\nĐặt bàn\nĐặt giao hàng"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nShare location\nOrder delivery\nChia sẻ vị trí",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nShare location only when you arrive at the gate"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Share location only when you arrive at the gate",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
