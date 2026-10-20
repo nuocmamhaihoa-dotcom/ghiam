@@ -730,6 +730,18 @@ def _append_rows(
                         "crisis_responder",
                         "neighborhood_member",
                         "parental_supervisor",
+                        "người chỉnh sửa avatar",
+                        "nguoi chinh sua avatar",
+                        "người thăm horizon",
+                        "nguoi tham horizon",
+                        "người hâm mộ esports",
+                        "nguoi ham mo esports",
+                        "người đặt trạng thái",
+                        "nguoi dat trang thai",
+                        "avatar_editor",
+                        "horizon_visitor",
+                        "esports_fan",
+                        "presence_setter",
                     ),
                 )
             )
@@ -1348,6 +1360,18 @@ def _append_rows(
                             "crisis_responder",
                             "neighborhood_member",
                             "parental_supervisor",
+                            "người chỉnh sửa avatar",
+                            "nguoi chinh sua avatar",
+                            "người thăm horizon",
+                            "nguoi tham horizon",
+                            "người hâm mộ esports",
+                            "nguoi ham mo esports",
+                            "người đặt trạng thái",
+                            "nguoi dat trang thai",
+                            "avatar_editor",
+                            "horizon_visitor",
+                            "esports_fan",
+                            "presence_setter",
                         ),
                     )
                 )
@@ -2314,6 +2338,24 @@ def post_id_from_url(url: str) -> str | None:
     notification_settings = re.search(r"/notification_settings/\?id=(\d+)", raw, re.IGNORECASE)
     if notification_settings:
         return accepted_object_id(notification_settings.group(1))
+    gaming_play = re.search(r"/gaming/play/\?id=(\d+)", raw, re.IGNORECASE)
+    if gaming_play:
+        return accepted_object_id(gaming_play.group(1))
+    avatar_edit = re.search(r"/avatar/edit/\?id=(\d+)", raw, re.IGNORECASE)
+    if avatar_edit:
+        return accepted_object_id(avatar_edit.group(1))
+    horizon_worlds = re.search(r"/horizon/worlds/\?id=(\d+)", raw, re.IGNORECASE)
+    if horizon_worlds:
+        return accepted_object_id(horizon_worlds.group(1))
+    esports = re.search(r"/esports/\?id=(\d+)", raw, re.IGNORECASE)
+    if esports:
+        return accepted_object_id(esports.group(1))
+    cloudgaming = re.search(r"/cloudgaming/\?id=(\d+)", raw, re.IGNORECASE)
+    if cloudgaming:
+        return accepted_object_id(cloudgaming.group(1))
+    quests = re.search(r"/quests/\?id=(\d+)", raw, re.IGNORECASE)
+    if quests:
+        return accepted_object_id(quests.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

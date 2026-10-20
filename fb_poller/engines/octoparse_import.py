@@ -753,6 +753,18 @@ _AUTHOR_KEYS = (
     "crisis_responder",
     "neighborhood_member",
     "parental_supervisor",
+    "người chỉnh sửa avatar",
+    "nguoi chinh sua avatar",
+    "người thăm horizon",
+    "nguoi tham horizon",
+    "người hâm mộ esports",
+    "nguoi ham mo esports",
+    "người đặt trạng thái",
+    "nguoi dat trang thai",
+    "avatar_editor",
+    "horizon_visitor",
+    "esports_fan",
+    "presence_setter",
 )
 _TIME_KEYS = (
     "time",
@@ -1295,6 +1307,16 @@ _TIME_KEYS = (
     "crisis_responded_at",
     "parental_supervised_at",
     "neighborhood_joined_at",
+    "ngày chỉnh sửa avatar",
+    "ngay chinh sua avatar",
+    "thời gian thăm horizon",
+    "thoi gian tham horizon",
+    "ngày đặt trạng thái",
+    "ngay dat trang thai",
+    "avatar_edited_at",
+    "horizon_visited_at",
+    "esports_viewed_at",
+    "presence_set_at",
 )
 
 

@@ -9047,6 +9047,132 @@ class EngineTests(unittest.TestCase):
             "Fundraiser only after you finish reading the charity details",
         )
 
+    def test_gaming_avatar_horizon_presence_vn_keys_and_urls(self) -> None:
+        avatar = _from_mapping(
+            {
+                "bình luận": "Avatar mới đẹp quá",
+                "người chỉnh sửa avatar": "Lan Av",
+                "ngày chỉnh sửa avatar": "2h",
+            }
+        )
+        self.assertIsNotNone(avatar)
+        assert avatar is not None
+        self.assertEqual(avatar.author_name, "Lan Av")
+        self.assertEqual(avatar.created_time, "2h")
+        horizon = _from_mapping(
+            {
+                "Nội dung": "World này vui lắm",
+                "người thăm horizon": "Minh",
+                "thời gian thăm horizon": "hôm nay",
+                "horizon_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(horizon)
+        assert horizon is not None
+        self.assertEqual(horizon.author_name, "Minh")
+        self.assertEqual(horizon.created_time, "hôm nay")
+        self.assertEqual(horizon.comment_id, "1357")
+        esports = _from_mapping(
+            {
+                "text": "trận này căng quá",
+                "người hâm mộ esports": "Bo",
+                "esports_viewed_at": "05:45",
+                "esports_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(esports)
+        assert esports is not None
+        self.assertEqual(esports.author_name, "Bo")
+        self.assertEqual(esports.created_time, "05:45")
+        self.assertEqual(esports.comment_id, "2468")
+        presence = _from_mapping(
+            {
+                "message": "mình đang nghe nhạc đây",
+                "người đặt trạng thái": "An",
+                "ngày đặt trạng thái": "2025-01-01T03:00:00Z",
+                "presence_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(presence)
+        assert presence is not None
+        self.assertEqual(presence.author_name, "An")
+        self.assertEqual(presence.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(presence.comment_id, "9753")
+        self.assertEqual(person_name({"avatar_editor": "Lan"}), "Lan")
+        self.assertEqual(person_name({"horizon_visitor": "Bo"}), "Bo")
+        self.assertEqual(person_name({"esports_fan": "Minh"}), "Minh")
+        self.assertEqual(person_name({"presence_setter": "An"}), "An")
+        self.assertEqual(person_name({"người chỉnh sửa avatar": "Ha"}), "Ha")
+        self.assertEqual(timestamp_of({"avatar_edited_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"horizon_visited_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"esports_viewed_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"presence_set_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"avatar_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"presence_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/gaming/play/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/avatar/edit/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/horizon/worlds/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/esports/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/cloudgaming/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/quests/?id=121212"),
+            "121212",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nGet game\nEsports\nTournament\nLeaderboard\n"
+                "Achievements\nCloud gaming\nAvatar editor\nStyle your avatar\n"
+                "Meta avatars\nHorizon worlds\nJoin world\nVr headset\n"
+                "Quest store\nCast from quest\nPresence\nEmoji status\n"
+                "Music status\nListening to\nPlaying\nIn a call\n"
+                "Hide active status\nTải game\nThể thao điện tử\nGiải đấu\n"
+                "Bảng xếp hạng\nThành tích\nChơi game đám mây\n"
+                "Trình chỉnh sửa avatar\nTạo kiểu avatar\nAvatar meta\n"
+                "Thế giới horizon\nTham gia thế giới\nKính thực tế ảo\n"
+                "Cửa hàng quest\nPhát từ quest\nHiện diện\n"
+                "Trạng thái biểu tượng cảm xúc\nTrạng thái nhạc\nĐang nghe\n"
+                "Đang chơi\nĐang trong cuộc gọi\nẨn trạng thái hoạt động"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nEsports\nPresence\n"
+                    "Thể thao điện tử\nHiện diện",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nPlaying only after you finish the tutorial level carefully"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Playing only after you finish the tutorial level carefully",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -891,6 +891,18 @@ def _one(row: Any) -> PublicComment | None:
         "crisis_responder",
         "neighborhood_member",
         "parental_supervisor",
+        "người chỉnh sửa avatar",
+        "nguoi chinh sua avatar",
+        "người thăm horizon",
+        "nguoi tham horizon",
+        "người hâm mộ esports",
+        "nguoi ham mo esports",
+        "người đặt trạng thái",
+        "nguoi dat trang thai",
+        "avatar_editor",
+        "horizon_visitor",
+        "esports_fan",
+        "presence_setter",
     )
     return PublicComment(
         text=text,

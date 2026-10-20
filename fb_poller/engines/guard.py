@@ -272,6 +272,10 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "crisis_comment_id",
         "neighborhood_comment_id",
         "parental_comment_id",
+        "avatar_comment_id",
+        "horizon_comment_id",
+        "esports_comment_id",
+        "presence_comment_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -489,6 +493,10 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "crisis_comment_id",
         "neighborhood_comment_id",
         "parental_comment_id",
+        "avatar_comment_id",
+        "horizon_comment_id",
+        "esports_comment_id",
+        "presence_comment_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -1282,6 +1290,18 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "crisis_responder",
             "neighborhood_member",
             "parental_supervisor",
+            "người chỉnh sửa avatar",
+            "nguoi chinh sua avatar",
+            "người thăm horizon",
+            "nguoi tham horizon",
+            "người hâm mộ esports",
+            "nguoi ham mo esports",
+            "người đặt trạng thái",
+            "nguoi dat trang thai",
+            "avatar_editor",
+            "horizon_visitor",
+            "esports_fan",
+            "presence_setter",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -1785,6 +1805,16 @@ def timestamp_of(row: object) -> str | None:
         "crisis_responded_at",
         "parental_supervised_at",
         "neighborhood_joined_at",
+        "ngày chỉnh sửa avatar",
+        "ngay chinh sua avatar",
+        "thời gian thăm horizon",
+        "thoi gian tham horizon",
+        "ngày đặt trạng thái",
+        "ngay dat trang thai",
+        "avatar_edited_at",
+        "horizon_visited_at",
+        "esports_viewed_at",
+        "presence_set_at",
         "mirrored_at",
         "copied_at",
         "backed_up_at",
@@ -2158,6 +2188,16 @@ def timestamp_of(row: object) -> str | None:
         "crisis_responded_at",
         "parental_supervised_at",
         "neighborhood_joined_at",
+        "ngày chỉnh sửa avatar",
+        "ngay chinh sua avatar",
+        "thời gian thăm horizon",
+        "thoi gian tham horizon",
+        "ngày đặt trạng thái",
+        "ngay dat trang thai",
+        "avatar_edited_at",
+        "horizon_visited_at",
+        "esports_viewed_at",
+        "presence_set_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:
