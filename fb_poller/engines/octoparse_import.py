@@ -263,6 +263,16 @@ _AUTHOR_KEYS = (
     "business_owner",
     "venue_owner",
     "merchant_name",
+    "người tổ chức",
+    "nguoi to chuc",
+    "người mời",
+    "nguoi moi",
+    "người tham gia",
+    "nguoi tham gia",
+    "event_organizer",
+    "event_host",
+    "invitee_name",
+    "attendee_name",
 )
 _TIME_KEYS = (
     "time",
@@ -457,6 +467,15 @@ _TIME_KEYS = (
     "checked_in_at",
     "visited_at",
     "arrived_at",
+    "thời gian sự kiện",
+    "thoi gian su kien",
+    "ngày sự kiện",
+    "ngay su kien",
+    "giờ bắt đầu",
+    "gio bat dau",
+    "event_time",
+    "starts_at",
+    "event_at",
 )
 
 

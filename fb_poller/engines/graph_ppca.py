@@ -240,6 +240,16 @@ def _append_rows(
                         "business_owner",
                         "venue_owner",
                         "merchant_name",
+                        "người tổ chức",
+                        "nguoi to chuc",
+                        "người mời",
+                        "nguoi moi",
+                        "người tham gia",
+                        "nguoi tham gia",
+                        "event_organizer",
+                        "event_host",
+                        "invitee_name",
+                        "attendee_name",
                     ),
                 )
             )
@@ -368,6 +378,16 @@ def _append_rows(
                             "business_owner",
                             "venue_owner",
                             "merchant_name",
+                            "người tổ chức",
+                            "nguoi to chuc",
+                            "người mời",
+                            "nguoi moi",
+                            "người tham gia",
+                            "nguoi tham gia",
+                            "event_organizer",
+                            "event_host",
+                            "invitee_name",
+                            "attendee_name",
                         ),
                     )
                 )
@@ -496,9 +516,15 @@ def post_id_from_url(url: str) -> str | None:
     share = re.search(r"/share/[pvr]/(pfbid[A-Za-z0-9]+|\d+)", raw, re.IGNORECASE)
     if share:
         return accepted_object_id(share.group(1))
-    notes = re.search(r"/notes/(\d+)", raw, re.IGNORECASE)
+    notes = re.search(r"/notes/(?:[^/?#]+/)?(\d+)", raw, re.IGNORECASE)
     if notes:
         return accepted_object_id(notes.group(1))
+    offers = re.search(r"/offers/(\d+)", raw, re.IGNORECASE)
+    if offers:
+        return accepted_object_id(offers.group(1))
+    messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
+    if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
+        return accepted_object_id(messenger_media.group(1))
     # Prefer the photo/post fbid over the album set id when both appear.
     query = re.search(r"(?:story_fbid|fbid|post_id)=([^&\s]+)", raw, re.IGNORECASE)
     if query:
@@ -509,7 +535,11 @@ def post_id_from_url(url: str) -> str | None:
     stories = re.search(r"/stories/(\d+)", raw, re.IGNORECASE)
     if stories:
         return accepted_object_id(stories.group(1))
-    media = re.search(r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e)\.(\d+)", raw, re.IGNORECASE)
+    media = re.search(
+        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb)\.(\d+)",
+        raw,
+        re.IGNORECASE,
+    )
     if media:
         return accepted_object_id(media.group(1))
     path = re.search(

@@ -3938,6 +3938,135 @@ class EngineTests(unittest.TestCase):
             "Share location only when you arrive at the gate",
         )
 
+    def test_events_friends_chrome_organizer_vn_keys_and_notes_urls(self) -> None:
+        organizer = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người tổ chức": "Lan Event",
+                "thời gian sự kiện": "6h",
+            }
+        )
+        self.assertIsNotNone(organizer)
+        assert organizer is not None
+        self.assertEqual(organizer.author_name, "Lan Event")
+        self.assertEqual(organizer.created_time, "6h")
+        invitee = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người mời": "Minh",
+                "ngày sự kiện": "hôm nay",
+                "event_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(invitee)
+        assert invitee is not None
+        self.assertEqual(invitee.author_name, "Minh")
+        self.assertEqual(invitee.created_time, "hôm nay")
+        self.assertEqual(invitee.comment_id, "1357")
+        attendee = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người tham gia": "Bo",
+                "giờ bắt đầu": "05:45",
+                "invite_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(attendee)
+        assert attendee is not None
+        self.assertEqual(attendee.author_name, "Bo")
+        self.assertEqual(attendee.created_time, "05:45")
+        self.assertEqual(attendee.comment_id, "2468")
+        host = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "event_organizer": "An",
+                "starts_at": "2025-01-01T03:00:00Z",
+            }
+        )
+        self.assertIsNotNone(host)
+        assert host is not None
+        self.assertEqual(host.author_name, "An")
+        self.assertEqual(host.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(person_name({"event_host": "Lan"}), "Lan")
+        self.assertEqual(person_name({"attendee_name": "Bo"}), "Bo")
+        self.assertEqual(person_name({"người tổ chức": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"event_time": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ngày sự kiện": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"event_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"event_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"invite_comment_id": "44"}), "44")
+        self.assertEqual(first_comment_id({"rsvp_comment_id": "11"}), "11")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/notes/foo-bar/111222/"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/offers/998877/"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url(
+                "https://www.facebook.com/messenger_media/?thread_id=1&asset_id=555666"
+            ),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=p.333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=vb.777888"),
+            "777888",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nCreate a public event\nInvite friends to this event\n"
+                "View event details\nRespond to event\nPeople going\n"
+                "People interested\nOn this day last year\nShare this memory\n"
+                "Wish them a happy birthday\nSend friend request\n"
+                "Accept friend request\nDecline friend request\n"
+                "Cancel friend request\nSee all mutual friends\n"
+                "Join this group\nLeave this group\nSee group rules\n"
+                "Pending posts for review\nMember since yesterday\n"
+                "Make an offer\nMessage the seller\nMark item as sold\n"
+                "Save this listing\nOriginal audio\nUse this audio\n"
+                "Watch more reels\nGo live now\nWatch live video\n"
+                "Create a poll\nAdd a poll option\nOpen chat in Messenger\n"
+                "Continue this chat in Messenger\n"
+                "Tạo sự kiện công khai\nMời bạn bè đến sự kiện này\n"
+                "Xem chi tiết sự kiện\nPhản hồi sự kiện\nNgười sẽ tham gia\n"
+                "Người quan tâm\nNgày này năm ngoái\nChia sẻ kỷ niệm này\n"
+                "Gửi lời mời kết bạn\nChấp nhận lời mời kết bạn\n"
+                "Tham gia nhóm này\nRời khỏi nhóm này\nXem quy tắc nhóm\n"
+                "Đặt một giá\nNhắn tin cho người bán\nĐánh dấu đã bán\n"
+                "Âm thanh gốc\nDùng âm thanh này\nPhát trực tiếp ngay\n"
+                "Tạo cuộc thăm dò ý kiến\nMở chat trong Messenger"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nCreate a public event\nSend friend request\n"
+                    "Tạo sự kiện công khai",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nCreate a public event only after you confirm the guest list"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Create a public event only after you confirm the guest list",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
