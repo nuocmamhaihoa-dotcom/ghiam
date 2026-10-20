@@ -4067,6 +4067,145 @@ class EngineTests(unittest.TestCase):
             "Create a public event only after you confirm the guest list",
         )
 
+    def test_profile_saves_chrome_saver_vn_keys_and_catalog_urls(self) -> None:
+        saver = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người lưu": "Lan Save",
+                "thời gian lưu": "6h",
+            }
+        )
+        self.assertIsNotNone(saver)
+        assert saver is not None
+        self.assertEqual(saver.author_name, "Lan Save")
+        self.assertEqual(saver.created_time, "6h")
+        reporter = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người báo cáo": "Minh",
+                "ngày lưu": "hôm nay",
+                "save_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(reporter)
+        assert reporter is not None
+        self.assertEqual(reporter.author_name, "Minh")
+        self.assertEqual(reporter.created_time, "hôm nay")
+        self.assertEqual(reporter.comment_id, "1357")
+        blocker = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người chặn": "Bo",
+                "lúc báo cáo": "05:45",
+                "report_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(blocker)
+        assert blocker is not None
+        self.assertEqual(blocker.author_name, "Bo")
+        self.assertEqual(blocker.created_time, "05:45")
+        self.assertEqual(blocker.comment_id, "2468")
+        page_mgr = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "page_manager": "An",
+                "saved_at": "2025-01-01T03:00:00Z",
+            }
+        )
+        self.assertIsNotNone(page_mgr)
+        assert page_mgr is not None
+        self.assertEqual(page_mgr.author_name, "An")
+        self.assertEqual(page_mgr.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(person_name({"collection_owner": "Lan"}), "Lan")
+        self.assertEqual(person_name({"group_creator": "Bo"}), "Bo")
+        self.assertEqual(person_name({"người lưu": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"blocked_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ngày lưu": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"reported_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"save_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"report_comment_id": "44"}), "44")
+        self.assertEqual(first_comment_id({"block_comment_id": "11"}), "11")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/catalog/products/111222/"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/menu/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/appointments/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/booking/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/rooms/777888/"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=n.121212"),
+            "121212",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nFind friends from contacts\nBlock this user\n"
+                "Report this profile\nEdit your profile\n"
+                "Update your profile picture\nUpdate your cover photo\n"
+                "Turn on post notifications\nTurn off post notifications\n"
+                "Archive this chat\nMark conversation as unread\n"
+                "Unfriend this person\nSay hi with a wave\nSend a poke\n"
+                "Create your story\nShare to close friends\n"
+                "Shop now on website\nForgot your password\n"
+                "Change password\nDownload your information\n"
+                "Unsave post\nAdd to collection\nCreate collection\n"
+                "See your saves\nPages you manage\n"
+                "Switch to professional mode\nCreate a fundraiser\n"
+                "Blood donations\nMental health resources\n"
+                "COVID-19 information\nVoting information\n"
+                "Climate science center\nJoin group\nOn this day\n"
+                "Share memory\nMake offer\nUse audio\n"
+                "Tìm bạn bè từ danh bạ\nChặn người dùng này\n"
+                "Báo cáo trang cá nhân này\nChỉnh sửa trang cá nhân của bạn\n"
+                "Cập nhật ảnh đại diện của bạn\nBật thông báo bài viết\n"
+                "Lưu trữ đoạn chat này\nChào hỏi bằng vẫy tay\n"
+                "Tạo tin của bạn\nChia sẻ với bạn thân\n"
+                "Mua ngay trên website\nQuên mật khẩu của bạn\n"
+                "Đổi mật khẩu\nBỏ lưu bài viết\nThêm vào bộ sưu tập\n"
+                "Tạo bộ sưu tập\nXem mục đã lưu\nTrang bạn quản lý\n"
+                "Chuyển sang chế độ chuyên nghiệp\nHiến máu\n"
+                "Thông tin COVID-19\nThông tin bỏ phiếu\n"
+                "Trung tâm khoa học khí hậu\nTham gia nhóm\n"
+                "Ngày này năm xưa\nChia sẻ kỷ niệm\nĐặt giá\n"
+                "Dùng âm thanh"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nFind friends from contacts\nAdd to collection\n"
+                    "Tìm bạn bè từ danh bạ",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nFind friends from contacts only if you already know them"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Find friends from contacts only if you already know them",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

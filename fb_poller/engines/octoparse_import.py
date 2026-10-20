@@ -273,6 +273,16 @@ _AUTHOR_KEYS = (
     "event_host",
     "invitee_name",
     "attendee_name",
+    "người lưu",
+    "nguoi luu",
+    "người báo cáo",
+    "nguoi bao cao",
+    "người chặn",
+    "nguoi chan",
+    "page_manager",
+    "collection_owner",
+    "group_creator",
+    "saver_name",
 )
 _TIME_KEYS = (
     "time",
@@ -476,6 +486,17 @@ _TIME_KEYS = (
     "event_time",
     "starts_at",
     "event_at",
+    "thời gian lưu",
+    "thoi gian luu",
+    "ngày lưu",
+    "ngay luu",
+    "lúc báo cáo",
+    "luc bao cao",
+    "thời gian chặn",
+    "thoi gian chan",
+    "saved_at",
+    "reported_at",
+    "blocked_at",
 )
 
 

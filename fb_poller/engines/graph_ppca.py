@@ -250,6 +250,16 @@ def _append_rows(
                         "event_host",
                         "invitee_name",
                         "attendee_name",
+                        "người lưu",
+                        "nguoi luu",
+                        "người báo cáo",
+                        "nguoi bao cao",
+                        "người chặn",
+                        "nguoi chan",
+                        "page_manager",
+                        "collection_owner",
+                        "group_creator",
+                        "saver_name",
                     ),
                 )
             )
@@ -388,6 +398,16 @@ def _append_rows(
                             "event_host",
                             "invitee_name",
                             "attendee_name",
+                            "người lưu",
+                            "nguoi luu",
+                            "người báo cáo",
+                            "nguoi bao cao",
+                            "người chặn",
+                            "nguoi chan",
+                            "page_manager",
+                            "collection_owner",
+                            "group_creator",
+                            "saver_name",
                         ),
                     )
                 )
@@ -522,6 +542,21 @@ def post_id_from_url(url: str) -> str | None:
     offers = re.search(r"/offers/(\d+)", raw, re.IGNORECASE)
     if offers:
         return accepted_object_id(offers.group(1))
+    catalog = re.search(r"/catalog/products/(\d+)", raw, re.IGNORECASE)
+    if catalog:
+        return accepted_object_id(catalog.group(1))
+    menu = re.search(r"/menu/\?id=(\d+)", raw, re.IGNORECASE)
+    if menu:
+        return accepted_object_id(menu.group(1))
+    appointments = re.search(r"/appointments/\?id=(\d+)", raw, re.IGNORECASE)
+    if appointments:
+        return accepted_object_id(appointments.group(1))
+    booking = re.search(r"/booking/\?id=(\d+)", raw, re.IGNORECASE)
+    if booking:
+        return accepted_object_id(booking.group(1))
+    rooms = re.search(r"/rooms/(\d+)", raw, re.IGNORECASE)
+    if rooms:
+        return accepted_object_id(rooms.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
@@ -536,7 +571,7 @@ def post_id_from_url(url: str) -> str | None:
     if stories:
         return accepted_object_id(stories.group(1))
     media = re.search(
-        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb)\.(\d+)",
+        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb|n)\.(\d+)",
         raw,
         re.IGNORECASE,
     )

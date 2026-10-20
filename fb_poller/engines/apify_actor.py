@@ -411,6 +411,16 @@ def _one(row: Any) -> PublicComment | None:
         "event_host",
         "invitee_name",
         "attendee_name",
+        "người lưu",
+        "nguoi luu",
+        "người báo cáo",
+        "nguoi bao cao",
+        "người chặn",
+        "nguoi chan",
+        "page_manager",
+        "collection_owner",
+        "group_creator",
+        "saver_name",
     )
     return PublicComment(
         text=text,
