@@ -638,6 +638,19 @@ _AUTHOR_KEYS = (
     "tag_reviewer",
     "friendship_viewer",
     "security_key_user",
+    "người quản lý Meta Verified",
+    "nguoi quan ly Meta Verified",
+    "người ghim thông báo",
+    "nguoi ghim thong bao",
+    "người mời vào nhóm",
+    "nguoi moi vao nhom",
+    "người gửi hoa hồng",
+    "nguoi gui hoa hong",
+    "meta_verified_manager",
+    "announcement_pinner",
+    "group_inviter",
+    "rose_sender",
+    "anonymous_poster",
 )
 _TIME_KEYS = (
     "time",
@@ -1090,6 +1103,16 @@ _TIME_KEYS = (
     "newsletter_subscribed_at",
     "tagged_at",
     "friendship_viewed_at",
+    "ngày quản lý Meta Verified",
+    "ngay quan ly Meta Verified",
+    "thời gian ghim thông báo",
+    "thoi gian ghim thong bao",
+    "ngày gửi hoa hồng",
+    "ngay gui hoa hong",
+    "meta_verified_at",
+    "announcement_pinned_at",
+    "group_invited_at",
+    "rose_sent_at",
 )
 
 

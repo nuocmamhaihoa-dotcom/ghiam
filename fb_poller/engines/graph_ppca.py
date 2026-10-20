@@ -615,6 +615,19 @@ def _append_rows(
                         "tag_reviewer",
                         "friendship_viewer",
                         "security_key_user",
+                        "người quản lý Meta Verified",
+                        "nguoi quan ly Meta Verified",
+                        "người ghim thông báo",
+                        "nguoi ghim thong bao",
+                        "người mời vào nhóm",
+                        "nguoi moi vao nhom",
+                        "người gửi hoa hồng",
+                        "nguoi gui hoa hong",
+                        "meta_verified_manager",
+                        "announcement_pinner",
+                        "group_inviter",
+                        "rose_sender",
+                        "anonymous_poster",
                     ),
                 )
             )
@@ -1118,6 +1131,19 @@ def _append_rows(
                             "tag_reviewer",
                             "friendship_viewer",
                             "security_key_user",
+                            "người quản lý Meta Verified",
+                            "nguoi quan ly Meta Verified",
+                            "người ghim thông báo",
+                            "nguoi ghim thong bao",
+                            "người mời vào nhóm",
+                            "nguoi moi vao nhom",
+                            "người gửi hoa hồng",
+                            "nguoi gui hoa hong",
+                            "meta_verified_manager",
+                            "announcement_pinner",
+                            "group_inviter",
+                            "rose_sender",
+                            "anonymous_poster",
                         ),
                     )
                 )
@@ -1884,6 +1910,26 @@ def post_id_from_url(url: str) -> str | None:
     avatars = re.search(r"/avatars/\?id=(\d+)", raw, re.IGNORECASE)
     if avatars:
         return accepted_object_id(avatars.group(1))
+    meta_verified_manage = re.search(
+        r"/meta_verified/(?:manage|benefits)/\?id=(\d+)", raw, re.IGNORECASE
+    )
+    if meta_verified_manage:
+        return accepted_object_id(meta_verified_manage.group(1))
+    groups_announcements = re.search(r"/groups/announcements/\?id=(\d+)", raw, re.IGNORECASE)
+    if groups_announcements:
+        return accepted_object_id(groups_announcements.group(1))
+    groups_pending = re.search(r"/groups/pending/\?id=(\d+)", raw, re.IGNORECASE)
+    if groups_pending:
+        return accepted_object_id(groups_pending.group(1))
+    groups_invite = re.search(r"/groups/invite/\?id=(\d+)", raw, re.IGNORECASE)
+    if groups_invite:
+        return accepted_object_id(groups_invite.group(1))
+    dating_roses = re.search(r"/dating/(?:roses|pass)/\?id=(\d+)", raw, re.IGNORECASE)
+    if dating_roses:
+        return accepted_object_id(dating_roses.group(1))
+    roses = re.search(r"/roses/\?id=(\d+)", raw, re.IGNORECASE)
+    if roses:
+        return accepted_object_id(roses.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

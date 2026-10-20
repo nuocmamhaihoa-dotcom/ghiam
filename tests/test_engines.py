@@ -7861,6 +7861,139 @@ class EngineTests(unittest.TestCase):
             "Approve login only after you finish verifying the device",
         )
 
+    def test_meta_verified_group_announce_dating_roses_vn_keys_and_urls(self) -> None:
+        verified = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người quản lý Meta Verified": "Lan Verified",
+                "ngày quản lý Meta Verified": "6h",
+            }
+        )
+        self.assertIsNotNone(verified)
+        assert verified is not None
+        self.assertEqual(verified.author_name, "Lan Verified")
+        self.assertEqual(verified.created_time, "6h")
+        announcer = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người ghim thông báo": "Minh",
+                "thời gian ghim thông báo": "hôm nay",
+                "announce_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(announcer)
+        assert announcer is not None
+        self.assertEqual(announcer.author_name, "Minh")
+        self.assertEqual(announcer.created_time, "hôm nay")
+        self.assertEqual(announcer.comment_id, "1357")
+        inviter = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người mời vào nhóm": "Bo",
+                "group_invited_at": "05:45",
+                "group_invite_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(inviter)
+        assert inviter is not None
+        self.assertEqual(inviter.author_name, "Bo")
+        self.assertEqual(inviter.created_time, "05:45")
+        self.assertEqual(inviter.comment_id, "2468")
+        rose = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người gửi hoa hồng": "An",
+                "ngày gửi hoa hồng": "2025-01-01T03:00:00Z",
+                "rose_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(rose)
+        assert rose is not None
+        self.assertEqual(rose.author_name, "An")
+        self.assertEqual(rose.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(rose.comment_id, "9753")
+        self.assertEqual(person_name({"meta_verified_manager": "Lan"}), "Lan")
+        self.assertEqual(person_name({"announcement_pinner": "Bo"}), "Bo")
+        self.assertEqual(person_name({"group_inviter": "Minh"}), "Minh")
+        self.assertEqual(person_name({"rose_sender": "An"}), "An")
+        self.assertEqual(person_name({"người gửi hoa hồng": "Ha"}), "Ha")
+        self.assertEqual(person_name({"anonymous_poster": "Vy"}), "Vy")
+        self.assertEqual(timestamp_of({"meta_verified_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"announcement_pinned_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"group_invited_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"rose_sent_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"verified_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"rose_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/meta_verified/manage/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/meta_verified/benefits/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/groups/announcements/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/groups/pending/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/groups/invite/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/dating/roses/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/dating/pass/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/roses/?id=565656"),
+            "565656",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nManage Meta Verified\nVerification badge\n"
+                "Meta Verified benefits\nInvite friends to group\n"
+                "Pending member requests\nAnonymous post\nPin announcement\n"
+                "Unpin announcement\nUnschedule post\nSend rose\nPass for now\n"
+                "Favorite this Reel\n"
+                "Quản lý Meta Verified\nHuy hiệu xác minh\n"
+                "Quyền lợi Meta Verified\nMời bạn bè vào nhóm\n"
+                "Yêu cầu thành viên đang chờ\nBài đăng ẩn danh\n"
+                "Ghim thông báo\nBỏ ghim thông báo\nHủy lên lịch bài viết\n"
+                "Gửi hoa hồng\nBỏ qua tạm thời\nYêu thích Reel này"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nSend rose\nPin announcement\n"
+                    "Gửi hoa hồng\nGhim thông báo",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nSend rose only after you finish the dating profile"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Send rose only after you finish the dating profile",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
