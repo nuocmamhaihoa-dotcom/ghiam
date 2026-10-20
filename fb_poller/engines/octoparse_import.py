@@ -241,6 +241,17 @@ _AUTHOR_KEYS = (
     "customer_name",
     "shopper_name",
     "donor_name",
+    "tên ứng viên",
+    "ten ung vien",
+    "nhà tuyển dụng",
+    "nha tuyen dung",
+    "người ứng tuyển",
+    "nguoi ung tuyen",
+    "applicant_name",
+    "candidate_name",
+    "employer_name",
+    "recruiter_name",
+    "matcher_name",
 )
 _TIME_KEYS = (
     "time",
@@ -413,6 +424,17 @@ _TIME_KEYS = (
     "mirrored_at",
     "copied_at",
     "backed_up_at",
+    "thời gian đồng bộ",
+    "thoi gian dong bo",
+    "ngày đồng bộ",
+    "ngay dong bo",
+    "lúc thu thập",
+    "luc thu thap",
+    "synced_time",
+    "replicated_at",
+    "duplicated_at",
+    "transferred_at",
+    "moved_at",
 )
 
 

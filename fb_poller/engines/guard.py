@@ -120,6 +120,10 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "external_comment_id",
         "source_comment_id",
         "remote_comment_id",
+        "platform_comment_id",
+        "provider_comment_id",
+        "upstream_comment_id",
+        "origin_comment_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -185,6 +189,10 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "external_comment_id",
         "source_comment_id",
         "remote_comment_id",
+        "platform_comment_id",
+        "provider_comment_id",
+        "upstream_comment_id",
+        "origin_comment_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -466,6 +474,17 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "customer_name",
             "shopper_name",
             "donor_name",
+            "tên ứng viên",
+            "ten ung vien",
+            "nhà tuyển dụng",
+            "nha tuyen dung",
+            "người ứng tuyển",
+            "nguoi ung tuyen",
+            "applicant_name",
+            "candidate_name",
+            "employer_name",
+            "recruiter_name",
+            "matcher_name",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -764,6 +783,17 @@ def timestamp_of(row: object) -> str | None:
         "mirrored_at",
         "copied_at",
         "backed_up_at",
+        "thời gian đồng bộ",
+        "thoi gian dong bo",
+        "ngày đồng bộ",
+        "ngay dong bo",
+        "lúc thu thập",
+        "luc thu thap",
+        "synced_time",
+        "replicated_at",
+        "duplicated_at",
+        "transferred_at",
+        "moved_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:

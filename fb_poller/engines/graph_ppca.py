@@ -224,6 +224,11 @@ def _append_rows(
                         "customer_name",
                         "shopper_name",
                         "donor_name",
+                        "applicant_name",
+                        "candidate_name",
+                        "employer_name",
+                        "recruiter_name",
+                        "matcher_name",
                     ),
                 )
             )
@@ -336,6 +341,11 @@ def _append_rows(
                             "customer_name",
                             "shopper_name",
                             "donor_name",
+                            "applicant_name",
+                            "candidate_name",
+                            "employer_name",
+                            "recruiter_name",
+                            "matcher_name",
                         ),
                     )
                 )
@@ -446,6 +456,15 @@ def post_id_from_url(url: str) -> str | None:
     job = re.search(r"[?&]job_opening_id=(\d+)", raw, re.IGNORECASE)
     if job:
         return accepted_object_id(job.group(1))
+    gaming = re.search(r"/gaming/(?:play/)?(\d+)", raw, re.IGNORECASE)
+    if gaming:
+        return accepted_object_id(gaming.group(1))
+    games_app = re.search(r"/games/app/(\d+)", raw, re.IGNORECASE)
+    if games_app:
+        return accepted_object_id(games_app.group(1))
+    clips = re.search(r"/clips/(?:play/)?(\d+)", raw, re.IGNORECASE)
+    if clips:
+        return accepted_object_id(clips.group(1))
     share = re.search(r"/share/[pvr]/(pfbid[A-Za-z0-9]+|\d+)", raw, re.IGNORECASE)
     if share:
         return accepted_object_id(share.group(1))
@@ -462,7 +481,7 @@ def post_id_from_url(url: str) -> str | None:
     stories = re.search(r"/stories/(\d+)", raw, re.IGNORECASE)
     if stories:
         return accepted_object_id(stories.group(1))
-    media = re.search(r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h)\.(\d+)", raw, re.IGNORECASE)
+    media = re.search(r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c)\.(\d+)", raw, re.IGNORECASE)
     if media:
         return accepted_object_id(media.group(1))
     path = re.search(

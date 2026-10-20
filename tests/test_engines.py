@@ -3719,6 +3719,118 @@ class EngineTests(unittest.TestCase):
             "Please apply now if the position is still open this week",
         )
 
+    def test_gaming_clips_chrome_candidate_vn_keys_and_urls(self) -> None:
+        candidate = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "tên ứng viên": "Lan Nguyen",
+                "thời gian đồng bộ": "5h",
+            }
+        )
+        self.assertIsNotNone(candidate)
+        assert candidate is not None
+        self.assertEqual(candidate.author_name, "Lan Nguyen")
+        self.assertEqual(candidate.created_time, "5h")
+        employer = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "nhà tuyển dụng": "Minh",
+                "ngày đồng bộ": "hôm nay",
+                "platform_comment_id": "1199",
+            }
+        )
+        self.assertIsNotNone(employer)
+        assert employer is not None
+        self.assertEqual(employer.author_name, "Minh")
+        self.assertEqual(employer.created_time, "hôm nay")
+        self.assertEqual(employer.comment_id, "1199")
+        applicant = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người ứng tuyển": "Bo",
+                "lúc thu thập": "06:30",
+                "provider_comment_id": "2288",
+            }
+        )
+        self.assertIsNotNone(applicant)
+        assert applicant is not None
+        self.assertEqual(applicant.author_name, "Bo")
+        self.assertEqual(applicant.created_time, "06:30")
+        self.assertEqual(applicant.comment_id, "2288")
+        recruiter = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "recruiter_name": "An",
+                "replicated_at": "2024-12-01T04:00:00Z",
+            }
+        )
+        self.assertIsNotNone(recruiter)
+        assert recruiter is not None
+        self.assertEqual(recruiter.author_name, "An")
+        self.assertEqual(recruiter.created_time, "2024-12-01T04:00:00Z")
+        self.assertEqual(person_name({"applicant_name": "Lan"}), "Lan")
+        self.assertEqual(person_name({"candidate_name": "Bo"}), "Bo")
+        self.assertEqual(person_name({"tên ứng viên": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"transferred_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ngày đồng bộ": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"synced_time": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"upstream_comment_id": "33"}), "33")
+        self.assertEqual(first_comment_id({"origin_comment_id": "44"}), "44")
+        self.assertEqual(first_comment_id({"platform_comment_id": "11"}), "11")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/gaming/play/12345/"),
+            "12345",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/games/app/998877/"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/clips/123456/"),
+            "123456",
+        )
+        self.assertEqual(
+            post_id_from_url("https://m.facebook.com/clips/play/654321/"),
+            "654321",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=c.111222"),
+            "111222",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nGame settings\nInvite players\nPlay with friends\n"
+                "See leaderboard\nJoin tournament\nGaming activity\n"
+                "Clip settings\nCreate clip\nShare clip\nWatch on Facebook\n"
+                "Open in app\nContinue in browser\nDownload app\n"
+                "Cài đặt trò chơi\nMời người chơi\nChơi với bạn bè\n"
+                "Xem bảng xếp hạng\nCài đặt clip\nTạo clip\n"
+                "Mở trong ứng dụng\nTải ứng dụng"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nGame settings\nClip settings\nCài đặt trò chơi",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nPlease play now with friends after dinner tonight"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Please play now with friends after dinner tonight",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
