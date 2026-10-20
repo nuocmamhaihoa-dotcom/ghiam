@@ -3505,6 +3505,108 @@ class EngineTests(unittest.TestCase):
             "Always translate comments carefully for guests",
         )
 
+    def test_shop_checkout_chrome_guest_vn_keys_and_ft_sets(self) -> None:
+        guest = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người trả lời": "Lan Nguyen",
+                "thời gian xuất": "3h",
+            }
+        )
+        self.assertIsNotNone(guest)
+        assert guest is not None
+        self.assertEqual(guest.author_name, "Lan Nguyen")
+        self.assertEqual(guest.created_time, "3h")
+        customer = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "tên khách": "Minh",
+                "ngày xuất": "hôm nay",
+                "social_comment_id": "4455",
+            }
+        )
+        self.assertIsNotNone(customer)
+        assert customer is not None
+        self.assertEqual(customer.author_name, "Minh")
+        self.assertEqual(customer.created_time, "hôm nay")
+        self.assertEqual(customer.comment_id, "4455")
+        fan = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "tên fan": "Bo",
+                "giờ comment": "08:15",
+                "fb_cid": "3366",
+            }
+        )
+        self.assertIsNotNone(fan)
+        assert fan is not None
+        self.assertEqual(fan.author_name, "Bo")
+        self.assertEqual(fan.created_time, "08:15")
+        self.assertEqual(fan.comment_id, "3366")
+        replier = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "replier_name": "An",
+                "exported_at": "2024-10-01T06:00:00Z",
+            }
+        )
+        self.assertIsNotNone(replier)
+        assert replier is not None
+        self.assertEqual(replier.author_name, "An")
+        self.assertEqual(replier.created_time, "2024-10-01T06:00:00Z")
+        self.assertEqual(person_name({"guest_name": "Lan"}), "Lan")
+        self.assertEqual(person_name({"visitor_name": "Bo"}), "Bo")
+        self.assertEqual(person_name({"tên khách": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"queued_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"thời gian xuất": "2h"}), "2h")
+        self.assertEqual(timestamp_of({"indexed_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"comment_pk": "11"}), "11")
+        self.assertEqual(first_comment_id({"comment_uuid": "22"}), "22")
+        self.assertEqual(first_comment_id({"social_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=ft.12345"),
+            "12345",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=s.998877"),
+            "998877",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nOrder details\nTrack package\nView receipt\n"
+                "Proceed to checkout\nEnter promo code\nShipping options\n"
+                "Delivery options\nEstimated delivery\nBilling address\n"
+                "Add payment method\nPlace order\nCancel order\n"
+                "Request refund\nContact seller\nLeave a review\n"
+                "Filter reviews\nFollow seller\nVisit shop\n"
+                "Chi tiết đơn hàng\nTheo dõi kiện hàng\nTiến hành thanh toán\n"
+                "Nhập mã khuyến mãi\nTùy chọn vận chuyển\nYêu cầu hoàn tiền\n"
+                "Liên hệ người bán\nĐể lại đánh giá\nGhé cửa hàng"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nOrder details\nContact seller\nChi tiết đơn hàng",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nPlease add to cart if the size is still available tonight"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Please add to cart if the size is still available tonight",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

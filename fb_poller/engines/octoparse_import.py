@@ -219,6 +219,17 @@ _AUTHOR_KEYS = (
     "owner_display",
     "member_title",
     "author_string",
+    "người trả lời",
+    "nguoi tra loi",
+    "tên khách",
+    "ten khach",
+    "tên fan",
+    "ten fan",
+    "replier_name",
+    "responder_name",
+    "answerer_name",
+    "guest_name",
+    "visitor_name",
 )
 _TIME_KEYS = (
     "time",
@@ -370,6 +381,17 @@ _TIME_KEYS = (
     "fetch_time",
     "import_time",
     "scan_time",
+    "thời gian xuất",
+    "thoi gian xuat",
+    "ngày xuất",
+    "ngay xuat",
+    "giờ comment",
+    "gio comment",
+    "exported_at",
+    "dumped_at",
+    "archived_at",
+    "indexed_at",
+    "queued_at",
 )
 
 

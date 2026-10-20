@@ -214,6 +214,11 @@ def _append_rows(
                         "owner_display",
                         "member_title",
                         "author_string",
+                        "replier_name",
+                        "responder_name",
+                        "answerer_name",
+                        "guest_name",
+                        "visitor_name",
                     ),
                 )
             )
@@ -316,6 +321,11 @@ def _append_rows(
                             "owner_display",
                             "member_title",
                             "author_string",
+                            "replier_name",
+                            "responder_name",
+                            "answerer_name",
+                            "guest_name",
+                            "visitor_name",
                         ),
                     )
                 )
@@ -436,7 +446,7 @@ def post_id_from_url(url: str) -> str | None:
     stories = re.search(r"/stories/(\d+)", raw, re.IGNORECASE)
     if stories:
         return accepted_object_id(stories.group(1))
-    media = re.search(r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go)\.(\d+)", raw, re.IGNORECASE)
+    media = re.search(r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s)\.(\d+)", raw, re.IGNORECASE)
     if media:
         return accepted_object_id(media.group(1))
     path = re.search(
