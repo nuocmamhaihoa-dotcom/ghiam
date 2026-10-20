@@ -654,6 +654,19 @@ def _append_rows(
                         "sticker_shopper",
                         "weather_viewer",
                         "work_account_switcher",
+                        "người thêm sự kiện cuộc sống",
+                        "nguoi them su kien cuoc song",
+                        "người nhắn người bán",
+                        "nguoi nhan nguoi ban",
+                        "người xem bộ sưu tập kỹ thuật số",
+                        "nguoi xem bo suu tap ky thuat so",
+                        "người thêm lựa chọn khảo sát",
+                        "nguoi them lua chon khao sat",
+                        "life_event_adder",
+                        "seller_messenger",
+                        "collectible_viewer",
+                        "poll_option_adder",
+                        "guest_inviter",
                     ),
                 )
             )
@@ -1196,6 +1209,19 @@ def _append_rows(
                             "sticker_shopper",
                             "weather_viewer",
                             "work_account_switcher",
+                            "người thêm sự kiện cuộc sống",
+                            "nguoi them su kien cuoc song",
+                            "người nhắn người bán",
+                            "nguoi nhan nguoi ban",
+                            "người xem bộ sưu tập kỹ thuật số",
+                            "nguoi xem bo suu tap ky thuat so",
+                            "người thêm lựa chọn khảo sát",
+                            "nguoi them lua chon khao sat",
+                            "life_event_adder",
+                            "seller_messenger",
+                            "collectible_viewer",
+                            "poll_option_adder",
+                            "guest_inviter",
                         ),
                     )
                 )
@@ -2027,6 +2053,30 @@ def post_id_from_url(url: str) -> str | None:
     work_accounts = re.search(r"/work/accounts/\?id=(\d+)", raw, re.IGNORECASE)
     if work_accounts:
         return accepted_object_id(work_accounts.group(1))
+    life_events = re.search(r"/life_events/\?id=(\d+)", raw, re.IGNORECASE)
+    if life_events:
+        return accepted_object_id(life_events.group(1))
+    about_contact = re.search(r"/about/contact/\?id=(\d+)", raw, re.IGNORECASE)
+    if about_contact:
+        return accepted_object_id(about_contact.group(1))
+    digital_collectibles = re.search(r"/digital_collectibles/\?id=(\d+)", raw, re.IGNORECASE)
+    if digital_collectibles:
+        return accepted_object_id(digital_collectibles.group(1))
+    marketplace_seller = re.search(r"/marketplace/seller/\?id=(\d+)", raw, re.IGNORECASE)
+    if marketplace_seller:
+        return accepted_object_id(marketplace_seller.group(1))
+    polls_create = re.search(r"/polls/create/\?id=(\d+)", raw, re.IGNORECASE)
+    if polls_create:
+        return accepted_object_id(polls_create.group(1))
+    events_invite = re.search(r"/events/invite/\?id=(\d+)", raw, re.IGNORECASE)
+    if events_invite:
+        return accepted_object_id(events_invite.group(1))
+    greenscreen_remix = re.search(r"/greenscreen/remix/\?id=(\d+)", raw, re.IGNORECASE)
+    if greenscreen_remix:
+        return accepted_object_id(greenscreen_remix.group(1))
+    profile_view_as = re.search(r"/profile/view_as/\?id=(\d+)", raw, re.IGNORECASE)
+    if profile_view_as:
+        return accepted_object_id(profile_view_as.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

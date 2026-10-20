@@ -8255,6 +8255,141 @@ class EngineTests(unittest.TestCase):
             "Music library only after you finish picking the beat",
         )
 
+    def test_profile_life_events_seller_poll_vn_keys_and_urls(self) -> None:
+        lifer = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người thêm sự kiện cuộc sống": "Lan Life",
+                "ngày thêm sự kiện cuộc sống": "6h",
+            }
+        )
+        self.assertIsNotNone(lifer)
+        assert lifer is not None
+        self.assertEqual(lifer.author_name, "Lan Life")
+        self.assertEqual(lifer.created_time, "6h")
+        seller = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người nhắn người bán": "Minh",
+                "thời gian nhắn người bán": "hôm nay",
+                "seller_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(seller)
+        assert seller is not None
+        self.assertEqual(seller.author_name, "Minh")
+        self.assertEqual(seller.created_time, "hôm nay")
+        self.assertEqual(seller.comment_id, "1357")
+        collector = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người xem bộ sưu tập kỹ thuật số": "Bo",
+                "collectible_viewed_at": "05:45",
+                "collectible_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(collector)
+        assert collector is not None
+        self.assertEqual(collector.author_name, "Bo")
+        self.assertEqual(collector.created_time, "05:45")
+        self.assertEqual(collector.comment_id, "2468")
+        poller = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người thêm lựa chọn khảo sát": "An",
+                "ngày thêm lựa chọn": "2025-01-01T03:00:00Z",
+                "poll_option_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(poller)
+        assert poller is not None
+        self.assertEqual(poller.author_name, "An")
+        self.assertEqual(poller.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(poller.comment_id, "9753")
+        self.assertEqual(person_name({"life_event_adder": "Lan"}), "Lan")
+        self.assertEqual(person_name({"seller_messenger": "Bo"}), "Bo")
+        self.assertEqual(person_name({"collectible_viewer": "Minh"}), "Minh")
+        self.assertEqual(person_name({"poll_option_adder": "An"}), "An")
+        self.assertEqual(person_name({"người thêm sự kiện cuộc sống": "Ha"}), "Ha")
+        self.assertEqual(person_name({"guest_inviter": "Vy"}), "Vy")
+        self.assertEqual(timestamp_of({"life_event_added_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"seller_messaged_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"collectible_viewed_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"poll_option_added_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"life_event_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"poll_option_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/life_events/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/about/contact/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/digital_collectibles/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/marketplace/seller/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/polls/create/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/events/invite/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/greenscreen/remix/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/profile/view_as/?id=565656"),
+            "565656",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nLife events\nWork and education\nPlaces lived\n"
+                "Family and relationships\nContact and basic info\n"
+                "Details about you\nFeatured photos\nView profile picture\n"
+                "Digital collectibles\nMessage seller\nAdd option\n"
+                "Not going\nGuest invite\nGreen screen remix\n"
+                "How are you feeling\nFeeling/activity\n"
+                "Sự kiện cuộc sống\nCông việc và học vấn\nNơi đã sống\n"
+                "Gia đình và mối quan hệ\nLiên hệ và thông tin cơ bản\n"
+                "Chi tiết về bạn\nẢnh nổi bật\nXem ảnh đại diện\n"
+                "Bộ sưu tập kỹ thuật số\nNhắn tin người bán\nThêm lựa chọn\n"
+                "Không tham gia\nMời khách\nRemix phông xanh\n"
+                "Bạn đang cảm thấy thế nào\nCảm xúc/hoạt động"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nLife events\nMessage seller\n"
+                    "Sự kiện cuộc sống\nNhắn tin người bán",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nLife events only after you finish updating the timeline"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Life events only after you finish updating the timeline",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
