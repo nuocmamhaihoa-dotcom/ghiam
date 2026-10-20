@@ -7597,6 +7597,137 @@ class EngineTests(unittest.TestCase):
             "Community chat only after you finish the group review",
         )
 
+    def test_whatsapp_collab_captions_templates_vn_keys_and_urls(self) -> None:
+        wa = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người chia sẻ WhatsApp": "Lan WA",
+                "ngày chia sẻ WhatsApp": "6h",
+            }
+        )
+        self.assertIsNotNone(wa)
+        assert wa is not None
+        self.assertEqual(wa.author_name, "Lan WA")
+        self.assertEqual(wa.created_time, "6h")
+        collaber = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người collab": "Minh",
+                "thời gian collab": "hôm nay",
+                "collab_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(collaber)
+        assert collaber is not None
+        self.assertEqual(collaber.author_name, "Minh")
+        self.assertEqual(collaber.created_time, "hôm nay")
+        self.assertEqual(collaber.comment_id, "1357")
+        captioner = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người chỉnh phụ đề": "Bo",
+                "captioned_at": "05:45",
+                "caption_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(captioner)
+        assert captioner is not None
+        self.assertEqual(captioner.author_name, "Bo")
+        self.assertEqual(captioner.created_time, "05:45")
+        self.assertEqual(captioner.comment_id, "2468")
+        templater = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người dùng mẫu": "An",
+                "ngày dùng mẫu": "2025-01-01T03:00:00Z",
+                "template_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(templater)
+        assert templater is not None
+        self.assertEqual(templater.author_name, "An")
+        self.assertEqual(templater.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(templater.comment_id, "9753")
+        self.assertEqual(person_name({"whatsapp_sharer": "Lan"}), "Lan")
+        self.assertEqual(person_name({"collaborator": "Bo"}), "Bo")
+        self.assertEqual(person_name({"caption_editor": "Minh"}), "Minh")
+        self.assertEqual(person_name({"template_user": "An"}), "An")
+        self.assertEqual(person_name({"người mở Instagram": "Ha"}), "Ha")
+        self.assertEqual(person_name({"instagram_opener": "Vy"}), "Vy")
+        self.assertEqual(timestamp_of({"whatsapp_shared_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"collabed_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"captioned_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"template_used_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"whatsapp_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"template_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/whatsapp/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/whatsapp/share/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/instagram/crosspost/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/remix/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/collab/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/captions/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/templates/browse/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/templates/?id=565656"),
+            "565656",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nContinue on WhatsApp\nOpen WhatsApp\nShare to WhatsApp\n"
+                "Open Instagram\nCollab invite\nAccept collab\nDecline collab\n"
+                "Download captions\nSync to beat\nBeat matcher\n"
+                "Browse templates\nTemplate details\n"
+                "Tiếp tục trên WhatsApp\nMở WhatsApp\nChia sẻ lên WhatsApp\n"
+                "Mở Instagram\nLời mời collab\nChấp nhận collab\nTừ chối collab\n"
+                "Tải phụ đề\nĐồng bộ theo nhịp\nGhép nhịp\n"
+                "Duyệt mẫu\nChi tiết mẫu"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nOpen WhatsApp\nAccept collab\n"
+                    "Mở WhatsApp\nChấp nhận collab",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nOpen WhatsApp only after you finish the product review"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Open WhatsApp only after you finish the product review",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

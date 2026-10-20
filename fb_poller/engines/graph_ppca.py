@@ -587,6 +587,21 @@ def _append_rows(
                         "quiet_mode_user",
                         "supervisor",
                         "parent_dashboard_user",
+                        "người chia sẻ WhatsApp",
+                        "nguoi chia se WhatsApp",
+                        "người mở Instagram",
+                        "nguoi mo Instagram",
+                        "người collab",
+                        "nguoi collab",
+                        "người chỉnh phụ đề",
+                        "nguoi chinh phu de",
+                        "người dùng mẫu",
+                        "nguoi dung mau",
+                        "whatsapp_sharer",
+                        "instagram_opener",
+                        "collaborator",
+                        "caption_editor",
+                        "template_user",
                     ),
                 )
             )
@@ -1062,6 +1077,21 @@ def _append_rows(
                             "quiet_mode_user",
                             "supervisor",
                             "parent_dashboard_user",
+                            "người chia sẻ WhatsApp",
+                            "nguoi chia se WhatsApp",
+                            "người mở Instagram",
+                            "nguoi mo Instagram",
+                            "người collab",
+                            "nguoi collab",
+                            "người chỉnh phụ đề",
+                            "nguoi chinh phu de",
+                            "người dùng mẫu",
+                            "nguoi dung mau",
+                            "whatsapp_sharer",
+                            "instagram_opener",
+                            "collaborator",
+                            "caption_editor",
+                            "template_user",
                         ),
                     )
                 )
@@ -1789,6 +1819,24 @@ def post_id_from_url(url: str) -> str | None:
     take_a_break = re.search(r"/take_a_break/\?id=(\d+)", raw, re.IGNORECASE)
     if take_a_break:
         return accepted_object_id(take_a_break.group(1))
+    whatsapp = re.search(r"/whatsapp/(?:share/)?\?id=(\d+)", raw, re.IGNORECASE)
+    if whatsapp:
+        return accepted_object_id(whatsapp.group(1))
+    instagram_crosspost = re.search(r"/instagram/crosspost/\?id=(\d+)", raw, re.IGNORECASE)
+    if instagram_crosspost:
+        return accepted_object_id(instagram_crosspost.group(1))
+    remix = re.search(r"/remix/\?id=(\d+)", raw, re.IGNORECASE)
+    if remix:
+        return accepted_object_id(remix.group(1))
+    collab = re.search(r"/collab/\?id=(\d+)", raw, re.IGNORECASE)
+    if collab:
+        return accepted_object_id(collab.group(1))
+    captions = re.search(r"/captions/\?id=(\d+)", raw, re.IGNORECASE)
+    if captions:
+        return accepted_object_id(captions.group(1))
+    templates_browse = re.search(r"/templates/(?:browse/)?\?id=(\d+)", raw, re.IGNORECASE)
+    if templates_browse:
+        return accepted_object_id(templates_browse.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
