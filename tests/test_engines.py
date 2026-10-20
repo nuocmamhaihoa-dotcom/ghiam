@@ -4344,6 +4344,136 @@ class EngineTests(unittest.TestCase):
             "Create playlist only after you finish the video draft",
         )
 
+    def test_effects_orders_chrome_buyer_vn_keys_and_effect_urls(self) -> None:
+        buyer = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người đặt hàng": "Lan Order",
+                "thời gian đặt hàng": "6h",
+            }
+        )
+        self.assertIsNotNone(buyer)
+        assert buyer is not None
+        self.assertEqual(buyer.author_name, "Lan Order")
+        self.assertEqual(buyer.created_time, "6h")
+        payer = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người thanh toán": "Minh",
+                "ngày thanh toán": "hôm nay",
+                "order_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(payer)
+        assert payer is not None
+        self.assertEqual(payer.author_name, "Minh")
+        self.assertEqual(payer.created_time, "hôm nay")
+        self.assertEqual(payer.comment_id, "1357")
+        creator = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người tạo hiệu ứng": "Bo",
+                "ordered_at": "05:45",
+                "effect_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(creator)
+        assert creator is not None
+        self.assertEqual(creator.author_name, "Bo")
+        self.assertEqual(creator.created_time, "05:45")
+        self.assertEqual(creator.comment_id, "2468")
+        sticker = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "effect_creator": "An",
+                "paid_at": "2025-01-01T03:00:00Z",
+            }
+        )
+        self.assertIsNotNone(sticker)
+        assert sticker is not None
+        self.assertEqual(sticker.author_name, "An")
+        self.assertEqual(sticker.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(person_name({"sticker_sender": "Lan"}), "Lan")
+        self.assertEqual(person_name({"order_buyer": "Bo"}), "Bo")
+        self.assertEqual(person_name({"người đặt hàng": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"effect_created_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ngày thanh toán": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"ordered_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"order_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"effect_comment_id": "44"}), "44")
+        self.assertEqual(first_comment_id({"payment_comment_id": "11"}), "11")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/effects/111222/"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/commerce/orders/998877/"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/payments/555666/"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/coupon/333444/"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=y.777888"),
+            "777888",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nArchive story\nDelete story\nAllow replies\n"
+                "Don't allow replies\nSave to camera roll\nRemix this reel\n"
+                "Use this effect\nSee effect\nTry effect\nEffect by\n"
+                "Track order\nView order\nShipping address\nEdit address\n"
+                "Checkout now\nSave audio\nShare audio\nAudio details\n"
+                "Ask Meta AI\nSearch with Meta AI\nTry Meta AI\n"
+                "Edit with AI\nOpen emoji picker\nAdd a reaction\n"
+                "Share video\nUpdate dating preferences\n"
+                "Take a break from\nSee poll results\n"
+                "Lưu trữ tin\nXóa tin\nCho phép trả lời\n"
+                "Không cho phép trả lời\nLưu vào cuộn camera\n"
+                "Phối lại reel này\nDùng hiệu ứng này\nXem hiệu ứng\n"
+                "Thử hiệu ứng\nHiệu ứng của\nTheo dõi đơn hàng\n"
+                "Xem đơn hàng\nHủy đơn hàng\nChỉnh sửa địa chỉ\n"
+                "Áp dụng mã giảm giá\nThanh toán ngay\nLưu âm thanh\n"
+                "Chia sẻ âm thanh\nChi tiết âm thanh\nHỏi Meta AI\n"
+                "Tìm với Meta AI\nThử Meta AI\nĐược tạo bởi AI\n"
+                "Chỉnh sửa bằng AI\nGửi nhãn dán\nChọn GIF\n"
+                "Mở bảng biểu tượng cảm xúc\nXem ai đã bày tỏ cảm xúc\n"
+                "Gỡ cảm xúc\nChia sẻ video\nCập nhật tùy chọn hẹn hò\n"
+                "Tạm nghỉ với\nXem kết quả thăm dò\n"
+                "Ứng phó khủng hoảng\nThêm vào Xem sau\n"
+                "Xóa khỏi Xem sau\nHình trong hình\nBuổi xem chung\n"
+                "Đánh dấu tất cả đã đọc"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nUse this effect\nTrack order\n"
+                    "Dùng hiệu ứng này",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nUse this effect only when the lighting looks good"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Use this effect only when the lighting looks good",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

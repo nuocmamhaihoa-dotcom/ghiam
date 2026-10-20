@@ -293,6 +293,16 @@ _AUTHOR_KEYS = (
     "playlist_owner",
     "watchlater_owner",
     "viewer_name",
+    "người đặt hàng",
+    "nguoi dat hang",
+    "người thanh toán",
+    "nguoi thanh toan",
+    "người tạo hiệu ứng",
+    "nguoi tao hieu ung",
+    "effect_creator",
+    "sticker_sender",
+    "order_buyer",
+    "payer_name",
 )
 _TIME_KEYS = (
     "time",
@@ -517,6 +527,13 @@ _TIME_KEYS = (
     "thoi gian danh sach phat",
     "watched_at",
     "queued_at",
+    "thời gian đặt hàng",
+    "thoi gian dat hang",
+    "ngày thanh toán",
+    "ngay thanh toan",
+    "ordered_at",
+    "paid_at",
+    "effect_created_at",
 )
 
 

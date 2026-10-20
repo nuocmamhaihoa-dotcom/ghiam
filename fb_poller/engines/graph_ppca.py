@@ -270,6 +270,16 @@ def _append_rows(
                         "playlist_owner",
                         "watchlater_owner",
                         "viewer_name",
+                        "người đặt hàng",
+                        "nguoi dat hang",
+                        "người thanh toán",
+                        "nguoi thanh toan",
+                        "người tạo hiệu ứng",
+                        "nguoi tao hieu ung",
+                        "effect_creator",
+                        "sticker_sender",
+                        "order_buyer",
+                        "payer_name",
                     ),
                 )
             )
@@ -428,6 +438,16 @@ def _append_rows(
                             "playlist_owner",
                             "watchlater_owner",
                             "viewer_name",
+                            "người đặt hàng",
+                            "nguoi dat hang",
+                            "người thanh toán",
+                            "nguoi thanh toan",
+                            "người tạo hiệu ứng",
+                            "nguoi tao hieu ung",
+                            "effect_creator",
+                            "sticker_sender",
+                            "order_buyer",
+                            "payer_name",
                         ),
                     )
                 )
@@ -586,6 +606,18 @@ def post_id_from_url(url: str) -> str | None:
     live_producer = re.search(r"/live/producer/(\d+)", raw, re.IGNORECASE)
     if live_producer:
         return accepted_object_id(live_producer.group(1))
+    effect = re.search(r"/effects/(\d+)", raw, re.IGNORECASE)
+    if effect:
+        return accepted_object_id(effect.group(1))
+    orders = re.search(r"/commerce/orders/(\d+)", raw, re.IGNORECASE)
+    if orders:
+        return accepted_object_id(orders.group(1))
+    payments = re.search(r"/payments/(\d+)", raw, re.IGNORECASE)
+    if payments:
+        return accepted_object_id(payments.group(1))
+    coupon = re.search(r"/coupon/(\d+)", raw, re.IGNORECASE)
+    if coupon:
+        return accepted_object_id(coupon.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
@@ -600,7 +632,7 @@ def post_id_from_url(url: str) -> str | None:
     if stories:
         return accepted_object_id(stories.group(1))
     media = re.search(
-        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb|n|q|v)\.(\d+)",
+        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb|n|q|v|y)\.(\d+)",
         raw,
         re.IGNORECASE,
     )
