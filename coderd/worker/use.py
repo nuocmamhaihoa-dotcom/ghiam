@@ -108,7 +108,14 @@ def link_learned(root: Path) -> Path:
             or (name == "rust" and (stem.startswith("tldr-cargo") or stem.startswith("tldr-rust")))
             or (name == "java" and stem in {"tldr-java", "tldr-javac", "tldr-mvn", "tldr-gradle"})
             or (name == "bien-dich" and stem in {"tldr-gcc", "tldr-g++", "tldr-clang", "tldr-cmake", "tldr-make", "tldr-gdb"})
-            or (name == "csdl" and stem in {"tldr-psql", "tldr-redis-cli", "tldr-mysql"})
+            or (name == "csdl" and stem in {"tldr-psql", "tldr-redis-cli", "tldr-mysql", "tldr-mongosh"})
+            or (name == "php" and (stem.startswith("tldr-php") or stem.startswith("tldr-composer")))
+            or (name == "ruby" and stem in {"tldr-ruby", "tldr-gem", "tldr-bundle", "tldr-rails", "tldr-rake"})
+            or (name == "ngon-ngu" and stem in {"tldr-perl", "tldr-lua", "tldr-dart", "tldr-flutter", "tldr-dotnet", "tldr-zig", "tldr-elixir", "tldr-mix", "tldr-julia", "tldr-scala", "tldr-sbt", "tldr-swift"})
+            or (name == "devops" and (stem.startswith("tldr-kube") or stem.startswith("tldr-helm") or stem.startswith("tldr-terraform") or stem.startswith("tldr-ansible") or stem in {"tldr-minikube", "tldr-kind", "tldr-kustomize", "tldr-istioctl", "tldr-vagrant", "tldr-packer", "tldr-pulumi"}))
+            or (name == "web" and stem in {"tldr-nginx", "tldr-caddy", "tldr-apache2", "tldr-httpd", "tldr-traefik"})
+            or (name == "bao-mat" and stem in {"tldr-openssl", "tldr-gpg", "tldr-ssh-keygen", "tldr-certbot"})
+            or (name == "dam-may" and stem in {"tldr-aws", "tldr-gcloud", "tldr-az", "tldr-wrangler", "tldr-heroku", "tldr-vercel", "tldr-doctl"})
         ]
         matching.sort(key=lambda stem: (0 if stem.startswith(name) or stem.startswith("tldr-" + name) else 1, stem))
         shown = ", ".join(matching[:8]) if matching else "chưa có kỹ năng"
