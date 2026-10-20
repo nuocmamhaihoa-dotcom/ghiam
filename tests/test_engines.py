@@ -6193,5 +6193,207 @@ class EngineTests(unittest.TestCase):
         )
 
 
+    def test_stories_reels_pages_inbox_stickers_vn_keys_and_urls(self) -> None:
+        story = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người tạo tin": "Lan Story",
+                "thời gian tạo tin": "6h",
+            }
+        )
+        self.assertIsNotNone(story)
+        assert story is not None
+        self.assertEqual(story.author_name, "Lan Story")
+        self.assertEqual(story.created_time, "6h")
+        sticker = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người gắn nhãn dán": "Minh",
+                "ngày gắn nhãn": "hôm nay",
+                "sticker_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(sticker)
+        assert sticker is not None
+        self.assertEqual(sticker.author_name, "Minh")
+        self.assertEqual(sticker.created_time, "hôm nay")
+        self.assertEqual(sticker.comment_id, "1357")
+        admin = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người quản lý trang": "Bo",
+                "reeled_at": "05:45",
+                "page_role_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(admin)
+        assert admin is not None
+        self.assertEqual(admin.author_name, "Bo")
+        self.assertEqual(admin.created_time, "05:45")
+        self.assertEqual(admin.comment_id, "2468")
+        inboxer = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người trả lời hộp thư": "An",
+                "ngày tạo Reels": "2025-01-01T03:00:00Z",
+                "inbox_reply_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(inboxer)
+        assert inboxer is not None
+        self.assertEqual(inboxer.author_name, "An")
+        self.assertEqual(inboxer.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(inboxer.comment_id, "9753")
+        self.assertEqual(person_name({"story_creator": "Lan"}), "Lan")
+        self.assertEqual(person_name({"reel_creator": "Bo"}), "Bo")
+        self.assertEqual(person_name({"template_user": "Minh"}), "Minh")
+        self.assertEqual(person_name({"sticker_user": "An"}), "An")
+        self.assertEqual(person_name({"page_admin": "Ha"}), "Ha")
+        self.assertEqual(person_name({"inbox_replier": "Vy"}), "Vy")
+        self.assertEqual(person_name({"close_friend": "Tu"}), "Tu")
+        self.assertEqual(person_name({"người tạo Reels": "My"}), "My")
+        self.assertEqual(person_name({"người dùng mẫu": "Na"}), "Na")
+        self.assertEqual(person_name({"người bạn thân": "Ki"}), "Ki")
+        self.assertEqual(timestamp_of({"storied_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"stickered_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"paged_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"inbox_replied_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(timestamp_of({"close_friended_at": "2024-01-05"}), "2024-01-05")
+        self.assertEqual(first_comment_id({"story_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"close_friend_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/stories/create/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/stories/archive/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/stories/highlight/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/create/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/audio/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/sequence/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/pages/transparency/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/pages/roles/?id=565656"),
+            "565656",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/pages/quality/?id=787878"),
+            "787878",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/pages/cta/?id=909090"),
+            "909090",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/pages/inbox/?id=101010"),
+            "101010",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/close_friends/?id=202020"),
+            "202020",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/stickers/?id=303030"),
+            "303030",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/magic_editor/?id=404040"),
+            "404040",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/saved_replies/?id=505050"),
+            "505050",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/icebreakers/?id=606060"),
+            "606060",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nStory privacy\nClose friends list\nEdit close friends\n"
+                "See story insights\nHighlight story\nNew highlight\n"
+                "Edit highlight\nDelete highlight\nDraft reels\n"
+                "Remix with this reel\nSee original reel\nCreate sequence\n"
+                "Add to sequence\nTry template\nSave template\n"
+                "Text to speech\nAdd voiceover\nMagic editor\n"
+                "Music sticker\nLocation sticker\nMention sticker\n"
+                "Poll sticker\nQuiz sticker\nCountdown sticker\n"
+                "Link sticker\nAdd sticker\nGIF sticker\nEmoji slider\n"
+                "Questions sticker\nAdd yours sticker\nCollab sticker\n"
+                "Page quality\nSee page transparency\nPage roles\n"
+                "Assign page role\nRemove page role\nPage info\n"
+                "Edit page info\nCall to action\nEdit call to action\n"
+                "WhatsApp number\nContact us\nShop now button\n"
+                "Sign up button\nWatch video button\nLearn more button\n"
+                "Inbox settings\nAutomated responses\nIce breakers\n"
+                "Frequently asked questions\nSaved replies\n"
+                "Create saved reply\nLabel conversation\nMark as done\n"
+                "Mark as unread\nSnooze conversation\nFollow up\n"
+                "Quyền riêng tư của tin\nDanh sách bạn thân\n"
+                "Chỉnh sửa bạn thân\nXem thông tin chi tiết tin\n"
+                "Đưa tin vào nổi bật\nNổi bật mới\nChỉnh sửa nổi bật\n"
+                "Xóa nổi bật\nBản nháp Reels\nPhối lại với Reels này\n"
+                "Xem Reels gốc\nTạo chuỗi\nThêm vào chuỗi\nThử mẫu\n"
+                "Lưu mẫu\nChữ thành giọng nói\nThêm lồng tiếng\n"
+                "Trình chỉnh sửa ma thuật\nNhãn dán nhạc\n"
+                "Nhãn dán vị trí\nNhãn dán nhắc đến\nNhãn dán thăm dò\n"
+                "Nhãn dán đố vui\nNhãn dán đếm ngược\nNhãn dán liên kết\n"
+                "Thêm nhãn dán\nNhãn dán GIF\nThanh trượt biểu tượng\n"
+                "Nhãn dán câu hỏi\nNhãn dán thêm của bạn\n"
+                "Nhãn dán cộng tác\nChất lượng Trang\nXem minh bạch Trang\n"
+                "Vai trò Trang\nGán vai trò Trang\nGỡ vai trò Trang\n"
+                "Thông tin Trang\nChỉnh sửa thông tin Trang\n"
+                "Nút kêu gọi hành động\nChỉnh sửa nút kêu gọi hành động\n"
+                "Số WhatsApp\nLiên hệ chúng tôi\nNút Mua ngay\n"
+                "Nút Đăng ký\nNút Xem video\nNút Tìm hiểu thêm\n"
+                "Cài đặt hộp thư\nPhản hồi tự động\nPhá băng\n"
+                "Câu hỏi thường gặp\nCâu trả lời đã lưu\n"
+                "Tạo câu trả lời đã lưu\nGắn nhãn cuộc trò chuyện\n"
+                "Đánh dấu đã xong\nĐánh dấu chưa đọc\n"
+                "Tạm ẩn cuộc trò chuyện\nTheo dõi tiếp"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nMagic editor\nPage quality\n"
+                    "Trình chỉnh sửa ma thuật\nChất lượng Trang",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nMagic editor only after you finish editing the caption"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Magic editor only after you finish editing the caption",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

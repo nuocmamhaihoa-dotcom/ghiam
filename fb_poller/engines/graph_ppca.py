@@ -446,6 +446,27 @@ def _append_rows(
                         "listing_seller",
                         "favorite_owner",
                         "listing_buyer",
+                        "người tạo tin",
+                        "nguoi tao tin",
+                        "người tạo Reels",
+                        "nguoi tao Reels",
+                        "người dùng mẫu",
+                        "nguoi dung mau",
+                        "người gắn nhãn dán",
+                        "nguoi gan nhan dan",
+                        "người quản lý trang",
+                        "nguoi quan ly trang",
+                        "người trả lời hộp thư",
+                        "nguoi tra loi hop thu",
+                        "người bạn thân",
+                        "nguoi ban than",
+                        "story_creator",
+                        "reel_creator",
+                        "template_user",
+                        "sticker_user",
+                        "page_admin",
+                        "inbox_replier",
+                        "close_friend",
                     ),
                 )
             )
@@ -780,6 +801,27 @@ def _append_rows(
                             "listing_seller",
                             "favorite_owner",
                             "listing_buyer",
+                            "người tạo tin",
+                            "nguoi tao tin",
+                            "người tạo Reels",
+                            "nguoi tao Reels",
+                            "người dùng mẫu",
+                            "nguoi dung mau",
+                            "người gắn nhãn dán",
+                            "nguoi gan nhan dan",
+                            "người quản lý trang",
+                            "nguoi quan ly trang",
+                            "người trả lời hộp thư",
+                            "nguoi tra loi hop thu",
+                            "người bạn thân",
+                            "nguoi ban than",
+                            "story_creator",
+                            "reel_creator",
+                            "template_user",
+                            "sticker_user",
+                            "page_admin",
+                            "inbox_replier",
+                            "close_friend",
                         ),
                     )
                 )
@@ -1213,6 +1255,58 @@ def post_id_from_url(url: str) -> str | None:
     feed_preferences = re.search(r"/feed/preferences/\?id=(\d+)", raw, re.IGNORECASE)
     if feed_preferences:
         return accepted_object_id(feed_preferences.group(1))
+
+    stories_create = re.search(r"/stories/create/\?id=(\d+)", raw, re.IGNORECASE)
+    if stories_create:
+        return accepted_object_id(stories_create.group(1))
+    stories_archive = re.search(r"/stories/archive/\?id=(\d+)", raw, re.IGNORECASE)
+    if stories_archive:
+        return accepted_object_id(stories_archive.group(1))
+    stories_highlight = re.search(r"/stories/highlight/\?id=(\d+)", raw, re.IGNORECASE)
+    if stories_highlight:
+        return accepted_object_id(stories_highlight.group(1))
+    reels_create = re.search(r"/reels/create/\?id=(\d+)", raw, re.IGNORECASE)
+    if reels_create:
+        return accepted_object_id(reels_create.group(1))
+    reels_audio = re.search(r"/reels/audio/\?id=(\d+)", raw, re.IGNORECASE)
+    if reels_audio:
+        return accepted_object_id(reels_audio.group(1))
+    reels_sequence = re.search(r"/reels/sequence/\?id=(\d+)", raw, re.IGNORECASE)
+    if reels_sequence:
+        return accepted_object_id(reels_sequence.group(1))
+    pages_transparency = re.search(r"/pages/transparency/\?id=(\d+)", raw, re.IGNORECASE)
+    if pages_transparency:
+        return accepted_object_id(pages_transparency.group(1))
+    pages_roles = re.search(r"/pages/roles/\?id=(\d+)", raw, re.IGNORECASE)
+    if pages_roles:
+        return accepted_object_id(pages_roles.group(1))
+    pages_quality = re.search(r"/pages/quality/\?id=(\d+)", raw, re.IGNORECASE)
+    if pages_quality:
+        return accepted_object_id(pages_quality.group(1))
+    pages_cta = re.search(r"/pages/cta/\?id=(\d+)", raw, re.IGNORECASE)
+    if pages_cta:
+        return accepted_object_id(pages_cta.group(1))
+    pages_inbox = re.search(r"/pages/inbox/\?id=(\d+)", raw, re.IGNORECASE)
+    if pages_inbox:
+        return accepted_object_id(pages_inbox.group(1))
+    close_friends = re.search(r"/close_friends/\?id=(\d+)", raw, re.IGNORECASE)
+    if close_friends:
+        return accepted_object_id(close_friends.group(1))
+    stickers = re.search(r"/stickers/\?id=(\d+)", raw, re.IGNORECASE)
+    if stickers:
+        return accepted_object_id(stickers.group(1))
+    magic_editor = re.search(r"/magic_editor/\?id=(\d+)", raw, re.IGNORECASE)
+    if magic_editor:
+        return accepted_object_id(magic_editor.group(1))
+    saved_replies = re.search(r"/saved_replies/\?id=(\d+)", raw, re.IGNORECASE)
+    if saved_replies:
+        return accepted_object_id(saved_replies.group(1))
+    automated_responses = re.search(r"/automated_responses/\?id=(\d+)", raw, re.IGNORECASE)
+    if automated_responses:
+        return accepted_object_id(automated_responses.group(1))
+    icebreakers = re.search(r"/icebreakers/\?id=(\d+)", raw, re.IGNORECASE)
+    if icebreakers:
+        return accepted_object_id(icebreakers.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
