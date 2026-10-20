@@ -664,6 +664,19 @@ _AUTHOR_KEYS = (
     "polling_finder",
     "spectate_user",
     "monetization_manager",
+    "người chọn nhạc",
+    "nguoi chon nhac",
+    "người chỉnh chữ",
+    "nguoi chinh chu",
+    "người chọn nhãn dán",
+    "nguoi chon nhan dan",
+    "người xem thời tiết",
+    "nguoi xem thoi tiet",
+    "music_picker",
+    "text_editor",
+    "sticker_shopper",
+    "weather_viewer",
+    "work_account_switcher",
 )
 _TIME_KEYS = (
     "time",
@@ -1136,6 +1149,16 @@ _TIME_KEYS = (
     "call_started_at",
     "polling_found_at",
     "spectated_at",
+    "ngày chọn nhạc",
+    "ngay chon nhac",
+    "thời gian chỉnh chữ",
+    "thoi gian chinh chu",
+    "ngày xem thời tiết",
+    "ngay xem thoi tiet",
+    "music_picked_at",
+    "text_edited_at",
+    "sticker_picked_at",
+    "weather_viewed_at",
 )
 
 

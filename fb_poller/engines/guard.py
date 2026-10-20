@@ -244,6 +244,10 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "call_comment_id",
         "polling_comment_id",
         "spectate_comment_id",
+        "music_comment_id",
+        "text_comment_id",
+        "sticker_store_comment_id",
+        "weather_comment_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -433,6 +437,10 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "call_comment_id",
         "polling_comment_id",
         "spectate_comment_id",
+        "music_comment_id",
+        "text_comment_id",
+        "sticker_store_comment_id",
+        "weather_comment_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -1137,6 +1145,19 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "polling_finder",
             "spectate_user",
             "monetization_manager",
+            "người chọn nhạc",
+            "nguoi chon nhac",
+            "người chỉnh chữ",
+            "nguoi chinh chu",
+            "người chọn nhãn dán",
+            "nguoi chon nhan dan",
+            "người xem thời tiết",
+            "nguoi xem thoi tiet",
+            "music_picker",
+            "text_editor",
+            "sticker_shopper",
+            "weather_viewer",
+            "work_account_switcher",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -1570,6 +1591,16 @@ def timestamp_of(row: object) -> str | None:
         "call_started_at",
         "polling_found_at",
         "spectated_at",
+        "ngày chọn nhạc",
+        "ngay chon nhac",
+        "thời gian chỉnh chữ",
+        "thoi gian chinh chu",
+        "ngày xem thời tiết",
+        "ngay xem thoi tiet",
+        "music_picked_at",
+        "text_edited_at",
+        "sticker_picked_at",
+        "weather_viewed_at",
         "mirrored_at",
         "copied_at",
         "backed_up_at",
@@ -1873,6 +1904,16 @@ def timestamp_of(row: object) -> str | None:
         "call_started_at",
         "polling_found_at",
         "spectated_at",
+        "ngày chọn nhạc",
+        "ngay chon nhac",
+        "thời gian chỉnh chữ",
+        "thoi gian chinh chu",
+        "ngày xem thời tiết",
+        "ngay xem thoi tiet",
+        "music_picked_at",
+        "text_edited_at",
+        "sticker_picked_at",
+        "weather_viewed_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:

@@ -641,6 +641,19 @@ def _append_rows(
                         "polling_finder",
                         "spectate_user",
                         "monetization_manager",
+                        "người chọn nhạc",
+                        "nguoi chon nhac",
+                        "người chỉnh chữ",
+                        "nguoi chinh chu",
+                        "người chọn nhãn dán",
+                        "nguoi chon nhan dan",
+                        "người xem thời tiết",
+                        "nguoi xem thoi tiet",
+                        "music_picker",
+                        "text_editor",
+                        "sticker_shopper",
+                        "weather_viewer",
+                        "work_account_switcher",
                     ),
                 )
             )
@@ -1170,6 +1183,19 @@ def _append_rows(
                             "polling_finder",
                             "spectate_user",
                             "monetization_manager",
+                            "người chọn nhạc",
+                            "nguoi chon nhac",
+                            "người chỉnh chữ",
+                            "nguoi chinh chu",
+                            "người chọn nhãn dán",
+                            "nguoi chon nhan dan",
+                            "người xem thời tiết",
+                            "nguoi xem thoi tiet",
+                            "music_picker",
+                            "text_editor",
+                            "sticker_shopper",
+                            "weather_viewer",
+                            "work_account_switcher",
                         ),
                     )
                 )
@@ -1980,6 +2006,27 @@ def post_id_from_url(url: str) -> str | None:
     tournament_bracket = re.search(r"/tournament/bracket/\?id=(\d+)", raw, re.IGNORECASE)
     if tournament_bracket:
         return accepted_object_id(tournament_bracket.group(1))
+    music_library = re.search(r"/music/library/\?id=(\d+)", raw, re.IGNORECASE)
+    if music_library:
+        return accepted_object_id(music_library.group(1))
+    sound_original = re.search(r"/sound/original/\?id=(\d+)", raw, re.IGNORECASE)
+    if sound_original:
+        return accepted_object_id(sound_original.group(1))
+    text_style = re.search(r"/text/style/\?id=(\d+)", raw, re.IGNORECASE)
+    if text_style:
+        return accepted_object_id(text_style.group(1))
+    stickers_store = re.search(r"/stickers/store/\?id=(\d+)", raw, re.IGNORECASE)
+    if stickers_store:
+        return accepted_object_id(stickers_store.group(1))
+    gifs_store = re.search(r"/gifs/store/\?id=(\d+)", raw, re.IGNORECASE)
+    if gifs_store:
+        return accepted_object_id(gifs_store.group(1))
+    weather = re.search(r"/weather/(?:forecast/)?\?id=(\d+)", raw, re.IGNORECASE)
+    if weather:
+        return accepted_object_id(weather.group(1))
+    work_accounts = re.search(r"/work/accounts/\?id=(\d+)", raw, re.IGNORECASE)
+    if work_accounts:
+        return accepted_object_id(work_accounts.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

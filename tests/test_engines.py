@@ -8123,6 +8123,138 @@ class EngineTests(unittest.TestCase):
             "Add to bag only after you finish comparing the sizes",
         )
 
+    def test_music_text_sticker_weather_work_vn_keys_and_urls(self) -> None:
+        musician = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người chọn nhạc": "Lan Music",
+                "ngày chọn nhạc": "6h",
+            }
+        )
+        self.assertIsNotNone(musician)
+        assert musician is not None
+        self.assertEqual(musician.author_name, "Lan Music")
+        self.assertEqual(musician.created_time, "6h")
+        texter = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người chỉnh chữ": "Minh",
+                "thời gian chỉnh chữ": "hôm nay",
+                "text_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(texter)
+        assert texter is not None
+        self.assertEqual(texter.author_name, "Minh")
+        self.assertEqual(texter.created_time, "hôm nay")
+        self.assertEqual(texter.comment_id, "1357")
+        stickerer = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người chọn nhãn dán": "Bo",
+                "sticker_picked_at": "05:45",
+                "sticker_store_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(stickerer)
+        assert stickerer is not None
+        self.assertEqual(stickerer.author_name, "Bo")
+        self.assertEqual(stickerer.created_time, "05:45")
+        self.assertEqual(stickerer.comment_id, "2468")
+        weather = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người xem thời tiết": "An",
+                "ngày xem thời tiết": "2025-01-01T03:00:00Z",
+                "weather_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(weather)
+        assert weather is not None
+        self.assertEqual(weather.author_name, "An")
+        self.assertEqual(weather.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(weather.comment_id, "9753")
+        self.assertEqual(person_name({"music_picker": "Lan"}), "Lan")
+        self.assertEqual(person_name({"text_editor": "Bo"}), "Bo")
+        self.assertEqual(person_name({"sticker_shopper": "Minh"}), "Minh")
+        self.assertEqual(person_name({"weather_viewer": "An"}), "An")
+        self.assertEqual(person_name({"người chọn nhạc": "Ha"}), "Ha")
+        self.assertEqual(person_name({"work_account_switcher": "Vy"}), "Vy")
+        self.assertEqual(timestamp_of({"music_picked_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"text_edited_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"sticker_picked_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"weather_viewed_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"music_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"weather_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/music/library/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/sound/original/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/text/style/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/stickers/store/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/gifs/store/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/weather/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/weather/forecast/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/work/accounts/?id=565656"),
+            "565656",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nUse this sound\nOriginal sound\nMusic library\n"
+                "Apply effect\nRemove effect\nGenerate captions\n"
+                "Edit text\nText style\nSticker store\nGIF store\n"
+                "Local weather\nSee forecast\nWork accounts\nSwitch work account\n"
+                "Dùng âm thanh này\nÂm thanh gốc\nThư viện nhạc\n"
+                "Áp dụng hiệu ứng\nGỡ hiệu ứng\nTạo phụ đề\n"
+                "Chỉnh chữ\nKiểu chữ\nCửa hàng nhãn dán\nCửa hàng GIF\n"
+                "Thời tiết địa phương\nXem dự báo\nTài khoản công việc\n"
+                "Chuyển tài khoản công việc"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nMusic library\nLocal weather\n"
+                    "Thư viện nhạc\nThời tiết địa phương",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nMusic library only after you finish picking the beat"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Music library only after you finish picking the beat",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
