@@ -161,6 +161,13 @@ def _append_rows(
                         "signed_name",
                         "credited_to",
                         "owner_label",
+                        "public_name",
+                        "visible_name",
+                        "shown_name",
+                        "legal_name",
+                        "stage_name",
+                        "pen_name",
+                        "label_name",
                     ),
                 )
             )
@@ -210,6 +217,13 @@ def _append_rows(
                             "signed_name",
                             "credited_to",
                             "owner_label",
+                            "public_name",
+                            "visible_name",
+                            "shown_name",
+                            "legal_name",
+                            "stage_name",
+                            "pen_name",
+                            "label_name",
                         ),
                     )
                 )
@@ -245,8 +259,39 @@ def _graph_rows(data: dict[str, object]) -> list[object]:
     value = data.get("data")
     if isinstance(value, list) and value:
         return connection_rows(value)
-    for name in ("comments", "replies"):
+    for name in (
+        "comments",
+        "replies",
+        "comment_list",
+        "commentList",
+        "comment_thread",
+        "comments_connection",
+        "top_level_comments",
+        "thread",
+        "feedback",
+    ):
         nested = _connection_rows(data.get(name))
+        if nested:
+            return nested
+        child = data.get(name)
+        if isinstance(child, dict):
+            for inner in (
+                "comments",
+                "comment_list",
+                "commentList",
+                "comment_thread",
+                "comments_connection",
+                "top_level_comments",
+                "data",
+                "edges",
+                "nodes",
+            ):
+                deeper = _connection_rows(child.get(inner))
+                if deeper:
+                    return deeper
+    edge = data.get("comment_edge")
+    if isinstance(edge, dict):
+        nested = _connection_rows([edge])
         if nested:
             return nested
     message = data.get("message")

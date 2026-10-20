@@ -138,6 +138,13 @@ _AUTHOR_KEYS = (
     "signed_name",
     "credited_to",
     "owner_label",
+    "public_name",
+    "visible_name",
+    "shown_name",
+    "legal_name",
+    "stage_name",
+    "pen_name",
+    "label_name",
     "tác giả",
     "tac gia",
 )
@@ -219,6 +226,10 @@ _TIME_KEYS = (
     "left_at",
     "wrote_at",
     "updated_at",
+    "ts_ms",
+    "epoch",
+    "unix",
+    "said_at",
 )
 
 

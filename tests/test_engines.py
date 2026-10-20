@@ -2584,6 +2584,97 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(imported.author_name, "lan")
         self.assertEqual(imported.created_time, "2025-05-05")
 
+    def test_comment_wrappers_and_tag_chrome(self) -> None:
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nYou were tagged\nMentioned you\nAlso commented\n"
+                "Also replied\nTagged in this\nSee who shared this\n"
+                "Shared by 2 people\nView 3 shares\nWrite a review\n"
+                "Rate this page\nWas this review helpful?\nWrite a recommendation\n"
+                "Ask for recommendations\nNot recommended\nYou're a top fan\n"
+                "Become a top fan\nAbout this ad\nAd choices\nFind support\n"
+                "Privacy Checkup\nSecurity and login\nLanguage and region\n"
+                "Switch to the app\nKeep me logged in\nAlready have an account?\n"
+                "Edit profile\nActivity log\nNews Feed\nLog out\n"
+                "Reviews · 12\nPhotos · 5\nWorks at Acme\nLives in Hanoi\n"
+                "Active 2h ago\nBạn đã được gắn thẻ\nXem ai đã chia sẻ\n"
+                "Chỉnh sửa trang cá nhân\nĐăng xuất"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nYou were tagged in the photo last night"], 5)
+        self.assertEqual(sentence[0].text, "You were tagged in the photo last night")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\nYou were tagged\nSee who shared this", author_name="Lan")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        connected = _from_items(
+            {
+                "comments_connection": {
+                    "edges": [{"node": {"text": "xin", "id": "3", "public_name": "An", "said_at": "2025-06-01"}}]
+                }
+            },
+            5,
+        )
+        self.assertEqual(connected[0].text, "xin")
+        self.assertEqual(connected[0].author_name, "An")
+        self.assertEqual(connected[0].created_time, "2025-06-01")
+        top = _comments_from_json(
+            {
+                "top_level_comments": {
+                    "nodes": [{"text": "xin", "id": "8", "visible_name": "Bo", "ts_ms": "1710000300"}]
+                }
+            },
+            5,
+        )
+        self.assertEqual(top[0].author_name, "Bo")
+        self.assertEqual(top[0].created_time, "1710000300")
+        threaded, err = comments_from_graph_payload(
+            {"thread": {"comments": [{"message": "xin", "legal_name": "An", "epoch": "1710000301"}]}},
+            5,
+        )
+        self.assertIsNone(err)
+        self.assertEqual(threaded[0].author_name, "An")
+        self.assertEqual(threaded[0].created_time, "1710000301")
+        edge = _from_items(
+            {"comment_edge": {"node": {"text": "xin", "id": "9", "author": {"shown_name": "Cy"}}}},
+            5,
+        )
+        self.assertEqual(edge[0].author_name, "Cy")
+        self.assertEqual(edge[0].comment_id, "9")
+        feedback = _comments_from_json(
+            {
+                "feedback": {
+                    "comments": {
+                        "edges": [
+                            {
+                                "node": {
+                                    "body": {"text": "xin"},
+                                    "id": "7",
+                                    "author": {"stage_name": "Di"},
+                                    "unix": "1710000302",
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+            5,
+        )
+        self.assertEqual(feedback[0].author_name, "Di")
+        self.assertEqual(feedback[0].created_time, "1710000302")
+        imported = _from_mapping(
+            {"Nội dung": "xin", "Public name": "lan", "Said at": "2025-06-05"}
+        )
+        self.assertIsNotNone(imported)
+        assert imported is not None
+        self.assertEqual(imported.author_name, "lan")
+        self.assertEqual(imported.created_time, "2025-06-05")
+
 
 if __name__ == "__main__":
     unittest.main()

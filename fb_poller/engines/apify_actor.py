@@ -100,6 +100,10 @@ def _from_items(payload: Any, limit: int) -> list[PublicComment]:
             "comment_list",
             "commentList",
             "comment_thread",
+            "comments_connection",
+            "top_level_comments",
+            "thread",
+            "comment_edge",
             "results",
             "result",
             "feedback",
@@ -114,10 +118,14 @@ def _from_items(payload: Any, limit: int) -> list[PublicComment]:
                     "comment_list",
                     "commentList",
                     "comment_thread",
+                    "comments_connection",
+                    "top_level_comments",
+                    "thread",
                     "items",
                     "data",
                     "results",
                     "feedback",
+                    "node",
                 ):
                     child = value.get(inner_key)
                     linked = connection_rows(child)
@@ -127,9 +135,12 @@ def _from_items(payload: Any, limit: int) -> list[PublicComment]:
                             "comment_list",
                             "commentList",
                             "comment_thread",
+                            "comments_connection",
+                            "top_level_comments",
                             "items",
                             "data",
                             "nodes",
+                            "node",
                         ):
                             linked = connection_rows(child.get(deeper))
                             if linked:
@@ -311,6 +322,13 @@ def _one(row: Any) -> PublicComment | None:
         "signed_name",
         "credited_to",
         "owner_label",
+        "public_name",
+        "visible_name",
+        "shown_name",
+        "legal_name",
+        "stage_name",
+        "pen_name",
+        "label_name",
     )
     return PublicComment(
         text=text,

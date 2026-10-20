@@ -295,6 +295,13 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "signed_name",
             "credited_to",
             "owner_label",
+            "public_name",
+            "visible_name",
+            "shown_name",
+            "legal_name",
+            "stage_name",
+            "pen_name",
+            "label_name",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -496,6 +503,10 @@ def timestamp_of(row: object) -> str | None:
         "left_at",
         "wrote_at",
         "updated_at",
+        "ts_ms",
+        "epoch",
+        "unix",
+        "said_at",
         "datetime",
         "date",
         "time",
@@ -517,7 +528,7 @@ def text_carrier(row: dict[str, object]) -> dict[str, object] | None:
 
 
 def connection_rows(value: object) -> list[object]:
-    """A list, ``{data: [...]}``, or ``{edges: [{node: ...}]}``. An empty list is empty."""
+    """A list, ``{data: [...]}``, ``{edges: [{node: ...}]}``, or one ``{node: ...}`` edge."""
     if isinstance(value, list):
         return [_unwrap_node(item) for item in value]
     if not isinstance(value, dict):
@@ -526,6 +537,9 @@ def connection_rows(value: object) -> list[object]:
         child = value.get(key)
         if isinstance(child, list) and child:
             return [_unwrap_node(item) for item in child]
+    node = value.get("node")
+    if isinstance(node, dict):
+        return [_unwrap_node(value)]
     return []
 
 

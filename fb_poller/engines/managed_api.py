@@ -208,6 +208,13 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
             "signed_name",
             "credited_to",
             "owner_label",
+            "public_name",
+            "visible_name",
+            "shown_name",
+            "legal_name",
+            "stage_name",
+            "pen_name",
+            "label_name",
         )
         author_name = first_person_name(row, author_keys) or (
             first_person_name(inner, author_keys) if inner else None
@@ -286,6 +293,11 @@ def _rows(payload: Any, depth: int = 0) -> list[Any]:
         "comment_list",
         "commentList",
         "comment_thread",
+        "comments_connection",
+        "top_level_comments",
+        "thread",
+        "comment_edge",
+        "feedback",
         "data",
         "results",
         "result",
