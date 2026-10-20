@@ -544,6 +544,22 @@ def _append_rows(
                         "ai_labeler",
                         "ai_try_on_user",
                         "ai_video_creator",
+                        "người dùng âm thanh",
+                        "nguoi dung am thanh",
+                        "người cắt video",
+                        "nguoi cat video",
+                        "người thêm hiệu ứng",
+                        "nguoi them hieu ung",
+                        "người dùng phông xanh",
+                        "nguoi dung phong xanh",
+                        "người làm đẹp",
+                        "nguoi lam dep",
+                        "audio_user",
+                        "trim_editor",
+                        "effect_downloader",
+                        "green_screen_user",
+                        "beauty_user",
+                        "layout_editor",
                     ),
                 )
             )
@@ -976,6 +992,22 @@ def _append_rows(
                             "ai_labeler",
                             "ai_try_on_user",
                             "ai_video_creator",
+                            "người dùng âm thanh",
+                            "nguoi dung am thanh",
+                            "người cắt video",
+                            "nguoi cat video",
+                            "người thêm hiệu ứng",
+                            "nguoi them hieu ung",
+                            "người dùng phông xanh",
+                            "nguoi dung phong xanh",
+                            "người làm đẹp",
+                            "nguoi lam dep",
+                            "audio_user",
+                            "trim_editor",
+                            "effect_downloader",
+                            "green_screen_user",
+                            "beauty_user",
+                            "layout_editor",
                         ),
                     )
                 )
@@ -1627,6 +1659,43 @@ def post_id_from_url(url: str) -> str | None:
     imagine_me = re.search(r"/imagine_me/\?id=(\d+)", raw, re.IGNORECASE)
     if imagine_me:
         return accepted_object_id(imagine_me.group(1))
+
+    reels_audio_library = re.search(r"/reels/audio/(?:library|trending|saved)/\?id=(\d+)", raw, re.IGNORECASE)
+    if reels_audio_library:
+        return accepted_object_id(reels_audio_library.group(1))
+    reels_trim = re.search(r"/reels/trim/\?id=(\d+)", raw, re.IGNORECASE)
+    if reels_trim:
+        return accepted_object_id(reels_trim.group(1))
+    reels_speed = re.search(r"/reels/speed/\?id=(\d+)", raw, re.IGNORECASE)
+    if reels_speed:
+        return accepted_object_id(reels_speed.group(1))
+    reels_transitions = re.search(r"/reels/transitions/\?id=(\d+)", raw, re.IGNORECASE)
+    if reels_transitions:
+        return accepted_object_id(reels_transitions.group(1))
+    reels_layout = re.search(r"/reels/layout/\?id=(\d+)", raw, re.IGNORECASE)
+    if reels_layout:
+        return accepted_object_id(reels_layout.group(1))
+    reels_timer = re.search(r"/reels/timer/\?id=(\d+)", raw, re.IGNORECASE)
+    if reels_timer:
+        return accepted_object_id(reels_timer.group(1))
+    reels_voice_effects = re.search(r"/reels/voice_effects/\?id=(\d+)", raw, re.IGNORECASE)
+    if reels_voice_effects:
+        return accepted_object_id(reels_voice_effects.group(1))
+    reels_green_screen = re.search(r"/reels/green_screen/\?id=(\d+)", raw, re.IGNORECASE)
+    if reels_green_screen:
+        return accepted_object_id(reels_green_screen.group(1))
+    effects_gallery = re.search(r"/effects/gallery/\?id=(\d+)", raw, re.IGNORECASE)
+    if effects_gallery:
+        return accepted_object_id(effects_gallery.group(1))
+    effects_download = re.search(r"/effects/download/\?id=(\d+)", raw, re.IGNORECASE)
+    if effects_download:
+        return accepted_object_id(effects_download.group(1))
+    camera_beauty = re.search(r"/camera/beauty/\?id=(\d+)", raw, re.IGNORECASE)
+    if camera_beauty:
+        return accepted_object_id(camera_beauty.group(1))
+    camera_flash = re.search(r"/camera/flash/\?id=(\d+)", raw, re.IGNORECASE)
+    if camera_flash:
+        return accepted_object_id(camera_flash.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

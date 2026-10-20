@@ -7151,5 +7151,179 @@ class EngineTests(unittest.TestCase):
         )
 
 
+    def test_reels_audio_editor_effects_vn_keys_and_urls(self) -> None:
+        audio = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người dùng âm thanh": "Lan Audio",
+                "thời gian dùng âm thanh": "6h",
+            }
+        )
+        self.assertIsNotNone(audio)
+        assert audio is not None
+        self.assertEqual(audio.author_name, "Lan Audio")
+        self.assertEqual(audio.created_time, "6h")
+        trimmer = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người cắt video": "Minh",
+                "ngày cắt video": "hôm nay",
+                "trim_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(trimmer)
+        assert trimmer is not None
+        self.assertEqual(trimmer.author_name, "Minh")
+        self.assertEqual(trimmer.created_time, "hôm nay")
+        self.assertEqual(trimmer.comment_id, "1357")
+        effector = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người thêm hiệu ứng": "Bo",
+                "green_screened_at": "05:45",
+                "effect_comment_id2": "2468",
+            }
+        )
+        self.assertIsNotNone(effector)
+        assert effector is not None
+        self.assertEqual(effector.author_name, "Bo")
+        self.assertEqual(effector.created_time, "05:45")
+        self.assertEqual(effector.comment_id, "2468")
+        beauty = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người làm đẹp": "An",
+                "ngày tải hiệu ứng": "2025-01-01T03:00:00Z",
+                "beauty_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(beauty)
+        assert beauty is not None
+        self.assertEqual(beauty.author_name, "An")
+        self.assertEqual(beauty.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(beauty.comment_id, "9753")
+        self.assertEqual(person_name({"audio_user": "Lan"}), "Lan")
+        self.assertEqual(person_name({"trim_editor": "Bo"}), "Bo")
+        self.assertEqual(person_name({"effect_downloader": "Minh"}), "Minh")
+        self.assertEqual(person_name({"green_screen_user": "An"}), "An")
+        self.assertEqual(person_name({"beauty_user": "Ha"}), "Ha")
+        self.assertEqual(person_name({"layout_editor": "Vy"}), "Vy")
+        self.assertEqual(person_name({"người dùng phông xanh": "Tu"}), "Tu")
+        self.assertEqual(timestamp_of({"audio_used_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"trimmed_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"effect_downloaded_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"beautified_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(timestamp_of({"layouted_at": "2024-01-05"}), "2024-01-05")
+        self.assertEqual(first_comment_id({"audio_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"layout_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/audio/library/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/audio/trending/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/audio/saved/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/trim/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/speed/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/transitions/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/layout/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/timer/?id=565656"),
+            "565656",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/voice_effects/?id=787878"),
+            "787878",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/green_screen/?id=909090"),
+            "909090",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/effects/gallery/?id=101010"),
+            "101010",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/effects/download/?id=202020"),
+            "202020",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/camera/beauty/?id=303030"),
+            "303030",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/camera/flash/?id=404040"),
+            "404040",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nReels audio library\nTrending audio\nSaved audio\n"
+                "Audio pages\nView audio credits\nManage audio\nRemove audio\n"
+                "Mute audio\nUnmute audio\nCamera roll\nSelect multiple\n"
+                "Trim video\nSplit clip\nReorder clips\nAdd clip\nDelete clip\n"
+                "Adjust clips\nAlign clips\nAdd transition\nEffects gallery\n"
+                "Download effect\nSave effect\nEffect info\nBy creator\n"
+                "Follow creator\nReport effect\nVoice effects\nDeep voice\n"
+                "Voice filter\nGreen screen gallery\nUpload green screen\n"
+                "Reorder layout\nLeft right\nTop bottom\n3 second timer\n"
+                "10 second timer\nHands-free\nHold to record\nTap to record\n"
+                "Flip camera\nFlash on\nFlash off\nTouch up\n"
+                "Thư viện âm thanh Reels\nÂm thanh thịnh hành\n"
+                "Âm thanh đã lưu\nTrang âm thanh\nXem ghi công âm thanh\n"
+                "Quản lý âm thanh\nGỡ âm thanh\nTắt tiếng âm thanh\n"
+                "Bật tiếng âm thanh\nCuộn camera\nChọn nhiều\nCắt video\n"
+                "Tách clip\nSắp xếp lại clip\nThêm clip\nXóa clip\n"
+                "Điều chỉnh clip\nCăn chỉnh clip\nThêm chuyển cảnh\n"
+                "Thư viện hiệu ứng\nTải hiệu ứng\nLưu hiệu ứng\n"
+                "Thông tin hiệu ứng\nBởi nhà sáng tạo\nTheo dõi nhà sáng tạo\n"
+                "Báo cáo hiệu ứng\nHiệu ứng giọng nói\nGiọng trầm\n"
+                "Bộ lọc giọng\nThư viện phông xanh\nTải phông xanh lên\n"
+                "Sắp xếp lại bố cục\nTrái phải\nTrên dưới\nHẹn giờ 3 giây\n"
+                "Hẹn giờ 10 giây\nRảnh tay\nGiữ để quay\nChạm để quay\n"
+                "Lật camera\nBật đèn flash\nTắt đèn flash\nChỉnh sửa nhẹ"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nTrending audio\nFlip camera\n"
+                    "Âm thanh thịnh hành\nLật camera",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nTrending audio only after you finish editing the caption"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Trending audio only after you finish editing the caption",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
