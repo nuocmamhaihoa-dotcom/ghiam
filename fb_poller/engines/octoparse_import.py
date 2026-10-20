@@ -197,6 +197,18 @@ _AUTHOR_KEYS = (
     "credit_name",
     "author_figure",
     "from_display",
+    "người comment",
+    "nguoi comment",
+    "tên tài khoản",
+    "ten tai khoan",
+    "tác giả bình luận",
+    "tac gia binh luan",
+    "comment_author_name",
+    "user_display",
+    "poster_display",
+    "sender_display",
+    "creator_display",
+    "actor_display",
 )
 _TIME_KEYS = (
     "time",
@@ -327,6 +339,17 @@ _TIME_KEYS = (
     "parsed_at",
     "ingest_time",
     "synced_at",
+    "thời gian thu thập",
+    "thoi gian thu thap",
+    "ngày comment",
+    "ngay comment",
+    "giờ bình luận",
+    "gio binh luan",
+    "harvested_at",
+    "pulled_at",
+    "retrieved_at",
+    "snapshot_time",
+    "batch_time",
 )
 
 

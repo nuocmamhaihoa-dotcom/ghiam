@@ -3280,6 +3280,126 @@ class EngineTests(unittest.TestCase):
             "Please report a problem with the delivery tonight",
         )
 
+    def test_face_history_chrome_share_unwrap_and_commenter_vn(self) -> None:
+        commenter = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người comment": "Lan Nguyen",
+                "thời gian thu thập": "1h",
+            }
+        )
+        self.assertIsNotNone(commenter)
+        assert commenter is not None
+        self.assertEqual(commenter.author_name, "Lan Nguyen")
+        self.assertEqual(commenter.created_time, "1h")
+        account = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "tên tài khoản": "Minh",
+                "ngày comment": "hôm nay",
+                "messaging_comment_id": "4411",
+            }
+        )
+        self.assertIsNotNone(account)
+        assert account is not None
+        self.assertEqual(account.author_name, "Minh")
+        self.assertEqual(account.created_time, "hôm nay")
+        self.assertEqual(account.comment_id, "4411")
+        author = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "tác giả bình luận": "Bo",
+                "giờ bình luận": "09:30",
+                "graph_comment_fbid": "5522",
+            }
+        )
+        self.assertIsNotNone(author)
+        assert author is not None
+        self.assertEqual(author.author_name, "Bo")
+        self.assertEqual(author.created_time, "09:30")
+        self.assertEqual(author.comment_id, "5522")
+        display = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "comment_author_name": "An",
+                "harvested_at": "2024-08-01T08:00:00Z",
+            }
+        )
+        self.assertIsNotNone(display)
+        assert display is not None
+        self.assertEqual(display.author_name, "An")
+        self.assertEqual(display.created_time, "2024-08-01T08:00:00Z")
+        self.assertEqual(person_name({"user_display": "Lan"}), "Lan")
+        self.assertEqual(person_name({"poster_display": "Bo"}), "Bo")
+        self.assertEqual(person_name({"tên tài khoản": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"retrieved_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ngày comment": "hôm nay"}), "hôm nay")
+        self.assertEqual(timestamp_of({"thời gian thu thập": "2h"}), "2h")
+        self.assertEqual(first_comment_id({"messaging_comment_id": "44"}), "44")
+        self.assertEqual(first_comment_id({"graph_comment_fbid": "11"}), "11")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=pb.12345.-2207520000"),
+            "12345",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=ms.998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url(
+                "https://www.facebook.com/dialog/share?href=https%3A%2F%2Fwww.facebook.com%2Fposts%2F999888"
+            ),
+            "999888",
+        )
+        self.assertEqual(
+            post_id_from_url(
+                "https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fwww.facebook.com%2Fphoto.php%3Ffbid%3D777666"
+            ),
+            "777666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://m.facebook.com/groups/123/?view=permalink&id=456789"),
+            "456789",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nFace recognition\nRestricted list\nLocation history\n"
+                "Search history\nWatch history\nUse less data\nConfirm your identity\n"
+                "Language settings\nPreferred language\nActive status\n"
+                "Show when you're active\nMake profile picture\nMake cover photo\n"
+                "Story archive\nArchive settings\nSave to archive\nDelete forever\n"
+                "Recently deleted\nAdd to favorites\nSee friendship\n"
+                "Delivery receipts\nRead receipts\nMessage settings\n"
+                "Trình nhận dạng khuôn mặt\nDanh sách hạn chế\nLịch sử vị trí\n"
+                "Lịch sử tìm kiếm\nLịch sử xem\nDùng ít dữ liệu hơn\n"
+                "Xác nhận danh tính\nCài đặt ngôn ngữ\nNgôn ngữ ưa thích\n"
+                "Trạng thái hoạt động\nĐặt làm ảnh đại diện\nLưu trữ tin\n"
+                "Xóa vĩnh viễn\nThêm vào mục yêu thích\nCài đặt tin nhắn"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nFace recognition\nLanguage settings\nCài đặt ngôn ngữ",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nPlease confirm your identity with the shop later"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Please confirm your identity with the shop later",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

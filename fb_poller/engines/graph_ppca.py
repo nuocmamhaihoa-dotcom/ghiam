@@ -204,6 +204,12 @@ def _append_rows(
                         "credit_name",
                         "author_figure",
                         "from_display",
+                        "comment_author_name",
+                        "user_display",
+                        "poster_display",
+                        "sender_display",
+                        "creator_display",
+                        "actor_display",
                     ),
                 )
             )
@@ -296,6 +302,12 @@ def _append_rows(
                             "credit_name",
                             "author_figure",
                             "from_display",
+                            "comment_author_name",
+                            "user_display",
+                            "poster_display",
+                            "sender_display",
+                            "creator_display",
+                            "actor_display",
                         ),
                     )
                 )
@@ -376,9 +388,9 @@ def post_id_from_url(url: str) -> str | None:
     raw = url.strip()
     if raw.isdigit() or ("_" in raw and raw.replace("_", "").isdigit()):
         return raw
-    # Unwrap Facebook click-tracking redirects before matching post ids.
-    if re.search(r"/l\.php\?", raw, re.IGNORECASE):
-        wrapped = re.search(r"[?&]u=([^&\s#]+)", raw, re.IGNORECASE)
+    # Unwrap Facebook click-tracking and share wrappers before matching post ids.
+    if re.search(r"/l\.php\?|/dialog/share\?|/sharer/sharer\.php\?", raw, re.IGNORECASE):
+        wrapped = re.search(r"[?&](?:u|href)=([^&\s#]+)", raw, re.IGNORECASE)
         if wrapped:
             inner = unquote(wrapped.group(1)).strip()
             if inner and inner != raw:
@@ -416,7 +428,7 @@ def post_id_from_url(url: str) -> str | None:
     stories = re.search(r"/stories/(\d+)", raw, re.IGNORECASE)
     if stories:
         return accepted_object_id(stories.group(1))
-    media = re.search(r"[?&]set=(?:a|pcb|o|gm|oa)\.(\d+)", raw, re.IGNORECASE)
+    media = re.search(r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms)\.(\d+)", raw, re.IGNORECASE)
     if media:
         return accepted_object_id(media.group(1))
     path = re.search(
@@ -426,6 +438,9 @@ def post_id_from_url(url: str) -> str | None:
     )
     if path:
         return accepted_object_id(path.group(1))
+    permalink = re.search(r"[?&]view=permalink(?:[^#]*?)[?&]id=(\d+)", raw, re.IGNORECASE)
+    if permalink:
+        return accepted_object_id(permalink.group(1))
     watch = re.search(r"[?&]v=(\d+)", raw)
     if watch:
         return accepted_object_id(watch.group(1))
