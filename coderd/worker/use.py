@@ -104,6 +104,11 @@ def link_learned(root: Path) -> Path:
             or (name == "he-thong" and stem.startswith("tldr-system"))
             or (name == "shell" and stem in {"tldr-ls", "tldr-mkdir", "tldr-rm", "tldr-grep", "tldr-find", "tldr-chmod", "tldr-ssh", "tldr-tar", "tldr-rsync", "tldr-sed", "tldr-awk", "tldr-make"})
             or (name == "node" and stem in {"tldr-node", "tldr-npm", "tldr-npx", "tldr-yarn", "tldr-pnpm"})
+            or (name == "go" and stem.startswith("tldr-go"))
+            or (name == "rust" and (stem.startswith("tldr-cargo") or stem.startswith("tldr-rust")))
+            or (name == "java" and stem in {"tldr-java", "tldr-javac", "tldr-mvn", "tldr-gradle"})
+            or (name == "bien-dich" and stem in {"tldr-gcc", "tldr-g++", "tldr-clang", "tldr-cmake", "tldr-make", "tldr-gdb"})
+            or (name == "csdl" and stem in {"tldr-psql", "tldr-redis-cli", "tldr-mysql"})
         ]
         matching.sort(key=lambda stem: (0 if stem.startswith(name) or stem.startswith("tldr-" + name) else 1, stem))
         shown = ", ".join(matching[:8]) if matching else "chưa có kỹ năng"

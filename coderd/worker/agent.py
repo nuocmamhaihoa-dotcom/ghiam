@@ -20,7 +20,7 @@ SYSTEM = (
     "Khi được bảo chạy lệnh, gọi run_cmd đúng một lần rồi trả lời tiếng Việt, không in JSON. "
     "Mọi path nằm trong workspace. "
     "Khi người dùng nói tiếng Việt và cần lập trình, đọc learn/dung.md rồi đúng một file trong learn/lenh/ và khi cần đúng một file trong learn/the/. "
-    "Nhóm lệnh: python, git, shell, sqlite, mang, he-thong, docker, node. "
+    "Nhóm lệnh: python, git, shell, sqlite, mang, he-thong, docker, node, go, rust, java, bien-dich, csdl. "
     "Để nhớ một việc cho lần sau, ghi đè file .coderd/memory.md."
 )
 

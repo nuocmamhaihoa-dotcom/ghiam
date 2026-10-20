@@ -204,6 +204,29 @@ OPEN_SOURCES = (
     ("tldr-docker-compose", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/docker-compose.md"),
     ("tldr-pytest", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/pytest.md"),
     ("tldr-pip3", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/pip3.md"),
+    ("tldr-go", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/go.md"),
+    ("tldr-gofmt", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/gofmt.md"),
+    ("tldr-cargo", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/cargo.md"),
+    ("tldr-rustc", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/rustc.md"),
+    ("tldr-gcc", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/gcc.md"),
+    ("tldr-g++", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/g++.md"),
+    ("tldr-clang", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/clang.md"),
+    ("tldr-cmake", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/cmake.md"),
+    ("tldr-gdb", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/gdb.md"),
+    ("tldr-java", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/java.md"),
+    ("tldr-javac", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/javac.md"),
+    ("tldr-mvn", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/mvn.md"),
+    ("tldr-gradle", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/gradle.md"),
+    ("tldr-poetry", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/poetry.md"),
+    ("tldr-jq", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/jq.md"),
+    ("tldr-psql", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/psql.md"),
+    ("tldr-redis-cli", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/redis-cli.md"),
+    ("tldr-gh", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/common/gh.md"),
+    ("python-ast", f"{_PY}/library/ast.rst"),
+    ("python-pdb-lib", f"{_PY}/library/pdb.rst"),
+    ("python-contextlib", f"{_PY}/library/contextlib.rst"),
+    ("python-ssl", f"{_PY}/library/ssl.rst"),
+    ("python-xml", f"{_PY}/library/xml.etree.elementtree.rst"),
 )
 SKIP_FILES = {
     "da-hoc.md",
@@ -1035,6 +1058,13 @@ def main() -> None:
     hours = 0.0
     if len(sys.argv) >= 3 and sys.argv[1] == "--hours":
         hours = float(sys.argv[2])
+    if len(sys.argv) >= 2 and sys.argv[1] == "--harvest":
+        from worker.use import link_learned
+
+        added = harvest_saved(root)
+        link_learned(root)
+        print(f"gom {added}")
+        return
     if len(sys.argv) >= 2 and sys.argv[1] == "--link":
         from worker.use import link_learned
 

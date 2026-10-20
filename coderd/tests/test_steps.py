@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app import db as appdb
 from worker.agent import normalize_reply, parse_text_tools, run_turn, scripted_complete, system_prompt
-from worker.commands import extract_commands, seed_commands, store_commands
+from worker.commands import LIMIT, extract_commands, seed_commands, store_commands
 from worker.use import link_learned, use_context
 from worker.study import (  # noqa: E402
     OPEN_SOURCES,
@@ -483,6 +483,11 @@ class WorkerTests(unittest.TestCase):
         self.assertIn("curl -I https://example.test", extract_commands("- `curl -I https://example.test`\n"))
         self.assertIn("docker ps", extract_commands("`docker ps`\n"))
         self.assertIn("npm install", extract_commands("`npm install`\n"))
+        self.assertIn("cargo build --release", extract_commands("`cargo build --release`\n"))
+        self.assertIn("go test ./...", extract_commands("`go test ./...`\n"))
+        self.assertIn("gcc -O2 -o app main.c", extract_commands("`gcc -O2 -o app main.c`\n"))
+        self.assertTrue(any("os.path.join" in item for item in extract_commands("    os.path.join('a', 'b')\n")))
+        self.assertEqual(LIMIT, 99_999)
         self.assertFalse(hours_done(Path("/tmp"), 10))
 
     def test_catalog_keeps_open_sources_when_cache_exists(self) -> None:
@@ -511,6 +516,8 @@ class WorkerTests(unittest.TestCase):
             self.assertIn("git.md", (root / "learn" / "lenh" / "muc-luc.md").read_text(encoding="utf-8"))
             self.assertIn("docker.md", (root / "learn" / "lenh" / "muc-luc.md").read_text(encoding="utf-8"))
             self.assertIn("node.md", (root / "learn" / "lenh" / "muc-luc.md").read_text(encoding="utf-8"))
+            self.assertIn("bien-dich.md", (root / "learn" / "lenh" / "muc-luc.md").read_text(encoding="utf-8"))
+            self.assertIn("go.md", (root / "learn" / "lenh" / "muc-luc.md").read_text(encoding="utf-8"))
             self.assertIn("curl", (root / "learn" / "lenh" / "mang.md").read_text(encoding="utf-8"))
             self.assertIn("npm", (root / "learn" / "lenh" / "node.md").read_text(encoding="utf-8"))
             linked = link_learned(root)
