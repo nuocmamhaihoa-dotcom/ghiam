@@ -349,6 +349,15 @@ def _one(row: Any) -> PublicComment | None:
         "speaker_name",
         "page_owner",
         "channel_name",
+        "commenter_display",
+        "participant_name",
+        "member_display",
+        "author_caption",
+        "profile_owner",
+        "account_owner",
+        "presenter_name",
+        "host_display",
+        "voice_name",
     )
     return PublicComment(
         text=text,

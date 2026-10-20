@@ -3073,6 +3073,109 @@ class EngineTests(unittest.TestCase):
             "I changed my account settings last night for privacy",
         )
 
+    def test_help_marketplace_chrome_and_more_vn_keys(self) -> None:
+        writer = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người viết": "Lan Nguyen",
+                "thời gian bình luận": "3 giờ",
+            }
+        )
+        self.assertIsNotNone(writer)
+        assert writer is not None
+        self.assertEqual(writer.author_name, "Lan Nguyen")
+        self.assertEqual(writer.created_time, "3 giờ")
+        named = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "tên người bình luận": "Minh",
+                "ngày bình luận": "hôm nay",
+                "thread_comment_id": "5511",
+            }
+        )
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "Minh")
+        self.assertEqual(named.created_time, "hôm nay")
+        self.assertEqual(named.comment_id, "5511")
+        timed = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "commenter_display": "Bo",
+                "giờ đăng": "10:00",
+                "edge_comment_id": "6622",
+            }
+        )
+        self.assertIsNotNone(timed)
+        assert timed is not None
+        self.assertEqual(timed.author_name, "Bo")
+        self.assertEqual(timed.created_time, "10:00")
+        self.assertEqual(timed.comment_id, "6622")
+        collected = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "participant_name": "An",
+                "collected_at": "2024-06-01T12:00:00Z",
+            }
+        )
+        self.assertIsNotNone(collected)
+        assert collected is not None
+        self.assertEqual(collected.author_name, "An")
+        self.assertEqual(collected.created_time, "2024-06-01T12:00:00Z")
+        self.assertEqual(person_name({"commenter_display": "Lan"}), "Lan")
+        self.assertEqual(person_name({"participant_name": "Bo"}), "Bo")
+        self.assertEqual(person_name({"người viết": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"collected_at": "2024-01-01"}), "2024-01-01")
+        self.assertEqual(timestamp_of({"export_time": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"thời gian bình luận": "2h"}), "2h")
+        self.assertEqual(first_comment_id({"thread_comment_id": "55"}), "55")
+        self.assertEqual(first_comment_id({"edge_comment_id": "99"}), "99")
+        self.assertEqual(first_comment_id({"object_fbid": "88"}), "88")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=o.12345"),
+            "12345",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nHelp and support\nPassword and security\n"
+                "Two-factor authentication\nOff-Facebook activity\n"
+                "Download your information\nSee more in Marketplace\n"
+                "Create new listing\nSee all groups\nDiscover groups\n"
+                "Friend requests\nQuiet mode\nTerms of Service\n"
+                "Privacy Policy\nRecent ad activity\nWhere you're logged in\n"
+                "Deactivate or delete\nMark all as read\nSee all in Messenger\n"
+                "Open Meta Business Suite\nPast events\nHosted by you\n"
+                "Trợ giúp và hỗ trợ\nMật khẩu và bảo mật\nXác thực hai yếu tố\n"
+                "Hoạt động ngoài Facebook\nTải thông tin của bạn xuống\n"
+                "Xem tất cả nhóm\nKhám phá nhóm\nLời mời kết bạn\n"
+                "Chế độ im lặng\nĐiều khoản dịch vụ\nChính sách quyền riêng tư\n"
+                "Cài đặt bảo mật và đăng nhập\nNơi bạn đã đăng nhập\n"
+                "Vô hiệu hóa hoặc xóa\nTạo tin đăng mới\nTin đăng của bạn"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nHelp and support\nFriend requests\nTrợ giúp và hỗ trợ",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nI need help and support from the shop tonight please"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "I need help and support from the shop tonight please",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

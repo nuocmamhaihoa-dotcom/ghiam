@@ -94,6 +94,11 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "root_comment_id",
         "top_level_comment_id",
         "comment_object_id",
+        "thread_comment_id",
+        "edge_comment_id",
+        "node_comment_id",
+        "object_fbid",
+        "fb_object_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -133,6 +138,11 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "root_comment_id",
         "top_level_comment_id",
         "comment_object_id",
+        "thread_comment_id",
+        "edge_comment_id",
+        "node_comment_id",
+        "object_fbid",
+        "fb_object_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -344,6 +354,19 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "ten tac gia",
             "người đăng",
             "nguoi dang",
+            "người viết",
+            "nguoi viet",
+            "tên người bình luận",
+            "ten nguoi binh luan",
+            "commenter_display",
+            "participant_name",
+            "member_display",
+            "author_caption",
+            "profile_owner",
+            "account_owner",
+            "presenter_name",
+            "host_display",
+            "voice_name",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -578,6 +601,18 @@ def timestamp_of(row: object) -> str | None:
         "scraped_at",
         "imported_at",
         "server_time",
+        "thời gian bình luận",
+        "thoi gian binh luan",
+        "ngày bình luận",
+        "ngay binh luan",
+        "giờ đăng",
+        "gio dang",
+        "collected_at",
+        "export_time",
+        "crawl_time",
+        "harvest_time",
+        "capture_time",
+        "observed_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:

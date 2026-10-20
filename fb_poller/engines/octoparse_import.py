@@ -171,6 +171,19 @@ _AUTHOR_KEYS = (
     "speaker_name",
     "page_owner",
     "channel_name",
+    "người viết",
+    "nguoi viet",
+    "tên người bình luận",
+    "ten nguoi binh luan",
+    "commenter_display",
+    "participant_name",
+    "member_display",
+    "author_caption",
+    "profile_owner",
+    "account_owner",
+    "presenter_name",
+    "host_display",
+    "voice_name",
 )
 _TIME_KEYS = (
     "time",
@@ -279,6 +292,18 @@ _TIME_KEYS = (
     "scraped_at",
     "imported_at",
     "server_time",
+    "thời gian bình luận",
+    "thoi gian binh luan",
+    "ngày bình luận",
+    "ngay binh luan",
+    "giờ đăng",
+    "gio dang",
+    "collected_at",
+    "export_time",
+    "crawl_time",
+    "harvest_time",
+    "capture_time",
+    "observed_at",
 )
 
 

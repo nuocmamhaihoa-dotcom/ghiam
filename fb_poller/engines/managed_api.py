@@ -235,6 +235,15 @@ def _comments_from_json(payload: Any, limit: int) -> list[PublicComment]:
             "speaker_name",
             "page_owner",
             "channel_name",
+            "commenter_display",
+            "participant_name",
+            "member_display",
+            "author_caption",
+            "profile_owner",
+            "account_owner",
+            "presenter_name",
+            "host_display",
+            "voice_name",
         )
         author_name = first_person_name(row, author_keys) or (
             first_person_name(inner, author_keys) if inner else None
