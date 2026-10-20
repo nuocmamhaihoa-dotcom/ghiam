@@ -288,6 +288,10 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "passkey_comment_id",
         "session_comment_id",
         "checkup_comment_id",
+        "cohost_comment_id",
+        "reminder_comment_id",
+        "premiere_comment_id",
+        "ticket_comment_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -521,6 +525,10 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "passkey_comment_id",
         "session_comment_id",
         "checkup_comment_id",
+        "cohost_comment_id",
+        "reminder_comment_id",
+        "premiere_comment_id",
+        "ticket_comment_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -1362,6 +1370,18 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "passkey_user",
             "session_manager",
             "security_checker",
+            "người đồng tổ chức",
+            "nguoi dong to chuc",
+            "người đặt lời nhắc",
+            "nguoi dat loi nhac",
+            "người xem buổi công chiếu",
+            "nguoi xem buoi cong chieu",
+            "người mua vé",
+            "nguoi mua ve",
+            "event_cohost",
+            "reminder_setter",
+            "premiere_viewer",
+            "ticket_buyer_user",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -1905,6 +1925,16 @@ def timestamp_of(row: object) -> str | None:
         "passkey_created_at",
         "session_managed_at",
         "checkup_done_at",
+        "ngày đồng tổ chức",
+        "ngay dong to chuc",
+        "thời gian đặt lời nhắc",
+        "thoi gian dat loi nhac",
+        "ngày xem buổi công chiếu",
+        "ngay xem buoi cong chieu",
+        "cohost_joined_at",
+        "reminder_set_at",
+        "premiere_viewed_at",
+        "ticket_bought_at",
         "mirrored_at",
         "copied_at",
         "backed_up_at",
@@ -2318,6 +2348,16 @@ def timestamp_of(row: object) -> str | None:
         "passkey_created_at",
         "session_managed_at",
         "checkup_done_at",
+        "ngày đồng tổ chức",
+        "ngay dong to chuc",
+        "thời gian đặt lời nhắc",
+        "thoi gian dat loi nhac",
+        "ngày xem buổi công chiếu",
+        "ngay xem buoi cong chieu",
+        "cohost_joined_at",
+        "reminder_set_at",
+        "premiere_viewed_at",
+        "ticket_bought_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:

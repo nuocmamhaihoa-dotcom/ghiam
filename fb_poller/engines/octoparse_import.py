@@ -801,6 +801,18 @@ _AUTHOR_KEYS = (
     "passkey_user",
     "session_manager",
     "security_checker",
+    "người đồng tổ chức",
+    "nguoi dong to chuc",
+    "người đặt lời nhắc",
+    "nguoi dat loi nhac",
+    "người xem buổi công chiếu",
+    "nguoi xem buoi cong chieu",
+    "người mua vé",
+    "nguoi mua ve",
+    "event_cohost",
+    "reminder_setter",
+    "premiere_viewer",
+    "ticket_buyer_user",
 )
 _TIME_KEYS = (
     "time",
@@ -1383,6 +1395,16 @@ _TIME_KEYS = (
     "passkey_created_at",
     "session_managed_at",
     "checkup_done_at",
+    "ngày đồng tổ chức",
+    "ngay dong to chuc",
+    "thời gian đặt lời nhắc",
+    "thoi gian dat loi nhac",
+    "ngày xem buổi công chiếu",
+    "ngay xem buoi cong chieu",
+    "cohost_joined_at",
+    "reminder_set_at",
+    "premiere_viewed_at",
+    "ticket_bought_at",
 )
 
 

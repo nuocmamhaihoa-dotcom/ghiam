@@ -9546,6 +9546,126 @@ class EngineTests(unittest.TestCase):
             "Passkeys only after you finish enabling two-factor auth",
         )
 
+    def test_events_tickets_reminders_premiere_vn_keys_and_urls(self) -> None:
+        cohost = _from_mapping(
+            {
+                "bình luận": "Mình sẽ đồng tổ chức nhé",
+                "người đồng tổ chức": "Lan Host",
+                "ngày đồng tổ chức": "8h",
+            }
+        )
+        self.assertIsNotNone(cohost)
+        assert cohost is not None
+        self.assertEqual(cohost.author_name, "Lan Host")
+        self.assertEqual(cohost.created_time, "8h")
+        reminder = _from_mapping(
+            {
+                "Nội dung": "Nhắc mình trước 1 giờ",
+                "người đặt lời nhắc": "Minh",
+                "thời gian đặt lời nhắc": "hôm nay",
+                "reminder_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(reminder)
+        assert reminder is not None
+        self.assertEqual(reminder.author_name, "Minh")
+        self.assertEqual(reminder.created_time, "hôm nay")
+        self.assertEqual(reminder.comment_id, "1357")
+        premiere = _from_mapping(
+            {
+                "text": "buổi công chiếu hay quá",
+                "người xem buổi công chiếu": "Bo",
+                "premiere_viewed_at": "05:45",
+                "premiere_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(premiere)
+        assert premiere is not None
+        self.assertEqual(premiere.author_name, "Bo")
+        self.assertEqual(premiere.created_time, "05:45")
+        self.assertEqual(premiere.comment_id, "2468")
+        ticket = _from_mapping(
+            {
+                "message": "đã mua vé rồi",
+                "người mua vé": "An",
+                "ticket_bought_at": "2025-01-01T03:00:00Z",
+                "ticket_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(ticket)
+        assert ticket is not None
+        self.assertEqual(ticket.author_name, "An")
+        self.assertEqual(ticket.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(ticket.comment_id, "9753")
+        self.assertEqual(person_name({"event_cohost": "Lan"}), "Lan")
+        self.assertEqual(person_name({"reminder_setter": "Bo"}), "Bo")
+        self.assertEqual(person_name({"premiere_viewer": "Minh"}), "Minh")
+        self.assertEqual(person_name({"ticket_buyer_user": "An"}), "An")
+        self.assertEqual(person_name({"người đồng tổ chức": "Ha"}), "Ha")
+        self.assertEqual(timestamp_of({"cohost_joined_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"reminder_set_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"premiere_viewed_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"ticket_bought_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"cohost_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"ticket_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/events/cohost/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reminders/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/premiere/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/countdown/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/calendar/add/?id=777888"),
+            "777888",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nBuy tickets\nTicketed event\nHost an event\n"
+                "Co-host\nAbout this event\nRepeat event\nEnd date\n"
+                "Start time\nOnline event\nHybrid event\nWatch party invite\n"
+                "Create watch party\nRemind me\nSet reminder\nTurn off reminder\n"
+                "Live premiere\nEvent countdown\n"
+                "Mua vé\nSự kiện có bán vé\nTổ chức sự kiện\nĐồng tổ chức\n"
+                "Về sự kiện này\nLặp lại sự kiện\nNgày kết thúc\nGiờ bắt đầu\n"
+                "Sự kiện trực tuyến\nSự kiện kết hợp\nLời mời xem chung\n"
+                "Tạo buổi xem chung\nNhắc tôi\nĐặt lời nhắc\nTắt lời nhắc\n"
+                "Sẽ tham gia\nBuổi công chiếu\nĐếm ngược sự kiện"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nRemind me\nBuy tickets\n"
+                    "Nhắc tôi\nMua vé",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nRemind me only after you finish reading the event details"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Remind me only after you finish reading the event details",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

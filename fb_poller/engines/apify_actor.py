@@ -939,6 +939,18 @@ def _one(row: Any) -> PublicComment | None:
         "passkey_user",
         "session_manager",
         "security_checker",
+        "người đồng tổ chức",
+        "nguoi dong to chuc",
+        "người đặt lời nhắc",
+        "nguoi dat loi nhac",
+        "người xem buổi công chiếu",
+        "nguoi xem buoi cong chieu",
+        "người mua vé",
+        "nguoi mua ve",
+        "event_cohost",
+        "reminder_setter",
+        "premiere_viewer",
+        "ticket_buyer_user",
     )
     return PublicComment(
         text=text,

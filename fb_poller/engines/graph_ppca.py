@@ -778,6 +778,18 @@ def _append_rows(
                         "passkey_user",
                         "session_manager",
                         "security_checker",
+                        "người đồng tổ chức",
+                        "nguoi dong to chuc",
+                        "người đặt lời nhắc",
+                        "nguoi dat loi nhac",
+                        "người xem buổi công chiếu",
+                        "nguoi xem buoi cong chieu",
+                        "người mua vé",
+                        "nguoi mua ve",
+                        "event_cohost",
+                        "reminder_setter",
+                        "premiere_viewer",
+                        "ticket_buyer_user",
                     ),
                 )
             )
@@ -1444,6 +1456,18 @@ def _append_rows(
                             "passkey_user",
                             "session_manager",
                             "security_checker",
+                            "người đồng tổ chức",
+                            "nguoi dong to chuc",
+                            "người đặt lời nhắc",
+                            "nguoi dat loi nhac",
+                            "người xem buổi công chiếu",
+                            "nguoi xem buoi cong chieu",
+                            "người mua vé",
+                            "nguoi mua ve",
+                            "event_cohost",
+                            "reminder_setter",
+                            "premiere_viewer",
+                            "ticket_buyer_user",
                         ),
                     )
                 )
@@ -2485,6 +2509,21 @@ def post_id_from_url(url: str) -> str | None:
     recovery_codes = re.search(r"/recovery_codes/\?id=(\d+)", raw, re.IGNORECASE)
     if recovery_codes:
         return accepted_object_id(recovery_codes.group(1))
+    events_cohost = re.search(r"/events/cohost/\?id=(\d+)", raw, re.IGNORECASE)
+    if events_cohost:
+        return accepted_object_id(events_cohost.group(1))
+    reminders = re.search(r"/reminders/\?id=(\d+)", raw, re.IGNORECASE)
+    if reminders:
+        return accepted_object_id(reminders.group(1))
+    premiere = re.search(r"/premiere/\?id=(\d+)", raw, re.IGNORECASE)
+    if premiere:
+        return accepted_object_id(premiere.group(1))
+    countdown = re.search(r"/countdown/\?id=(\d+)", raw, re.IGNORECASE)
+    if countdown:
+        return accepted_object_id(countdown.group(1))
+    calendar_add = re.search(r"/calendar/add/\?id=(\d+)", raw, re.IGNORECASE)
+    if calendar_add:
+        return accepted_object_id(calendar_add.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
