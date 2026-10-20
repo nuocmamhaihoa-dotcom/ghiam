@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, unquote, urlparse
 
 from fb_poller.config import Settings
 from fb_poller.storage.db import session_scope
@@ -27,6 +27,13 @@ class ProxyConfig:
             cfg["password"] = self.password
         return cfg
 
+    def as_httpx(self) -> str:
+        if self.username:
+            user = quote(self.username, safe="")
+            password = quote(self.password or "", safe="")
+            return self.server.replace("://", f"://{user}:{password}@", 1)
+        return self.server
+
 
 def parse_proxy_line(line: str) -> ProxyConfig | None:
     """
@@ -45,21 +52,53 @@ def parse_proxy_line(line: str) -> ProxyConfig | None:
         if not parsed.hostname or not parsed.port:
             return None
         scheme = parsed.scheme or "http"
-        server = f"{scheme}://{parsed.hostname}:{parsed.port}"
+        host = parsed.hostname
+        if ":" in host:
+            host = f"[{host}]"
+        server = f"{scheme}://{host}:{parsed.port}"
+        username = unquote(parsed.username) if parsed.username else None
+        password = unquote(parsed.password) if parsed.password else None
         return ProxyConfig(
             id=None,
             server=server,
-            username=parsed.username,
-            password=parsed.password,
+            username=username,
+            password=password,
             raw=line,
         )
+
+    if line.startswith("["):
+        end = line.find("]")
+        if end > 1 and line[end + 1 : end + 2] == ":":
+            host = line[1:end]
+            rest = line[end + 2 :].split(":")
+            if host and rest and rest[0].isdigit():
+                port = rest[0]
+                server = f"http://[{host}]:{port}"
+                if len(rest) == 1:
+                    return ProxyConfig(id=None, server=server, raw=line)
+                user = rest[1]
+                password = ":".join(rest[2:]) if len(rest) > 2 else None
+                if user:
+                    return ProxyConfig(
+                        id=None,
+                        server=server,
+                        username=user,
+                        password=password,
+                        raw=line,
+                    )
+        return None
 
     parts = line.split(":")
     if len(parts) == 2:
         host, port = parts
+        if not port.isdigit():
+            return None
         return ProxyConfig(id=None, server=f"http://{host}:{port}", raw=line)
-    if len(parts) == 4:
-        host, port, user, password = parts
+    if len(parts) >= 4 and parts[1].isdigit():
+        host, port, user = parts[0], parts[1], parts[2]
+        password = ":".join(parts[3:])
+        if not host or not user:
+            return None
         return ProxyConfig(
             id=None,
             server=f"http://{host}:{port}",
