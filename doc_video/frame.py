@@ -531,21 +531,29 @@ def _read_names(small: list[Image.Image], large: list[Image.Image]) -> list[str]
 
 
 def _read_phones(screen: Image.Image, pairs: list[tuple[ocr.TextLine, ocr.TextLine]]) -> list[str]:
+    """Đọc số bằng phiếu [bộ chữ lớn, bộ chữ nhanh, dòng lúc quét, bộ nét].
+
+    Ba lần sau đã ra cùng một số thì bỏ bộ chữ lớn. Một phiếu lệch không thắng
+    được ba phiếu giống nhau, nên kết quả không đổi. Khác nhau thì vẫn đọc bộ
+    chữ lớn rồi bỏ phiếu như trước.
+    """
+    if not pairs:
+        return []
     phone_crops = [_crop(screen, phone) for phone, _ in pairs]
-    best_digits = ocr.read_texts(phone_crops, "eng", ocr.DIGITS)
-    fast_digits = ocr.read_texts(phone_crops, "eng", ocr.DIGITS, best=False)
-    glyphs = [read_digit_line(crop) for crop in phone_crops]
-    return [
-        vote_digits(
-            [
-                normalize_phone(best_digits[index]),
-                normalize_phone(fast_digits[index]),
-                normalize_phone(phone_line.text),
-                normalize_phone(glyphs[index]),
-            ]
-        )
-        for index, (phone_line, _) in enumerate(pairs)
+    from_line = [normalize_phone(phone_line.text) for phone_line, _ in pairs]
+    glyphs = [normalize_phone(read_digit_line(crop)) for crop in phone_crops]
+    fast = [normalize_phone(text) for text in ocr.read_texts(phone_crops, "eng", ocr.DIGITS, best=False)]
+    best = [""] * len(pairs)
+    pending = [
+        index
+        for index, (line, glyph, quick) in enumerate(zip(from_line, glyphs, fast))
+        if not (line and line == glyph == quick)
     ]
+    if pending:
+        careful = ocr.read_texts([phone_crops[index] for index in pending], "eng", ocr.DIGITS)
+        for index, text in zip(pending, careful):
+            best[index] = normalize_phone(text)
+    return [vote_digits([best[index], fast[index], from_line[index], glyphs[index]]) for index in range(len(pairs))]
 
 
 def _read_handle(screen: Image.Image, line: ocr.TextLine) -> str:
@@ -565,6 +573,7 @@ def _read_handle(screen: Image.Image, line: ocr.TextLine) -> str:
         (first, 1.0, VIE_DIGIT_WEIGHT),
         (second, 1.0, VIE_DIGIT_WEIGHT),
     ]
+    seen = [first, second]
     for target, lang, whitelist, best in (
         (46, "vie", "", False),
         (60, "eng", LOWER_HANDLE, False),
@@ -572,8 +581,11 @@ def _read_handle(screen: Image.Image, line: ocr.TextLine) -> str:
         (80, "eng", ocr.ASCII, True),
     ):
         text = ocr.read_texts([_crop(screen, line, target)], lang, whitelist, best)[0]
-        reads.append((handle_from_read(text), 1.0, VIE_DIGIT_WEIGHT if lang == "vie" else 1.0))
-    if viet.available():
+        handle = handle_from_read(text)
+        seen.append(handle)
+        reads.append((handle, 1.0, VIE_DIGIT_WEIGHT if lang == "vie" else 1.0))
+    # Sáu lần tesseract đã ra cùng một @id thì VietOCR (trọng số 1) không đổi được phiếu.
+    if viet.available() and not (seen[0] and all(item == seen[0] for item in seen)):
         reads.append((handle_from_viet(viet.read_lines([_crop(screen, line)])[0]), 1.0, 1.0))
     bodies = [(handle[1:], weight, digit_weight) for handle, weight, digit_weight in reads if handle]
     handle = find_handle("@" + vote_chars(bodies, loose=False)) if bodies else ""

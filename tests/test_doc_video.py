@@ -882,6 +882,89 @@ class EarlyReadTests(unittest.TestCase):
         ):
             self.assertEqual(_read_phones(screen, [(phone, name)]), ["0912000000"])
 
+    def test_an_agreed_phone_skips_the_slow_reader(self) -> None:
+        from doc_video.frame import _read_phones
+
+        screen = Image.new("RGB", (80, 60), (255, 255, 255))
+        name = TextLine("Lan", 2, 24, 40, 40)
+        phone = TextLine("0912345678", 2, 2, 70, 20)
+        calls: list[bool] = []
+
+        def fake(batch, lang, whitelist="", best=True):
+            calls.append(best)
+            self.assertFalse(best)
+            return ["0912345678"]
+
+        with (
+            patch("doc_video.frame.ocr.read_texts", side_effect=fake),
+            patch("doc_video.frame.read_digit_line", return_value="0912345678"),
+        ):
+            self.assertEqual(_read_phones(screen, [(phone, name)]), ["0912345678"])
+        self.assertEqual(calls, [False])
+
+    def test_a_phone_the_fast_readers_split_still_uses_the_slow_reader(self) -> None:
+        from doc_video.frame import _read_phones
+
+        screen = Image.new("RGB", (160, 60), (255, 255, 255))
+        name = TextLine("Lan", 2, 24, 40, 40)
+        agreed = TextLine("0912345678", 2, 2, 70, 20)
+        split = TextLine("0911111111", 80, 2, 150, 20)
+        calls: list[tuple[int, bool]] = []
+
+        def fake(batch, lang, whitelist="", best=True):
+            calls.append((len(batch), best))
+            if best:
+                self.assertEqual(len(batch), 1)
+                return ["0911111111"]
+            return ["0912345678", "0910000000"]
+
+        glyphs = iter(["0912345678", "0911111111"])
+        with (
+            patch("doc_video.frame.ocr.read_texts", side_effect=fake),
+            patch("doc_video.frame.read_digit_line", side_effect=lambda _image: next(glyphs)),
+        ):
+            self.assertEqual(
+                _read_phones(screen, [(agreed, name), (split, name)]),
+                ["0912345678", "0911111111"],
+            )
+        self.assertEqual(calls, [(2, False), (1, True)])
+
+    def test_an_agreed_digit_handle_skips_vietocr(self) -> None:
+        from doc_video.frame import _read_handle
+
+        line = TextLine("@truc51798", 4, 4, 90, 28)
+        screen = Image.new("RGB", (120, 48), (255, 255, 255))
+
+        def fake(batch, lang, whitelist="", best=True):
+            return ["@truc51798"]
+
+        with (
+            patch("doc_video.frame.ocr.read_texts", side_effect=fake),
+            patch("doc_video.frame.viet.available", return_value=True),
+            patch("doc_video.frame.viet.read_lines") as viet_lines,
+        ):
+            self.assertEqual(_read_handle(screen, line), "@truc51798")
+        viet_lines.assert_not_called()
+
+    def test_a_split_digit_handle_still_asks_vietocr(self) -> None:
+        from doc_video.frame import _read_handle
+
+        line = TextLine("@truc51798", 4, 4, 90, 28)
+        screen = Image.new("RGB", (120, 48), (255, 255, 255))
+
+        def fake(batch, lang, whitelist="", best=True):
+            if lang == "eng" and best:
+                return ["@truc51799"]
+            return ["@truc51798"]
+
+        with (
+            patch("doc_video.frame.ocr.read_texts", side_effect=fake),
+            patch("doc_video.frame.viet.available", return_value=True),
+            patch("doc_video.frame.viet.read_lines", return_value=["@truc51798"]) as viet_lines,
+        ):
+            _read_handle(screen, line)
+        viet_lines.assert_called_once()
+
 
 class DigitTests(unittest.TestCase):
     def test_three_fonts_read_every_digit(self) -> None:
@@ -983,6 +1066,121 @@ class DiskRoomTests(unittest.TestCase):
             self.assertGreaterEqual(len(frames), 1)
             self.assertTrue(frames[0][0].is_file())
             self.assertFalse(any(path.name.startswith("part-") for path in folder.iterdir()))
+
+    def test_a_frame_still_being_written_stays_unread(self) -> None:
+        from doc_video.video import jpeg_time, pending_jpegs, ready_jpegs
+
+        self.assertEqual(ready_jpegs([], False), [])
+        self.assertEqual(ready_jpegs(["f_000001.jpg"], False), [])
+        self.assertEqual(ready_jpegs(["f_000001.jpg", "f_000002.jpg", "f_000003.jpg"], False), ["f_000001.jpg", "f_000002.jpg"])
+        self.assertEqual(ready_jpegs(["f_000001.jpg"], True), ["f_000001.jpg"])
+        self.assertEqual(jpeg_time("f_000001.jpg", 2.0), 0.0)
+        self.assertEqual(jpeg_time("f_000003.jpg", 2.0), 1.0)
+        seen = {"f_000001.jpg", "f_000002.jpg"}
+        # f_000002 vừa bị xóa vì trùng. f_000003 đã đóng và phải vẫn được đọc.
+        self.assertEqual(
+            pending_jpegs(["f_000001.jpg", "f_000003.jpg", "f_000004.jpg"], False, seen),
+            ["f_000003.jpg"],
+        )
+        seen.add("f_000003.jpg")
+        self.assertEqual(
+            pending_jpegs(["f_000001.jpg", "f_000003.jpg", "f_000004.jpg"], True, seen),
+            ["f_000004.jpg"],
+        )
+
+    def test_keeping_frames_one_by_one_matches_keeping_them_together(self) -> None:
+        from doc_video.video import _select_frames, drop_repeats
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            frames = []
+            for index, color in enumerate(((10, 10, 10), (10, 10, 10), (240, 240, 240))):
+                path = root / f"f_{index}.jpg"
+                Image.new("RGB", (80, 160), color).save(path, format="JPEG", quality=90)
+                frames.append((path, index / 2))
+            together = drop_repeats(frames)
+            last = None
+            kept = []
+            for item in frames:
+                chosen, last = _select_frames([item], last, False)
+                kept.extend(chosen)
+            self.assertEqual(kept, together)
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "không có ffmpeg")
+    def test_scanning_during_extract_keeps_the_same_frames(self) -> None:
+        from doc_video.video import _frames_for, drop_repeats, extract_frames, read_inputs
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            video = root / "in.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc=s=64x64:d=2:r=10",
+                    str(video),
+                ],
+                check=True,
+            )
+            plain_dir = root / "plain"
+            plain_dir.mkdir()
+            plain = drop_repeats(extract_frames(video, plain_dir, 2.0))
+            stream_dir = root / "stream"
+            stream_dir.mkdir()
+            seen: list[float] = []
+            streamed = _frames_for(video, stream_dir, 2.0, None, lambda path, at: seen.append(at))
+            self.assertEqual([at for _path, at in plain], [at for _path, at in streamed])
+            self.assertEqual(seen, [at for _path, at in streamed])
+            self.assertGreaterEqual(len(streamed), 2)
+            alone = read_inputs([video], workers=1)
+            parallel = read_inputs([video], workers=2)
+            self.assertEqual([frame.at for frame in alone], [frame.at for frame in parallel])
+            self.assertEqual(len(parallel), len(streamed))
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "không có ffmpeg")
+    def test_deleting_a_repeat_still_keeps_the_next_color(self) -> None:
+        from doc_video.video import _frames_for, drop_repeats, extract_frames
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            video = root / "holds.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=red:s=64x64:d=1:r=10",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=blue:s=64x64:d=1:r=10",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=green:s=64x64:d=1:r=10",
+                    "-filter_complex",
+                    "[0:v][1:v][2:v]concat=n=3:v=1:a=0",
+                    str(video),
+                ],
+                check=True,
+            )
+            plain_dir = root / "plain"
+            plain_dir.mkdir()
+            plain = drop_repeats(extract_frames(video, plain_dir, 2.0))
+            stream_dir = root / "stream"
+            stream_dir.mkdir()
+            streamed = _frames_for(video, stream_dir, 2.0, None, lambda _path, _at: None)
+            self.assertEqual([at for _path, at in plain], [at for _path, at in streamed])
+            self.assertGreaterEqual(len(streamed), 3)
 
 
 ASSETS = Path("/home/ubuntu/.cursor/projects/workspace/assets")
