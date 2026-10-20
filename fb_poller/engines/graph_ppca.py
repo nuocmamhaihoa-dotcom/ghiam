@@ -488,6 +488,27 @@ def _append_rows(
                         "searcher",
                         "data_downloader",
                         "legacy_contact",
+                        "người xem sau",
+                        "nguoi xem sau",
+                        "người tạo playlist",
+                        "nguoi tao playlist",
+                        "người gửi sao",
+                        "nguoi gui sao",
+                        "người stream",
+                        "nguoi stream",
+                        "người tham gia giải",
+                        "nguoi tham gia giai",
+                        "người thách đấu",
+                        "nguoi thach dau",
+                        "người chơi instant",
+                        "nguoi choi instant",
+                        "watch_later_user",
+                        "playlist_owner",
+                        "star_buyer",
+                        "streamer",
+                        "tournament_player",
+                        "challenger",
+                        "instant_gamer",
                     ),
                 )
             )
@@ -864,6 +885,27 @@ def _append_rows(
                             "searcher",
                             "data_downloader",
                             "legacy_contact",
+                            "người xem sau",
+                            "nguoi xem sau",
+                            "người tạo playlist",
+                            "nguoi tao playlist",
+                            "người gửi sao",
+                            "nguoi gui sao",
+                            "người stream",
+                            "nguoi stream",
+                            "người tham gia giải",
+                            "nguoi tham gia giai",
+                            "người thách đấu",
+                            "nguoi thach dau",
+                            "người chơi instant",
+                            "nguoi choi instant",
+                            "watch_later_user",
+                            "playlist_owner",
+                            "star_buyer",
+                            "streamer",
+                            "tournament_player",
+                            "challenger",
+                            "instant_gamer",
                         ),
                     )
                 )
@@ -1395,6 +1437,49 @@ def post_id_from_url(url: str) -> str | None:
     security_checkup = re.search(r"/security_checkup/\?id=(\d+)", raw, re.IGNORECASE)
     if security_checkup:
         return accepted_object_id(security_checkup.group(1))
+
+    watch_later = re.search(r"/watch/later/\?id=(\d+)", raw, re.IGNORECASE)
+    if watch_later:
+        return accepted_object_id(watch_later.group(1))
+    video_settings = re.search(r"/video/settings/\?id=(\d+)", raw, re.IGNORECASE)
+    if video_settings:
+        return accepted_object_id(video_settings.group(1))
+    captions_settings = re.search(r"/captions/settings/\?id=(\d+)", raw, re.IGNORECASE)
+    if captions_settings:
+        return accepted_object_id(captions_settings.group(1))
+    gaming_stream = re.search(r"/gaming/stream/\?id=(\d+)", raw, re.IGNORECASE)
+    if gaming_stream:
+        return accepted_object_id(gaming_stream.group(1))
+    gaming_clips = re.search(r"/gaming/clips/\?id=(\d+)", raw, re.IGNORECASE)
+    if gaming_clips:
+        return accepted_object_id(gaming_clips.group(1))
+    gaming_leaderboard = re.search(r"/gaming/leaderboard/\?id=(\d+)", raw, re.IGNORECASE)
+    if gaming_leaderboard:
+        return accepted_object_id(gaming_leaderboard.group(1))
+    gaming_challenge = re.search(r"/gaming/challenge/\?id=(\d+)", raw, re.IGNORECASE)
+    if gaming_challenge:
+        return accepted_object_id(gaming_challenge.group(1))
+    instantgames = re.search(r"/instantgames/\?id=(\d+)", raw, re.IGNORECASE)
+    if instantgames:
+        return accepted_object_id(instantgames.group(1))
+    games_browse = re.search(r"/games/browse/\?id=(\d+)", raw, re.IGNORECASE)
+    if games_browse:
+        return accepted_object_id(games_browse.group(1))
+    stars_buy = re.search(r"/stars/buy/\?id=(\d+)", raw, re.IGNORECASE)
+    if stars_buy:
+        return accepted_object_id(stars_buy.group(1))
+    stars_gift = re.search(r"/stars/gift/\?id=(\d+)", raw, re.IGNORECASE)
+    if stars_gift:
+        return accepted_object_id(stars_gift.group(1))
+    live_badges = re.search(r"/live/badges/\?id=(\d+)", raw, re.IGNORECASE)
+    if live_badges:
+        return accepted_object_id(live_badges.group(1))
+    picture_in_picture = re.search(r"/picture_in_picture/\?id=(\d+)", raw, re.IGNORECASE)
+    if picture_in_picture:
+        return accepted_object_id(picture_in_picture.group(1))
+    autoplay = re.search(r"/autoplay/\?id=(\d+)", raw, re.IGNORECASE)
+    if autoplay:
+        return accepted_object_id(autoplay.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

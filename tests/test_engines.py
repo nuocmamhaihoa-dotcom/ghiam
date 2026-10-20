@@ -6593,5 +6593,197 @@ class EngineTests(unittest.TestCase):
         )
 
 
+    def test_watch_gaming_stars_playlist_vn_keys_and_urls(self) -> None:
+        watcher = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người xem sau": "Lan Watch",
+                "thời gian xem sau": "6h",
+            }
+        )
+        self.assertIsNotNone(watcher)
+        assert watcher is not None
+        self.assertEqual(watcher.author_name, "Lan Watch")
+        self.assertEqual(watcher.created_time, "6h")
+        star = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người gửi sao": "Minh",
+                "ngày gửi sao": "hôm nay",
+                "star_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(star)
+        assert star is not None
+        self.assertEqual(star.author_name, "Minh")
+        self.assertEqual(star.created_time, "hôm nay")
+        self.assertEqual(star.comment_id, "1357")
+        streamer = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người stream": "Bo",
+                "challenged_at": "05:45",
+                "stream_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(streamer)
+        assert streamer is not None
+        self.assertEqual(streamer.author_name, "Bo")
+        self.assertEqual(streamer.created_time, "05:45")
+        self.assertEqual(streamer.comment_id, "2468")
+        gamer = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người chơi instant": "An",
+                "ngày stream": "2025-01-01T03:00:00Z",
+                "challenge_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(gamer)
+        assert gamer is not None
+        self.assertEqual(gamer.author_name, "An")
+        self.assertEqual(gamer.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(gamer.comment_id, "9753")
+        self.assertEqual(person_name({"watch_later_user": "Lan"}), "Lan")
+        self.assertEqual(person_name({"playlist_owner": "Bo"}), "Bo")
+        self.assertEqual(person_name({"star_buyer": "Minh"}), "Minh")
+        self.assertEqual(person_name({"streamer": "An"}), "An")
+        self.assertEqual(person_name({"tournament_player": "Ha"}), "Ha")
+        self.assertEqual(person_name({"challenger": "Vy"}), "Vy")
+        self.assertEqual(person_name({"instant_gamer": "Tu"}), "Tu")
+        self.assertEqual(person_name({"người tạo playlist": "My"}), "My")
+        self.assertEqual(person_name({"người tham gia giải": "Na"}), "Na")
+        self.assertEqual(person_name({"người thách đấu": "Ki"}), "Ki")
+        self.assertEqual(timestamp_of({"watch_later_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"starred_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"streamed_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"tournamented_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(timestamp_of({"instant_played_at": "2024-01-05"}), "2024-01-05")
+        self.assertEqual(first_comment_id({"watch_later_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"tournament_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/watch/later/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/video/settings/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/captions/settings/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/gaming/stream/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/gaming/clips/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/gaming/leaderboard/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/gaming/challenge/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/instantgames/?id=565656"),
+            "565656",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/games/browse/?id=787878"),
+            "787878",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/stars/buy/?id=909090"),
+            "909090",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/stars/gift/?id=101010"),
+            "101010",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/live/badges/?id=202020"),
+            "202020",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/picture_in_picture/?id=303030"),
+            "303030",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/autoplay/?id=404040"),
+            "404040",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nVideo settings\nPlayback settings\n"
+                "Never autoplay videos\nWi-Fi only\nData saver\n"
+                "Video quality\nHD quality\nStandard quality\n"
+                "Always show captions\nDefault caption language\n"
+                "Picture-in-picture\nAllow picture-in-picture\n"
+                "Watch in original language\nDubbed audio\nAudio track\n"
+                "Change audio track\nSave video to Watch later\n"
+                "Watch later\nAdd to playlist\nYour playlists\n"
+                "Edit playlist\nDelete playlist\nShare playlist\n"
+                "Live badges\nSend a star\nStars balance\nBuy stars\n"
+                "Gift stars\nFan badges\nBecome a supporter\n"
+                "Subscription badges\nStreamer dashboard\n"
+                "Go live on Gaming\nSchedule stream\nStream settings\n"
+                "Clip this moment\nYour clips\nTournament details\n"
+                "Leave tournament\nSee leaderboard\nChallenge a friend\n"
+                "Accept challenge\nDecline challenge\nInstall game\n"
+                "Open game\nGame requests\nIgnore game request\n"
+                "Send game request\nInstant games\nBrowse games\n"
+                "Trending games\nNew games\nYour games\n"
+                "Cài đặt video\nCài đặt phát lại\n"
+                "Không bao giờ tự động phát video\nChỉ Wi-Fi\n"
+                "Tiết kiệm dữ liệu\nChất lượng video\nChất lượng HD\n"
+                "Chất lượng tiêu chuẩn\nLuôn hiện phụ đề\n"
+                "Ngôn ngữ phụ đề mặc định\nHình trong hình\n"
+                "Cho phép hình trong hình\nXem bằng ngôn ngữ gốc\n"
+                "Âm thanh lồng tiếng\nDải âm thanh\nĐổi dải âm thanh\n"
+                "Lưu video vào Xem sau\nXem sau\n"
+                "Thêm vào danh sách phát\nDanh sách phát của bạn\n"
+                "Chỉnh sửa danh sách phát\nXóa danh sách phát\n"
+                "Chia sẻ danh sách phát\nHuy hiệu trực tiếp\n"
+                "Gửi một ngôi sao\nSố dư ngôi sao\nMua ngôi sao\n"
+                "Tặng ngôi sao\nHuy hiệu người hâm mộ\n"
+                "Trở thành người ủng hộ\nHuy hiệu đăng ký\n"
+                "Bảng điều khiển streamer\nPhát trực tiếp trên Gaming\n"
+                "Lên lịch stream\nCài đặt stream\nCắt khoảnh khắc này\n"
+                "Clip của bạn\nChi tiết giải đấu\nRời giải đấu\n"
+                "Xem bảng xếp hạng\nThách đấu bạn\nChấp nhận thách đấu\n"
+                "Từ chối thách đấu\nCài game\nMở game\nLời mời game\n"
+                "Bỏ qua lời mời game\nGửi lời mời game\nGame tức thì\n"
+                "Duyệt game\nGame thịnh hành\nGame mới\nGame của bạn"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nWatch later\nBuy stars\nXem sau\nMua ngôi sao",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nWatch later only after you finish editing the caption"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Watch later only after you finish editing the caption",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
