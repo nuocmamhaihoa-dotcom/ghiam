@@ -268,6 +268,10 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "trash_comment_id",
         "branded_comment_id",
         "contacts_comment_id",
+        "donor_comment_id",
+        "crisis_comment_id",
+        "neighborhood_comment_id",
+        "parental_comment_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -481,6 +485,10 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "trash_comment_id",
         "branded_comment_id",
         "contacts_comment_id",
+        "donor_comment_id",
+        "crisis_comment_id",
+        "neighborhood_comment_id",
+        "parental_comment_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -1262,6 +1270,18 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "trash_manager",
             "branded_content_partner",
             "contact_uploader",
+            "người gây quỹ",
+            "nguoi gay quy",
+            "người ứng phó khủng hoảng",
+            "nguoi ung pho khung hoang",
+            "người khu phố",
+            "nguoi khu pho",
+            "người giám sát phụ huynh",
+            "nguoi giam sat phu huynh",
+            "fundraiser_donor",
+            "crisis_responder",
+            "neighborhood_member",
+            "parental_supervisor",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -1755,6 +1775,16 @@ def timestamp_of(row: object) -> str | None:
         "permanently_deleted_at",
         "contacts_uploaded_at",
         "branded_content_at",
+        "ngày gây quỹ",
+        "ngay gay quy",
+        "thời gian ứng phó",
+        "thoi gian ung pho",
+        "ngày giám sát",
+        "ngay giam sat",
+        "fundraiser_donated_at",
+        "crisis_responded_at",
+        "parental_supervised_at",
+        "neighborhood_joined_at",
         "mirrored_at",
         "copied_at",
         "backed_up_at",
@@ -2118,6 +2148,16 @@ def timestamp_of(row: object) -> str | None:
         "permanently_deleted_at",
         "contacts_uploaded_at",
         "branded_content_at",
+        "ngày gây quỹ",
+        "ngay gay quy",
+        "thời gian ứng phó",
+        "thoi gian ung pho",
+        "ngày giám sát",
+        "ngay giam sat",
+        "fundraiser_donated_at",
+        "crisis_responded_at",
+        "parental_supervised_at",
+        "neighborhood_joined_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:

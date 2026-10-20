@@ -718,6 +718,18 @@ def _append_rows(
                         "trash_manager",
                         "branded_content_partner",
                         "contact_uploader",
+                        "người gây quỹ",
+                        "nguoi gay quy",
+                        "người ứng phó khủng hoảng",
+                        "nguoi ung pho khung hoang",
+                        "người khu phố",
+                        "nguoi khu pho",
+                        "người giám sát phụ huynh",
+                        "nguoi giam sat phu huynh",
+                        "fundraiser_donor",
+                        "crisis_responder",
+                        "neighborhood_member",
+                        "parental_supervisor",
                     ),
                 )
             )
@@ -1324,6 +1336,18 @@ def _append_rows(
                             "trash_manager",
                             "branded_content_partner",
                             "contact_uploader",
+                            "người gây quỹ",
+                            "nguoi gay quy",
+                            "người ứng phó khủng hoảng",
+                            "nguoi ung pho khung hoang",
+                            "người khu phố",
+                            "nguoi khu pho",
+                            "người giám sát phụ huynh",
+                            "nguoi giam sat phu huynh",
+                            "fundraiser_donor",
+                            "crisis_responder",
+                            "neighborhood_member",
+                            "parental_supervisor",
                         ),
                     )
                 )
@@ -2269,6 +2293,27 @@ def post_id_from_url(url: str) -> str | None:
     partnership_ads = re.search(r"/partnership_ads/\?id=(\d+)", raw, re.IGNORECASE)
     if partnership_ads:
         return accepted_object_id(partnership_ads.group(1))
+    crisis_response = re.search(r"/crisis_response/\?id=(\d+)", raw, re.IGNORECASE)
+    if crisis_response:
+        return accepted_object_id(crisis_response.group(1))
+    family_center = re.search(r"/family_center/\?id=(\d+)", raw, re.IGNORECASE)
+    if family_center:
+        return accepted_object_id(family_center.group(1))
+    accessibility = re.search(r"/accessibility/\?id=(\d+)", raw, re.IGNORECASE)
+    if accessibility:
+        return accepted_object_id(accessibility.group(1))
+    neighborhoods = re.search(r"/neighborhoods/\?id=(\d+)", raw, re.IGNORECASE)
+    if neighborhoods:
+        return accepted_object_id(neighborhoods.group(1))
+    parental_supervision = re.search(r"/parental_supervision/\?id=(\d+)", raw, re.IGNORECASE)
+    if parental_supervision:
+        return accepted_object_id(parental_supervision.group(1))
+    time_management = re.search(r"/time_management/\?id=(\d+)", raw, re.IGNORECASE)
+    if time_management:
+        return accepted_object_id(time_management.group(1))
+    notification_settings = re.search(r"/notification_settings/\?id=(\d+)", raw, re.IGNORECASE)
+    if notification_settings:
+        return accepted_object_id(notification_settings.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

@@ -741,6 +741,18 @@ _AUTHOR_KEYS = (
     "trash_manager",
     "branded_content_partner",
     "contact_uploader",
+    "người gây quỹ",
+    "nguoi gay quy",
+    "người ứng phó khủng hoảng",
+    "nguoi ung pho khung hoang",
+    "người khu phố",
+    "nguoi khu pho",
+    "người giám sát phụ huynh",
+    "nguoi giam sat phu huynh",
+    "fundraiser_donor",
+    "crisis_responder",
+    "neighborhood_member",
+    "parental_supervisor",
 )
 _TIME_KEYS = (
     "time",
@@ -1273,6 +1285,16 @@ _TIME_KEYS = (
     "permanently_deleted_at",
     "contacts_uploaded_at",
     "branded_content_at",
+    "ngày gây quỹ",
+    "ngay gay quy",
+    "thời gian ứng phó",
+    "thoi gian ung pho",
+    "ngày giám sát",
+    "ngay giam sat",
+    "fundraiser_donated_at",
+    "crisis_responded_at",
+    "parental_supervised_at",
+    "neighborhood_joined_at",
 )
 
 

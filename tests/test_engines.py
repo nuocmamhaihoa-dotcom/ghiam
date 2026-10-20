@@ -8921,6 +8921,132 @@ class EngineTests(unittest.TestCase):
             "Write a post only after you finish drafting the real update",
         )
 
+    def test_accessibility_parental_neighborhoods_media_vn_keys_and_urls(self) -> None:
+        donor = _from_mapping(
+            {
+                "bình luận": "Mình đã quyên góp rồi ạ",
+                "người gây quỹ": "Lan Donor",
+                "ngày gây quỹ": "4h",
+            }
+        )
+        self.assertIsNotNone(donor)
+        assert donor is not None
+        self.assertEqual(donor.author_name, "Lan Donor")
+        self.assertEqual(donor.created_time, "4h")
+        crisis = _from_mapping(
+            {
+                "Nội dung": "An toàn cả nhà nhé",
+                "người ứng phó khủng hoảng": "Minh",
+                "thời gian ứng phó": "hôm nay",
+                "crisis_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(crisis)
+        assert crisis is not None
+        self.assertEqual(crisis.author_name, "Minh")
+        self.assertEqual(crisis.created_time, "hôm nay")
+        self.assertEqual(crisis.comment_id, "1357")
+        hood = _from_mapping(
+            {
+                "text": "cảm ơn hàng xóm nhiều",
+                "người khu phố": "Bo",
+                "neighborhood_joined_at": "05:45",
+                "neighborhood_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(hood)
+        assert hood is not None
+        self.assertEqual(hood.author_name, "Bo")
+        self.assertEqual(hood.created_time, "05:45")
+        self.assertEqual(hood.comment_id, "2468")
+        parental = _from_mapping(
+            {
+                "message": "đã bật giám sát rồi",
+                "người giám sát phụ huynh": "An",
+                "ngày giám sát": "2025-01-01T03:00:00Z",
+                "parental_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(parental)
+        assert parental is not None
+        self.assertEqual(parental.author_name, "An")
+        self.assertEqual(parental.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(parental.comment_id, "9753")
+        self.assertEqual(person_name({"fundraiser_donor": "Lan"}), "Lan")
+        self.assertEqual(person_name({"crisis_responder": "Bo"}), "Bo")
+        self.assertEqual(person_name({"neighborhood_member": "Minh"}), "Minh")
+        self.assertEqual(person_name({"parental_supervisor": "An"}), "An")
+        self.assertEqual(person_name({"người gây quỹ": "Ha"}), "Ha")
+        self.assertEqual(timestamp_of({"fundraiser_donated_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"crisis_responded_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"parental_supervised_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"neighborhood_joined_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"donor_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"parental_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/crisis_response/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/family_center/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/accessibility/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/neighborhoods/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/parental_supervision/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/time_management/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/notification_settings/?id=343434"),
+            "343434",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nHide ads from this advertiser\nAccessibility\n"
+                "Fundraiser\nCovid information center\nNeighborhoods\n"
+                "Parental supervision\nTime management\nNotification dots\n"
+                "Sound settings\nData saver\nAutoplay\n"
+                "Độ truy cập\nGây quỹ\nKhu phố\nHội thảo thị trấn\n"
+                "Giám sát của phụ huynh\nQuản lý thời gian\nNghỉ giải lao\n"
+                "Dấu chấm thông báo\nCài đặt âm thanh\nTrình tiết kiệm dữ liệu\n"
+                "Phát tự động"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nAccessibility\nAutoplay\n"
+                    "Độ truy cập\nPhát tự động",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nFundraiser only after you finish reading the charity details"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Fundraiser only after you finish reading the charity details",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
