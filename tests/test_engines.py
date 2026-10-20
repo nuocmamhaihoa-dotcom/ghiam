@@ -2855,6 +2855,110 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(imported.author_name, "lan")
         self.assertEqual(imported.created_time, "2025-08-05")
 
+    def test_multi_permalinks_stories_and_page_chrome(self) -> None:
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/groups/123/?multi_permalinks=456"),
+            "456",
+        )
+        self.assertEqual(
+            post_id_from_url(
+                "https://www.facebook.com/groups/1/?multi_permalinks=99887766%2C112233"
+            ),
+            "99887766",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/stories/1234567890"),
+            "1234567890",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nSee all stories\nCreate a Story\nClose friends\n"
+                "Story settings\nAdd music\nSave video\nDownload video\n"
+                "Turn on captions\nNot interested in this video\nHide this Reel\n"
+                "Show fewer posts like this\nLike page\nClaim this Page\n"
+                "Manage Page\nInvite friends to like this Page\nShare Page\n"
+                "This post is unavailable\nGo to News Feed\nNo posts yet\n"
+                "Write something…\nShare your thoughts...\n"
+                "Xem tất cả tin\nThêm nhạc\nẨn reel này\nViết gì đó…"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(
+            ["Lan\nWrite something kind for the host tonight"],
+            5,
+        )
+        self.assertEqual(sentence[0].text, "Write something kind for the host tonight")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nWrite something…\nHide this Reel\nLike page",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        named = _one(
+            {
+                "text": "xin",
+                "author": {"brand_name": "Bo Co"},
+                "reply_fbid": "81",
+                "fb_time": "2025-09-01",
+            }
+        )
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "Bo Co")
+        self.assertEqual(named.comment_id, "81")
+        self.assertEqual(named.created_time, "2025-09-01")
+        rows, err = comments_from_graph_payload(
+            {
+                "data": [
+                    {
+                        "message": "xin",
+                        "admin_name": "An",
+                        "comment_ts": "1710000900",
+                        "legacy_reply_id": "82",
+                    }
+                ]
+            },
+            5,
+        )
+        self.assertIsNone(err)
+        self.assertEqual(rows[0].author_name, "An")
+        self.assertEqual(rows[0].created_time, "1710000900")
+        self.assertEqual(rows[0].comment_id, "82")
+        managed = _comments_from_json(
+            {
+                "comments": [
+                    {
+                        "text": "xin",
+                        "company_name": "bo",
+                        "posted_ts": "1710000901",
+                        "comment_reply_id": "83",
+                    }
+                ]
+            },
+            5,
+        )
+        self.assertEqual(managed[0].author_name, "bo")
+        self.assertEqual(managed[0].created_time, "1710000901")
+        self.assertEqual(managed[0].comment_id, "83")
+        imported = _from_mapping(
+            {
+                "Nội dung": "xin",
+                "Moderator name": "lan",
+                "Update time": "2025-09-05",
+            }
+        )
+        self.assertIsNotNone(imported)
+        assert imported is not None
+        self.assertEqual(imported.author_name, "lan")
+        self.assertEqual(imported.created_time, "2025-09-05")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -156,6 +156,12 @@ _AUTHOR_KEYS = (
     "host_name",
     "organizer_name",
     "page_title",
+    "brand_name",
+    "company_name",
+    "venue_name",
+    "artist_name",
+    "moderator_name",
+    "admin_name",
     "tác giả",
     "tac gia",
 )
@@ -251,6 +257,11 @@ _TIME_KEYS = (
     "time_created_ms",
     "creation_ms",
     "fb_timestamp",
+    "fb_time",
+    "graph_time",
+    "comment_ts",
+    "posted_ts",
+    "update_time",
 )
 
 

@@ -179,6 +179,12 @@ def _append_rows(
                         "host_name",
                         "organizer_name",
                         "page_title",
+                        "brand_name",
+                        "company_name",
+                        "venue_name",
+                        "artist_name",
+                        "moderator_name",
+                        "admin_name",
                     ),
                 )
             )
@@ -246,6 +252,12 @@ def _append_rows(
                             "host_name",
                             "organizer_name",
                             "page_title",
+                            "brand_name",
+                            "company_name",
+                            "venue_name",
+                            "artist_name",
+                            "moderator_name",
+                            "admin_name",
                         ),
                     )
                 )
@@ -351,6 +363,12 @@ def post_id_from_url(url: str) -> str | None:
     query = re.search(r"(?:story_fbid|fbid|post_id)=([^&\s]+)", raw, re.IGNORECASE)
     if query:
         return accepted_object_id(unquote(query.group(1)).rstrip("="))
+    multi = re.search(r"[?&]multi_permalinks=(\d+)", raw, re.IGNORECASE)
+    if multi:
+        return accepted_object_id(multi.group(1))
+    stories = re.search(r"/stories/(\d+)", raw, re.IGNORECASE)
+    if stories:
+        return accepted_object_id(stories.group(1))
     media = re.search(r"[?&]set=(?:a|pcb)\.(\d+)", raw, re.IGNORECASE)
     if media:
         return accepted_object_id(media.group(1))
