@@ -215,6 +215,23 @@ def prior_dialogue(path: Path, session_id: str, before_id: str, limit: int = 8) 
     return dialogue
 
 
+def has_live_chat(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        with session(path) as conn:
+            row = conn.execute(
+                """
+                SELECT 1 FROM messages
+                WHERE role = 'user' AND state IN ('queued', 'running')
+                LIMIT 1
+                """
+            ).fetchone()
+    except sqlite3.OperationalError:
+        return False
+    return row is not None
+
+
 def oldest_queued(path: Path) -> dict | None:
     with session(path) as conn:
         row = conn.execute(

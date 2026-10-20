@@ -6,22 +6,19 @@ import threading
 import urllib.error
 import urllib.request
 
+from worker.scene import needs_model_tools, plan_scene, render_scene
 from worker.tools import run_tool, schemas
 from worker.use import use_context, vietnamese_lessons
 from worker.workspace import Workspace
 
 
 SYSTEM = (
-    "Bạn là coderd, trợ lý lập trình chạy trên máy của người dùng. "
-    "Trả lời tiếng Việt, ngắn. "
-    "Khi cần xem, ghi file hoặc chạy lệnh, in đúng một dòng và không thêm chữ khác:\n"
+    "Bạn là coderd. Trả lời tiếng Việt, ngắn. "
+    "Khi cần xem, ghi file hoặc chạy lệnh, in đúng một dòng:\n"
     'TOOL {"name":"write_file","arguments":{"path":"ten.py","content":"print(1)\\n"}}\n'
-    "Tool hợp lệ: list_dir, read_file, write_file, run_cmd. "
-    "Khi được bảo chạy lệnh, gọi run_cmd đúng một lần rồi trả lời tiếng Việt, không in JSON. "
+    "Tool: list_dir, read_file, write_file, run_cmd. "
     "Mọi path nằm trong workspace. "
-    "Khi người dùng nói tiếng Việt và cần lập trình, đọc learn/dung.md rồi đúng một file trong learn/lenh/ và khi cần đúng một file trong learn/the/. "
-    "Nhóm lệnh: python, git, shell, sqlite, mang, he-thong, docker, node, go, rust, java, bien-dich, csdl, php, ruby, ngon-ngu, devops, web, bao-mat, dam-may. "
-    "Để nhớ một việc cho lần sau, ghi đè file .coderd/memory.md."
+    "Việc lập trình tiếng Việt: ghép vài lệnh từ learn/lenh/, không bịa."
 )
 
 
@@ -59,7 +56,7 @@ def _post_chat(messages: list[dict], tools: list[dict] | None) -> dict:
     base = os.environ["MODEL_BASE_URL"].rstrip("/")
     model = os.environ["MODEL_NAME"]
     key = os.environ.get("MODEL_API_KEY", "")
-    payload: dict = {"model": model, "messages": messages}
+    payload: dict = {"model": model, "messages": messages, "max_tokens": 256}
     if tools:
         payload["tools"] = tools
     headers = {"Content-Type": "application/json"}
@@ -177,7 +174,7 @@ def system_prompt(workspace: Workspace, question: str = "") -> str:
     except PermissionError:
         return text
     if memory.is_file():
-        note = memory.read_text(encoding="utf-8", errors="replace")[:2000].strip()
+        note = memory.read_text(encoding="utf-8", errors="replace")[:800].strip()
         if note:
             text += "\nGhi nhớ:\n" + note
     try:
@@ -212,14 +209,34 @@ def run_turn(
             before_terminal()
         emit(kind, payload)
 
+    scene = plan_scene(workspace.root, text)
+    if scene is not None:
+        emit("text", render_scene(scene, workspace.root))
+        for step in scene.steps:
+            if cancel.is_set():
+                finish("cancelled", "")
+                return
+            if not step.run:
+                continue
+            result = run_tool(workspace, "run_cmd", {"command": step.command}, cancel, procs)
+            emit("tool", json.dumps({"name": "run_cmd", "result": result}, ensure_ascii=False))
+            stdout = str(result.get("stdout") or "").strip()
+            if stdout:
+                emit("text", stdout[:4000])
+            if result.get("cancelled"):
+                finish("cancelled", "")
+                return
+        finish("done", "")
+        return
+
     messages: list[dict] = [{"role": "system", "content": system_prompt(workspace, text)}]
-    for item in history or []:
+    for item in (history or [])[-4:]:
         role = item.get("role")
         content = str(item.get("content") or "")
         if role in {"user", "assistant"} and content:
-            messages.append({"role": role, "content": content[:2000]})
+            messages.append({"role": role, "content": content[:400]})
     messages.append({"role": "user", "content": text})
-    tool_schema = schemas()
+    tool_schema = schemas() if needs_model_tools(text) else []
     seen: set[str] = set()
     last_stdout = ""
     said = False

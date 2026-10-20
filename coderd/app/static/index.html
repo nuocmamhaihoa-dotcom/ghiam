@@ -174,12 +174,12 @@
   <main>
     <div class="top"><button id="menu" type="button" aria-label="Menu">☰</button></div>
     <div id="thread">
-      <div class="column" id="empty">Hôm nay bạn muốn làm gì?</div>
+      <div class="column" id="empty">Nói việc lập trình bằng tiếng Việt</div>
       <div class="column" id="messages" hidden></div>
     </div>
     <p id="error"></p>
     <form class="composer" id="send-form">
-      <textarea id="composer" rows="1" placeholder="Nhắn tin cho coderd"></textarea>
+      <textarea id="composer" rows="1" placeholder="Nói việc cần làm bằng tiếng Việt"></textarea>
       <button id="stop" type="button" aria-label="Dừng">■</button>
       <button id="send" type="submit" aria-label="Gửi">↑</button>
     </form>
@@ -303,7 +303,7 @@ function renderMessages(messages) {
     if (message.state === "queued" || message.state === "running") {
       const state = document.createElement("div");
       state.className = "state";
-      state.textContent = message.state === "running" ? "Đang làm" : "Đang chờ PC";
+      state.textContent = message.state === "running" ? "Đang làm" : "Đang chờ trợ lý";
       assistant.append(state);
     }
     if (message.state === "running") runningId = message.id;

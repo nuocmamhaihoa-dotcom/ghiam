@@ -25,6 +25,7 @@ from app.main import create_app  # noqa: E402
 from app import db as appdb
 from worker.agent import normalize_reply, parse_text_tools, run_turn, scripted_complete, system_prompt
 from worker.commands import LIMIT, extract_commands, seed_commands, store_commands
+from worker.scene import plan_scene, render_scene
 from worker.use import link_learned, use_context
 from worker.study import (  # noqa: E402
     OPEN_SOURCES,
@@ -71,6 +72,8 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertIn("Đoạn chat mới", page.text)
         self.assertIn('id="composer"', page.text)
+        self.assertIn("Đang chờ trợ lý", page.text)
+        self.assertNotIn("Đang chờ PC", page.text)
         self.assertNotIn("user-token", page.text)
 
     def test_home_cookie_opens_the_api(self) -> None:
@@ -306,6 +309,87 @@ class WorkerTests(unittest.TestCase):
             self.assertEqual(events[-1][0], "done")
             self.assertLess(sum(1 for kind, _payload in events if kind == "tool"), 6)
             self.assertTrue(any(kind == "text" and "4" in payload for kind, payload in events))
+
+    def test_vietnamese_order_builds_a_playbook(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "work"
+            seed_commands(root)
+            scene = plan_scene(root, "xem những file đã đổi")
+            self.assertIsNotNone(scene)
+            assert scene is not None
+            self.assertTrue(any(step.command.startswith("git status") for step in scene.steps))
+            self.assertIn("git status", render_scene(scene))
+            self.assertIsNone(plan_scene(root, "xin chào"))
+            self.assertIsNone(plan_scene(root, "chạy"))
+            self.assertIsNone(plan_scene(root, "tạo hello.py in 2+2 rồi chạy"))
+            self.assertIsNone(plan_scene(root, "ghi file"))
+            counted = plan_scene(root, "hiện tại mình có bao nhiêu câu lệnh")
+            self.assertIsNotNone(counted)
+            assert counted is not None
+            self.assertIn("câu lệnh", counted.extra)
+            events: list[tuple[str, str]] = []
+
+            def forbidden(*_args, **_kwargs):
+                raise AssertionError("không được gọi model")
+
+            run_turn(
+                Workspace(root),
+                "xem những file đã đổi",
+                forbidden,
+                lambda kind, payload: events.append((kind, payload)),
+                threading.Event(),
+                {},
+            )
+            shown = "\n".join(payload for kind, payload in events if kind == "text")
+            self.assertIn("git status", shown)
+            self.assertIn("Kịch bản", shown)
+            self.assertEqual(events[-1][0], "done")
+            count_events: list[tuple[str, str]] = []
+            run_turn(
+                Workspace(root),
+                "có bao nhiêu câu lệnh",
+                forbidden,
+                lambda kind, payload: count_events.append((kind, payload)),
+                threading.Event(),
+                {},
+            )
+            counted_text = "\n".join(payload for kind, payload in count_events if kind == "text")
+            self.assertIn("learn/lenh/python.md", counted_text)
+            self.assertEqual(count_events[-1][0], "done")
+
+    def test_study_skips_model_when_chat_is_waiting(self) -> None:
+        calls = {"n": 0, "ask": 0}
+
+        def clock() -> float:
+            calls["n"] += 1
+            return 1_000_000 + calls["n"] * 10
+
+        def fetch(_url: str) -> str:
+            return "Alpha keeps a namespace so a later lookup finds the same object.\n"
+
+        def ask(_prompt: str) -> str:
+            calls["ask"] += 1
+            return "- không dùng model khi chat đang chờ"
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "work"
+            database = root / "coderd.db"
+            appdb.init_db(database)
+            session = appdb.create_session(database)
+            appdb.add_message(database, session["id"], "xin chào")
+            self.assertTrue(appdb.has_live_chat(database))
+            rounds = study_hours(
+                root,
+                database,
+                ask,
+                25 / 3600,
+                fetch=fetch,
+                clock=clock,
+                catalog=(("alpha", "https://example.test/a"),),
+            )
+            self.assertGreaterEqual(rounds, 1)
+            self.assertEqual(calls["ask"], 0)
+            self.assertTrue((root / "learn" / "the" / "alpha.md").is_file())
 
     def test_study_keeps_a_lesson_once(self) -> None:
         self.assertEqual(parse_lessons("- không có\n- Có\n- 4\n- 2 cộng 2 bằng 4\n- 2 cộng 2 bằng 4"), ["2 cộng 2 bằng 4"])

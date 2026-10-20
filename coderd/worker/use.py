@@ -73,7 +73,7 @@ def link_learned(root: Path) -> Path:
     lines = [
         "# Dùng kiến thức đã học",
         "",
-        "Người dùng nói tiếng Việt. Đổi thành lệnh, mở đúng một file nhóm, khi cần mở thêm một file kỹ năng.",
+        "Người dùng nói tiếng Việt. Tìm lệnh cần thiết, ghép thành kịch bản, mở đúng một file nhóm.",
         "",
         "## Việc → lệnh → file",
         "",

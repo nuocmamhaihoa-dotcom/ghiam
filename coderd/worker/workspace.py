@@ -19,6 +19,14 @@ class Workspace:
             )
         subprocess.run(["git", "-C", str(self.root), "config", "user.email", "coderd@localhost"], check=True)
         subprocess.run(["git", "-C", str(self.root), "config", "user.name", "coderd"], check=True)
+        ignore = self.root / ".gitignore"
+        marker = "learn/cache/"
+        if ignore.is_file():
+            text = ignore.read_text(encoding="utf-8", errors="replace")
+            if marker not in text:
+                ignore.write_text(text.rstrip() + "\n" + marker + "\n", encoding="utf-8")
+        else:
+            ignore.write_text(marker + "\n", encoding="utf-8")
 
     def resolve(self, raw: str) -> Path:
         if not str(raw or "").strip():

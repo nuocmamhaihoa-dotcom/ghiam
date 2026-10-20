@@ -1266,7 +1266,12 @@ def study_hours(root: Path, database: Path, ask, hours: float, fetch=fetch_text,
         elif catalog:
             name, fresh = next_saved(root, state)
         lessons: list[str] = []
-        if fresh:
+        chat_busy = False
+        try:
+            chat_busy = db.has_live_chat(database)
+        except Exception:
+            chat_busy = False
+        if fresh and not chat_busy:
             try:
                 lessons = distill_notes(ask, name, fresh)
             except Exception as exc:
@@ -1292,14 +1297,15 @@ def study_hours(root: Path, database: Path, ask, hours: float, fetch=fetch_text,
         index = rebuild_index(root)
         if name and fresh:
             reflect(root, name, fresh, index)
-        try:
-            review_once(root, state, ask)
-        except Exception as exc:
-            print(f"ôn: {exc}")
-        try:
-            study_once(database, root, ask)
-        except Exception as exc:
-            print(f"chat: {exc}")
+        if not chat_busy:
+            try:
+                review_once(root, state, ask)
+            except Exception as exc:
+                print(f"ôn: {exc}")
+            try:
+                study_once(database, root, ask)
+            except Exception as exc:
+                print(f"chat: {exc}")
         save_progress(root, state)
         spent = float(state.get("active_seconds") or 0) / 3600
         line = f"vòng {rounds} {name or 'trống'} +{len(fresh)} bài {len(lessons)} đã học {spent:.2f}/{need / 3600:.2f} giờ"
