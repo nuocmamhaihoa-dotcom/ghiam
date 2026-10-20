@@ -509,6 +509,25 @@ def _append_rows(
                         "tournament_player",
                         "challenger",
                         "instant_gamer",
+                        "người chỉnh trợ năng",
+                        "nguoi chinh tro nang",
+                        "người đổi ngôn ngữ",
+                        "nguoi doi ngon ngu",
+                        "người bật chế độ tối",
+                        "nguoi bat che do toi",
+                        "người thêm alt text",
+                        "nguoi them alt text",
+                        "người tham gia beta",
+                        "nguoi tham gia beta",
+                        "người tải lên lại",
+                        "nguoi tai len lai",
+                        "accessibility_user",
+                        "language_setter",
+                        "dark_mode_user",
+                        "alt_text_editor",
+                        "beta_tester",
+                        "upload_retrier",
+                        "offline_poster",
                     ),
                 )
             )
@@ -906,6 +925,25 @@ def _append_rows(
                             "tournament_player",
                             "challenger",
                             "instant_gamer",
+                            "người chỉnh trợ năng",
+                            "nguoi chinh tro nang",
+                            "người đổi ngôn ngữ",
+                            "nguoi doi ngon ngu",
+                            "người bật chế độ tối",
+                            "nguoi bat che do toi",
+                            "người thêm alt text",
+                            "nguoi them alt text",
+                            "người tham gia beta",
+                            "nguoi tham gia beta",
+                            "người tải lên lại",
+                            "nguoi tai len lai",
+                            "accessibility_user",
+                            "language_setter",
+                            "dark_mode_user",
+                            "alt_text_editor",
+                            "beta_tester",
+                            "upload_retrier",
+                            "offline_poster",
                         ),
                     )
                 )
@@ -1480,6 +1518,49 @@ def post_id_from_url(url: str) -> str | None:
     autoplay = re.search(r"/autoplay/\?id=(\d+)", raw, re.IGNORECASE)
     if autoplay:
         return accepted_object_id(autoplay.group(1))
+
+    settings_accessibility = re.search(r"/settings/accessibility/\?id=(\d+)", raw, re.IGNORECASE)
+    if settings_accessibility:
+        return accepted_object_id(settings_accessibility.group(1))
+    settings_language = re.search(r"/settings/language/\?id=(\d+)", raw, re.IGNORECASE)
+    if settings_language:
+        return accepted_object_id(settings_language.group(1))
+    settings_dark_mode = re.search(r"/settings/dark_mode/\?id=(\d+)", raw, re.IGNORECASE)
+    if settings_dark_mode:
+        return accepted_object_id(settings_dark_mode.group(1))
+    settings_text_size = re.search(r"/settings/text_size/\?id=(\d+)", raw, re.IGNORECASE)
+    if settings_text_size:
+        return accepted_object_id(settings_text_size.group(1))
+    settings_media = re.search(r"/settings/media/\?id=(\d+)", raw, re.IGNORECASE)
+    if settings_media:
+        return accepted_object_id(settings_media.group(1))
+    settings_data = re.search(r"/settings/data/\?id=(\d+)", raw, re.IGNORECASE)
+    if settings_data:
+        return accepted_object_id(settings_data.group(1))
+    settings_beta = re.search(r"/settings/beta/\?id=(\d+)", raw, re.IGNORECASE)
+    if settings_beta:
+        return accepted_object_id(settings_beta.group(1))
+    settings_region = re.search(r"/settings/region/\?id=(\d+)", raw, re.IGNORECASE)
+    if settings_region:
+        return accepted_object_id(settings_region.group(1))
+    settings_experiments = re.search(r"/settings/experiments/\?id=(\d+)", raw, re.IGNORECASE)
+    if settings_experiments:
+        return accepted_object_id(settings_experiments.group(1))
+    help_keyboard = re.search(r"/help/keyboard/\?id=(\d+)", raw, re.IGNORECASE)
+    if help_keyboard:
+        return accepted_object_id(help_keyboard.group(1))
+    alt_text = re.search(r"/alt_text/\?id=(\d+)", raw, re.IGNORECASE)
+    if alt_text:
+        return accepted_object_id(alt_text.group(1))
+    upload_queue = re.search(r"/upload/queue/\?id=(\d+)", raw, re.IGNORECASE)
+    if upload_queue:
+        return accepted_object_id(upload_queue.group(1))
+    offline = re.search(r"/offline/\?id=(\d+)", raw, re.IGNORECASE)
+    if offline:
+        return accepted_object_id(offline.group(1))
+    composer_retry = re.search(r"/composer/retry/\?id=(\d+)", raw, re.IGNORECASE)
+    if composer_retry:
+        return accepted_object_id(composer_retry.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

@@ -6785,5 +6785,192 @@ class EngineTests(unittest.TestCase):
         )
 
 
+    def test_a11y_language_offline_upload_vn_keys_and_urls(self) -> None:
+        a11y = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người chỉnh trợ năng": "Lan A11y",
+                "thời gian đổi ngôn ngữ": "6h",
+            }
+        )
+        self.assertIsNotNone(a11y)
+        assert a11y is not None
+        self.assertEqual(a11y.author_name, "Lan A11y")
+        self.assertEqual(a11y.created_time, "6h")
+        lang = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người đổi ngôn ngữ": "Minh",
+                "ngày bật chế độ tối": "hôm nay",
+                "language_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(lang)
+        assert lang is not None
+        self.assertEqual(lang.author_name, "Minh")
+        self.assertEqual(lang.created_time, "hôm nay")
+        self.assertEqual(lang.comment_id, "1357")
+        beta = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người tham gia beta": "Bo",
+                "upload_retried_at": "05:45",
+                "beta_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(beta)
+        assert beta is not None
+        self.assertEqual(beta.author_name, "Bo")
+        self.assertEqual(beta.created_time, "05:45")
+        self.assertEqual(beta.comment_id, "2468")
+        uploader = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người tải lên lại": "An",
+                "ngày tham gia beta": "2025-01-01T03:00:00Z",
+                "upload_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(uploader)
+        assert uploader is not None
+        self.assertEqual(uploader.author_name, "An")
+        self.assertEqual(uploader.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(uploader.comment_id, "9753")
+        self.assertEqual(person_name({"accessibility_user": "Lan"}), "Lan")
+        self.assertEqual(person_name({"language_setter": "Bo"}), "Bo")
+        self.assertEqual(person_name({"dark_mode_user": "Minh"}), "Minh")
+        self.assertEqual(person_name({"alt_text_editor": "An"}), "An")
+        self.assertEqual(person_name({"beta_tester": "Ha"}), "Ha")
+        self.assertEqual(person_name({"upload_retrier": "Vy"}), "Vy")
+        self.assertEqual(person_name({"offline_poster": "Tu"}), "Tu")
+        self.assertEqual(person_name({"người bật chế độ tối": "My"}), "My")
+        self.assertEqual(person_name({"người thêm alt text": "Na"}), "Na")
+        self.assertEqual(timestamp_of({"language_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"dark_mode_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"beta_joined_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"alt_texted_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(timestamp_of({"offline_at": "2024-01-05"}), "2024-01-05")
+        self.assertEqual(first_comment_id({"a11y_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"alt_text_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/settings/accessibility/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/settings/language/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/settings/dark_mode/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/settings/text_size/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/settings/media/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/settings/data/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/settings/beta/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/settings/region/?id=565656"),
+            "565656",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/help/keyboard/?id=787878"),
+            "787878",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/alt_text/?id=909090"),
+            "909090",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/upload/queue/?id=101010"),
+            "101010",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/offline/?id=202020"),
+            "202020",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/composer/retry/?id=303030"),
+            "303030",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/settings/experiments/?id=404040"),
+            "404040",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nAccessibility settings\nSee keyboard shortcuts\n"
+                "Keyboard shortcuts\nScreen reader\nHigh contrast\n"
+                "Reduce motion\nAutoplay control\nLink previews\n"
+                "Alternative text\nAdd alt text\nEdit alt text\n"
+                "Change language\nLanguage and region\nFacebook language\n"
+                "Region format\nStart of week\nLight mode\nDark mode\n"
+                "Use system setting\nCompact mode\nIncrease text size\n"
+                "Decrease text size\nUpload HD\nUpload standard\n"
+                "Data usage\nUse less data\nCellular data\nWi-Fi uploads\n"
+                "Proxy settings\nDeveloper mode\nDebug logs\n"
+                "Internal settings\nExperiment settings\nJoin beta\n"
+                "Leave beta\nSomething went wrong\nTry again later\n"
+                "Refresh feed\nPull to refresh\nNo internet connection\n"
+                "You're offline\nGo back online\nQueued posts\n"
+                "Post when online\nFailed to post\nRetry upload\n"
+                "Cancel upload\nUpload progress\nProcessing video\n"
+                "Video ready\n"
+                "Cài đặt trợ năng\nXem phím tắt\nPhím tắt\n"
+                "Trình đọc màn hình\nĐộ tương phản cao\nGiảm chuyển động\n"
+                "Điều khiển phát tự động\nXem trước liên kết\n"
+                "Văn bản thay thế\nThêm văn bản thay thế\n"
+                "Chỉnh sửa văn bản thay thế\nĐổi ngôn ngữ\n"
+                "Ngôn ngữ và khu vực\nNgôn ngữ Facebook\nĐịnh dạng khu vực\n"
+                "Ngày bắt đầu tuần\nChế độ sáng\nChế độ tối\n"
+                "Dùng cài đặt hệ thống\nChế độ thu gọn\nTăng cỡ chữ\n"
+                "Giảm cỡ chữ\nTải lên HD\nTải lên tiêu chuẩn\n"
+                "Mức dùng dữ liệu\nDùng ít dữ liệu hơn\nDữ liệu di động\n"
+                "Tải lên qua Wi-Fi\nCài đặt proxy\nChế độ nhà phát triển\n"
+                "Nhật ký gỡ lỗi\nCài đặt nội bộ\nCài đặt thử nghiệm\n"
+                "Tham gia beta\nRời beta\nĐã xảy ra lỗi\nThử lại sau\n"
+                "Làm mới bảng tin\nKéo để làm mới\n"
+                "Không có kết nối internet\nBạn đang ngoại tuyến\n"
+                "Quay lại trực tuyến\nBài viết đang chờ\n"
+                "Đăng khi trực tuyến\nKhông đăng được\nThử tải lên lại\n"
+                "Hủy tải lên\nTiến trình tải lên\nĐang xử lý video\n"
+                "Video sẵn sàng"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nDark mode\nRetry upload\nChế độ tối\nThử tải lên lại",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nDark mode only after you finish editing the caption"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Dark mode only after you finish editing the caption",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
