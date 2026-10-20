@@ -804,13 +804,14 @@ _DEEP = frozenset(
 )
 _DEEP_PREFIX = ("py-", "python", "git-doc", "git-", "cheat-", "docker-ref", "kubectl")
 _TOOL_TOKENS = tool_names()
+_SKIP_TOKENS = frozenset({"tldr", "linux", "cheat", "common", "pages", "doc", "docs", "ref", "howto", "cli"})
 
 
 def _deep_name(name: str) -> bool:
     low = name.lower()
     if low.startswith(_DEEP_PREFIX):
         return True
-    tokens = {part for part in re.split(r"[^a-z0-9+]+", low) if part}
+    tokens = {part for part in re.split(r"[^a-z0-9+]+", low) if part} - _SKIP_TOKENS
     if tokens & _DEEP or tokens & _TOOL_TOKENS:
         return True
     rest = low[5:] if low.startswith("tldr-") else low
