@@ -290,8 +290,14 @@ OPEN_SOURCES = (
     ("tldr-apache2ctl", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/linux/apache2ctl.md"),
     ("tldr-apachectl", "https://raw.githubusercontent.com/tldr-pages/tldr/main/pages/linux/apachectl.md"),
     ("art-of-command-line", "https://raw.githubusercontent.com/jlevy/the-art-of-command-line/master/README.md"),
-    ("kubectl-cheatsheet", "https://raw.githubusercontent.com/kubernetes/website/main/content/en/docs/reference/kubectl/cheatsheet.md"),
+    ("kubectl-quick", "https://raw.githubusercontent.com/kubernetes/website/master/content/en/docs/reference/kubectl/quick-reference.md"),
     ("composer-cli", "https://raw.githubusercontent.com/composer/composer/main/doc/03-cli.md"),
+    ("node-cli", "https://raw.githubusercontent.com/nodejs/node/main/doc/api/cli.md"),
+    ("go-alldocs", "https://raw.githubusercontent.com/golang/go/master/src/cmd/go/alldocs.go"),
+    ("rails-command-line", "https://raw.githubusercontent.com/rails/rails/main/guides/source/command_line.md"),
+    ("laravel-artisan", "https://raw.githubusercontent.com/laravel/docs/11.x/artisan.md"),
+    ("poetry-cli", "https://raw.githubusercontent.com/python-poetry/poetry/main/docs/cli.md"),
+    ("phpunit-readme", "https://raw.githubusercontent.com/sebastianbergmann/phpunit/main/README.md"),
 )
 SKIP_FILES = {
     "da-hoc.md",
@@ -319,8 +325,27 @@ _LISTINGS = (
     ("https://api.github.com/repos/chubin/cheat.sheets/contents/sheets?ref=master", "cheat"),
     ("https://api.github.com/repos/docker/cli/contents/docs/reference/commandline?ref=master", "docker-ref"),
     ("https://api.github.com/repos/git/git/contents/Documentation/howto?ref=master", "git-howto"),
+    ("https://api.github.com/repos/npm/cli/contents/docs/lib/content/commands?ref=latest", "npm-cmd"),
+    ("https://api.github.com/repos/rust-lang/cargo/contents/doc/man?ref=master", "cargo-man"),
+    ("https://api.github.com/repos/pypa/pip/contents/docs/html/cli?ref=main", "pip-cli"),
+    ("https://api.github.com/repos/python-poetry/poetry/contents/docs?ref=main", "poetry-doc"),
+    ("https://api.github.com/repos/composer/composer/contents/doc?ref=main", "composer-doc"),
+    ("https://api.github.com/repos/openssl/openssl/contents/doc/man1?ref=master", "openssl-man"),
+    ("https://api.github.com/repos/redis/redis-doc/contents/commands?ref=master", "redis-cmd"),
+    ("https://api.github.com/repos/Kitware/CMake/contents/Help/manual?ref=master", "cmake-man"),
+    ("https://api.github.com/repos/LeCoupa/awesome-cheatsheets/contents/languages?ref=master", "lecoupa-lang"),
+    ("https://api.github.com/repos/LeCoupa/awesome-cheatsheets/contents/tools?ref=master", "lecoupa-tools"),
+    ("https://api.github.com/repos/LeCoupa/awesome-cheatsheets/contents/backend?ref=master", "lecoupa-back"),
+    ("https://api.github.com/repos/aws/aws-cli/contents/awscli/examples/s3?ref=develop", "aws-s3"),
+    ("https://api.github.com/repos/aws/aws-cli/contents/awscli/examples/iam?ref=develop", "aws-iam"),
+    ("https://api.github.com/repos/aws/aws-cli/contents/awscli/examples/lambda?ref=develop", "aws-lambda"),
+    ("https://api.github.com/repos/aws/aws-cli/contents/awscli/examples/logs?ref=develop", "aws-logs"),
+    ("https://api.github.com/repos/aws/aws-cli/contents/awscli/examples/ecr?ref=develop", "aws-ecr"),
+    ("https://api.github.com/repos/aws/aws-cli/contents/awscli/examples/ecs?ref=develop", "aws-ecs"),
+    ("https://api.github.com/repos/aws/aws-cli/contents/awscli/examples/eks?ref=develop", "aws-eks"),
+    ("https://api.github.com/repos/aws/aws-cli/contents/awscli/examples/sts?ref=develop", "aws-sts"),
 )
-_DOC_SUFFIX = (".rst", ".adoc", ".md")
+_DOC_SUFFIX = (".rst", ".adoc", ".md", ".pod", ".pod.in", ".txt", ".sh", ".php")
 
 
 def _clean_markup(line: str) -> str:
@@ -398,7 +423,7 @@ def extract_notes(text: str, limit: int = 8) -> list[str]:
 
 
 def fetch_text(url: str) -> str:
-    cap = 2_000_000 if "api.github.com" in url else 100_000
+    cap = 2_000_000 if "api.github.com" in url else 300_000
     request = urllib.request.Request(url, headers={"User-Agent": "coderd-study"})
     with urllib.request.urlopen(request, timeout=12) as response:
         data = response.read(cap)
@@ -802,7 +827,29 @@ _DEEP = frozenset(
         "ipaddress",
     }
 )
-_DEEP_PREFIX = ("py-", "python", "git-doc", "git-", "cheat-", "docker-ref", "kubectl")
+_DEEP_PREFIX = (
+    "py-",
+    "python",
+    "git-doc",
+    "git-",
+    "cheat-",
+    "docker-ref",
+    "kubectl",
+    "npm-cmd",
+    "cargo-man",
+    "openssl-man",
+    "pip-cli",
+    "poetry-doc",
+    "composer-doc",
+    "redis-cmd",
+    "cmake-man",
+    "lecoupa-",
+    "aws-",
+    "node-cli",
+    "go-alldocs",
+    "rails-",
+    "laravel-",
+)
 _TOOL_TOKENS = tool_names()
 _SKIP_TOKENS = frozenset({"tldr", "linux", "cheat", "common", "pages", "doc", "docs", "ref", "howto", "cli"})
 

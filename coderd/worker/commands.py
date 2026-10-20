@@ -873,9 +873,10 @@ def group_of(command: str) -> str:
     return ""
 
 
-def extract_commands(text: str) -> list[str]:
+def extract_commands(text: str, source: str = "") -> list[str]:
     found: list[str] = []
     seen: set[str] = set()
+    src = (source or "").lower()
 
     def keep(command: str) -> None:
         if not command or len(command) > 220 or len(command.split()) > 24:
@@ -898,11 +899,27 @@ def extract_commands(text: str) -> list[str]:
         command = " ".join(raw.strip().split())
         if command.startswith("$ "):
             command = command[2:].strip()
+        if command.startswith("// ") and group_of(command[3:]):
+            command = command[3:].strip()
         if command.startswith(">>> ") or command.startswith("... "):
             command = command[4:].strip()
         command = command.strip("`")
-        if command.startswith("# ") and group_of(command[2:]):
-            command = command[2:].strip()
+        if command.startswith("# "):
+            maybe = command[2:].strip()
+            first = maybe.split()[0] if maybe.split() else ""
+            if group_of(maybe) or (src.startswith("redis-cmd") and first.isupper()):
+                command = maybe
+        low = command.lower()
+        for prompt, tool in (
+            ("redis> ", "redis-cli "),
+            ("mysql> ", "mysql "),
+            ("sqlite> ", "sqlite3 "),
+            ("mongo> ", "mongosh "),
+            ("irb> ", "ruby "),
+        ):
+            if low.startswith(prompt):
+                command = tool + command[len(prompt) :]
+                break
         parts = command.split()
         if parts and re.match(r"^git-[a-z0-9-]+$", parts[0]):
             command = "git " + parts[0][4:]
@@ -912,7 +929,7 @@ def extract_commands(text: str) -> list[str]:
             if group_of(head):
                 command = head
         for item in expand_placeholders(command):
-            keep(item)
+            keep(adapt_command(item, source))
 
     for match in re.findall(r"`([^`\n]{2,180})`", text):
         add(match)
@@ -925,8 +942,14 @@ def extract_commands(text: str) -> list[str]:
             add(stripped)
         elif raw.startswith("    ") or raw.startswith("\t") or stripped.startswith(("$", ">>>", "...")):
             add(raw)
-        elif group_of(raw) or stripped.startswith("git-"):
-            add(raw)
+        else:
+            probe = stripped[2:].strip() if stripped.startswith("# ") else stripped
+            first = probe.split()[0] if probe.split() else ""
+            redis_line = src.startswith("redis-cmd") and first.isupper() and any(ch.isalpha() for ch in first)
+            prompt_line = stripped.lower().startswith(("redis> ", "mysql> ", "sqlite> ", "mongo> ", "irb> "))
+            comment_line = stripped.startswith("// ") and group_of(stripped[3:])
+            if group_of(raw) or stripped.startswith("git-") or redis_line or prompt_line or comment_line:
+                add(raw)
     return found
 
 
@@ -964,9 +987,25 @@ def _flush_groups(root: Path, groups: dict[str, list[tuple[str, str, str]]], lim
     write_phrases(folder)
 
 
+def adapt_command(command: str, source: str) -> str:
+    src = (source or "").lower()
+    parts = command.split()
+    if not parts:
+        return command
+    first = parts[0]
+    if src.startswith("redis-cmd") and first.lower() not in {"redis-cli", "redis-server"}:
+        return "redis-cli " + command
+    if src.startswith("openssl-man") and first.lower() != "openssl":
+        if first.lower().startswith("openssl-"):
+            rest = first.split("-", 1)[1]
+            tail = " ".join(parts[1:])
+            return f"openssl {rest} {tail}".strip()
+    return command
+
+
 def _absorb(groups: dict[str, list[tuple[str, str, str]]], seen: dict[str, set[str]], text: str, source: str) -> int:
     added = 0
-    for command in extract_commands(text):
+    for command in extract_commands(text, source):
         name = group_of(command)
         if not name:
             continue

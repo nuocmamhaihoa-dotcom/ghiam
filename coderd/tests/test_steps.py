@@ -498,6 +498,13 @@ class WorkerTests(unittest.TestCase):
         self.assertIn("curl -I https://example.test", extract_commands("```bash\ncurl -I https://example.test\n```\n"))
         self.assertIn("apt-get update", extract_commands("`apt-get update`\n"))
         self.assertIn("rg pattern", extract_commands("`rg pattern`\n"))
+        self.assertIn("redis-cli GET mykey", extract_commands("redis> GET mykey\n"))
+        self.assertIn("go build", extract_commands("// go build\n"))
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "redis-work"
+            self.assertGreaterEqual(store_commands(root, "GET mykey\n", "redis-cmd-get"), 1)
+            csdl = (root / "learn" / "lenh" / "csdl.md").read_text(encoding="utf-8")
+            self.assertIn("redis-cli GET mykey", csdl)
         self.assertTrue(any("os.path.join" in item for item in extract_commands("    os.path.join('a', 'b')\n")))
         self.assertEqual(LIMIT, 99_999)
         self.assertFalse(hours_done(Path("/tmp"), 10))
@@ -521,7 +528,11 @@ class WorkerTests(unittest.TestCase):
             self.assertIn("tldr-certbot", names)
             self.assertIn("tldr-apache2ctl", names)
             self.assertIn("art-of-command-line", names)
-            self.assertIn("kubectl-cheatsheet", names)
+            self.assertIn("kubectl-quick", names)
+            self.assertIn("node-cli", names)
+            self.assertIn("go-alldocs", names)
+            self.assertIn("rails-command-line", names)
+            self.assertIn("laravel-artisan", names)
             self.assertIn(OPEN_SOURCES[0][0], names)
             urls = {url for _name, url in found}
             self.assertIn("https://example.test/old.txt", urls)
