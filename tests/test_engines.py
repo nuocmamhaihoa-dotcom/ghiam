@@ -8658,6 +8658,140 @@ class EngineTests(unittest.TestCase):
             "Pin to profile only after you finish the album layout",
         )
 
+    def test_feed_control_ad_library_watch_party_vn_keys_and_urls(self) -> None:
+        feeder = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người tạm ẩn bài": "Lan Feed",
+                "ngày tạm ẩn bài": "6h",
+            }
+        )
+        self.assertIsNotNone(feeder)
+        assert feeder is not None
+        self.assertEqual(feeder.author_name, "Lan Feed")
+        self.assertEqual(feeder.created_time, "6h")
+        advert = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người xem thư viện quảng cáo": "Minh",
+                "thời gian xem thư viện quảng cáo": "hôm nay",
+                "ad_library_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(advert)
+        assert advert is not None
+        self.assertEqual(advert.author_name, "Minh")
+        self.assertEqual(advert.created_time, "hôm nay")
+        self.assertEqual(advert.comment_id, "1357")
+        party = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người tổ chức xem chung": "Bo",
+                "watch_party_at": "05:45",
+                "watch_party_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(party)
+        assert party is not None
+        self.assertEqual(party.author_name, "Bo")
+        self.assertEqual(party.created_time, "05:45")
+        self.assertEqual(party.comment_id, "2468")
+        activity = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người quản lý hoạt động": "An",
+                "ngày quản lý hoạt động": "2025-01-01T03:00:00Z",
+                "activity_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(activity)
+        assert activity is not None
+        self.assertEqual(activity.author_name, "An")
+        self.assertEqual(activity.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(activity.comment_id, "9753")
+        self.assertEqual(person_name({"feed_snoozer": "Lan"}), "Lan")
+        self.assertEqual(person_name({"ad_library_viewer": "Bo"}), "Bo")
+        self.assertEqual(person_name({"watch_party_host": "Minh"}), "Minh")
+        self.assertEqual(person_name({"activity_manager": "An"}), "An")
+        self.assertEqual(person_name({"người tạm ẩn bài": "Ha"}), "Ha")
+        self.assertEqual(person_name({"friend_request_viewer": "Vy"}), "Vy")
+        self.assertEqual(timestamp_of({"feed_snoozed_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ad_library_viewed_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"watch_party_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"activity_managed_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"snooze_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"activity_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/watch_party/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/activity/manage/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/search/history/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/friends/requests/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/off_facebook_activity/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/ad_library/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/stories/settings/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/pages/promote/?id=565656"),
+            "565656",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nBirthdays\nUnrestrict\nSnooze for 30 days\n"
+                "See fewer posts like this\nHide all from\nUnfollow page\n"
+                "Message page\nCreate offer\nBoost this post\nPromote now\n"
+                "See more about this Page\nAd library\nInfo and ads\n"
+                "Friends of friends\nExcept friends\nCustom privacy\n"
+                "Sinh nhật\nBỏ hạn chế\nTạm ẩn trong 30 ngày\n"
+                "Xem ít bài tương tự hơn\nẨn tất cả từ\nBỏ theo dõi trang\n"
+                "Nhắn tin trang\nTạo ưu đãi\nQuảng cáo bài viết này\n"
+                "Quảng cáo ngay\nXem thêm về Trang này\nThư viện quảng cáo\n"
+                "Thông tin và quảng cáo\nBạn của bạn bè\nNgoại trừ bạn bè\n"
+                "Quyền riêng tư tùy chỉnh"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nAd library\nSnooze for 30 days\n"
+                    "Thư viện quảng cáo\nTạm ẩn trong 30 ngày",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nAd library only after you finish researching the brand"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Ad library only after you finish researching the brand",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -693,6 +693,19 @@ def _append_rows(
                         "continue_watcher",
                         "support_inbox_user",
                         "brand_content_creator",
+                        "người tạm ẩn bài",
+                        "nguoi tam an bai",
+                        "người xem thư viện quảng cáo",
+                        "nguoi xem thu vien quang cao",
+                        "người tổ chức xem chung",
+                        "nguoi to chuc xem chung",
+                        "người quản lý hoạt động",
+                        "nguoi quan ly hoat dong",
+                        "feed_snoozer",
+                        "ad_library_viewer",
+                        "watch_party_host",
+                        "activity_manager",
+                        "friend_request_viewer",
                     ),
                 )
             )
@@ -1274,6 +1287,19 @@ def _append_rows(
                             "continue_watcher",
                             "support_inbox_user",
                             "brand_content_creator",
+                            "người tạm ẩn bài",
+                            "nguoi tam an bai",
+                            "người xem thư viện quảng cáo",
+                            "nguoi xem thu vien quang cao",
+                            "người tổ chức xem chung",
+                            "nguoi to chuc xem chung",
+                            "người quản lý hoạt động",
+                            "nguoi quan ly hoat dong",
+                            "feed_snoozer",
+                            "ad_library_viewer",
+                            "watch_party_host",
+                            "activity_manager",
+                            "friend_request_viewer",
                         ),
                     )
                 )
@@ -2174,6 +2200,30 @@ def post_id_from_url(url: str) -> str | None:
     adpreferences_topics = re.search(r"/adpreferences/topics/\?id=(\d+)", raw, re.IGNORECASE)
     if adpreferences_topics:
         return accepted_object_id(adpreferences_topics.group(1))
+    watch_party = re.search(r"/watch_party/\?id=(\d+)", raw, re.IGNORECASE)
+    if watch_party:
+        return accepted_object_id(watch_party.group(1))
+    activity_manage = re.search(r"/activity/manage/\?id=(\d+)", raw, re.IGNORECASE)
+    if activity_manage:
+        return accepted_object_id(activity_manage.group(1))
+    search_history = re.search(r"/search/history/\?id=(\d+)", raw, re.IGNORECASE)
+    if search_history:
+        return accepted_object_id(search_history.group(1))
+    friends_requests = re.search(r"/friends/requests/\?id=(\d+)", raw, re.IGNORECASE)
+    if friends_requests:
+        return accepted_object_id(friends_requests.group(1))
+    off_facebook_activity = re.search(r"/off_facebook_activity/\?id=(\d+)", raw, re.IGNORECASE)
+    if off_facebook_activity:
+        return accepted_object_id(off_facebook_activity.group(1))
+    ad_library = re.search(r"/ad_library/\?id=(\d+)", raw, re.IGNORECASE)
+    if ad_library:
+        return accepted_object_id(ad_library.group(1))
+    stories_settings = re.search(r"/stories/settings/\?id=(\d+)", raw, re.IGNORECASE)
+    if stories_settings:
+        return accepted_object_id(stories_settings.group(1))
+    pages_promote = re.search(r"/pages/promote/\?id=(\d+)", raw, re.IGNORECASE)
+    if pages_promote:
+        return accepted_object_id(pages_promote.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
