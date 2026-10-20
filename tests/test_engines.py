@@ -7324,6 +7324,145 @@ class EngineTests(unittest.TestCase):
             "Trending audio only after you finish editing the caption",
         )
 
+    def test_notes_podcasts_albums_collections_vn_keys_and_urls(self) -> None:
+        note = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người viết ghi chú": "Lan Note",
+                "ngày viết ghi chú": "6h",
+            }
+        )
+        self.assertIsNotNone(note)
+        assert note is not None
+        self.assertEqual(note.author_name, "Lan Note")
+        self.assertEqual(note.created_time, "6h")
+        podcaster = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người nghe podcast": "Minh",
+                "thời gian nghe podcast": "hôm nay",
+                "podcast_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(podcaster)
+        assert podcaster is not None
+        self.assertEqual(podcaster.author_name, "Minh")
+        self.assertEqual(podcaster.created_time, "hôm nay")
+        self.assertEqual(podcaster.comment_id, "1357")
+        albumer = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người tạo album": "Bo",
+                "album_created_at": "05:45",
+                "album_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(albumer)
+        assert albumer is not None
+        self.assertEqual(albumer.author_name, "Bo")
+        self.assertEqual(albumer.created_time, "05:45")
+        self.assertEqual(albumer.comment_id, "2468")
+        collector = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người tạo bộ sưu tập": "An",
+                "ngày lưu bộ sưu tập": "2025-01-01T03:00:00Z",
+                "collection_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(collector)
+        assert collector is not None
+        self.assertEqual(collector.author_name, "An")
+        self.assertEqual(collector.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(collector.comment_id, "9753")
+        self.assertEqual(person_name({"note_author": "Lan"}), "Lan")
+        self.assertEqual(person_name({"podcast_listener": "Bo"}), "Bo")
+        self.assertEqual(person_name({"album_creator": "Minh"}), "Minh")
+        self.assertEqual(person_name({"collection_saver": "An"}), "An")
+        self.assertEqual(person_name({"người lưu bài": "Ha"}), "Ha")
+        self.assertEqual(person_name({"người viết ghi chú": "Vy"}), "Vy")
+        self.assertEqual(timestamp_of({"noted_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"podcast_listened_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"album_created_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"collection_saved_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"note_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"collection_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/notes/library/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/notes/drafts/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/podcasts/episodes/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/episodes/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/albums/create/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/albums/edit/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/collections/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/collections/view/?id=565656"),
+            "565656",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/saved/collections/?id=787878"),
+            "787878",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nWrite a note\nPublish note\nDraft note\n"
+                "Note settings\nListen now\nSubscribe to podcast\n"
+                "Episode details\nPlay episode\nPause episode\n"
+                "Skip forward\nSkip back\nCreate album\n"
+                "Add photos to album\nAlbum privacy\nEdit album\n"
+                "Delete album\nView collection\n"
+                "Viết ghi chú\nXuất bản ghi chú\nBản nháp ghi chú\n"
+                "Cài đặt ghi chú\nNghe ngay\nĐăng ký podcast\n"
+                "Chi tiết tập\nPhát tập\nTạm dừng tập\n"
+                "Tua tới\nTua lùi\nTạo album\n"
+                "Thêm ảnh vào album\nQuyền riêng tư album\n"
+                "Chỉnh sửa album\nXóa album\nXem bộ sưu tập"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nListen now\nCreate album\n"
+                    "Nghe ngay\nTạo album",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nListen now only after you finish writing the review"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Listen now only after you finish writing the review",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -560,6 +560,20 @@ def _append_rows(
                         "green_screen_user",
                         "beauty_user",
                         "layout_editor",
+                        "người viết ghi chú",
+                        "nguoi viet ghi chu",
+                        "người nghe podcast",
+                        "nguoi nghe podcast",
+                        "người tạo album",
+                        "nguoi tao album",
+                        "người tạo bộ sưu tập",
+                        "nguoi tao bo suu tap",
+                        "người lưu bài",
+                        "nguoi luu bai",
+                        "note_author",
+                        "podcast_listener",
+                        "album_creator",
+                        "collection_saver",
                     ),
                 )
             )
@@ -1008,6 +1022,20 @@ def _append_rows(
                             "green_screen_user",
                             "beauty_user",
                             "layout_editor",
+                            "người viết ghi chú",
+                            "nguoi viet ghi chu",
+                            "người nghe podcast",
+                            "nguoi nghe podcast",
+                            "người tạo album",
+                            "nguoi tao album",
+                            "người tạo bộ sưu tập",
+                            "nguoi tao bo suu tap",
+                            "người lưu bài",
+                            "nguoi luu bai",
+                            "note_author",
+                            "podcast_listener",
+                            "album_creator",
+                            "collection_saver",
                         ),
                     )
                 )
@@ -1696,6 +1724,24 @@ def post_id_from_url(url: str) -> str | None:
     camera_flash = re.search(r"/camera/flash/\?id=(\d+)", raw, re.IGNORECASE)
     if camera_flash:
         return accepted_object_id(camera_flash.group(1))
+    notes_library = re.search(r"/notes/(?:library|drafts)/\?id=(\d+)", raw, re.IGNORECASE)
+    if notes_library:
+        return accepted_object_id(notes_library.group(1))
+    podcasts_episodes = re.search(r"/podcasts/episodes/\?id=(\d+)", raw, re.IGNORECASE)
+    if podcasts_episodes:
+        return accepted_object_id(podcasts_episodes.group(1))
+    episodes = re.search(r"/episodes/\?id=(\d+)", raw, re.IGNORECASE)
+    if episodes:
+        return accepted_object_id(episodes.group(1))
+    albums_create = re.search(r"/albums/(?:create|edit)/\?id=(\d+)", raw, re.IGNORECASE)
+    if albums_create:
+        return accepted_object_id(albums_create.group(1))
+    collections = re.search(r"/collections/(?:view/)?\?id=(\d+)", raw, re.IGNORECASE)
+    if collections:
+        return accepted_object_id(collections.group(1))
+    saved_collections = re.search(r"/saved/collections/\?id=(\d+)", raw, re.IGNORECASE)
+    if saved_collections:
+        return accepted_object_id(saved_collections.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
