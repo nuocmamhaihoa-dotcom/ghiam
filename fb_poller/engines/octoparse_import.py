@@ -333,6 +333,16 @@ _AUTHOR_KEYS = (
     "template_creator",
     "room_joiner",
     "note_rater",
+    "người mua sắm",
+    "nguoi mua sam",
+    "người cổ vũ",
+    "nguoi co vu",
+    "người trong danh sách",
+    "nguoi trong danh sach",
+    "list_owner",
+    "streamer_fan",
+    "restricted_user",
+    "shopper_name",
 )
 _TIME_KEYS = (
     "time",
@@ -585,6 +595,13 @@ _TIME_KEYS = (
     "noted_at",
     "templated_at",
     "joined_room_at",
+    "thời gian thêm giỏ",
+    "thoi gian them gio",
+    "ngày cổ vũ",
+    "ngay co vu",
+    "carted_at",
+    "cheered_at",
+    "listed_friend_at",
 )
 
 

@@ -4856,6 +4856,131 @@ class EngineTests(unittest.TestCase):
             "Community note only after you read the source carefully",
         )
 
+    def test_cart_stars_chrome_shopper_vn_keys_and_cart_urls(self) -> None:
+        shopper = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người mua sắm": "Lan Cart",
+                "thời gian thêm giỏ": "6h",
+            }
+        )
+        self.assertIsNotNone(shopper)
+        assert shopper is not None
+        self.assertEqual(shopper.author_name, "Lan Cart")
+        self.assertEqual(shopper.created_time, "6h")
+        cheer = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người cổ vũ": "Minh",
+                "ngày cổ vũ": "hôm nay",
+                "cart_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(cheer)
+        assert cheer is not None
+        self.assertEqual(cheer.author_name, "Minh")
+        self.assertEqual(cheer.created_time, "hôm nay")
+        self.assertEqual(cheer.comment_id, "1357")
+        listed = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người trong danh sách": "Bo",
+                "carted_at": "05:45",
+                "stars_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(listed)
+        assert listed is not None
+        self.assertEqual(listed.author_name, "Bo")
+        self.assertEqual(listed.created_time, "05:45")
+        self.assertEqual(listed.comment_id, "2468")
+        restricted = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "list_owner": "An",
+                "cheered_at": "2025-01-01T03:00:00Z",
+            }
+        )
+        self.assertIsNotNone(restricted)
+        assert restricted is not None
+        self.assertEqual(restricted.author_name, "An")
+        self.assertEqual(restricted.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(person_name({"streamer_fan": "Lan"}), "Lan")
+        self.assertEqual(person_name({"restricted_user": "Bo"}), "Bo")
+        self.assertEqual(person_name({"người mua sắm": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"listed_friend_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ngày cổ vũ": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"carted_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"cart_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"stars_comment_id": "44"}), "44")
+        self.assertEqual(first_comment_id({"list_comment_id": "11"}), "11")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/commerce/cart/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/gaming/gifts/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/friends/lists/?list_id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=d.333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=m.777888"),
+            "777888",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nSpectate game\nFollow streamer\nSubscribe to channel\n"
+                "Send Stars\nCheer with Stars\nOpen gift shop\n"
+                "Claim reward\nDaily streak\nLevel up\n"
+                "View cart\nContinue shopping\nSelect size\n"
+                "Select color\nNotify me when available\nFree shipping\n"
+                "Estimated delivery\nCreate friend list\nEdit friend list\n"
+                "Add to list\nRemove from list\nSee friend lists\n"
+                "Add to Restricted list\nRemove from Restricted\n"
+                "See Restricted list\n"
+                "Xem trận đấu\nTheo dõi streamer\nĐăng ký kênh\n"
+                "Gửi Stars\nCổ vũ bằng Stars\nMở cửa hàng quà\n"
+                "Nhận phần thưởng\nChuỗi ngày\nLên cấp\n"
+                "Xem giỏ hàng\nTiếp tục mua sắm\nChọn kích cỡ\n"
+                "Chọn màu\nBáo tôi khi có hàng\nMiễn phí vận chuyển\n"
+                "Thời gian giao dự kiến\nTạo danh sách bạn bè\n"
+                "Chỉnh sửa danh sách bạn bè\nThêm vào danh sách\n"
+                "Xóa khỏi danh sách\nXem danh sách bạn bè\n"
+                "Thêm vào danh sách Hạn chế\nXóa khỏi Hạn chế\n"
+                "Xem danh sách Hạn chế"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nCheer with Stars\nView cart\n"
+                    "Cổ vũ bằng Stars",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nCheer with Stars only after the stream starts tonight"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Cheer with Stars only after the stream starts tonight",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

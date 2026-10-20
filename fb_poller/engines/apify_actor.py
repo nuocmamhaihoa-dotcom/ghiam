@@ -471,6 +471,16 @@ def _one(row: Any) -> PublicComment | None:
         "template_creator",
         "room_joiner",
         "note_rater",
+        "người mua sắm",
+        "nguoi mua sam",
+        "người cổ vũ",
+        "nguoi co vu",
+        "người trong danh sách",
+        "nguoi trong danh sach",
+        "list_owner",
+        "streamer_fan",
+        "restricted_user",
+        "shopper_name",
     )
     return PublicComment(
         text=text,
