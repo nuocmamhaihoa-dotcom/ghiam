@@ -6,6 +6,9 @@ kỹ tên và @id chỉ chạy trên vài khung rõ nhất của mỗi người:
 vòng tròn chạm màn hình đè, rải đều theo thời gian để mỗi lần đọc thấy một
 ảnh hơi khác. Nhanh hơn nhiều so với đọc kỹ mọi khung, và bỏ phiếu giữa các
 lần đọc vẫn sửa được lỗi của từng lần.
+
+Khung được quét ngay khi ffmpeg đóng file, trong lúc video còn đang tách.
+Những khung được giữ và thời điểm của chúng vẫn đúng như tách xong rồi mới quét.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from collections.abc import Callable
 from concurrent.futures import BrokenExecutor, Future, ProcessPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
@@ -312,32 +316,117 @@ def _ffmpeg_frames(cmd: list[str], folder: Path, pattern: str) -> tuple[subproce
     return done, files
 
 
+def _ffmpeg_command(
+    video: Path,
+    pattern: Path,
+    fps: float,
+    start: float | None = None,
+    length: float | None = None,
+) -> list[str]:
+    """Lệnh tách khung. -ss đứng trước -i; ffmpeg tua tới đúng thời điểm rồi mới ghi."""
+    command = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-threads",
+        str(ffmpeg_thread_count()),
+    ]
+    if start is not None:
+        command += ["-ss", f"{start:.3f}"]
+    command += ["-i", str(video)]
+    if length is not None:
+        command += ["-t", f"{length:.3f}"]
+    command += ["-vf", f"fps={fps}", "-q:v", "2", str(pattern)]
+    return command
+
+
 def extract_frames(video: Path, folder: Path, fps: float) -> list[tuple[Path, float]]:
     if shutil.which("ffmpeg") is None:
         raise RuntimeError("Chưa cài ffmpeg. Ubuntu: sudo apt install ffmpeg")
     pattern = folder / "f_%06d.jpg"
-    done, files = _ffmpeg_frames(
-        [
-            "ffmpeg",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-threads",
-            str(ffmpeg_thread_count()),
-            "-i",
-            str(video),
-            "-vf",
-            f"fps={fps}",
-            "-q:v",
-            "2",
-            str(pattern),
-        ],
-        folder,
-        "f_*.jpg",
-    )
+    done, files = _ffmpeg_frames(_ffmpeg_command(video, pattern, fps), folder, "f_*.jpg")
     if done.returncode != 0 and not files:
         raise RuntimeError(f"Không mở được video {video.name}: {done.stderr.strip()[:300]}")
     return [(path, index / fps) for index, path in enumerate(files)]
+
+
+def ready_jpegs(names: list[str], process_done: bool) -> list[str]:
+    """Tên file ffmpeg đã đóng. File cuối có thể đang ghi khi tiến trình còn chạy."""
+    if process_done:
+        return list(names)
+    if len(names) < 2:
+        return []
+    return names[:-1]
+
+
+def jpeg_time(name: str, fps: float) -> float:
+    """Mốc thời gian theo số ffmpeg ghi trong tên file. Xóa khung trùng không làm lệch mốc sau."""
+    number = int(Path(name).stem.split("_", 1)[1])
+    return (number - 1) / fps
+
+
+def pending_jpegs(names: list[str], process_done: bool, seen: set[str]) -> list[str]:
+    """Khung đã đóng và chưa đọc. Danh sách co lại sau khi xóa khung trùng vẫn còn khung kế tiếp."""
+    return [name for name in ready_jpegs(names, process_done) if name not in seen]
+
+
+def _capture_kept(
+    video: Path,
+    folder: Path,
+    fps: float,
+    on_kept: Callable[[Path, float], None],
+) -> list[tuple[Path, float]]:
+    """Tách cả video và gọi on_kept ngay khi một khung được giữ.
+
+    Khung giữ lại và mốc thời gian trùng với extract_frames rồi drop_repeats.
+    Hết chỗ trên đĩa thì xóa khung và ném OSError 28, giống lệnh tách một mạch.
+    """
+    if shutil.which("ffmpeg") is None:
+        raise RuntimeError("Chưa cài ffmpeg. Ubuntu: sudo apt install ffmpeg")
+    pattern = folder / "f_%06d.jpg"
+    err_path = folder / ".ffmpeg-err"
+    err_handle = err_path.open("w", encoding="utf-8")
+    proc = subprocess.Popen(
+        _ffmpeg_command(video, pattern, fps),
+        stdout=subprocess.DEVNULL,
+        stderr=err_handle,
+    )
+    err_handle.close()
+    kept: list[tuple[Path, float]] = []
+    last: np.ndarray | None = None
+    seen: set[str] = set()
+    try:
+        while True:
+            names = sorted(path.name for path in folder.glob("f_*.jpg"))
+            done = proc.poll() is not None
+            for name in pending_jpegs(names, done, seen):
+                seen.add(name)
+                chosen, last = _select_frames([(folder / name, jpeg_time(name, fps))], last, True)
+                for item in chosen:
+                    kept.append(item)
+                    on_kept(item[0], item[1])
+            if done:
+                break
+            time.sleep(0.05)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+    try:
+        err = err_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        err = ""
+    _unlink_quiet(err_path)
+    if _disk_text(err):
+        for path in folder.glob("f_*.jpg"):
+            _unlink_quiet(path)
+        raise OSError(28, "No space left on device", str(folder))
+    if proc.returncode not in (0, None) and not seen:
+        raise RuntimeError(f"Không mở được video {video.name}: {err.strip()[:300]}")
+    if seen and not kept:
+        raise RuntimeError(f"Không đọc được khung hình nào của {video.name}. File có thể bị cắt hoặc hỏng.")
+    return kept
 
 
 def _extract_span(
@@ -348,25 +437,7 @@ def _extract_span(
         raise RuntimeError("Chưa cài ffmpeg. Ubuntu: sudo apt install ffmpeg")
     pattern = folder / "f_%06d.jpg"
     done, files = _ffmpeg_frames(
-        [
-            "ffmpeg",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-threads",
-            str(ffmpeg_thread_count()),
-            "-ss",
-            f"{start:.3f}",
-            "-i",
-            str(video),
-            "-t",
-            f"{length:.3f}",
-            "-vf",
-            f"fps={fps}",
-            "-q:v",
-            "2",
-            str(pattern),
-        ],
+        _ffmpeg_command(video, pattern, fps, start, length),
         folder,
         "f_*.jpg",
     )
@@ -458,6 +529,7 @@ def _extract_slices(
     fps: float,
     duration: float,
     make_room: Callable[[int], None] | None,
+    on_kept: Callable[[Path, float], None] | None = None,
 ) -> list[tuple[Path, float]]:
     """Cắt 20 giây một, xóa khung trùng ngay, chỉ giữ khung khác ảnh ở thư mục chính.
 
@@ -492,6 +564,8 @@ def _extract_slices(
             dest = folder / f"f_{seq:06d}.jpg"
             _replace_frame(frame, dest, folder, need, make_room)
             kept.append((dest, at))
+            if on_kept is not None:
+                on_kept(dest, at)
         shutil.rmtree(piece, ignore_errors=True)
         start += SLICE_SECONDS
         index += 1
@@ -505,6 +579,7 @@ def _frames_for(
     folder: Path,
     fps: float,
     make_room: Callable[[int], None] | None,
+    on_kept: Callable[[Path, float], None] | None = None,
 ) -> list[tuple[Path, float]]:
     duration = probe_duration(path)
     budget = frame_budget(duration, fps) if duration is not None else ONE_SHOT_CAP
@@ -512,15 +587,27 @@ def _frames_for(
     _ensure_room(folder, need, make_room)
     if duration is not None and use_slices(budget, _free_bytes(folder)):
         print(f"Tách khung từng đoạn {path.name} vì đĩa không đủ chỗ cho cả video.", flush=True)
-        return _extract_slices(path, folder, fps, duration, make_room)
+        return _extract_slices(path, folder, fps, duration, make_room, on_kept)
+    published = False
+
+    def publish(frame: Path, at: float) -> None:
+        nonlocal published
+        published = True
+        if on_kept is not None:
+            on_kept(frame, at)
+
     try:
-        extracted = extract_frames(path, folder, fps)
+        if on_kept is None:
+            extracted = extract_frames(path, folder, fps)
+        else:
+            return _capture_kept(path, folder, fps, publish)
     except OSError as exc:
-        if not disk_full(exc) or duration is None:
+        if not disk_full(exc) or duration is None or published:
             raise
         print(f"Tách khung từng đoạn {path.name} vì đĩa không đủ chỗ cho cả video.", flush=True)
         _ensure_room(folder, need, make_room)
-        return _extract_slices(path, folder, fps, duration, make_room)
+        _empty_dir(folder)
+        return _extract_slices(path, folder, fps, duration, make_room, on_kept)
     kept = drop_repeats(extracted, unlink_dropped=True)
     if extracted and not kept:
         raise RuntimeError(f"Không đọc được khung hình nào của {path.name}. File có thể bị cắt hoặc hỏng.")
@@ -858,33 +945,83 @@ def read_inputs(
     make_room(số byte cần trống) được gọi khi đĩa chặt, trước khi cắt tiếp. Không có thì cắt với chỗ đang có.
     """
     jobs: list[tuple[str, float]] = []
+    prescan: list[Future | None] = []
     temps: list[tempfile.TemporaryDirectory[str]] = []
     video_slices: list[tuple[Path, int, int]] = []
     pool: ProcessPoolExecutor | None = None
     extracting = _reporter(progress, "extract")
+
+    def open_pool() -> None:
+        nonlocal pool, submit
+        if submit is not None or pool is not None:
+            return
+        count = read_worker_count(workers)
+        if count <= 1:
+            return
+        pool = ProcessPoolExecutor(max_workers=count)
+        submit = pool.submit
+
     try:
-        for path in paths:
-            suffix = path.suffix.lower()
-            if suffix in IMAGE_SUFFIXES:
-                jobs.append((str(path), -1.0))
-            elif suffix in VIDEO_SUFFIXES:
-                if extracting is not None:
-                    extracting(0, 0)
-                folder = _open_work("docvideo-frames-", work_dir, make_room, ONE_SHOT_CAP)
-                temps.append(folder)
-                start = len(jobs)
-                frames = _frames_for(path, Path(folder.name), fps, make_room)
-                jobs.extend((str(frame), at) for frame, at in frames)
-                if frames:
-                    video_slices.append((path, start, len(jobs)))
-            else:
-                raise RuntimeError(f"Không đọc được {path.name}: cần ảnh hoặc video.")
+        try:
+            for path in paths:
+                suffix = path.suffix.lower()
+                if suffix in IMAGE_SUFFIXES:
+                    jobs.append((str(path), -1.0))
+                    prescan.append(None)
+                elif suffix in VIDEO_SUFFIXES:
+                    if extracting is not None:
+                        extracting(0, 0)
+                    open_pool()
+                    for index, (queued, at) in enumerate(jobs):
+                        if prescan[index] is None and submit is not None:
+                            prescan[index] = submit(_scan_file, queued, at)
+                    folder = _open_work("docvideo-frames-", work_dir, make_room, ONE_SHOT_CAP)
+                    temps.append(folder)
+                    start = len(jobs)
+
+                    def keep(frame: Path, at: float) -> None:
+                        fut = submit(_scan_file, str(frame), at) if submit is not None else None
+                        prescan.append(fut)
+
+                    frames = _frames_for(
+                        path,
+                        Path(folder.name),
+                        fps,
+                        make_room,
+                        keep if submit is not None else None,
+                    )
+                    jobs.extend((str(frame), at) for frame, at in frames)
+                    if submit is None:
+                        prescan.extend([None] * len(frames))
+                    elif len(prescan) != len(jobs):
+                        raise RuntimeError("Số khung đã đưa đi quét không khớp số khung giữ lại.")
+                    if frames:
+                        video_slices.append((path, start, len(jobs)))
+                else:
+                    raise RuntimeError(f"Không đọc được {path.name}: cần ảnh hoặc video.")
+        except BaseException:
+            for fut in prescan:
+                if fut is not None:
+                    fut.cancel()
+            raise
         if submit is None:
-            workers = read_worker_count(workers)
-            if workers > 1 and len(jobs) > 1:
-                pool = ProcessPoolExecutor(max_workers=workers)
+            count = read_worker_count(workers)
+            if count > 1 and len(jobs) > 1:
+                pool = ProcessPoolExecutor(max_workers=count)
                 submit = pool.submit
-        layouts = _run(submit, [(_scan_file, path, at) for path, at in jobs], task_timeout, _reporter(progress, "scan"))
+        if submit is None:
+            layouts = _run(
+                None,
+                [(_scan_file, path, at) for path, at in jobs],
+                task_timeout,
+                _reporter(progress, "scan"),
+            )
+        else:
+            waiting = [
+                fut if fut is not None else submit(_scan_file, path, at)
+                for (path, at), fut in zip(jobs, prescan, strict=True)
+            ]
+            layouts = _finish(waiting, task_timeout, _reporter(progress, "scan"))
         jobs, layouts = _insert_fast_frames(
             jobs,
             layouts,
@@ -920,23 +1057,14 @@ def read_inputs(
                 pass
 
 
-def _run(
-    submit: Callable[..., Future] | None,
-    calls: list[tuple],
+def _finish(
+    futures: list[Future],
     timeout: float | None = None,
     on_done: Callable[[int, int], None] | None = None,
 ) -> list:
-    total = len(calls)
+    total = len(futures)
     if on_done is not None:
         on_done(0, total)
-    if submit is None:
-        results = []
-        for call in calls:
-            results.append(call[0](*call[1:]))
-            if on_done is not None:
-                on_done(len(results), total)
-        return results
-    futures = [submit(*call) for call in calls]
     try:
         collected = []
         for future in futures:
@@ -952,3 +1080,22 @@ def _run(
         for future in futures:
             future.cancel()
         raise
+
+
+def _run(
+    submit: Callable[..., Future] | None,
+    calls: list[tuple],
+    timeout: float | None = None,
+    on_done: Callable[[int, int], None] | None = None,
+) -> list:
+    if submit is None:
+        total = len(calls)
+        if on_done is not None:
+            on_done(0, total)
+        results = []
+        for call in calls:
+            results.append(call[0](*call[1:]))
+            if on_done is not None:
+                on_done(len(results), total)
+        return results
+    return _finish([submit(*call) for call in calls], timeout, on_done)
