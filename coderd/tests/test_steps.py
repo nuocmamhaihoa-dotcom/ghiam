@@ -319,6 +319,11 @@ class WorkerTests(unittest.TestCase):
             assert scene is not None
             self.assertTrue(any(step.command.startswith("git status") for step in scene.steps))
             self.assertIn("git status", render_scene(scene))
+            commit = plan_scene(root, "ghi commit")
+            self.assertIsNotNone(commit)
+            assert commit is not None
+            self.assertTrue(any(step.command.startswith("git add") for step in commit.steps))
+            self.assertFalse(any("<" in step.command or ">" in step.command for step in commit.steps))
             self.assertIsNone(plan_scene(root, "xin chào"))
             self.assertIsNone(plan_scene(root, "chạy"))
             self.assertIsNone(plan_scene(root, "tạo hello.py in 2+2 rồi chạy"))

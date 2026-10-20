@@ -34,17 +34,17 @@ _SAFE_HEADS = (
 _CHAINS = (
     (
         ("file đã đổi", "những file đã đổi", "chỗ đã sửa", "đã sửa gì", "xem git", "git status"),
-        ("git status", "git diff"),
+        ("git status --short", "git diff --stat"),
         "Xem chỗ đã đổi",
     ),
     (
         ("ghi commit", "ghi một mốc", "tạo commit", "commit thay đổi"),
-        ("git status", "git add .", 'git commit -m "mo ta"'),
+        ("git status --short", "git add .", 'git commit -m "mo ta"'),
         "Ghi một mốc thay đổi",
     ),
     (
         ("đẩy lên", "git push", "đẩy commit"),
-        ("git status", "git add .", 'git commit -m "mo ta"', "git push"),
+        ("git status --short", "git add .", 'git commit -m "mo ta"', "git push"),
         "Đẩy thay đổi lên máy khác",
     ),
     (
@@ -142,16 +142,31 @@ def command_counts(root: Path) -> list[tuple[str, str, int]]:
     return rows
 
 
+def _usable(command: str) -> bool:
+    if not command or any(mark in command for mark in "<>{}"):
+        return False
+    return len(command) <= 80
+
+
 def _pick(prefix: str, groups: dict[str, list[tuple[str, str, str]]]) -> tuple[str, str, str]:
     meaning = gloss(prefix)
     group = group_of(prefix) or group_of(prefix + " x")
+    if group_of(prefix) and _usable(prefix):
+        return prefix, meaning, group
     low = prefix.lower()
+    best = ""
+    best_text = ""
     if group:
         for command, text, _src in groups.get(group) or []:
-            if command.lower().startswith(low):
-                return command, text or meaning, group
+            if not _usable(command) or not command.lower().startswith(low):
+                continue
+            if not best or len(command) < len(best):
+                best = command
+                best_text = text
+    if best:
+        return best, best_text or meaning, group
     for item in SEED:
-        if item.lower().startswith(low):
+        if item.lower().startswith(low) and _usable(item):
             return item, gloss(item) or meaning, group_of(item) or group
     return prefix, meaning, group
 

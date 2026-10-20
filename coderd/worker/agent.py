@@ -7,7 +7,7 @@ import urllib.error
 import urllib.request
 
 from worker.scene import needs_model_tools, plan_scene, render_scene
-from worker.tools import run_tool, schemas
+from worker.tools import run_cmd, run_tool, schemas
 from worker.use import use_context, vietnamese_lessons
 from worker.workspace import Workspace
 
@@ -218,11 +218,11 @@ def run_turn(
                 return
             if not step.run:
                 continue
-            result = run_tool(workspace, "run_cmd", {"command": step.command}, cancel, procs)
+            result = run_cmd(step.command, workspace.root, cancel, procs, timeout=8)
             emit("tool", json.dumps({"name": "run_cmd", "result": result}, ensure_ascii=False))
             stdout = str(result.get("stdout") or "").strip()
             if stdout:
-                emit("text", stdout[:4000])
+                emit("text", stdout[:1200])
             if result.get("cancelled"):
                 finish("cancelled", "")
                 return
