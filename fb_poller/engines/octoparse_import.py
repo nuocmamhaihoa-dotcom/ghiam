@@ -729,6 +729,18 @@ _AUTHOR_KEYS = (
     "watch_party_host",
     "activity_manager",
     "friend_request_viewer",
+    "người xem kỷ niệm",
+    "nguoi xem ky niem",
+    "người quản lý thùng rác",
+    "nguoi quan ly thung rac",
+    "người tạo nội dung thương hiệu",
+    "nguoi tao noi dung thuong hieu",
+    "người tải danh bạ",
+    "nguoi tai danh ba",
+    "memory_viewer",
+    "trash_manager",
+    "branded_content_partner",
+    "contact_uploader",
 )
 _TIME_KEYS = (
     "time",
@@ -1251,6 +1263,16 @@ _TIME_KEYS = (
     "ad_library_viewed_at",
     "watch_party_at",
     "activity_managed_at",
+    "ngày xem kỷ niệm",
+    "ngay xem ky niem",
+    "thời gian xóa vĩnh viễn",
+    "thoi gian xoa vinh vien",
+    "ngày tải danh bạ",
+    "ngay tai danh ba",
+    "memories_viewed_at",
+    "permanently_deleted_at",
+    "contacts_uploaded_at",
+    "branded_content_at",
 )
 
 

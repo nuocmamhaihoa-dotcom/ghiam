@@ -706,6 +706,18 @@ def _append_rows(
                         "watch_party_host",
                         "activity_manager",
                         "friend_request_viewer",
+                        "người xem kỷ niệm",
+                        "nguoi xem ky niem",
+                        "người quản lý thùng rác",
+                        "nguoi quan ly thung rac",
+                        "người tạo nội dung thương hiệu",
+                        "nguoi tao noi dung thuong hieu",
+                        "người tải danh bạ",
+                        "nguoi tai danh ba",
+                        "memory_viewer",
+                        "trash_manager",
+                        "branded_content_partner",
+                        "contact_uploader",
                     ),
                 )
             )
@@ -1300,6 +1312,18 @@ def _append_rows(
                             "watch_party_host",
                             "activity_manager",
                             "friend_request_viewer",
+                            "người xem kỷ niệm",
+                            "nguoi xem ky niem",
+                            "người quản lý thùng rác",
+                            "nguoi quan ly thung rac",
+                            "người tạo nội dung thương hiệu",
+                            "nguoi tao noi dung thuong hieu",
+                            "người tải danh bạ",
+                            "nguoi tai danh ba",
+                            "memory_viewer",
+                            "trash_manager",
+                            "branded_content_partner",
+                            "contact_uploader",
                         ),
                     )
                 )
@@ -2224,6 +2248,27 @@ def post_id_from_url(url: str) -> str | None:
     pages_promote = re.search(r"/pages/promote/\?id=(\d+)", raw, re.IGNORECASE)
     if pages_promote:
         return accepted_object_id(pages_promote.group(1))
+    memories = re.search(r"/memories/\?id=(\d+)", raw, re.IGNORECASE)
+    if memories:
+        return accepted_object_id(memories.group(1))
+    recyclebin = re.search(r"/recyclebin/\?id=(\d+)", raw, re.IGNORECASE)
+    if recyclebin:
+        return accepted_object_id(recyclebin.group(1))
+    rights_manager = re.search(r"/rights_manager/\?id=(\d+)", raw, re.IGNORECASE)
+    if rights_manager:
+        return accepted_object_id(rights_manager.group(1))
+    contacts_upload = re.search(r"/contacts_upload/\?id=(\d+)", raw, re.IGNORECASE)
+    if contacts_upload:
+        return accepted_object_id(contacts_upload.group(1))
+    onthisday = re.search(r"/onthisday/\?id=(\d+)", raw, re.IGNORECASE)
+    if onthisday:
+        return accepted_object_id(onthisday.group(1))
+    audience_insights = re.search(r"/audience_insights/\?id=(\d+)", raw, re.IGNORECASE)
+    if audience_insights:
+        return accepted_object_id(audience_insights.group(1))
+    partnership_ads = re.search(r"/partnership_ads/\?id=(\d+)", raw, re.IGNORECASE)
+    if partnership_ads:
+        return accepted_object_id(partnership_ads.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

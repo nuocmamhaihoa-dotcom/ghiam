@@ -8792,6 +8792,135 @@ class EngineTests(unittest.TestCase):
             "Ad library only after you finish researching the brand",
         )
 
+    def test_memories_business_archive_contacts_vn_keys_and_urls(self) -> None:
+        memory = _from_mapping(
+            {
+                "bình luận": "Nhớ ngày này quá đi ạ",
+                "người xem kỷ niệm": "Lan Mem",
+                "ngày xem kỷ niệm": "3h",
+            }
+        )
+        self.assertIsNotNone(memory)
+        assert memory is not None
+        self.assertEqual(memory.author_name, "Lan Mem")
+        self.assertEqual(memory.created_time, "3h")
+        trash = _from_mapping(
+            {
+                "Nội dung": "Mình đã khôi phục bài rồi",
+                "người quản lý thùng rác": "Minh",
+                "thời gian xóa vĩnh viễn": "hôm nay",
+                "trash_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(trash)
+        assert trash is not None
+        self.assertEqual(trash.author_name, "Minh")
+        self.assertEqual(trash.created_time, "hôm nay")
+        self.assertEqual(trash.comment_id, "1357")
+        branded = _from_mapping(
+            {
+                "text": "cảm ơn nhãn hàng nhiều",
+                "người tạo nội dung thương hiệu": "Bo",
+                "branded_content_at": "05:45",
+                "branded_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(branded)
+        assert branded is not None
+        self.assertEqual(branded.author_name, "Bo")
+        self.assertEqual(branded.created_time, "05:45")
+        self.assertEqual(branded.comment_id, "2468")
+        contacts = _from_mapping(
+            {
+                "message": "mình tìm được bạn cũ nè",
+                "người tải danh bạ": "An",
+                "ngày tải danh bạ": "2025-01-01T03:00:00Z",
+                "contacts_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(contacts)
+        assert contacts is not None
+        self.assertEqual(contacts.author_name, "An")
+        self.assertEqual(contacts.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(contacts.comment_id, "9753")
+        self.assertEqual(person_name({"memory_viewer": "Lan"}), "Lan")
+        self.assertEqual(person_name({"trash_manager": "Bo"}), "Bo")
+        self.assertEqual(person_name({"branded_content_partner": "Minh"}), "Minh")
+        self.assertEqual(person_name({"contact_uploader": "An"}), "An")
+        self.assertEqual(person_name({"người xem kỷ niệm": "Ha"}), "Ha")
+        self.assertEqual(timestamp_of({"memories_viewed_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"permanently_deleted_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"contacts_uploaded_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"branded_content_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"memory_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"contacts_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/memories/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/recyclebin/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/rights_manager/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/contacts_upload/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/onthisday/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/audience_insights/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/partnership_ads/?id=343434"),
+            "343434",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nHide ads from\nWrite a post\nBranded content\n"
+                "Partnership ads\nRights manager\nRecycle bin\nMove to trash\n"
+                "Permanently delete\nContacts uploaded\nManage preferences\n"
+                "Quảng bá bài viết\nPromote post\nUnarchive\nVào ngày này\n"
+                "Gợi ý kết bạn\nKhóa trang cá nhân\n"
+                "Bộ công cụ kinh doanh meta\nStudio dành cho nhà sáng tạo\n"
+                "Ẩn quảng cáo từ\nViết bài\nNội dung có gắn thương hiệu\n"
+                "Quảng cáo hợp tác\nTrình quản lý quyền\nThùng rác\n"
+                "Chuyển vào thùng rác\nDanh bạ đã tải lên\nQuản lý tùy chọn\n"
+                "Thông tin chi tiết về đối tượng\nBỏ lưu trữ\n"
+                "Tại sao tôi nhìn thấy nội dung này"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nHide ads from\nRecycle bin\n"
+                    "Ẩn quảng cáo từ\nThùng rác",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nWrite a post only after you finish drafting the real update"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Write a post only after you finish drafting the real update",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
