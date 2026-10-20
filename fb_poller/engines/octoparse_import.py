@@ -789,6 +789,18 @@ _AUTHOR_KEYS = (
     "education_editor",
     "dashboard_viewer",
     "language_user",
+    "người xem đăng nhập",
+    "nguoi xem dang nhap",
+    "người tạo khóa truy cập",
+    "nguoi tao khoa truy cap",
+    "người quản lý phiên",
+    "nguoi quan ly phien",
+    "người kiểm tra bảo mật",
+    "nguoi kiem tra bao mat",
+    "login_reviewer",
+    "passkey_user",
+    "session_manager",
+    "security_checker",
 )
 _TIME_KEYS = (
     "time",
@@ -1361,6 +1373,16 @@ _TIME_KEYS = (
     "education_edited_at",
     "dashboard_viewed_at",
     "language_changed_at",
+    "ngày xem đăng nhập",
+    "ngay xem dang nhap",
+    "thời gian tạo khóa truy cập",
+    "thoi gian tao khoa truy cap",
+    "ngày kiểm tra bảo mật",
+    "ngay kiem tra bao mat",
+    "login_reviewed_at",
+    "passkey_created_at",
+    "session_managed_at",
+    "checkup_done_at",
 )
 
 

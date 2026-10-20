@@ -766,6 +766,18 @@ def _append_rows(
                         "education_editor",
                         "dashboard_viewer",
                         "language_user",
+                        "người xem đăng nhập",
+                        "nguoi xem dang nhap",
+                        "người tạo khóa truy cập",
+                        "nguoi tao khoa truy cap",
+                        "người quản lý phiên",
+                        "nguoi quan ly phien",
+                        "người kiểm tra bảo mật",
+                        "nguoi kiem tra bao mat",
+                        "login_reviewer",
+                        "passkey_user",
+                        "session_manager",
+                        "security_checker",
                     ),
                 )
             )
@@ -1420,6 +1432,18 @@ def _append_rows(
                             "education_editor",
                             "dashboard_viewer",
                             "language_user",
+                            "người xem đăng nhập",
+                            "nguoi xem dang nhap",
+                            "người tạo khóa truy cập",
+                            "nguoi tao khoa truy cap",
+                            "người quản lý phiên",
+                            "nguoi quan ly phien",
+                            "người kiểm tra bảo mật",
+                            "nguoi kiem tra bao mat",
+                            "login_reviewer",
+                            "passkey_user",
+                            "session_manager",
+                            "security_checker",
                         ),
                     )
                 )
@@ -2443,6 +2467,24 @@ def post_id_from_url(url: str) -> str | None:
     drafts = re.search(r"/drafts/\?id=(\d+)", raw, re.IGNORECASE)
     if drafts:
         return accepted_object_id(drafts.group(1))
+    security_2fa = re.search(r"/security/2fa/\?id=(\d+)", raw, re.IGNORECASE)
+    if security_2fa:
+        return accepted_object_id(security_2fa.group(1))
+    security_checkup = re.search(r"/security/checkup/\?id=(\d+)", raw, re.IGNORECASE)
+    if security_checkup:
+        return accepted_object_id(security_checkup.group(1))
+    passkeys = re.search(r"/passkeys/\?id=(\d+)", raw, re.IGNORECASE)
+    if passkeys:
+        return accepted_object_id(passkeys.group(1))
+    sessions = re.search(r"/sessions/\?id=(\d+)", raw, re.IGNORECASE)
+    if sessions:
+        return accepted_object_id(sessions.group(1))
+    trusted_devices = re.search(r"/trusted_devices/\?id=(\d+)", raw, re.IGNORECASE)
+    if trusted_devices:
+        return accepted_object_id(trusted_devices.group(1))
+    recovery_codes = re.search(r"/recovery_codes/\?id=(\d+)", raw, re.IGNORECASE)
+    if recovery_codes:
+        return accepted_object_id(recovery_codes.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

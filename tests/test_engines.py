@@ -9424,6 +9424,128 @@ class EngineTests(unittest.TestCase):
             "Drafts only after you finish writing the real caption",
         )
 
+    def test_security_passkeys_sessions_checkup_vn_keys_and_urls(self) -> None:
+        login = _from_mapping(
+            {
+                "bình luận": "Đây là tôi đăng nhập",
+                "người xem đăng nhập": "Lan Sec",
+                "ngày xem đăng nhập": "7h",
+            }
+        )
+        self.assertIsNotNone(login)
+        assert login is not None
+        self.assertEqual(login.author_name, "Lan Sec")
+        self.assertEqual(login.created_time, "7h")
+        passkey = _from_mapping(
+            {
+                "Nội dung": "Đã tạo khóa truy cập",
+                "người tạo khóa truy cập": "Minh",
+                "thời gian tạo khóa truy cập": "hôm nay",
+                "passkey_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(passkey)
+        assert passkey is not None
+        self.assertEqual(passkey.author_name, "Minh")
+        self.assertEqual(passkey.created_time, "hôm nay")
+        self.assertEqual(passkey.comment_id, "1357")
+        session = _from_mapping(
+            {
+                "text": "đã đăng xuất máy cũ",
+                "người quản lý phiên": "Bo",
+                "session_managed_at": "05:45",
+                "session_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(session)
+        assert session is not None
+        self.assertEqual(session.author_name, "Bo")
+        self.assertEqual(session.created_time, "05:45")
+        self.assertEqual(session.comment_id, "2468")
+        checkup = _from_mapping(
+            {
+                "message": "kiểm tra bảo mật xong",
+                "người kiểm tra bảo mật": "An",
+                "ngày kiểm tra bảo mật": "2025-01-01T03:00:00Z",
+                "checkup_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(checkup)
+        assert checkup is not None
+        self.assertEqual(checkup.author_name, "An")
+        self.assertEqual(checkup.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(checkup.comment_id, "9753")
+        self.assertEqual(person_name({"login_reviewer": "Lan"}), "Lan")
+        self.assertEqual(person_name({"passkey_user": "Bo"}), "Bo")
+        self.assertEqual(person_name({"session_manager": "Minh"}), "Minh")
+        self.assertEqual(person_name({"security_checker": "An"}), "An")
+        self.assertEqual(person_name({"người xem đăng nhập": "Ha"}), "Ha")
+        self.assertEqual(timestamp_of({"login_reviewed_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"passkey_created_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"session_managed_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"checkup_done_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"login_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"checkup_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/security/2fa/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/security/checkup/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/passkeys/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/sessions/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/trusted_devices/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/recovery_codes/?id=121212"),
+            "121212",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nNew login alert\nLogin approval\nAuthenticator app\n"
+                "Recovery codes\nTrusted devices\nPasskeys\nCreate passkey\n"
+                "Compromised account\nSuspicious activity\nGenerate code\n"
+                "Get alerts about unrecognized logins\n"
+                "Cảnh báo đăng nhập mới\nPhê duyệt đăng nhập\nỨng dụng xác thực\n"
+                "Mã khôi phục\nThiết bị tin cậy\nKhóa truy cập\nTạo khóa truy cập\n"
+                "Tài khoản bị xâm phạm\nHoạt động đáng ngờ\nTạo mã\n"
+                "Nhận cảnh báo về đăng nhập không nhận dạng"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nPasskeys\nSuspicious activity\n"
+                    "Khóa truy cập\nHoạt động đáng ngờ",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nPasskeys only after you finish enabling two-factor auth"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Passkeys only after you finish enabling two-factor auth",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

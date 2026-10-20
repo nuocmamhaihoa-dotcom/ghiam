@@ -927,6 +927,18 @@ def _one(row: Any) -> PublicComment | None:
         "education_editor",
         "dashboard_viewer",
         "language_user",
+        "người xem đăng nhập",
+        "nguoi xem dang nhap",
+        "người tạo khóa truy cập",
+        "nguoi tao khoa truy cap",
+        "người quản lý phiên",
+        "nguoi quan ly phien",
+        "người kiểm tra bảo mật",
+        "nguoi kiem tra bao mat",
+        "login_reviewer",
+        "passkey_user",
+        "session_manager",
+        "security_checker",
     )
     return PublicComment(
         text=text,
