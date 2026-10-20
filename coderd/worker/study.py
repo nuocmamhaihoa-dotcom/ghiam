@@ -589,6 +589,86 @@ def discover_catalog(root: Path, fetch) -> list[tuple[str, str]]:
     return found
 
 
+_DEEP = (
+    "python",
+    "git",
+    "go",
+    "gofmt",
+    "cargo",
+    "rust",
+    "gcc",
+    "g++",
+    "clang",
+    "cmake",
+    "make",
+    "gdb",
+    "lldb",
+    "java",
+    "javac",
+    "mvn",
+    "gradle",
+    "docker",
+    "npm",
+    "node",
+    "pip",
+    "poetry",
+    "sqlite",
+    "curl",
+    "wget",
+    "ssh",
+    "jq",
+    "psql",
+    "redis",
+    "http",
+    "pytest",
+    "ruff",
+    "mypy",
+    "black",
+    "uv",
+    "php",
+    "ruby",
+    "perl",
+    "lua",
+    "ninja",
+    "meson",
+    "gh",
+    "subprocess",
+    "pathlib",
+    "argparse",
+    "unittest",
+    "asyncio",
+    "typing",
+)
+
+
+def _deep_name(name: str) -> bool:
+    low = name.lower()
+    return any(key in low for key in _DEEP)
+
+
+def prefetch_catalog(root: Path, fetch=fetch_text, limit: int = 2500, deep_only: bool = True) -> int:
+    catalog = discover_catalog(root, fetch)
+    catalog = sorted(catalog, key=lambda item: (0 if _deep_name(item[0]) else 1, item[0]))
+    loaded = 0
+    for name, url in catalog:
+        if url.startswith("file:"):
+            continue
+        if deep_only and not _deep_name(name):
+            continue
+        cache = root / "learn" / "cache" / f"{name}.txt"
+        if cache.is_file() and cache.stat().st_size > 40:
+            continue
+        try:
+            load_source(root, name, url, fetch)
+            loaded += 1
+            print(f"tải {name}", flush=True)
+        except Exception as exc:
+            print(f"không tải {name}: {exc}", flush=True)
+        if loaded >= limit:
+            break
+    return loaded
+
+
 def load_progress(root: Path) -> dict:
     path = root / "learn" / "tien-do.json"
     if path.is_file():
@@ -1064,6 +1144,14 @@ def main() -> None:
         added = harvest_saved(root)
         link_learned(root)
         print(f"gom {added}")
+        return
+    if len(sys.argv) >= 2 and sys.argv[1] == "--fill":
+        from worker.use import link_learned
+
+        loaded = prefetch_catalog(root)
+        added = harvest_saved(root)
+        link_learned(root)
+        print(f"tải {loaded} gom {added}")
         return
     if len(sys.argv) >= 2 and sys.argv[1] == "--link":
         from worker.use import link_learned

@@ -30,6 +30,7 @@ from worker.study import (  # noqa: E402
     OPEN_SOURCES,
     begin_hours,
     discover_catalog,
+    prefetch_catalog,
     extract_examples,
     extract_notes,
     grounded,
@@ -506,6 +507,20 @@ class WorkerTests(unittest.TestCase):
             self.assertIn(OPEN_SOURCES[0][0], names)
             urls = {url for _name, url in found}
             self.assertIn("https://example.test/old.txt", urls)
+
+    def test_prefetch_saves_deep_sources(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cache = root / "learn" / "cache"
+            cache.mkdir(parents=True)
+            (cache / "catalog.json").write_text(
+                json.dumps([["tldr-go", "https://example.test/go.md"], ["tldr-clamav", "https://example.test/clam.md"]]),
+                encoding="utf-8",
+            )
+            loaded = prefetch_catalog(root, fetch=lambda url: "`go test ./...`\n", limit=5, deep_only=True)
+            self.assertGreaterEqual(loaded, 1)
+            texts = "".join(path.read_text(encoding="utf-8") for path in cache.glob("*.txt") if path.is_file())
+            self.assertIn("go test", texts)
 
     def test_seed_commands_are_grouped_in_vietnamese(self) -> None:
         with TemporaryDirectory() as tmp:
