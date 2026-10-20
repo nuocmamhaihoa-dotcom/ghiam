@@ -765,6 +765,18 @@ _AUTHOR_KEYS = (
     "horizon_visitor",
     "esports_fan",
     "presence_setter",
+    "người theo dõi đơn hàng",
+    "nguoi theo doi don hang",
+    "người dùng trình quản lý thương mại",
+    "nguoi dung trinh quan ly thuong mai",
+    "người chỉnh danh mục",
+    "nguoi chinh danh muc",
+    "người dùng mã giảm giá",
+    "nguoi dung ma giam gia",
+    "order_tracker",
+    "commerce_manager_user",
+    "catalog_editor",
+    "coupon_user",
 )
 _TIME_KEYS = (
     "time",
@@ -1317,6 +1329,16 @@ _TIME_KEYS = (
     "horizon_visited_at",
     "esports_viewed_at",
     "presence_set_at",
+    "ngày theo dõi đơn hàng",
+    "ngay theo doi don hang",
+    "thời gian quản lý thương mại",
+    "thoi gian quan ly thuong mai",
+    "ngày dùng mã giảm giá",
+    "ngay dung ma giam gia",
+    "order_tracked_at",
+    "commerce_managed_at",
+    "catalog_edited_at",
+    "coupon_applied_at",
 )
 
 

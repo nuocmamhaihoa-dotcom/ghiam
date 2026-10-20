@@ -9173,6 +9173,129 @@ class EngineTests(unittest.TestCase):
             "Playing only after you finish the tutorial level carefully",
         )
 
+    def test_commerce_orders_coupons_seller_hub_vn_keys_and_urls(self) -> None:
+        order = _from_mapping(
+            {
+                "bình luận": "Đơn hàng đã tới rồi",
+                "người theo dõi đơn hàng": "Lan Ord",
+                "ngày theo dõi đơn hàng": "1h",
+            }
+        )
+        self.assertIsNotNone(order)
+        assert order is not None
+        self.assertEqual(order.author_name, "Lan Ord")
+        self.assertEqual(order.created_time, "1h")
+        commerce = _from_mapping(
+            {
+                "Nội dung": "Đã cập nhật catalog",
+                "người dùng trình quản lý thương mại": "Minh",
+                "thời gian quản lý thương mại": "hôm nay",
+                "commerce_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(commerce)
+        assert commerce is not None
+        self.assertEqual(commerce.author_name, "Minh")
+        self.assertEqual(commerce.created_time, "hôm nay")
+        self.assertEqual(commerce.comment_id, "1357")
+        catalog = _from_mapping(
+            {
+                "text": "sản phẩm mới thêm vào",
+                "người chỉnh danh mục": "Bo",
+                "catalog_edited_at": "05:45",
+                "catalog_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(catalog)
+        assert catalog is not None
+        self.assertEqual(catalog.author_name, "Bo")
+        self.assertEqual(catalog.created_time, "05:45")
+        self.assertEqual(catalog.comment_id, "2468")
+        coupon = _from_mapping(
+            {
+                "message": "mã giảm giá vẫn dùng được",
+                "người dùng mã giảm giá": "An",
+                "ngày dùng mã giảm giá": "2025-01-01T03:00:00Z",
+                "coupon_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(coupon)
+        assert coupon is not None
+        self.assertEqual(coupon.author_name, "An")
+        self.assertEqual(coupon.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(coupon.comment_id, "9753")
+        self.assertEqual(person_name({"order_tracker": "Lan"}), "Lan")
+        self.assertEqual(person_name({"commerce_manager_user": "Bo"}), "Bo")
+        self.assertEqual(person_name({"catalog_editor": "Minh"}), "Minh")
+        self.assertEqual(person_name({"coupon_user": "An"}), "An")
+        self.assertEqual(person_name({"người theo dõi đơn hàng": "Ha"}), "Ha")
+        self.assertEqual(timestamp_of({"order_tracked_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"commerce_managed_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"catalog_edited_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"coupon_applied_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"order_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"coupon_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/commerce_manager/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/catalog_manager/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/seller_hub/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/returns/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/gift_cards/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/coupons/?id=121212"),
+            "121212",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nShipping label\nPrint label\nRequest return\n"
+                "Refund issued\nSeller hub\nCommerce manager\nCatalog manager\n"
+                "Inventory\nRestock\nVariant\nSku\nPrice drop\nFlash sale\n"
+                "Limited offer\nCoupon code\nGift card\nStore credit\n"
+                "Nhãn vận chuyển\nIn nhãn\nYêu cầu trả hàng\nĐã hoàn tiền\n"
+                "Trung tâm người bán\nTrình quản lý thương mại\n"
+                "Trình quản lý danh mục\nHàng tồn kho\nNhập hàng lại\n"
+                "Biến thể\nMã sku\nGiảm giá\nƯu đãi có hạn\nMã giảm giá\n"
+                "Thẻ quà tặng\nTín dụng cửa hàng"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nSeller hub\nCoupon code\n"
+                    "Trung tâm người bán\nMã giảm giá",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nFlash sale only after you finish checking the real product"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Flash sale only after you finish checking the real product",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

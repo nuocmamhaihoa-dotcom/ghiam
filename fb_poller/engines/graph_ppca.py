@@ -742,6 +742,18 @@ def _append_rows(
                         "horizon_visitor",
                         "esports_fan",
                         "presence_setter",
+                        "người theo dõi đơn hàng",
+                        "nguoi theo doi don hang",
+                        "người dùng trình quản lý thương mại",
+                        "nguoi dung trinh quan ly thuong mai",
+                        "người chỉnh danh mục",
+                        "nguoi chinh danh muc",
+                        "người dùng mã giảm giá",
+                        "nguoi dung ma giam gia",
+                        "order_tracker",
+                        "commerce_manager_user",
+                        "catalog_editor",
+                        "coupon_user",
                     ),
                 )
             )
@@ -1372,6 +1384,18 @@ def _append_rows(
                             "horizon_visitor",
                             "esports_fan",
                             "presence_setter",
+                            "người theo dõi đơn hàng",
+                            "nguoi theo doi don hang",
+                            "người dùng trình quản lý thương mại",
+                            "nguoi dung trinh quan ly thuong mai",
+                            "người chỉnh danh mục",
+                            "nguoi chinh danh muc",
+                            "người dùng mã giảm giá",
+                            "nguoi dung ma giam gia",
+                            "order_tracker",
+                            "commerce_manager_user",
+                            "catalog_editor",
+                            "coupon_user",
                         ),
                     )
                 )
@@ -2356,6 +2380,24 @@ def post_id_from_url(url: str) -> str | None:
     quests = re.search(r"/quests/\?id=(\d+)", raw, re.IGNORECASE)
     if quests:
         return accepted_object_id(quests.group(1))
+    commerce_manager = re.search(r"/commerce_manager/\?id=(\d+)", raw, re.IGNORECASE)
+    if commerce_manager:
+        return accepted_object_id(commerce_manager.group(1))
+    catalog_manager = re.search(r"/catalog_manager/\?id=(\d+)", raw, re.IGNORECASE)
+    if catalog_manager:
+        return accepted_object_id(catalog_manager.group(1))
+    seller_hub = re.search(r"/seller_hub/\?id=(\d+)", raw, re.IGNORECASE)
+    if seller_hub:
+        return accepted_object_id(seller_hub.group(1))
+    returns = re.search(r"/returns/\?id=(\d+)", raw, re.IGNORECASE)
+    if returns:
+        return accepted_object_id(returns.group(1))
+    gift_cards = re.search(r"/gift_cards/\?id=(\d+)", raw, re.IGNORECASE)
+    if gift_cards:
+        return accepted_object_id(gift_cards.group(1))
+    coupons = re.search(r"/coupons/\?id=(\d+)", raw, re.IGNORECASE)
+    if coupons:
+        return accepted_object_id(coupons.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
