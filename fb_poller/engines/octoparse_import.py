@@ -145,6 +145,11 @@ _AUTHOR_KEYS = (
     "stage_name",
     "pen_name",
     "label_name",
+    "comment_by",
+    "written_by",
+    "posted_as",
+    "display_label",
+    "profile_caption",
     "tác giả",
     "tac gia",
 )
@@ -230,6 +235,10 @@ _TIME_KEYS = (
     "epoch",
     "unix",
     "said_at",
+    "time_ms",
+    "created_datetime",
+    "comment_created",
+    "post_created_at",
 )
 
 

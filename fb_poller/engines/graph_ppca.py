@@ -168,6 +168,11 @@ def _append_rows(
                         "stage_name",
                         "pen_name",
                         "label_name",
+                        "comment_by",
+                        "written_by",
+                        "posted_as",
+                        "display_label",
+                        "profile_caption",
                     ),
                 )
             )
@@ -224,6 +229,11 @@ def _append_rows(
                             "stage_name",
                             "pen_name",
                             "label_name",
+                            "comment_by",
+                            "written_by",
+                            "posted_as",
+                            "display_label",
+                            "profile_caption",
                         ),
                     )
                 )
@@ -326,7 +336,7 @@ def post_id_from_url(url: str) -> str | None:
     query = re.search(r"(?:story_fbid|fbid|post_id)=([^&\s]+)", raw, re.IGNORECASE)
     if query:
         return accepted_object_id(unquote(query.group(1)).rstrip("="))
-    media = re.search(r"[?&]set=a\.(\d+)", raw, re.IGNORECASE)
+    media = re.search(r"[?&]set=(?:a|pcb)\.(\d+)", raw, re.IGNORECASE)
     if media:
         return accepted_object_id(media.group(1))
     path = re.search(

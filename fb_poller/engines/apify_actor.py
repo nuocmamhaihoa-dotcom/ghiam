@@ -329,6 +329,11 @@ def _one(row: Any) -> PublicComment | None:
         "stage_name",
         "pen_name",
         "label_name",
+        "comment_by",
+        "written_by",
+        "posted_as",
+        "display_label",
+        "profile_caption",
     )
     return PublicComment(
         text=text,
