@@ -222,7 +222,10 @@ def run_turn(
             emit("tool", json.dumps({"name": "run_cmd", "result": result}, ensure_ascii=False))
             stdout = str(result.get("stdout") or "").strip()
             if stdout:
-                emit("text", stdout[:1200])
+                shown = stdout[:400]
+                if len(stdout) > 400:
+                    shown += "\n…"
+                emit("text", shown)
             if result.get("cancelled"):
                 finish("cancelled", "")
                 return
