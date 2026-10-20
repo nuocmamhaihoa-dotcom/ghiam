@@ -378,6 +378,30 @@ def _append_rows(
                         "memorial_author",
                         "gift_sender",
                         "game_player",
+                        "người viết đánh giá",
+                        "nguoi viet danh gia",
+                        "người theo dõi đơn",
+                        "nguoi theo doi don",
+                        "người dùng bộ lọc",
+                        "nguoi dung bo loc",
+                        "người quét QR",
+                        "nguoi quet QR",
+                        "người khóa hồ sơ",
+                        "nguoi khoa ho so",
+                        "người đăng ký Meta",
+                        "nguoi dang ky Meta",
+                        "người hợp tác thương hiệu",
+                        "nguoi hop tac thuong hieu",
+                        "người lên lịch bài",
+                        "nguoi len lich bai",
+                        "wishlist_owner",
+                        "review_writer",
+                        "qr_scanner",
+                        "subscription_holder",
+                        "collab_applicant",
+                        "caption_editor",
+                        "filter_user",
+                        "profile_locker",
                     ),
                 )
             )
@@ -644,6 +668,30 @@ def _append_rows(
                             "memorial_author",
                             "gift_sender",
                             "game_player",
+                            "người viết đánh giá",
+                            "nguoi viet danh gia",
+                            "người theo dõi đơn",
+                            "nguoi theo doi don",
+                            "người dùng bộ lọc",
+                            "nguoi dung bo loc",
+                            "người quét QR",
+                            "nguoi quet QR",
+                            "người khóa hồ sơ",
+                            "nguoi khoa ho so",
+                            "người đăng ký Meta",
+                            "nguoi dang ky Meta",
+                            "người hợp tác thương hiệu",
+                            "nguoi hop tac thuong hieu",
+                            "người lên lịch bài",
+                            "nguoi len lich bai",
+                            "wishlist_owner",
+                            "review_writer",
+                            "qr_scanner",
+                            "subscription_holder",
+                            "collab_applicant",
+                            "caption_editor",
+                            "filter_user",
+                            "profile_locker",
                         ),
                     )
                 )
@@ -928,6 +976,48 @@ def post_id_from_url(url: str) -> str | None:
     podcasts = re.search(r"/podcasts/\?id=(\d+)", raw, re.IGNORECASE)
     if podcasts:
         return accepted_object_id(podcasts.group(1))
+    wishlist = re.search(r"/(?:commerce/)?wishlist/\?id=(\d+)", raw, re.IGNORECASE)
+    if wishlist:
+        return accepted_object_id(wishlist.group(1))
+    shipping = re.search(r"/(?:commerce/)?shipping/\?id=(\d+)", raw, re.IGNORECASE)
+    if shipping:
+        return accepted_object_id(shipping.group(1))
+    feedback = re.search(r"/feedback/\?id=(\d+)", raw, re.IGNORECASE)
+    if feedback:
+        return accepted_object_id(feedback.group(1))
+    reviews_write = re.search(r"/reviews/write/\?id=(\d+)", raw, re.IGNORECASE)
+    if reviews_write:
+        return accepted_object_id(reviews_write.group(1))
+    ar_effect = re.search(r"/ar/effect/\?id=(\d+)", raw, re.IGNORECASE)
+    if ar_effect:
+        return accepted_object_id(ar_effect.group(1))
+    camera_effects = re.search(r"/camera_effects/\?id=(\d+)", raw, re.IGNORECASE)
+    if camera_effects:
+        return accepted_object_id(camera_effects.group(1))
+    qrcode = re.search(r"/qr(?:code)?/\?id=(\d+)", raw, re.IGNORECASE)
+    if qrcode:
+        return accepted_object_id(qrcode.group(1))
+    accounts_center = re.search(r"/accounts_center/\?id=(\d+)", raw, re.IGNORECASE)
+    if accounts_center:
+        return accepted_object_id(accounts_center.group(1))
+    creator_marketplace = re.search(r"/creator_marketplace/\?id=(\d+)", raw, re.IGNORECASE)
+    if creator_marketplace:
+        return accepted_object_id(creator_marketplace.group(1))
+    brandcollabs = re.search(r"/brandcollabs/\?id=(\d+)", raw, re.IGNORECASE)
+    if brandcollabs:
+        return accepted_object_id(brandcollabs.group(1))
+    professional_mode = re.search(r"/professional_mode/\?id=(\d+)", raw, re.IGNORECASE)
+    if professional_mode:
+        return accepted_object_id(professional_mode.group(1))
+    lock_profile = re.search(r"/lock_profile/\?id=(\d+)", raw, re.IGNORECASE)
+    if lock_profile:
+        return accepted_object_id(lock_profile.group(1))
+    subscriptions = re.search(r"/subscriptions/\?id=(\d+)", raw, re.IGNORECASE)
+    if subscriptions:
+        return accepted_object_id(subscriptions.group(1))
+    spark_ar = re.search(r"/spark_?ar/\?id=(\d+)", raw, re.IGNORECASE)
+    if spark_ar:
+        return accepted_object_id(spark_ar.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

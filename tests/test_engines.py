@@ -5629,6 +5629,194 @@ class EngineTests(unittest.TestCase):
             "Save reel only after you finish editing the caption",
         )
 
+    def test_ar_qr_wishlist_profile_subscription_vn_keys_and_urls(self) -> None:
+        filterer = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người dùng bộ lọc": "Lan Filter",
+                "ngày quét QR": "6h",
+            }
+        )
+        self.assertIsNotNone(filterer)
+        assert filterer is not None
+        self.assertEqual(filterer.author_name, "Lan Filter")
+        self.assertEqual(filterer.created_time, "6h")
+        scanner = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người quét QR": "Minh",
+                "wishlisted_at": "hôm nay",
+                "qr_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(scanner)
+        assert scanner is not None
+        self.assertEqual(scanner.author_name, "Minh")
+        self.assertEqual(scanner.created_time, "hôm nay")
+        self.assertEqual(scanner.comment_id, "1357")
+        locker = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người khóa hồ sơ": "Bo",
+                "subscribed_at": "05:45",
+                "subscription_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(locker)
+        assert locker is not None
+        self.assertEqual(locker.author_name, "Bo")
+        self.assertEqual(locker.created_time, "05:45")
+        self.assertEqual(locker.comment_id, "2468")
+        collaber = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người hợp tác thương hiệu": "An",
+                "ngày khóa hồ sơ": "2025-01-01T03:00:00Z",
+                "collab_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(collaber)
+        assert collaber is not None
+        self.assertEqual(collaber.author_name, "An")
+        self.assertEqual(collaber.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(collaber.comment_id, "9753")
+        self.assertEqual(person_name({"wishlist_owner": "Lan"}), "Lan")
+        self.assertEqual(person_name({"review_writer": "Bo"}), "Bo")
+        self.assertEqual(person_name({"qr_scanner": "Minh"}), "Minh")
+        self.assertEqual(person_name({"subscription_holder": "An"}), "An")
+        self.assertEqual(person_name({"collab_applicant": "Ha"}), "Ha")
+        self.assertEqual(person_name({"filter_user": "Vy"}), "Vy")
+        self.assertEqual(person_name({"profile_locker": "Tu"}), "Tu")
+        self.assertEqual(person_name({"người viết đánh giá": "My"}), "My")
+        self.assertEqual(person_name({"người theo dõi đơn": "Na"}), "Na")
+        self.assertEqual(person_name({"người đăng ký Meta": "Ki"}), "Ki")
+        self.assertEqual(person_name({"người lên lịch bài": "Ly"}), "Ly")
+        self.assertEqual(person_name({"caption_editor": "Do"}), "Do")
+        self.assertEqual(timestamp_of({"scanned_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"filtered_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"collabed_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"locked_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"wishlist_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"filter_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/wishlist/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/commerce/wishlist/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/commerce/shipping/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/feedback/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reviews/write/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/ar/effect/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/camera_effects/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/qr/?id=565656"),
+            "565656",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/accounts_center/?id=787878"),
+            "787878",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/creator_marketplace/?id=909090"),
+            "909090",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/brandcollabs/?id=101010"),
+            "101010",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/professional_mode/?id=202020"),
+            "202020",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/lock_profile/?id=303030"),
+            "303030",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/subscriptions/?id=404040"),
+            "404040",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/spark_ar/?id=505050"),
+            "505050",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nUse this filter\nTry AR effect\nOpen camera effects\n"
+                "Scan QR code\nShow QR code\nClear history\nManage history\n"
+                "Take a break\nRemove as friend\nFocus mode\nQuiet mode\n"
+                "Lock profile\nUnlock profile\nProfessional mode\n"
+                "Switch to professional\nSwitch to personal\n"
+                "Get Meta Verified\nRenew subscription\nSee subscription\n"
+                "Creator Marketplace\nFind brand partners\nApply to collab\n"
+                "Reuse content\nSchedule reel\nSee drafts\nDelete draft\n"
+                "Publish draft\nAutomatically share to Instagram\n"
+                "Connected experiences\nAccounts Center\n"
+                "Why am I seeing this ad\nAbout this ad\nShop the look\n"
+                "View products\nAdd to wishlist\nRemove from wishlist\n"
+                "Track order\nMark as shipped\nConfirm delivery\n"
+                "Leave seller feedback\nLeave buyer feedback\n"
+                "Rate your experience\n"
+                "Dùng bộ lọc này\nThử hiệu ứng AR\nMở hiệu ứng máy ảnh\n"
+                "Quét mã QR\nHiện mã QR\nXóa lịch sử\nQuản lý lịch sử\n"
+                "Tạm nghỉ\nHủy kết bạn\nChế độ tập trung\nChế độ yên tĩnh\n"
+                "Khóa hồ sơ\nMở khóa hồ sơ\nChế độ chuyên nghiệp\n"
+                "Chuyển sang chuyên nghiệp\nChuyển sang cá nhân\n"
+                "Nhận Meta Đã xác minh\nGia hạn đăng ký\nXem đăng ký\n"
+                "Thị trường nhà sáng tạo\nTìm đối tác thương hiệu\n"
+                "Ứng tuyển hợp tác\nTái sử dụng nội dung\nLên lịch Reels\n"
+                "Xem bản nháp\nXóa bản nháp\nĐăng bản nháp\n"
+                "Tự động chia sẻ lên Instagram\nTrải nghiệm được kết nối\n"
+                "Trung tâm tài khoản\nTại sao tôi thấy quảng cáo này\n"
+                "Giới thiệu về quảng cáo này\nMua phong cách này\n"
+                "Xem sản phẩm\nThêm vào danh sách mong muốn\n"
+                "Xóa khỏi danh sách mong muốn\nTheo dõi đơn hàng\n"
+                "Đánh dấu đã gửi\nXác nhận giao hàng\n"
+                "Để lại phản hồi người bán\nĐể lại phản hồi người mua\n"
+                "Đánh giá trải nghiệm của bạn"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nScan QR code\nLock profile\nQuét mã QR\nKhóa hồ sơ",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nScan QR code only after you finish editing the caption"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Scan QR code only after you finish editing the caption",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -169,6 +169,11 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "memorial_comment_id",
         "gift_comment_id",
         "game_comment_id",
+        "wishlist_comment_id",
+        "qr_comment_id",
+        "subscription_comment_id",
+        "collab_comment_id",
+        "filter_comment_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -283,6 +288,11 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "memorial_comment_id",
         "gift_comment_id",
         "game_comment_id",
+        "wishlist_comment_id",
+        "qr_comment_id",
+        "subscription_comment_id",
+        "collab_comment_id",
+        "filter_comment_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -724,6 +734,30 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "memorial_author",
             "gift_sender",
             "game_player",
+            "người viết đánh giá",
+            "nguoi viet danh gia",
+            "người theo dõi đơn",
+            "nguoi theo doi don",
+            "người dùng bộ lọc",
+            "nguoi dung bo loc",
+            "người quét QR",
+            "nguoi quet QR",
+            "người khóa hồ sơ",
+            "nguoi khoa ho so",
+            "người đăng ký Meta",
+            "nguoi dang ky Meta",
+            "người hợp tác thương hiệu",
+            "nguoi hop tac thuong hieu",
+            "người lên lịch bài",
+            "nguoi len lich bai",
+            "wishlist_owner",
+            "review_writer",
+            "qr_scanner",
+            "subscription_holder",
+            "collab_applicant",
+            "caption_editor",
+            "filter_user",
+            "profile_locker",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -1148,6 +1182,18 @@ def timestamp_of(row: object) -> str | None:
         "memorialized_at",
         "gifted_at",
         "played_at",
+        "thời gian đánh giá mua",
+        "thoi gian danh gia mua",
+        "ngày quét QR",
+        "ngay quet QR",
+        "ngày khóa hồ sơ",
+        "ngay khoa ho so",
+        "wishlisted_at",
+        "scanned_at",
+        "subscribed_at",
+        "collabed_at",
+        "filtered_at",
+        "locked_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:
