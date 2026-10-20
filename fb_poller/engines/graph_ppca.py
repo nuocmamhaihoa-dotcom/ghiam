@@ -320,6 +320,16 @@ def _append_rows(
                         "streamer_fan",
                         "restricted_user",
                         "shopper_name",
+                        "người giám sát",
+                        "nguoi giam sat",
+                        "người xác minh",
+                        "nguoi xac minh",
+                        "người song ca",
+                        "nguoi song ca",
+                        "publication_follower",
+                        "duet_partner",
+                        "family_supervisor",
+                        "verified_subscriber",
                     ),
                 )
             )
@@ -528,6 +538,16 @@ def _append_rows(
                             "streamer_fan",
                             "restricted_user",
                             "shopper_name",
+                            "người giám sát",
+                            "nguoi giam sat",
+                            "người xác minh",
+                            "nguoi xac minh",
+                            "người song ca",
+                            "nguoi song ca",
+                            "publication_follower",
+                            "duet_partner",
+                            "family_supervisor",
+                            "verified_subscriber",
                         ),
                     )
                 )
@@ -734,6 +754,18 @@ def post_id_from_url(url: str) -> str | None:
     friend_list = re.search(r"[?&]list_id=(\d+)", raw, re.IGNORECASE)
     if friend_list and re.search(r"/friends/lists", raw, re.IGNORECASE):
         return accepted_object_id(friend_list.group(1))
+    capcut = re.search(r"/reels/capcut/\?id=(\d+)", raw, re.IGNORECASE)
+    if capcut:
+        return accepted_object_id(capcut.group(1))
+    bulletin = re.search(r"/bulletin/(\d+)", raw, re.IGNORECASE)
+    if bulletin:
+        return accepted_object_id(bulletin.group(1))
+    family = re.search(r"/familycenter/\?id=(\d+)", raw, re.IGNORECASE)
+    if family:
+        return accepted_object_id(family.group(1))
+    meta_verified = re.search(r"/meta_verified/\?id=(\d+)", raw, re.IGNORECASE)
+    if meta_verified:
+        return accepted_object_id(meta_verified.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
@@ -748,7 +780,7 @@ def post_id_from_url(url: str) -> str | None:
     if stories:
         return accepted_object_id(stories.group(1))
     media = re.search(
-        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb|n|q|v|y|i|z|u|w|x|k|d|m)\.(\d+)",
+        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb|n|q|v|y|i|z|u|w|x|k|d|m|l)\.(\d+)",
         raw,
         re.IGNORECASE,
     )

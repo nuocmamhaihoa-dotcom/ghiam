@@ -4981,6 +4981,129 @@ class EngineTests(unittest.TestCase):
             "Cheer with Stars only after the stream starts tonight",
         )
 
+    def test_family_verified_chrome_supervisor_vn_keys_and_capcut_urls(self) -> None:
+        supervisor = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người giám sát": "Lan Parent",
+                "thời gian giám sát": "6h",
+            }
+        )
+        self.assertIsNotNone(supervisor)
+        assert supervisor is not None
+        self.assertEqual(supervisor.author_name, "Lan Parent")
+        self.assertEqual(supervisor.created_time, "6h")
+        verified = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người xác minh": "Minh",
+                "ngày xác minh": "hôm nay",
+                "family_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(verified)
+        assert verified is not None
+        self.assertEqual(verified.author_name, "Minh")
+        self.assertEqual(verified.created_time, "hôm nay")
+        self.assertEqual(verified.comment_id, "1357")
+        duet = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người song ca": "Bo",
+                "supervised_at": "05:45",
+                "verified_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(duet)
+        assert duet is not None
+        self.assertEqual(duet.author_name, "Bo")
+        self.assertEqual(duet.created_time, "05:45")
+        self.assertEqual(duet.comment_id, "2468")
+        publisher = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "publication_follower": "An",
+                "verified_at": "2025-01-01T03:00:00Z",
+            }
+        )
+        self.assertIsNotNone(publisher)
+        assert publisher is not None
+        self.assertEqual(publisher.author_name, "An")
+        self.assertEqual(publisher.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(person_name({"duet_partner": "Lan"}), "Lan")
+        self.assertEqual(person_name({"family_supervisor": "Bo"}), "Bo")
+        self.assertEqual(person_name({"người giám sát": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"dueted_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ngày xác minh": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"supervised_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"family_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"verified_comment_id": "44"}), "44")
+        self.assertEqual(first_comment_id({"duet_comment_id": "11"}), "11")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/capcut/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/bulletin/998877/"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/familycenter/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/meta_verified/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=l.777888"),
+            "777888",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nDuet with\nStitch with\nCapCut edit\n"
+                "Open in CapCut\nSee who likes you\nUpgrade to Premium\n"
+                "Hide my age\nHide my distance\nBulletin article\n"
+                "Follow publication\nSave article\nShare article\n"
+                "Listen to article\nFamily Center\nSupervise account\n"
+                "Set screen time\nSchedule breaks\nSee activity summary\n"
+                "Parent controls\nGet Meta Verified\nManage subscription\n"
+                "Cancel Meta Verified\nVerified badge\n"
+                "Song ca với\nGhép với\nChỉnh sửa CapCut\n"
+                "Mở trong CapCut\nXem ai thích bạn\nNâng cấp Premium\n"
+                "Ẩn tuổi của tôi\nẨn khoảng cách của tôi\nBài Bulletin\n"
+                "Theo dõi ấn phẩm\nLưu bài viết tin\nChia sẻ bài viết tin\n"
+                "Nghe bài viết\nTrung tâm Gia đình\nGiám sát tài khoản\n"
+                "Đặt thời gian sử dụng\nLên lịch nghỉ\n"
+                "Xem tóm tắt hoạt động\nKiểm soát của phụ huynh\n"
+                "Nhận Meta Verified\nQuản lý đăng ký\nHủy Meta Verified\n"
+                "Huy hiệu đã xác minh"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nGet Meta Verified\nSupervise account\n"
+                    "Nhận Meta Verified",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nGet Meta Verified only after you confirm the billing plan"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Get Meta Verified only after you confirm the billing plan",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
