@@ -226,7 +226,7 @@ def _steps_for(
         if not command or key in seen:
             continue
         seen.add(key)
-        skills = _match_skills(command, stems)
+        skills = _match_skills(" ".join(command.split()[:2]), stems)
         steps.append(
             Step(
                 command=command,
@@ -315,7 +315,8 @@ def render_scene(scene: Scene, root: Path | None = None) -> str:
             if step.skill:
                 bit += f" — learn/the/{step.skill}.md"
                 how = _how(root, step.skill) if root is not None else ""
-                if how:
+                tokens = step.command.lower().split()[:2]
+                if how and any(token in how.lower() for token in tokens if len(token) >= 3):
                     bit += f" — {how}"
             numbered.append(bit)
         parts.append("\n".join(numbered))
