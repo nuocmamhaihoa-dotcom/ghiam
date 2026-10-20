@@ -5223,6 +5223,126 @@ class EngineTests(unittest.TestCase):
             "Request a return only after you open the package carefully",
         )
 
+    def test_avatar_offer_chrome_status_vn_keys_and_avatar_urls(self) -> None:
+        avatar = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người tạo avatar": "Lan Avatar",
+                "thời gian trạng thái": "6h",
+            }
+        )
+        self.assertIsNotNone(avatar)
+        assert avatar is not None
+        self.assertEqual(avatar.author_name, "Lan Avatar")
+        self.assertEqual(avatar.created_time, "6h")
+        offerer = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người đề nghị": "Minh",
+                "ngày đề nghị": "hôm nay",
+                "avatar_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(offerer)
+        assert offerer is not None
+        self.assertEqual(offerer.author_name, "Minh")
+        self.assertEqual(offerer.created_time, "hôm nay")
+        self.assertEqual(offerer.comment_id, "1357")
+        statuser = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người đặt trạng thái": "Bo",
+                "status_at": "05:45",
+                "offer_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(statuser)
+        assert statuser is not None
+        self.assertEqual(statuser.author_name, "Bo")
+        self.assertEqual(statuser.created_time, "05:45")
+        self.assertEqual(statuser.comment_id, "2468")
+        member = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "status_author": "An",
+                "offered_at": "2025-01-01T03:00:00Z",
+            }
+        )
+        self.assertIsNotNone(member)
+        assert member is not None
+        self.assertEqual(member.author_name, "An")
+        self.assertEqual(member.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(person_name({"offer_buyer": "Lan"}), "Lan")
+        self.assertEqual(person_name({"membership_applicant": "Bo"}), "Bo")
+        self.assertEqual(person_name({"người tạo avatar": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"avatar_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ngày đề nghị": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"status_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"avatar_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"offer_comment_id": "44"}), "44")
+        self.assertEqual(first_comment_id({"status_comment_id": "11"}), "11")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/avatareditor/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/status/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/marketplace/offer/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=j.333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=f.777888"),
+            "777888",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nCreate avatar\nEdit avatar\nAvatar store\n"
+                "Wear avatar\nTake selfie for avatar\nSet status\n"
+                "Clear status\nCustomize status\nAuto captions\n"
+                "Edit captions\nDownload reel\nRemix audio\n"
+                "Agree to rules\nMembership questions\nAnswer questions\n"
+                "Accept offer\nDecline offer\nCounter offer\n"
+                "Withdraw offer\n"
+                "Tạo avatar\nChỉnh sửa avatar\nCửa hàng avatar\n"
+                "Đeo avatar\nChụp selfie cho avatar\nĐặt trạng thái\n"
+                "Xóa trạng thái\nTùy chỉnh trạng thái\nPhụ đề tự động\n"
+                "Chỉnh sửa phụ đề\nTải reel\nPhối âm thanh\n"
+                "Đồng ý với quy tắc\nCâu hỏi thành viên\nTrả lời câu hỏi\n"
+                "Chấp nhận đề nghị\nTừ chối đề nghị\nĐề nghị ngược\n"
+                "Rút đề nghị"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nCreate avatar\nAccept offer\n"
+                    "Tạo avatar",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nCreate avatar only after you finish the photo upload"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Create avatar only after you finish the photo upload",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

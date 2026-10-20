@@ -363,6 +363,16 @@ _AUTHOR_KEYS = (
     "insights_viewer",
     "goal_setter",
     "reviewer_name",
+    "người tạo avatar",
+    "nguoi tao avatar",
+    "người đề nghị",
+    "nguoi de nghi",
+    "người đặt trạng thái",
+    "nguoi dat trang thai",
+    "status_author",
+    "offer_buyer",
+    "membership_applicant",
+    "avatar_owner",
 )
 _TIME_KEYS = (
     "time",
@@ -636,6 +646,13 @@ _TIME_KEYS = (
     "reviewed_at",
     "returned_at",
     "quizzed_at",
+    "thời gian trạng thái",
+    "thoi gian trang thai",
+    "ngày đề nghị",
+    "ngay de nghi",
+    "status_at",
+    "offered_at",
+    "avatar_at",
 )
 
 
