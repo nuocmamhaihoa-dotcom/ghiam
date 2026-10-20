@@ -219,6 +219,11 @@ def _append_rows(
                         "answerer_name",
                         "guest_name",
                         "visitor_name",
+                        "fan_name",
+                        "buyer_name",
+                        "customer_name",
+                        "shopper_name",
+                        "donor_name",
                     ),
                 )
             )
@@ -326,6 +331,11 @@ def _append_rows(
                             "answerer_name",
                             "guest_name",
                             "visitor_name",
+                            "fan_name",
+                            "buyer_name",
+                            "customer_name",
+                            "shopper_name",
+                            "donor_name",
                         ),
                     )
                 )
@@ -430,6 +440,12 @@ def post_id_from_url(url: str) -> str | None:
     fundraiser = re.search(r"/fundraisers?/(\d+)", raw, re.IGNORECASE)
     if fundraiser:
         return accepted_object_id(fundraiser.group(1))
+    donate = re.search(r"/donate/(\d+)", raw, re.IGNORECASE)
+    if donate:
+        return accepted_object_id(donate.group(1))
+    job = re.search(r"[?&]job_opening_id=(\d+)", raw, re.IGNORECASE)
+    if job:
+        return accepted_object_id(job.group(1))
     share = re.search(r"/share/[pvr]/(pfbid[A-Za-z0-9]+|\d+)", raw, re.IGNORECASE)
     if share:
         return accepted_object_id(share.group(1))
@@ -446,7 +462,7 @@ def post_id_from_url(url: str) -> str | None:
     stories = re.search(r"/stories/(\d+)", raw, re.IGNORECASE)
     if stories:
         return accepted_object_id(stories.group(1))
-    media = re.search(r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s)\.(\d+)", raw, re.IGNORECASE)
+    media = re.search(r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h)\.(\d+)", raw, re.IGNORECASE)
     if media:
         return accepted_object_id(media.group(1))
     path = re.search(

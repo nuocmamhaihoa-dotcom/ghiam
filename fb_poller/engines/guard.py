@@ -116,6 +116,10 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "comment_uuid",
         "fb_cid",
         "social_comment_id",
+        "comment_sid",
+        "external_comment_id",
+        "source_comment_id",
+        "remote_comment_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -177,6 +181,10 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "comment_uuid",
         "fb_cid",
         "social_comment_id",
+        "comment_sid",
+        "external_comment_id",
+        "source_comment_id",
+        "remote_comment_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -447,6 +455,17 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "answerer_name",
             "guest_name",
             "visitor_name",
+            "tên người mua",
+            "ten nguoi mua",
+            "khách hàng",
+            "khach hang",
+            "người xem",
+            "nguoi xem",
+            "fan_name",
+            "buyer_name",
+            "customer_name",
+            "shopper_name",
+            "donor_name",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -735,6 +754,16 @@ def timestamp_of(row: object) -> str | None:
         "archived_at",
         "indexed_at",
         "queued_at",
+        "thời điểm xuất",
+        "thoi diem xuat",
+        "ngày thu thập",
+        "ngay thu thap",
+        "lúc comment",
+        "luc comment",
+        "listed_at",
+        "mirrored_at",
+        "copied_at",
+        "backed_up_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:

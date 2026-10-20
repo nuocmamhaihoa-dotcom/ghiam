@@ -3607,6 +3607,118 @@ class EngineTests(unittest.TestCase):
             "Please add to cart if the size is still available tonight",
         )
 
+    def test_jobs_dating_fundraiser_chrome_and_buyer_vn_keys(self) -> None:
+        buyer = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "tên người mua": "Lan Nguyen",
+                "thời điểm xuất": "4h",
+            }
+        )
+        self.assertIsNotNone(buyer)
+        assert buyer is not None
+        self.assertEqual(buyer.author_name, "Lan Nguyen")
+        self.assertEqual(buyer.created_time, "4h")
+        customer = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "khách hàng": "Minh",
+                "ngày thu thập": "hôm qua",
+                "external_comment_id": "5566",
+            }
+        )
+        self.assertIsNotNone(customer)
+        assert customer is not None
+        self.assertEqual(customer.author_name, "Minh")
+        self.assertEqual(customer.created_time, "hôm qua")
+        self.assertEqual(customer.comment_id, "5566")
+        viewer = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người xem": "Bo",
+                "lúc comment": "07:00",
+                "source_comment_id": "7788",
+            }
+        )
+        self.assertIsNotNone(viewer)
+        assert viewer is not None
+        self.assertEqual(viewer.author_name, "Bo")
+        self.assertEqual(viewer.created_time, "07:00")
+        self.assertEqual(viewer.comment_id, "7788")
+        fan = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "fan_name": "An",
+                "mirrored_at": "2024-11-01T05:00:00Z",
+            }
+        )
+        self.assertIsNotNone(fan)
+        assert fan is not None
+        self.assertEqual(fan.author_name, "An")
+        self.assertEqual(fan.created_time, "2024-11-01T05:00:00Z")
+        self.assertEqual(person_name({"buyer_name": "Lan"}), "Lan")
+        self.assertEqual(person_name({"customer_name": "Bo"}), "Bo")
+        self.assertEqual(person_name({"khách hàng": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"copied_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ngày thu thập": "hôm nay"}), "hôm nay")
+        self.assertEqual(timestamp_of({"listed_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"comment_sid": "11"}), "11")
+        self.assertEqual(first_comment_id({"remote_comment_id": "44"}), "44")
+        self.assertEqual(first_comment_id({"external_comment_id": "22"}), "22")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=r.12345"),
+            "12345",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=h.998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/donate/333444/"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url(
+                "https://www.facebook.com/jobs_application/?job_opening_id=111222"
+            ),
+            "111222",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nSee all jobs\nApply now\nJob preferences\n"
+                "Recommended jobs\nEasy apply\nWithdraw application\n"
+                "Company page\nAbout the company\nDating settings\n"
+                "Update preferences\nDiscover people\nPassed on you\n"
+                "It's a match\nPause dating\nSee fundraiser\n"
+                "Share fundraiser\nInvite donors\nFundraiser updates\n"
+                "Xem tất cả việc làm\nỨng tuyển ngay\nTùy chọn việc làm\n"
+                "Cài đặt hẹn hò\nKhám phá mọi người\nXem gây quỹ\n"
+                "Chia sẻ gây quỹ\nMời người quyên góp"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nApply now\nDating settings\nỨng tuyển ngay",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nPlease apply now if the position is still open this week"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Please apply now if the position is still open this week",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

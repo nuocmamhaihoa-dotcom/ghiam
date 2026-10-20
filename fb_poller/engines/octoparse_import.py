@@ -230,6 +230,17 @@ _AUTHOR_KEYS = (
     "answerer_name",
     "guest_name",
     "visitor_name",
+    "tên người mua",
+    "ten nguoi mua",
+    "khách hàng",
+    "khach hang",
+    "người xem",
+    "nguoi xem",
+    "fan_name",
+    "buyer_name",
+    "customer_name",
+    "shopper_name",
+    "donor_name",
 )
 _TIME_KEYS = (
     "time",
@@ -392,6 +403,16 @@ _TIME_KEYS = (
     "archived_at",
     "indexed_at",
     "queued_at",
+    "thời điểm xuất",
+    "thoi diem xuat",
+    "ngày thu thập",
+    "ngay thu thap",
+    "lúc comment",
+    "luc comment",
+    "listed_at",
+    "mirrored_at",
+    "copied_at",
+    "backed_up_at",
 )
 
 
