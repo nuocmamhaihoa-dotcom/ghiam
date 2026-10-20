@@ -680,6 +680,19 @@ def _append_rows(
                         "reactions_viewer",
                         "post_translator",
                         "group_follower",
+                        "người ghim trang cá nhân",
+                        "nguoi ghim trang ca nhan",
+                        "người gắn thẻ sản phẩm",
+                        "nguoi gan the san pham",
+                        "người tiếp tục xem",
+                        "nguoi tiep tuc xem",
+                        "người mở hộp thư hỗ trợ",
+                        "nguoi mo hop thu ho tro",
+                        "profile_pinner",
+                        "product_tagger",
+                        "continue_watcher",
+                        "support_inbox_user",
+                        "brand_content_creator",
                     ),
                 )
             )
@@ -1248,6 +1261,19 @@ def _append_rows(
                             "reactions_viewer",
                             "post_translator",
                             "group_follower",
+                            "người ghim trang cá nhân",
+                            "nguoi ghim trang ca nhan",
+                            "người gắn thẻ sản phẩm",
+                            "nguoi gan the san pham",
+                            "người tiếp tục xem",
+                            "nguoi tiep tuc xem",
+                            "người mở hộp thư hỗ trợ",
+                            "nguoi mo hop thu ho tro",
+                            "profile_pinner",
+                            "product_tagger",
+                            "continue_watcher",
+                            "support_inbox_user",
+                            "brand_content_creator",
                         ),
                     )
                 )
@@ -2124,6 +2150,30 @@ def post_id_from_url(url: str) -> str | None:
     save_link = re.search(r"/save/link/\?id=(\d+)", raw, re.IGNORECASE)
     if save_link:
         return accepted_object_id(save_link.group(1))
+    profile_pin = re.search(r"/profile/pin/\?id=(\d+)", raw, re.IGNORECASE)
+    if profile_pin:
+        return accepted_object_id(profile_pin.group(1))
+    highlights = re.search(r"/highlights/\?id=(\d+)", raw, re.IGNORECASE)
+    if highlights:
+        return accepted_object_id(highlights.group(1))
+    shops_collection = re.search(r"/shops/collection/\?id=(\d+)", raw, re.IGNORECASE)
+    if shops_collection:
+        return accepted_object_id(shops_collection.group(1))
+    branded_content = re.search(r"/branded_content/\?id=(\d+)", raw, re.IGNORECASE)
+    if branded_content:
+        return accepted_object_id(branded_content.group(1))
+    collaboration = re.search(r"/collaboration/\?id=(\d+)", raw, re.IGNORECASE)
+    if collaboration:
+        return accepted_object_id(collaboration.group(1))
+    watch_continue = re.search(r"/watch/continue/\?id=(\d+)", raw, re.IGNORECASE)
+    if watch_continue:
+        return accepted_object_id(watch_continue.group(1))
+    support_inbox = re.search(r"/support_inbox/\?id=(\d+)", raw, re.IGNORECASE)
+    if support_inbox:
+        return accepted_object_id(support_inbox.group(1))
+    adpreferences_topics = re.search(r"/adpreferences/topics/\?id=(\d+)", raw, re.IGNORECASE)
+    if adpreferences_topics:
+        return accepted_object_id(adpreferences_topics.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

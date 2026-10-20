@@ -703,6 +703,19 @@ _AUTHOR_KEYS = (
     "reactions_viewer",
     "post_translator",
     "group_follower",
+    "người ghim trang cá nhân",
+    "nguoi ghim trang ca nhan",
+    "người gắn thẻ sản phẩm",
+    "nguoi gan the san pham",
+    "người tiếp tục xem",
+    "nguoi tiep tuc xem",
+    "người mở hộp thư hỗ trợ",
+    "nguoi mo hop thu ho tro",
+    "profile_pinner",
+    "product_tagger",
+    "continue_watcher",
+    "support_inbox_user",
+    "brand_content_creator",
 )
 _TIME_KEYS = (
     "time",
@@ -1205,6 +1218,16 @@ _TIME_KEYS = (
     "voice_sent_at",
     "reactions_viewed_at",
     "translated_at",
+    "ngày ghim trang cá nhân",
+    "ngay ghim trang ca nhan",
+    "thời gian gắn thẻ sản phẩm",
+    "thoi gian gan the san pham",
+    "ngày mở hộp thư hỗ trợ",
+    "ngay mo hop thu ho tro",
+    "profile_pinned_at",
+    "product_tagged_at",
+    "continue_watched_at",
+    "support_opened_at",
 )
 
 

@@ -8521,6 +8521,143 @@ class EngineTests(unittest.TestCase):
             "Make admin only after you finish reviewing the requests",
         )
 
+    def test_profile_pin_shops_watching_support_vn_keys_and_urls(self) -> None:
+        pinner = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người ghim trang cá nhân": "Lan Pin",
+                "ngày ghim trang cá nhân": "6h",
+            }
+        )
+        self.assertIsNotNone(pinner)
+        assert pinner is not None
+        self.assertEqual(pinner.author_name, "Lan Pin")
+        self.assertEqual(pinner.created_time, "6h")
+        shopper = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người gắn thẻ sản phẩm": "Minh",
+                "thời gian gắn thẻ sản phẩm": "hôm nay",
+                "product_tag_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(shopper)
+        assert shopper is not None
+        self.assertEqual(shopper.author_name, "Minh")
+        self.assertEqual(shopper.created_time, "hôm nay")
+        self.assertEqual(shopper.comment_id, "1357")
+        watcher = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người tiếp tục xem": "Bo",
+                "continue_watched_at": "05:45",
+                "watching_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(watcher)
+        assert watcher is not None
+        self.assertEqual(watcher.author_name, "Bo")
+        self.assertEqual(watcher.created_time, "05:45")
+        self.assertEqual(watcher.comment_id, "2468")
+        supporter = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người mở hộp thư hỗ trợ": "An",
+                "ngày mở hộp thư hỗ trợ": "2025-01-01T03:00:00Z",
+                "support_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(supporter)
+        assert supporter is not None
+        self.assertEqual(supporter.author_name, "An")
+        self.assertEqual(supporter.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(supporter.comment_id, "9753")
+        self.assertEqual(person_name({"profile_pinner": "Lan"}), "Lan")
+        self.assertEqual(person_name({"product_tagger": "Bo"}), "Bo")
+        self.assertEqual(person_name({"continue_watcher": "Minh"}), "Minh")
+        self.assertEqual(person_name({"support_inbox_user": "An"}), "An")
+        self.assertEqual(person_name({"người ghim trang cá nhân": "Ha"}), "Ha")
+        self.assertEqual(person_name({"brand_content_creator": "Vy"}), "Vy")
+        self.assertEqual(timestamp_of({"profile_pinned_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"product_tagged_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"continue_watched_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"support_opened_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"pin_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"support_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/profile/pin/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/highlights/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/shops/collection/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/branded_content/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/collaboration/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/watch/continue/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/support_inbox/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/adpreferences/topics/?id=565656"),
+            "565656",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nPin to profile\nUnpin from profile\nFundraiser goal\n"
+                "Stories archive\nSave story\nAd topics\nBrand content\n"
+                "Collaboration post\nTag a product\nAdd products\n"
+                "Shops collection\nBrowse shop\nContinue watching\nCast to TV\n"
+                "Report problem\nSupport inbox\nAccount status\nAccount Center\n"
+                "How others can find and contact you\nPosts you're tagged in\n"
+                "Ghim lên trang cá nhân\nBỏ ghim khỏi trang cá nhân\n"
+                "Mục tiêu gây quỹ\nKho lưu trữ tin\nLưu tin\nChủ đề quảng cáo\n"
+                "Nội dung thương hiệu\nBài viết hợp tác\nGắn thẻ sản phẩm\n"
+                "Thêm sản phẩm\nBộ sưu tập cửa hàng\nDuyệt cửa hàng\n"
+                "Tiếp tục xem\nPhát lên TV\nBáo cáo sự cố\nHộp thư hỗ trợ\n"
+                "Trạng thái tài khoản\nTrung tâm tài khoản\n"
+                "Cách người khác tìm và liên hệ với bạn\n"
+                "Bài viết bạn được gắn thẻ"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nPin to profile\nContinue watching\n"
+                    "Ghim lên trang cá nhân\nTiếp tục xem",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nPin to profile only after you finish the album layout"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Pin to profile only after you finish the album layout",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

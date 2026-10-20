@@ -256,6 +256,10 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "voice_comment_id",
         "reactions_comment_id",
         "translate_comment_id",
+        "pin_comment_id",
+        "product_tag_comment_id",
+        "watching_comment_id",
+        "support_comment_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -457,6 +461,10 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "voice_comment_id",
         "reactions_comment_id",
         "translate_comment_id",
+        "pin_comment_id",
+        "product_tag_comment_id",
+        "watching_comment_id",
+        "support_comment_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -1200,6 +1208,19 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "reactions_viewer",
             "post_translator",
             "group_follower",
+            "người ghim trang cá nhân",
+            "nguoi ghim trang ca nhan",
+            "người gắn thẻ sản phẩm",
+            "nguoi gan the san pham",
+            "người tiếp tục xem",
+            "nguoi tiep tuc xem",
+            "người mở hộp thư hỗ trợ",
+            "nguoi mo hop thu ho tro",
+            "profile_pinner",
+            "product_tagger",
+            "continue_watcher",
+            "support_inbox_user",
+            "brand_content_creator",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -1663,6 +1684,16 @@ def timestamp_of(row: object) -> str | None:
         "voice_sent_at",
         "reactions_viewed_at",
         "translated_at",
+        "ngày ghim trang cá nhân",
+        "ngay ghim trang ca nhan",
+        "thời gian gắn thẻ sản phẩm",
+        "thoi gian gan the san pham",
+        "ngày mở hộp thư hỗ trợ",
+        "ngay mo hop thu ho tro",
+        "profile_pinned_at",
+        "product_tagged_at",
+        "continue_watched_at",
+        "support_opened_at",
         "mirrored_at",
         "copied_at",
         "backed_up_at",
@@ -1996,6 +2027,16 @@ def timestamp_of(row: object) -> str | None:
         "voice_sent_at",
         "reactions_viewed_at",
         "translated_at",
+        "ngày ghim trang cá nhân",
+        "ngay ghim trang ca nhan",
+        "thời gian gắn thẻ sản phẩm",
+        "thoi gian gan the san pham",
+        "ngày mở hộp thư hỗ trợ",
+        "ngay mo hop thu ho tro",
+        "profile_pinned_at",
+        "product_tagged_at",
+        "continue_watched_at",
+        "support_opened_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:
