@@ -690,6 +690,19 @@ _AUTHOR_KEYS = (
     "collectible_viewer",
     "poll_option_adder",
     "guest_inviter",
+    "người đặt quản trị viên",
+    "nguoi dat quan tri vien",
+    "người gửi tin nhắn thoại",
+    "nguoi gui tin nhan thoai",
+    "người xem tất cả cảm xúc",
+    "nguoi xem tat ca cam xuc",
+    "người dịch bài viết",
+    "nguoi dich bai viet",
+    "group_admin_maker",
+    "voice_sender",
+    "reactions_viewer",
+    "post_translator",
+    "group_follower",
 )
 _TIME_KEYS = (
     "time",
@@ -1182,6 +1195,16 @@ _TIME_KEYS = (
     "seller_messaged_at",
     "collectible_viewed_at",
     "poll_option_added_at",
+    "ngày đặt quản trị viên",
+    "ngay dat quan tri vien",
+    "thời gian gửi tin nhắn thoại",
+    "thoi gian gui tin nhan thoai",
+    "ngày dịch bài viết",
+    "ngay dich bai viet",
+    "admin_made_at",
+    "voice_sent_at",
+    "reactions_viewed_at",
+    "translated_at",
 )
 
 

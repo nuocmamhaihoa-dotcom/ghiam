@@ -667,6 +667,19 @@ def _append_rows(
                         "collectible_viewer",
                         "poll_option_adder",
                         "guest_inviter",
+                        "người đặt quản trị viên",
+                        "nguoi dat quan tri vien",
+                        "người gửi tin nhắn thoại",
+                        "nguoi gui tin nhan thoai",
+                        "người xem tất cả cảm xúc",
+                        "nguoi xem tat ca cam xuc",
+                        "người dịch bài viết",
+                        "nguoi dich bai viet",
+                        "group_admin_maker",
+                        "voice_sender",
+                        "reactions_viewer",
+                        "post_translator",
+                        "group_follower",
                     ),
                 )
             )
@@ -1222,6 +1235,19 @@ def _append_rows(
                             "collectible_viewer",
                             "poll_option_adder",
                             "guest_inviter",
+                            "người đặt quản trị viên",
+                            "nguoi dat quan tri vien",
+                            "người gửi tin nhắn thoại",
+                            "nguoi gui tin nhan thoai",
+                            "người xem tất cả cảm xúc",
+                            "nguoi xem tat ca cam xuc",
+                            "người dịch bài viết",
+                            "nguoi dich bai viet",
+                            "group_admin_maker",
+                            "voice_sender",
+                            "reactions_viewer",
+                            "post_translator",
+                            "group_follower",
                         ),
                     )
                 )
@@ -2077,6 +2103,27 @@ def post_id_from_url(url: str) -> str | None:
     profile_view_as = re.search(r"/profile/view_as/\?id=(\d+)", raw, re.IGNORECASE)
     if profile_view_as:
         return accepted_object_id(profile_view_as.group(1))
+    groups_insights = re.search(r"/groups/insights/\?id=(\d+)", raw, re.IGNORECASE)
+    if groups_insights:
+        return accepted_object_id(groups_insights.group(1))
+    groups_snooze = re.search(r"/groups/snooze/\?id=(\d+)", raw, re.IGNORECASE)
+    if groups_snooze:
+        return accepted_object_id(groups_snooze.group(1))
+    groups_admins = re.search(r"/groups/admins/\?id=(\d+)", raw, re.IGNORECASE)
+    if groups_admins:
+        return accepted_object_id(groups_admins.group(1))
+    messenger_voice = re.search(r"/messenger/(?:voice|video)/\?id=(\d+)", raw, re.IGNORECASE)
+    if messenger_voice:
+        return accepted_object_id(messenger_voice.group(1))
+    reactions_all = re.search(r"/reactions/all/\?id=(\d+)", raw, re.IGNORECASE)
+    if reactions_all:
+        return accepted_object_id(reactions_all.group(1))
+    translate = re.search(r"/translate/\?id=(\d+)", raw, re.IGNORECASE)
+    if translate:
+        return accepted_object_id(translate.group(1))
+    save_link = re.search(r"/save/link/\?id=(\d+)", raw, re.IGNORECASE)
+    if save_link:
+        return accepted_object_id(save_link.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

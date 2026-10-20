@@ -8390,6 +8390,137 @@ class EngineTests(unittest.TestCase):
             "Life events only after you finish updating the timeline",
         )
 
+    def test_group_admin_messenger_media_reactions_vn_keys_and_urls(self) -> None:
+        admin = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người đặt quản trị viên": "Lan Admin",
+                "ngày đặt quản trị viên": "6h",
+            }
+        )
+        self.assertIsNotNone(admin)
+        assert admin is not None
+        self.assertEqual(admin.author_name, "Lan Admin")
+        self.assertEqual(admin.created_time, "6h")
+        voicer = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người gửi tin nhắn thoại": "Minh",
+                "thời gian gửi tin nhắn thoại": "hôm nay",
+                "voice_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(voicer)
+        assert voicer is not None
+        self.assertEqual(voicer.author_name, "Minh")
+        self.assertEqual(voicer.created_time, "hôm nay")
+        self.assertEqual(voicer.comment_id, "1357")
+        reactor = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người xem tất cả cảm xúc": "Bo",
+                "reactions_viewed_at": "05:45",
+                "reactions_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(reactor)
+        assert reactor is not None
+        self.assertEqual(reactor.author_name, "Bo")
+        self.assertEqual(reactor.created_time, "05:45")
+        self.assertEqual(reactor.comment_id, "2468")
+        translator = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người dịch bài viết": "An",
+                "ngày dịch bài viết": "2025-01-01T03:00:00Z",
+                "translate_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(translator)
+        assert translator is not None
+        self.assertEqual(translator.author_name, "An")
+        self.assertEqual(translator.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(translator.comment_id, "9753")
+        self.assertEqual(person_name({"group_admin_maker": "Lan"}), "Lan")
+        self.assertEqual(person_name({"voice_sender": "Bo"}), "Bo")
+        self.assertEqual(person_name({"reactions_viewer": "Minh"}), "Minh")
+        self.assertEqual(person_name({"post_translator": "An"}), "An")
+        self.assertEqual(person_name({"người đặt quản trị viên": "Ha"}), "Ha")
+        self.assertEqual(person_name({"group_follower": "Vy"}), "Vy")
+        self.assertEqual(timestamp_of({"admin_made_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"voice_sent_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"reactions_viewed_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"translated_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"admin_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"translate_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/groups/insights/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/groups/snooze/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/groups/admins/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/messenger/voice/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/messenger/video/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reactions/all/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/translate/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/save/link/?id=565656"),
+            "565656",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nSnooze group for 30 days\nFollow group\nUnfollow group\n"
+                "Invite as admin\nMake admin\nRemove admin\n"
+                "Voice message\nVideo message\nPhoto message\n"
+                "React with\nSee all reactions\nTranslate post\nSave link\n"
+                "Tạm ẩn nhóm trong 30 ngày\nTheo dõi nhóm\nBỏ theo dõi nhóm\n"
+                "Mời làm quản trị viên\nĐặt làm quản trị viên\nGỡ quản trị viên\n"
+                "Tin nhắn thoại\nTin nhắn video\nTin nhắn ảnh\n"
+                "Thả cảm xúc\nXem tất cả cảm xúc\nDịch bài viết\nLưu liên kết"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nMake admin\nSee all reactions\n"
+                    "Đặt làm quản trị viên\nXem tất cả cảm xúc",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nMake admin only after you finish reviewing the requests"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Make admin only after you finish reviewing the requests",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
