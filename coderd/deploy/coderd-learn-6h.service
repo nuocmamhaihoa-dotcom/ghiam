@@ -1,0 +1,19 @@
+[Unit]
+Description=coderd study without pause for ten hours
+After=coderd-model.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+TimeoutStartSec=infinity
+Restart=on-failure
+RestartSec=2
+User=coder
+WorkingDirectory=/opt/coderd
+Environment=HOME=/opt/coderd/var/home
+Environment=CODERD_STUDY_HOURS=10
+EnvironmentFile=/opt/coderd/worker.env
+ExecStartPre=+/bin/systemctl stop coderd-learn.timer
+ExecStartPre=+/bin/systemctl stop coderd-learn.service
+ExecStart=/bin/sh /opt/coderd/deploy/study-until.sh
+ExecStopPost=+/bin/sh /opt/coderd/deploy/after-study.sh

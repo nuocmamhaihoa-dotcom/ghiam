@@ -1,0 +1,12 @@
+[Unit]
+Description=coderd worker
+
+[Service]
+EnvironmentFile=%h/.config/coderd/worker.env
+WorkingDirectory=%CODERD_PREFIX%
+ExecStart=%CODERD_PREFIX%/.venv/bin/python -m worker.connect
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
