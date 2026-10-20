@@ -350,6 +350,15 @@ def _append_rows(
                         "offer_buyer",
                         "membership_applicant",
                         "avatar_owner",
+                        "người đăng Threads",
+                        "nguoi dang Threads",
+                        "người xem lại thẻ",
+                        "nguoi xem lai the",
+                        "người lên lịch live",
+                        "nguoi len lich live",
+                        "threads_author",
+                        "listing_reporter",
+                        "live_scheduler",
                     ),
                 )
             )
@@ -588,6 +597,15 @@ def _append_rows(
                             "offer_buyer",
                             "membership_applicant",
                             "avatar_owner",
+                            "người đăng Threads",
+                            "nguoi dang Threads",
+                            "người xem lại thẻ",
+                            "nguoi xem lai the",
+                            "người lên lịch live",
+                            "nguoi len lich live",
+                            "threads_author",
+                            "listing_reporter",
+                            "live_scheduler",
                         ),
                     )
                 )
@@ -827,6 +845,21 @@ def post_id_from_url(url: str) -> str | None:
     market_offer = re.search(r"/marketplace/offer/\?id=(\d+)", raw, re.IGNORECASE)
     if market_offer:
         return accepted_object_id(market_offer.group(1))
+    share_threads = re.search(r"/share/threads/\?id=(\d+)", raw, re.IGNORECASE)
+    if share_threads:
+        return accepted_object_id(share_threads.group(1))
+    instagram_crosspost = re.search(r"/instagram/crosspost/\?id=(\d+)", raw, re.IGNORECASE)
+    if instagram_crosspost:
+        return accepted_object_id(instagram_crosspost.group(1))
+    effects_saved = re.search(r"/effects/saved/\?id=(\d+)", raw, re.IGNORECASE)
+    if effects_saved:
+        return accepted_object_id(effects_saved.group(1))
+    live_schedule = re.search(r"/live/schedule/\?id=(\d+)", raw, re.IGNORECASE)
+    if live_schedule:
+        return accepted_object_id(live_schedule.group(1))
+    privacy_tags = re.search(r"/privacy/tags/\?id=(\d+)", raw, re.IGNORECASE)
+    if privacy_tags:
+        return accepted_object_id(privacy_tags.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

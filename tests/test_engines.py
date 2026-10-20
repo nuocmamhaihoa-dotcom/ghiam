@@ -5343,6 +5343,134 @@ class EngineTests(unittest.TestCase):
             "Create avatar only after you finish the photo upload",
         )
 
+    def test_threads_privacy_chrome_crosspost_vn_keys_and_live_urls(self) -> None:
+        crossposter = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người đăng Threads": "Lan Threads",
+                "thời gian đăng chéo": "6h",
+            }
+        )
+        self.assertIsNotNone(crossposter)
+        assert crossposter is not None
+        self.assertEqual(crossposter.author_name, "Lan Threads")
+        self.assertEqual(crossposter.created_time, "6h")
+        tagger = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người xem lại thẻ": "Minh",
+                "ngày xem lại thẻ": "hôm nay",
+                "threads_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(tagger)
+        assert tagger is not None
+        self.assertEqual(tagger.author_name, "Minh")
+        self.assertEqual(tagger.created_time, "hôm nay")
+        self.assertEqual(tagger.comment_id, "1357")
+        scheduler = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người lên lịch live": "Bo",
+                "crossposted_at": "05:45",
+                "tag_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(scheduler)
+        assert scheduler is not None
+        self.assertEqual(scheduler.author_name, "Bo")
+        self.assertEqual(scheduler.created_time, "05:45")
+        self.assertEqual(scheduler.comment_id, "2468")
+        blocker = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "live_scheduler": "An",
+                "tag_reviewed_at": "2025-01-01T03:00:00Z",
+            }
+        )
+        self.assertIsNotNone(blocker)
+        assert blocker is not None
+        self.assertEqual(blocker.author_name, "An")
+        self.assertEqual(blocker.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(person_name({"threads_author": "Lan"}), "Lan")
+        self.assertEqual(person_name({"listing_reporter": "Bo"}), "Bo")
+        self.assertEqual(person_name({"người đăng Threads": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"live_scheduled_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ngày xem lại thẻ": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"crossposted_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"threads_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"tag_comment_id": "44"}), "44")
+        self.assertEqual(first_comment_id({"live_comment_id": "11"}), "11")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/share/threads/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/instagram/crosspost/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/effects/saved/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/live/schedule/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/privacy/tags/?id=777888"),
+            "777888",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nShare to Threads\nCrosspost to Instagram\n"
+                "Also share to Instagram\nPost to Threads\nView on Threads\n"
+                "View on Instagram\nBrowse effects\nSaved effects\n"
+                "Trending effects\nEffect details\nManage your privacy\n"
+                "Who can see your posts\nWho can see your friends list\n"
+                "Limit past posts\nReview tagged posts\nTimeline review\n"
+                "Tag review\nMeet in a public place\nBring a friend\n"
+                "Report this listing\nBlock seller\nBlock buyer\n"
+                "Schedule live video\nGo live with a friend\n"
+                "Invite to go live\nEnd live for viewers\n"
+                "Chia sẻ lên Threads\nĐăng chéo lên Instagram\n"
+                "Cũng chia sẻ lên Instagram\nĐăng lên Threads\n"
+                "Xem trên Threads\nXem trên Instagram\nDuyệt hiệu ứng\n"
+                "Hiệu ứng đã lưu\nHiệu ứng thịnh hành\nChi tiết hiệu ứng\n"
+                "Quản lý quyền riêng tư của bạn\n"
+                "Ai có thể xem danh sách bạn bè của bạn\n"
+                "Giới hạn bài viết cũ\nXem lại bài viết được gắn thẻ\n"
+                "Xem lại dòng thời gian\nXem lại gắn thẻ\n"
+                "Gặp ở nơi công cộng\nMang theo bạn\n"
+                "Báo cáo tin đăng này\nChặn người bán\nChặn người mua\n"
+                "Lên lịch video trực tiếp\nPhát trực tiếp với bạn\n"
+                "Mời phát trực tiếp\nKết thúc phát cho người xem"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nShare to Threads\nSchedule live video\n"
+                    "Chia sẻ lên Threads",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nShare to Threads only after you finish editing the caption"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Share to Threads only after you finish editing the caption",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
