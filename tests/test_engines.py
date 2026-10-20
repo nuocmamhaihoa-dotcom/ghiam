@@ -4731,6 +4731,131 @@ class EngineTests(unittest.TestCase):
             "Promote Page only after you finish the creative brief",
         )
 
+    def test_notes_rooms_chrome_noter_vn_keys_and_horizon_urls(self) -> None:
+        noter = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người ghi chú": "Lan Note",
+                "thời gian ghi chú": "6h",
+            }
+        )
+        self.assertIsNotNone(noter)
+        assert noter is not None
+        self.assertEqual(noter.author_name, "Lan Note")
+        self.assertEqual(noter.created_time, "6h")
+        templater = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người tạo mẫu": "Minh",
+                "ngày tạo mẫu": "hôm nay",
+                "note_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(templater)
+        assert templater is not None
+        self.assertEqual(templater.author_name, "Minh")
+        self.assertEqual(templater.created_time, "hôm nay")
+        self.assertEqual(templater.comment_id, "1357")
+        joiner = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người tham gia phòng": "Bo",
+                "noted_at": "05:45",
+                "room_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(joiner)
+        assert joiner is not None
+        self.assertEqual(joiner.author_name, "Bo")
+        self.assertEqual(joiner.created_time, "05:45")
+        self.assertEqual(joiner.comment_id, "2468")
+        rater = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "note_author": "An",
+                "templated_at": "2025-01-01T03:00:00Z",
+            }
+        )
+        self.assertIsNotNone(rater)
+        assert rater is not None
+        self.assertEqual(rater.author_name, "An")
+        self.assertEqual(rater.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(person_name({"template_creator": "Lan"}), "Lan")
+        self.assertEqual(person_name({"room_joiner": "Bo"}), "Bo")
+        self.assertEqual(person_name({"người ghi chú": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"joined_room_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ngày tạo mẫu": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"noted_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(first_comment_id({"note_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"room_comment_id": "44"}), "44")
+        self.assertEqual(first_comment_id({"template_comment_id": "11"}), "11")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/horizon/world/111222/"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/communitynotes/998877/"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/reels/templates/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/rooms/join/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=k.777888"),
+            "777888",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nJoin Workplace\nWorkplace chat\nCreate a team\n"
+                "Open Horizon World\nJoin World\nQuest settings\n"
+                "Cast to Quest\nCreate a room\nRoom link\n"
+                "Copy room link\nEnd room for all\nStop sharing\n"
+                "Add a note\nCommunity note\nRate this note\n"
+                "See fact check\nRelated articles\nMore about this\n"
+                "Use template\nSee templates\nCreate from template\n"
+                "Remix with template\nWrite on timeline\n"
+                "Send birthday wish\nSee birthday posts\n"
+                "Tham gia Workplace\nChat Workplace\nTạo nhóm làm việc\n"
+                "Mở Horizon World\nTham gia World\nCài đặt Quest\n"
+                "Chiếu lên Quest\nTạo phòng\nLiên kết phòng\n"
+                "Sao chép liên kết phòng\nKết thúc phòng cho mọi người\n"
+                "Dừng chia sẻ\nThêm ghi chú\nGhi chú cộng đồng\n"
+                "Đánh giá ghi chú này\nXem kiểm chứng\n"
+                "Bài viết liên quan\nThêm về điều này\nDùng mẫu\n"
+                "Xem mẫu\nTạo từ mẫu\nPhối với mẫu\n"
+                "Viết lên dòng thời gian\nGửi lời chúc sinh nhật\n"
+                "Xem bài sinh nhật"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nCommunity note\nUse template\n"
+                    "Ghi chú cộng đồng",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nCommunity note only after you read the source carefully"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Community note only after you read the source carefully",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

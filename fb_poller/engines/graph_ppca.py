@@ -300,6 +300,16 @@ def _append_rows(
                         "alt_text_editor",
                         "inbox_agent",
                         "advertiser_name",
+                        "người ghi chú",
+                        "nguoi ghi chu",
+                        "người tạo mẫu",
+                        "nguoi tao mau",
+                        "người tham gia phòng",
+                        "nguoi tham gia phong",
+                        "note_author",
+                        "template_creator",
+                        "room_joiner",
+                        "note_rater",
                     ),
                 )
             )
@@ -488,6 +498,16 @@ def _append_rows(
                             "alt_text_editor",
                             "inbox_agent",
                             "advertiser_name",
+                            "người ghi chú",
+                            "nguoi ghi chu",
+                            "người tạo mẫu",
+                            "nguoi tao mau",
+                            "người tham gia phòng",
+                            "nguoi tham gia phong",
+                            "note_author",
+                            "template_creator",
+                            "room_joiner",
+                            "note_rater",
                         ),
                     )
                 )
@@ -673,6 +693,18 @@ def post_id_from_url(url: str) -> str | None:
     year_review = re.search(r"/yearinreview/\?id=(\d+)", raw, re.IGNORECASE)
     if year_review:
         return accepted_object_id(year_review.group(1))
+    horizon = re.search(r"/horizon/world/(\d+)", raw, re.IGNORECASE)
+    if horizon:
+        return accepted_object_id(horizon.group(1))
+    community_notes = re.search(r"/communitynotes/(\d+)", raw, re.IGNORECASE)
+    if community_notes:
+        return accepted_object_id(community_notes.group(1))
+    templates = re.search(r"/reels/templates/\?id=(\d+)", raw, re.IGNORECASE)
+    if templates:
+        return accepted_object_id(templates.group(1))
+    room_join = re.search(r"/rooms/join/\?id=(\d+)", raw, re.IGNORECASE)
+    if room_join:
+        return accepted_object_id(room_join.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
@@ -687,7 +719,7 @@ def post_id_from_url(url: str) -> str | None:
     if stories:
         return accepted_object_id(stories.group(1))
     media = re.search(
-        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb|n|q|v|y|i|z|u|w|x)\.(\d+)",
+        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb|n|q|v|y|i|z|u|w|x|k)\.(\d+)",
         raw,
         re.IGNORECASE,
     )
