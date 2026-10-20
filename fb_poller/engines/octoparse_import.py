@@ -651,6 +651,19 @@ _AUTHOR_KEYS = (
     "group_inviter",
     "rose_sender",
     "anonymous_poster",
+    "người thêm vào túi",
+    "nguoi them vao tui",
+    "người bắt đầu cuộc gọi",
+    "nguoi bat dau cuoc goi",
+    "người tìm điểm bỏ phiếu",
+    "nguoi tim diem bo phieu",
+    "người xem giải đấu",
+    "nguoi xem giai dau",
+    "bag_adder",
+    "call_starter",
+    "polling_finder",
+    "spectate_user",
+    "monetization_manager",
 )
 _TIME_KEYS = (
     "time",
@@ -1113,6 +1126,16 @@ _TIME_KEYS = (
     "announcement_pinned_at",
     "group_invited_at",
     "rose_sent_at",
+    "ngày thêm vào túi",
+    "ngay them vao tui",
+    "thời gian bắt đầu cuộc gọi",
+    "thoi gian bat dau cuoc goi",
+    "ngày xem giải đấu",
+    "ngay xem giai dau",
+    "bag_added_at",
+    "call_started_at",
+    "polling_found_at",
+    "spectated_at",
 )
 
 

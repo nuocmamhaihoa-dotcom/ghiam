@@ -628,6 +628,19 @@ def _append_rows(
                         "group_inviter",
                         "rose_sender",
                         "anonymous_poster",
+                        "người thêm vào túi",
+                        "nguoi them vao tui",
+                        "người bắt đầu cuộc gọi",
+                        "nguoi bat dau cuoc goi",
+                        "người tìm điểm bỏ phiếu",
+                        "nguoi tim diem bo phieu",
+                        "người xem giải đấu",
+                        "nguoi xem giai dau",
+                        "bag_adder",
+                        "call_starter",
+                        "polling_finder",
+                        "spectate_user",
+                        "monetization_manager",
                     ),
                 )
             )
@@ -1144,6 +1157,19 @@ def _append_rows(
                             "group_inviter",
                             "rose_sender",
                             "anonymous_poster",
+                            "người thêm vào túi",
+                            "nguoi them vao tui",
+                            "người bắt đầu cuộc gọi",
+                            "nguoi bat dau cuoc goi",
+                            "người tìm điểm bỏ phiếu",
+                            "nguoi tim diem bo phieu",
+                            "người xem giải đấu",
+                            "nguoi xem giai dau",
+                            "bag_adder",
+                            "call_starter",
+                            "polling_finder",
+                            "spectate_user",
+                            "monetization_manager",
                         ),
                     )
                 )
@@ -1930,6 +1956,30 @@ def post_id_from_url(url: str) -> str | None:
     roses = re.search(r"/roses/\?id=(\d+)", raw, re.IGNORECASE)
     if roses:
         return accepted_object_id(roses.group(1))
+    bag = re.search(r"/bag/\?id=(\d+)", raw, re.IGNORECASE)
+    if bag:
+        return accepted_object_id(bag.group(1))
+    checkout = re.search(r"/checkout/\?id=(\d+)", raw, re.IGNORECASE)
+    if checkout:
+        return accepted_object_id(checkout.group(1))
+    orders_track = re.search(r"/orders/track/\?id=(\d+)", raw, re.IGNORECASE)
+    if orders_track:
+        return accepted_object_id(orders_track.group(1))
+    rooms_call = re.search(r"/rooms/call/\?id=(\d+)", raw, re.IGNORECASE)
+    if rooms_call:
+        return accepted_object_id(rooms_call.group(1))
+    pollingplace = re.search(r"/pollingplace/\?id=(\d+)", raw, re.IGNORECASE)
+    if pollingplace:
+        return accepted_object_id(pollingplace.group(1))
+    elections_reminders = re.search(r"/elections/reminders/\?id=(\d+)", raw, re.IGNORECASE)
+    if elections_reminders:
+        return accepted_object_id(elections_reminders.group(1))
+    gaming_spectate = re.search(r"/gaming/spectate/\?id=(\d+)", raw, re.IGNORECASE)
+    if gaming_spectate:
+        return accepted_object_id(gaming_spectate.group(1))
+    tournament_bracket = re.search(r"/tournament/bracket/\?id=(\d+)", raw, re.IGNORECASE)
+    if tournament_bracket:
+        return accepted_object_id(tournament_bracket.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))

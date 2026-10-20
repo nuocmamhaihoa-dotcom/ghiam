@@ -7994,6 +7994,135 @@ class EngineTests(unittest.TestCase):
             "Send rose only after you finish the dating profile",
         )
 
+    def test_bag_video_call_polling_spectate_vn_keys_and_urls(self) -> None:
+        bagger = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người thêm vào túi": "Lan Bag",
+                "ngày thêm vào túi": "6h",
+            }
+        )
+        self.assertIsNotNone(bagger)
+        assert bagger is not None
+        self.assertEqual(bagger.author_name, "Lan Bag")
+        self.assertEqual(bagger.created_time, "6h")
+        caller = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người bắt đầu cuộc gọi": "Minh",
+                "thời gian bắt đầu cuộc gọi": "hôm nay",
+                "call_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(caller)
+        assert caller is not None
+        self.assertEqual(caller.author_name, "Minh")
+        self.assertEqual(caller.created_time, "hôm nay")
+        self.assertEqual(caller.comment_id, "1357")
+        voter = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người tìm điểm bỏ phiếu": "Bo",
+                "polling_found_at": "05:45",
+                "polling_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(voter)
+        assert voter is not None
+        self.assertEqual(voter.author_name, "Bo")
+        self.assertEqual(voter.created_time, "05:45")
+        self.assertEqual(voter.comment_id, "2468")
+        spectator = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "người xem giải đấu": "An",
+                "ngày xem giải đấu": "2025-01-01T03:00:00Z",
+                "spectate_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(spectator)
+        assert spectator is not None
+        self.assertEqual(spectator.author_name, "An")
+        self.assertEqual(spectator.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(spectator.comment_id, "9753")
+        self.assertEqual(person_name({"bag_adder": "Lan"}), "Lan")
+        self.assertEqual(person_name({"call_starter": "Bo"}), "Bo")
+        self.assertEqual(person_name({"polling_finder": "Minh"}), "Minh")
+        self.assertEqual(person_name({"spectate_user": "An"}), "An")
+        self.assertEqual(person_name({"người thêm vào túi": "Ha"}), "Ha")
+        self.assertEqual(person_name({"monetization_manager": "Vy"}), "Vy")
+        self.assertEqual(timestamp_of({"bag_added_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"call_started_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"polling_found_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"spectated_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"bag_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"spectate_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/bag/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/checkout/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/orders/track/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/rooms/call/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/pollingplace/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/elections/reminders/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/gaming/spectate/?id=343434"),
+            "343434",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/tournament/bracket/?id=565656"),
+            "565656",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nAdd to bag\nStart a video call\nFind polling place\n"
+                "Election day reminders\nTournament bracket\nSpectate live\n"
+                "Donate with\nCrossposting settings\nMonetization status\n"
+                "Thêm vào túi\nBắt đầu cuộc gọi video\nTìm điểm bỏ phiếu\n"
+                "Nhắc nhở ngày bầu cử\nBảng đấu giải\nXem trực tiếp giải\n"
+                "Quyên góp bằng\nCài đặt đăng chéo\nTrạng thái kiếm tiền"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nAdd to bag\nSpectate live\n"
+                    "Thêm vào túi\nXem trực tiếp giải",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nAdd to bag only after you finish comparing the sizes"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Add to bag only after you finish comparing the sizes",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

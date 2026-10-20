@@ -240,6 +240,10 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "announce_comment_id",
         "group_invite_comment_id",
         "rose_comment_id",
+        "bag_comment_id",
+        "call_comment_id",
+        "polling_comment_id",
+        "spectate_comment_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -425,6 +429,10 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "announce_comment_id",
         "group_invite_comment_id",
         "rose_comment_id",
+        "bag_comment_id",
+        "call_comment_id",
+        "polling_comment_id",
+        "spectate_comment_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -1116,6 +1124,19 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "group_inviter",
             "rose_sender",
             "anonymous_poster",
+            "người thêm vào túi",
+            "nguoi them vao tui",
+            "người bắt đầu cuộc gọi",
+            "nguoi bat dau cuoc goi",
+            "người tìm điểm bỏ phiếu",
+            "nguoi tim diem bo phieu",
+            "người xem giải đấu",
+            "nguoi xem giai dau",
+            "bag_adder",
+            "call_starter",
+            "polling_finder",
+            "spectate_user",
+            "monetization_manager",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -1539,6 +1560,16 @@ def timestamp_of(row: object) -> str | None:
         "announcement_pinned_at",
         "group_invited_at",
         "rose_sent_at",
+        "ngày thêm vào túi",
+        "ngay them vao tui",
+        "thời gian bắt đầu cuộc gọi",
+        "thoi gian bat dau cuoc goi",
+        "ngày xem giải đấu",
+        "ngay xem giai dau",
+        "bag_added_at",
+        "call_started_at",
+        "polling_found_at",
+        "spectated_at",
         "mirrored_at",
         "copied_at",
         "backed_up_at",
@@ -1832,6 +1863,16 @@ def timestamp_of(row: object) -> str | None:
         "announcement_pinned_at",
         "group_invited_at",
         "rose_sent_at",
+        "ngày thêm vào túi",
+        "ngay them vao tui",
+        "thời gian bắt đầu cuộc gọi",
+        "thoi gian bat dau cuoc goi",
+        "ngày xem giải đấu",
+        "ngay xem giai dau",
+        "bag_added_at",
+        "call_started_at",
+        "polling_found_at",
+        "spectated_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:
