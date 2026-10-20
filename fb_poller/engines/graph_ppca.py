@@ -260,6 +260,16 @@ def _append_rows(
                         "collection_owner",
                         "group_creator",
                         "saver_name",
+                        "người xem",
+                        "nguoi xem",
+                        "người bán hàng",
+                        "nguoi ban hang",
+                        "người mua hàng",
+                        "nguoi mua hang",
+                        "group_manager",
+                        "playlist_owner",
+                        "watchlater_owner",
+                        "viewer_name",
                     ),
                 )
             )
@@ -408,6 +418,16 @@ def _append_rows(
                             "collection_owner",
                             "group_creator",
                             "saver_name",
+                            "người xem",
+                            "nguoi xem",
+                            "người bán hàng",
+                            "nguoi ban hang",
+                            "người mua hàng",
+                            "nguoi mua hang",
+                            "group_manager",
+                            "playlist_owner",
+                            "watchlater_owner",
+                            "viewer_name",
                         ),
                     )
                 )
@@ -557,6 +577,15 @@ def post_id_from_url(url: str) -> str | None:
     rooms = re.search(r"/rooms/(\d+)", raw, re.IGNORECASE)
     if rooms:
         return accepted_object_id(rooms.group(1))
+    playlist = re.search(r"/watch/playlist/\?id=(\d+)", raw, re.IGNORECASE)
+    if playlist:
+        return accepted_object_id(playlist.group(1))
+    ads_library = re.search(r"/ads/library/\?id=(\d+)", raw, re.IGNORECASE)
+    if ads_library:
+        return accepted_object_id(ads_library.group(1))
+    live_producer = re.search(r"/live/producer/(\d+)", raw, re.IGNORECASE)
+    if live_producer:
+        return accepted_object_id(live_producer.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
@@ -571,7 +600,7 @@ def post_id_from_url(url: str) -> str | None:
     if stories:
         return accepted_object_id(stories.group(1))
     media = re.search(
-        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb|n)\.(\d+)",
+        r"[?&]set=(?:a|pcb|o|gm|oa|pb|ms|t|go|ft|s|r|h|c|e|p|vb|n|q|v)\.(\d+)",
         raw,
         re.IGNORECASE,
     )

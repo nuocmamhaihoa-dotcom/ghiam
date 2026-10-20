@@ -421,6 +421,16 @@ def _one(row: Any) -> PublicComment | None:
         "collection_owner",
         "group_creator",
         "saver_name",
+        "người xem",
+        "nguoi xem",
+        "người bán hàng",
+        "nguoi ban hang",
+        "người mua hàng",
+        "nguoi mua hang",
+        "group_manager",
+        "playlist_owner",
+        "watchlater_owner",
+        "viewer_name",
     )
     return PublicComment(
         text=text,

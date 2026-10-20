@@ -4206,6 +4206,144 @@ class EngineTests(unittest.TestCase):
             "Find friends from contacts only if you already know them",
         )
 
+    def test_watch_group_chrome_viewer_vn_keys_and_playlist_urls(self) -> None:
+        viewer = _from_mapping(
+            {
+                "bình luận": "Sản phẩm rất tốt nhé mọi người",
+                "người xem": "Lan Watch",
+                "thời gian xem": "6h",
+            }
+        )
+        self.assertIsNotNone(viewer)
+        assert viewer is not None
+        self.assertEqual(viewer.author_name, "Lan Watch")
+        self.assertEqual(viewer.created_time, "6h")
+        seller = _from_mapping(
+            {
+                "Nội dung": "Mình đã mua rồi bạn ơi",
+                "người bán hàng": "Minh",
+                "ngày xem": "hôm nay",
+                "watch_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(seller)
+        assert seller is not None
+        self.assertEqual(seller.author_name, "Minh")
+        self.assertEqual(seller.created_time, "hôm nay")
+        self.assertEqual(seller.comment_id, "1357")
+        buyer = _from_mapping(
+            {
+                "text": "cảm ơn shop nhiều lắm luôn",
+                "người mua hàng": "Bo",
+                "lúc lưu video": "05:45",
+                "listing_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(buyer)
+        assert buyer is not None
+        self.assertEqual(buyer.author_name, "Bo")
+        self.assertEqual(buyer.created_time, "05:45")
+        self.assertEqual(buyer.comment_id, "2468")
+        manager = _from_mapping(
+            {
+                "message": "sản phẩm đẹp quá đi ạ",
+                "group_manager": "An",
+                "watched_at": "2025-01-01T03:00:00Z",
+            }
+        )
+        self.assertIsNotNone(manager)
+        assert manager is not None
+        self.assertEqual(manager.author_name, "An")
+        self.assertEqual(manager.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(person_name({"playlist_owner": "Lan"}), "Lan")
+        self.assertEqual(person_name({"watchlater_owner": "Bo"}), "Bo")
+        self.assertEqual(person_name({"người xem": "Minh"}), "Minh")
+        self.assertEqual(timestamp_of({"queued_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"ngày xem": "hôm qua"}), "hôm qua")
+        self.assertEqual(
+            timestamp_of({"thời gian danh sách phát": "2024-01-03"}),
+            "2024-01-03",
+        )
+        self.assertEqual(first_comment_id({"watch_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"listing_comment_id": "44"}), "44")
+        self.assertEqual(first_comment_id({"group_comment_id": "11"}), "11")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/watch/playlist/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/ads/library/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/live/producer/555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=q.333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/set/?set=v.777888"),
+            "777888",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nCreate playlist\nStart a watch party\n"
+                "Copy video link\nAutoplay settings\n"
+                "Mark as available\nRenew listing\nBoost listing\n"
+                "Delete listing\nSee similar items\nSeller details\n"
+                "Buyer protection\nMeetup details\n"
+                "Create a post in group\nSearch this group\n"
+                "Group insights\nManage group\nPinned post\n"
+                "Featured posts\nAnnouncements\nChats in group\n"
+                "See all friends\nMutual friends\nGet directions now\n"
+                "Call this business\nShare this location\nAdd a location\n"
+                "Invite people to group\nMark as sold\nSave listing\n"
+                "Add friend\nSee results\nLive now\nWatch live\n"
+                "Member since\nHelp center\nRecent searches\n"
+                "Trending searches\nSee all notifications\n"
+                "Tạo danh sách phát\nBắt đầu buổi xem chung\n"
+                "Sao chép liên kết video\nCài đặt tự động phát\n"
+                "Đánh dấu còn hàng\nGia hạn tin đăng\nQuảng cáo tin đăng\n"
+                "Xóa tin đăng\nXem mặt hàng tương tự\nChi tiết người bán\n"
+                "Bảo vệ người mua\nChi tiết gặp mặt\n"
+                "Tạo bài viết trong nhóm\nTìm trong nhóm này\n"
+                "Thống kê nhóm\nQuản lý nhóm\nBài viết đã ghim\n"
+                "Bài viết nổi bật\nThông báo nhóm\nTrò chuyện trong nhóm\n"
+                "Xem tất cả bạn bè\nBạn chung\nChỉ đường ngay\n"
+                "Gọi doanh nghiệp này\nChia sẻ vị trí này\nThêm một vị trí\n"
+                "Mời mọi người vào nhóm\nĐánh dấu đã bán\nLưu tin đăng\n"
+                "Thêm bạn bè\nXem kết quả\nĐang phát trực tiếp\n"
+                "Xem trực tiếp\nThành viên từ\nTrung tâm trợ giúp\n"
+                "Tìm kiếm gần đây\nTìm kiếm thịnh hành\n"
+                "Xem tất cả thông báo"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nCreate playlist\nManage group\n"
+                    "Tạo danh sách phát",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nCreate playlist only after you finish the video draft"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Create playlist only after you finish the video draft",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

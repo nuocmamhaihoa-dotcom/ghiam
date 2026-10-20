@@ -283,6 +283,16 @@ _AUTHOR_KEYS = (
     "collection_owner",
     "group_creator",
     "saver_name",
+    "người xem",
+    "nguoi xem",
+    "người bán hàng",
+    "nguoi ban hang",
+    "người mua hàng",
+    "nguoi mua hang",
+    "group_manager",
+    "playlist_owner",
+    "watchlater_owner",
+    "viewer_name",
 )
 _TIME_KEYS = (
     "time",
@@ -497,6 +507,16 @@ _TIME_KEYS = (
     "saved_at",
     "reported_at",
     "blocked_at",
+    "thời gian xem",
+    "thoi gian xem",
+    "ngày xem",
+    "ngay xem",
+    "lúc lưu video",
+    "luc luu video",
+    "thời gian danh sách phát",
+    "thoi gian danh sach phat",
+    "watched_at",
+    "queued_at",
 )
 
 
