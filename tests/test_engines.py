@@ -9666,6 +9666,135 @@ class EngineTests(unittest.TestCase):
             "Remind me only after you finish reading the event details",
         )
 
+    def test_photo_album_tag_edit_slideshow_vn_keys_and_urls(self) -> None:
+        upload = _from_mapping(
+            {
+                "bình luận": "Ảnh mới đẹp quá",
+                "người tải ảnh lên": "Lan Pic",
+                "ngày tải ảnh lên": "9h",
+            }
+        )
+        self.assertIsNotNone(upload)
+        assert upload is not None
+        self.assertEqual(upload.author_name, "Lan Pic")
+        self.assertEqual(upload.created_time, "9h")
+        tag = _from_mapping(
+            {
+                "Nội dung": "Gắn thẻ mình với",
+                "người gắn thẻ ảnh": "Minh",
+                "thời gian gắn thẻ ảnh": "hôm nay",
+                "photo_tag_comment_id": "1357",
+            }
+        )
+        self.assertIsNotNone(tag)
+        assert tag is not None
+        self.assertEqual(tag.author_name, "Minh")
+        self.assertEqual(tag.created_time, "hôm nay")
+        self.assertEqual(tag.comment_id, "1357")
+        slide = _from_mapping(
+            {
+                "text": "trình chiếu mượt",
+                "người xem trình chiếu": "Bo",
+                "slideshow_viewed_at": "05:45",
+                "slideshow_comment_id": "2468",
+            }
+        )
+        self.assertIsNotNone(slide)
+        assert slide is not None
+        self.assertEqual(slide.author_name, "Bo")
+        self.assertEqual(slide.created_time, "05:45")
+        self.assertEqual(slide.comment_id, "2468")
+        cover = _from_mapping(
+            {
+                "message": "ảnh bìa mới ok",
+                "người chỉnh ảnh bìa": "An",
+                "cover_edited_at": "2025-01-01T03:00:00Z",
+                "album_comment_id": "9753",
+            }
+        )
+        self.assertIsNotNone(cover)
+        assert cover is not None
+        self.assertEqual(cover.author_name, "An")
+        self.assertEqual(cover.created_time, "2025-01-01T03:00:00Z")
+        self.assertEqual(cover.comment_id, "9753")
+        self.assertEqual(person_name({"photo_uploader": "Lan"}), "Lan")
+        self.assertEqual(person_name({"photo_tagger": "Bo"}), "Bo")
+        self.assertEqual(person_name({"slideshow_viewer": "Minh"}), "Minh")
+        self.assertEqual(person_name({"cover_editor": "An"}), "An")
+        self.assertEqual(person_name({"người tải ảnh lên": "Ha"}), "Ha")
+        self.assertEqual(timestamp_of({"photo_uploaded_at": "2024-01-02"}), "2024-01-02")
+        self.assertEqual(timestamp_of({"photo_tagged_at": "hôm qua"}), "hôm qua")
+        self.assertEqual(timestamp_of({"slideshow_viewed_at": "2024-01-03"}), "2024-01-03")
+        self.assertEqual(timestamp_of({"cover_edited_at": "2024-01-04"}), "2024-01-04")
+        self.assertEqual(first_comment_id({"photo_upload_comment_id": "22"}), "22")
+        self.assertEqual(first_comment_id({"album_comment_id": "44"}), "44")
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/media/albums/?id=111222"),
+            "111222",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/photo/upload/?id=998877"),
+            "998877",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/photo/edit/?id=555666"),
+            "555666",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/photo/tag/?id=333444"),
+            "333444",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/slideshow/?id=777888"),
+            "777888",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/cover_photo/?id=121212"),
+            "121212",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/profile_picture/?id=343434"),
+            "343434",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nPhoto album\nMove to album\nShared album\n"
+                "Make album\nUpload photos\nUpload video\nSelect photos\n"
+                "Tag people in photo\nWho can see this photo\nDownload photo\n"
+                "Reorder photos\nSlideshow\nView fullscreen\nZoom in\n"
+                "Zoom out\nRotate left\nRotate right\nEdit photo\n"
+                "Apply filter\nCrop photo\n"
+                "Album ảnh\nChuyển vào album\nAlbum được chia sẻ\nTạo album ảnh\n"
+                "Tải ảnh lên\nTải video lên\nChọn ảnh\nGắn thẻ người trong ảnh\n"
+                "Ai có thể xem ảnh này\nTải ảnh xuống\nSắp xếp lại ảnh\n"
+                "Trình chiếu\nXem toàn màn hình\nPhóng to\nThu nhỏ\n"
+                "Xoay trái\nXoay phải\nChỉnh sửa ảnh\nÁp dụng bộ lọc\nCắt ảnh"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        healed, codes = heal_comments(
+            [
+                PublicComment(
+                    text="hello\nEdit photo\nSlideshow\n"
+                    "Chỉnh sửa ảnh\nTrình chiếu",
+                    author_name="Lan",
+                )
+            ]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        kept = comments_from_articles(
+            ["Lan\nEdit photo only after you finish picking the real filter"],
+            5,
+        )
+        self.assertEqual(
+            kept[0].text,
+            "Edit photo only after you finish picking the real filter",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

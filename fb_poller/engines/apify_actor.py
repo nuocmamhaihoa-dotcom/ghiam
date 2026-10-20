@@ -951,6 +951,18 @@ def _one(row: Any) -> PublicComment | None:
         "reminder_setter",
         "premiere_viewer",
         "ticket_buyer_user",
+        "người tải ảnh lên",
+        "nguoi tai anh len",
+        "người gắn thẻ ảnh",
+        "nguoi gan the anh",
+        "người xem trình chiếu",
+        "nguoi xem trinh chieu",
+        "người chỉnh ảnh bìa",
+        "nguoi chinh anh bia",
+        "photo_uploader",
+        "photo_tagger",
+        "slideshow_viewer",
+        "cover_editor",
     )
     return PublicComment(
         text=text,

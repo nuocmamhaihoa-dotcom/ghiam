@@ -292,6 +292,10 @@ def first_comment_id(row: dict[str, object]) -> str | None:
         "reminder_comment_id",
         "premiere_comment_id",
         "ticket_comment_id",
+        "album_comment_id",
+        "photo_upload_comment_id",
+        "photo_tag_comment_id",
+        "slideshow_comment_id",
     ):
         found = _id_value(folded.get(fold_key(key)))
         if found:
@@ -529,6 +533,10 @@ def _id_value(value: object, depth: int = 0) -> str | None:
         "reminder_comment_id",
         "premiere_comment_id",
         "ticket_comment_id",
+        "album_comment_id",
+        "photo_upload_comment_id",
+        "photo_tag_comment_id",
+        "slideshow_comment_id",
     ):
         folded_key = fold_key(key)
         if folded_key not in lowered:
@@ -1382,6 +1390,18 @@ def person_name(value: object, depth: int = 0) -> str | None:
             "reminder_setter",
             "premiere_viewer",
             "ticket_buyer_user",
+            "người tải ảnh lên",
+            "nguoi tai anh len",
+            "người gắn thẻ ảnh",
+            "nguoi gan the anh",
+            "người xem trình chiếu",
+            "nguoi xem trinh chieu",
+            "người chỉnh ảnh bìa",
+            "nguoi chinh anh bia",
+            "photo_uploader",
+            "photo_tagger",
+            "slideshow_viewer",
+            "cover_editor",
         ):
             token = fold_key(key)
             if token not in lowered:
@@ -1935,6 +1955,16 @@ def timestamp_of(row: object) -> str | None:
         "reminder_set_at",
         "premiere_viewed_at",
         "ticket_bought_at",
+        "ngày tải ảnh lên",
+        "ngay tai anh len",
+        "thời gian gắn thẻ ảnh",
+        "thoi gian gan the anh",
+        "ngày xem trình chiếu",
+        "ngay xem trinh chieu",
+        "photo_uploaded_at",
+        "photo_tagged_at",
+        "slideshow_viewed_at",
+        "cover_edited_at",
         "mirrored_at",
         "copied_at",
         "backed_up_at",
@@ -2358,6 +2388,16 @@ def timestamp_of(row: object) -> str | None:
         "reminder_set_at",
         "premiere_viewed_at",
         "ticket_bought_at",
+        "ngày tải ảnh lên",
+        "ngay tai anh len",
+        "thời gian gắn thẻ ảnh",
+        "thoi gian gan the anh",
+        "ngày xem trình chiếu",
+        "ngay xem trinh chieu",
+        "photo_uploaded_at",
+        "photo_tagged_at",
+        "slideshow_viewed_at",
+        "cover_edited_at",
     ):
         found = time_text(folded.get(fold_key(key)))
         if found:

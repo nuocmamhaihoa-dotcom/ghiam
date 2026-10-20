@@ -813,6 +813,18 @@ _AUTHOR_KEYS = (
     "reminder_setter",
     "premiere_viewer",
     "ticket_buyer_user",
+    "người tải ảnh lên",
+    "nguoi tai anh len",
+    "người gắn thẻ ảnh",
+    "nguoi gan the anh",
+    "người xem trình chiếu",
+    "nguoi xem trinh chieu",
+    "người chỉnh ảnh bìa",
+    "nguoi chinh anh bia",
+    "photo_uploader",
+    "photo_tagger",
+    "slideshow_viewer",
+    "cover_editor",
 )
 _TIME_KEYS = (
     "time",
@@ -1405,6 +1417,16 @@ _TIME_KEYS = (
     "reminder_set_at",
     "premiere_viewed_at",
     "ticket_bought_at",
+    "ngày tải ảnh lên",
+    "ngay tai anh len",
+    "thời gian gắn thẻ ảnh",
+    "thoi gian gan the anh",
+    "ngày xem trình chiếu",
+    "ngay xem trinh chieu",
+    "photo_uploaded_at",
+    "photo_tagged_at",
+    "slideshow_viewed_at",
+    "cover_edited_at",
 )
 
 

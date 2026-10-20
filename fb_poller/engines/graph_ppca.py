@@ -790,6 +790,18 @@ def _append_rows(
                         "reminder_setter",
                         "premiere_viewer",
                         "ticket_buyer_user",
+                        "người tải ảnh lên",
+                        "nguoi tai anh len",
+                        "người gắn thẻ ảnh",
+                        "nguoi gan the anh",
+                        "người xem trình chiếu",
+                        "nguoi xem trinh chieu",
+                        "người chỉnh ảnh bìa",
+                        "nguoi chinh anh bia",
+                        "photo_uploader",
+                        "photo_tagger",
+                        "slideshow_viewer",
+                        "cover_editor",
                     ),
                 )
             )
@@ -1468,6 +1480,18 @@ def _append_rows(
                             "reminder_setter",
                             "premiere_viewer",
                             "ticket_buyer_user",
+                            "người tải ảnh lên",
+                            "nguoi tai anh len",
+                            "người gắn thẻ ảnh",
+                            "nguoi gan the anh",
+                            "người xem trình chiếu",
+                            "nguoi xem trinh chieu",
+                            "người chỉnh ảnh bìa",
+                            "nguoi chinh anh bia",
+                            "photo_uploader",
+                            "photo_tagger",
+                            "slideshow_viewer",
+                            "cover_editor",
                         ),
                     )
                 )
@@ -2524,6 +2548,27 @@ def post_id_from_url(url: str) -> str | None:
     calendar_add = re.search(r"/calendar/add/\?id=(\d+)", raw, re.IGNORECASE)
     if calendar_add:
         return accepted_object_id(calendar_add.group(1))
+    media_albums = re.search(r"/media/albums/\?id=(\d+)", raw, re.IGNORECASE)
+    if media_albums:
+        return accepted_object_id(media_albums.group(1))
+    photo_upload = re.search(r"/photo/upload/\?id=(\d+)", raw, re.IGNORECASE)
+    if photo_upload:
+        return accepted_object_id(photo_upload.group(1))
+    photo_edit = re.search(r"/photo/edit/\?id=(\d+)", raw, re.IGNORECASE)
+    if photo_edit:
+        return accepted_object_id(photo_edit.group(1))
+    photo_tag = re.search(r"/photo/tag/\?id=(\d+)", raw, re.IGNORECASE)
+    if photo_tag:
+        return accepted_object_id(photo_tag.group(1))
+    slideshow = re.search(r"/slideshow/\?id=(\d+)", raw, re.IGNORECASE)
+    if slideshow:
+        return accepted_object_id(slideshow.group(1))
+    cover_photo = re.search(r"/cover_photo/\?id=(\d+)", raw, re.IGNORECASE)
+    if cover_photo:
+        return accepted_object_id(cover_photo.group(1))
+    profile_picture = re.search(r"/profile_picture/\?id=(\d+)", raw, re.IGNORECASE)
+    if profile_picture:
+        return accepted_object_id(profile_picture.group(1))
     messenger_media = re.search(r"[?&]asset_id=(\d+)", raw, re.IGNORECASE)
     if messenger_media and re.search(r"messenger_media", raw, re.IGNORECASE):
         return accepted_object_id(messenger_media.group(1))
