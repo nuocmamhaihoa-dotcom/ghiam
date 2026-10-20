@@ -2764,6 +2764,97 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(imported.author_name, "lan")
         self.assertEqual(imported.created_time, "2025-07-05")
 
+    def test_fundraiser_url_and_commerce_event_chrome(self) -> None:
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/fundraisers/123456/"),
+            "123456",
+        )
+        self.assertEqual(
+            post_id_from_url("https://www.facebook.com/fundraiser/987654"),
+            "987654",
+        )
+        article = comments_from_articles(
+            [
+                "Lan\nhello\nDraft saved\nReview post\nAdd to cart\nCheckout\n"
+                "Join event\nAdd to calendar\nGet tickets\nDonate now\n"
+                "Live video\nWas live\nWatch again\nPlay video\nSkip ad\n"
+                "Sponsored · Shop now\nLike Page · Message\nChat on WhatsApp\n"
+                "Product details\nCustomer reviews\nAdd to wishlist\n"
+                "Out of stock\nOnly a few left\nPre-order\n"
+                "Đã lưu bản nháp\nThêm vào giỏ\nTham gia sự kiện\n"
+                "Quyên góp ngay\nVideo trực tiếp\nBỏ qua quảng cáo\n"
+                "Được tài trợ · Mua ngay\nThích Trang · Nhắn tin\nHết hàng"
+            ],
+            5,
+        )
+        self.assertEqual(len(article), 1)
+        self.assertEqual(article[0].author_name, "Lan")
+        self.assertEqual(article[0].text, "hello")
+        sentence = comments_from_articles(["Lan\nDonate now so the clinic can reopen"], 5)
+        self.assertEqual(sentence[0].text, "Donate now so the clinic can reopen")
+        healed, codes = heal_comments(
+            [PublicComment(text="hello\nAdd to cart\nSkip ad\nDonate now", author_name="Lan")]
+        )
+        self.assertEqual(healed[0].text, "hello")
+        self.assertIn("strip_chrome_lines", codes)
+        named = _one(
+            {
+                "text": "xin",
+                "author": {"business_name": "Bo Shop"},
+                "reply_id": "55",
+                "publish_datetime": "2025-08-01",
+            }
+        )
+        self.assertIsNotNone(named)
+        assert named is not None
+        self.assertEqual(named.author_name, "Bo Shop")
+        self.assertEqual(named.comment_id, "55")
+        self.assertEqual(named.created_time, "2025-08-01")
+        rows, err = comments_from_graph_payload(
+            {
+                "data": [
+                    {
+                        "message": "xin",
+                        "host_name": "An",
+                        "comment_datetime": "2025-08-02",
+                        "graph_comment_id": "66",
+                    }
+                ]
+            },
+            5,
+        )
+        self.assertIsNone(err)
+        self.assertEqual(rows[0].author_name, "An")
+        self.assertEqual(rows[0].created_time, "2025-08-02")
+        self.assertEqual(rows[0].comment_id, "66")
+        managed = _comments_from_json(
+            {
+                "comments": [
+                    {
+                        "text": "xin",
+                        "seller_name": "bo",
+                        "creation_ms": "1710000700",
+                        "comment_graph_id": "77",
+                    }
+                ]
+            },
+            5,
+        )
+        self.assertEqual(managed[0].author_name, "bo")
+        self.assertEqual(managed[0].created_time, "1710000700")
+        self.assertEqual(managed[0].comment_id, "77")
+        imported = _from_mapping(
+            {
+                "Nội dung": "xin",
+                "Organizer name": "lan",
+                "Posted datetime": "2025-08-05",
+            }
+        )
+        self.assertIsNotNone(imported)
+        assert imported is not None
+        self.assertEqual(imported.author_name, "lan")
+        self.assertEqual(imported.created_time, "2025-08-05")
+
 
 if __name__ == "__main__":
     unittest.main()

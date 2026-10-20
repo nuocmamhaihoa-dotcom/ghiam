@@ -173,6 +173,12 @@ def _append_rows(
                         "posted_as",
                         "display_label",
                         "profile_caption",
+                        "business_name",
+                        "store_name",
+                        "seller_name",
+                        "host_name",
+                        "organizer_name",
+                        "page_title",
                     ),
                 )
             )
@@ -234,6 +240,12 @@ def _append_rows(
                             "posted_as",
                             "display_label",
                             "profile_caption",
+                            "business_name",
+                            "store_name",
+                            "seller_name",
+                            "host_name",
+                            "organizer_name",
+                            "page_title",
                         ),
                     )
                 )
@@ -326,6 +338,9 @@ def post_id_from_url(url: str) -> str | None:
     shop = re.search(r"/shop/product/(\d+)", raw, re.IGNORECASE)
     if shop:
         return accepted_object_id(shop.group(1))
+    fundraiser = re.search(r"/fundraisers?/(\d+)", raw, re.IGNORECASE)
+    if fundraiser:
+        return accepted_object_id(fundraiser.group(1))
     share = re.search(r"/share/[pvr]/(pfbid[A-Za-z0-9]+|\d+)", raw, re.IGNORECASE)
     if share:
         return accepted_object_id(share.group(1))

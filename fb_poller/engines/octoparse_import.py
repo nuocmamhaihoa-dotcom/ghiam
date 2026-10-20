@@ -150,6 +150,12 @@ _AUTHOR_KEYS = (
     "posted_as",
     "display_label",
     "profile_caption",
+    "business_name",
+    "store_name",
+    "seller_name",
+    "host_name",
+    "organizer_name",
+    "page_title",
     "tác giả",
     "tac gia",
 )
@@ -239,6 +245,12 @@ _TIME_KEYS = (
     "created_datetime",
     "comment_created",
     "post_created_at",
+    "publish_datetime",
+    "comment_datetime",
+    "posted_datetime",
+    "time_created_ms",
+    "creation_ms",
+    "fb_timestamp",
 )
 
 

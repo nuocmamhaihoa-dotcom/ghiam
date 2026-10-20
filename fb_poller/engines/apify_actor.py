@@ -334,6 +334,12 @@ def _one(row: Any) -> PublicComment | None:
         "posted_as",
         "display_label",
         "profile_caption",
+        "business_name",
+        "store_name",
+        "seller_name",
+        "host_name",
+        "organizer_name",
+        "page_title",
     )
     return PublicComment(
         text=text,
