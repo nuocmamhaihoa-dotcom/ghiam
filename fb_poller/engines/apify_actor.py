@@ -358,6 +358,13 @@ def _one(row: Any) -> PublicComment | None:
         "presenter_name",
         "host_display",
         "voice_name",
+        "display_author",
+        "reply_author_name",
+        "parent_author_name",
+        "byline_name",
+        "credit_name",
+        "author_figure",
+        "from_display",
     )
     return PublicComment(
         text=text,

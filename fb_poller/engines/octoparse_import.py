@@ -184,6 +184,19 @@ _AUTHOR_KEYS = (
     "presenter_name",
     "host_display",
     "voice_name",
+    "người gửi",
+    "nguoi gui",
+    "tên thành viên",
+    "ten thanh vien",
+    "họ tên",
+    "ho ten",
+    "display_author",
+    "reply_author_name",
+    "parent_author_name",
+    "byline_name",
+    "credit_name",
+    "author_figure",
+    "from_display",
 )
 _TIME_KEYS = (
     "time",
@@ -304,6 +317,16 @@ _TIME_KEYS = (
     "harvest_time",
     "capture_time",
     "observed_at",
+    "thời điểm tạo",
+    "thoi diem tao",
+    "lúc đăng",
+    "luc dang",
+    "thời gian comment",
+    "thoi gian comment",
+    "extracted_at",
+    "parsed_at",
+    "ingest_time",
+    "synced_at",
 )
 
 

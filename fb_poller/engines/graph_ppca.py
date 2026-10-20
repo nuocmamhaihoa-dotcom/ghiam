@@ -197,6 +197,13 @@ def _append_rows(
                         "presenter_name",
                         "host_display",
                         "voice_name",
+                        "display_author",
+                        "reply_author_name",
+                        "parent_author_name",
+                        "byline_name",
+                        "credit_name",
+                        "author_figure",
+                        "from_display",
                     ),
                 )
             )
@@ -282,6 +289,13 @@ def _append_rows(
                             "presenter_name",
                             "host_display",
                             "voice_name",
+                            "display_author",
+                            "reply_author_name",
+                            "parent_author_name",
+                            "byline_name",
+                            "credit_name",
+                            "author_figure",
+                            "from_display",
                         ),
                     )
                 )
@@ -402,7 +416,7 @@ def post_id_from_url(url: str) -> str | None:
     stories = re.search(r"/stories/(\d+)", raw, re.IGNORECASE)
     if stories:
         return accepted_object_id(stories.group(1))
-    media = re.search(r"[?&]set=(?:a|pcb|o)\.(\d+)", raw, re.IGNORECASE)
+    media = re.search(r"[?&]set=(?:a|pcb|o|gm|oa)\.(\d+)", raw, re.IGNORECASE)
     if media:
         return accepted_object_id(media.group(1))
     path = re.search(
