@@ -115,6 +115,46 @@ def storage_forms(phone: str) -> tuple[str, str | None]:
     return ten, "+84" + ten[1:]
 
 
+def equivalent_forms(phone: str) -> tuple[str, ...]:
+    """Every compact spelling that must count as one already-assigned number.
+
+    A book may still hold ``84901234567``, ``+84901234567`` or ``0162…`` from an
+    older import. A later file that says ``0901…`` or ``032…`` has to find that
+    row instead of opening a new one.
+    """
+    ten = to_vietnam_10(phone)
+    if ten is None:
+        text = str(phone).strip()
+        return (text,) if text else ()
+    tail = ten[1:]
+    forms = {
+        ten,
+        "+84" + tail,
+        "84" + tail,
+        "0084" + tail,
+        "840" + tail,
+        "+840" + tail,
+    }
+    legacy = _CURRENT_TO_LEGACY.get(ten[:3])
+    if legacy is not None:
+        old = legacy + ten[3:]
+        old_tail = old[1:]
+        forms.update(
+            {
+                old,
+                "+84" + old_tail,
+                "84" + old_tail,
+                "0084" + old_tail,
+                "+84" + old,
+                "84" + old,
+            }
+        )
+    return tuple(sorted(forms))
+
+
+_CURRENT_TO_LEGACY = {current: old for old, current in _LEGACY_PREFIX.items()}
+
+
 def canonical_phones(raw: str) -> list[str]:
     """Return every stored phone from one cell.
 

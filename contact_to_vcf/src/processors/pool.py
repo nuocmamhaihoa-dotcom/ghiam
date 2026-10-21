@@ -12,7 +12,12 @@ from pathlib import Path
 from exporters.vcf_validator import contact_label, format_card
 from models.records import JobConfig
 from parsers.detect import detect_encoding, open_reader, prepare_source
-from processors.phone_normalizer import canonical_phones, storage_forms, to_vietnam_10
+from processors.phone_normalizer import (
+    canonical_phones,
+    equivalent_forms,
+    storage_forms,
+    to_vietnam_10,
+)
 
 CONTACTS_PER_FILE = 4000
 
@@ -223,10 +228,13 @@ def book_of(folder: Path, phone: str) -> int | None:
     connection = _connect(pool_path(folder))
     try:
         _ensure_schema(connection)
-        stored, alt = storage_forms(phone)
+        forms = equivalent_forms(phone)
+        if not forms:
+            return None
+        marks = ",".join("?" for _ in forms)
         row = connection.execute(
-            "SELECT book_id FROM numbers WHERE phone = ? OR phone = ?",
-            (stored, alt or stored),
+            f"SELECT book_id FROM numbers WHERE phone IN ({marks}) ORDER BY book_id LIMIT 1",
+            forms,
         ).fetchone()
     finally:
         connection.close()
@@ -264,26 +272,28 @@ class _Pool:
             return 0, duplicate
         self.connection.execute(
             """
-            CREATE TEMP TABLE IF NOT EXISTS staging (
-                phone TEXT PRIMARY KEY,
-                alt TEXT
+            CREATE TEMP TABLE IF NOT EXISTS phone_forms (
+                form TEXT PRIMARY KEY,
+                phone TEXT NOT NULL
             )
             """
         )
-        self.connection.execute("DELETE FROM staging")
+        self.connection.execute("DELETE FROM phone_forms")
         self.connection.executemany(
-            "INSERT OR IGNORE INTO staging (phone, alt) VALUES (?, ?)",
-            ordered,
+            "INSERT OR IGNORE INTO phone_forms (form, phone) VALUES (?, ?)",
+            [
+                (form, phone)
+                for phone, _alt in ordered
+                for form in equivalent_forms(phone)
+            ],
         )
         already = {
             str(row["phone"])
             for row in self.connection.execute(
                 """
-                SELECT staging.phone AS phone
-                FROM staging
-                JOIN numbers
-                  ON numbers.phone = staging.phone
-                  OR numbers.phone = staging.alt
+                SELECT phone_forms.phone AS phone
+                FROM phone_forms
+                JOIN numbers ON numbers.phone = phone_forms.form
                 """
             )
         }
@@ -321,10 +331,12 @@ class _Pool:
         return added, duplicate
 
     def add(self, phone: str, source_name: str) -> bool:
-        stored, alt = storage_forms(phone)
+        stored, _alt = storage_forms(phone)
+        forms = equivalent_forms(stored)
+        marks = ",".join("?" for _ in forms)
         existing = self.connection.execute(
-            "SELECT book_id FROM numbers WHERE phone = ? OR phone = ?",
-            (stored, alt or stored),
+            f"SELECT book_id FROM numbers WHERE phone IN ({marks}) LIMIT 1",
+            forms,
         ).fetchone()
         if existing is not None:
             return False
@@ -492,7 +504,7 @@ def _ensure_schema(connection: sqlite3.Connection) -> None:
 def _collapse_duplicate_numbers(connection: sqlite3.Connection) -> None:
     """Keep the first book for each number and store one 10-digit key."""
     done = connection.execute(
-        "SELECT value FROM pool_meta WHERE key = 'canonical_v1'"
+        "SELECT value FROM pool_meta WHERE key = 'canonical_v2'"
     ).fetchone()
     if done is not None:
         return
@@ -540,8 +552,19 @@ def _collapse_duplicate_numbers(connection: sqlite3.Connection) -> None:
             )
             """
         )
+        connection.execute(
+            """
+            DELETE FROM books
+            WHERE NOT EXISTS (
+                SELECT 1 FROM numbers WHERE numbers.book_id = books.id
+            )
+            """
+        )
     connection.execute(
-        "INSERT INTO pool_meta (key, value) VALUES ('canonical_v1', '1')"
+        """
+        INSERT INTO pool_meta (key, value) VALUES ('canonical_v2', '1')
+        ON CONFLICT(key) DO UPDATE SET value = '1'
+        """
     )
 
 
