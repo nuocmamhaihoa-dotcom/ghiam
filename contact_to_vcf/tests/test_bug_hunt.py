@@ -100,6 +100,7 @@ def test_open_book_keeps_accepting_numbers_until_one_thousand(tmp_path: Path) ->
         has_header=False,
         encoding="utf-8",
         phone_column=0,
+        contacts_per_file=1000,
     )
     assert added.added == 600
     assert added.filled == ()
@@ -112,6 +113,7 @@ def test_open_book_keeps_accepting_numbers_until_one_thousand(tmp_path: Path) ->
         has_header=False,
         encoding="utf-8",
         phone_column=0,
+        contacts_per_file=1000,
     )
     assert more.added == 500
     assert more.filled == (1,)
@@ -126,6 +128,7 @@ def test_open_book_keeps_accepting_numbers_until_one_thousand(tmp_path: Path) ->
         has_header=False,
         encoding="utf-8",
         phone_column=0,
+        contacts_per_file=1000,
     )
     assert again.added == 0
     assert again.duplicate == 600
