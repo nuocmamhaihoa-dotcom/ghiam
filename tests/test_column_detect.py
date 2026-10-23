@@ -135,6 +135,21 @@ class ColumnAssignTests(unittest.TestCase):
         self.assertEqual(incoming[0]["name"], "Nguyễn Lan")
         self.assertEqual(incoming[0]["address"], "12 Lê Lợi\nQuận 1\nTP.HCM")
 
+    def test_street_and_admin_headers_split_apart(self) -> None:
+        headers = ["Tên khách", "Số nhà", "Phường", "Tỉnh"]
+        values = [
+            ["Nguyễn Lan"],
+            ["12 Lê Lợi"],
+            ["Quận 1"],
+            ["TP.HCM"],
+        ]
+        mapping, details = assign_fields(headers, values)
+        self.assertEqual(mapping["name"], 0)
+        self.assertEqual(mapping["address"], 1)
+        self.assertEqual(details["address"]["indexes"], [1])
+        self.assertEqual(mapping["adminAddress"], 2)
+        self.assertEqual(details["adminAddress"]["indexes"], [2, 3])
+
     def test_unlabeled_address_parts_are_all_kept(self) -> None:
         headers = ["A", "B", "C", "D"]
         values = [

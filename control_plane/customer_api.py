@@ -132,9 +132,10 @@ async def customers_preview(
     values = _column_values_from_previews(columns, previews)
     suggested, details = assign_fields(headers, values)
     payload = dict(suggested)
-    address_columns = (details.get("address") or {}).get("indexes") or []
-    if address_columns:
-        payload["addressColumns"] = address_columns
+    for field, key in (("address", "addressColumns"), ("adminAddress", "adminAddressColumns")):
+        indexes = (details.get(field) or {}).get("indexes") or []
+        if indexes:
+            payload[key] = indexes
     return {
         "files": [
             {
@@ -282,11 +283,7 @@ async def customers_lookup_export(
             [
                 item.get("query") or "",
                 "Có" if item.get("found") else "Không",
-                customer.get("name") or "",
-                customer.get("phone") or "",
-                customer.get("address") or "",
-                customer.get("facebookUid") or "",
-                customer.get("tiktokId") or "",
+                *[customer.get(field) or "" for field in FIELDS],
             ]
         )
     payload = write_xlsx(headers, body)

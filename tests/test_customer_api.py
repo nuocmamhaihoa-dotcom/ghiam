@@ -57,6 +57,9 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("Kho khách Excel", home.text)
         self.assertIn("Chọn file Excel", home.text)
         self.assertIn("không dùng video", home.text)
+        self.assertIn("địa chỉ hành chính", home.text)
+        self.assertIn("hàng mua", home.text)
+        self.assertIn("giá COD", home.text)
         alias = self.client.get("/khach")
         self.assertEqual(alias.status_code, 200)
         self.assertIn("Cột nào là dữ liệu nào", alias.text)
@@ -116,7 +119,8 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(preview.status_code, 200, preview.text)
         data = preview.json()
         self.assertEqual(data["suggested"]["name"], 0)
-        self.assertEqual(data["suggested"]["addressColumns"], [1, 2, 3])
+        self.assertEqual(data["suggested"]["addressColumns"], [1])
+        self.assertEqual(data["suggested"]["adminAddressColumns"], [2, 3])
         imported = self.client.post(
             "/v1/customers/import",
             headers=self.headers,
@@ -139,6 +143,46 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(imported.status_code, 200, imported.text)
         listed = self.client.get("/v1/customers", headers=self.headers)
         self.assertEqual(listed.json()["items"][0]["address"], "12 Lê Lợi\nQuận 1\nTP.HCM")
+
+    def test_import_admin_address_order_and_cod(self) -> None:
+        name, body = self._xlsx(
+            "don.xlsx",
+            ["Tên khách", "SĐT", "Địa chỉ hành chính", "Nội dung hàng mua", "Giá tiền COD"],
+            [["Lan", "0901222333", "Phường Phú Hội, Huế", "Giày nam size 41", "230k"]],
+        )
+        preview = self.client.post(
+            "/v1/customers/preview",
+            headers=self.headers,
+            files=[("files", (name, body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(preview.status_code, 200, preview.text)
+        suggested = preview.json()["suggested"]
+        self.assertEqual(suggested["name"], 0)
+        self.assertEqual(suggested["phone"], 1)
+        self.assertEqual(suggested["adminAddress"], 2)
+        self.assertEqual(suggested["orderContent"], 3)
+        self.assertEqual(suggested["codAmount"], 4)
+        imported = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={
+                "mapping": json.dumps(
+                    {
+                        "name": {"index": 0, "header": "Tên khách"},
+                        "phone": {"index": 1, "header": "SĐT"},
+                        "adminAddress": {"index": 2, "header": "Địa chỉ hành chính"},
+                        "orderContent": {"index": 3, "header": "Nội dung hàng mua"},
+                        "codAmount": {"index": 4, "header": "Giá tiền COD"},
+                    }
+                )
+            },
+            files=[("files", (name, body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+        item = self.client.get("/v1/customers", headers=self.headers).json()["items"][0]
+        self.assertEqual(item["adminAddress"], "Phường Phú Hội, Huế")
+        self.assertEqual(item["orderContent"], "Giày nam size 41")
+        self.assertEqual(item["codAmount"], "230000")
 
     def test_import_fills_missing_fields_on_later_file(self) -> None:
         name, body = self._xlsx(

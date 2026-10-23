@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 
 from control_plane.customers import (
+    clean_cod_amount,
     clean_facebook_uid,
     clean_phone,
     clean_tiktok_id,
@@ -35,6 +36,13 @@ class CustomerCleanTests(unittest.TestCase):
         self.assertEqual(clean_facebook_uid("1.000123456789e+12"), "1000123456789")
         self.assertEqual(clean_facebook_uid("1000123456789"), "1000123456789")
 
+    def test_cod_reads_k_and_plain_numbers(self) -> None:
+        self.assertEqual(clean_cod_amount("230k"), "230000")
+        self.assertEqual(clean_cod_amount("1.5tr"), "1500000")
+        self.assertEqual(clean_cod_amount("230.000đ"), "230000")
+        self.assertEqual(clean_cod_amount("0901222333"), "")
+        self.assertEqual(clean_cod_amount("480000"), "480000")
+
     def test_tiktok_id_from_url(self) -> None:
         self.assertEqual(clean_tiktok_id("https://www.tiktok.com/@ban.gach"), "ban.gach")
         self.assertEqual(clean_tiktok_id("@ban.gach"), "ban.gach")
@@ -50,7 +58,16 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(stats["created"], 1)
         second, stats, _removed = fold_customers(
             first,
-            [{"phone": "0901234567", "facebookUid": "1000123456789", "tiktokId": "ban.gach"}],
+            [
+                {
+                    "phone": "0901234567",
+                    "facebookUid": "1000123456789",
+                    "tiktokId": "ban.gach",
+                    "adminAddress": "Thừa Thiên Huế",
+                    "orderContent": "Giày size 41",
+                    "codAmount": "230k",
+                }
+            ],
             "2026-01-02T00:00:00+00:00",
         )
         self.assertEqual(len(second), 1)
@@ -59,6 +76,9 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(second[0]["phone"], "0901234567")
         self.assertEqual(second[0]["facebookUid"], "1000123456789")
         self.assertEqual(second[0]["tiktokId"], "ban.gach")
+        self.assertEqual(second[0]["adminAddress"], "Thừa Thiên Huế")
+        self.assertEqual(second[0]["orderContent"], "Giày size 41")
+        self.assertEqual(second[0]["codAmount"], "230000")
 
     def test_existing_values_are_kept(self) -> None:
         stored, _stats, _removed = fold_customers(

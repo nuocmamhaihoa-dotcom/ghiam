@@ -108,6 +108,9 @@ def init_db(db_path: Path) -> None:
               name TEXT NOT NULL DEFAULT '',
               phone TEXT NOT NULL DEFAULT '',
               address TEXT NOT NULL DEFAULT '',
+              admin_address TEXT NOT NULL DEFAULT '',
+              order_content TEXT NOT NULL DEFAULT '',
+              cod_amount TEXT NOT NULL DEFAULT '',
               facebook_uid TEXT NOT NULL DEFAULT '',
               tiktok_id TEXT NOT NULL DEFAULT '',
               created_at TEXT NOT NULL,
@@ -119,7 +122,16 @@ def init_db(db_path: Path) -> None:
             CREATE INDEX IF NOT EXISTS idx_customers_tiktok ON customers(tiktok_id);
             """
         )
+        _ensure_customer_columns(conn)
         conn.commit()
+
+
+def _ensure_customer_columns(conn: sqlite3.Connection) -> None:
+    existing = {str(row[1]) for row in conn.execute("PRAGMA table_info(customers)").fetchall()}
+    for name in ("admin_address", "order_content", "cod_amount"):
+        if name in existing:
+            continue
+        conn.execute(f"ALTER TABLE customers ADD COLUMN {name} TEXT NOT NULL DEFAULT ''")
 
 
 @contextmanager
@@ -739,7 +751,8 @@ def list_customers(db_path: Path) -> list[dict[str, str]]:
     with session(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT id, name, phone, address, facebook_uid, tiktok_id, created_at, updated_at
+            SELECT id, name, phone, address, admin_address, order_content, cod_amount,
+                   facebook_uid, tiktok_id, created_at, updated_at
             FROM customers
             ORDER BY updated_at DESC, created_at DESC
             """
@@ -750,6 +763,9 @@ def list_customers(db_path: Path) -> list[dict[str, str]]:
             "name": row["name"],
             "phone": row["phone"],
             "address": row["address"],
+            "adminAddress": row["admin_address"],
+            "orderContent": row["order_content"],
+            "codAmount": row["cod_amount"],
             "facebookUid": row["facebook_uid"],
             "tiktokId": row["tiktok_id"],
             "createdAt": row["created_at"],
@@ -766,12 +782,18 @@ def replace_customers(db_path: Path, rows: list[dict[str, Any]], removed_ids: li
         for row in rows:
             conn.execute(
                 """
-                INSERT INTO customers(id, name, phone, address, facebook_uid, tiktok_id, created_at, updated_at)
-                VALUES(?,?,?,?,?,?,?,?)
+                INSERT INTO customers(
+                  id, name, phone, address, admin_address, order_content, cod_amount,
+                  facebook_uid, tiktok_id, created_at, updated_at
+                )
+                VALUES(?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET
                   name=excluded.name,
                   phone=excluded.phone,
                   address=excluded.address,
+                  admin_address=excluded.admin_address,
+                  order_content=excluded.order_content,
+                  cod_amount=excluded.cod_amount,
                   facebook_uid=excluded.facebook_uid,
                   tiktok_id=excluded.tiktok_id,
                   created_at=excluded.created_at,
@@ -782,6 +804,9 @@ def replace_customers(db_path: Path, rows: list[dict[str, Any]], removed_ids: li
                     row.get("name") or "",
                     row.get("phone") or "",
                     row.get("address") or "",
+                    row.get("adminAddress") or "",
+                    row.get("orderContent") or "",
+                    row.get("codAmount") or "",
                     row.get("facebookUid") or "",
                     row.get("tiktokId") or "",
                     row.get("createdAt") or "",

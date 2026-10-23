@@ -85,12 +85,17 @@ _HEADER_HINTS: dict[str, tuple[str, ...]] = {
         "dia chi 3",
         "address",
         "addr",
-        "tinh thanh",
-        "que quan",
         "so nha",
         "duong",
         "ten duong",
         "pho",
+        "street",
+    ),
+    "adminAddress": (
+        "dia chi hanh chinh",
+        "hanh chinh",
+        "tinh thanh",
+        "que quan",
         "phuong",
         "xa",
         "quan",
@@ -99,8 +104,32 @@ _HEADER_HINTS: dict[str, tuple[str, ...]] = {
         "thanh pho",
         "ward",
         "district",
-        "street",
         "city",
+        "province",
+    ),
+    "orderContent": (
+        "noi dung hang mua",
+        "hang mua",
+        "san pham",
+        "noi dung",
+        "ten hang",
+        "mat hang",
+        "sku",
+        "product",
+        "item",
+        "order",
+    ),
+    "codAmount": (
+        "gia tien cod",
+        "tien cod",
+        "cod",
+        "thu ho",
+        "tien thu ho",
+        "gia tien",
+        "so tien",
+        "thanh tien",
+        "amount",
+        "price",
     ),
     "facebookUid": (
         "uid facebook",
@@ -125,8 +154,11 @@ _HEADER_HINTS: dict[str, tuple[str, ...]] = {
 _FIELD_PRIORITY = {
     "tiktokId": 1.08,
     "phone": 1.06,
+    "codAmount": 1.05,
     "facebookUid": 1.03,
     "address": 1.02,
+    "adminAddress": 1.01,
+    "orderContent": 1.005,
     "name": 1.0,
 }
 _MIN_SCORE = 0.42
@@ -142,6 +174,13 @@ _ADDRESS_PART_HINTS = frozenset(
         "duong",
         "ten duong",
         "pho",
+        "street",
+    }
+)
+_ADMIN_PART_HINTS = frozenset(
+    {
+        "dia chi hanh chinh",
+        "hanh chinh",
         "phuong",
         "xa",
         "quan",
@@ -152,17 +191,24 @@ _ADDRESS_PART_HINTS = frozenset(
         "que quan",
         "ward",
         "district",
-        "street",
         "city",
+        "province",
     }
 )
 _REASONS = {
     "name": "chữ, không có số",
     "phone": "đầu số nhà mạng Việt Nam",
-    "address": "địa danh / đơn vị hành chính Việt Nam",
+    "address": "địa chỉ giao / số nhà / đường",
+    "adminAddress": "tỉnh / huyện / xã / phường",
+    "orderContent": "tên hàng / size / sản phẩm",
+    "codAmount": "số tiền COD / thu hộ",
     "facebookUid": "dãy số, không phải SĐT",
     "tiktokId": "bắt đầu bằng @",
 }
+_ORDER_HINT = re.compile(
+    r"(?i)\b(?:size|sz|sku|mau|doi|chiec|giay|dep|ao|quan|nuoc mam|san pham)\b"
+)
+_COD_HINT = re.compile(r"(?i)(\d+(?:[.,]\d+)?)\s*(?:k|nghin|tr|trieu|d|đ|vnd|dong|cod)\b")
 
 
 def _digits(value: str) -> str:
@@ -240,6 +286,31 @@ def looks_like_address(value: str) -> bool:
     return has_vietnam_place(text) or has_address_keyword(text)
 
 
+def looks_like_admin_address(value: str) -> bool:
+    return looks_like_address(value)
+
+
+def looks_like_cod(value: str) -> bool:
+    text = collapse(value)
+    if not text or looks_like_vn_phone(text) or looks_like_facebook_uid(text) or looks_like_tiktok_id(text):
+        return False
+    if _COD_HINT.search(text):
+        return True
+    digits = _digits(text)
+    if not digits or (digits.startswith("0") and len(digits) >= 9):
+        return False
+    return 3 <= len(digits) <= 10 and bool(re.fullmatch(r"[\d.,\s]+", text))
+
+
+def looks_like_order_content(value: str) -> bool:
+    text = collapse(value)
+    if not text or looks_like_vn_phone(text) or looks_like_facebook_uid(text) or looks_like_tiktok_id(text):
+        return False
+    if looks_like_cod(text) or looks_like_address(text):
+        return False
+    return bool(_ORDER_HINT.search(fold_vietnamese(text)))
+
+
 def looks_like_name(value: str) -> bool:
     text = collapse(value)
     if not text or looks_like_tiktok_id(text) or looks_like_vn_phone(text) or looks_like_facebook_uid(text):
@@ -288,7 +359,12 @@ def score_column(header: str, values: list[str]) -> dict[str, float]:
         scores["facebookUid"] = _ratio(sum(1 for item in cells if looks_like_facebook_uid(item)), total)
         scores["tiktokId"] = _ratio(sum(1 for item in cells if looks_like_tiktok_id(item)), total)
         scores["address"] = _ratio(sum(1 for item in cells if looks_like_address(item)), total)
+        scores["orderContent"] = _ratio(sum(1 for item in cells if looks_like_order_content(item)), total)
+        scores["codAmount"] = _ratio(sum(1 for item in cells if looks_like_cod(item)), total)
         scores["name"] = _ratio(sum(1 for item in cells if looks_like_name(item)), total)
+        if hinted == "adminAddress":
+            scores["adminAddress"] = _ratio(sum(1 for item in cells if looks_like_admin_address(item)), total)
+            scores["address"] = 0.0
     if hinted:
         if hinted == "tiktokId" and total:
             handle_like = sum(
@@ -303,7 +379,7 @@ def score_column(header: str, values: list[str]) -> dict[str, float]:
         if not total:
             scores[hinted] = max(scores[hinted], 0.55)
         elif scores[hinted] >= 0.3 or strongest_other < 0.7:
-            scores[hinted] = min(1.0, scores[hinted] + 0.22)
+            scores[hinted] = min(1.22, scores[hinted] + 0.22)
     return scores
 
 
@@ -324,6 +400,8 @@ def assign_fields(headers: list[str], column_values: list[list[str]]) -> tuple[d
     for _weighted, field, index, score in ranked:
         if field in used_fields or index in used_columns:
             continue
+        if field == "address" and header_key(headers[index]) in _ADMIN_PART_HINTS:
+            continue
         mapping[field] = index
         used_fields.add(field)
         used_columns.add(index)
@@ -336,26 +414,32 @@ def assign_fields(headers: list[str], column_values: list[list[str]]) -> tuple[d
             "reason": _REASONS[field],
             "fromHeader": hinted,
         }
-    address_indexes = _extra_address_columns(headers, column_values, used_columns, mapping.get("address"))
-    if address_indexes:
-        mapping["address"] = address_indexes[0]
-        first_header = collapse(headers[address_indexes[0]])
-        details["address"] = {
-            "index": address_indexes[0],
-            "indexes": address_indexes,
-            "score": details.get("address", {}).get("score", 1.0),
-            "header": first_header,
-            "reason": "mỗi cột địa chỉ thành một dòng",
-            "fromHeader": any(header_field(headers[index]) == "address" for index in address_indexes),
+    for field, hints, reason in (
+        ("address", _ADDRESS_PART_HINTS, "mỗi cột địa chỉ thành một dòng"),
+        ("adminAddress", _ADMIN_PART_HINTS, "mỗi cột hành chính thành một dòng"),
+    ):
+        indexes = _extra_line_columns(headers, column_values, used_columns, mapping.get(field), field, hints)
+        if not indexes:
+            continue
+        mapping[field] = indexes[0]
+        details[field] = {
+            "index": indexes[0],
+            "indexes": indexes,
+            "score": details.get(field, {}).get("score", 1.0),
+            "header": collapse(headers[indexes[0]]),
+            "reason": reason,
+            "fromHeader": any(header_field(headers[index]) == field for index in indexes),
         }
     return mapping, details
 
 
-def _extra_address_columns(
+def _extra_line_columns(
     headers: list[str],
     column_values: list[list[str]],
     used_columns: set[int],
     primary: int | None,
+    field: str,
+    hints: frozenset[str],
 ) -> list[int]:
     chosen: list[int] = []
     if primary is not None:
@@ -366,11 +450,13 @@ def _extra_address_columns(
         values = column_values[index] if index < len(column_values) else []
         scores = score_column(header, values)
         key = header_key(header)
-        part = key in _ADDRESS_PART_HINTS
-        exclusive = max(scores["phone"], scores["facebookUid"], scores["tiktokId"])
+        part = key in hints
+        exclusive = max(scores["phone"], scores["facebookUid"], scores["tiktokId"], scores["codAmount"])
         if exclusive >= 0.7:
             continue
-        if scores["address"] >= _ADDRESS_EXTRA or (part and scores["name"] < 0.75):
+        if field == "address" and key in _ADMIN_PART_HINTS:
+            continue
+        if scores[field] >= _ADDRESS_EXTRA or (part and scores["name"] < 0.75):
             chosen.append(index)
             used_columns.add(index)
     return sorted(dict.fromkeys(chosen))
@@ -397,9 +483,9 @@ def explain_mapping(details: dict[str, dict[str, Any]], headers: list[str]) -> s
             title = collapse(headers[index]) if 0 <= index < len(headers) else ""
             labels.append(f"Cột {letter}" + (f" — {title}" if title else ""))
         how = item["reason"]
-        if field == "address" and len(indexes) > 1:
-            how = "mỗi cột một dòng địa chỉ"
-        elif item.get("fromHeader") and field != "address":
+        if field in {"address", "adminAddress"} and len(indexes) > 1:
+            how = "mỗi cột một dòng"
+        elif item.get("fromHeader") and field not in {"address", "adminAddress"}:
             how = "tên cột và nội dung"
         parts.append(f"{_label(field)} ← {', '.join(labels)} ({how})")
     if not parts:
@@ -412,6 +498,9 @@ def _label(field: str) -> str:
         "name": "Tên khách",
         "phone": "Số điện thoại",
         "address": "Địa chỉ",
+        "adminAddress": "Địa chỉ hành chính",
+        "orderContent": "Hàng mua",
+        "codAmount": "Tiền COD",
         "facebookUid": "UID Facebook",
         "tiktokId": "ID TikTok",
     }

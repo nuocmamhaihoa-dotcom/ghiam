@@ -56,7 +56,7 @@
 <body>
 <main>
   <h1>Kho khách Excel</h1>
-  <p class="lead">Nhập khách bằng file Excel, không dùng video. Mỗi lần nạp, chọn cột nào là tên, số điện thoại, địa chỉ, UID Facebook, ID TikTok. Cùng một lần chọn cột dùng cho mọi file bạn thêm lúc đó. Chỉ gộp khi trùng số điện thoại. Không có số, hoặc khác số, thì mỗi dòng là một khách. Ô đã có giữ nguyên, ô trống được điền thêm. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
+  <p class="lead">Nhập khách bằng file Excel, không dùng video. Mỗi lần nạp, chọn cột nào là tên, số điện thoại, địa chỉ, địa chỉ hành chính, hàng mua, giá COD, UID Facebook, ID TikTok. Cùng một lần chọn cột dùng cho mọi file bạn thêm lúc đó. Chỉ gộp khi trùng số điện thoại. Không có số, hoặc khác số, thì mỗi dòng là một khách. Ô đã có giữ nguyên, ô trống được điền thêm. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
 
   <section>
     <h2>Thêm file Excel</h2>
@@ -110,7 +110,7 @@
     <h2>Khách đã lưu</h2>
     <div class="stats" id="storeStats"></div>
     <p class="row" style="margin:0.8rem 0">
-      <input id="query" type="search" placeholder="Tìm tên, số điện thoại, địa chỉ, UID Facebook, ID TikTok" />
+      <input id="query" type="search" placeholder="Tìm tên, số, địa chỉ, hàng mua, COD, UID Facebook, ID TikTok" />
       <button class="ghost" type="button" id="export">Tải Excel kho khách</button>
     </p>
     <div class="scroll" id="people"></div>
@@ -121,7 +121,12 @@
   var serverToken = __CONTROL_TOKEN__;
   var pendingFiles = [];
   var preview = null;
-  var fieldOrder = ["name", "phone", "address", "facebookUid", "tiktokId"];
+  var fieldOrder = ["name", "phone", "address", "adminAddress", "orderContent", "codAmount", "facebookUid", "tiktokId"];
+  var lineFields = { address: "addressColumns", adminAddress: "adminAddressColumns" };
+  var lineLabels = {
+    address: "Địa chỉ khách (mỗi cột đã chọn thành một dòng)",
+    adminAddress: "Địa chỉ hành chính (mỗi cột đã chọn thành một dòng)"
+  };
   var lookupFiles = [];
   var lastLookup = null;
 
@@ -154,9 +159,9 @@
   function currentMapping() {
     var mapping = {};
     fieldOrder.forEach(function (field) {
-      if (field === "address") {
+      if (lineFields[field]) {
         var columns = [];
-        document.querySelectorAll("#map-address input[type=checkbox]:checked").forEach(function (box) {
+        document.querySelectorAll("#map-" + field + " input[type=checkbox]:checked").forEach(function (box) {
           var header = box.getAttribute("data-header") || "";
           var rawIndex = box.getAttribute("data-index");
           var index = rawIndex === "" || rawIndex == null ? null : Number(rawIndex);
@@ -164,7 +169,7 @@
           if (header || index !== null) columns.push({ index: index, header: header });
         });
         var first = columns[0] || { index: null, header: "" };
-        mapping.address = { index: first.index, header: first.header, columns: columns };
+        mapping[field] = { index: first.index, header: first.header, columns: columns };
         return;
       }
       var select = document.getElementById("map-" + field);
@@ -210,14 +215,14 @@
       var suggested = body.suggested[field.id];
       var label = document.createElement("label");
       label.setAttribute("for", "map-" + field.id);
-      label.textContent = field.id === "address" ? "Địa chỉ khách (mỗi cột đã chọn thành một dòng)" : field.label;
+      label.textContent = lineLabels[field.id] || field.label;
       box.appendChild(label);
-      if (field.id === "address") {
+      if (lineFields[field.id]) {
         var picks = document.createElement("div");
-        picks.id = "map-address";
+        picks.id = "map-" + field.id;
         picks.className = "picks";
         var chosen = {};
-        (body.suggested.addressColumns || []).forEach(function (index) { chosen[index] = true; });
+        (body.suggested[lineFields[field.id]] || []).forEach(function (index) { chosen[index] = true; });
         if (suggested != null && suggested !== "") chosen[suggested] = true;
         body.columns.forEach(function (col, colPos) {
           var row = document.createElement("label");
@@ -285,7 +290,7 @@
     }
     var mapping = currentMapping();
     var used = fieldOrder.some(function (field) {
-      if (field === "address") return mapping.address && mapping.address.columns && mapping.address.columns.length;
+      if (lineFields[field]) return mapping[field] && mapping[field].columns && mapping[field].columns.length;
       return mapping[field].header || mapping[field].index !== null;
     });
     if (!used) {
@@ -331,9 +336,9 @@
       document.getElementById("people").innerHTML = "<p class='note'>Chưa có khách, hoặc không khớp từ tìm.</p>";
       return;
     }
-    var html = "<table><thead><tr><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
+    var html = "<table><thead><tr><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
     items.forEach(function (row) {
-      html += "<tr><td>" + escapeHtml(row.name) + "</td><td>" + escapeHtml(row.phone) + "</td><td class='addr'>" + escapeHtml(row.address) + "</td><td>" + escapeHtml(row.facebookUid) + "</td><td>" + escapeHtml(row.tiktokId) + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(row.name) + "</td><td>" + escapeHtml(row.phone) + "</td><td class='addr'>" + escapeHtml(row.address) + "</td><td class='addr'>" + escapeHtml(row.adminAddress) + "</td><td class='addr'>" + escapeHtml(row.orderContent) + "</td><td>" + escapeHtml(row.codAmount) + "</td><td>" + escapeHtml(row.facebookUid) + "</td><td>" + escapeHtml(row.tiktokId) + "</td></tr>";
     });
     html += "</tbody></table>";
     document.getElementById("people").innerHTML = html;
@@ -382,10 +387,10 @@
       document.getElementById("lookupExport").hidden = true;
       return;
     }
-    var html = "<table><thead><tr><th>Số tra cứu</th><th>Kho</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
+    var html = "<table><thead><tr><th>Số tra cứu</th><th>Kho</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
     items.forEach(function (item) {
       var customer = item.customer || {};
-      html += "<tr><td>" + escapeHtml(item.query) + "</td><td>" + (item.found ? "Có" : "Không") + "</td><td>" + escapeHtml(customer.name) + "</td><td>" + escapeHtml(customer.phone) + "</td><td class='addr'>" + escapeHtml(customer.address) + "</td><td>" + escapeHtml(customer.facebookUid) + "</td><td>" + escapeHtml(customer.tiktokId) + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(item.query) + "</td><td>" + (item.found ? "Có" : "Không") + "</td><td>" + escapeHtml(customer.name) + "</td><td>" + escapeHtml(customer.phone) + "</td><td class='addr'>" + escapeHtml(customer.address) + "</td><td class='addr'>" + escapeHtml(customer.adminAddress) + "</td><td class='addr'>" + escapeHtml(customer.orderContent) + "</td><td>" + escapeHtml(customer.codAmount) + "</td><td>" + escapeHtml(customer.facebookUid) + "</td><td>" + escapeHtml(customer.tiktokId) + "</td></tr>";
     });
     html += "</tbody></table>";
     document.getElementById("lookupPeople").innerHTML = html;

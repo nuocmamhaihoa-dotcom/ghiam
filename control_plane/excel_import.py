@@ -12,6 +12,7 @@ from typing import Any, Iterable
 from control_plane.column_detect import suggest_mapping as detect_mapping
 from control_plane.customers import (
     FIELDS,
+    LINE_FIELDS,
     clean_phone,
     clean_row,
     collapse,
@@ -29,6 +30,9 @@ FIELD_LABELS = {
     "name": "Tên khách",
     "phone": "Số điện thoại khách",
     "address": "Địa chỉ khách",
+    "adminAddress": "Địa chỉ hành chính",
+    "orderContent": "Nội dung hàng mua",
+    "codAmount": "Giá tiền COD",
     "facebookUid": "UID Facebook",
     "tiktokId": "ID TikTok",
 }
@@ -379,14 +383,14 @@ def rows_from_table(rows: list[list[str]], mapping: dict[str, Any], allow_index:
     indexes = {
         field: resolve_index(headers, mapping.get(field), allow_index=allow_index) for field in FIELDS
     }
-    address_specs = _address_specs(mapping.get("address"))
+    line_specs = {field: _address_specs(mapping.get(field)) for field in LINE_FIELDS}
     extracted: list[dict[str, str]] = []
     for row in table[1:]:
         raw: dict[str, str] = {}
         for field in FIELDS:
-            if field == "address":
+            if field in LINE_FIELDS:
                 parts = []
-                for spec in address_specs:
+                for spec in line_specs[field]:
                     index = resolve_index(headers, spec, allow_index=allow_index)
                     if index is not None and index < len(row):
                         parts.append(row[index])
@@ -502,13 +506,13 @@ def mapping_from_form(raw: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
         item = source.get(field) or {}
         if not isinstance(item, dict):
             item = {"index": item}
-        columns = _address_specs(item) if field == "address" else []
+        columns = _address_specs(item) if field in LINE_FIELDS else []
         first = columns[0] if columns else item
         mapping[field] = {
             "index": first.get("index") if isinstance(first, dict) else item.get("index"),
             "header": (first.get("header") if isinstance(first, dict) else "") or item.get("header") or "",
         }
-        if field == "address":
+        if field in LINE_FIELDS:
             mapping[field]["columns"] = columns or [
                 {"index": item.get("index"), "header": item.get("header") or ""}
             ]

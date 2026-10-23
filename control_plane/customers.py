@@ -7,7 +7,19 @@ import uuid
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-FIELDS = ("name", "phone", "address", "facebookUid", "tiktokId")
+FIELDS = (
+    "name",
+    "phone",
+    "address",
+    "adminAddress",
+    "orderContent",
+    "codAmount",
+    "facebookUid",
+    "tiktokId",
+)
+LINE_FIELDS = ("address", "adminAddress", "orderContent")
+_COD_THOUSAND = re.compile(r"(?i)(\d+(?:[.,]\d+)?)\s*k\b")
+_COD_MILLION = re.compile(r"(?i)(\d+(?:[.,]\d+)?)\s*tr(?:ieu)?\b")
 
 _SCI = re.compile(r"^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$")
 _DIGITS = re.compile(r"^\d{5,20}$")
@@ -106,6 +118,46 @@ def address_key(value: str) -> str:
     return " | ".join(line.casefold() for line in split_address_lines(value))
 
 
+def clean_admin_address(value: Any) -> str:
+    return join_address_lines(value)[:800]
+
+
+def clean_order_content(value: Any) -> str:
+    return join_address_lines(value)[:800]
+
+
+def _cod_number(text: str) -> str:
+    try:
+        return str(int(round(float(text.replace(",", ".")))))
+    except ValueError:
+        return ""
+
+
+def clean_cod_amount(value: Any) -> str:
+    text = collapse(value)
+    if not text:
+        return ""
+    thousand = _COD_THOUSAND.search(text)
+    if thousand:
+        base = _cod_number(thousand.group(1))
+        return str(int(base) * 1000) if base else ""
+    million = _COD_MILLION.search(text)
+    if million:
+        amount = million.group(1).replace(",", ".")
+        try:
+            return str(int(round(float(amount) * 1_000_000)))
+        except ValueError:
+            return ""
+    digits = "".join(character for character in text if character.isdigit())
+    if not digits:
+        return ""
+    if digits.startswith("0") and 9 <= len(digits) <= 15:
+        return ""
+    if len(digits) > 12:
+        return ""
+    return str(int(digits))
+
+
 def clean_facebook_uid(value: Any) -> str:
     text = expand_scientific(collapse(value))
     if not text:
@@ -150,6 +202,9 @@ _CLEANERS = {
     "name": clean_name,
     "phone": clean_phone,
     "address": clean_address,
+    "adminAddress": clean_admin_address,
+    "orderContent": clean_order_content,
+    "codAmount": clean_cod_amount,
     "facebookUid": clean_facebook_uid,
     "tiktokId": clean_tiktok_id,
 }
@@ -158,6 +213,9 @@ _KEYS = {
     "name": name_key,
     "phone": clean_phone,
     "address": address_key,
+    "adminAddress": address_key,
+    "orderContent": address_key,
+    "codAmount": clean_cod_amount,
     "facebookUid": facebook_key,
     "tiktokId": tiktok_key,
 }
@@ -223,11 +281,11 @@ class _UnionFind:
 
 
 def _pick(members: list[dict[str, Any]], field: str) -> str:
-    if field == "address":
-        existing = [str(row.get("address") or "") for row in members if row["existing"] and row.get("address")]
+    if field in LINE_FIELDS:
+        existing = [str(row.get(field) or "") for row in members if row["existing"] and row.get(field)]
         if existing:
             return join_address_lines(*existing)
-        return join_address_lines(*(str(row.get("address") or "") for row in members if not row["existing"]))
+        return join_address_lines(*(str(row.get(field) or "") for row in members if not row["existing"]))
     for row in members:
         if row["existing"] and row.get(field):
             return str(row[field])
@@ -342,6 +400,9 @@ def public_customer(row: dict[str, Any]) -> dict[str, str]:
         "name": str(row.get("name") or ""),
         "phone": str(row.get("phone") or ""),
         "address": str(row.get("address") or ""),
+        "adminAddress": str(row.get("adminAddress") or ""),
+        "orderContent": str(row.get("orderContent") or ""),
+        "codAmount": str(row.get("codAmount") or ""),
         "facebookUid": str(row.get("facebookUid") or ""),
         "tiktokId": str(row.get("tiktokId") or ""),
         "createdAt": str(row.get("createdAt") or ""),
@@ -437,6 +498,9 @@ def matches_query(row: dict[str, Any], query: str) -> bool:
         row.get("name") or "",
         row.get("phone") or "",
         row.get("address") or "",
+        row.get("adminAddress") or "",
+        row.get("orderContent") or "",
+        row.get("codAmount") or "",
         row.get("facebookUid") or "",
         row.get("tiktokId") or "",
     ]
