@@ -7,6 +7,8 @@ import uuid
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from control_plane.vietnam_places import fold_vietnamese, has_address_keyword, has_vietnam_place
+
 FIELDS = (
     "name",
     "phone",
@@ -493,6 +495,161 @@ def lookup_by_phones(
         "missing": missing,
         "hits": found,
     }
+
+
+_GENDER_KEYS = frozenset(
+    {
+        "female",
+        "male",
+        "femelelle",
+        "femelele",
+        "femelle",
+        "femele",
+        "gioi tinh",
+        "nu",
+    }
+)
+_DATE_LINE = re.compile(r"^\d{1,2}[/.\-]\d{1,2}(?:[/.\-]\d{2,4})?$")
+_FB_HOST = re.compile(r"(?i)(?:facebook\.com|fb\.com|fb\.me)")
+_LETTER_OR_MARK = re.compile(r"[^\W\d_]", re.UNICODE)
+
+
+def is_gender_value(value: str) -> bool:
+    return fold_vietnamese(value) in _GENDER_KEYS
+
+
+def _is_date_line(value: str) -> bool:
+    return bool(_DATE_LINE.fullmatch(collapse(value)))
+
+
+def _is_uid_digits(value: str) -> bool:
+    text = collapse(value)
+    if not text or not text.isdigit() or clean_phone(text):
+        return False
+    return 5 <= len(text) <= 20
+
+
+def _is_name_line(value: str) -> bool:
+    text = collapse(value)
+    if not text or is_gender_value(text) or _is_date_line(text) or _FB_HOST.search(text):
+        return False
+    if clean_phone(text) or _is_uid_digits(text) or any(character.isdigit() for character in text):
+        return False
+    if has_vietnam_place(text) or has_address_keyword(text):
+        return False
+    words = fold_vietnamese(text).split()
+    return bool(1 <= len(words) <= 7 and _LETTER_OR_MARK.search(text))
+
+
+def _is_address_line(value: str) -> bool:
+    text = collapse(value)
+    if not text or is_gender_value(text) or _is_date_line(text) or _FB_HOST.search(text):
+        return False
+    if clean_phone(text) or _is_uid_digits(text):
+        return False
+    return has_vietnam_place(text) or has_address_keyword(text)
+
+
+def _is_facebook_dump(name: str, lines: list[str]) -> bool:
+    if is_gender_value(name):
+        return True
+    return any(is_gender_value(line) or _FB_HOST.search(line) for line in lines)
+
+
+_DUMP_URL = re.compile(r"https?://\S+|(?:facebook\.com|fb\.com|fb\.me)/\S*", re.I)
+_DUMP_GENDER = re.compile(
+    r"(?i)\b(?:female|male|femelelle|femelele|femelle|femele)\b"
+)
+_DUMP_DATE = re.compile(r"\b\d{1,2}[/.\-]\d{1,2}(?:[/.\-]\d{2,4})?\b")
+_DUMP_DIGITS = re.compile(r"\b\d{5,20}\b")
+
+
+def _dump_lines(address: str) -> list[str]:
+    text = str(address or "").replace("\r\n", "\n").replace("\r", "\n")
+    text = _DUMP_URL.sub(lambda match: f"\n{match.group(0)}\n", text)
+    text = _DUMP_GENDER.sub(lambda match: f"\n{match.group(0)}\n", text)
+    text = _DUMP_DATE.sub(lambda match: f"\n{match.group(0)}\n", text)
+    text = _DUMP_DIGITS.sub(lambda match: f"\n{match.group(0)}\n", text)
+    return split_address_lines(text)
+
+
+def repair_customer_row(row: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    """Đưa tên, SĐT, UID Facebook ra đúng cột; bỏ giới tính/ngày/link khỏi địa chỉ."""
+    current = {field: str(row.get(field) or "") for field in FIELDS}
+    lines = _dump_lines(current["address"])
+    if not _is_facebook_dump(current["name"], lines):
+        return dict(row), False
+    found_name = ""
+    found_phone = clean_phone(current["phone"])
+    found_uid = clean_facebook_uid(current["facebookUid"])
+    kept_address: list[str] = []
+    past_gender = False
+    for line in lines:
+        if is_gender_value(line):
+            past_gender = True
+            continue
+        if _is_date_line(line):
+            continue
+        if _FB_HOST.search(line):
+            uid = clean_facebook_uid(line)
+            if uid and not found_uid:
+                found_uid = uid
+            continue
+        phone = clean_phone(line)
+        if phone:
+            if not found_phone:
+                found_phone = phone
+            continue
+        if _is_uid_digits(line):
+            if not found_uid:
+                found_uid = line
+            continue
+        if not past_gender and _is_name_line(line):
+            if not found_name:
+                found_name = clean_name(line)
+            continue
+        if _is_address_line(line) or past_gender:
+            kept_address.append(line)
+            continue
+        if _is_name_line(line):
+            continue
+        kept_address.append(line)
+    name = current["name"]
+    if is_gender_value(name) or not collapse(name):
+        name = found_name
+    if is_gender_value(name):
+        name = ""
+    fixed = dict(row)
+    fixed.update(current)
+    fixed["name"] = name
+    fixed["phone"] = found_phone
+    fixed["address"] = join_address_lines(*kept_address)
+    fixed["facebookUid"] = found_uid
+    changed = any(str(fixed.get(field) or "") != current[field] for field in FIELDS)
+    return fixed, changed
+
+
+def repair_customer_rows(rows: list[dict[str, Any]]) -> int:
+    fixed_count = 0
+    for index, row in enumerate(rows):
+        fixed, changed = repair_customer_row(row)
+        if not changed:
+            continue
+        fixed["write"] = True
+        rows[index] = fixed
+        fixed_count += 1
+    return fixed_count
+
+
+def repair_stored_customers(db_path: Any) -> int:
+    from control_plane import db
+
+    rows = db.list_customers(db_path)
+    fixed_count = repair_customer_rows(rows)
+    dirty = [row for row in rows if row.get("write")]
+    if dirty:
+        db.replace_customers(db_path, dirty, [])
+    return fixed_count
 
 
 def matches_query(row: dict[str, Any], query: str) -> bool:

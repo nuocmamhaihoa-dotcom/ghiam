@@ -44,6 +44,7 @@ from control_plane.recordings import (
     steps_to_events,
 )
 from control_plane.settings import ROOT, settings
+from control_plane.customers import repair_stored_customers
 from control_plane.customer_api import router as customer_router
 from control_plane.video_api import router as video_router
 from control_plane.video_store import init_db as init_video_db
@@ -122,6 +123,7 @@ def _remember_hub(kind: str, summary: str, detail: str | None = None, actor: str
 async def _startup() -> None:
     settings.ensure_dirs()
     db.init_db(settings.db_path)
+    repair_stored_customers(settings.db_path)
     init_video_db(settings.video_db_path)
     merge_close_results(settings.video_db_path)
     # Import proxy list into DB immediately; live/die loop runs in background

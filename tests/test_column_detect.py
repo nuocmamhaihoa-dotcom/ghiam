@@ -1,4 +1,4 @@
-"""Nhận cột theo nội dung: tránh nhầm SĐT, UID, tên, địa chỉ, TikTok."""
+"""Khớp cột theo tên kho; cột lạ bỏ qua, không đoán nội dung."""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ class CellSignalTests(unittest.TestCase):
 
 
 class ColumnAssignTests(unittest.TestCase):
-    def test_generic_headers_follow_cell_content(self) -> None:
+    def test_generic_headers_are_skipped(self) -> None:
         headers = ["Cột 1", "Cột 2", "Cột 3", "Cột 4", "Cột 5"]
         values = [
             ["Nguyễn Lan", "Trần Minh", "Lê Hoa"],
@@ -72,33 +72,61 @@ class ColumnAssignTests(unittest.TestCase):
             ["@lan.hue", "@minh.hn", "https://www.tiktok.com/@hoa.hue"],
         ]
         mapping = suggest_mapping(headers, values)
-        self.assertEqual(mapping["name"], 0)
-        self.assertEqual(mapping["phone"], 1)
-        self.assertEqual(mapping["address"], 2)
-        self.assertEqual(mapping["facebookUid"], 3)
-        self.assertEqual(mapping["tiktokId"], 4)
+        self.assertIsNone(mapping["name"])
+        self.assertIsNone(mapping["phone"])
+        self.assertIsNone(mapping["address"])
+        self.assertIsNone(mapping["facebookUid"])
+        self.assertIsNone(mapping["tiktokId"])
 
-    def test_swapped_columns_still_map_by_content(self) -> None:
+    def test_unlabeled_columns_are_not_guessed_from_content(self) -> None:
         headers = ["A", "B"]
         values = [
             ["1000123456789", "1000222333444"],
             ["Nguyễn Lan", "Trần Minh"],
         ]
         mapping = suggest_mapping(headers, values)
-        self.assertEqual(mapping["facebookUid"], 0)
-        self.assertEqual(mapping["name"], 1)
+        self.assertIsNone(mapping["facebookUid"])
+        self.assertIsNone(mapping["name"])
         self.assertIsNone(mapping["phone"])
 
-    def test_phone_column_is_not_taken_as_facebook(self) -> None:
+    def test_header_uid_maps_facebook_even_when_cells_are_phones(self) -> None:
         headers = ["uid", "name"]
         values = [
             ["0901222333", "0912345678", "0321111222"],
             ["Lan", "Minh", "Hoa"],
         ]
         mapping = suggest_mapping(headers, values)
-        self.assertEqual(mapping["phone"], 0)
+        self.assertEqual(mapping["facebookUid"], 0)
         self.assertEqual(mapping["name"], 1)
-        self.assertIsNone(mapping["facebookUid"])
+        self.assertIsNone(mapping["phone"])
+
+    def test_gender_birthday_and_link_columns_are_skipped(self) -> None:
+        headers = [
+            "Tên khách",
+            "Số điện thoại",
+            "Địa chỉ",
+            "UID Facebook",
+            "Giới tính",
+            "Ngày sinh",
+            "Link Facebook",
+        ]
+        values = [
+            ["Nguyễn Lan"],
+            ["0901222333"],
+            ["Huế"],
+            ["1000123456789"],
+            ["female"],
+            ["05/07/2024"],
+            ["https://fb.com/1000123456789"],
+        ]
+        mapping, details = assign_fields(headers, values)
+        self.assertEqual(mapping["name"], 0)
+        self.assertEqual(mapping["phone"], 1)
+        self.assertEqual(mapping["address"], 2)
+        self.assertEqual(mapping["facebookUid"], 3)
+        self.assertIsNone(mapping["tiktokId"])
+        self.assertNotIn(4, [item["index"] for item in details.values()])
+        self.assertNotIn(5, [item["index"] for item in details.values()])
 
     def test_multiple_address_columns_become_separate_lines(self) -> None:
         from control_plane.excel_import import mapping_from_form, rows_from_files
@@ -150,7 +178,7 @@ class ColumnAssignTests(unittest.TestCase):
         self.assertEqual(mapping["adminAddress"], 2)
         self.assertEqual(details["adminAddress"]["indexes"], [2, 3])
 
-    def test_unlabeled_address_parts_are_all_kept(self) -> None:
+    def test_unlabeled_address_parts_are_skipped(self) -> None:
         headers = ["A", "B", "C", "D"]
         values = [
             ["Nguyễn Lan", "Trần Minh"],
@@ -159,10 +187,10 @@ class ColumnAssignTests(unittest.TestCase):
             ["Phường Phú Hội", "Cầu Giấy"],
         ]
         mapping, details = assign_fields(headers, values)
-        self.assertEqual(mapping["name"], 0)
-        self.assertEqual(mapping["phone"], 1)
-        self.assertEqual(mapping["address"], 2)
-        self.assertEqual(details["address"]["indexes"], [2, 3])
+        self.assertIsNone(mapping["name"])
+        self.assertIsNone(mapping["phone"])
+        self.assertIsNone(mapping["address"])
+        self.assertEqual(details, {})
 
     def test_labeled_tiktok_without_at_still_maps(self) -> None:
         payload = write_xlsx(

@@ -13,6 +13,8 @@ from control_plane.customers import (
     lookup_by_phones,
     matches_query,
     phones_from_text,
+    repair_customer_row,
+    repair_stored_customers,
 )
 from control_plane.excel_import import (
     mapping_from_form,
@@ -321,6 +323,102 @@ class ExcelMappingTests(unittest.TestCase):
         folded, stats, _removed = fold_customers([], incoming, "2026-01-01T00:00:00+00:00")
         self.assertEqual(stats["created"], 2)
         self.assertEqual({row["name"] for row in folded}, {"An", "Bình"})
+
+
+class CustomerRepairTests(unittest.TestCase):
+    def test_facebook_dump_moves_name_uid_and_place(self) -> None:
+        row = {
+            "name": "femelelle",
+            "phone": "0972863591",
+            "address": (
+                "1000045227421200\n"
+                "84972863591\n"
+                "Quackky Nkanan\n"
+                "femelelle\n"
+                "05/07/2024\n"
+                "Tràng Bom\n"
+                "https://fb.com/1000045227421200"
+            ),
+            "adminAddress": "",
+            "orderContent": "",
+            "codAmount": "",
+            "facebookUid": "1000045227421200",
+            "tiktokId": "",
+        }
+        fixed, changed = repair_customer_row(row)
+        self.assertTrue(changed)
+        self.assertEqual(fixed["name"], "Quackky Nkanan")
+        self.assertEqual(fixed["phone"], "0972863591")
+        self.assertEqual(fixed["address"], "Tràng Bom")
+        self.assertEqual(fixed["facebookUid"], "1000045227421200")
+
+    def test_clean_row_is_left_alone(self) -> None:
+        row = {
+            "name": "Nguyễn Ngân",
+            "phone": "0903449598",
+            "address": "Huế",
+            "facebookUid": "1000183715327222",
+        }
+        fixed, changed = repair_customer_row(row)
+        self.assertFalse(changed)
+        self.assertEqual(fixed["name"], "Nguyễn Ngân")
+        self.assertEqual(fixed["address"], "Huế")
+
+    def test_repair_stored_customers_writes_only_dirty_rows(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        from control_plane import db
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "server.db"
+            db.init_db(path)
+            db.replace_customers(
+                path,
+                [
+                    {
+                        "id": "dump1",
+                        "name": "female",
+                        "phone": "0985515140",
+                        "address": (
+                            "100007416894544\n"
+                            "84985515140\n"
+                            "Thienoy Nguyen\n"
+                            "female\n"
+                            "Tuy Hòa\n"
+                            "https://fb.com/100007416894544"
+                        ),
+                        "adminAddress": "",
+                        "orderContent": "",
+                        "codAmount": "",
+                        "facebookUid": "100007416894544",
+                        "tiktokId": "",
+                        "createdAt": "2026-01-01T00:00:00+00:00",
+                        "updatedAt": "2026-01-01T00:00:00+00:00",
+                    },
+                    {
+                        "id": "ok1",
+                        "name": "Nguyễn Ngân",
+                        "phone": "0903449598",
+                        "address": "Huế",
+                        "adminAddress": "",
+                        "orderContent": "",
+                        "codAmount": "",
+                        "facebookUid": "1000183715327222",
+                        "tiktokId": "",
+                        "createdAt": "2026-01-01T00:00:00+00:00",
+                        "updatedAt": "2026-01-01T00:00:00+00:00",
+                    },
+                ],
+                [],
+            )
+            self.assertEqual(repair_stored_customers(path), 1)
+            rows = {row["id"]: row for row in db.list_customers(path)}
+            self.assertEqual(rows["dump1"]["name"], "Thienoy Nguyen")
+            self.assertEqual(rows["dump1"]["address"], "Tuy Hòa")
+            self.assertEqual(rows["dump1"]["facebookUid"], "100007416894544")
+            self.assertEqual(rows["ok1"]["name"], "Nguyễn Ngân")
+            self.assertEqual(rows["ok1"]["address"], "Huế")
 
 
 if __name__ == "__main__":

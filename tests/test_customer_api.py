@@ -68,6 +68,8 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("địa chỉ hành chính", home.text)
         self.assertIn("hàng mua", home.text)
         self.assertIn("giá COD", home.text)
+        self.assertIn("không đoán nội dung ô", home.text)
+        self.assertIn("giới tính", home.text)
         alias = self.client.get("/khach")
         self.assertEqual(alias.status_code, 200)
         self.assertIn("Cột nào là dữ liệu nào", alias.text)
@@ -88,15 +90,15 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(data["files"][0]["rowCount"], 1)
         self.assertEqual(data["suggested"]["name"], 0)
         self.assertIn("mọi file", data["applyNote"])
-        self.assertIn("Đã tự nhận", data["detectNote"])
+        self.assertIn("Khớp theo tên cột kho", data["detectNote"])
 
-    def test_preview_detects_unlabeled_columns_by_content(self) -> None:
+    def test_preview_skips_unlabeled_and_gender_columns(self) -> None:
         name, body = self._xlsx(
             "an.xlsx",
-            ["A", "B", "C", "D", "E"],
+            ["A", "B", "C", "D", "E", "Giới tính"],
             [
-                ["Nguyễn Lan", "0901222333", "Huế", "1000123456789", "@lan.hue"],
-                ["Trần Minh", "84901444555", "Ha Noi", "1000987654321", "@minh.hn"],
+                ["Nguyễn Lan", "0901222333", "Huế", "1000123456789", "@lan.hue", "female"],
+                ["Trần Minh", "84901444555", "Ha Noi", "1000987654321", "@minh.hn", "male"],
             ],
         )
         preview = self.client.post(
@@ -106,12 +108,47 @@ class CustomerApiTests(unittest.TestCase):
         )
         self.assertEqual(preview.status_code, 200, preview.text)
         data = preview.json()
-        self.assertEqual(data["suggested"]["name"], 0)
-        self.assertEqual(data["suggested"]["phone"], 1)
-        self.assertEqual(data["suggested"]["address"], 2)
-        self.assertEqual(data["suggested"]["facebookUid"], 3)
-        self.assertEqual(data["suggested"]["tiktokId"], 4)
-        self.assertIn("đầu số nhà mạng", data["detectNote"])
+        self.assertIsNone(data["suggested"]["name"])
+        self.assertIsNone(data["suggested"]["phone"])
+        self.assertIsNone(data["suggested"]["address"])
+        self.assertIsNone(data["suggested"]["facebookUid"])
+        self.assertIsNone(data["suggested"]["tiktokId"])
+        self.assertIn("Không cột nào trùng tên với kho", data["detectNote"])
+
+    def test_import_repairs_gender_name_and_facebook_dump_address(self) -> None:
+        name, body = self._xlsx(
+            "dump.xlsx",
+            ["Tên khách", "Số điện thoại", "Địa chỉ", "UID Facebook"],
+            [
+                [
+                    "female",
+                    "0903449598",
+                    "1000183715327222\n84903449598\nNguyễn Ngân\nfemale\nhttps://fb.com/1000183715327222",
+                    "1000183715327222",
+                ]
+            ],
+        )
+        imported = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={
+                "mapping": json.dumps(
+                    {
+                        "name": {"index": 0, "header": "Tên khách"},
+                        "phone": {"index": 1, "header": "Số điện thoại"},
+                        "address": {"index": 2, "header": "Địa chỉ"},
+                        "facebookUid": {"index": 3, "header": "UID Facebook"},
+                    }
+                )
+            },
+            files=[("files", (name, body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+        item = self.client.get("/v1/customers", headers=self.headers).json()["items"][0]
+        self.assertEqual(item["name"], "Nguyễn Ngân")
+        self.assertEqual(item["phone"], "0903449598")
+        self.assertEqual(item["address"], "")
+        self.assertEqual(item["facebookUid"], "1000183715327222")
 
     def test_preview_keeps_every_address_column(self) -> None:
         name, body = self._xlsx(

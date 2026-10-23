@@ -24,6 +24,7 @@ from control_plane.customers import (
     matches_query,
     phones_from_text,
     public_customer,
+    repair_customer_rows,
 )
 from control_plane.excel_import import (
     FIELD_LABELS,
@@ -198,7 +199,7 @@ async def customers_preview(
         "suggested": payload,
         "detectNote": explain_mapping(details, headers),
         "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
-        "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này. Không giới hạn số file.",
+        "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này. Không giới hạn số file. Cột không trùng tên kho thì bỏ qua, không đoán nội dung ô.",
         "headerMismatch": different,
     }
 
@@ -252,6 +253,7 @@ async def customers_import(
         )
     stored = db.list_customers(settings.db_path)
     folded, stats, removed = fold_customers(stored, incoming, utcnow())
+    repair_customer_rows(folded)
     db.replace_customers(settings.db_path, folded, removed)
     summary = (
         f"Nạp Excel: thêm {stats['created']}, bổ sung {stats['updated']}, "

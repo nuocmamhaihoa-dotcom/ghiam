@@ -1,11 +1,11 @@
-"""Nhận cột Excel theo nội dung ô trước, tên cột chỉ là điểm phụ."""
+"""Khớp cột Excel theo tên cột kho. Cột không giống thì bỏ qua, không đoán nội dung."""
 
 from __future__ import annotations
 
 import re
 from typing import Any
 
-from control_plane.customers import FIELDS, collapse, expand_scientific
+from control_plane.customers import FIELDS, LINE_FIELDS, collapse, expand_scientific
 from control_plane.vietnam_places import fold_vietnamese, has_address_keyword, has_vietnam_place
 
 _SCI = re.compile(r"^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$")
@@ -337,10 +337,21 @@ def header_field(header: str) -> str | None:
     key = header_key(header)
     if not key:
         return None
+    best: tuple[int, str] | None = None
     for field, hints in _HEADER_HINTS.items():
-        if key in hints:
-            return field
-    return None
+        for hint in hints:
+            hit = 0
+            if key == hint:
+                hit = 100 + len(hint)
+            elif len(hint) >= 5 and (
+                key.startswith(hint + " ")
+                or key.endswith(" " + hint)
+                or f" {hint} " in f" {key} "
+            ):
+                hit = 50 + len(hint)
+            if hit and (best is None or hit > best[0]):
+                best = (hit, field)
+    return best[1] if best else None
 
 
 def _ratio(hits: int, total: int) -> float:
@@ -384,82 +395,29 @@ def score_column(header: str, values: list[str]) -> dict[str, float]:
 
 
 def assign_fields(headers: list[str], column_values: list[list[str]]) -> tuple[dict[str, int | None], dict[str, dict[str, Any]]]:
+    del column_values
     mapping: dict[str, int | None] = {field: None for field in FIELDS}
     details: dict[str, dict[str, Any]] = {}
-    ranked: list[tuple[float, str, int, float]] = []
+    matches: dict[str, list[int]] = {field: [] for field in FIELDS}
     for index, header in enumerate(headers):
-        values = column_values[index] if index < len(column_values) else []
-        scores = score_column(header, values)
-        for field, score in scores.items():
-            if score < _MIN_SCORE:
-                continue
-            ranked.append((score * _FIELD_PRIORITY[field], field, index, score))
-    ranked.sort(key=lambda item: (item[0], -item[2]), reverse=True)
-    used_fields: set[str] = set()
-    used_columns: set[int] = set()
-    for _weighted, field, index, score in ranked:
-        if field in used_fields or index in used_columns:
+        field = header_field(header)
+        if field is None:
             continue
-        if field == "address" and header_key(headers[index]) in _ADMIN_PART_HINTS:
-            continue
-        mapping[field] = index
-        used_fields.add(field)
-        used_columns.add(index)
-        hinted = header_field(headers[index]) == field
-        details[field] = {
-            "index": index,
-            "indexes": [index],
-            "score": round(score, 3),
-            "header": collapse(headers[index]),
-            "reason": _REASONS[field],
-            "fromHeader": hinted,
-        }
-    for field, hints, reason in (
-        ("address", _ADDRESS_PART_HINTS, "mỗi cột địa chỉ thành một dòng"),
-        ("adminAddress", _ADMIN_PART_HINTS, "mỗi cột hành chính thành một dòng"),
-    ):
-        indexes = _extra_line_columns(headers, column_values, used_columns, mapping.get(field), field, hints)
+        matches[field].append(index)
+    for field in FIELDS:
+        indexes = matches[field]
         if not indexes:
             continue
         mapping[field] = indexes[0]
         details[field] = {
             "index": indexes[0],
-            "indexes": indexes,
-            "score": details.get(field, {}).get("score", 1.0),
+            "indexes": indexes if field in LINE_FIELDS else [indexes[0]],
+            "score": 1.0,
             "header": collapse(headers[indexes[0]]),
-            "reason": reason,
-            "fromHeader": any(header_field(headers[index]) == field for index in indexes),
+            "reason": "trùng tên cột kho",
+            "fromHeader": True,
         }
     return mapping, details
-
-
-def _extra_line_columns(
-    headers: list[str],
-    column_values: list[list[str]],
-    used_columns: set[int],
-    primary: int | None,
-    field: str,
-    hints: frozenset[str],
-) -> list[int]:
-    chosen: list[int] = []
-    if primary is not None:
-        chosen.append(primary)
-    for index, header in enumerate(headers):
-        if index in used_columns:
-            continue
-        values = column_values[index] if index < len(column_values) else []
-        scores = score_column(header, values)
-        key = header_key(header)
-        part = key in hints
-        exclusive = max(scores["phone"], scores["facebookUid"], scores["tiktokId"], scores["codAmount"])
-        if exclusive >= 0.7:
-            continue
-        if field == "address" and key in _ADMIN_PART_HINTS:
-            continue
-        if scores[field] >= _ADDRESS_EXTRA or (part and scores["name"] < 0.75):
-            chosen.append(index)
-            used_columns.add(index)
-    return sorted(dict.fromkeys(chosen))
 
 
 def suggest_mapping(
@@ -483,14 +441,12 @@ def explain_mapping(details: dict[str, dict[str, Any]], headers: list[str]) -> s
             title = collapse(headers[index]) if 0 <= index < len(headers) else ""
             labels.append(f"Cột {letter}" + (f" — {title}" if title else ""))
         how = item["reason"]
-        if field in {"address", "adminAddress"} and len(indexes) > 1:
+        if field in LINE_FIELDS and len(indexes) > 1:
             how = "mỗi cột một dòng"
-        elif item.get("fromHeader") and field not in {"address", "adminAddress"}:
-            how = "tên cột và nội dung"
         parts.append(f"{_label(field)} ← {', '.join(labels)} ({how})")
     if not parts:
-        return "Chưa chắc cột nào. Hãy chọn tay rồi nạp."
-    return "Đã tự nhận: " + "; ".join(parts) + ". Hãy xem lại rồi nạp."
+        return "Không cột nào trùng tên với kho. Cột lạ (giới tính, ngày sinh, link...) bị bỏ qua. Hãy chọn tay nếu cần."
+    return "Khớp theo tên cột kho: " + "; ".join(parts) + ". Cột không giống kho đã bỏ qua."
 
 
 def _label(field: str) -> str:
