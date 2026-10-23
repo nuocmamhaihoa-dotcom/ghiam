@@ -52,9 +52,14 @@ class CustomerApiTests(unittest.TestCase):
         return name, io.BytesIO(payload)
 
     def test_page_is_served(self) -> None:
-        response = self.client.get("/khach")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("Cột nào là dữ liệu nào", response.text)
+        home = self.client.get("/")
+        self.assertEqual(home.status_code, 200)
+        self.assertIn("Kho khách Excel", home.text)
+        self.assertIn("Chọn file Excel", home.text)
+        self.assertIn("không dùng video", home.text)
+        alias = self.client.get("/khach")
+        self.assertEqual(alias.status_code, 200)
+        self.assertIn("Cột nào là dữ liệu nào", alias.text)
 
     def test_preview_then_import_asks_for_columns(self) -> None:
         name, body = self._xlsx(

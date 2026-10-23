@@ -183,7 +183,9 @@ def health() -> dict[str, Any]:
         "danhbaBuild": DANHBA_BUILD,
         "danhba": "/danhba/",
         "delivery": "/tai",
-        "customers": "/khach",
+        "customers": "/",
+        "customersAlias": "/khach",
+        "videos": "/video",
     }
 
 
@@ -199,7 +201,13 @@ def _html(name: str) -> HTMLResponse:
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard() -> HTMLResponse:
-    """Trang duy nhất: thêm video, xem thống kê, tải bản sao lưu."""
+    """Trang chính: nạp khách bằng Excel, tra cứu theo số điện thoại."""
+    return _html("khach.html")
+
+
+@app.get("/video", response_class=HTMLResponse)
+def video_queue() -> HTMLResponse:
+    """Hàng đợi đọc video danh bạ, không phải trang nhập khách."""
     return _html("video.html")
 
 
