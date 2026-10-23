@@ -9,6 +9,7 @@ from control_plane.customers import (
     clean_facebook_uid,
     clean_phone,
     clean_tiktok_id,
+    expand_scientific,
     fold_customers,
     lookup_by_phones,
     matches_query,
@@ -17,6 +18,7 @@ from control_plane.customers import (
     repair_stored_customers,
 )
 from control_plane.excel_import import (
+    _combine_sheets,
     mapping_from_form,
     preview_table,
     rows_from_files,
@@ -37,6 +39,8 @@ class CustomerCleanTests(unittest.TestCase):
         self.assertEqual(clean_facebook_uid("https://www.facebook.com/profile.php?id=1000123456789"), "1000123456789")
         self.assertEqual(clean_facebook_uid("1.000123456789e+12"), "1000123456789")
         self.assertEqual(clean_facebook_uid("1000123456789"), "1000123456789")
+        self.assertEqual(expand_scientific("1.0001234567890123e+16"), "10001234567890123")
+        self.assertEqual(clean_facebook_uid("1.0001234567890123e+16"), "10001234567890123")
 
     def test_cod_reads_k_and_plain_numbers(self) -> None:
         self.assertEqual(clean_cod_amount("230k"), "230000")
@@ -309,6 +313,17 @@ class ExcelMappingTests(unittest.TestCase):
         self.assertEqual(reports[0]["rows"], 1)
         self.assertEqual(incoming[0]["name"], "Lan")
         self.assertEqual(incoming[0]["phone"], "0901222333")
+
+    def test_later_sheet_keeps_new_warehouse_columns(self) -> None:
+        combined = _combine_sheets(
+            [
+                [["Tên khách", "SĐT"], ["Lan", "0901222333"]],
+                [["Tên khách", "UID Facebook"], ["Lan", "1000123456789"]],
+            ]
+        )
+        self.assertEqual(combined[0], ["Tên khách", "SĐT", "UID Facebook"])
+        self.assertEqual(combined[1], ["Lan", "0901222333", ""])
+        self.assertEqual(combined[2], ["Lan", "", "1000123456789"])
 
     def test_missing_header_falls_back_to_same_column_index(self) -> None:
         first = write_xlsx(["Tên khách", "SĐT"], [["An", "0901999888"]])

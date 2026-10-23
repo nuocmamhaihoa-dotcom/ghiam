@@ -6,6 +6,7 @@ import unittest
 
 from control_plane.column_detect import (
     assign_fields,
+    header_field,
     looks_like_address,
     looks_like_facebook_uid,
     looks_like_name,
@@ -127,6 +128,12 @@ class ColumnAssignTests(unittest.TestCase):
         self.assertIsNone(mapping["tiktokId"])
         self.assertNotIn(4, [item["index"] for item in details.values()])
         self.assertNotIn(5, [item["index"] for item in details.values()])
+        self.assertNotIn(6, [item["index"] for item in details.values()])
+        self.assertIsNone(header_field("Link Facebook"))
+        self.assertIsNone(header_field("Order date"))
+        self.assertIsNone(header_field("Ngày sinh"))
+        self.assertEqual(header_field("UID Facebook"), "facebookUid")
+        self.assertEqual(header_field("Nội dung hàng mua 2"), "orderContent")
 
     def test_multiple_address_columns_become_separate_lines(self) -> None:
         from control_plane.excel_import import mapping_from_form, rows_from_files
@@ -162,6 +169,36 @@ class ColumnAssignTests(unittest.TestCase):
         incoming, _reports = rows_from_files([("nhieu-dia-chi.xlsx", payload)], mapping)
         self.assertEqual(incoming[0]["name"], "Nguyễn Lan")
         self.assertEqual(incoming[0]["address"], "12 Lê Lợi\nQuận 1\nTP.HCM")
+
+    def test_multiple_order_content_columns_join_as_lines(self) -> None:
+        from control_plane.excel_import import mapping_from_form, rows_from_files
+
+        payload = write_xlsx(
+            ["Tên khách", "Hàng mua", "Sản phẩm", "Size"],
+            [["Nguyễn Lan", "Nước mắm", "chai 500ml", "size 41"]],
+        )
+        mapping, details = assign_fields(
+            ["Tên khách", "Hàng mua", "Sản phẩm", "Size"],
+            [["Nguyễn Lan"], ["Nước mắm"], ["chai 500ml"], ["size 41"]],
+        )
+        self.assertEqual(mapping["name"], 0)
+        self.assertEqual(mapping["orderContent"], 1)
+        self.assertEqual(details["orderContent"]["indexes"], [1, 2])
+        incoming, _reports = rows_from_files(
+            [("hang.xlsx", payload)],
+            mapping_from_form(
+                {
+                    "name": {"index": 0, "header": "Tên khách"},
+                    "orderContent": {
+                        "columns": [
+                            {"index": 1, "header": "Hàng mua"},
+                            {"index": 2, "header": "Sản phẩm"},
+                        ]
+                    },
+                }
+            ),
+        )
+        self.assertEqual(incoming[0]["orderContent"], "Nước mắm\nchai 500ml")
 
     def test_street_and_admin_headers_split_apart(self) -> None:
         headers = ["Tên khách", "Số nhà", "Phường", "Tỉnh"]

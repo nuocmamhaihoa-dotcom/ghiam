@@ -23,7 +23,7 @@ LINE_FIELDS = ("address", "adminAddress", "orderContent")
 _COD_THOUSAND = re.compile(r"(?i)(\d+(?:[.,]\d+)?)\s*k\b")
 _COD_MILLION = re.compile(r"(?i)(\d+(?:[.,]\d+)?)\s*tr(?:ieu)?\b")
 
-_SCI = re.compile(r"^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$")
+_SCI = re.compile(r"^([+-]?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$")
 _DIGITS = re.compile(r"^\d{5,20}$")
 _PHONE_BREAK = set(" -().\t")
 
@@ -33,16 +33,24 @@ def collapse(value: Any) -> str:
 
 
 def expand_scientific(value: str) -> str:
+    """Giữ nguyên chữ số UID/SĐT trong dạng 1.00e+15, không đi qua float."""
     text = collapse(value)
-    if not text or not _SCI.fullmatch(text):
+    if not text:
         return text
-    try:
-        number = float(text)
-    except ValueError:
+    match = _SCI.fullmatch(text)
+    if not match:
         return text
-    if number.is_integer() and abs(number) < 1e16:
-        return str(int(number))
-    return text
+    sign, whole, frac, exp_text = match.groups()
+    digits = whole + (frac or "")
+    if not digits:
+        return text
+    shift = int(exp_text) - len(frac or "")
+    if shift < 0:
+        return text
+    body = (digits + ("0" * shift)).lstrip("0") or "0"
+    if len(body) > 20:
+        return text
+    return ("-" if sign == "-" else "") + body
 
 
 def clean_name(value: Any) -> str:

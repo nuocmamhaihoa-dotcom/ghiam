@@ -53,6 +53,24 @@ _MOBILE_PREFIXES = frozenset(
         "99",
     }
 )
+_SKIP_HEADER_PARTS = frozenset(
+    {
+        "link",
+        "url",
+        "website",
+        "web",
+        "gioi tinh",
+        "gender",
+        "sex",
+        "ngay sinh",
+        "nam sinh",
+        "birthday",
+        "date",
+        "ngay",
+        "thoi gian",
+        "time",
+    }
+)
 _HEADER_HINTS: dict[str, tuple[str, ...]] = {
     "name": (
         "ten khach",
@@ -333,9 +351,29 @@ def header_key(value: str) -> str:
     return fold_vietnamese(value)
 
 
+def _header_is_skipped(key: str) -> bool:
+    if not key or key in _SKIP_HEADER_PARTS:
+        return True
+    words = key.split()
+    padded = f" {key} "
+    for part in _SKIP_HEADER_PARTS:
+        if " " in part:
+            if (
+                key == part
+                or key.startswith(part + " ")
+                or key.endswith(" " + part)
+                or f" {part} " in padded
+            ):
+                return True
+            continue
+        if part in words:
+            return True
+    return False
+
+
 def header_field(header: str) -> str | None:
     key = header_key(header)
-    if not key:
+    if not key or _header_is_skipped(key):
         return None
     best: tuple[int, str] | None = None
     for field, hints in _HEADER_HINTS.items():

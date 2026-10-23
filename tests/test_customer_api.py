@@ -70,6 +70,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("hàng mua", home.text)
         self.assertIn("giá COD", home.text)
         self.assertIn("không đoán nội dung ô", home.text)
+        self.assertIn("orderContentColumns", home.text)
         self.assertIn("giới tính", home.text)
         alias = self.client.get("/khach")
         self.assertEqual(alias.status_code, 200)
@@ -207,6 +208,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(suggested["phone"], 1)
         self.assertEqual(suggested["adminAddress"], 2)
         self.assertEqual(suggested["orderContent"], 3)
+        self.assertEqual(suggested["orderContentColumns"], [3])
         self.assertEqual(suggested["codAmount"], 4)
         imported = self.client.post(
             "/v1/customers/import",
@@ -217,7 +219,11 @@ class CustomerApiTests(unittest.TestCase):
                         "name": {"index": 0, "header": "Tên khách"},
                         "phone": {"index": 1, "header": "SĐT"},
                         "adminAddress": {"index": 2, "header": "Địa chỉ hành chính"},
-                        "orderContent": {"index": 3, "header": "Nội dung hàng mua"},
+                        "orderContent": {
+                            "index": 3,
+                            "header": "Nội dung hàng mua",
+                            "columns": [{"index": 3, "header": "Nội dung hàng mua"}],
+                        },
                         "codAmount": {"index": 4, "header": "Giá tiền COD"},
                     }
                 )
@@ -229,6 +235,42 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(item["adminAddress"], "Phường Phú Hội, Huế")
         self.assertEqual(item["orderContent"], "Giày nam size 41")
         self.assertEqual(item["codAmount"], "230000")
+
+    def test_preview_keeps_every_order_content_column(self) -> None:
+        name, body = self._xlsx(
+            "hang.xlsx",
+            ["Tên khách", "Hàng mua", "Sản phẩm"],
+            [["Nguyễn Lan", "Nước mắm", "chai 500ml"]],
+        )
+        preview = self.client.post(
+            "/v1/customers/preview",
+            headers=self.headers,
+            files=[("files", (name, body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(preview.status_code, 200, preview.text)
+        data = preview.json()
+        self.assertEqual(data["suggested"]["orderContentColumns"], [1, 2])
+        imported = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={
+                "mapping": json.dumps(
+                    {
+                        "name": {"index": 0, "header": "Tên khách"},
+                        "orderContent": {
+                            "columns": [
+                                {"index": 1, "header": "Hàng mua"},
+                                {"index": 2, "header": "Sản phẩm"},
+                            ]
+                        },
+                    }
+                )
+            },
+            files=[("files", (name, body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+        item = self.client.get("/v1/customers", headers=self.headers).json()["items"][0]
+        self.assertEqual(item["orderContent"], "Nước mắm\nchai 500ml")
 
     def test_import_fills_missing_fields_on_later_file(self) -> None:
         name, body = self._xlsx(
@@ -498,6 +540,14 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(body["total"], 2005)
         self.assertEqual(len(body["items"]), 2000)
         self.assertEqual(body["count"], 2000)
+        self.assertEqual(body["matched"], 2005)
+        searched = self.client.get("/v1/customers?q=K", headers=self.headers)
+        self.assertEqual(searched.status_code, 200, searched.text)
+        found = searched.json()
+        self.assertEqual(found["total"], 2005)
+        self.assertEqual(found["matched"], 2005)
+        self.assertEqual(found["count"], 2000)
+        self.assertEqual(len(found["items"]), 2000)
 
     def test_export_xlsx_roundtrip(self) -> None:
         db.replace_customers(

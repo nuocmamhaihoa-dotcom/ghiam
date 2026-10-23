@@ -63,6 +63,21 @@ def _cell_ref(ref: str) -> tuple[int, int] | None:
     return column - 1, int(row_text)
 
 
+def _si_text(item: ET.Element) -> str:
+    parts: list[str] = []
+    for child in item:
+        tag = _local(child.tag)
+        if tag == "t" and child.text:
+            parts.append(child.text)
+            continue
+        if tag != "r":
+            continue
+        for node in child:
+            if _local(node.tag) == "t" and node.text:
+                parts.append(node.text)
+    return "".join(parts)
+
+
 def _shared_strings(payload: bytes) -> list[str]:
     values: list[str] = []
     try:
@@ -72,11 +87,7 @@ def _shared_strings(payload: bytes) -> list[str]:
     for item in root:
         if _local(item.tag) != "si":
             continue
-        parts: list[str] = []
-        for node in item.iter():
-            if _local(node.tag) == "t" and node.text:
-                parts.append(node.text)
-        values.append("".join(parts))
+        values.append(_si_text(item))
     return values
 
 
@@ -187,24 +198,42 @@ def _combine_sheets(tables: list[list[list[str]]]) -> list[list[str]]:
         return []
     header = [collapse(cell) for cell in kept[0][0]]
     header_index = {header_key(title): index for index, title in enumerate(header) if header_key(title)}
-    combined = [list(header)]
+    combined: list[list[str]] = [list(header)]
+
+    def ensure_column(title: str) -> int:
+        key = header_key(title)
+        dest = header_index.get(key)
+        if dest is not None:
+            return dest
+        dest = len(header)
+        header.append(title)
+        header_index[key] = dest
+        for prev in combined:
+            prev.append("")
+        return dest
+
     for table in kept:
         other_header = [collapse(cell) for cell in table[0]]
         same = [header_key(item) for item in other_header] == [header_key(item) for item in header]
         body = table[1:] if other_header and any(collapse(cell) for cell in other_header) else table
         if same:
-            combined.extend(body)
+            width = len(header)
+            for row in body:
+                combined.append(list(row[:width]) + [""] * max(0, width - len(row)))
             continue
         for row in body:
             aligned = [""] * len(header)
             for index, cell in enumerate(row):
                 title = other_header[index] if index < len(other_header) else ""
-                dest = header_index.get(header_key(title))
-                if dest is None:
+                if not header_key(title):
                     continue
+                dest = ensure_column(title)
+                if dest >= len(aligned):
+                    aligned.extend([""] * (dest + 1 - len(aligned)))
                 aligned[dest] = cell
             if any(collapse(cell) for cell in aligned):
                 combined.append(aligned)
+    combined[0] = list(header)
     return combined
 
 

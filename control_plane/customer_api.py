@@ -18,6 +18,7 @@ from control_plane import db
 from control_plane.column_detect import assign_fields, explain_mapping
 from control_plane.customers import (
     FIELDS,
+    LINE_FIELDS,
     MAX_LOOKUP,
     collapse,
     fold_customers,
@@ -134,15 +135,18 @@ def customers_list(
     total = db.customer_count(settings.db_path)
     if collapse(q):
         rows = [public_customer(row) for row in db.list_customers(settings.db_path) if matches_query(row, q)]
+        shown = rows[:LIST_LIMIT]
         return {
-            "count": len(rows),
+            "count": len(shown),
+            "matched": len(rows),
             "total": total,
-            "items": rows[:LIST_LIMIT],
+            "items": shown,
             "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
         }
     rows = [public_customer(row) for row in db.list_customers(settings.db_path, limit=LIST_LIMIT)]
     return {
         "count": len(rows),
+        "matched": total,
         "total": total,
         "items": rows,
         "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
@@ -180,10 +184,10 @@ async def customers_preview(
     values = _column_values_from_previews(columns, previews)
     suggested, details = assign_fields(headers, values)
     payload = dict(suggested)
-    for field, key in (("address", "addressColumns"), ("adminAddress", "adminAddressColumns")):
+    for field in LINE_FIELDS:
         indexes = (details.get(field) or {}).get("indexes") or []
         if indexes:
-            payload[key] = indexes
+            payload[f"{field}Columns"] = indexes
     return {
         "files": [
             {

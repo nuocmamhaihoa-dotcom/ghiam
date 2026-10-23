@@ -124,10 +124,15 @@
   var pendingKeys = {};
   var preview = null;
   var fieldOrder = ["name", "phone", "address", "adminAddress", "orderContent", "codAmount", "facebookUid", "tiktokId"];
-  var lineFields = { address: "addressColumns", adminAddress: "adminAddressColumns" };
+  var lineFields = {
+    address: "addressColumns",
+    adminAddress: "adminAddressColumns",
+    orderContent: "orderContentColumns"
+  };
   var lineLabels = {
     address: "Địa chỉ khách (mỗi cột đã chọn thành một dòng)",
-    adminAddress: "Địa chỉ hành chính (mỗi cột đã chọn thành một dòng)"
+    adminAddress: "Địa chỉ hành chính (mỗi cột đã chọn thành một dòng)",
+    orderContent: "Nội dung hàng mua (mỗi cột đã chọn thành một dòng)"
   };
   var lookupFiles = [];
   var lookupKeys = {};
@@ -449,10 +454,21 @@
         return;
       }
       var body = await response.json();
-      document.getElementById("storeStats").innerHTML = stat(body.total, "Khách trong kho") + stat(body.count, "Khách đang hiện");
-      renderRows(body.items || []);
-      if (body.total > (body.items || []).length) {
-        setNote("listNote", "Đang hiện " + body.items.length + "/" + body.total + " khách. Gõ tìm để thu hẹp.");
+      var items = body.items || [];
+      var shown = items.length;
+      var matched = body.matched != null ? body.matched : body.count;
+      document.getElementById("storeStats").innerHTML = stat(body.total, "Khách trong kho") + stat(shown, "Khách đang hiện");
+      renderRows(items);
+      if (query) {
+        if (!matched) {
+          setNote("listNote", "Không khớp từ tìm.");
+        } else if (matched > shown) {
+          setNote("listNote", "Tìm thấy " + matched + " khách, đang hiện " + shown + ". Thu hẹp từ khóa nếu cần.");
+        } else {
+          setNote("listNote", "Tìm thấy " + matched + " khách.");
+        }
+      } else if (body.total > shown) {
+        setNote("listNote", "Đang hiện " + shown + "/" + body.total + " khách. Gõ tìm để thu hẹp.");
       } else {
         setNote("listNote", body.total ? "" : "Kho còn trống.");
       }
