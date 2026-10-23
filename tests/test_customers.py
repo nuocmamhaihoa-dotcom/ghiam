@@ -76,10 +76,37 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(again[0]["address"], "Hà Nội")
         self.assertEqual(again[0]["facebookUid"], "1")
 
-    def test_same_name_merges_and_links_two_existing(self) -> None:
+    def test_same_name_different_phones_stay_apart(self) -> None:
+        folded, stats, _removed = fold_customers(
+            [],
+            [
+                {"name": "sơn(hg)", "phone": "0338174222", "address": "Đà Nẵng"},
+                {"name": "sơn(hg)", "phone": "0918028684", "address": "Hà Nội"},
+            ],
+            "2026-01-01T00:00:00+00:00",
+        )
+        self.assertEqual(len(folded), 2)
+        self.assertEqual(stats["created"], 2)
+        self.assertEqual({row["phone"] for row in folded}, {"0338174222", "0918028684"})
+
+    def test_same_phone_merges_even_when_names_differ(self) -> None:
+        folded, stats, _removed = fold_customers(
+            [],
+            [
+                {"name": "Sơn", "phone": "0338174222", "address": "Đà Nẵng"},
+                {"name": "sơn(hg)", "phone": "0338174222", "address": "Hà Nội"},
+            ],
+            "2026-01-01T00:00:00+00:00",
+        )
+        self.assertEqual(len(folded), 1)
+        self.assertEqual(stats["created"], 1)
+        self.assertEqual(folded[0]["phone"], "0338174222")
+        self.assertEqual(folded[0]["name"], "Sơn")
+
+    def test_facebook_uid_links_two_existing(self) -> None:
         first, _stats, _removed = fold_customers(
             [],
-            [{"name": "Trần Tùng", "phone": "0901111111"}],
+            [{"name": "Trần Tùng", "facebookUid": "222", "phone": "0901111111"}],
             "2026-01-01T00:00:00+00:00",
         )
         second, _stats, _removed = fold_customers(
@@ -87,19 +114,10 @@ class CustomerMergeTests(unittest.TestCase):
             [{"tiktokId": "tung.ban", "facebookUid": "222"}],
             "2026-01-02T00:00:00+00:00",
         )
-        self.assertEqual(len(second), 2)
-        third, stats, removed = fold_customers(
-            second,
-            [{"name": "trần tùng", "facebookUid": "222", "address": "Xuân Trung"}],
-            "2026-01-03T00:00:00+00:00",
-        )
-        self.assertEqual(len(third), 1)
-        self.assertEqual(stats["absorbed"], 1)
-        self.assertEqual(len(removed), 1)
-        self.assertEqual(third[0]["phone"], "0901111111")
-        self.assertEqual(third[0]["facebookUid"], "222")
-        self.assertEqual(third[0]["tiktokId"], "tung.ban")
-        self.assertEqual(third[0]["address"], "Xuân Trung")
+        self.assertEqual(len(second), 1)
+        self.assertEqual(second[0]["phone"], "0901111111")
+        self.assertEqual(second[0]["tiktokId"], "tung.ban")
+        self.assertEqual(second[0]["facebookUid"], "222")
 
     def test_unchanged_counts_only_rows_in_this_import(self) -> None:
         first, _stats, _removed = fold_customers(

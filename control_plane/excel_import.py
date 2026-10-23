@@ -117,13 +117,16 @@ def _sheet_rows(payload: bytes, shared: list[str]) -> list[list[str]]:
             continue
         cells: dict[int, str] = {}
         max_col = -1
+        sequential = 0
         for cell in row:
             if _local(cell.tag) != "c":
                 continue
             parsed = _cell_ref(cell.attrib.get("r", ""))
             if parsed is None:
-                continue
-            column, _row_number = parsed
+                column = sequential
+            else:
+                column, _row_number = parsed
+            sequential = column + 1
             cells[column] = _cell_text(cell, shared)
             if column > max_col:
                 max_col = column
@@ -136,26 +139,66 @@ def _sheet_rows(payload: bytes, shared: list[str]) -> list[list[str]]:
     return table
 
 
-def _first_sheet_path(archive: zipfile.ZipFile) -> str:
+def _rel_target_path(target: str) -> str:
+    if target.startswith("/"):
+        return target.lstrip("/")
+    return "xl/" + target.lstrip("/")
+
+
+def _sheet_paths(archive: zipfile.ZipFile) -> list[str]:
     workbook = ET.fromstring(archive.read("xl/workbook.xml"))
-    first_id = ""
+    rels_by_id: dict[str, str] = {}
+    if "xl/_rels/workbook.xml.rels" in archive.namelist():
+        rels = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+        for rel in rels:
+            rel_id = rel.attrib.get("Id") or ""
+            target = rel.attrib.get("Target", "")
+            if rel_id and target:
+                rels_by_id[rel_id] = _rel_target_path(target)
+    paths: list[str] = []
+    seen: set[str] = set()
     for node in workbook.iter():
-        if _local(node.tag) == "sheet":
-            first_id = node.attrib.get(
-                "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id",
-                "",
-            )
-            break
-    if not first_id:
-        return "xl/worksheets/sheet1.xml"
-    rels = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
-    for rel in rels:
-        if rel.attrib.get("Id") == first_id:
-            target = rel.attrib.get("Target", "worksheets/sheet1.xml")
-            if target.startswith("/"):
-                return target.lstrip("/")
-            return "xl/" + target.lstrip("/")
-    return "xl/worksheets/sheet1.xml"
+        if _local(node.tag) != "sheet":
+            continue
+        rel_id = node.attrib.get(
+            "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id",
+            "",
+        )
+        path = rels_by_id.get(rel_id) or "xl/worksheets/sheet1.xml"
+        if path in seen or path not in archive.namelist():
+            continue
+        seen.add(path)
+        paths.append(path)
+    if not paths and "xl/worksheets/sheet1.xml" in archive.namelist():
+        paths.append("xl/worksheets/sheet1.xml")
+    return paths
+
+
+def _combine_sheets(tables: list[list[list[str]]]) -> list[list[str]]:
+    kept = [table for table in tables if table]
+    if not kept:
+        return []
+    header = [collapse(cell) for cell in kept[0][0]]
+    header_index = {header_key(title): index for index, title in enumerate(header) if header_key(title)}
+    combined = [list(header)]
+    for table in kept:
+        other_header = [collapse(cell) for cell in table[0]]
+        same = [header_key(item) for item in other_header] == [header_key(item) for item in header]
+        body = table[1:] if other_header and any(collapse(cell) for cell in other_header) else table
+        if same:
+            combined.extend(body)
+            continue
+        for row in body:
+            aligned = [""] * len(header)
+            for index, cell in enumerate(row):
+                title = other_header[index] if index < len(other_header) else ""
+                dest = header_index.get(header_key(title))
+                if dest is None:
+                    continue
+                aligned[dest] = cell
+            if any(collapse(cell) for cell in aligned):
+                combined.append(aligned)
+    return combined
 
 
 def read_xlsx(data: bytes) -> list[list[str]]:
@@ -166,10 +209,11 @@ def read_xlsx(data: bytes) -> list[list[str]]:
     shared: list[str] = []
     if "xl/sharedStrings.xml" in archive.namelist():
         shared = _shared_strings(archive.read("xl/sharedStrings.xml"))
-    path = _first_sheet_path(archive)
-    if path not in archive.namelist():
+    paths = _sheet_paths(archive)
+    if not paths:
         raise ValueError("File Excel không có bảng tính.")
-    return _sheet_rows(archive.read(path), shared)
+    tables = [_sheet_rows(archive.read(path), shared) for path in paths]
+    return _combine_sheets(tables)
 
 
 def read_csv(data: bytes) -> list[list[str]]:
