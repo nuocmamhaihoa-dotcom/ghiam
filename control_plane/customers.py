@@ -313,6 +313,86 @@ def public_customer(row: dict[str, Any]) -> dict[str, str]:
     }
 
 
+MAX_LOOKUP = 100_000
+_SPLIT_FIELDS = re.compile(r"[,;\t|]+")
+
+
+def phones_from_text(text: str, limit: int = MAX_LOOKUP) -> tuple[list[str], dict[str, int]]:
+    """Lấy số điện thoại theo thứ tự danh sách, bỏ số trùng và dòng không có số."""
+    phones: list[str] = []
+    seen: set[str] = set()
+    raw = 0
+    invalid = 0
+    duplicate = 0
+    truncated = False
+    for line in str(text or "").replace("\ufeff", "").splitlines():
+        stripped = collapse(line)
+        if not stripped or stripped.startswith("#"):
+            continue
+        raw += 1
+        found: list[str] = []
+        whole = clean_phone(stripped)
+        if whole:
+            found.append(whole)
+        for piece in _SPLIT_FIELDS.split(stripped):
+            for token in piece.split():
+                phone = clean_phone(token)
+                if phone and phone not in found:
+                    found.append(phone)
+        if not found:
+            invalid += 1
+            continue
+        for phone in found:
+            if phone in seen:
+                duplicate += 1
+                continue
+            if len(phones) >= limit:
+                truncated = True
+                break
+            seen.add(phone)
+            phones.append(phone)
+        if truncated:
+            break
+    return phones, {
+        "raw": raw,
+        "unique": len(phones),
+        "invalid": invalid,
+        "duplicate": duplicate,
+        "truncated": int(truncated),
+    }
+
+
+def lookup_by_phones(
+    stored: list[dict[str, Any]],
+    phones: list[str],
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Đối chiếu list số với kho. Giữ đúng thứ tự số người dùng đưa vào."""
+    index: dict[str, list[dict[str, str]]] = {}
+    for row in stored:
+        phone = clean_phone(row.get("phone") or "")
+        if not phone:
+            continue
+        index.setdefault(phone, []).append(public_customer(row))
+    items: list[dict[str, Any]] = []
+    found = 0
+    missing = 0
+    for phone in phones:
+        matches = index.get(phone) or []
+        if not matches:
+            missing += 1
+            items.append({"query": phone, "found": False, "customer": None})
+            continue
+        found += 1
+        for customer in matches:
+            items.append({"query": phone, "found": True, "customer": customer})
+    return items, {
+        "queried": len(phones),
+        "found": found,
+        "missing": missing,
+        "hits": found,
+    }
+
+
 def matches_query(row: dict[str, Any], query: str) -> bool:
     needle = collapse(query).casefold()
     if not needle:

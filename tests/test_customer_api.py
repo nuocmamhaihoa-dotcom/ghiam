@@ -126,6 +126,55 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(items[0]["facebookUid"], "10001")
         self.assertEqual(items[0]["tiktokId"], "lan.hue")
 
+    def test_bulk_phone_lookup_and_export(self) -> None:
+        db.replace_customers(
+            settings.db_path,
+            [
+                {
+                    "id": "c1",
+                    "name": "Lan",
+                    "phone": "0901222333",
+                    "address": "Huế",
+                    "facebookUid": "10001",
+                    "tiktokId": "lan.hue",
+                    "createdAt": "2026-01-01T00:00:00+00:00",
+                    "updatedAt": "2026-01-01T00:00:00+00:00",
+                }
+            ],
+            [],
+        )
+        looked = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            data={"text": "0901222333\n0901999888\nkhông phải số"},
+        )
+        self.assertEqual(looked.status_code, 200, looked.text)
+        body = looked.json()
+        self.assertEqual(body["stats"]["found"], 1)
+        self.assertEqual(body["stats"]["missing"], 1)
+        self.assertEqual(body["stats"]["invalid"], 1)
+        self.assertEqual(body["items"][0]["customer"]["name"], "Lan")
+        self.assertFalse(body["items"][1]["found"])
+
+        name, file_body = self._xlsx("so.xlsx", ["SĐT"], [["0901222333"], ["0901777666"]])
+        from_file = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            data={"text": ""},
+            files=[("files", (name, file_body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(from_file.status_code, 200, from_file.text)
+        self.assertEqual(from_file.json()["stats"]["found"], 1)
+        self.assertEqual(from_file.json()["stats"]["missing"], 1)
+
+        exported = self.client.post(
+            "/v1/customers/lookup/export",
+            headers=self.headers,
+            data={"text": "0901222333\n0901999888"},
+        )
+        self.assertEqual(exported.status_code, 200)
+        self.assertIn("spreadsheetml", exported.headers["content-type"])
+
     def test_export_xlsx_roundtrip(self) -> None:
         db.replace_customers(
             settings.db_path,

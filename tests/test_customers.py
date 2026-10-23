@@ -9,7 +9,9 @@ from control_plane.customers import (
     clean_phone,
     clean_tiktok_id,
     fold_customers,
+    lookup_by_phones,
     matches_query,
+    phones_from_text,
 )
 from control_plane.excel_import import (
     mapping_from_form,
@@ -119,6 +121,29 @@ class CustomerMergeTests(unittest.TestCase):
         folded, stats, _removed = fold_customers([], [{"name": "   "}, {}], "2026-01-01T00:00:00+00:00")
         self.assertEqual(folded, [])
         self.assertEqual(stats["skipped"], 2)
+
+    def test_phone_list_lookup_keeps_order_and_misses(self) -> None:
+        phones, parsed = phones_from_text(
+            "0901222333\n+84 901 222 333\nabc\n0901444555\n0901999888"
+        )
+        self.assertEqual(phones, ["0901222333", "0901444555", "0901999888"])
+        self.assertEqual(parsed["invalid"], 1)
+        self.assertEqual(parsed["duplicate"], 1)
+        stored, _stats, _removed = fold_customers(
+            [],
+            [
+                {"name": "Lan", "phone": "0901222333", "address": "Huế"},
+                {"name": "Minh", "phone": "0901444555"},
+            ],
+            "2026-01-01T00:00:00+00:00",
+        )
+        items, stats = lookup_by_phones(stored, phones)
+        self.assertEqual(stats["found"], 2)
+        self.assertEqual(stats["missing"], 1)
+        self.assertEqual(items[0]["customer"]["name"], "Lan")
+        self.assertEqual(items[1]["customer"]["name"], "Minh")
+        self.assertFalse(items[2]["found"])
+        self.assertEqual(items[2]["query"], "0901999888")
 
     def test_search_matches_any_field(self) -> None:
         row = {"name": "Nguyễn A", "phone": "0901234567", "address": "Hà Nội", "facebookUid": "1", "tiktokId": "ban"}

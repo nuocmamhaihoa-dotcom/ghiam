@@ -12,11 +12,20 @@ from fastapi import APIRouter, File, Form, Header, HTTPException, Query, UploadF
 from fastapi.responses import Response
 
 from control_plane import db
-from control_plane.customers import FIELDS, fold_customers, matches_query, public_customer
+from control_plane.customers import (
+    FIELDS,
+    MAX_LOOKUP,
+    fold_customers,
+    lookup_by_phones,
+    matches_query,
+    phones_from_text,
+    public_customer,
+)
 from control_plane.excel_import import (
     FIELD_LABELS,
     mapping_from_form,
     merge_preview_columns,
+    phones_from_files,
     preview_table,
     rows_from_files,
     suggest_mapping,
@@ -169,6 +178,94 @@ async def customers_import(
         "items": [public_customer(row) for row in folded[:200]],
         "total": stats["total"],
     }
+
+
+def _unique_phones(*groups: list[str]) -> list[str]:
+    seen: set[str] = set()
+    phones: list[str] = []
+    for group in groups:
+        for phone in group:
+            if phone in seen or len(phones) >= MAX_LOOKUP:
+                continue
+            seen.add(phone)
+            phones.append(phone)
+    return phones
+
+
+def _lookup_payload(text: str, file_phones: list[str]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    pasted, parsed = phones_from_text(text)
+    phones = _unique_phones(pasted, file_phones)
+    if not phones:
+        raise HTTPException(status_code=400, detail="Không thấy số điện thoại nào trong danh sách.")
+    stored = db.list_customers(settings.db_path)
+    items, stats = lookup_by_phones(stored, phones)
+    stats.update(parsed)
+    stats["total"] = len(stored)
+    return items, stats
+
+
+@router.post("/v1/customers/lookup")
+async def customers_lookup(
+    text: str = Form(default=""),
+    files: list[UploadFile] | None = File(default=None),
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _auth(authorization)
+    db.init_db(settings.db_path)
+    file_phones: list[str] = []
+    file_reports: list[dict[str, Any]] = []
+    if files:
+        uploaded = [item for item in files if item.filename]
+        if uploaded:
+            raw_files = await _files_from_upload(uploaded)
+            try:
+                file_phones, file_reports = phones_from_files(raw_files)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+    items, stats = _lookup_payload(text, file_phones)
+    return {"stats": stats, "files": file_reports, "items": items}
+
+
+@router.post("/v1/customers/lookup/export")
+async def customers_lookup_export(
+    text: str = Form(default=""),
+    files: list[UploadFile] | None = File(default=None),
+    authorization: str | None = Header(default=None),
+) -> Response:
+    _auth(authorization)
+    db.init_db(settings.db_path)
+    file_phones: list[str] = []
+    if files:
+        uploaded = [item for item in files if item.filename]
+        if uploaded:
+            raw_files = await _files_from_upload(uploaded)
+            try:
+                file_phones, _reports = phones_from_files(raw_files)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+    items, _stats = _lookup_payload(text, file_phones)
+    headers = ["Số tra cứu", "Có trong kho", *FIELD_LABELS.values()]
+    body: list[list[str]] = []
+    for item in items:
+        customer = item.get("customer") or {}
+        body.append(
+            [
+                item.get("query") or "",
+                "Có" if item.get("found") else "Không",
+                customer.get("name") or "",
+                customer.get("phone") or "",
+                customer.get("address") or "",
+                customer.get("facebookUid") or "",
+                customer.get("tiktokId") or "",
+            ]
+        )
+    payload = write_xlsx(headers, body)
+    filename = quote("tra-cuu-khach.xlsx")
+    return Response(
+        content=payload,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )
 
 
 @router.get("/v1/customers/export")

@@ -9,7 +9,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 from typing import Any, Iterable
 
-from control_plane.customers import FIELDS, clean_row, collapse, expand_scientific, has_data
+from control_plane.customers import FIELDS, clean_phone, clean_row, collapse, expand_scientific, has_data
 
 MAX_ROWS = 200_000
 SAMPLE_ROWS = 8
@@ -463,6 +463,22 @@ def write_xlsx(headers: list[str], rows: list[list[str]]) -> bytes:
         archive.writestr("xl/_rels/workbook.xml.rels", workbook_rels)
         archive.writestr("xl/worksheets/sheet1.xml", sheet)
     return buffer.getvalue()
+
+
+def phones_from_files(files: Iterable[tuple[str, bytes]]) -> tuple[list[str], list[dict[str, Any]]]:
+    phones: list[str] = []
+    reports: list[dict[str, Any]] = []
+    for filename, data in files:
+        table = read_table(filename, data)
+        found: list[str] = []
+        for row in table:
+            for cell in row:
+                phone = clean_phone(cell)
+                if phone:
+                    found.append(phone)
+        phones.extend(found)
+        reports.append({"name": filename, "phones": len(found)})
+    return phones, reports
 
 
 def mapping_from_form(raw: dict[str, Any] | None) -> dict[str, dict[str, Any]]:

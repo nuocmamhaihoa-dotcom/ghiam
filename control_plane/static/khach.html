@@ -15,9 +15,10 @@
     .lead { color: var(--muted); margin-bottom: 1rem; }
     section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem; margin: 0 0 0.8rem; }
     label { display: block; font-weight: 650; margin: 0 0 0.35rem; }
-    input[type="search"], select {
+    input[type="search"], select, textarea {
       width: 100%; font: inherit; padding: 0.7rem 0.75rem; border: 1px solid #cfd5dc; border-radius: 10px; background: #fff;
     }
+    textarea { min-height: 140px; resize: vertical; }
     .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
     button, .file {
       font: inherit; font-weight: 700; border: 0; border-radius: 10px; min-height: 46px; padding: 0 1rem; cursor: pointer;
@@ -46,14 +47,14 @@
     .nav a { color: var(--blue); font-weight: 650; text-decoration: none; }
     .scroll { overflow-x: auto; }
     [hidden] { display: none !important; }
-    #file { display: none; }
+    #file, #lookupFile { display: none; }
   </style>
 </head>
 <body>
 <main>
   <p class="nav"><a href="/">Đọc video</a></p>
   <h1>Kho khách</h1>
-  <p class="lead">Nạp Excel. Mỗi lần nạp, chọn cột nào là tên, số điện thoại, địa chỉ, UID Facebook, ID TikTok. Cùng một lần chọn cột dùng cho mọi file bạn thêm lúc đó. Khách trùng thì bổ sung ô trống, ô đã có giữ nguyên.</p>
+  <p class="lead">Nạp Excel. Mỗi lần nạp, chọn cột nào là tên, số điện thoại, địa chỉ, UID Facebook, ID TikTok. Cùng một lần chọn cột dùng cho mọi file bạn thêm lúc đó. Khách trùng thì bổ sung ô trống, ô đã có giữ nguyên. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
 
   <section>
     <h2>Thêm file Excel</h2>
@@ -87,6 +88,23 @@
   </section>
 
   <section>
+    <h2>Tra cứu hàng loạt</h2>
+    <p class="note">Dán list số điện thoại, hoặc chọn file danh sách. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
+    <label for="lookupPaste">Danh sách số điện thoại</label>
+    <textarea id="lookupPaste" placeholder="0901222333"></textarea>
+    <p class="row" style="margin-top:0.7rem">
+      <button class="file" type="button" id="lookupPick">Chọn file danh sách</button>
+      <input id="lookupFile" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple />
+      <button class="primary" type="button" id="lookupGo">Tra cứu</button>
+      <button class="ghost" type="button" id="lookupExport" hidden>Tải kết quả Excel</button>
+    </p>
+    <p id="lookupFiles" class="note"></p>
+    <div class="stats" id="lookupStats"></div>
+    <div class="scroll" id="lookupPeople"></div>
+    <p id="lookupNote" class="note">Chưa tra cứu trong phiên này.</p>
+  </section>
+
+  <section>
     <h2>Khách đã lưu</h2>
     <div class="stats" id="storeStats"></div>
     <p class="row" style="margin:0.8rem 0">
@@ -102,6 +120,8 @@
   var pendingFiles = [];
   var preview = null;
   var fieldOrder = ["name", "phone", "address", "facebookUid", "tiktokId"];
+  var lookupFiles = [];
+  var lastLookup = null;
 
   function token() { return serverToken; }
 
@@ -297,6 +317,80 @@
     }
   }
 
+  function lookupForm() {
+    var data = new FormData();
+    data.append("text", document.getElementById("lookupPaste").value || "");
+    lookupFiles.forEach(function (file) { data.append("files", file, file.name); });
+    return data;
+  }
+
+  function renderLookup(body) {
+    lastLookup = body;
+    var stats = body.stats || {};
+    document.getElementById("lookupStats").innerHTML =
+      stat(stats.queried || 0, "Số đã tra") +
+      stat(stats.found || 0, "Có trong kho") +
+      stat(stats.missing || 0, "Không có") +
+      stat(stats.invalid || 0, "Dòng không phải số");
+    var items = body.items || [];
+    if (!items.length) {
+      document.getElementById("lookupPeople").innerHTML = "";
+      setNote("lookupNote", "Không có kết quả.", "warn");
+      document.getElementById("lookupExport").hidden = true;
+      return;
+    }
+    var html = "<table><thead><tr><th>Số tra cứu</th><th>Kho</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
+    items.forEach(function (item) {
+      var customer = item.customer || {};
+      html += "<tr><td>" + escapeHtml(item.query) + "</td><td>" + (item.found ? "Có" : "Không") + "</td><td>" + escapeHtml(customer.name) + "</td><td>" + escapeHtml(customer.phone) + "</td><td>" + escapeHtml(customer.address) + "</td><td>" + escapeHtml(customer.facebookUid) + "</td><td>" + escapeHtml(customer.tiktokId) + "</td></tr>";
+    });
+    html += "</tbody></table>";
+    document.getElementById("lookupPeople").innerHTML = html;
+    document.getElementById("lookupExport").hidden = false;
+    var note = "Đã đối chiếu " + (stats.queried || 0) + " số với kho.";
+    if (stats.truncated) note += " Danh sách quá dài, chỉ lấy phần đầu.";
+    setNote("lookupNote", note, stats.missing ? "" : "ok");
+  }
+
+  async function runLookup() {
+    var text = (document.getElementById("lookupPaste").value || "").trim();
+    if (!text && !lookupFiles.length) {
+      setNote("lookupNote", "Dán list số hoặc chọn file danh sách.", "warn");
+      return;
+    }
+    document.getElementById("lookupGo").disabled = true;
+    setNote("lookupNote", "Đang tra cứu trong kho…");
+    var response = await api("/v1/customers/lookup", { method: "POST", body: lookupForm() });
+    var body = await response.json().catch(function () { return {}; });
+    document.getElementById("lookupGo").disabled = false;
+    if (!response.ok) {
+      setNote("lookupNote", body.detail || "Không tra cứu được.", "warn");
+      return;
+    }
+    renderLookup(body);
+  }
+
+  async function exportLookup() {
+    if (!lastLookup) {
+      setNote("lookupNote", "Hãy tra cứu trước khi tải kết quả.", "warn");
+      return;
+    }
+    var response = await api("/v1/customers/lookup/export", { method: "POST", body: lookupForm() });
+    if (!response.ok) {
+      setNote("lookupNote", "Không tải được kết quả Excel.", "warn");
+      return;
+    }
+    var blob = await response.blob();
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = "tra-cuu-khach.xlsx";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   async function exportBook() {
     var response = await api("/v1/customers/export");
     if (!response.ok) {
@@ -347,6 +441,17 @@
     window.__khachSearch = window.setTimeout(loadCustomers, 200);
   });
   document.getElementById("export").addEventListener("click", exportBook);
+  document.getElementById("lookupPick").addEventListener("click", function () {
+    document.getElementById("lookupFile").click();
+  });
+  document.getElementById("lookupFile").addEventListener("change", function (event) {
+    lookupFiles = Array.prototype.slice.call(event.target.files || []);
+    document.getElementById("lookupFiles").textContent = lookupFiles.length
+      ? "Đã chọn " + lookupFiles.map(function (file) { return file.name; }).join(", ")
+      : "";
+  });
+  document.getElementById("lookupGo").addEventListener("click", runLookup);
+  document.getElementById("lookupExport").addEventListener("click", exportLookup);
   bindDrop();
   loadCustomers();
 </script>
