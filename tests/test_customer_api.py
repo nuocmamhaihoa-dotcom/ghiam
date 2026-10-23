@@ -64,6 +64,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("Chọn file Excel", home.text)
         self.assertIn("không dùng video", home.text)
         self.assertIn("không giới hạn số file", home.text)
+        self.assertIn("dung lượng", home.text)
         self.assertIn("Thêm file", home.text)
         self.assertIn("địa chỉ hành chính", home.text)
         self.assertIn("hàng mua", home.text)
@@ -341,7 +342,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(preview.status_code, 200, preview.text)
         body = preview.json()
         self.assertEqual(len(body["files"]), 12)
-        self.assertIn("Không giới hạn số file", body["applyNote"])
+        self.assertIn("Không giới hạn số file và dung lượng", body["applyNote"])
         imported = self.client.post(
             "/v1/customers/import",
             headers=self.headers,
@@ -362,6 +363,24 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(imported.json()["stats"]["created"], 12)
         listed = self.client.get("/v1/customers", headers=self.headers)
         self.assertEqual(listed.json()["total"], 12)
+
+    def test_upload_size_is_unlimited(self) -> None:
+        from control_plane.settings import settings as live
+
+        self.assertEqual(live.max_upload_mb, 0)
+        self.assertIsNone(live.upload_limit_bytes())
+        rows = [[f"K{index}", f"0901{index:06d}", f"Địa chỉ {index}"] for index in range(250)]
+        name, body = self._xlsx("lon.xlsx", ["Tên khách", "SĐT", "Địa chỉ"], rows)
+        preview = self.client.post(
+            "/v1/customers/preview",
+            headers=self.headers,
+            files=[("files", (name, body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(preview.status_code, 200, preview.text)
+        data = preview.json()
+        self.assertEqual(data["files"][0]["rowCount"], 250)
+        self.assertFalse(data["files"][0]["truncated"])
+        self.assertIn("dung lượng", data["applyNote"])
 
     def test_bad_file_does_not_block_import(self) -> None:
         files = [

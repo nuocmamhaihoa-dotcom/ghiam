@@ -111,7 +111,7 @@ async def upload_video(
     tmp = settings.video_dir / f"up-{secrets.token_hex(8)}{suffix}"
     hasher = hashlib.sha256()
     size = 0
-    limit = settings.max_upload_mb * 1024 * 1024
+    limit = settings.upload_limit_bytes()
     created: dict[str, object] | None = None
     final: Path | None = None
     try:
@@ -121,7 +121,7 @@ async def upload_video(
                 if not chunk:
                     break
                 size += len(chunk)
-                if size > limit:
+                if limit is not None and size > limit:
                     raise HTTPException(status_code=413, detail="Video quá lớn.")
                 await run_in_threadpool(_write_chunk, handle, hasher, chunk)
         free = shutil.disk_usage(settings.video_dir).free

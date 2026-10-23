@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import sys
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
@@ -91,17 +92,17 @@ def _is_upload(value: object) -> bool:
 
 
 async def _read_customer_form(request: Request) -> tuple[list[tuple[str, bytes]], dict[str, str], list[str]]:
-    max_part = max(int(settings.max_upload_mb), 1) * 1024 * 1024
+    max_part = settings.upload_limit_bytes()
     try:
         form = await request.form(
             max_files=float("inf"),
             max_fields=float("inf"),
-            max_part_size=max_part,
+            max_part_size=max_part if max_part is not None else sys.maxsize,
         )
     except MultiPartException as exc:
         raise HTTPException(
             status_code=400,
-            detail="Không đọc được file tải lên. Không giới hạn số file; hãy thử lại hoặc gửi tiếp các file còn lại.",
+            detail="Không đọc được file tải lên. Không giới hạn số file và dung lượng; hãy thử lại hoặc gửi tiếp các file còn lại.",
         ) from exc
     files: list[tuple[str, bytes]] = []
     fields: dict[str, str] = {}
@@ -199,7 +200,7 @@ async def customers_preview(
         "suggested": payload,
         "detectNote": explain_mapping(details, headers),
         "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
-        "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này. Không giới hạn số file. Cột không trùng tên kho thì bỏ qua, không đoán nội dung ô.",
+        "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này. Không giới hạn số file và dung lượng. Cột không trùng tên kho thì bỏ qua, không đoán nội dung ô.",
         "headerMismatch": different,
     }
 

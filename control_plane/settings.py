@@ -24,8 +24,8 @@ class ServerSettings:
         self.data_dir = Path(os.environ.get("CONTROL_DATA_DIR", ROOT / "control_data"))
         self.packages_dir = Path(os.environ.get("CONTROL_PACKAGES_DIR", self.data_dir / "packages"))
         self.db_path = Path(os.environ.get("CONTROL_DB", self.data_dir / "server.db"))
-        # High-bandwidth defaults (LAN / multi-gigabit friendly)
-        self.max_upload_mb = int(os.environ.get("CONTROL_MAX_UPLOAD_MB", "4096"))
+        # 0 = không giới hạn dung lượng file tải lên.
+        self.max_upload_mb = int(os.environ.get("CONTROL_MAX_UPLOAD_MB", "0"))
         self.video_db_path = Path(os.environ.get("CONTROL_VIDEO_DB", self.data_dir / "video.db"))
         self.video_dir = Path(os.environ.get("CONTROL_VIDEO_DIR", self.data_dir / "videos"))
         self.video_disk_gb = int(os.environ.get("CONTROL_VIDEO_DISK_GB", "80"))
@@ -58,6 +58,11 @@ class ServerSettings:
         # Optional shared auth for host:port lines (ProxyVN packages)
         self.proxy_user = os.environ.get("CONTROL_PROXY_USER", "")
         self.proxy_pass = os.environ.get("CONTROL_PROXY_PASS", "")
+
+    def upload_limit_bytes(self) -> int | None:
+        if self.max_upload_mb <= 0:
+            return None
+        return self.max_upload_mb * 1024 * 1024
 
     def ensure_dirs(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)

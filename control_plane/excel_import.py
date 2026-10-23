@@ -22,7 +22,6 @@ from control_plane.customers import (
 )
 from control_plane.vietnam_places import fold_vietnamese
 
-MAX_ROWS = 2_000_000
 SAMPLE_ROWS = 8
 DETECT_ROWS = 200
 _COL_REF = re.compile(r"^([A-Z]+)(\d+)$")
@@ -139,8 +138,6 @@ def _sheet_rows(payload: bytes, shared: list[str]) -> list[list[str]]:
             table.append([])
             continue
         table.append([cells.get(index, "") for index in range(max_col + 1)])
-        if len(table) > MAX_ROWS + 1:
-            break
     return table
 
 
@@ -250,8 +247,6 @@ def read_csv(data: bytes) -> list[list[str]]:
     rows: list[list[str]] = []
     for row in reader:
         rows.append([expand_scientific(collapse(cell)) for cell in row])
-        if len(rows) > MAX_ROWS + 1:
-            break
     return rows
 
 
@@ -288,8 +283,6 @@ def _trim_table(rows: list[list[str]]) -> list[list[str]]:
         padded = list(row[:width]) + [""] * max(0, width - len(row))
         if any(collapse(cell) for cell in padded):
             trimmed.append(padded)
-        if len(trimmed) > MAX_ROWS + 1:
-            break
     return trimmed
 
 
@@ -332,8 +325,6 @@ def preview_table(filename: str, data: bytes) -> dict[str, Any]:
         raise ValueError("File không có dòng dữ liệu.")
     headers = [collapse(cell) or f"Cột {column_letter(index)}" for index, cell in enumerate(rows[0])]
     body = rows[1:]
-    truncated = len(body) > MAX_ROWS
-    body = body[:MAX_ROWS]
     samples = body[:SAMPLE_ROWS]
     detect_rows = body[:DETECT_ROWS]
     return {
@@ -343,7 +334,7 @@ def preview_table(filename: str, data: bytes) -> dict[str, Any]:
         "samples": samples,
         "detectRows": detect_rows,
         "rowCount": len(body),
-        "truncated": truncated,
+        "truncated": False,
         "suggested": suggest_mapping(headers, column_values_from_rows(detect_rows, len(headers))),
     }
 

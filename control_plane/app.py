@@ -74,13 +74,16 @@ if STATIC_DIR.is_dir():
 
 class LimitUploadSizeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+        limit = settings.upload_limit_bytes()
+        if limit is None:
+            return await call_next(request)
         cl = request.headers.get("content-length")
         if cl:
             try:
                 size = int(cl)
             except ValueError:
                 size = 0
-            if size > settings.max_upload_mb * 1024 * 1024:
+            if size > limit:
                 return JSONResponse({"detail": "upload too large"}, status_code=413)
         return await call_next(request)
 
@@ -91,7 +94,7 @@ app.add_middleware(LimitUploadSizeMiddleware)
 @app.exception_handler(MultiPartException)
 async def _multipart_error(_request: Request, _exc: MultiPartException) -> JSONResponse:
     return JSONResponse(
-        {"detail": "Không đọc được file tải lên. Không giới hạn số file; hãy thử lại."},
+        {"detail": "Không đọc được file tải lên. Không giới hạn số file và dung lượng; hãy thử lại."},
         status_code=400,
     )
 

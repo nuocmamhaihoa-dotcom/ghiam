@@ -56,12 +56,12 @@
 <body>
 <main>
   <h1>Kho khách Excel</h1>
-  <p class="lead">Nhập khách bằng file Excel, không dùng video. Không giới hạn số file: chọn thêm là cộng vào lần nạp này. Chỉ khớp cột khi tên cột giống kho (tên, SĐT, địa chỉ, địa chỉ hành chính, hàng mua, giá COD, UID Facebook, ID TikTok). Cột lạ như giới tính, ngày sinh, link thì bỏ qua, không đoán nội dung ô. Cùng một lần chọn cột dùng cho mọi file bạn thêm lúc đó. Chỉ gộp khi trùng số điện thoại. Không có số, hoặc khác số, thì mỗi dòng là một khách. Ô đã có giữ nguyên, ô trống được điền thêm. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
+  <p class="lead">Nhập khách bằng file Excel, không dùng video. Không giới hạn số file và dung lượng: chọn thêm là cộng vào lần nạp này. Chỉ khớp cột khi tên cột giống kho (tên, SĐT, địa chỉ, địa chỉ hành chính, hàng mua, giá COD, UID Facebook, ID TikTok). Cột lạ như giới tính, ngày sinh, link thì bỏ qua, không đoán nội dung ô. Cùng một lần chọn cột dùng cho mọi file bạn thêm lúc đó. Chỉ gộp khi trùng số điện thoại. Không có số, hoặc khác số, thì mỗi dòng là một khách. Ô đã có giữ nguyên, ô trống được điền thêm. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
 
   <section>
     <h2>Thêm file Excel</h2>
     <div class="drop" id="drop">
-      <p>Kéo bao nhiêu file Excel cũng được, không giới hạn số file</p>
+      <p>Kéo bao nhiêu file Excel cũng được, không giới hạn số file và dung lượng</p>
       <p class="note">hoặc</p>
       <button class="file" type="button" id="pick">Chọn file Excel</button>
       <input id="file" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" multiple />
@@ -92,7 +92,7 @@
 
   <section>
     <h2>Tra cứu hàng loạt</h2>
-    <p class="note">Dán list số điện thoại, hoặc chọn file danh sách. Chọn thêm file là cộng vào, không giới hạn số file. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
+    <p class="note">Dán list số điện thoại, hoặc chọn file danh sách. Chọn thêm file là cộng vào, không giới hạn số file và dung lượng. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
     <label for="lookupPaste">Danh sách số điện thoại</label>
     <textarea id="lookupPaste" placeholder="0901222333"></textarea>
     <p class="row" style="margin-top:0.7rem">
@@ -342,7 +342,7 @@
     if (!pendingFiles.length) {
       document.getElementById("mapBox").hidden = true;
       clearPending();
-      setNote("uploadNote", "Đã bỏ hết file. Hãy chọn lại, không giới hạn số file.");
+      setNote("uploadNote", "Đã bỏ hết file. Hãy chọn lại, không giới hạn số file và dung lượng.");
       return;
     }
     previewPending();
@@ -362,7 +362,7 @@
         return;
       }
       var extra = body.fileErrors && body.fileErrors.length ? " Một số file lỗi vẫn bị bỏ qua." : "";
-      setNote("uploadNote", "Đã đọc " + body.files.length + " file. Chọn thêm file là cộng vào lần này, không giới hạn số file." + extra);
+      setNote("uploadNote", "Đã đọc " + body.files.length + " file. Chọn thêm file là cộng vào lần này, không giới hạn số file và dung lượng." + extra);
       renderMap(body);
       if (previous) applyMapping(previous);
     } catch (error) {
@@ -627,7 +627,7 @@
   document.getElementById("cancel").addEventListener("click", function () {
     document.getElementById("mapBox").hidden = true;
     clearPending();
-    setNote("uploadNote", "Đã bỏ hết file. Chọn lại, không giới hạn số file.");
+    setNote("uploadNote", "Đã bỏ hết file. Chọn lại, không giới hạn số file và dung lượng.");
   });
   document.getElementById("query").addEventListener("input", function () {
     window.clearTimeout(window.__khachSearch);

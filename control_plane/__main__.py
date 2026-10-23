@@ -44,7 +44,7 @@ def main() -> None:
 
     print(
         f"fb-poller LAN server listening on http://{settings.host}:{settings.port}/ "
-        f"(workers={kwargs['workers']}, max_upload_mb={settings.max_upload_mb})",
+        f"(workers={kwargs['workers']}, max_upload_mb={'unlimited' if settings.max_upload_mb <= 0 else settings.max_upload_mb})",
         file=sys.stderr,
     )
     uvicorn.run(**kwargs)
