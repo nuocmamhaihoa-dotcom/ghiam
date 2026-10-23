@@ -103,6 +103,20 @@ def init_db(db_path: Path) -> None:
               username TEXT NOT NULL DEFAULT '',
               updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS customers (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL DEFAULT '',
+              phone TEXT NOT NULL DEFAULT '',
+              address TEXT NOT NULL DEFAULT '',
+              facebook_uid TEXT NOT NULL DEFAULT '',
+              tiktok_id TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
+            CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+            CREATE INDEX IF NOT EXISTS idx_customers_facebook ON customers(facebook_uid);
+            CREATE INDEX IF NOT EXISTS idx_customers_tiktok ON customers(tiktok_id);
             """
         )
         conn.commit()
@@ -719,6 +733,67 @@ def list_people(db_path: Path) -> list[dict[str, str]]:
         }
         for row in rows
     ]
+
+
+def list_customers(db_path: Path) -> list[dict[str, str]]:
+    with session(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, name, phone, address, facebook_uid, tiktok_id, created_at, updated_at
+            FROM customers
+            ORDER BY updated_at DESC, created_at DESC
+            """
+        ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "phone": row["phone"],
+            "address": row["address"],
+            "facebookUid": row["facebook_uid"],
+            "tiktokId": row["tiktok_id"],
+            "createdAt": row["created_at"],
+            "updatedAt": row["updated_at"],
+        }
+        for row in rows
+    ]
+
+
+def replace_customers(db_path: Path, rows: list[dict[str, Any]], removed_ids: list[str]) -> None:
+    with session(db_path) as conn:
+        for customer_id in removed_ids:
+            conn.execute("DELETE FROM customers WHERE id=?", (customer_id,))
+        for row in rows:
+            conn.execute(
+                """
+                INSERT INTO customers(id, name, phone, address, facebook_uid, tiktok_id, created_at, updated_at)
+                VALUES(?,?,?,?,?,?,?,?)
+                ON CONFLICT(id) DO UPDATE SET
+                  name=excluded.name,
+                  phone=excluded.phone,
+                  address=excluded.address,
+                  facebook_uid=excluded.facebook_uid,
+                  tiktok_id=excluded.tiktok_id,
+                  created_at=excluded.created_at,
+                  updated_at=excluded.updated_at
+                """,
+                (
+                    row["id"],
+                    row.get("name") or "",
+                    row.get("phone") or "",
+                    row.get("address") or "",
+                    row.get("facebookUid") or "",
+                    row.get("tiktokId") or "",
+                    row.get("createdAt") or "",
+                    row.get("updatedAt") or "",
+                ),
+            )
+
+
+def customer_count(db_path: Path) -> int:
+    with session(db_path) as conn:
+        row = conn.execute("SELECT COUNT(*) AS n FROM customers").fetchone()
+    return int(row["n"] if row else 0)
 
 
 def save_people(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> None:

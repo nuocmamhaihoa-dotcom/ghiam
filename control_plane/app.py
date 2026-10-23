@@ -43,6 +43,7 @@ from control_plane.recordings import (
     steps_to_events,
 )
 from control_plane.settings import ROOT, settings
+from control_plane.customer_api import router as customer_router
 from control_plane.video_api import router as video_router
 from control_plane.video_store import init_db as init_video_db
 from control_plane.video_store import merge_close_results
@@ -57,6 +58,7 @@ app = FastAPI(
     openapi_url=None,
 )
 app.include_router(video_router)
+app.include_router(customer_router)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CORSMiddleware,
@@ -181,6 +183,7 @@ def health() -> dict[str, Any]:
         "danhbaBuild": DANHBA_BUILD,
         "danhba": "/danhba/",
         "delivery": "/tai",
+        "customers": "/khach",
     }
 
 
@@ -210,6 +213,12 @@ def phone() -> HTMLResponse:
 def iphone_app() -> HTMLResponse:
     """App trên iPhone: lướt để lưu tên, điều khiển để ghi và làm lại thao tác."""
     return _html("iphone.html")
+
+
+@app.get("/khach", response_class=HTMLResponse)
+def customer_book() -> HTMLResponse:
+    """Kho khách: nạp Excel, hỏi cột, gộp khách trùng."""
+    return _html("khach.html")
 
 
 @app.get("/tai", response_class=HTMLResponse)

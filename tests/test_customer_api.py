@@ -1,0 +1,153 @@
+"""HTTP API kho khách: hỏi cột rồi nạp Excel."""
+
+from __future__ import annotations
+
+import io
+import json
+import os
+import shutil
+import tempfile
+import unittest
+from pathlib import Path
+
+_TMP = tempfile.mkdtemp(prefix="fb-khach-")
+os.environ["CONTROL_DATA_DIR"] = _TMP
+os.environ["CONTROL_DB"] = str(Path(_TMP) / "server.db")
+os.environ["CONTROL_TOKEN"] = "test-token"
+os.environ["CONTROL_PROXIES_FILE"] = str(Path(_TMP) / "proxies.txt")
+os.environ["CONTROL_PACKAGES_DIR"] = str(Path(_TMP) / "packages")
+os.environ["CONTROL_PROXY_CHECK_SEC"] = "86400"
+Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from control_plane import db  # noqa: E402
+from control_plane.app import app  # noqa: E402
+from control_plane.excel_import import write_xlsx  # noqa: E402
+from control_plane.settings import settings  # noqa: E402
+
+
+def tearDownModule() -> None:
+    shutil.rmtree(_TMP, ignore_errors=True)
+
+
+class CustomerApiTests(unittest.TestCase):
+    def setUp(self) -> None:
+        settings.data_dir = Path(_TMP)
+        settings.db_path = Path(_TMP) / "server.db"
+        settings.token = "test-token"
+        settings.page_token = "page-token"
+        if settings.db_path.exists():
+            settings.db_path.unlink()
+        db.init_db(settings.db_path)
+        self._client_cm = TestClient(app)
+        self.client = self._client_cm.__enter__()
+        self.headers = {"Authorization": "Bearer test-token"}
+
+    def tearDown(self) -> None:
+        self._client_cm.__exit__(None, None, None)
+
+    def _xlsx(self, name: str, headers: list[str], rows: list[list[str]]) -> tuple[str, io.BytesIO]:
+        payload = write_xlsx(headers, rows)
+        return name, io.BytesIO(payload)
+
+    def test_page_is_served(self) -> None:
+        response = self.client.get("/khach")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Cột nào là dữ liệu nào", response.text)
+
+    def test_preview_then_import_asks_for_columns(self) -> None:
+        name, body = self._xlsx(
+            "lan1.xlsx",
+            ["Tên khách", "Số điện thoại khách", "Địa chỉ khách"],
+            [["Lan", "0901222333", "Huế"]],
+        )
+        preview = self.client.post(
+            "/v1/customers/preview",
+            headers=self.headers,
+            files=[("files", (name, body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(preview.status_code, 200, preview.text)
+        data = preview.json()
+        self.assertEqual(data["files"][0]["rowCount"], 1)
+        self.assertEqual(data["suggested"]["name"], 0)
+        self.assertIn("mọi file", data["applyNote"])
+
+        name, body = self._xlsx(
+            "lan1.xlsx",
+            ["Tên khách", "Số điện thoại khách", "Địa chỉ khách"],
+            [["Lan", "0901222333", "Huế"]],
+        )
+        imported = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={
+                "mapping": json.dumps(
+                    {
+                        "name": {"index": 0, "header": "Tên khách"},
+                        "phone": {"index": 1, "header": "Số điện thoại khách"},
+                        "address": {"index": 2, "header": "Địa chỉ khách"},
+                    }
+                )
+            },
+            files=[("files", (name, body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+        self.assertEqual(imported.json()["stats"]["created"], 1)
+
+        name, body = self._xlsx(
+            "lan2.xlsx",
+            ["Tên khách", "Số điện thoại khách", "UID Facebook", "ID TikTok"],
+            [["Lan", "0901222333", "10001", "lan.hue"]],
+        )
+        filled = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={
+                "mapping": json.dumps(
+                    {
+                        "name": {"index": 0, "header": "Tên khách"},
+                        "phone": {"index": 1, "header": "Số điện thoại khách"},
+                        "facebookUid": {"index": 2, "header": "UID Facebook"},
+                        "tiktokId": {"index": 3, "header": "ID TikTok"},
+                    }
+                )
+            },
+            files=[("files", (name, body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(filled.status_code, 200, filled.text)
+        self.assertEqual(filled.json()["stats"]["updated"], 1)
+        listed = self.client.get("/v1/customers", headers=self.headers)
+        self.assertEqual(listed.status_code, 200)
+        items = listed.json()["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["name"], "Lan")
+        self.assertEqual(items[0]["address"], "Huế")
+        self.assertEqual(items[0]["facebookUid"], "10001")
+        self.assertEqual(items[0]["tiktokId"], "lan.hue")
+
+    def test_export_xlsx_roundtrip(self) -> None:
+        db.replace_customers(
+            settings.db_path,
+            [
+                {
+                    "id": "c1",
+                    "name": "Hoa",
+                    "phone": "0901888777",
+                    "address": "",
+                    "facebookUid": "",
+                    "tiktokId": "hoa.tt",
+                    "createdAt": "2026-01-01T00:00:00+00:00",
+                    "updatedAt": "2026-01-01T00:00:00+00:00",
+                }
+            ],
+            [],
+        )
+        response = self.client.get("/v1/customers/export", headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("spreadsheetml", response.headers["content-type"])
+        self.assertGreater(len(response.content), 100)
+
+
+if __name__ == "__main__":
+    unittest.main()
