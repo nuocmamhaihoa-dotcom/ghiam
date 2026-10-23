@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 
 from control_plane.column_detect import (
+    assign_fields,
     looks_like_address,
     looks_like_facebook_uid,
     looks_like_name,
@@ -98,6 +99,55 @@ class ColumnAssignTests(unittest.TestCase):
         self.assertEqual(mapping["phone"], 0)
         self.assertEqual(mapping["name"], 1)
         self.assertIsNone(mapping["facebookUid"])
+
+    def test_multiple_address_columns_become_separate_lines(self) -> None:
+        from control_plane.excel_import import mapping_from_form, rows_from_files
+
+        payload = write_xlsx(
+            ["Tên khách", "Số nhà", "Phường", "Tỉnh"],
+            [["Nguyễn Lan", "12 Lê Lợi", "Quận 1", "TP.HCM"]],
+        )
+        preview = preview_table("nhieu-dia-chi.xlsx", payload)
+        self.assertEqual(preview["suggested"]["name"], 0)
+        details_indexes = suggest_mapping(
+            preview["headers"],
+            [
+                ["Nguyễn Lan"],
+                ["12 Lê Lợi"],
+                ["Quận 1"],
+                ["TP.HCM"],
+            ],
+        )
+        self.assertEqual(details_indexes["name"], 0)
+        mapping = mapping_from_form(
+            {
+                "name": {"index": 0, "header": "Tên khách"},
+                "address": {
+                    "columns": [
+                        {"index": 1, "header": "Số nhà"},
+                        {"index": 2, "header": "Phường"},
+                        {"index": 3, "header": "Tỉnh"},
+                    ]
+                },
+            }
+        )
+        incoming, _reports = rows_from_files([("nhieu-dia-chi.xlsx", payload)], mapping)
+        self.assertEqual(incoming[0]["name"], "Nguyễn Lan")
+        self.assertEqual(incoming[0]["address"], "12 Lê Lợi\nQuận 1\nTP.HCM")
+
+    def test_unlabeled_address_parts_are_all_kept(self) -> None:
+        headers = ["A", "B", "C", "D"]
+        values = [
+            ["Nguyễn Lan", "Trần Minh"],
+            ["0901222333", "0901444555"],
+            ["Huế", "Ha Noi"],
+            ["Phường Phú Hội", "Cầu Giấy"],
+        ]
+        mapping, details = assign_fields(headers, values)
+        self.assertEqual(mapping["name"], 0)
+        self.assertEqual(mapping["phone"], 1)
+        self.assertEqual(mapping["address"], 2)
+        self.assertEqual(details["address"]["indexes"], [2, 3])
 
     def test_labeled_tiktok_without_at_still_maps(self) -> None:
         payload = write_xlsx(

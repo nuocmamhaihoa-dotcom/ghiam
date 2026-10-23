@@ -102,6 +102,44 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(data["suggested"]["tiktokId"], 4)
         self.assertIn("đầu số nhà mạng", data["detectNote"])
 
+    def test_preview_keeps_every_address_column(self) -> None:
+        name, body = self._xlsx(
+            "diachi.xlsx",
+            ["Tên khách", "Số nhà", "Phường", "Tỉnh"],
+            [["Nguyễn Lan", "12 Lê Lợi", "Quận 1", "TP.HCM"]],
+        )
+        preview = self.client.post(
+            "/v1/customers/preview",
+            headers=self.headers,
+            files=[("files", (name, body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(preview.status_code, 200, preview.text)
+        data = preview.json()
+        self.assertEqual(data["suggested"]["name"], 0)
+        self.assertEqual(data["suggested"]["addressColumns"], [1, 2, 3])
+        imported = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={
+                "mapping": json.dumps(
+                    {
+                        "name": {"index": 0, "header": "Tên khách"},
+                        "address": {
+                            "columns": [
+                                {"index": 1, "header": "Số nhà"},
+                                {"index": 2, "header": "Phường"},
+                                {"index": 3, "header": "Tỉnh"},
+                            ]
+                        },
+                    }
+                )
+            },
+            files=[("files", (name, body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+        listed = self.client.get("/v1/customers", headers=self.headers)
+        self.assertEqual(listed.json()["items"][0]["address"], "12 Lê Lợi\nQuận 1\nTP.HCM")
+
     def test_import_fills_missing_fields_on_later_file(self) -> None:
         name, body = self._xlsx(
             "lan1.xlsx",

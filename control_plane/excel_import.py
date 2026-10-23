@@ -10,7 +10,15 @@ import xml.etree.ElementTree as ET
 from typing import Any, Iterable
 
 from control_plane.column_detect import suggest_mapping as detect_mapping
-from control_plane.customers import FIELDS, clean_phone, clean_row, collapse, expand_scientific, has_data
+from control_plane.customers import (
+    FIELDS,
+    clean_phone,
+    clean_row,
+    collapse,
+    expand_scientific,
+    has_data,
+    join_address_lines,
+)
 
 MAX_ROWS = 200_000
 SAMPLE_ROWS = 8
@@ -327,10 +335,23 @@ def rows_from_table(rows: list[list[str]], mapping: dict[str, Any], allow_index:
     indexes = {
         field: resolve_index(headers, mapping.get(field), allow_index=allow_index) for field in FIELDS
     }
+    address_specs = _address_specs(mapping.get("address"))
     extracted: list[dict[str, str]] = []
     for row in table[1:]:
         raw: dict[str, str] = {}
         for field in FIELDS:
+            if field == "address":
+                parts = []
+                for spec in address_specs:
+                    index = resolve_index(headers, spec, allow_index=allow_index)
+                    if index is not None and index < len(row):
+                        parts.append(row[index])
+                if not parts:
+                    index = indexes[field]
+                    if index is not None and index < len(row):
+                        parts.append(row[index])
+                raw[field] = join_address_lines(*parts)
+                continue
             index = indexes[field]
             raw[field] = row[index] if index is not None and index < len(row) else ""
         cleaned = clean_row(raw)
@@ -368,7 +389,7 @@ def write_xlsx(headers: list[str], rows: list[list[str]]) -> bytes:
     def cell_xml(column: int, row_number: int, value: str) -> str:
         return (
             f'<c r="{column_letter(column)}{row_number}" t="inlineStr">'
-            f"<is><t>{xml_escape(value)}</t></is></c>"
+            f'<is><t xml:space="preserve">{xml_escape(value)}</t></is></c>'
         )
 
     lines = [
@@ -437,8 +458,37 @@ def mapping_from_form(raw: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
         item = source.get(field) or {}
         if not isinstance(item, dict):
             item = {"index": item}
+        columns = _address_specs(item) if field == "address" else []
+        first = columns[0] if columns else item
         mapping[field] = {
-            "index": item.get("index"),
-            "header": item.get("header") or "",
+            "index": first.get("index") if isinstance(first, dict) else item.get("index"),
+            "header": (first.get("header") if isinstance(first, dict) else "") or item.get("header") or "",
         }
+        if field == "address":
+            mapping[field]["columns"] = columns or [
+                {"index": item.get("index"), "header": item.get("header") or ""}
+            ]
     return mapping
+
+
+def _address_specs(item: dict[str, Any] | None) -> list[dict[str, Any]]:
+    source = item or {}
+    raw_columns = source.get("columns")
+    specs: list[dict[str, Any]] = []
+    if isinstance(raw_columns, list):
+        for entry in raw_columns:
+            if not isinstance(entry, dict):
+                specs.append({"index": entry, "header": ""})
+                continue
+            specs.append({"index": entry.get("index"), "header": entry.get("header") or ""})
+    if not specs and (source.get("index") is not None or source.get("header")):
+        specs.append({"index": source.get("index"), "header": source.get("header") or ""})
+    seen: set[tuple[Any, str]] = set()
+    unique: list[dict[str, Any]] = []
+    for spec in specs:
+        key = (spec.get("index"), str(spec.get("header") or ""))
+        if key in seen or (spec.get("index") is None and not spec.get("header")):
+            continue
+        seen.add(key)
+        unique.append(spec)
+    return unique

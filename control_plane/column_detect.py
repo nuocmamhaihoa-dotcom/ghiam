@@ -81,10 +81,26 @@ _HEADER_HINTS: dict[str, tuple[str, ...]] = {
     "address": (
         "dia chi khach",
         "dia chi",
+        "dia chi 2",
+        "dia chi 3",
         "address",
         "addr",
         "tinh thanh",
         "que quan",
+        "so nha",
+        "duong",
+        "ten duong",
+        "pho",
+        "phuong",
+        "xa",
+        "quan",
+        "huyen",
+        "tinh",
+        "thanh pho",
+        "ward",
+        "district",
+        "street",
+        "city",
     ),
     "facebookUid": (
         "uid facebook",
@@ -114,6 +130,32 @@ _FIELD_PRIORITY = {
     "name": 1.0,
 }
 _MIN_SCORE = 0.42
+_ADDRESS_EXTRA = 0.42
+_ADDRESS_PART_HINTS = frozenset(
+    {
+        "dia chi",
+        "dia chi 2",
+        "dia chi 3",
+        "address",
+        "addr",
+        "so nha",
+        "duong",
+        "ten duong",
+        "pho",
+        "phuong",
+        "xa",
+        "quan",
+        "huyen",
+        "tinh",
+        "tinh thanh",
+        "thanh pho",
+        "que quan",
+        "ward",
+        "district",
+        "street",
+        "city",
+    }
+)
 _REASONS = {
     "name": "chữ, không có số",
     "phone": "đầu số nhà mạng Việt Nam",
@@ -288,12 +330,50 @@ def assign_fields(headers: list[str], column_values: list[list[str]]) -> tuple[d
         hinted = header_field(headers[index]) == field
         details[field] = {
             "index": index,
+            "indexes": [index],
             "score": round(score, 3),
             "header": collapse(headers[index]),
             "reason": _REASONS[field],
             "fromHeader": hinted,
         }
+    address_indexes = _extra_address_columns(headers, column_values, used_columns, mapping.get("address"))
+    if address_indexes:
+        mapping["address"] = address_indexes[0]
+        first_header = collapse(headers[address_indexes[0]])
+        details["address"] = {
+            "index": address_indexes[0],
+            "indexes": address_indexes,
+            "score": details.get("address", {}).get("score", 1.0),
+            "header": first_header,
+            "reason": "mỗi cột địa chỉ thành một dòng",
+            "fromHeader": any(header_field(headers[index]) == "address" for index in address_indexes),
+        }
     return mapping, details
+
+
+def _extra_address_columns(
+    headers: list[str],
+    column_values: list[list[str]],
+    used_columns: set[int],
+    primary: int | None,
+) -> list[int]:
+    chosen: list[int] = []
+    if primary is not None:
+        chosen.append(primary)
+    for index, header in enumerate(headers):
+        if index in used_columns:
+            continue
+        values = column_values[index] if index < len(column_values) else []
+        scores = score_column(header, values)
+        key = header_key(header)
+        part = key in _ADDRESS_PART_HINTS
+        exclusive = max(scores["phone"], scores["facebookUid"], scores["tiktokId"])
+        if exclusive >= 0.7:
+            continue
+        if scores["address"] >= _ADDRESS_EXTRA or (part and scores["name"] < 0.75):
+            chosen.append(index)
+            used_columns.add(index)
+    return sorted(dict.fromkeys(chosen))
 
 
 def suggest_mapping(
@@ -310,12 +390,18 @@ def explain_mapping(details: dict[str, dict[str, Any]], headers: list[str]) -> s
         item = details.get(field)
         if not item:
             continue
-        index = item["index"]
-        letter = chr(65 + index) if 0 <= index < 26 else str(index + 1)
-        title = collapse(headers[index]) if 0 <= index < len(headers) else ""
-        label = f"Cột {letter}" + (f" — {title}" if title else "")
-        how = "tên cột và nội dung" if item.get("fromHeader") else item["reason"]
-        parts.append(f"{_label(field)} ← {label} ({how})")
+        indexes = item.get("indexes") or [item["index"]]
+        labels = []
+        for index in indexes:
+            letter = chr(65 + index) if 0 <= index < 26 else str(index + 1)
+            title = collapse(headers[index]) if 0 <= index < len(headers) else ""
+            labels.append(f"Cột {letter}" + (f" — {title}" if title else ""))
+        how = item["reason"]
+        if field == "address" and len(indexes) > 1:
+            how = "mỗi cột một dòng địa chỉ"
+        elif item.get("fromHeader") and field != "address":
+            how = "tên cột và nội dung"
+        parts.append(f"{_label(field)} ← {', '.join(labels)} ({how})")
     if not parts:
         return "Chưa chắc cột nào. Hãy chọn tay rồi nạp."
     return "Đã tự nhận: " + "; ".join(parts) + ". Hãy xem lại rồi nạp."

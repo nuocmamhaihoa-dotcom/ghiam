@@ -36,6 +36,9 @@
     .stat span { color: var(--muted); font-size: 0.92rem; }
     table { width: 100%; border-collapse: collapse; }
     th, td { text-align: left; padding: 0.45rem 0.3rem; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 0.95rem; }
+    td.addr { white-space: pre-line; }
+    .picks { display: grid; gap: 0.35rem; margin: 0.2rem 0 0.4rem; }
+    .picks label { font-weight: 500; display: flex; gap: 0.45rem; align-items: center; }
     th { color: var(--muted); font-weight: 650; }
     .note { color: var(--muted); margin-top: 0.55rem; }
     .warn { color: #8a2b2b; font-weight: 650; }
@@ -151,6 +154,19 @@
   function currentMapping() {
     var mapping = {};
     fieldOrder.forEach(function (field) {
+      if (field === "address") {
+        var columns = [];
+        document.querySelectorAll("#map-address input[type=checkbox]:checked").forEach(function (box) {
+          var header = box.getAttribute("data-header") || "";
+          var rawIndex = box.getAttribute("data-index");
+          var index = rawIndex === "" || rawIndex == null ? null : Number(rawIndex);
+          if (index !== index) index = null;
+          if (header || index !== null) columns.push({ index: index, header: header });
+        });
+        var first = columns[0] || { index: null, header: "" };
+        mapping.address = { index: first.index, header: first.header, columns: columns };
+        return;
+      }
       var select = document.getElementById("map-" + field);
       var option = select && select.selectedOptions && select.selectedOptions[0];
       var header = option && option.value ? option.getAttribute("data-header") || "" : "";
@@ -194,7 +210,29 @@
       var suggested = body.suggested[field.id];
       var label = document.createElement("label");
       label.setAttribute("for", "map-" + field.id);
-      label.textContent = field.label;
+      label.textContent = field.id === "address" ? "Địa chỉ khách (mỗi cột đã chọn thành một dòng)" : field.label;
+      box.appendChild(label);
+      if (field.id === "address") {
+        var picks = document.createElement("div");
+        picks.id = "map-address";
+        picks.className = "picks";
+        var chosen = {};
+        (body.suggested.addressColumns || []).forEach(function (index) { chosen[index] = true; });
+        if (suggested != null && suggested !== "") chosen[suggested] = true;
+        body.columns.forEach(function (col, colPos) {
+          var row = document.createElement("label");
+          var boxInput = document.createElement("input");
+          boxInput.type = "checkbox";
+          boxInput.setAttribute("data-header", col.header || "");
+          boxInput.setAttribute("data-index", col.index == null ? "" : String(col.index));
+          boxInput.checked = !!chosen[colPos];
+          row.appendChild(boxInput);
+          row.appendChild(document.createTextNode(col.title));
+          picks.appendChild(row);
+        });
+        box.appendChild(picks);
+        return;
+      }
       var select = document.createElement("select");
       select.id = "map-" + field.id;
       var skip = document.createElement("option");
@@ -212,7 +250,6 @@
         if (suggested === colPos) option.selected = true;
         select.appendChild(option);
       });
-      box.appendChild(label);
       box.appendChild(select);
     });
     renderSample(body.columns, body.files[0] ? body.files[0].samples : []);
@@ -248,6 +285,7 @@
     }
     var mapping = currentMapping();
     var used = fieldOrder.some(function (field) {
+      if (field === "address") return mapping.address && mapping.address.columns && mapping.address.columns.length;
       return mapping[field].header || mapping[field].index !== null;
     });
     if (!used) {
@@ -289,7 +327,7 @@
     }
     var html = "<table><thead><tr><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
     items.forEach(function (row) {
-      html += "<tr><td>" + escapeHtml(row.name) + "</td><td>" + escapeHtml(row.phone) + "</td><td>" + escapeHtml(row.address) + "</td><td>" + escapeHtml(row.facebookUid) + "</td><td>" + escapeHtml(row.tiktokId) + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(row.name) + "</td><td>" + escapeHtml(row.phone) + "</td><td class='addr'>" + escapeHtml(row.address) + "</td><td>" + escapeHtml(row.facebookUid) + "</td><td>" + escapeHtml(row.tiktokId) + "</td></tr>";
     });
     html += "</tbody></table>";
     document.getElementById("people").innerHTML = html;
@@ -341,7 +379,7 @@
     var html = "<table><thead><tr><th>Số tra cứu</th><th>Kho</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
     items.forEach(function (item) {
       var customer = item.customer || {};
-      html += "<tr><td>" + escapeHtml(item.query) + "</td><td>" + (item.found ? "Có" : "Không") + "</td><td>" + escapeHtml(customer.name) + "</td><td>" + escapeHtml(customer.phone) + "</td><td>" + escapeHtml(customer.address) + "</td><td>" + escapeHtml(customer.facebookUid) + "</td><td>" + escapeHtml(customer.tiktokId) + "</td></tr>";
+      html += "<tr><td>" + escapeHtml(item.query) + "</td><td>" + (item.found ? "Có" : "Không") + "</td><td>" + escapeHtml(customer.name) + "</td><td>" + escapeHtml(customer.phone) + "</td><td class='addr'>" + escapeHtml(customer.address) + "</td><td>" + escapeHtml(customer.facebookUid) + "</td><td>" + escapeHtml(customer.tiktokId) + "</td></tr>";
     });
     html += "</tbody></table>";
     document.getElementById("lookupPeople").innerHTML = html;

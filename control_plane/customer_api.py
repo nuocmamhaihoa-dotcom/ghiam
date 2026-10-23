@@ -131,6 +131,10 @@ async def customers_preview(
     headers = [str(column.get("header") or "") for column in columns]
     values = _column_values_from_previews(columns, previews)
     suggested, details = assign_fields(headers, values)
+    payload = dict(suggested)
+    address_columns = (details.get("address") or {}).get("indexes") or []
+    if address_columns:
+        payload["addressColumns"] = address_columns
     return {
         "files": [
             {
@@ -143,7 +147,7 @@ async def customers_preview(
             for item in previews
         ],
         "columns": columns,
-        "suggested": suggested,
+        "suggested": payload,
         "detectNote": explain_mapping(details, headers),
         "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
         "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này.",

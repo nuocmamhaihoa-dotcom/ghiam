@@ -76,12 +76,34 @@ def clean_phone(value: Any) -> str:
     return ("+" + digits) if leading_plus and not digits.startswith("84") else digits
 
 
+def split_address_lines(value: Any) -> list[str]:
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    lines: list[str] = []
+    seen: set[str] = set()
+    for raw in text.split("\n"):
+        line = collapse(raw)
+        if not line:
+            continue
+        key = line.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        lines.append(line[:200])
+        if len(lines) >= 12:
+            break
+    return lines
+
+
+def join_address_lines(*parts: Any) -> str:
+    return "\n".join(split_address_lines("\n".join(str(part or "") for part in parts)))
+
+
 def clean_address(value: Any) -> str:
-    return collapse(value)[:300]
+    return join_address_lines(value)[:800]
 
 
 def address_key(value: str) -> str:
-    return clean_address(value).casefold()
+    return " | ".join(line.casefold() for line in split_address_lines(value))
 
 
 def clean_facebook_uid(value: Any) -> str:
@@ -203,6 +225,11 @@ class _UnionFind:
 
 
 def _pick(members: list[dict[str, Any]], field: str) -> str:
+    if field == "address":
+        existing = [str(row.get("address") or "") for row in members if row["existing"] and row.get("address")]
+        if existing:
+            return join_address_lines(*existing)
+        return join_address_lines(*(str(row.get("address") or "") for row in members if not row["existing"]))
     for row in members:
         if row["existing"] and row.get(field):
             return str(row[field])
