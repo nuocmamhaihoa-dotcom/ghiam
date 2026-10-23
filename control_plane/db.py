@@ -747,16 +747,18 @@ def list_people(db_path: Path) -> list[dict[str, str]]:
     ]
 
 
-def list_customers(db_path: Path) -> list[dict[str, str]]:
+def list_customers(db_path: Path, limit: int | None = None) -> list[dict[str, str]]:
+    sql = """
+        SELECT id, name, phone, address, admin_address, order_content, cod_amount,
+               facebook_uid, tiktok_id, created_at, updated_at
+        FROM customers
+        ORDER BY updated_at DESC, created_at DESC
+    """
     with session(db_path) as conn:
-        rows = conn.execute(
-            """
-            SELECT id, name, phone, address, admin_address, order_content, cod_amount,
-                   facebook_uid, tiktok_id, created_at, updated_at
-            FROM customers
-            ORDER BY updated_at DESC, created_at DESC
-            """
-        ).fetchall()
+        if limit is None:
+            rows = conn.execute(sql).fetchall()
+        else:
+            rows = conn.execute(sql + " LIMIT ?", (max(1, int(limit)),)).fetchall()
     return [
         {
             "id": row["id"],
@@ -776,29 +778,32 @@ def list_customers(db_path: Path) -> list[dict[str, str]]:
 
 
 def replace_customers(db_path: Path, rows: list[dict[str, Any]], removed_ids: list[str]) -> None:
+    dirty = [row for row in rows if row.get("write", True)]
     with session(db_path) as conn:
-        for customer_id in removed_ids:
-            conn.execute("DELETE FROM customers WHERE id=?", (customer_id,))
-        for row in rows:
-            conn.execute(
-                """
-                INSERT INTO customers(
-                  id, name, phone, address, admin_address, order_content, cod_amount,
-                  facebook_uid, tiktok_id, created_at, updated_at
-                )
-                VALUES(?,?,?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(id) DO UPDATE SET
-                  name=excluded.name,
-                  phone=excluded.phone,
-                  address=excluded.address,
-                  admin_address=excluded.admin_address,
-                  order_content=excluded.order_content,
-                  cod_amount=excluded.cod_amount,
-                  facebook_uid=excluded.facebook_uid,
-                  tiktok_id=excluded.tiktok_id,
-                  created_at=excluded.created_at,
-                  updated_at=excluded.updated_at
-                """,
+        if removed_ids:
+            conn.executemany("DELETE FROM customers WHERE id=?", [(customer_id,) for customer_id in removed_ids])
+        if not dirty:
+            return
+        conn.executemany(
+            """
+            INSERT INTO customers(
+              id, name, phone, address, admin_address, order_content, cod_amount,
+              facebook_uid, tiktok_id, created_at, updated_at
+            )
+            VALUES(?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+              name=excluded.name,
+              phone=excluded.phone,
+              address=excluded.address,
+              admin_address=excluded.admin_address,
+              order_content=excluded.order_content,
+              cod_amount=excluded.cod_amount,
+              facebook_uid=excluded.facebook_uid,
+              tiktok_id=excluded.tiktok_id,
+              created_at=excluded.created_at,
+              updated_at=excluded.updated_at
+            """,
+            [
                 (
                     row["id"],
                     row.get("name") or "",
@@ -811,8 +816,10 @@ def replace_customers(db_path: Path, rows: list[dict[str, Any]], removed_ids: li
                     row.get("tiktokId") or "",
                     row.get("createdAt") or "",
                     row.get("updatedAt") or "",
-                ),
-            )
+                )
+                for row in dirty
+            ],
+        )
 
 
 def customer_count(db_path: Path) -> int:

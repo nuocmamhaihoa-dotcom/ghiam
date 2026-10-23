@@ -24,6 +24,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.formparsers import MultiPartException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
@@ -73,12 +74,25 @@ if STATIC_DIR.is_dir():
 class LimitUploadSizeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
         cl = request.headers.get("content-length")
-        if cl and int(cl) > settings.max_upload_mb * 1024 * 1024:
-            return JSONResponse({"detail": "upload too large"}, status_code=413)
+        if cl:
+            try:
+                size = int(cl)
+            except ValueError:
+                size = 0
+            if size > settings.max_upload_mb * 1024 * 1024:
+                return JSONResponse({"detail": "upload too large"}, status_code=413)
         return await call_next(request)
 
 
 app.add_middleware(LimitUploadSizeMiddleware)
+
+
+@app.exception_handler(MultiPartException)
+async def _multipart_error(_request: Request, _exc: MultiPartException) -> JSONResponse:
+    return JSONResponse(
+        {"detail": "Không đọc được file tải lên. Không giới hạn số file; hãy thử lại."},
+        status_code=400,
+    )
 
 
 def utcnow() -> str:

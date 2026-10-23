@@ -8,8 +8,10 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import Response
+from starlette.datastructures import UploadFile
+from starlette.formparsers import MultiPartException
 
 from control_plane import db
 from control_plane.column_detect import assign_fields, explain_mapping
@@ -72,23 +74,52 @@ def _remember(summary: str, detail: str | None = None) -> None:
         return
 
 
+LIST_LIMIT = 2000
+
+
 def _mapped(spec: dict[str, Any]) -> bool:
     if str(spec.get("header") or "").strip():
         return True
     return spec.get("index") not in (None, "")
 
 
-async def _files_from_upload(files: list[UploadFile]) -> list[tuple[str, bytes]]:
-    if not files:
-        raise HTTPException(status_code=400, detail="Hãy chọn ít nhất một file Excel.")
-    collected: list[tuple[str, bytes]] = []
-    for item in files:
-        name = item.filename or "khach.xlsx"
-        payload = await item.read()
-        if not payload:
-            raise HTTPException(status_code=400, detail=f"{name} đang trống.")
-        collected.append((name, payload))
-    return collected
+def _is_upload(value: object) -> bool:
+    return isinstance(value, UploadFile) or (
+        hasattr(value, "filename") and hasattr(value, "read")
+    )
+
+
+async def _read_customer_form(request: Request) -> tuple[list[tuple[str, bytes]], dict[str, str], list[str]]:
+    max_part = max(int(settings.max_upload_mb), 1) * 1024 * 1024
+    try:
+        form = await request.form(
+            max_files=float("inf"),
+            max_fields=float("inf"),
+            max_part_size=max_part,
+        )
+    except MultiPartException as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Không đọc được file tải lên. Không giới hạn số file; hãy thử lại hoặc gửi tiếp các file còn lại.",
+        ) from exc
+    files: list[tuple[str, bytes]] = []
+    fields: dict[str, str] = {}
+    problems: list[str] = []
+    try:
+        for key, value in form.multi_items():
+            if _is_upload(value):
+                name = str(getattr(value, "filename", None) or "khach.xlsx")
+                payload = await value.read()
+                if not payload:
+                    problems.append(f"{name} đang trống.")
+                    continue
+                files.append((name, payload))
+                continue
+            if key not in fields:
+                fields[key] = str(value or "")
+    finally:
+        await form.close()
+    return files, fields, problems
 
 
 @router.get("/v1/customers")
@@ -98,29 +129,44 @@ def customers_list(
 ) -> dict[str, Any]:
     _auth(authorization)
     db.init_db(settings.db_path)
-    rows = [public_customer(row) for row in db.list_customers(settings.db_path)]
-    filtered = [row for row in rows if matches_query(row, q)]
+    total = db.customer_count(settings.db_path)
+    if collapse(q):
+        rows = [public_customer(row) for row in db.list_customers(settings.db_path) if matches_query(row, q)]
+        return {
+            "count": len(rows),
+            "total": total,
+            "items": rows[:LIST_LIMIT],
+            "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
+        }
+    rows = [public_customer(row) for row in db.list_customers(settings.db_path, limit=LIST_LIMIT)]
     return {
-        "count": len(filtered),
-        "total": len(rows),
-        "items": filtered[:500],
+        "count": total,
+        "total": total,
+        "items": rows,
         "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
     }
 
 
 @router.post("/v1/customers/preview")
 async def customers_preview(
-    files: list[UploadFile] = File(...),
+    request: Request,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     _auth(authorization)
-    uploaded = await _files_from_upload(files)
+    uploaded, _fields, problems = await _read_customer_form(request)
+    if not uploaded:
+        raise HTTPException(
+            status_code=400,
+            detail="Hãy chọn ít nhất một file Excel." + ((" " + " ".join(problems)) if problems else ""),
+        )
     previews: list[dict[str, Any]] = []
     for name, payload in uploaded:
         try:
             previews.append(preview_table(name, payload))
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            problems.append(f"{name}: {exc}")
+    if not previews:
+        raise HTTPException(status_code=400, detail="Không đọc được file nào. " + " ".join(problems))
     first = previews[0]
     columns = merge_preview_columns(previews)
     different = [
@@ -147,11 +193,12 @@ async def customers_preview(
             }
             for item in previews
         ],
+        "fileErrors": problems,
         "columns": columns,
         "suggested": payload,
         "detectNote": explain_mapping(details, headers),
         "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
-        "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này.",
+        "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này. Không giới hạn số file.",
         "headerMismatch": different,
     }
 
@@ -178,23 +225,31 @@ def _column_values_from_previews(
 
 @router.post("/v1/customers/import")
 async def customers_import(
-    files: list[UploadFile] = File(...),
-    mapping: str = Form(...),
+    request: Request,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     _auth(authorization)
     db.init_db(settings.db_path)
+    uploaded, fields, problems = await _read_customer_form(request)
     try:
-        parsed = mapping_from_form(json.loads(mapping))
+        parsed = mapping_from_form(json.loads(fields.get("mapping") or ""))
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=400, detail="Bảng chọn cột không đọc được.") from exc
     if not any(_mapped(spec) for spec in parsed.values()):
         raise HTTPException(status_code=400, detail="Hãy chọn ít nhất một cột dữ liệu.")
-    uploaded = await _files_from_upload(files)
-    try:
-        incoming, file_reports = rows_from_files(uploaded, parsed)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not uploaded:
+        raise HTTPException(
+            status_code=400,
+            detail="Hãy chọn ít nhất một file Excel." + ((" " + " ".join(problems)) if problems else ""),
+        )
+    incoming, file_reports = rows_from_files(uploaded, parsed)
+    problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
+    problems = [item for item in problems if item]
+    if not incoming:
+        raise HTTPException(
+            status_code=400,
+            detail="Không đọc được dòng khách nào. " + " ".join(problems),
+        )
     stored = db.list_customers(settings.db_path)
     folded, stats, removed = fold_customers(stored, incoming, utcnow())
     db.replace_customers(settings.db_path, folded, removed)
@@ -203,10 +258,12 @@ async def customers_import(
         f"giữ {stats['unchanged']}, gộp {stats['absorbed']}."
     )
     _remember(summary, json.dumps({"files": file_reports, "stats": stats}, ensure_ascii=False))
+    changed = [public_customer(row) for row in folded if row.get("write")]
     return {
         "stats": stats,
         "files": file_reports,
-        "items": [public_customer(row) for row in folded[:200]],
+        "fileErrors": problems,
+        "items": changed[:200],
         "total": stats["total"],
     }
 
@@ -235,46 +292,37 @@ def _lookup_payload(text: str, file_phones: list[str]) -> tuple[list[dict[str, A
     return items, stats
 
 
+async def _lookup_from_request(request: Request) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
+    uploaded, fields, problems = await _read_customer_form(request)
+    file_phones: list[str] = []
+    file_reports: list[dict[str, Any]] = []
+    if uploaded:
+        file_phones, file_reports = phones_from_files(uploaded)
+        problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
+    items, stats = _lookup_payload(fields.get("text") or "", file_phones)
+    stats["fileErrors"] = [item for item in problems if item]
+    return items, stats, file_reports
+
+
 @router.post("/v1/customers/lookup")
 async def customers_lookup(
-    text: str = Form(default=""),
-    files: list[UploadFile] | None = File(default=None),
+    request: Request,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     _auth(authorization)
     db.init_db(settings.db_path)
-    file_phones: list[str] = []
-    file_reports: list[dict[str, Any]] = []
-    if files:
-        uploaded = [item for item in files if item.filename]
-        if uploaded:
-            raw_files = await _files_from_upload(uploaded)
-            try:
-                file_phones, file_reports = phones_from_files(raw_files)
-            except ValueError as exc:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
-    items, stats = _lookup_payload(text, file_phones)
-    return {"stats": stats, "files": file_reports, "items": items}
+    items, stats, file_reports = await _lookup_from_request(request)
+    return {"stats": stats, "files": file_reports, "fileErrors": stats.get("fileErrors") or [], "items": items}
 
 
 @router.post("/v1/customers/lookup/export")
 async def customers_lookup_export(
-    text: str = Form(default=""),
-    files: list[UploadFile] | None = File(default=None),
+    request: Request,
     authorization: str | None = Header(default=None),
 ) -> Response:
     _auth(authorization)
     db.init_db(settings.db_path)
-    file_phones: list[str] = []
-    if files:
-        uploaded = [item for item in files if item.filename]
-        if uploaded:
-            raw_files = await _files_from_upload(uploaded)
-            try:
-                file_phones, _reports = phones_from_files(raw_files)
-            except ValueError as exc:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
-    items, _stats = _lookup_payload(text, file_phones)
+    items, _stats, _reports = await _lookup_from_request(request)
     headers = ["Số tra cứu", "Có trong kho", *FIELD_LABELS.values()]
     body: list[list[str]] = []
     for item in items:

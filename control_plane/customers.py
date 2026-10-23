@@ -363,15 +363,20 @@ def fold_customers(
         changed = bool(merged.pop("changed"))
         existing = bool(merged.pop("existing"))
         had_incoming = any(not row["existing"] for row in members)
+        existing_updated = next((row.get("updatedAt") or "" for row in members if row["existing"]), "")
         if existing and changed:
             updated += 1
+            merged["write"] = True
         elif existing and had_incoming:
             unchanged += 1
-            merged["updatedAt"] = members[0].get("updatedAt") or now
+            merged["updatedAt"] = existing_updated or now
+            merged["write"] = False
         elif existing:
-            merged["updatedAt"] = members[0].get("updatedAt") or now
+            merged["updatedAt"] = existing_updated or now
+            merged["write"] = False
         else:
             created += 1
+            merged["write"] = True
         folded.append(merged)
     folded.sort(key=lambda row: (row.get("updatedAt") or "", row.get("createdAt") or ""), reverse=True)
     removed_ids = sorted(
@@ -410,7 +415,7 @@ def public_customer(row: dict[str, Any]) -> dict[str, str]:
     }
 
 
-MAX_LOOKUP = 100_000
+MAX_LOOKUP = 1_000_000
 _SPLIT_FIELDS = re.compile(r"[,;\t|]+")
 
 

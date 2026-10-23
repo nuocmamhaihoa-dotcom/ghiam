@@ -165,6 +165,11 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(stats["updated"], 0)
         self.assertEqual(stats["created"], 0)
         self.assertEqual(stats["total"], 2)
+        lan = next(row for row in _again if row["phone"] == "0901222333")
+        minh = next(row for row in _again if row["phone"] == "0901444555")
+        self.assertFalse(lan["write"])
+        self.assertFalse(minh["write"])
+        self.assertEqual(_removed, [])
 
     def test_empty_rows_are_skipped(self) -> None:
         folded, stats, _removed = fold_customers([], [{"name": "   "}, {}], "2026-01-01T00:00:00+00:00")
@@ -268,6 +273,40 @@ class ExcelMappingTests(unittest.TestCase):
         self.assertEqual(folded[0]["address"], "Huế")
         self.assertEqual(folded[0]["facebookUid"], "10001")
         self.assertEqual(folded[0]["tiktokId"], "lan.hue")
+
+    def test_bad_file_in_batch_does_not_block_others(self) -> None:
+        good = write_xlsx(["Tên khách", "SĐT"], [["Lan", "0901222333"]])
+        mapping = mapping_from_form(
+            {
+                "name": {"index": 0, "header": "Tên khách"},
+                "phone": {"index": 1, "header": "SĐT"},
+            }
+        )
+        incoming, reports = rows_from_files(
+            [("ok.xlsx", good), ("hong.xlsx", b"not-excel"), ("ok2.xlsx", good)],
+            mapping,
+        )
+        self.assertEqual(len(incoming), 2)
+        self.assertEqual(reports[1]["rows"], 0)
+        self.assertIn("hỏng", reports[1]["error"])
+        self.assertEqual(reports[0]["rows"], 1)
+        self.assertEqual(reports[2]["rows"], 1)
+
+    def test_accented_and_plain_headers_match(self) -> None:
+        payload = write_xlsx(
+            ["Ten khach", "So dien thoai"],
+            [["Lan", "0901222333"]],
+        )
+        mapping = mapping_from_form(
+            {
+                "name": {"index": None, "header": "Tên khách"},
+                "phone": {"index": None, "header": "Số điện thoại"},
+            }
+        )
+        incoming, reports = rows_from_files([("so.xlsx", payload)], mapping)
+        self.assertEqual(reports[0]["rows"], 1)
+        self.assertEqual(incoming[0]["name"], "Lan")
+        self.assertEqual(incoming[0]["phone"], "0901222333")
 
     def test_missing_header_falls_back_to_same_column_index(self) -> None:
         first = write_xlsx(["Tên khách", "SĐT"], [["An", "0901999888"]])

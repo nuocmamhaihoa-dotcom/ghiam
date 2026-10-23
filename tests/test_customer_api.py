@@ -51,12 +51,20 @@ class CustomerApiTests(unittest.TestCase):
         payload = write_xlsx(headers, rows)
         return name, io.BytesIO(payload)
 
+    def _file(self, name: str, headers: list[str], rows: list[list[str]]) -> tuple[str, tuple[str, bytes, str]]:
+        return (
+            "files",
+            (name, write_xlsx(headers, rows), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        )
+
     def test_page_is_served(self) -> None:
         home = self.client.get("/")
         self.assertEqual(home.status_code, 200)
         self.assertIn("Kho khách Excel", home.text)
         self.assertIn("Chọn file Excel", home.text)
         self.assertIn("không dùng video", home.text)
+        self.assertIn("không giới hạn số file", home.text)
+        self.assertIn("Thêm file", home.text)
         self.assertIn("địa chỉ hành chính", home.text)
         self.assertIn("hàng mua", home.text)
         self.assertIn("giá COD", home.text)
@@ -286,6 +294,128 @@ class CustomerApiTests(unittest.TestCase):
         )
         self.assertEqual(exported.status_code, 200)
         self.assertIn("spreadsheetml", exported.headers["content-type"])
+
+    def test_preview_and_import_many_files(self) -> None:
+        files = [
+            self._file(f"f{index}.xlsx", ["Tên khách", "SĐT"], [[f"K{index}", f"0901000{index:03d}"]])
+            for index in range(12)
+        ]
+        preview = self.client.post("/v1/customers/preview", headers=self.headers, files=files)
+        self.assertEqual(preview.status_code, 200, preview.text)
+        body = preview.json()
+        self.assertEqual(len(body["files"]), 12)
+        self.assertIn("Không giới hạn số file", body["applyNote"])
+        imported = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={
+                "mapping": json.dumps(
+                    {
+                        "name": {"index": 0, "header": "Tên khách"},
+                        "phone": {"index": 1, "header": "SĐT"},
+                    }
+                )
+            },
+            files=[
+                self._file(f"f{index}.xlsx", ["Tên khách", "SĐT"], [[f"K{index}", f"0901000{index:03d}"]])
+                for index in range(12)
+            ],
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+        self.assertEqual(imported.json()["stats"]["created"], 12)
+        listed = self.client.get("/v1/customers", headers=self.headers)
+        self.assertEqual(listed.json()["total"], 12)
+
+    def test_bad_file_does_not_block_import(self) -> None:
+        files = [
+            self._file("ok1.xlsx", ["Tên khách", "SĐT"], [["Lan", "0901222333"]]),
+            ("files", ("hong.xlsx", b"not-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+            self._file("ok2.xlsx", ["Tên khách", "SĐT"], [["Hoa", "0901999888"]]),
+        ]
+        preview = self.client.post("/v1/customers/preview", headers=self.headers, files=files)
+        self.assertEqual(preview.status_code, 200, preview.text)
+        self.assertEqual(len(preview.json()["files"]), 2)
+        self.assertTrue(preview.json()["fileErrors"])
+        imported = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={
+                "mapping": json.dumps(
+                    {
+                        "name": {"index": 0, "header": "Tên khách"},
+                        "phone": {"index": 1, "header": "SĐT"},
+                    }
+                )
+            },
+            files=[
+                self._file("ok1.xlsx", ["Tên khách", "SĐT"], [["Lan", "0901222333"]]),
+                ("files", ("hong.xlsx", b"not-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                self._file("ok2.xlsx", ["Tên khách", "SĐT"], [["Hoa", "0901999888"]]),
+            ],
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+        self.assertEqual(imported.json()["stats"]["created"], 2)
+        self.assertTrue(imported.json()["fileErrors"])
+        listed = self.client.get("/v1/customers", headers=self.headers)
+        self.assertEqual(listed.json()["total"], 2)
+
+    def test_reimport_same_rows_keeps_warehouse(self) -> None:
+        mapping = json.dumps(
+            {
+                "name": {"index": 0, "header": "Tên khách"},
+                "phone": {"index": 1, "header": "SĐT"},
+                "address": {"index": 2, "header": "Địa chỉ"},
+            }
+        )
+        first = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={"mapping": mapping},
+            files=[self._file("lan.xlsx", ["Tên khách", "SĐT", "Địa chỉ"], [["Lan", "0901222333", "Huế"]])],
+        )
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(first.json()["stats"]["created"], 1)
+        again = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={"mapping": mapping},
+            files=[self._file("lan.xlsx", ["Tên khách", "SĐT", "Địa chỉ"], [["Lan", "0901222333", "Huế"]])],
+        )
+        self.assertEqual(again.status_code, 200, again.text)
+        self.assertEqual(again.json()["stats"]["unchanged"], 1)
+        self.assertEqual(again.json()["stats"]["created"], 0)
+        listed = self.client.get("/v1/customers", headers=self.headers)
+        self.assertEqual(listed.json()["total"], 1)
+        self.assertEqual(listed.json()["items"][0]["address"], "Huế")
+
+    def test_lookup_skips_bad_file_and_uses_text(self) -> None:
+        db.replace_customers(
+            settings.db_path,
+            [
+                {
+                    "id": "c1",
+                    "name": "Lan",
+                    "phone": "0901222333",
+                    "address": "Huế",
+                    "facebookUid": "",
+                    "tiktokId": "",
+                    "createdAt": "2026-01-01T00:00:00+00:00",
+                    "updatedAt": "2026-01-01T00:00:00+00:00",
+                }
+            ],
+            [],
+        )
+        looked = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            data={"text": "0901222333"},
+            files=[
+                ("files", ("hong.xlsx", b"not-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            ],
+        )
+        self.assertEqual(looked.status_code, 200, looked.text)
+        self.assertEqual(looked.json()["stats"]["found"], 1)
+        self.assertTrue(looked.json()["fileErrors"])
 
     def test_export_xlsx_roundtrip(self) -> None:
         db.replace_customers(

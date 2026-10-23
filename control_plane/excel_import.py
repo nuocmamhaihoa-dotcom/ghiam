@@ -20,8 +20,9 @@ from control_plane.customers import (
     has_data,
     join_address_lines,
 )
+from control_plane.vietnam_places import fold_vietnamese
 
-MAX_ROWS = 200_000
+MAX_ROWS = 2_000_000
 SAMPLE_ROWS = 8
 DETECT_ROWS = 200
 _COL_REF = re.compile(r"^([A-Z]+)(\d+)$")
@@ -150,6 +151,11 @@ def _rel_target_path(target: str) -> str:
 
 
 def _sheet_paths(archive: zipfile.ZipFile) -> list[str]:
+    names = archive.namelist()
+    if "xl/workbook.xml" not in names:
+        if "xl/worksheets/sheet1.xml" in names:
+            return ["xl/worksheets/sheet1.xml"]
+        return []
     workbook = ET.fromstring(archive.read("xl/workbook.xml"))
     rels_by_id: dict[str, str] = {}
     if "xl/_rels/workbook.xml.rels" in archive.namelist():
@@ -210,14 +216,19 @@ def read_xlsx(data: bytes) -> list[list[str]]:
         archive = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as exc:
         raise ValueError("File Excel bị hỏng hoặc không phải .xlsx.") from exc
-    shared: list[str] = []
-    if "xl/sharedStrings.xml" in archive.namelist():
-        shared = _shared_strings(archive.read("xl/sharedStrings.xml"))
-    paths = _sheet_paths(archive)
-    if not paths:
-        raise ValueError("File Excel không có bảng tính.")
-    tables = [_sheet_rows(archive.read(path), shared) for path in paths]
-    return _combine_sheets(tables)
+    try:
+        shared: list[str] = []
+        if "xl/sharedStrings.xml" in archive.namelist():
+            shared = _shared_strings(archive.read("xl/sharedStrings.xml"))
+        paths = _sheet_paths(archive)
+        if not paths:
+            raise ValueError("File Excel không có bảng tính.")
+        tables = [_sheet_rows(archive.read(path), shared) for path in paths]
+        return _combine_sheets(tables)
+    except ValueError:
+        raise
+    except (KeyError, ET.ParseError, zipfile.BadZipFile, OSError) as exc:
+        raise ValueError("File Excel bị hỏng hoặc không đọc được.") from exc
 
 
 def read_csv(data: bytes) -> list[list[str]]:
@@ -246,15 +257,21 @@ def read_csv(data: bytes) -> list[list[str]]:
 
 def read_table(filename: str, data: bytes) -> list[list[str]]:
     name = (filename or "").casefold()
-    if name.endswith(".xls"):
-        raise ValueError("Hãy lưu file .xls thành .xlsx rồi nạp lại.")
-    if name.endswith(".xlsx") or name.endswith(".xlsm"):
-        return read_xlsx(data)
-    if name.endswith(".csv") or name.endswith(".tsv") or name.endswith(".txt"):
+    try:
+        if name.endswith(".xls"):
+            raise ValueError("Hãy lưu file .xls thành .xlsx rồi nạp lại.")
+        if name.endswith(".xlsx") or name.endswith(".xlsm"):
+            return read_xlsx(data)
+        if name.endswith(".csv") or name.endswith(".tsv") or name.endswith(".txt"):
+            return read_csv(data)
+        if data[:2] == b"PK":
+            return read_xlsx(data)
         return read_csv(data)
-    if data[:2] == b"PK":
-        return read_xlsx(data)
-    return read_csv(data)
+    except ValueError:
+        raise
+    except Exception as exc:
+        label = filename or "Excel"
+        raise ValueError(f"Không đọc được file {label}.") from exc
 
 
 def _trim_table(rows: list[list[str]]) -> list[list[str]]:
@@ -277,7 +294,7 @@ def _trim_table(rows: list[list[str]]) -> list[list[str]]:
 
 
 def header_key(value: str) -> str:
-    return collapse(value).casefold()
+    return fold_vietnamese(value)
 
 
 def column_values_from_rows(rows: list[list[str]], width: int) -> list[list[str]]:
@@ -413,7 +430,11 @@ def rows_from_files(files: Iterable[tuple[str, bytes]], mapping: dict[str, Any])
     reports: list[dict[str, Any]] = []
     first_width: int | None = None
     for filename, data in files:
-        table = read_table(filename, data)
+        try:
+            table = read_table(filename, data)
+        except ValueError as exc:
+            reports.append({"name": filename, "rows": 0, "error": str(exc)})
+            continue
         trimmed = _trim_table(table)
         width = len(trimmed[0]) if trimmed else 0
         if first_width is None:
@@ -487,7 +508,11 @@ def phones_from_files(files: Iterable[tuple[str, bytes]]) -> tuple[list[str], li
     phones: list[str] = []
     reports: list[dict[str, Any]] = []
     for filename, data in files:
-        table = read_table(filename, data)
+        try:
+            table = read_table(filename, data)
+        except ValueError as exc:
+            reports.append({"name": filename, "phones": 0, "error": str(exc)})
+            continue
         found: list[str] = []
         for row in table:
             for cell in row:

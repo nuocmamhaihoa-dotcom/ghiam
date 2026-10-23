@@ -56,12 +56,12 @@
 <body>
 <main>
   <h1>Kho khách Excel</h1>
-  <p class="lead">Nhập khách bằng file Excel, không dùng video. Mỗi lần nạp, chọn cột nào là tên, số điện thoại, địa chỉ, địa chỉ hành chính, hàng mua, giá COD, UID Facebook, ID TikTok. Cùng một lần chọn cột dùng cho mọi file bạn thêm lúc đó. Chỉ gộp khi trùng số điện thoại. Không có số, hoặc khác số, thì mỗi dòng là một khách. Ô đã có giữ nguyên, ô trống được điền thêm. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
+  <p class="lead">Nhập khách bằng file Excel, không dùng video. Không giới hạn số file: chọn thêm là cộng vào lần nạp này. Mỗi lần nạp, chọn cột nào là tên, số điện thoại, địa chỉ, địa chỉ hành chính, hàng mua, giá COD, UID Facebook, ID TikTok. Cùng một lần chọn cột dùng cho mọi file bạn thêm lúc đó. Chỉ gộp khi trùng số điện thoại. Không có số, hoặc khác số, thì mỗi dòng là một khách. Ô đã có giữ nguyên, ô trống được điền thêm. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
 
   <section>
     <h2>Thêm file Excel</h2>
     <div class="drop" id="drop">
-      <p>Kéo một hoặc nhiều file Excel vào đây</p>
+      <p>Kéo bao nhiêu file Excel cũng được, không giới hạn số file</p>
       <p class="note">hoặc</p>
       <button class="file" type="button" id="pick">Chọn file Excel</button>
       <input id="file" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" multiple />
@@ -78,7 +78,8 @@
     <div class="scroll" id="sampleBox"></div>
     <p class="row" style="margin-top:0.9rem">
       <button class="primary" type="button" id="confirm">Nạp với cách chọn cột này</button>
-      <button class="ghost" type="button" id="cancel">Chọn file khác</button>
+      <button class="ghost" type="button" id="addMore">Thêm file</button>
+      <button class="ghost" type="button" id="cancel">Bỏ hết, chọn lại</button>
     </p>
     <p id="mapNote" class="note"></p>
   </section>
@@ -91,7 +92,7 @@
 
   <section>
     <h2>Tra cứu hàng loạt</h2>
-    <p class="note">Dán list số điện thoại, hoặc chọn file danh sách. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
+    <p class="note">Dán list số điện thoại, hoặc chọn file danh sách. Chọn thêm file là cộng vào, không giới hạn số file. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
     <label for="lookupPaste">Danh sách số điện thoại</label>
     <textarea id="lookupPaste" placeholder="0901222333"></textarea>
     <p class="row" style="margin-top:0.7rem">
@@ -120,6 +121,7 @@
 <script>
   var serverToken = __CONTROL_TOKEN__;
   var pendingFiles = [];
+  var pendingKeys = {};
   var preview = null;
   var fieldOrder = ["name", "phone", "address", "adminAddress", "orderContent", "codAmount", "facebookUid", "tiktokId"];
   var lineFields = { address: "addressColumns", adminAddress: "adminAddressColumns" };
@@ -128,6 +130,7 @@
     adminAddress: "Địa chỉ hành chính (mỗi cột đã chọn thành một dòng)"
   };
   var lookupFiles = [];
+  var lookupKeys = {};
   var lastLookup = null;
 
   function token() { return serverToken; }
@@ -206,9 +209,18 @@
   function renderMap(body) {
     preview = body;
     var list = document.getElementById("fileList");
-    list.innerHTML = body.files.map(function (item) {
-      return "<li>" + escapeHtml(item.name) + " · " + item.rowCount + " dòng</li>";
+    list.innerHTML = pendingFiles.map(function (file, index) {
+      var info = (body.files || []).find(function (item) { return item.name === file.name; });
+      var extra = info && info.truncated ? " · đã cắt phần cuối" : "";
+      var rows = info ? " · " + info.rowCount + " dòng" : "";
+      return "<li>" + escapeHtml(file.name) + rows + extra +
+        " <button class='ghost' type='button' data-remove='" + index + "'>Bỏ</button></li>";
     }).join("");
+    list.querySelectorAll("button[data-remove]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        removePending(Number(button.getAttribute("data-remove")));
+      });
+    });
     var box = document.getElementById("mapFields");
     box.innerHTML = "";
     body.fields.forEach(function (field) {
@@ -264,23 +276,98 @@
       lead += " Một số file có tên cột khác file đầu: phần mềm tìm cùng tên cột, không có thì lấy cùng vị trí.";
     }
     setNote("mapLead", lead);
-    setNote("mapNote", body.detectNote || "Hãy xem lại cột, rồi bấm nạp. Lần nạp sau sẽ hỏi lại.", body.detectNote ? "ok" : "");
+    var note = body.detectNote || "Hãy xem lại cột, rồi bấm nạp. Lần nạp sau sẽ hỏi lại.";
+    if (body.fileErrors && body.fileErrors.length) {
+      note += " File lỗi: " + body.fileErrors.join(" ");
+    }
+    setNote("mapNote", note, body.fileErrors && body.fileErrors.length ? "warn" : body.detectNote ? "ok" : "");
   }
 
-  async function previewFiles(fileList) {
-    pendingFiles = Array.prototype.slice.call(fileList || []);
+  function applyMapping(mapping) {
+    if (!mapping) return;
+    fieldOrder.forEach(function (field) {
+      var spec = mapping[field];
+      if (!spec) return;
+      if (lineFields[field]) {
+        var wanted = {};
+        (spec.columns || []).forEach(function (col) {
+          if (col.header) wanted["h:" + col.header] = true;
+          if (col.index !== null && col.index !== undefined) wanted["i:" + String(col.index)] = true;
+        });
+        document.querySelectorAll("#map-" + field + " input[type=checkbox]").forEach(function (box) {
+          var header = box.getAttribute("data-header") || "";
+          var rawIndex = box.getAttribute("data-index");
+          box.checked = !!(wanted["h:" + header] || (rawIndex !== "" && wanted["i:" + rawIndex]));
+        });
+        return;
+      }
+      var select = document.getElementById("map-" + field);
+      if (!select) return;
+      var header = spec.header || "";
+      var index = spec.index;
+      var matched = null;
+      Array.prototype.forEach.call(select.options, function (option) {
+        if (header && option.getAttribute("data-header") === header) matched = option;
+        else if (matched == null && index != null && option.getAttribute("data-index") === String(index)) matched = option;
+      });
+      if (matched) select.value = matched.value;
+    });
+  }
+
+  function fileKey(file) {
+    return [file.name, file.size, file.lastModified].join(":");
+  }
+
+  function addPendingFiles(fileList) {
+    Array.prototype.slice.call(fileList || []).forEach(function (file) {
+      var key = fileKey(file);
+      if (pendingKeys[key]) return;
+      pendingKeys[key] = true;
+      pendingFiles.push(file);
+    });
+  }
+
+  function clearPending() {
+    pendingFiles = [];
+    pendingKeys = {};
+    preview = null;
+    document.getElementById("file").value = "";
+  }
+
+  function removePending(index) {
+    var file = pendingFiles[index];
+    if (!file) return;
+    delete pendingKeys[fileKey(file)];
+    pendingFiles.splice(index, 1);
+    if (!pendingFiles.length) {
+      document.getElementById("mapBox").hidden = true;
+      clearPending();
+      setNote("uploadNote", "Đã bỏ hết file. Hãy chọn lại, không giới hạn số file.");
+      return;
+    }
+    previewPending();
+  }
+
+  async function previewPending() {
     if (!pendingFiles.length) return;
+    var previous = document.getElementById("mapBox").hidden ? null : currentMapping();
     var data = new FormData();
     pendingFiles.forEach(function (file) { data.append("files", file, file.name); });
     setNote("uploadNote", "Đang đọc " + pendingFiles.length + " file…");
-    var response = await api("/v1/customers/preview", { method: "POST", body: data });
-    var body = await response.json().catch(function () { return {}; });
-    if (!response.ok) {
-      setNote("uploadNote", body.detail || "Không đọc được file.", "warn");
-      return;
+    try {
+      var response = await api("/v1/customers/preview", { method: "POST", body: data });
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        setNote("uploadNote", body.detail || "Không đọc được file.", "warn");
+        return;
+      }
+      var extra = body.fileErrors && body.fileErrors.length ? " Một số file lỗi vẫn bị bỏ qua." : "";
+      setNote("uploadNote", "Đã đọc " + body.files.length + " file. Chọn thêm file là cộng vào lần này, không giới hạn số file." + extra);
+      renderMap(body);
+      if (previous) applyMapping(previous);
+    } catch (error) {
+      setNote("uploadNote", "Không gửi được file. Mạng đứt hoặc máy chủ bận, hãy thử lại.", "warn");
     }
-    setNote("uploadNote", "Đã đọc " + body.files.length + " file. Cột đã được nhận tự động, hãy xem lại.");
-    renderMap(body);
   }
 
   async function importNow() {
@@ -301,34 +388,39 @@
     pendingFiles.forEach(function (file) { data.append("files", file, file.name); });
     data.append("mapping", JSON.stringify(mapping));
     document.getElementById("confirm").disabled = true;
-    setNote("mapNote", "Đang nạp và gộp khách trùng…");
-    var response = await api("/v1/customers/import", { method: "POST", body: data });
-    var body = await response.json().catch(function () { return {}; });
-    document.getElementById("confirm").disabled = false;
-    if (!response.ok) {
-      setNote("mapNote", body.detail || "Không nạp được.", "warn");
-      return;
+    setNote("mapNote", "Đang nạp " + pendingFiles.length + " file và gộp khách trùng…");
+    try {
+      var response = await api("/v1/customers/import", { method: "POST", body: data });
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        setNote("mapNote", body.detail || "Không nạp được.", "warn");
+        return;
+      }
+      var stats = body.stats || {};
+      document.getElementById("importStats").innerHTML =
+        stat(stats.incoming || 0, "Dòng đã đọc") +
+        stat(stats.created || 0, "Khách mới") +
+        stat(stats.updated || 0, "Đã bổ sung") +
+        stat(stats.unchanged || 0, "Giữ nguyên") +
+        stat(stats.absorbed || 0, "Khách bị gộp") +
+        stat(stats.skipped || 0, "Dòng trống");
+      var fileNote = (body.files || []).length + " file";
+      if (body.fileErrors && body.fileErrors.length) fileNote += ", một số file lỗi bị bỏ qua";
+      setNote(
+        "importNote",
+        "Đã đọc " + (stats.incoming || 0) + " dòng từ " + fileNote +
+          ". Chỉ gộp khi trùng số điện thoại. Không có số hoặc khác số thì vẫn thêm khách mới.",
+        "ok"
+      );
+      setNote("mapNote", "Xong. Lần nạp sau sẽ hỏi lại cột.", "ok");
+      document.getElementById("mapBox").hidden = true;
+      clearPending();
+      await loadCustomers();
+    } catch (error) {
+      setNote("mapNote", "Không nạp được. Mạng đứt hoặc máy chủ bận, hãy thử lại.", "warn");
+    } finally {
+      document.getElementById("confirm").disabled = false;
     }
-    var stats = body.stats || {};
-    document.getElementById("importStats").innerHTML =
-      stat(stats.incoming || 0, "Dòng đã đọc") +
-      stat(stats.created || 0, "Khách mới") +
-      stat(stats.updated || 0, "Đã bổ sung") +
-      stat(stats.unchanged || 0, "Giữ nguyên") +
-      stat(stats.absorbed || 0, "Khách bị gộp") +
-      stat(stats.skipped || 0, "Dòng trống");
-    setNote(
-      "importNote",
-      "Đã đọc " + (stats.incoming || 0) + " dòng từ " + (body.files || []).length +
-        " file. Chỉ gộp khi trùng số điện thoại. Không có số hoặc khác số thì vẫn thêm khách mới.",
-      "ok"
-    );
-    setNote("mapNote", "Xong. Lần nạp sau sẽ hỏi lại cột.", "ok");
-    document.getElementById("mapBox").hidden = true;
-    pendingFiles = [];
-    preview = null;
-    document.getElementById("file").value = "";
-    await loadCustomers();
   }
 
   function renderRows(items) {
@@ -345,23 +437,27 @@
   }
 
   async function loadCustomers() {
-    var query = document.getElementById("query").value;
-    var response = await api("/v1/customers" + (query ? "?q=" + encodeURIComponent(query) : ""));
-    if (response.status === 401) {
-      setNote("listNote", "Trang chưa kết nối được máy chủ.", "warn");
-      return;
-    }
-    if (!response.ok) {
+    try {
+      var query = document.getElementById("query").value;
+      var response = await api("/v1/customers" + (query ? "?q=" + encodeURIComponent(query) : ""));
+      if (response.status === 401) {
+        setNote("listNote", "Trang chưa kết nối được máy chủ.", "warn");
+        return;
+      }
+      if (!response.ok) {
+        setNote("listNote", "Không tải được kho khách.", "warn");
+        return;
+      }
+      var body = await response.json();
+      document.getElementById("storeStats").innerHTML = stat(body.total, "Khách trong kho") + stat(body.count, "Khách đang hiện");
+      renderRows(body.items || []);
+      if (body.total > (body.items || []).length) {
+        setNote("listNote", "Đang hiện " + body.items.length + "/" + body.total + " khách. Gõ tìm để thu hẹp.");
+      } else {
+        setNote("listNote", body.total ? "" : "Kho còn trống.");
+      }
+    } catch (error) {
       setNote("listNote", "Không tải được kho khách.", "warn");
-      return;
-    }
-    var body = await response.json();
-    document.getElementById("storeStats").innerHTML = stat(body.total, "Khách trong kho") + stat(body.count, "Khách đang hiện");
-    renderRows(body.items || []);
-    if (body.total > (body.items || []).length) {
-      setNote("listNote", "Đang hiện " + body.items.length + "/" + body.total + " khách. Gõ tìm để thu hẹp.");
-    } else {
-      setNote("listNote", body.total ? "" : "Kho còn trống.");
     }
   }
 
@@ -397,7 +493,39 @@
     document.getElementById("lookupExport").hidden = false;
     var note = "Đã đối chiếu " + (stats.queried || 0) + " số với kho.";
     if (stats.truncated) note += " Danh sách quá dài, chỉ lấy phần đầu.";
-    setNote("lookupNote", note, stats.missing ? "" : "ok");
+    if (body.fileErrors && body.fileErrors.length) note += " File lỗi: " + body.fileErrors.join(" ");
+    setNote("lookupNote", note, (body.fileErrors && body.fileErrors.length) || stats.missing ? "warn" : "ok");
+  }
+
+  function addLookupFiles(fileList) {
+    Array.prototype.slice.call(fileList || []).forEach(function (file) {
+      var key = fileKey(file);
+      if (lookupKeys[key]) return;
+      lookupKeys[key] = true;
+      lookupFiles.push(file);
+    });
+  }
+
+  function renderLookupFiles() {
+    var node = document.getElementById("lookupFiles");
+    if (!lookupFiles.length) {
+      node.textContent = "";
+      return;
+    }
+    node.innerHTML = lookupFiles.map(function (file, index) {
+      return escapeHtml(file.name) +
+        " <button class='ghost' type='button' data-lookup-remove='" + index + "'>Bỏ</button>";
+    }).join(" · ");
+    node.querySelectorAll("button[data-lookup-remove]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var index = Number(button.getAttribute("data-lookup-remove"));
+        var file = lookupFiles[index];
+        if (!file) return;
+        delete lookupKeys[fileKey(file)];
+        lookupFiles.splice(index, 1);
+        renderLookupFiles();
+      });
+    });
   }
 
   async function runLookup() {
@@ -408,14 +536,19 @@
     }
     document.getElementById("lookupGo").disabled = true;
     setNote("lookupNote", "Đang tra cứu trong kho…");
-    var response = await api("/v1/customers/lookup", { method: "POST", body: lookupForm() });
-    var body = await response.json().catch(function () { return {}; });
-    document.getElementById("lookupGo").disabled = false;
-    if (!response.ok) {
-      setNote("lookupNote", body.detail || "Không tra cứu được.", "warn");
-      return;
+    try {
+      var response = await api("/v1/customers/lookup", { method: "POST", body: lookupForm() });
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        setNote("lookupNote", body.detail || "Không tra cứu được.", "warn");
+        return;
+      }
+      renderLookup(body);
+    } catch (error) {
+      setNote("lookupNote", "Không tra cứu được. Mạng đứt hoặc máy chủ bận, hãy thử lại.", "warn");
+    } finally {
+      document.getElementById("lookupGo").disabled = false;
     }
-    renderLookup(body);
   }
 
   async function exportLookup() {
@@ -423,37 +556,45 @@
       setNote("lookupNote", "Hãy tra cứu trước khi tải kết quả.", "warn");
       return;
     }
-    var response = await api("/v1/customers/lookup/export", { method: "POST", body: lookupForm() });
-    if (!response.ok) {
+    try {
+      var response = await api("/v1/customers/lookup/export", { method: "POST", body: lookupForm() });
+      if (!response.ok) {
+        setNote("lookupNote", "Không tải được kết quả Excel.", "warn");
+        return;
+      }
+      var blob = await response.blob();
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement("a");
+      link.href = url;
+      link.download = "tra-cuu-khach.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
       setNote("lookupNote", "Không tải được kết quả Excel.", "warn");
-      return;
     }
-    var blob = await response.blob();
-    var url = URL.createObjectURL(blob);
-    var link = document.createElement("a");
-    link.href = url;
-    link.download = "tra-cuu-khach.xlsx";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
   }
 
   async function exportBook() {
-    var response = await api("/v1/customers/export");
-    if (!response.ok) {
+    try {
+      var response = await api("/v1/customers/export");
+      if (!response.ok) {
+        setNote("listNote", "Không tải được file Excel.", "warn");
+        return;
+      }
+      var blob = await response.blob();
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement("a");
+      link.href = url;
+      link.download = "kho-khach.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
       setNote("listNote", "Không tải được file Excel.", "warn");
-      return;
     }
-    var blob = await response.blob();
-    var url = URL.createObjectURL(blob);
-    var link = document.createElement("a");
-    link.href = url;
-    link.download = "kho-khach.xlsx";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
   }
 
   function bindDrop() {
@@ -466,23 +607,27 @@
     drop.addEventListener("drop", function (event) {
       event.preventDefault();
       drop.classList.remove("over");
-      previewFiles(event.dataTransfer.files);
+      addPendingFiles(event.dataTransfer.files);
+      previewPending();
     });
     document.getElementById("pick").addEventListener("click", function () {
       document.getElementById("file").click();
     });
     document.getElementById("file").addEventListener("change", function (event) {
-      previewFiles(event.target.files);
+      addPendingFiles(event.target.files);
+      event.target.value = "";
+      previewPending();
     });
   }
 
   document.getElementById("confirm").addEventListener("click", importNow);
+  document.getElementById("addMore").addEventListener("click", function () {
+    document.getElementById("file").click();
+  });
   document.getElementById("cancel").addEventListener("click", function () {
     document.getElementById("mapBox").hidden = true;
-    pendingFiles = [];
-    preview = null;
-    document.getElementById("file").value = "";
-    setNote("uploadNote", "Đã bỏ lần chọn này. Hãy chọn file lại.");
+    clearPending();
+    setNote("uploadNote", "Đã bỏ hết file. Chọn lại, không giới hạn số file.");
   });
   document.getElementById("query").addEventListener("input", function () {
     window.clearTimeout(window.__khachSearch);
@@ -493,10 +638,9 @@
     document.getElementById("lookupFile").click();
   });
   document.getElementById("lookupFile").addEventListener("change", function (event) {
-    lookupFiles = Array.prototype.slice.call(event.target.files || []);
-    document.getElementById("lookupFiles").textContent = lookupFiles.length
-      ? "Đã chọn " + lookupFiles.map(function (file) { return file.name; }).join(", ")
-      : "";
+    addLookupFiles(event.target.files);
+    event.target.value = "";
+    renderLookupFiles();
   });
   document.getElementById("lookupGo").addEventListener("click", runLookup);
   document.getElementById("lookupExport").addEventListener("click", exportLookup);
