@@ -133,11 +133,11 @@
     var mapping = {};
     fieldOrder.forEach(function (field) {
       var select = document.getElementById("map-" + field);
-      var index = select && select.value !== "" ? Number(select.value) : null;
-      var header = "";
-      if (select && index !== null && preview && preview.columns[index]) {
-        header = preview.columns[index].header;
-      }
+      var option = select && select.selectedOptions && select.selectedOptions[0];
+      var header = option && option.value ? option.getAttribute("data-header") || "" : "";
+      var rawIndex = option && option.getAttribute("data-index");
+      var index = rawIndex === "" || rawIndex == null ? null : Number(rawIndex);
+      if (index !== index) index = null;
       mapping[field] = { index: index, header: header };
     });
     return mapping;
@@ -180,13 +180,17 @@
       select.id = "map-" + field.id;
       var skip = document.createElement("option");
       skip.value = "";
+      skip.setAttribute("data-header", "");
+      skip.setAttribute("data-index", "");
       skip.textContent = "Không dùng cột này";
       select.appendChild(skip);
-      body.columns.forEach(function (col) {
+      body.columns.forEach(function (col, colPos) {
         var option = document.createElement("option");
-        option.value = String(col.index);
+        option.value = "col-" + colPos;
+        option.setAttribute("data-header", col.header || "");
+        option.setAttribute("data-index", col.index == null ? "" : String(col.index));
         option.textContent = col.title;
-        if (suggested === col.index) option.selected = true;
+        if (suggested === colPos) option.selected = true;
         select.appendChild(option);
       });
       box.appendChild(label);
@@ -224,7 +228,9 @@
       return;
     }
     var mapping = currentMapping();
-    var used = fieldOrder.some(function (field) { return mapping[field].index !== null; });
+    var used = fieldOrder.some(function (field) {
+      return mapping[field].header || mapping[field].index !== null;
+    });
     if (!used) {
       setNote("mapNote", "Hãy chọn ít nhất một cột dữ liệu.", "warn");
       return;

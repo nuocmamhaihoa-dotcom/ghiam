@@ -96,6 +96,25 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(third[0]["tiktokId"], "tung.ban")
         self.assertEqual(third[0]["address"], "Xuân Trung")
 
+    def test_unchanged_counts_only_rows_in_this_import(self) -> None:
+        first, _stats, _removed = fold_customers(
+            [],
+            [
+                {"name": "Lan", "phone": "0901222333"},
+                {"name": "Minh", "phone": "0901444555"},
+            ],
+            "2026-01-01T00:00:00+00:00",
+        )
+        _again, stats, _removed = fold_customers(
+            first,
+            [{"name": "Lan", "phone": "0901222333"}],
+            "2026-01-02T00:00:00+00:00",
+        )
+        self.assertEqual(stats["unchanged"], 1)
+        self.assertEqual(stats["updated"], 0)
+        self.assertEqual(stats["created"], 0)
+        self.assertEqual(stats["total"], 2)
+
     def test_empty_rows_are_skipped(self) -> None:
         folded, stats, _removed = fold_customers([], [{"name": "   "}, {}], "2026-01-01T00:00:00+00:00")
         self.assertEqual(folded, [])
@@ -149,6 +168,32 @@ class ExcelMappingTests(unittest.TestCase):
         minh = next(row for row in folded if row["name"] == "Minh")
         self.assertEqual(minh["facebookUid"], "111")
         self.assertEqual(minh["phone"], "0901000001")
+
+    def test_complementary_files_map_extra_headers_without_stealing(self) -> None:
+        first = write_xlsx(
+            ["Tên khách", "Số điện thoại khách", "Địa chỉ khách"],
+            [["Lan", "0901222333", "Huế"]],
+        )
+        second = write_xlsx(
+            ["Tên khách", "Số điện thoại khách", "UID Facebook", "ID TikTok"],
+            [["Lan", "0901222333", "10001", "lan.hue"]],
+        )
+        mapping = mapping_from_form(
+            {
+                "name": {"index": 0, "header": "Tên khách"},
+                "phone": {"index": 1, "header": "Số điện thoại khách"},
+                "address": {"index": 2, "header": "Địa chỉ khách"},
+                "facebookUid": {"index": None, "header": "UID Facebook"},
+                "tiktokId": {"index": None, "header": "ID TikTok"},
+            }
+        )
+        incoming, _reports = rows_from_files([("a.xlsx", first), ("b.xlsx", second)], mapping)
+        folded, stats, _removed = fold_customers([], incoming, "2026-01-01T00:00:00+00:00")
+        self.assertEqual(stats["created"], 1)
+        self.assertEqual(folded[0]["name"], "Lan")
+        self.assertEqual(folded[0]["address"], "Huế")
+        self.assertEqual(folded[0]["facebookUid"], "10001")
+        self.assertEqual(folded[0]["tiktokId"], "lan.hue")
 
     def test_missing_header_falls_back_to_same_column_index(self) -> None:
         first = write_xlsx(["Tên khách", "SĐT"], [["An", "0901999888"]])

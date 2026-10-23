@@ -326,7 +326,11 @@ def preview_table(filename: str, data: bytes) -> dict[str, Any]:
     }
 
 
-def resolve_index(headers: list[str], spec: dict[str, Any] | None) -> int | None:
+def resolve_index(
+    headers: list[str],
+    spec: dict[str, Any] | None,
+    allow_index: bool = True,
+) -> int | None:
     if not spec:
         return None
     header = collapse(str(spec.get("header") or ""))
@@ -335,6 +339,8 @@ def resolve_index(headers: list[str], spec: dict[str, Any] | None) -> int | None
         for index, item in enumerate(headers):
             if header_key(item) == wanted:
                 return index
+    if not allow_index:
+        return None
     raw_index = spec.get("index")
     if raw_index is None or raw_index == "":
         return None
@@ -347,12 +353,31 @@ def resolve_index(headers: list[str], spec: dict[str, Any] | None) -> int | None
     return None
 
 
-def rows_from_table(rows: list[list[str]], mapping: dict[str, Any]) -> list[dict[str, str]]:
+def merge_preview_columns(previews: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    columns: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    first_headers = {header_key(header) for header in (previews[0].get("headers") or [])} if previews else set()
+    for preview in previews:
+        for column in preview.get("columns") or []:
+            key = header_key(str(column.get("header") or ""))
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            item = dict(column)
+            if key not in first_headers:
+                item["index"] = None
+            columns.append(item)
+    return columns
+
+
+def rows_from_table(rows: list[list[str]], mapping: dict[str, Any], allow_index: bool = True) -> list[dict[str, str]]:
     table = _trim_table(rows)
     if not table:
         return []
     headers = [collapse(cell) or f"Cột {column_letter(index)}" for index, cell in enumerate(table[0])]
-    indexes = {field: resolve_index(headers, mapping.get(field)) for field in FIELDS}
+    indexes = {
+        field: resolve_index(headers, mapping.get(field), allow_index=allow_index) for field in FIELDS
+    }
     extracted: list[dict[str, str]] = []
     for row in table[1:]:
         raw: dict[str, str] = {}
@@ -368,9 +393,14 @@ def rows_from_table(rows: list[list[str]], mapping: dict[str, Any]) -> list[dict
 def rows_from_files(files: Iterable[tuple[str, bytes]], mapping: dict[str, Any]) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
     incoming: list[dict[str, str]] = []
     reports: list[dict[str, Any]] = []
+    first_width: int | None = None
     for filename, data in files:
         table = read_table(filename, data)
-        rows = rows_from_table(table, mapping)
+        trimmed = _trim_table(table)
+        width = len(trimmed[0]) if trimmed else 0
+        if first_width is None:
+            first_width = width
+        rows = rows_from_table(table, mapping, allow_index=width == first_width)
         incoming.extend(rows)
         reports.append({"name": filename, "rows": len(rows)})
     return incoming, reports

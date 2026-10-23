@@ -16,8 +16,10 @@ from control_plane.customers import FIELDS, fold_customers, matches_query, publi
 from control_plane.excel_import import (
     FIELD_LABELS,
     mapping_from_form,
+    merge_preview_columns,
     preview_table,
     rows_from_files,
+    suggest_mapping,
     write_xlsx,
 )
 from control_plane.settings import settings
@@ -109,6 +111,7 @@ async def customers_preview(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     first = previews[0]
+    columns = merge_preview_columns(previews)
     different = [
         item["name"]
         for item in previews[1:]
@@ -125,8 +128,8 @@ async def customers_preview(
             }
             for item in previews
         ],
-        "columns": first["columns"],
-        "suggested": first["suggested"],
+        "columns": columns,
+        "suggested": suggest_mapping([column["header"] for column in columns]),
         "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
         "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này.",
         "headerMismatch": different,

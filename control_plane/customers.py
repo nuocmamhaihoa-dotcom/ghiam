@@ -268,10 +268,13 @@ def fold_customers(
         absorbed += int(merged.pop("absorbed"))
         changed = bool(merged.pop("changed"))
         existing = bool(merged.pop("existing"))
+        had_incoming = any(not row["existing"] for row in members)
         if existing and changed:
             updated += 1
-        elif existing:
+        elif existing and had_incoming:
             unchanged += 1
+            merged["updatedAt"] = members[0].get("updatedAt") or now
+        elif existing:
             merged["updatedAt"] = members[0].get("updatedAt") or now
         else:
             created += 1
