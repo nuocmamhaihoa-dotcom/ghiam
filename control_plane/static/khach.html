@@ -56,7 +56,7 @@
 <body>
 <main>
   <h1>Kho khách Excel</h1>
-  <p class="lead">Nhập khách bằng file Excel, không dùng video. Mỗi lần nạp, chọn cột nào là tên, số điện thoại, địa chỉ, UID Facebook, ID TikTok. Cùng một lần chọn cột dùng cho mọi file bạn thêm lúc đó. Chỉ gộp khi trùng số điện thoại, UID Facebook hoặc ID TikTok — cùng tên nhưng khác số vẫn là hai khách. Ô đã có giữ nguyên, ô trống được điền thêm. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
+  <p class="lead">Nhập khách bằng file Excel, không dùng video. Mỗi lần nạp, chọn cột nào là tên, số điện thoại, địa chỉ, UID Facebook, ID TikTok. Cùng một lần chọn cột dùng cho mọi file bạn thêm lúc đó. Chỉ gộp khi trùng số điện thoại. Không có số, hoặc khác số, thì mỗi dòng là một khách. Ô đã có giữ nguyên, ô trống được điền thêm. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
 
   <section>
     <h2>Thêm file Excel</h2>
@@ -315,7 +315,7 @@
     setNote(
       "importNote",
       "Đã đọc " + (stats.incoming || 0) + " dòng từ " + (body.files || []).length +
-        " file. Chỉ gộp khi trùng số điện thoại / UID Facebook / ID TikTok. Cùng tên nhưng khác số thì vẫn thêm khách mới.",
+        " file. Chỉ gộp khi trùng số điện thoại. Không có số hoặc khác số thì vẫn thêm khách mới.",
       "ok"
     );
     setNote("mapNote", "Xong. Lần nạp sau sẽ hỏi lại cột.", "ok");

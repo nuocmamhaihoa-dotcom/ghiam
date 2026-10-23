@@ -103,21 +103,29 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(folded[0]["phone"], "0338174222")
         self.assertEqual(folded[0]["name"], "Sơn")
 
-    def test_facebook_uid_links_two_existing(self) -> None:
-        first, _stats, _removed = fold_customers(
+    def test_same_name_and_address_without_phone_stay_apart(self) -> None:
+        folded, stats, _removed = fold_customers(
             [],
-            [{"name": "Trần Tùng", "facebookUid": "222", "phone": "0901111111"}],
+            [
+                {"name": "Lan", "address": "Huế"},
+                {"name": "Lan", "address": "Huế"},
+            ],
             "2026-01-01T00:00:00+00:00",
         )
-        second, _stats, _removed = fold_customers(
-            first,
-            [{"tiktokId": "tung.ban", "facebookUid": "222"}],
-            "2026-01-02T00:00:00+00:00",
+        self.assertEqual(len(folded), 2)
+        self.assertEqual(stats["created"], 2)
+
+    def test_facebook_or_tiktok_alone_does_not_merge(self) -> None:
+        folded, stats, _removed = fold_customers(
+            [],
+            [
+                {"name": "Trần Tùng", "facebookUid": "222", "tiktokId": "tung.ban"},
+                {"name": "Tùng", "facebookUid": "222", "tiktokId": "tung.ban"},
+            ],
+            "2026-01-01T00:00:00+00:00",
         )
-        self.assertEqual(len(second), 1)
-        self.assertEqual(second[0]["phone"], "0901111111")
-        self.assertEqual(second[0]["tiktokId"], "tung.ban")
-        self.assertEqual(second[0]["facebookUid"], "222")
+        self.assertEqual(len(folded), 2)
+        self.assertEqual(stats["created"], 2)
 
     def test_unchanged_counts_only_rows_in_this_import(self) -> None:
         first, _stats, _removed = fold_customers(

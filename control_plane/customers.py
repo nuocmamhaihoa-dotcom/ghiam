@@ -8,7 +8,6 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 FIELDS = ("name", "phone", "address", "facebookUid", "tiktokId")
-STRONG_FIELDS = ("phone", "facebookUid", "tiktokId")
 
 _SCI = re.compile(r"^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$")
 _DIGITS = re.compile(r"^\d{5,20}$")
@@ -174,25 +173,11 @@ def has_data(row: dict[str, str]) -> bool:
 
 
 def identity_keys(row: dict[str, str]) -> list[tuple[str, str]]:
-    """Chỉ gộp khi trùng SĐT / UID Facebook / ID TikTok.
-
-    Cùng tên hoặc cùng địa chỉ không đủ để coi là một người — list bán hàng
-    thường có nhiều khách trùng tên Facebook, mỗi người một số khác.
-    Dòng không có mã mạnh thì chỉ gộp khi trùng cả tên lẫn địa chỉ.
-    """
-    keys: list[tuple[str, str]] = []
-    for field in STRONG_FIELDS:
-        value = row.get(field) or ""
-        if not value:
-            continue
-        keys.append((field, _KEYS[field](value)))
-    if keys:
-        return keys
-    name = _KEYS["name"](row.get("name") or "")
-    address = _KEYS["address"](row.get("address") or "")
-    if name and address:
-        keys.append(("name+address", f"{name} | {address}"))
-    return keys
+    """Chỉ gộp khi trùng số điện thoại. Không có số thì mỗi dòng là một khách."""
+    phone = clean_phone(row.get("phone") or "")
+    if not phone:
+        return []
+    return [("phone", phone)]
 
 
 def _new_id() -> str:
@@ -283,10 +268,10 @@ def fold_customers(
     incoming: list[dict[str, Any]],
     now: str,
 ) -> tuple[list[dict[str, Any]], dict[str, int], list[str]]:
-    """Ghép khách mới vào kho khi trùng SĐT / UID Facebook / ID TikTok.
+    """Ghép khách mới vào kho khi trùng số điện thoại.
 
-    Ô đã có giữ nguyên, ô trống được điền thêm. Cùng tên hoặc cùng địa chỉ
-    không gộp nếu số / UID khác nhau.
+    Ô đã có giữ nguyên, ô trống được điền thêm. Không có số, hoặc khác số,
+    thì mỗi dòng là một khách — không gộp vì tên, địa chỉ, Facebook hay TikTok.
     """
     kept_incoming: list[dict[str, Any]] = []
     skipped = 0
