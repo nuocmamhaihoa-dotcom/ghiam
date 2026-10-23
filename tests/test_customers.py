@@ -19,6 +19,7 @@ from control_plane.customers import (
 )
 from control_plane.excel_import import (
     _combine_sheets,
+    _shared_strings,
     mapping_from_form,
     preview_table,
     rows_from_files,
@@ -226,6 +227,14 @@ class ExcelMappingTests(unittest.TestCase):
         self.assertEqual(preview["suggested"]["address"], 2)
         self.assertEqual(preview["suggested"]["facebookUid"], 3)
         self.assertEqual(preview["suggested"]["tiktokId"], 4)
+
+    def test_shared_strings_stream_skips_phonetic_runs(self) -> None:
+        payload = (
+            b'<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/'
+            b'spreadsheetml/2006/main"><si><t>Lan</t></si><si><r><t>0901</t></r>'
+            b"<rPh><t>x</t></rPh></si></sst>"
+        )
+        self.assertEqual(_shared_strings(payload), ["Lan", "0901"])
 
     def test_preview_counts_all_rows_without_storing_them(self) -> None:
         payload = write_xlsx(

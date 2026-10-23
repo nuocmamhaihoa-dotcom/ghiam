@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="only light" />
   <meta name="supported-color-schemes" content="light only" />
   <meta name="google" content="notranslate" />
+  <meta http-equiv="content-language" content="vi" />
   <title>Kho khách</title>
   <style>
     html { color-scheme: only light; }
@@ -73,6 +74,12 @@
     .scroll { overflow-x: auto; }
     [hidden] { display: none !important; }
     #file, #lookupFile { display: none; }
+    .sp {
+      display: inline-block;
+      width: 0.35em;
+      min-width: 0.35em;
+      height: 0.7em;
+    }
   </style>
 </head>
 <body translate="no" class="notranslate">
@@ -179,42 +186,114 @@
     if (name === "AbortError") {
       return "Gửi file quá lâu nên đã dừng. Giữ trang mở rồi thử lại.";
     }
-    return "Không gửi được file. Máy chủ chưa nhận kịp — thử lại, đừng tắt trang. Nếu trình duyệt đang dịch trang thì tắt dịch rồi tải lại.";
+    return "Không gửi được file. Máy chủ bị ngắt khi đọc file lớn — giữ trang mở rồi thử lại.";
+  }
+
+  function padSpaces(root) {
+    if (!root) return;
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (node) {
+        var parent = node.parentElement;
+        if (!parent || parent.classList.contains("sp")) return NodeFilter.FILTER_REJECT;
+        if (/^(SCRIPT|STYLE|TEXTAREA|INPUT|SELECT|OPTION)$/.test(parent.tagName)) return NodeFilter.FILTER_REJECT;
+        if (!node.nodeValue || node.nodeValue.indexOf(" ") < 0) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(function (node) {
+      var parts = node.nodeValue.split(" ");
+      var frag = document.createDocumentFragment();
+      parts.forEach(function (part, index) {
+        if (index) {
+          var spacer = document.createElement("span");
+          spacer.className = "sp";
+          spacer.setAttribute("aria-hidden", "true");
+          frag.appendChild(spacer);
+        }
+        if (part) frag.appendChild(document.createTextNode(part));
+      });
+      node.parentNode.replaceChild(frag, node);
+    });
+  }
+
+  function sendForm(url, form, headers, waitMs, onProgress) {
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open("POST", url);
+      Object.keys(headers || {}).forEach(function (key) {
+        xhr.setRequestHeader(key, headers[key]);
+      });
+      xhr.timeout = waitMs;
+      xhr.withCredentials = true;
+      if (xhr.upload && onProgress) {
+        xhr.upload.onprogress = function (event) {
+          if (event.lengthComputable) onProgress(event.loaded, event.total);
+        };
+      }
+      xhr.onload = function () {
+        resolve({
+          ok: xhr.status >= 200 && xhr.status < 300,
+          status: xhr.status,
+          json: function () {
+            try { return Promise.resolve(JSON.parse(xhr.responseText || "{}")); }
+            catch (error) { return Promise.resolve({}); }
+          }
+        });
+      };
+      xhr.onerror = function () { reject(new Error("network")); };
+      xhr.ontimeout = function () {
+        var error = new Error("timeout");
+        error.name = "AbortError";
+        reject(error);
+      };
+      xhr.send(form);
+    });
   }
 
   async function api(path, options) {
-    var headers = options && options.headers ? options.headers : {};
+    var headers = options && options.headers ? Object.assign({}, options.headers) : {};
     if (token()) headers.Authorization = "Bearer " + token();
     var url = apiUrl(path);
-    var upload = !!(options && options.body);
-    var tries = upload ? 3 : 2;
+    var upload = !!(options && (options.body || options.makeBody));
+    var tries = upload ? 2 : 2;
     var lastError = null;
     var index = 0;
     while (index < tries) {
       index += 1;
       if (index > 1 && options && options.onRetry) options.onRetry(index, tries);
-      var ctrl = new AbortController();
+      var body = options && options.makeBody ? options.makeBody() : (options && options.body);
       var waitMs = upload ? 30 * 60 * 1000 : 60 * 1000;
-      var timer = window.setTimeout(function () { ctrl.abort(); }, waitMs);
       try {
-        var response = await fetch(url, Object.assign({}, options || {}, {
-          headers: headers,
-          credentials: "same-origin",
-          signal: ctrl.signal,
-          cache: "no-store"
-        }));
-        window.clearTimeout(timer);
+        var response;
+        if (upload && typeof FormData !== "undefined" && body instanceof FormData) {
+          response = await sendForm(url, body, headers, waitMs, options.onProgress);
+        } else {
+          var ctrl = new AbortController();
+          var timer = window.setTimeout(function () { ctrl.abort(); }, waitMs);
+          try {
+            response = await fetch(url, Object.assign({}, options || {}, {
+              headers: headers,
+              body: body,
+              credentials: "same-origin",
+              signal: ctrl.signal,
+              cache: "no-store"
+            }));
+          } finally {
+            window.clearTimeout(timer);
+          }
+        }
         if ((response.status === 502 || response.status === 503 || response.status === 504) && index < tries) {
           lastError = new Error("busy");
-          await sleep(900 * index);
+          await sleep(2500 * index);
           continue;
         }
         return response;
       } catch (error) {
-        window.clearTimeout(timer);
         lastError = error;
         if (index >= tries) break;
-        await sleep(700 * index);
+        await sleep(2500 * index);
       }
     }
     throw lastError || new Error("network");
@@ -236,6 +315,7 @@
     var node = document.getElementById(id);
     node.textContent = text || "";
     node.className = kind === "warn" ? "note warn" : kind === "ok" ? "note ok" : "note";
+    padSpaces(node);
   }
 
   function currentMapping() {
@@ -360,6 +440,7 @@
       note += " File lỗi: " + body.fileErrors.join(" ");
     }
     setNote("mapNote", note, body.fileErrors && body.fileErrors.length ? "warn" : body.detectNote ? "ok" : "");
+    padSpaces(document.getElementById("mapBox"));
   }
 
   function applyMapping(mapping) {
@@ -427,16 +508,31 @@
     previewPending();
   }
 
+  function buildPendingForm(extra) {
+    var data = new FormData();
+    pendingFiles.forEach(function (file) { data.append("files", file, file.name); });
+    if (extra) Object.keys(extra).forEach(function (key) { data.append(key, extra[key]); });
+    return data;
+  }
+
+  function progressLabel(label, loaded, total) {
+    if (!total) return label;
+    var sent = Math.round(loaded / 1024 / 1024);
+    var all = Math.max(1, Math.round(total / 1024 / 1024));
+    return label + " " + sent + "/" + all + " MB";
+  }
+
   async function previewPending() {
     if (!pendingFiles.length) return;
     var previous = document.getElementById("mapBox").hidden ? null : currentMapping();
-    var data = new FormData();
-    pendingFiles.forEach(function (file) { data.append("files", file, file.name); });
     setNote("uploadNote", "Đang đọc " + pendingFiles.length + " file…");
     try {
       var response = await api("/v1/customers/preview", {
         method: "POST",
-        body: data,
+        makeBody: function () { return buildPendingForm(); },
+        onProgress: function (loaded, total) {
+          setNote("uploadNote", progressLabel("Đang gửi " + pendingFiles.length + " file…", loaded, total));
+        },
         onRetry: function (index, tries) {
           setNote("uploadNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
         }
@@ -469,15 +565,15 @@
       setNote("mapNote", "Hãy chọn ít nhất một cột dữ liệu.", "warn");
       return;
     }
-    var data = new FormData();
-    pendingFiles.forEach(function (file) { data.append("files", file, file.name); });
-    data.append("mapping", JSON.stringify(mapping));
     document.getElementById("confirm").disabled = true;
     setNote("mapNote", "Đang nạp " + pendingFiles.length + " file và gộp khách trùng…");
     try {
       var response = await api("/v1/customers/import", {
         method: "POST",
-        body: data,
+        makeBody: function () { return buildPendingForm({ mapping: JSON.stringify(mapping) }); },
+        onProgress: function (loaded, total) {
+          setNote("mapNote", progressLabel("Đang gửi " + pendingFiles.length + " file…", loaded, total));
+        },
         onRetry: function (index, tries) {
           setNote("mapNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
         }
@@ -540,11 +636,12 @@
         return;
       }
       var body = await response.json();
-      var items = body.items || [];
+      var items = (body.items || []).slice(0, 200);
       var shown = items.length;
       var matched = body.matched != null ? body.matched : body.count;
       document.getElementById("storeStats").innerHTML = stat(body.total, "Khách trong kho") + stat(shown, "Khách đang hiện");
       renderRows(items);
+      padSpaces(document.getElementById("people"));
       if (query) {
         if (!matched) {
           setNote("listNote", "Không khớp từ tìm.");
@@ -592,6 +689,7 @@
     });
     html += "</tbody></table>";
     document.getElementById("lookupPeople").innerHTML = html;
+    padSpaces(document.getElementById("lookupPeople"));
     document.getElementById("lookupExport").hidden = false;
     var note = "Đã đối chiếu " + (stats.queried || 0) + " số với kho.";
     if (stats.truncated) note += " Danh sách quá dài, chỉ lấy phần đầu.";
@@ -641,7 +739,7 @@
     try {
       var response = await api("/v1/customers/lookup", {
         method: "POST",
-        body: lookupForm(),
+        makeBody: lookupForm,
         onRetry: function (index, tries) {
           setNote("lookupNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
         }
@@ -753,6 +851,7 @@
   document.getElementById("lookupGo").addEventListener("click", runLookup);
   document.getElementById("lookupExport").addEventListener("click", exportLookup);
   bindDrop();
+  padSpaces(document.body);
   loadCustomers();
 </script>
 </body>

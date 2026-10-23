@@ -79,17 +79,21 @@ def _si_text(item: ET.Element) -> str:
     return "".join(parts)
 
 
-def _shared_strings(payload: bytes) -> list[str]:
+def _shared_strings_from(source: Any) -> list[str]:
     values: list[str] = []
     try:
-        root = ET.fromstring(payload)
+        for _event, elem in ET.iterparse(source, events=("end",)):
+            if _local(elem.tag) != "si":
+                continue
+            values.append(_si_text(elem))
+            elem.clear()
     except ET.ParseError:
         return values
-    for item in root:
-        if _local(item.tag) != "si":
-            continue
-        values.append(_si_text(item))
     return values
+
+
+def _shared_strings(payload: bytes) -> list[str]:
+    return _shared_strings_from(io.BytesIO(payload))
 
 
 def _cell_text(cell: ET.Element, shared: list[str]) -> str:
@@ -136,15 +140,15 @@ def _parse_row(row: ET.Element, shared: list[str]) -> list[str]:
     return [cells.get(index, "") for index in range(max_col + 1)]
 
 
-def _sheet_rows(
-    payload: bytes,
+def _sheet_rows_from(
+    source: Any,
     shared: list[str],
     max_store: int | None = None,
 ) -> tuple[list[list[str]], int]:
     table: list[list[str]] = []
     total = 0
     try:
-        for _event, elem in ET.iterparse(io.BytesIO(payload), events=("end",)):
+        for _event, elem in ET.iterparse(source, events=("end",)):
             if _local(elem.tag) != "row":
                 continue
             total += 1
@@ -154,6 +158,14 @@ def _sheet_rows(
     except ET.ParseError:
         return [], 0
     return table, total
+
+
+def _sheet_rows(
+    payload: bytes,
+    shared: list[str],
+    max_store: int | None = None,
+) -> tuple[list[list[str]], int]:
+    return _sheet_rows_from(io.BytesIO(payload), shared, max_store=max_store)
 
 
 def _rel_target_path(target: str) -> str:
@@ -254,7 +266,8 @@ def _read_xlsx(data: bytes, max_store: int | None = None) -> tuple[list[list[str
     try:
         shared: list[str] = []
         if "xl/sharedStrings.xml" in archive.namelist():
-            shared = _shared_strings(archive.read("xl/sharedStrings.xml"))
+            with archive.open("xl/sharedStrings.xml") as handle:
+                shared = _shared_strings_from(handle)
         paths = _sheet_paths(archive)
         if not paths:
             raise ValueError("File Excel không có bảng tính.")
@@ -262,7 +275,8 @@ def _read_xlsx(data: bytes, max_store: int | None = None) -> tuple[list[list[str
         total = 0
         remaining = max_store
         for path in paths:
-            rows, count = _sheet_rows(archive.read(path), shared, max_store=remaining)
+            with archive.open(path) as handle:
+                rows, count = _sheet_rows_from(handle, shared, max_store=remaining)
             tables.append(rows)
             total += count
             if remaining is not None:

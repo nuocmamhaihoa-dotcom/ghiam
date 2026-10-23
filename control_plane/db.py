@@ -13,8 +13,8 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
-    conn.execute("PRAGMA temp_store=MEMORY;")
-    conn.execute("PRAGMA cache_size=-128000;")  # ~128MB page cache
+    conn.execute("PRAGMA temp_store=FILE;")
+    conn.execute("PRAGMA cache_size=-8000;")
     return conn
 
 
