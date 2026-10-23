@@ -24,6 +24,7 @@ from control_plane.vietnam_places import fold_vietnamese
 
 SAMPLE_ROWS = 8
 DETECT_ROWS = 200
+PREVIEW_STORE = SAMPLE_ROWS + DETECT_ROWS + 1
 _COL_REF = re.compile(r"^([A-Z]+)(\d+)$")
 
 FIELD_LABELS = {
@@ -114,42 +115,45 @@ def _cell_text(cell: ET.Element, shared: list[str]) -> str:
     return expand_scientific(collapse(value))
 
 
-def _sheet_rows(payload: bytes, shared: list[str]) -> list[list[str]]:
-    try:
-        root = ET.fromstring(payload)
-    except ET.ParseError:
+def _parse_row(row: ET.Element, shared: list[str]) -> list[str]:
+    cells: dict[int, str] = {}
+    max_col = -1
+    sequential = 0
+    for cell in row:
+        if _local(cell.tag) != "c":
+            continue
+        parsed = _cell_ref(cell.attrib.get("r", ""))
+        if parsed is None:
+            column = sequential
+        else:
+            column, _row_number = parsed
+        sequential = column + 1
+        cells[column] = _cell_text(cell, shared)
+        if column > max_col:
+            max_col = column
+    if max_col < 0:
         return []
-    sheet_data = None
-    for node in root:
-        if _local(node.tag) == "sheetData":
-            sheet_data = node
-            break
-    if sheet_data is None:
-        return []
+    return [cells.get(index, "") for index in range(max_col + 1)]
+
+
+def _sheet_rows(
+    payload: bytes,
+    shared: list[str],
+    max_store: int | None = None,
+) -> tuple[list[list[str]], int]:
     table: list[list[str]] = []
-    for row in sheet_data:
-        if _local(row.tag) != "row":
-            continue
-        cells: dict[int, str] = {}
-        max_col = -1
-        sequential = 0
-        for cell in row:
-            if _local(cell.tag) != "c":
+    total = 0
+    try:
+        for _event, elem in ET.iterparse(io.BytesIO(payload), events=("end",)):
+            if _local(elem.tag) != "row":
                 continue
-            parsed = _cell_ref(cell.attrib.get("r", ""))
-            if parsed is None:
-                column = sequential
-            else:
-                column, _row_number = parsed
-            sequential = column + 1
-            cells[column] = _cell_text(cell, shared)
-            if column > max_col:
-                max_col = column
-        if max_col < 0:
-            table.append([])
-            continue
-        table.append([cells.get(index, "") for index in range(max_col + 1)])
-    return table
+            total += 1
+            if max_store is None or len(table) < max_store:
+                table.append(_parse_row(elem, shared))
+            elem.clear()
+    except ET.ParseError:
+        return [], 0
+    return table, total
 
 
 def _rel_target_path(target: str) -> str:
@@ -237,7 +241,12 @@ def _combine_sheets(tables: list[list[list[str]]]) -> list[list[str]]:
     return combined
 
 
-def read_xlsx(data: bytes) -> list[list[str]]:
+def read_xlsx(data: bytes, max_store: int | None = None) -> list[list[str]]:
+    rows, _total = _read_xlsx(data, max_store=max_store)
+    return rows
+
+
+def _read_xlsx(data: bytes, max_store: int | None = None) -> tuple[list[list[str]], int]:
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as exc:
@@ -249,15 +258,31 @@ def read_xlsx(data: bytes) -> list[list[str]]:
         paths = _sheet_paths(archive)
         if not paths:
             raise ValueError("File Excel không có bảng tính.")
-        tables = [_sheet_rows(archive.read(path), shared) for path in paths]
-        return _combine_sheets(tables)
+        tables: list[list[list[str]]] = []
+        total = 0
+        remaining = max_store
+        for path in paths:
+            rows, count = _sheet_rows(archive.read(path), shared, max_store=remaining)
+            tables.append(rows)
+            total += count
+            if remaining is not None:
+                remaining = max(0, remaining - len(rows))
+        combined = _combine_sheets(tables)
+        if max_store is not None:
+            combined = combined[:max_store]
+        return combined, total
     except ValueError:
         raise
     except (KeyError, ET.ParseError, zipfile.BadZipFile, OSError) as exc:
         raise ValueError("File Excel bị hỏng hoặc không đọc được.") from exc
 
 
-def read_csv(data: bytes) -> list[list[str]]:
+def read_csv(data: bytes, max_store: int | None = None) -> list[list[str]]:
+    rows, _total = _read_csv(data, max_store=max_store)
+    return rows
+
+
+def _read_csv(data: bytes, max_store: int | None = None) -> tuple[list[list[str]], int]:
     text = ""
     for encoding in ("utf-8-sig", "utf-8", "utf-16", "cp1258", "cp1252"):
         try:
@@ -274,23 +299,31 @@ def read_csv(data: bytes) -> list[list[str]]:
         dialect = csv.excel
     reader = csv.reader(io.StringIO(text), dialect)
     rows: list[list[str]] = []
+    total = 0
     for row in reader:
-        rows.append([expand_scientific(collapse(cell)) for cell in row])
+        total += 1
+        if max_store is None or len(rows) < max_store:
+            rows.append([expand_scientific(collapse(cell)) for cell in row])
+    return rows, total
+
+
+def read_table(filename: str, data: bytes, max_store: int | None = None) -> list[list[str]]:
+    rows, _total = _read_table(filename, data, max_store=max_store)
     return rows
 
 
-def read_table(filename: str, data: bytes) -> list[list[str]]:
+def _read_table(filename: str, data: bytes, max_store: int | None = None) -> tuple[list[list[str]], int]:
     name = (filename or "").casefold()
     try:
         if name.endswith(".xls"):
             raise ValueError("Hãy lưu file .xls thành .xlsx rồi nạp lại.")
         if name.endswith(".xlsx") or name.endswith(".xlsm"):
-            return read_xlsx(data)
+            return _read_xlsx(data, max_store=max_store)
         if name.endswith(".csv") or name.endswith(".tsv") or name.endswith(".txt"):
-            return read_csv(data)
+            return _read_csv(data, max_store=max_store)
         if data[:2] == b"PK":
-            return read_xlsx(data)
-        return read_csv(data)
+            return _read_xlsx(data, max_store=max_store)
+        return _read_csv(data, max_store=max_store)
     except ValueError:
         raise
     except Exception as exc:
@@ -349,21 +382,27 @@ def describe_columns(headers: list[str]) -> list[dict[str, Any]]:
 
 
 def preview_table(filename: str, data: bytes) -> dict[str, Any]:
-    rows = _trim_table(read_table(filename, data))
+    stored, total = _read_table(filename, data, max_store=PREVIEW_STORE)
+    truncated = total > len(stored)
+    rows = _trim_table(stored)
     if not rows:
         raise ValueError("File không có dòng dữ liệu.")
     headers = [collapse(cell) or f"Cột {column_letter(index)}" for index, cell in enumerate(rows[0])]
     body = rows[1:]
     samples = body[:SAMPLE_ROWS]
     detect_rows = body[:DETECT_ROWS]
+    if truncated:
+        row_count = max(len(body), total - 1)
+    else:
+        row_count = len(body)
     return {
         "name": filename,
         "columns": describe_columns(headers),
         "headers": headers,
         "samples": samples,
         "detectRows": detect_rows,
-        "rowCount": len(body),
-        "truncated": False,
+        "rowCount": row_count,
+        "truncated": truncated,
         "suggested": suggest_mapping(headers, column_values_from_rows(detect_rows, len(headers))),
     }
 

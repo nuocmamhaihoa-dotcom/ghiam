@@ -220,11 +220,23 @@ class ExcelMappingTests(unittest.TestCase):
         )
         preview = preview_table("danh-sach.xlsx", payload)
         self.assertEqual(preview["rowCount"], 1)
+        self.assertFalse(preview["truncated"])
         self.assertEqual(preview["suggested"]["name"], 0)
         self.assertEqual(preview["suggested"]["phone"], 1)
         self.assertEqual(preview["suggested"]["address"], 2)
         self.assertEqual(preview["suggested"]["facebookUid"], 3)
         self.assertEqual(preview["suggested"]["tiktokId"], 4)
+
+    def test_preview_counts_all_rows_without_storing_them(self) -> None:
+        payload = write_xlsx(
+            ["Tên khách", "SĐT"],
+            [[f"K{index}", f"0901{index:06d}"] for index in range(300)],
+        )
+        preview = preview_table("lon.xlsx", payload)
+        self.assertEqual(preview["rowCount"], 300)
+        self.assertTrue(preview["truncated"])
+        self.assertLessEqual(len(preview["samples"]), 8)
+        self.assertLessEqual(len(preview["detectRows"]), 200)
 
     def test_same_mapping_applies_to_every_file_in_batch(self) -> None:
         first = write_xlsx(

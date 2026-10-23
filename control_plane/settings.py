@@ -33,7 +33,7 @@ class ServerSettings:
         self.limit_concurrency = int(os.environ.get("CONTROL_LIMIT_CONCURRENCY", "200"))
         self.backlog = int(os.environ.get("CONTROL_BACKLOG", "2048"))
         self.keep_alive = int(os.environ.get("CONTROL_KEEPALIVE", "75"))
-        self.timeout_keep_alive = int(os.environ.get("CONTROL_TIMEOUT_KEEPALIVE", "75"))
+        self.timeout_keep_alive = int(os.environ.get("CONTROL_TIMEOUT_KEEPALIVE", "300"))
         self.h11_max_incomplete_size = int(
             os.environ.get("CONTROL_H11_MAX_INCOMPLETE", str(16 * 1024 * 1024))
         )

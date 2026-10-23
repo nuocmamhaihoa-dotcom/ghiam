@@ -1,20 +1,42 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" translate="no" class="notranslate">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="only light" />
+  <meta name="supported-color-schemes" content="light only" />
+  <meta name="google" content="notranslate" />
   <title>Kho khách</title>
   <style>
-    :root { color-scheme: light; --ink: #17202a; --muted: #5c6770; --line: #e4e7ec; --bg: #f4f6f8; --card: #fff; --blue: #0b6bcb; }
+    html { color-scheme: only light; }
+    :root { color-scheme: only light; --ink: #17202a; --muted: #5c6770; --line: #e4e7ec; --bg: #f4f6f8; --card: #fff; --blue: #0b6bcb; }
     * { box-sizing: border-box; }
-    body { margin: 0; font: 16px/1.45 "Segoe UI", system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+    html, body, button, input, textarea, select {
+      color-scheme: only light;
+      forced-color-adjust: none;
+    }
+    html, body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: Tahoma, "Segoe UI", Arial, Helvetica, sans-serif;
+      font-size: 16px;
+      font-weight: 400;
+      line-height: 1.45;
+      letter-spacing: 0;
+      word-spacing: 0.14em;
+      font-kerning: none;
+      font-variant-ligatures: none;
+      text-autospace: no-autospace;
+      text-rendering: auto;
+    }
     main { max-width: 960px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
-    h1 { font-size: 1.7rem; margin: 0 0 0.25rem; }
-    h2 { font-size: 1.15rem; margin: 0 0 0.7rem; }
+    h1 { font-size: 1.7rem; margin: 0 0 0.25rem; font-weight: 700; }
+    h2 { font-size: 1.15rem; margin: 0 0 0.7rem; font-weight: 700; }
     p { margin: 0; }
     .lead { color: var(--muted); margin-bottom: 1rem; }
     section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem; margin: 0 0 0.8rem; }
-    label { display: block; font-weight: 650; margin: 0 0 0.35rem; }
+    label { display: block; font-weight: 700; margin: 0 0 0.35rem; }
     input[type="search"], select, textarea {
       width: 100%; font: inherit; padding: 0.7rem 0.75rem; border: 1px solid #cfd5dc; border-radius: 10px; background: #fff;
     }
@@ -39,22 +61,22 @@
     td.addr { white-space: pre-line; }
     .picks { display: grid; gap: 0.35rem; margin: 0.2rem 0 0.4rem; }
     .picks label { font-weight: 500; display: flex; gap: 0.45rem; align-items: center; }
-    th { color: var(--muted); font-weight: 650; }
+    th { color: var(--muted); font-weight: 700; }
     .note { color: var(--muted); margin-top: 0.55rem; }
-    .warn { color: #8a2b2b; font-weight: 650; }
+    .warn { color: #8a2b2b; font-weight: 700; }
     .ok { color: #0d6b3a; }
     .map { display: grid; gap: 0.7rem; margin: 0.8rem 0; }
     .files { margin: 0.4rem 0 0.8rem; padding: 0; }
     .files li { margin: 0.25rem 0; }
     .nav { margin: 0 0 1rem; }
-    .nav a { color: var(--blue); font-weight: 650; text-decoration: none; }
+    .nav a { color: var(--blue); font-weight: 700; text-decoration: none; }
     .scroll { overflow-x: auto; }
     [hidden] { display: none !important; }
     #file, #lookupFile { display: none; }
   </style>
 </head>
-<body>
-<main>
+<body translate="no" class="notranslate">
+<main translate="no">
   <h1>Kho khách Excel</h1>
   <p class="lead">Nhập khách bằng file Excel, không dùng video. Không giới hạn số file và dung lượng: chọn thêm là cộng vào lần nạp này. Chỉ khớp cột khi tên cột giống kho (tên, SĐT, địa chỉ, địa chỉ hành chính, hàng mua, giá COD, UID Facebook, ID TikTok). Cột lạ như giới tính, ngày sinh, link thì bỏ qua, không đoán nội dung ô. Cùng một lần chọn cột dùng cho mọi file bạn thêm lúc đó. Chỉ gộp khi trùng số điện thoại. Không có số, hoặc khác số, thì mỗi dòng là một khách. Ô đã có giữ nguyên, ô trống được điền thêm. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
 
@@ -140,10 +162,62 @@
 
   function token() { return serverToken; }
 
+  function apiUrl(path) {
+    try {
+      return new URL(path, window.location.origin).href;
+    } catch (error) {
+      return path;
+    }
+  }
+
+  function sleep(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function networkMessage(error) {
+    var name = error && error.name;
+    if (name === "AbortError") {
+      return "Gửi file quá lâu nên đã dừng. Giữ trang mở rồi thử lại.";
+    }
+    return "Không gửi được file. Máy chủ chưa nhận kịp — thử lại, đừng tắt trang. Nếu trình duyệt đang dịch trang thì tắt dịch rồi tải lại.";
+  }
+
   async function api(path, options) {
     var headers = options && options.headers ? options.headers : {};
     if (token()) headers.Authorization = "Bearer " + token();
-    return fetch(path, Object.assign({}, options || {}, { headers: headers }));
+    var url = apiUrl(path);
+    var upload = !!(options && options.body);
+    var tries = upload ? 3 : 2;
+    var lastError = null;
+    var index = 0;
+    while (index < tries) {
+      index += 1;
+      if (index > 1 && options && options.onRetry) options.onRetry(index, tries);
+      var ctrl = new AbortController();
+      var waitMs = upload ? 30 * 60 * 1000 : 60 * 1000;
+      var timer = window.setTimeout(function () { ctrl.abort(); }, waitMs);
+      try {
+        var response = await fetch(url, Object.assign({}, options || {}, {
+          headers: headers,
+          credentials: "same-origin",
+          signal: ctrl.signal,
+          cache: "no-store"
+        }));
+        window.clearTimeout(timer);
+        if ((response.status === 502 || response.status === 503 || response.status === 504) && index < tries) {
+          lastError = new Error("busy");
+          await sleep(900 * index);
+          continue;
+        }
+        return response;
+      } catch (error) {
+        window.clearTimeout(timer);
+        lastError = error;
+        if (index >= tries) break;
+        await sleep(700 * index);
+      }
+    }
+    throw lastError || new Error("network");
   }
 
   function escapeHtml(value) {
@@ -216,7 +290,7 @@
     var list = document.getElementById("fileList");
     list.innerHTML = pendingFiles.map(function (file, index) {
       var info = (body.files || []).find(function (item) { return item.name === file.name; });
-      var extra = info && info.truncated ? " · đã cắt phần cuối" : "";
+      var extra = info && info.truncated ? " · đang xem mẫu, nạp sẽ lấy hết" : "";
       var rows = info ? " · " + info.rowCount + " dòng" : "";
       return "<li>" + escapeHtml(file.name) + rows + extra +
         " <button class='ghost' type='button' data-remove='" + index + "'>Bỏ</button></li>";
@@ -360,7 +434,13 @@
     pendingFiles.forEach(function (file) { data.append("files", file, file.name); });
     setNote("uploadNote", "Đang đọc " + pendingFiles.length + " file…");
     try {
-      var response = await api("/v1/customers/preview", { method: "POST", body: data });
+      var response = await api("/v1/customers/preview", {
+        method: "POST",
+        body: data,
+        onRetry: function (index, tries) {
+          setNote("uploadNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
+        }
+      });
       var body = await response.json().catch(function () { return {}; });
       if (!response.ok) {
         setNote("uploadNote", body.detail || "Không đọc được file.", "warn");
@@ -371,7 +451,7 @@
       renderMap(body);
       if (previous) applyMapping(previous);
     } catch (error) {
-      setNote("uploadNote", "Không gửi được file. Mạng đứt hoặc máy chủ bận, hãy thử lại.", "warn");
+      setNote("uploadNote", networkMessage(error), "warn");
     }
   }
 
@@ -395,7 +475,13 @@
     document.getElementById("confirm").disabled = true;
     setNote("mapNote", "Đang nạp " + pendingFiles.length + " file và gộp khách trùng…");
     try {
-      var response = await api("/v1/customers/import", { method: "POST", body: data });
+      var response = await api("/v1/customers/import", {
+        method: "POST",
+        body: data,
+        onRetry: function (index, tries) {
+          setNote("mapNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
+        }
+      });
       var body = await response.json().catch(function () { return {}; });
       if (!response.ok) {
         setNote("mapNote", body.detail || "Không nạp được.", "warn");
@@ -422,7 +508,7 @@
       clearPending();
       await loadCustomers();
     } catch (error) {
-      setNote("mapNote", "Không nạp được. Mạng đứt hoặc máy chủ bận, hãy thử lại.", "warn");
+      setNote("mapNote", networkMessage(error), "warn");
     } finally {
       document.getElementById("confirm").disabled = false;
     }
@@ -553,7 +639,13 @@
     document.getElementById("lookupGo").disabled = true;
     setNote("lookupNote", "Đang tra cứu trong kho…");
     try {
-      var response = await api("/v1/customers/lookup", { method: "POST", body: lookupForm() });
+      var response = await api("/v1/customers/lookup", {
+        method: "POST",
+        body: lookupForm(),
+        onRetry: function (index, tries) {
+          setNote("lookupNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
+        }
+      });
       var body = await response.json().catch(function () { return {}; });
       if (!response.ok) {
         setNote("lookupNote", body.detail || "Không tra cứu được.", "warn");
@@ -561,7 +653,7 @@
       }
       renderLookup(body);
     } catch (error) {
-      setNote("lookupNote", "Không tra cứu được. Mạng đứt hoặc máy chủ bận, hãy thử lại.", "warn");
+      setNote("lookupNote", networkMessage(error), "warn");
     } finally {
       document.getElementById("lookupGo").disabled = false;
     }

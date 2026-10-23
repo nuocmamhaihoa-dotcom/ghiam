@@ -62,6 +62,11 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(home.status_code, 200)
         self.assertIn("Kho khách Excel", home.text)
         self.assertIn("Chọn file Excel", home.text)
+        self.assertIn('translate="no"', home.text)
+        self.assertIn("notranslate", home.text)
+        self.assertIn("color-scheme: only light", home.text)
+        self.assertIn("word-spacing", home.text)
+        self.assertNotIn("font-weight: 650", home.text)
         self.assertIn("không dùng video", home.text)
         self.assertIn("không giới hạn số file", home.text)
         self.assertIn("dung lượng", home.text)
@@ -421,7 +426,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(preview.status_code, 200, preview.text)
         data = preview.json()
         self.assertEqual(data["files"][0]["rowCount"], 250)
-        self.assertFalse(data["files"][0]["truncated"])
+        self.assertTrue(data["files"][0]["truncated"])
         self.assertIn("dung lượng", data["applyNote"])
 
     def test_bad_file_does_not_block_import(self) -> None:
