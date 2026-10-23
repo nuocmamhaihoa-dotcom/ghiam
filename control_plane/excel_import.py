@@ -9,10 +9,12 @@ import zipfile
 import xml.etree.ElementTree as ET
 from typing import Any, Iterable
 
+from control_plane.column_detect import suggest_mapping as detect_mapping
 from control_plane.customers import FIELDS, clean_phone, clean_row, collapse, expand_scientific, has_data
 
 MAX_ROWS = 200_000
 SAMPLE_ROWS = 8
+DETECT_ROWS = 200
 _COL_REF = re.compile(r"^([A-Z]+)(\d+)$")
 
 FIELD_LABELS = {
@@ -22,63 +24,6 @@ FIELD_LABELS = {
     "facebookUid": "UID Facebook",
     "tiktokId": "ID TikTok",
 }
-
-_HEADER_HINTS: dict[str, tuple[str, ...]] = {
-    "name": (
-        "ten khach",
-        "tên khách",
-        "ten khach hang",
-        "tên khách hàng",
-        "ho ten",
-        "họ tên",
-        "họ và tên",
-        "hoten",
-        "name",
-        "ten",
-        "tên",
-        "khach",
-        "khách",
-    ),
-    "phone": (
-        "so dien thoai khach",
-        "số điện thoại khách",
-        "so dien thoai",
-        "số điện thoại",
-        "dien thoai",
-        "điện thoại",
-        "sdt",
-        "sđt",
-        "phone",
-        "tel",
-        "mobile",
-    ),
-    "address": (
-        "dia chi khach",
-        "địa chỉ khách",
-        "dia chi",
-        "địa chỉ",
-        "address",
-        "addr",
-    ),
-    "facebookUid": (
-        "uid facebook",
-        "facebook uid",
-        "uid fb",
-        "fb uid",
-        "facebook",
-        "uid",
-        "id facebook",
-        "facebook id",
-    ),
-    "tiktokId": (
-        "id tiktok",
-        "tiktok id",
-        "tiktok",
-        "id tt",
-        "tt id",
-    ),
-}
-
 
 def column_letter(index: int) -> str:
     if index < 0:
@@ -279,19 +224,21 @@ def header_key(value: str) -> str:
     return collapse(value).casefold()
 
 
-def suggest_mapping(headers: list[str]) -> dict[str, int | None]:
-    used: set[int] = set()
-    mapping: dict[str, int | None] = {field: None for field in FIELDS}
-    keyed = [header_key(header) for header in headers]
-    for field, hints in _HEADER_HINTS.items():
-        for index, key in enumerate(keyed):
-            if index in used or not key:
-                continue
-            if key in hints:
-                mapping[field] = index
-                used.add(index)
-                break
-    return mapping
+def column_values_from_rows(rows: list[list[str]], width: int) -> list[list[str]]:
+    values: list[list[str]] = [[] for _ in range(width)]
+    for row in rows:
+        for index in range(width):
+            cell = row[index] if index < len(row) else ""
+            if collapse(cell):
+                values[index].append(cell)
+    return values
+
+
+def suggest_mapping(
+    headers: list[str],
+    column_values: list[list[str]] | None = None,
+) -> dict[str, int | None]:
+    return detect_mapping(headers, column_values)
 
 
 def describe_columns(headers: list[str]) -> list[dict[str, Any]]:
@@ -315,14 +262,16 @@ def preview_table(filename: str, data: bytes) -> dict[str, Any]:
     truncated = len(body) > MAX_ROWS
     body = body[:MAX_ROWS]
     samples = body[:SAMPLE_ROWS]
+    detect_rows = body[:DETECT_ROWS]
     return {
         "name": filename,
         "columns": describe_columns(headers),
         "headers": headers,
         "samples": samples,
+        "detectRows": detect_rows,
         "rowCount": len(body),
         "truncated": truncated,
-        "suggested": suggest_mapping(headers),
+        "suggested": suggest_mapping(headers, column_values_from_rows(detect_rows, len(headers))),
     }
 
 

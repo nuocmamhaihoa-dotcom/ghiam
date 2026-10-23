@@ -12,9 +12,11 @@ from fastapi import APIRouter, File, Form, Header, HTTPException, Query, UploadF
 from fastapi.responses import Response
 
 from control_plane import db
+from control_plane.column_detect import assign_fields, explain_mapping
 from control_plane.customers import (
     FIELDS,
     MAX_LOOKUP,
+    collapse,
     fold_customers,
     lookup_by_phones,
     matches_query,
@@ -23,12 +25,12 @@ from control_plane.customers import (
 )
 from control_plane.excel_import import (
     FIELD_LABELS,
+    header_key,
     mapping_from_form,
     merge_preview_columns,
     phones_from_files,
     preview_table,
     rows_from_files,
-    suggest_mapping,
     write_xlsx,
 )
 from control_plane.settings import settings
@@ -126,6 +128,9 @@ async def customers_preview(
         for item in previews[1:]
         if item["headers"] != first["headers"]
     ]
+    headers = [str(column.get("header") or "") for column in columns]
+    values = _column_values_from_previews(columns, previews)
+    suggested, details = assign_fields(headers, values)
     return {
         "files": [
             {
@@ -138,11 +143,32 @@ async def customers_preview(
             for item in previews
         ],
         "columns": columns,
-        "suggested": suggest_mapping([column["header"] for column in columns]),
+        "suggested": suggested,
+        "detectNote": explain_mapping(details, headers),
         "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
         "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này.",
         "headerMismatch": different,
     }
+
+
+def _column_values_from_previews(
+    columns: list[dict[str, Any]],
+    previews: list[dict[str, Any]],
+) -> list[list[str]]:
+    buckets: list[list[str]] = [[] for _ in columns]
+    by_header = {header_key(str(column.get("header") or "")): index for index, column in enumerate(columns)}
+    for preview in previews:
+        headers = [str(item) for item in (preview.get("headers") or [])]
+        rows = preview.get("detectRows") or preview.get("samples") or []
+        for row in rows:
+            for source, header in enumerate(headers):
+                dest = by_header.get(header_key(header))
+                if dest is None or source >= len(row):
+                    continue
+                cell = row[source]
+                if collapse(cell):
+                    buckets[dest].append(cell)
+    return buckets
 
 
 @router.post("/v1/customers/import")

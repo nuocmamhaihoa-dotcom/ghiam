@@ -77,7 +77,32 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(data["files"][0]["rowCount"], 1)
         self.assertEqual(data["suggested"]["name"], 0)
         self.assertIn("mọi file", data["applyNote"])
+        self.assertIn("Đã tự nhận", data["detectNote"])
 
+    def test_preview_detects_unlabeled_columns_by_content(self) -> None:
+        name, body = self._xlsx(
+            "an.xlsx",
+            ["A", "B", "C", "D", "E"],
+            [
+                ["Nguyễn Lan", "0901222333", "Huế", "1000123456789", "@lan.hue"],
+                ["Trần Minh", "84901444555", "Ha Noi", "1000987654321", "@minh.hn"],
+            ],
+        )
+        preview = self.client.post(
+            "/v1/customers/preview",
+            headers=self.headers,
+            files=[("files", (name, body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(preview.status_code, 200, preview.text)
+        data = preview.json()
+        self.assertEqual(data["suggested"]["name"], 0)
+        self.assertEqual(data["suggested"]["phone"], 1)
+        self.assertEqual(data["suggested"]["address"], 2)
+        self.assertEqual(data["suggested"]["facebookUid"], 3)
+        self.assertEqual(data["suggested"]["tiktokId"], 4)
+        self.assertIn("đầu số nhà mạng", data["detectNote"])
+
+    def test_import_fills_missing_fields_on_later_file(self) -> None:
         name, body = self._xlsx(
             "lan1.xlsx",
             ["Tên khách", "Số điện thoại khách", "Địa chỉ khách"],

@@ -222,7 +222,7 @@
       lead += " Một số file có tên cột khác file đầu: phần mềm tìm cùng tên cột, không có thì lấy cùng vị trí.";
     }
     setNote("mapLead", lead);
-    setNote("mapNote", "Hãy xem lại cột, rồi bấm nạp. Lần nạp sau sẽ hỏi lại.");
+    setNote("mapNote", body.detectNote || "Hãy xem lại cột, rồi bấm nạp. Lần nạp sau sẽ hỏi lại.", body.detectNote ? "ok" : "");
   }
 
   async function previewFiles(fileList) {
@@ -237,7 +237,7 @@
       setNote("uploadNote", body.detail || "Không đọc được file.", "warn");
       return;
     }
-    setNote("uploadNote", "Đã đọc " + body.files.length + " file. Chọn cột bên dưới.");
+    setNote("uploadNote", "Đã đọc " + body.files.length + " file. Cột đã được nhận tự động, hãy xem lại.");
     renderMap(body);
   }
 
