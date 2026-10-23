@@ -417,6 +417,32 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(looked.json()["stats"]["found"], 1)
         self.assertTrue(looked.json()["fileErrors"])
 
+    def test_list_caps_visible_items_without_hiding_total(self) -> None:
+        now = "2026-01-01T00:00:00+00:00"
+        db.replace_customers(
+            settings.db_path,
+            [
+                {
+                    "id": f"c{index}",
+                    "name": f"K{index}",
+                    "phone": f"0901{index:06d}",
+                    "address": "",
+                    "facebookUid": "",
+                    "tiktokId": "",
+                    "createdAt": now,
+                    "updatedAt": now,
+                }
+                for index in range(2005)
+            ],
+            [],
+        )
+        listed = self.client.get("/v1/customers", headers=self.headers)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        body = listed.json()
+        self.assertEqual(body["total"], 2005)
+        self.assertEqual(len(body["items"]), 2000)
+        self.assertEqual(body["count"], 2000)
+
     def test_export_xlsx_roundtrip(self) -> None:
         db.replace_customers(
             settings.db_path,

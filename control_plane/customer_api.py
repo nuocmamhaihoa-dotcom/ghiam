@@ -140,7 +140,7 @@ def customers_list(
         }
     rows = [public_customer(row) for row in db.list_customers(settings.db_path, limit=LIST_LIMIT)]
     return {
-        "count": total,
+        "count": len(rows),
         "total": total,
         "items": rows,
         "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
