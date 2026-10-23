@@ -75,10 +75,8 @@
     [hidden] { display: none !important; }
     #file, #lookupFile { display: none; }
     .sp {
-      display: inline-block;
-      width: 0.35em;
-      min-width: 0.35em;
-      height: 0.7em;
+      display: inline;
+      font-weight: 400;
     }
   </style>
 </head>
@@ -209,7 +207,7 @@
         if (index) {
           var spacer = document.createElement("span");
           spacer.className = "sp";
-          spacer.setAttribute("aria-hidden", "true");
+          spacer.textContent = "\u00A0";
           frag.appendChild(spacer);
         }
         if (part) frag.appendChild(document.createTextNode(part));
