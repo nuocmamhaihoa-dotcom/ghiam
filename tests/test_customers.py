@@ -25,6 +25,9 @@ class CustomerCleanTests(unittest.TestCase):
     def test_phone_strips_country_code(self) -> None:
         self.assertEqual(clean_phone("+84 901 234 567"), "0901234567")
         self.assertEqual(clean_phone("0901-234-567"), "0901234567")
+        self.assertEqual(clean_phone("0084901234567"), "0901234567")
+        self.assertEqual(clean_phone("084901234567"), "0901234567")
+        self.assertEqual(clean_phone("84901234567"), "0901234567")
         self.assertEqual(clean_phone("abc"), "")
 
     def test_facebook_uid_from_url_and_scientific(self) -> None:

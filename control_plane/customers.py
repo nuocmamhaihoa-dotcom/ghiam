@@ -62,8 +62,15 @@ def clean_phone(value: Any) -> str:
         break
     if not (8 <= len(digits) <= 15):
         return ""
-    if digits.startswith("84") and len(digits) == 11:
-        return "0" + digits[2:]
+    if digits.startswith("0084") and len(digits) >= 13:
+        rest = digits[4:]
+        return rest if rest.startswith("0") else "0" + rest
+    if digits.startswith("084") and len(digits) >= 12:
+        rest = digits[3:]
+        return rest if rest.startswith("0") else "0" + rest
+    if digits.startswith("84") and len(digits) >= 11:
+        rest = digits[2:]
+        return rest if rest.startswith("0") else "0" + rest
     if leading_plus and digits.startswith("84") and len(digits) >= 10:
         return "0" + digits[2:]
     return ("+" + digits) if leading_plus and not digits.startswith("84") else digits
