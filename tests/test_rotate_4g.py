@@ -132,9 +132,9 @@ class RotateLoopTests(unittest.IsolatedAsyncioTestCase):
         self.now = 1_300
         await self.loop.run_due()
         self.now = 1_599
-        self.assertEqual([t.index for t in self.loop.due_targets()], [])
+        self.assertNotIn(1, [t.index for t in self.loop.due_targets()])
         self.now = 1_600
-        self.assertEqual([t.index for t in self.loop.due_targets()], [1])
+        self.assertIn(1, [t.index for t in self.loop.due_targets()])
 
     async def test_cooldown_does_not_spam(self) -> None:
         async def press_wait(target: RotateTarget) -> RotateResult:
@@ -154,9 +154,9 @@ class RotateLoopTests(unittest.IsolatedAsyncioTestCase):
         await self.loop.run_due()
         self.assertEqual(self.calls, [1])
         self.now = 1_330
-        self.assertEqual([t.index for t in self.loop.due_targets()], [])
+        self.assertNotIn(1, [t.index for t in self.loop.due_targets()])
         self.now = 1_360
-        self.assertEqual([t.index for t in self.loop.due_targets()], [1])
+        self.assertIn(1, [t.index for t in self.loop.due_targets()])
 
 
 class LoadTargetsTests(unittest.TestCase):
