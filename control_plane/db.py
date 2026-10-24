@@ -4,7 +4,11 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterable, Iterator
+
+
+PHONE_IN_CHUNK = 800
+PHONE_TEMP_KEYS = 1600
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -17,6 +21,16 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA cache_size=-8000;")
     conn.execute("PRAGMA busy_timeout=8000;")
     return conn
+
+
+def apply_heavy_pragmas(conn: sqlite3.Connection) -> None:
+    """Tăng cache/mmap khi nạp hoặc tra cứu hàng loạt. VPS ~2GB nên giữ dưới 64+256MB."""
+    conn.execute("PRAGMA temp_store=MEMORY;")
+    conn.execute("PRAGMA cache_size=-65536;")
+    conn.execute("PRAGMA mmap_size=268435456;")
+    conn.execute("PRAGMA wal_autocheckpoint=10000;")
+    conn.execute("PRAGMA busy_timeout=60000;")
+    conn.execute("PRAGMA journal_size_limit=67108864;")
 
 
 def init_db(db_path: Path) -> None:
@@ -800,13 +814,8 @@ def iter_customers(db_path: Path, chunk: int = 500) -> Iterator[dict[str, str]]:
 def customers_by_phone(conn: sqlite3.Connection, phone: str) -> list[dict[str, str]]:
     if not phone:
         return []
-    keys = _phone_variants(phone) or [phone]
-    marks = ",".join("?" * len(keys))
-    rows = conn.execute(
-        _CUSTOMER_SELECT + f" WHERE phone IN ({marks}) ORDER BY created_at ASC, id ASC",
-        keys,
-    ).fetchall()
-    return [customer_from_sql_row(row) for row in rows]
+    found = customers_matching_phones(conn, [phone])
+    return found.get(phone) or []
 
 
 def _phone_variants(value: str) -> list[str]:
@@ -848,8 +857,80 @@ def _phone_variants(value: str) -> list[str]:
     return unique
 
 
-def customers_for_phones(db_path: Path, phones: list[str]) -> dict[str, list[dict[str, str]]]:
-    """Tìm khách theo list số, không tải cả kho vào RAM."""
+def _unique_phone_keys(phones: Iterable[str]) -> list[str]:
+    keys: list[str] = []
+    seen: set[str] = set()
+    for phone in phones:
+        if not phone:
+            continue
+        for key in _phone_variants(phone) or [phone]:
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            keys.append(key)
+    return keys
+
+
+def _fetch_customers_by_keys(conn: sqlite3.Connection, keys: list[str]) -> list[dict[str, str]]:
+    if not keys:
+        return []
+    if len(keys) >= PHONE_TEMP_KEYS:
+        conn.execute("CREATE TEMP TABLE IF NOT EXISTS _khach_phone_q (phone TEXT NOT NULL PRIMARY KEY)")
+        conn.execute("DELETE FROM _khach_phone_q")
+        conn.executemany("INSERT OR IGNORE INTO _khach_phone_q(phone) VALUES (?)", ((key,) for key in keys))
+        rows = conn.execute(
+            _CUSTOMER_SELECT
+            + " WHERE phone IN (SELECT phone FROM _khach_phone_q) ORDER BY created_at ASC, id ASC"
+        ).fetchall()
+        return [customer_from_sql_row(row) for row in rows]
+    found: list[dict[str, str]] = []
+    for start in range(0, len(keys), PHONE_IN_CHUNK):
+        chunk = keys[start : start + PHONE_IN_CHUNK]
+        marks = ",".join("?" * len(chunk))
+        rows = conn.execute(
+            _CUSTOMER_SELECT + f" WHERE phone IN ({marks}) ORDER BY created_at ASC, id ASC",
+            chunk,
+        ).fetchall()
+        found.extend(customer_from_sql_row(row) for row in rows)
+    return found
+
+
+def _index_customers_by_phone_keys(rows: list[dict[str, str]]) -> dict[str, list[dict[str, str]]]:
+    index: dict[str, list[dict[str, str]]] = {}
+    for item in rows:
+        stored = item.get("phone") or ""
+        keys = _phone_variants(stored) or ([stored] if stored else [])
+        if stored and stored not in keys:
+            keys.append(stored)
+        for key in keys:
+            bucket = index.setdefault(key, [])
+            if any(existing.get("id") == item["id"] for existing in bucket):
+                continue
+            bucket.append(item)
+    return index
+
+
+def _customers_for_phone_from_index(
+    index: dict[str, list[dict[str, str]]],
+    phone: str,
+) -> list[dict[str, str]]:
+    matches: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+    for key in _phone_variants(phone) or [phone]:
+        for item in index.get(key) or []:
+            customer_id = str(item.get("id") or "")
+            if customer_id in seen_ids:
+                continue
+            seen_ids.add(customer_id)
+            matches.append(item)
+    return matches
+
+
+def customers_matching_phones(
+    conn: sqlite3.Connection,
+    phones: list[str],
+) -> dict[str, list[dict[str, str]]]:
+    """Một lần đọc SQLite cho cả lô số. Trả về map số hỏi → khách khớp (cả biến thể 0/84)."""
     wanted: list[str] = []
     seen: set[str] = set()
     for phone in phones:
@@ -857,39 +938,21 @@ def customers_for_phones(db_path: Path, phones: list[str]) -> dict[str, list[dic
             continue
         seen.add(phone)
         wanted.append(phone)
-    query_keys: list[str] = []
-    key_seen: set[str] = set()
-    for phone in wanted:
-        for key in _phone_variants(phone) or [phone]:
-            if key in key_seen:
-                continue
-            key_seen.add(key)
-            query_keys.append(key)
     found: dict[str, list[dict[str, str]]] = {phone: [] for phone in wanted}
-    if not query_keys:
+    keys = _unique_phone_keys(wanted)
+    if not keys:
         return found
-    with session(db_path) as conn:
-        for start in range(0, len(query_keys), 400):
-            chunk = query_keys[start : start + 400]
-            marks = ",".join("?" * len(chunk))
-            rows = conn.execute(
-                _CUSTOMER_SELECT + f" WHERE phone IN ({marks}) ORDER BY created_at ASC, id ASC",
-                chunk,
-            ).fetchall()
-            for row in rows:
-                item = customer_from_sql_row(row)
-                stored = item.get("phone") or ""
-                stored_keys = set(_phone_variants(stored) or [stored])
-                stored_keys.add(stored)
-                for phone in wanted:
-                    query_set = set(_phone_variants(phone) or [phone])
-                    query_set.add(phone)
-                    if stored_keys.isdisjoint(query_set):
-                        continue
-                    if any(existing.get("id") == item["id"] for existing in found[phone]):
-                        continue
-                    found[phone].append(item)
+    index = _index_customers_by_phone_keys(_fetch_customers_by_keys(conn, keys))
+    for phone in wanted:
+        found[phone] = _customers_for_phone_from_index(index, phone)
     return found
+
+
+def customers_for_phones(db_path: Path, phones: list[str]) -> dict[str, list[dict[str, str]]]:
+    """Tìm khách theo list số, không tải cả kho vào RAM."""
+    with session(db_path) as conn:
+        apply_heavy_pragmas(conn)
+        return customers_matching_phones(conn, phones)
 
 
 def search_customers(db_path: Path, query: str, limit: int = 2000) -> tuple[list[dict[str, str]], int]:

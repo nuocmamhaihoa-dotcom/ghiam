@@ -194,7 +194,7 @@
 
   <section>
     <h2>Tra cứu hàng loạt</h2>
-    <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. File chỉ lấy ô số điện thoại Việt Nam, không lấy UID Facebook. Chọn thêm file là cộng vào. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
+    <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. File chỉ lấy ô số điện thoại Việt Nam, không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
     <label for="lookupPaste">Danh sách số điện thoại</label>
     <textarea id="lookupPaste" placeholder="0901222333"></textarea>
     <p class="row" style="margin-top:0.7rem">
@@ -1151,6 +1151,7 @@
       return;
     }
     var shown = items.slice(0, 2000);
+    var queried = stats.queried || items.length;
     var html = "<table class='sheet'><colgroup><col class='col-query'><col class='col-flag'><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'><col class='col-id'><col class='col-id'></colgroup><thead><tr><th>Số tra cứu</th><th>Kho</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
     shown.forEach(function (item) {
       var customer = item.customer || {};
@@ -1160,8 +1161,10 @@
     document.getElementById("lookupPeople").innerHTML = html;
     padSpaces(document.getElementById("lookupPeople"));
     document.getElementById("lookupExport").hidden = false;
-    var note = "Đã đối chiếu " + (stats.queried || 0) + " số với kho.";
-    if (items.length > shown.length) note += " Đang hiện " + shown.length + "/" + items.length + ". Tải Excel để xem hết.";
+    var note = "Đã đối chiếu " + queried + " số với kho.";
+    if ((stats.hidden || 0) > 0 || items.length > shown.length) {
+      note += " Đang hiện " + shown.length + "/" + queried + ". Tải Excel để xem hết.";
+    }
     if (stats.truncated) note += " Danh sách quá dài, chỉ lấy phần đầu.";
     if (body.fileErrors && body.fileErrors.length) note += " File lỗi: " + body.fileErrors.join(" ");
     setNote("lookupNote", note, (body.fileErrors && body.fileErrors.length) || stats.missing ? "warn" : "ok");
@@ -1225,7 +1228,7 @@
           headers: { "Content-Type": "application/json" },
           body: lookupJsonBody(),
           tries: 4,
-          waitMs: 60 * 1000,
+          waitMs: 3 * 60 * 60 * 1000,
           onRetry: function (index, tries) {
             setNote("lookupNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
           }

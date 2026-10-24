@@ -31,7 +31,7 @@ from control_plane.customers import (
     collapse,
     fold_customers,
     ingest_customers,
-    lookup_by_phones,
+    lookup_by_phone_map,
     phones_from_text,
     public_customer,
     repair_customer_rows,
@@ -90,6 +90,7 @@ def _remember(summary: str, detail: str | None = None, at: str | None = None) ->
 
 
 LIST_LIMIT = 2000
+LOOKUP_RETURN_LIMIT = 2000
 
 
 def _mapped(spec: dict[str, Any]) -> bool:
@@ -104,7 +105,7 @@ def _is_upload(value: object) -> bool:
     )
 
 
-UPLOAD_CHUNK = 1024 * 1024
+UPLOAD_CHUNK = 4 * 1024 * 1024
 
 
 def _cleanup_uploads(files: list[tuple[str, Path]]) -> None:
@@ -696,17 +697,7 @@ def _lookup_payload(text: str, file_phones: list[str]) -> tuple[list[dict[str, A
     if not phones:
         raise HTTPException(status_code=400, detail="Không thấy số điện thoại nào trong danh sách.")
     by_phone = db.customers_for_phones(settings.db_path, phones)
-    stored: list[dict[str, Any]] = []
-    seen_ids: set[str] = set()
-    for rows in by_phone.values():
-        for row in rows:
-            customer_id = str(row.get("id") or "")
-            if customer_id and customer_id in seen_ids:
-                continue
-            if customer_id:
-                seen_ids.add(customer_id)
-            stored.append(row)
-    items, stats = lookup_by_phones(stored, phones)
+    items, stats = lookup_by_phone_map(by_phone, phones)
     stats.update(parsed)
     return items, stats
 
@@ -761,7 +752,11 @@ async def customers_lookup(
     _auth(authorization)
     db.init_db(settings.db_path)
     items, stats, file_reports = await _lookup_from_request(request)
-    return {"stats": stats, "files": file_reports, "fileErrors": stats.get("fileErrors") or [], "items": items}
+    shown = items[:LOOKUP_RETURN_LIMIT]
+    if len(items) > LOOKUP_RETURN_LIMIT:
+        stats["shown"] = LOOKUP_RETURN_LIMIT
+        stats["hidden"] = len(items) - LOOKUP_RETURN_LIMIT
+    return {"stats": stats, "files": file_reports, "fileErrors": stats.get("fileErrors") or [], "items": shown}
 
 
 def _unlink_temp(path: str) -> None:

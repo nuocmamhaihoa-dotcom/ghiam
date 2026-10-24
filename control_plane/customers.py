@@ -524,6 +524,7 @@ def ingest_customers(
     pending_phone: dict[str, str] = {}
     pending_deletes: list[str] = []
     preview: list[dict[str, Any]] = []
+    work: list[dict[str, Any]] = []
     flush_every = max(50, int(flush_every))
 
     def flush(conn: Any) -> None:
@@ -535,9 +536,49 @@ def ingest_customers(
         pending_phone.clear()
         pending_deletes.clear()
 
+    def apply_row(existing: list[dict[str, Any]], row: dict[str, Any]) -> None:
+        nonlocal created, updated, unchanged, absorbed
+        phone = str(row.get("phone") or "")
+        merged, extra_ids, kind = merge_existing_with_incoming(existing, row, now)
+        for extra_id in extra_ids:
+            pending.pop(extra_id, None)
+            pending_deletes.append(extra_id)
+            absorbed += 1
+        pending[merged["id"]] = merged
+        for key in phone_lookup_keys(merged.get("phone") or phone) or [phone]:
+            pending_phone[key] = merged["id"]
+        if kind == "created":
+            created += 1
+        elif kind == "updated":
+            updated += 1
+        else:
+            unchanged += 1
+        if merged.get("write") and len(preview) < 200:
+            preview.append(merged)
+
+    def process_work(conn: Any) -> None:
+        if not work:
+            return
+        loaded = db.customers_matching_phones(conn, [str(row.get("phone") or "") for row in work])
+        for row in work:
+            phone = str(row.get("phone") or "")
+            pending_id = ""
+            for key in phone_lookup_keys(phone) or [phone]:
+                pending_id = pending_phone.get(key) or ""
+                if pending_id:
+                    break
+            if pending_id and pending_id in pending:
+                existing = [pending[pending_id]]
+            else:
+                existing = loaded.get(phone) or []
+            apply_row(existing, row)
+        work.clear()
+        flush(conn)
+
     db.init_db(db_path)
     conn = db.connect(db_path)
     try:
+        db.apply_heavy_pragmas(conn)
         for raw in incoming:
             incoming_count += 1
             row = clean_row(raw)
@@ -556,34 +597,10 @@ def ingest_customers(
                 continue
             row["phone"] = phone
             kept += 1
-            pending_id = ""
-            for key in phone_lookup_keys(phone) or [phone]:
-                pending_id = pending_phone.get(key) or ""
-                if pending_id:
-                    break
-            if pending_id and pending_id in pending:
-                existing = [pending[pending_id]]
-            else:
-                existing = db.customers_by_phone(conn, phone)
-            merged, extra_ids, kind = merge_existing_with_incoming(existing, row, now)
-            for extra_id in extra_ids:
-                pending.pop(extra_id, None)
-                pending_deletes.append(extra_id)
-                absorbed += 1
-            pending[merged["id"]] = merged
-            for key in phone_lookup_keys(merged.get("phone") or phone) or [phone]:
-                pending_phone[key] = merged["id"]
-            if kind == "created":
-                created += 1
-            elif kind == "updated":
-                updated += 1
-            else:
-                unchanged += 1
-            if merged.get("write") and len(preview) < 200:
-                preview.append(merged)
-            if len(pending) >= flush_every:
-                flush(conn)
-        flush(conn)
+            work.append(row)
+            if len(work) >= flush_every:
+                process_work(conn)
+        process_work(conn)
         total = int(conn.execute("SELECT COUNT(*) AS n FROM customers").fetchone()["n"])
     finally:
         conn.close()
@@ -640,11 +657,14 @@ def phones_from_text(text: str, limit: int = MAX_LOOKUP) -> tuple[list[str], dic
         whole = extract_phone(stripped) or clean_phone(stripped)
         if whole and not is_facebook_id_digits(whole):
             found.append(whole)
-        for piece in _SPLIT_FIELDS.split(stripped):
-            for token in piece.split():
-                phone = extract_phone(token) or clean_phone(token)
-                if phone and not is_facebook_id_digits(phone) and phone not in found:
-                    found.append(phone)
+        if whole and not _SPLIT_FIELDS.search(stripped) and " " not in stripped:
+            pass
+        else:
+            for piece in _SPLIT_FIELDS.split(stripped):
+                for token in piece.split():
+                    phone = extract_phone(token) or clean_phone(token)
+                    if phone and not is_facebook_id_digits(phone) and phone not in found:
+                        found.append(phone)
         if not found:
             invalid += 1
             continue
@@ -704,6 +724,38 @@ def lookup_by_phones(
         found += 1
         for customer in matches:
             items.append({"query": phone, "found": True, "customer": customer})
+    return items, {
+        "queried": len(phones),
+        "found": found,
+        "missing": missing,
+        "hits": found,
+    }
+
+
+def lookup_by_phone_map(
+    by_phone: dict[str, list[dict[str, Any]]],
+    phones: list[str],
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Ghép kết quả tra cứu đã lấy từ SQLite, không lập chỉ mục lại."""
+    items: list[dict[str, Any]] = []
+    found = 0
+    missing = 0
+    for phone in phones:
+        matches = by_phone.get(phone) or []
+        if not matches:
+            missing += 1
+            items.append({"query": phone, "found": False, "customer": None})
+            continue
+        found += 1
+        seen_ids: set[str] = set()
+        for row in matches:
+            public = public_customer(row)
+            customer_id = str(public.get("id") or "")
+            if customer_id and customer_id in seen_ids:
+                continue
+            if customer_id:
+                seen_ids.add(customer_id)
+            items.append({"query": phone, "found": True, "customer": public})
     return items, {
         "queried": len(phones),
         "found": found,
@@ -788,6 +840,8 @@ def _dump_lines(address: str) -> list[str]:
 def repair_customer_row(row: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     """Đưa tên, SĐT, UID Facebook ra đúng cột; bỏ giới tính/ngày/link khỏi địa chỉ."""
     current = {field: str(row.get(field) or "") for field in FIELDS}
+    if not current["address"] and not is_gender_value(current["name"]):
+        return dict(row), False
     lines = _dump_lines(current["address"])
     if not _is_facebook_dump(current["name"], lines):
         return dict(row), False

@@ -41,12 +41,14 @@ from control_plane.customers import (
 from control_plane.vietnam_places import fold_vietnamese
 
 TableSource = bytes | bytearray | os.PathLike[str] | str
-IMPORT_BATCH = 2500
+IMPORT_BATCH = 10000
 SHARED_SPILL = 150_000
 SAMPLE_ROWS = 8
 DETECT_ROWS = 200
 PREVIEW_STORE = SAMPLE_ROWS + DETECT_ROWS + 1
 _COL_REF = re.compile(r"^([A-Z]+)(\d+)$")
+_XLSX_DIMENSION = re.compile(rb'dimension[^>]*ref="[A-Z]+(\d+):[A-Z]+(\d+)"', re.I)
+_ROW_END = b"</row>"
 EXCEL_SHEET_ROWS = 1_000_000
 
 FIELD_LABELS = {
@@ -615,9 +617,69 @@ def read_table(filename: str, data: TableSource, max_store: int | None = None) -
     return rows
 
 
+def _xlsx_dimension_last_row(archive: zipfile.ZipFile, path: str) -> int | None:
+    try:
+        with archive.open(path) as handle:
+            head = handle.read(16384)
+    except (KeyError, OSError):
+        return None
+    match = _XLSX_DIMENSION.search(head)
+    if not match:
+        return None
+    try:
+        return int(match.group(2))
+    except (TypeError, ValueError):
+        return None
+
+
+def _count_end_row_tags(archive: zipfile.ZipFile, path: str) -> int:
+    count = 0
+    leftover = b""
+    try:
+        with archive.open(path) as handle:
+            while True:
+                chunk = handle.read(1 << 20)
+                if not chunk:
+                    break
+                data = leftover + chunk
+                count += data.count(_ROW_END)
+                leftover = data[1 - len(_ROW_END) :]
+    except (KeyError, OSError):
+        return count
+    return count
+
+
+def _xlsx_row_count_fast(data: TableSource) -> int | None:
+    archive = None
+    try:
+        archive = _open_xlsx(data)
+        paths = _sheet_paths(archive)
+        if not paths:
+            return 0
+        if len(paths) == 1:
+            last = _xlsx_dimension_last_row(archive, paths[0])
+            if last:
+                return last
+        return sum(_count_end_row_tags(archive, path) for path in paths)
+    except (zipfile.BadZipFile, KeyError, OSError):
+        return None
+    finally:
+        if archive is not None:
+            archive.close()
+
+
 def _read_table(filename: str, data: TableSource, max_store: int | None = None) -> tuple[list[list[str]], int]:
     try:
+        name = (filename or "").casefold()
+        xlsx = name.endswith(".xlsx") or name.endswith(".xlsm") or (not name.endswith((".csv", ".tsv", ".txt")) and _is_zip_bytes(data))
         rows: list[list[str]] = []
+        if max_store is not None and xlsx:
+            for row in iter_raw_rows(filename, data):
+                rows.append(row)
+                if len(rows) >= max_store:
+                    counted = _xlsx_row_count_fast(data)
+                    return rows, max(counted, len(rows)) if counted else len(rows)
+            return rows, len(rows)
         total = 0
         for row in iter_raw_rows(filename, data):
             total += 1
@@ -790,9 +852,13 @@ def _read_first_xlsx_sheet(data: TableSource, max_store: int | None = None) -> t
         with archive.open(paths[0]) as handle:
             for row in _iter_sheet_rows(handle, shared):
                 total += 1
-                if max_store is None or len(rows) < max_store:
-                    rows.append(row)
-        return rows, total
+                rows.append(row)
+                if max_store is not None and len(rows) >= max_store:
+                    break
+            else:
+                return rows, total
+        counted = _xlsx_dimension_last_row(archive, paths[0]) or _count_end_row_tags(archive, paths[0])
+        return rows, max(counted, len(rows))
     except (zipfile.BadZipFile, KeyError, ET.ParseError, OSError):
         return _read_xlsx(data, max_store=max_store)
     finally:
@@ -1441,17 +1507,61 @@ def write_xlsx_to_path(
     return dest
 
 
+def _best_phone_column(sample: list[list[str]]) -> int | None:
+    if not sample:
+        return None
+    body = sample
+    first = sample[0]
+    if looks_like_label_row(first):
+        for index, header in enumerate(first):
+            if header_field(header) == "phone":
+                return index
+        body = sample[1:]
+    width = max((len(row) for row in sample), default=0)
+    if not width:
+        return None
+    scores = [0] * width
+    for row in body:
+        for index in range(min(width, len(row))):
+            cell = row[index]
+            if looks_like_vn_phone(cell) or extract_phone(cell):
+                scores[index] += 1
+    best = max(range(width), key=lambda index: scores[index])
+    if scores[best] <= 0:
+        return None
+    return best
+
+
+def _phones_from_row(row: list[str], phone_index: int | None) -> list[str]:
+    if phone_index is not None and phone_index < len(row):
+        phone = phone_from_cell(row[phone_index])
+        if phone:
+            return [phone]
+    found: list[str] = []
+    for cell in row:
+        phone = phone_from_cell(cell)
+        if phone:
+            found.append(phone)
+    return found
+
+
 def phones_from_files(files: Iterable[tuple[str, TableSource]]) -> tuple[list[str], list[dict[str, Any]]]:
     phones: list[str] = []
     reports: list[dict[str, Any]] = []
     for filename, data in files:
         found: list[str] = []
         try:
-            for row in iter_raw_rows(filename, data):
-                for cell in row:
-                    phone = phone_from_cell(cell)
-                    if phone:
-                        found.append(phone)
+            stream = iter_raw_rows(filename, data)
+            sample: list[list[str]] = []
+            for index, row in enumerate(stream):
+                sample.append(row)
+                if index + 1 >= DETECT_ROWS:
+                    break
+            phone_index = _best_phone_column(sample)
+            for row in sample:
+                found.extend(_phones_from_row(row, phone_index))
+            for row in stream:
+                found.extend(_phones_from_row(row, phone_index))
         except ValueError as exc:
             reports.append({"name": filename, "phones": 0, "error": str(exc)})
             continue

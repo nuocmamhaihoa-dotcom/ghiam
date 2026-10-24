@@ -113,6 +113,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("Số 84", home.text)
         self.assertIn("không lấy UID Facebook", home.text)
         self.assertIn("không bắt buộc chọn file", home.text)
+        self.assertIn("Tra theo lô số", home.text)
         self.assertIn("lookupError", home.text)
         self.assertIn("không cần chọn file", home.text)
         self.assertIn("lookupJsonBody", home.text)
@@ -573,6 +574,26 @@ class CustomerApiTests(unittest.TestCase):
         )
         self.assertEqual(exported.status_code, 200)
         self.assertIn("spreadsheetml", exported.headers["content-type"])
+
+        from control_plane import customer_api as api
+
+        previous_limit = api.LOOKUP_RETURN_LIMIT
+        api.LOOKUP_RETURN_LIMIT = 1
+        try:
+            capped = self.client.post(
+                "/v1/customers/lookup",
+                headers=self.headers,
+                json={"text": "0375866792\n0901222333\n0985098234"},
+            )
+        finally:
+            api.LOOKUP_RETURN_LIMIT = previous_limit
+        self.assertEqual(capped.status_code, 200, capped.text)
+        capped_body = capped.json()
+        self.assertEqual(capped_body["stats"]["queried"], 3)
+        self.assertEqual(capped_body["stats"]["found"], 2)
+        self.assertEqual(len(capped_body["items"]), 1)
+        self.assertEqual(capped_body["stats"]["shown"], 1)
+        self.assertEqual(capped_body["stats"]["hidden"], 2)
 
     def test_preview_and_import_many_files(self) -> None:
         files = [
