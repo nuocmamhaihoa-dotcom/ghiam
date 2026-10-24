@@ -192,7 +192,7 @@
 
   <section>
     <h2>Tra cứu hàng loạt</h2>
-    <p class="note">Dán list số điện thoại, hoặc chọn file danh sách. Số 84, 0 hoặc thiếu số 0 vẫn khớp. File chỉ lấy ô số điện thoại Việt Nam, không lấy UID Facebook. Chọn thêm file là cộng vào. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
+    <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. File chỉ lấy ô số điện thoại Việt Nam, không lấy UID Facebook. Chọn thêm file là cộng vào. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
     <label for="lookupPaste">Danh sách số điện thoại</label>
     <textarea id="lookupPaste" placeholder="0901222333"></textarea>
     <p class="row" style="margin-top:0.7rem">
@@ -258,6 +258,14 @@
       return "Gửi file quá lâu nên đã dừng. Giữ trang mở rồi thử lại.";
     }
     return "Không gửi được file. Máy chủ bị ngắt khi đọc file lớn — giữ trang mở rồi thử lại.";
+  }
+
+  function lookupError(error) {
+    var name = error && error.name;
+    if (name === "AbortError") {
+      return "Tra cứu quá lâu. Tải lại trang rồi bấm Tra cứu lại.";
+    }
+    return "Máy chủ vừa bận hoặc bị ngắt. Tải lại trang, rồi bấm Tra cứu lại — không cần chọn file.";
   }
 
   function fillWordWrap(wrap, text) {
@@ -356,6 +364,7 @@
     return new Promise(function (resolve, reject) {
       var xhr = new XMLHttpRequest();
       xhr.open("POST", url);
+      xhr.responseType = "blob";
       Object.keys(headers || {}).forEach(function (key) {
         xhr.setRequestHeader(key, headers[key]);
       });
@@ -367,12 +376,19 @@
         };
       }
       xhr.onload = function () {
+        var blob = xhr.response || new Blob();
         resolve({
           ok: xhr.status >= 200 && xhr.status < 300,
           status: xhr.status,
+          blob: function () { return Promise.resolve(blob); },
+          arrayBuffer: function () {
+            return blob.arrayBuffer ? blob.arrayBuffer() : new Response(blob).arrayBuffer();
+          },
           json: function () {
-            try { return Promise.resolve(JSON.parse(xhr.responseText || "{}")); }
-            catch (error) { return Promise.resolve({}); }
+            return blob.text().then(function (text) {
+              try { return JSON.parse(text || "{}"); }
+              catch (error) { return {}; }
+            });
           }
         });
       };
@@ -391,14 +407,14 @@
     if (token()) headers.Authorization = "Bearer " + token();
     var url = apiUrl(path);
     var upload = !!(options && (options.body || options.makeBody));
-    var tries = upload ? 2 : 2;
+    var tries = (options && options.tries) || 2;
     var lastError = null;
     var index = 0;
     while (index < tries) {
       index += 1;
       if (index > 1 && options && options.onRetry) options.onRetry(index, tries);
       var body = options && options.makeBody ? options.makeBody() : (options && options.body);
-      var waitMs = upload ? 3 * 60 * 60 * 1000 : 60 * 1000;
+      var waitMs = (options && options.waitMs) || (upload ? 3 * 60 * 60 * 1000 : 60 * 1000);
       try {
         var response;
         if (upload && typeof FormData !== "undefined" && body instanceof FormData) {
@@ -1167,6 +1183,10 @@
     });
   }
 
+  function lookupJsonBody() {
+    return JSON.stringify({ text: document.getElementById("lookupPaste").value || "" });
+  }
+
   async function runLookup() {
     var text = (document.getElementById("lookupPaste").value || "").trim();
     if (!text && !lookupFiles.length) {
@@ -1176,13 +1196,25 @@
     document.getElementById("lookupGo").disabled = true;
     setNote("lookupNote", "Đang tra cứu trong kho…");
     try {
-      var response = await api("/v1/customers/lookup", {
-        method: "POST",
-        makeBody: lookupForm,
-        onRetry: function (index, tries) {
-          setNote("lookupNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
-        }
-      });
+      var response = lookupFiles.length
+        ? await api("/v1/customers/lookup", {
+          method: "POST",
+          makeBody: lookupForm,
+          tries: 3,
+          onRetry: function (index, tries) {
+            setNote("lookupNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
+          }
+        })
+        : await api("/v1/customers/lookup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: lookupJsonBody(),
+          tries: 4,
+          waitMs: 60 * 1000,
+          onRetry: function (index, tries) {
+            setNote("lookupNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
+          }
+        });
       var body = await response.json().catch(function () { return {}; });
       if (!response.ok) {
         setNote("lookupNote", body.detail || "Không tra cứu được.", "warn");
@@ -1190,7 +1222,7 @@
       }
       renderLookup(body);
     } catch (error) {
-      setNote("lookupNote", networkMessage(error), "warn");
+      setNote("lookupNote", lookupError(error), "warn");
     } finally {
       document.getElementById("lookupGo").disabled = false;
     }
@@ -1202,12 +1234,20 @@
       return;
     }
     try {
-      var response = await api("/v1/customers/lookup/export", { method: "POST", body: lookupForm() });
+      var response = lookupFiles.length
+        ? await api("/v1/customers/lookup/export", { method: "POST", makeBody: lookupForm, tries: 3 })
+        : await api("/v1/customers/lookup/export", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: lookupJsonBody(),
+          tries: 4,
+          waitMs: 60 * 1000
+        });
       if (!response.ok) {
         setNote("lookupNote", "Không tải được kết quả Excel.", "warn");
         return;
       }
-      var blob = await response.blob();
+      var blob = response.blob ? await response.blob() : new Blob([await response.arrayBuffer()]);
       var url = URL.createObjectURL(blob);
       var link = document.createElement("a");
       link.href = url;

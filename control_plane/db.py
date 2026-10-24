@@ -121,9 +121,11 @@ def init_db(db_path: Path) -> None:
             CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
             CREATE INDEX IF NOT EXISTS idx_customers_facebook ON customers(facebook_uid);
             CREATE INDEX IF NOT EXISTS idx_customers_tiktok ON customers(tiktok_id);
+            CREATE INDEX IF NOT EXISTS idx_customers_created ON customers(created_at);
             """
         )
         _ensure_customer_columns(conn)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_created ON customers(created_at)")
         conn.commit()
 
 

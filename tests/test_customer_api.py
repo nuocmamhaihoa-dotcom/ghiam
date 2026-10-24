@@ -103,6 +103,10 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("một khách cho mỗi số điện thoại", home.text)
         self.assertIn("Số 84", home.text)
         self.assertIn("không lấy UID Facebook", home.text)
+        self.assertIn("không bắt buộc chọn file", home.text)
+        self.assertIn("lookupError", home.text)
+        self.assertIn("không cần chọn file", home.text)
+        self.assertIn("lookupJsonBody", home.text)
         self.assertIn("map-card", home.text)
         self.assertNotIn("data-label", home.text)
         self.assertNotIn("#people thead", home.text)
@@ -485,6 +489,59 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(by_country.status_code, 200, by_country.text)
         self.assertEqual(by_country.json()["stats"]["found"], 1)
         self.assertEqual(by_country.json()["items"][0]["customer"]["name"], "Lan")
+
+        db.replace_customers(
+            settings.db_path,
+            [
+                {
+                    "id": "c1",
+                    "name": "Lan",
+                    "phone": "0901222333",
+                    "address": "Huế",
+                    "facebookUid": "10001",
+                    "tiktokId": "lan.hue",
+                    "createdAt": "2026-01-01T00:00:00+00:00",
+                    "updatedAt": "2026-01-01T00:00:00+00:00",
+                },
+                {
+                    "id": "c2",
+                    "name": "Minh",
+                    "phone": "0375866792",
+                    "address": "Đà Nẵng",
+                    "facebookUid": "",
+                    "tiktokId": "",
+                    "createdAt": "2026-01-01T00:00:00+00:00",
+                    "updatedAt": "2026-01-01T00:00:00+00:00",
+                },
+            ],
+            [],
+        )
+        by_json = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            json={"text": "0375866792\n0901222333\n0985098234"},
+        )
+        self.assertEqual(by_json.status_code, 200, by_json.text)
+        json_body = by_json.json()
+        self.assertEqual(json_body["stats"]["found"], 2)
+        self.assertEqual(json_body["stats"]["missing"], 1)
+        self.assertNotIn("total", json_body["stats"])
+        self.assertEqual(json_body["items"][0]["customer"]["name"], "Minh")
+        broken = self.client.post(
+            "/v1/customers/lookup",
+            headers={**self.headers, "Content-Type": "application/json"},
+            content=b"{not-json",
+        )
+        self.assertEqual(broken.status_code, 400, broken.text)
+        self.assertIn("không đọc được", broken.json()["detail"])
+
+        exported_json = self.client.post(
+            "/v1/customers/lookup/export",
+            headers=self.headers,
+            json={"text": "0375866792"},
+        )
+        self.assertEqual(exported_json.status_code, 200)
+        self.assertIn("spreadsheetml", exported_json.headers["content-type"])
 
         name, file_body = self._xlsx("so.xlsx", ["SĐT"], [["0901222333"], ["0901777666"]])
         from_file = self.client.post(

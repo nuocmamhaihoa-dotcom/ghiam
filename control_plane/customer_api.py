@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import hmac
 import json
 import re
@@ -211,7 +212,7 @@ def _import_sessions() -> dict[str, Any]:
         stamp = str(payload.get("importedAt") or "") or at
         moment = _parse_iso(stamp)
         kept = 0
-        if moment is not None:
+        if created >= 1000 and moment is not None:
             if payload.get("importedAt"):
                 kept = db.customers_created_between(settings.db_path, stamp, stamp)
             else:
@@ -632,6 +633,7 @@ def _import_uploaded(
         ),
         at=now,
     )
+    gc.collect()
     return {
         "stats": stats,
         "files": file_reports,
@@ -695,7 +697,6 @@ def _lookup_payload(text: str, file_phones: list[str]) -> tuple[list[dict[str, A
             stored.append(row)
     items, stats = lookup_by_phones(stored, phones)
     stats.update(parsed)
-    stats["total"] = db.customer_count(settings.db_path)
     return items, stats
 
 
@@ -715,10 +716,28 @@ def _lookup_uploaded(
 
 
 async def _lookup_from_request(request: Request) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "application/json" in content_type:
+        try:
+            payload = await request.json()
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="Danh sách số không đọc được.") from exc
+        text = str((payload or {}).get("text") or "") if isinstance(payload, dict) else ""
+        return await run_in_threadpool(_lookup_uploaded, [], text, [])
+    if "application/x-www-form-urlencoded" in content_type:
+        form = await request.form()
+        try:
+            text = str(form.get("text") or "")
+        finally:
+            await form.close()
+        return await run_in_threadpool(_lookup_uploaded, [], text, [])
     uploaded, fields, problems = await _read_customer_form(request)
     try:
-        async with _heavy_lock:
-            return await run_in_threadpool(_lookup_uploaded, uploaded, fields.get("text") or "", problems)
+        text = fields.get("text") or ""
+        if uploaded:
+            async with _heavy_lock:
+                return await run_in_threadpool(_lookup_uploaded, uploaded, text, problems)
+        return await run_in_threadpool(_lookup_uploaded, [], text, problems)
     finally:
         _cleanup_uploads(uploaded)
 
