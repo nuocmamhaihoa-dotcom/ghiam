@@ -618,7 +618,7 @@ class IngestFastPathTests(unittest.TestCase):
             found = db.customers_for_phones(path, ["0901222333"])["0901222333"]
         self.assertEqual(len(found), 1)
         self.assertEqual(found[0]["name"], "Lan")
-        self.assertEqual(found[0]["address"], "Huế\nĐà Nẵng")
+        self.assertEqual(found[0]["address"], "Đà Nẵng")
 
 
 if __name__ == "__main__":

@@ -1407,7 +1407,7 @@ class CustomerApiTests(unittest.TestCase):
         items = {item["phone"]: item for item in listed.json()["items"]}
         self.assertEqual(set(items), {"0901111111", "0902222222", "0903333333"})
         self.assertEqual(items["0901111111"]["name"], "Lan")
-        self.assertEqual(items["0901111111"]["address"], "Huế\nĐà Nẵng")
+        self.assertEqual(items["0901111111"]["address"], "Đà Nẵng")
         self.assertEqual(items["0902222222"]["name"], "Minh")
         self.assertEqual(items["0903333333"]["name"], "Hoa")
         again = self.client.post(
@@ -1486,7 +1486,7 @@ class CustomerApiTests(unittest.TestCase):
             set(items),
             {"0901111111", "0902222222", "0903333333", "0901444444", "0901555555"},
         )
-        self.assertEqual(items["0901111111"]["address"], "Huế\nHuế 2")
+        self.assertEqual(items["0901111111"]["address"], "Huế 2")
         again = self.client.post(
             "/v1/customers/import",
             headers=self.headers,

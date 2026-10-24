@@ -1,4 +1,7 @@
-"""Kho khách: chuẩn hoá, nhận diện trùng, bổ sung ô trống, không ghi đè ô đã có."""
+"""Kho khách: chuẩn hoá, nhận diện trùng, bổ sung ô trống.
+
+Địa chỉ mới thay địa chỉ cũ. Ô khác đã có thì giữ, ô trống thì điền thêm.
+"""
 
 from __future__ import annotations
 
@@ -344,6 +347,14 @@ def compose_address(parts: list[tuple[int, str, str]]) -> str:
     return ", ".join(item[3] for item in ordered)
 
 
+def arranged_address(value: str) -> str:
+    """Xếp một địa chỉ từ số nhà đến tỉnh. Rỗng nếu không còn mảnh dùng được."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return compose_address([(0, "", text)])
+
+
 def address_key(value: str) -> str:
     return " | ".join(line.casefold() for line in split_address_lines(value))
 
@@ -530,6 +541,16 @@ class _UnionFind:
 
 
 def _pick(members: list[dict[str, Any]], field: str) -> str:
+    if field == "address":
+        incoming = [str(row.get(field) or "") for row in members if not row["existing"] and row.get(field)]
+        for text in reversed(incoming):
+            arranged = arranged_address(text)
+            if arranged:
+                return arranged
+        existing = [str(row.get(field) or "") for row in members if row["existing"] and row.get(field)]
+        if len(existing) <= 1:
+            return existing[0] if existing else ""
+        return compose_address([(index, "", text) for index, text in enumerate(existing)]) or existing[0]
     if field in LINE_FIELDS:
         existing = [str(row.get(field) or "") for row in members if row["existing"] and row.get(field)]
         incoming = [str(row.get(field) or "") for row in members if not row["existing"] and row.get(field)]
@@ -576,8 +597,9 @@ def fold_customers(
 ) -> tuple[list[dict[str, Any]], dict[str, int], list[str]]:
     """Ghép khách mới vào kho khi trùng số điện thoại.
 
-    Một số điện thoại là một hàng. Ô trống được bổ sung; địa chỉ / hàng mua /
-    địa chỉ hành chính mới thêm dòng; ô đã có mà không đổi thì giữ nguyên.
+    Một số điện thoại là một hàng. Ô trống được bổ sung. Địa chỉ mới thay
+    địa chỉ cũ; ô địa chỉ trống thì giữ địa chỉ đang có. Hàng mua và địa chỉ
+    hành chính mới thêm dòng. Ô đã có mà không đổi thì giữ nguyên.
     Không có số điện thoại thì bỏ qua, không lưu.
     """
     kept_incoming: list[dict[str, Any]] = []
@@ -653,7 +675,11 @@ def _merge_one(
     incoming: dict[str, str],
     now: str,
 ) -> tuple[dict[str, Any], list[str], str]:
-    """Một khách sẵn có + một dòng đã làm sạch: ô trống điền thêm, dòng địa chỉ mới nối thêm, ô có rồi giữ."""
+    """Một khách sẵn có + một dòng đã làm sạch.
+
+    Ô trống điền thêm. Địa chỉ mới thay địa chỉ cũ. Hàng mua và địa chỉ
+    hành chính mới nối thêm dòng. Ô đã có mà không đổi thì giữ.
+    """
     merged: dict[str, Any] = {
         "id": str(current.get("id") or "") or _new_id(),
         "createdAt": str(current.get("createdAt") or "") or now,
@@ -663,6 +689,13 @@ def _merge_one(
     for field in FIELDS:
         value = str(current.get(field) or "")
         new = incoming.get(field) or ""
+        if field == "address":
+            arranged = arranged_address(new) if new else ""
+            if arranged and arranged != value:
+                value = arranged
+                changed = True
+            merged[field] = value
+            continue
         if new and new != value:
             if field in LINE_FIELDS:
                 joined = join_address_lines(value, new) if value else new
@@ -688,7 +721,7 @@ def merge_existing_with_incoming(
 ) -> tuple[dict[str, Any], list[str], str]:
     """Ghép một dòng file vào các khách cùng SĐT.
 
-    Ô trống điền thêm, dòng địa chỉ mới bổ sung, ô đã có không đổi thì giữ.
+    Ô trống điền thêm. Địa chỉ mới thay địa chỉ cũ. Ô đã có không đổi thì giữ.
     """
     cleaned = incoming if incoming_clean else clean_row(incoming)
     if len(existing) == 1:
@@ -697,6 +730,9 @@ def merge_existing_with_incoming(
         created = {"id": _new_id(), "createdAt": now, "updatedAt": now}
         for field in FIELDS:
             created[field] = cleaned.get(field) or ""
+        arranged = arranged_address(created["address"])
+        if arranged:
+            created["address"] = arranged
         created["write"] = True
         return created, [], "created"
     incoming_row = _as_customer(cleaned, False)
@@ -1213,6 +1249,46 @@ def repair_stored_customers(db_path: Any) -> int:
     if dirty:
         db.replace_customers(db_path, dirty, [])
     return fixed_count
+
+
+def rewrite_stored_addresses(db_path: Any, now: str, batch: int = 2000) -> dict[str, int]:
+    """Xếp lại địa chỉ đang lưu: số nhà, thôn, xã, huyện, tỉnh.
+
+    Chỉ cập nhật ô địa chỉ khi chữ thay đổi. Không xóa khách, không đổi SĐT,
+    tên, địa chỉ hành chính, hàng mua hay COD.
+    """
+    conn = db.connect(db_path)
+    seen = 0
+    changed = 0
+    try:
+        conn.execute("PRAGMA busy_timeout=60000;")
+        top = int(conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM customers").fetchone()[0] or 0)
+        start = 0
+        size = max(200, int(batch))
+        while start < top:
+            rows = conn.execute(
+                "SELECT id, address FROM customers WHERE rowid > ? AND rowid <= ?",
+                (start, start + size),
+            ).fetchall()
+            updates: list[tuple[str, str, str, str]] = []
+            for row in rows:
+                seen += 1
+                current = str(row["address"] or "")
+                arranged = arranged_address(current)
+                if arranged and arranged != current:
+                    updates.append((arranged, now, str(row["id"]), current))
+            if updates:
+                before = conn.total_changes
+                conn.executemany(
+                    "UPDATE customers SET address=?, updated_at=? WHERE id=? AND address=?",
+                    updates,
+                )
+                changed += conn.total_changes - before
+            conn.commit()
+            start += size
+    finally:
+        conn.close()
+    return {"seen": seen, "changed": changed, "unchanged": seen - changed}
 
 
 def matches_query(row: dict[str, Any], query: str) -> bool:
