@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import json
 import sys
@@ -13,6 +14,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import Response
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartException
 
@@ -44,6 +46,7 @@ from control_plane.excel_import import (
 from control_plane.settings import settings
 
 router = APIRouter()
+_heavy_lock = asyncio.Lock()
 
 
 def _bearer_matches(authorization: str, token: str) -> bool:
@@ -132,39 +135,45 @@ async def _spool_upload(value: Any) -> Path:
 
 async def _read_customer_form(request: Request) -> tuple[list[tuple[str, Path]], dict[str, str], list[str]]:
     max_part = settings.upload_limit_bytes()
+    settings.ensure_dirs()
+    previous_tempdir = tempfile.tempdir
+    tempfile.tempdir = str(settings.tmp_dir())
     try:
-        form = await request.form(
-            max_files=float("inf"),
-            max_fields=float("inf"),
-            max_part_size=max_part if max_part is not None else sys.maxsize,
-        )
-    except MultiPartException as exc:
-        raise HTTPException(
-            status_code=400,
-            detail="Không đọc được file tải lên. Không giới hạn số file và dung lượng; hãy thử lại hoặc gửi tiếp các file còn lại.",
-        ) from exc
-    files: list[tuple[str, Path]] = []
-    fields: dict[str, str] = {}
-    problems: list[str] = []
-    try:
-        for key, value in form.multi_items():
-            if _is_upload(value):
-                name = str(getattr(value, "filename", None) or "khach.xlsx")
-                path = await _spool_upload(value)
-                if path.stat().st_size == 0:
-                    path.unlink(missing_ok=True)
-                    problems.append(f"{name} đang trống.")
+        try:
+            form = await request.form(
+                max_files=float("inf"),
+                max_fields=float("inf"),
+                max_part_size=max_part if max_part is not None else sys.maxsize,
+            )
+        except MultiPartException as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Không đọc được file tải lên. Không giới hạn số file và dung lượng; hãy thử lại hoặc gửi tiếp các file còn lại.",
+            ) from exc
+        files: list[tuple[str, Path]] = []
+        fields: dict[str, str] = {}
+        problems: list[str] = []
+        try:
+            for key, value in form.multi_items():
+                if _is_upload(value):
+                    name = str(getattr(value, "filename", None) or "khach.xlsx")
+                    path = await _spool_upload(value)
+                    if path.stat().st_size == 0:
+                        path.unlink(missing_ok=True)
+                        problems.append(f"{name} đang trống.")
+                        continue
+                    files.append((name, path))
                     continue
-                files.append((name, path))
-                continue
-            if key not in fields:
-                fields[key] = str(value or "")
-    except Exception:
-        _cleanup_uploads(files)
-        raise
+                if key not in fields:
+                    fields[key] = str(value or "")
+        except Exception:
+            _cleanup_uploads(files)
+            raise
+        finally:
+            await form.close()
+        return files, fields, problems
     finally:
-        await form.close()
-    return files, fields, problems
+        tempfile.tempdir = previous_tempdir
 
 
 def _blank_import_stats() -> dict[str, int]:
@@ -241,6 +250,59 @@ def customers_list(
     }
 
 
+def _preview_uploaded(
+    uploaded: list[tuple[str, Path]],
+    problems: list[str],
+) -> dict[str, Any]:
+    if not uploaded:
+        raise HTTPException(
+            status_code=400,
+            detail="Hãy chọn ít nhất một file Excel." + ((" " + " ".join(problems)) if problems else ""),
+        )
+    previews: list[dict[str, Any]] = []
+    for name, payload in uploaded:
+        try:
+            previews.append(preview_table(name, payload))
+        except ValueError as exc:
+            problems.append(f"{name}: {exc}")
+    if not previews:
+        raise HTTPException(status_code=400, detail="Không đọc được file nào. " + " ".join(problems))
+    first = previews[0]
+    columns = merge_preview_columns(previews)
+    different = [
+        item["name"]
+        for item in previews[1:]
+        if item["headers"] != first["headers"]
+    ]
+    headers = [str(column.get("header") or "") for column in columns]
+    values = _column_values_from_previews(columns, previews)
+    suggested, details = assign_fields(headers, values)
+    payload = dict(suggested)
+    for field in LINE_FIELDS:
+        indexes = (details.get(field) or {}).get("indexes") or []
+        if indexes:
+            payload[f"{field}Columns"] = indexes
+    return {
+        "files": [
+            {
+                "name": item["name"],
+                "columns": item["columns"],
+                "samples": item["samples"],
+                "rowCount": item["rowCount"],
+                "truncated": item["truncated"],
+            }
+            for item in previews
+        ],
+        "fileErrors": problems,
+        "columns": columns,
+        "suggested": payload,
+        "detectNote": explain_mapping(details, headers),
+        "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
+        "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này. Không giới hạn số file và dung lượng. File nằm trên đĩa khi đọc, không nhét cả file vào bộ nhớ. Cột không trùng tên kho thì bỏ qua, không đoán nội dung ô.",
+        "headerMismatch": different,
+    }
+
+
 @router.post("/v1/customers/preview")
 async def customers_preview(
     request: Request,
@@ -249,53 +311,8 @@ async def customers_preview(
     _auth(authorization)
     uploaded, _fields, problems = await _read_customer_form(request)
     try:
-        if not uploaded:
-            raise HTTPException(
-                status_code=400,
-                detail="Hãy chọn ít nhất một file Excel." + ((" " + " ".join(problems)) if problems else ""),
-            )
-        previews: list[dict[str, Any]] = []
-        for name, payload in uploaded:
-            try:
-                previews.append(preview_table(name, payload))
-            except ValueError as exc:
-                problems.append(f"{name}: {exc}")
-        if not previews:
-            raise HTTPException(status_code=400, detail="Không đọc được file nào. " + " ".join(problems))
-        first = previews[0]
-        columns = merge_preview_columns(previews)
-        different = [
-            item["name"]
-            for item in previews[1:]
-            if item["headers"] != first["headers"]
-        ]
-        headers = [str(column.get("header") or "") for column in columns]
-        values = _column_values_from_previews(columns, previews)
-        suggested, details = assign_fields(headers, values)
-        payload = dict(suggested)
-        for field in LINE_FIELDS:
-            indexes = (details.get(field) or {}).get("indexes") or []
-            if indexes:
-                payload[f"{field}Columns"] = indexes
-        return {
-            "files": [
-                {
-                    "name": item["name"],
-                    "columns": item["columns"],
-                    "samples": item["samples"],
-                    "rowCount": item["rowCount"],
-                    "truncated": item["truncated"],
-                }
-                for item in previews
-            ],
-            "fileErrors": problems,
-            "columns": columns,
-            "suggested": payload,
-            "detectNote": explain_mapping(details, headers),
-            "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
-            "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này. Không giới hạn số file và dung lượng. File nằm trên đĩa khi đọc, không nhét cả file vào bộ nhớ. Cột không trùng tên kho thì bỏ qua, không đoán nội dung ô.",
-            "headerMismatch": different,
-        }
+        async with _heavy_lock:
+            return await run_in_threadpool(_preview_uploaded, uploaded, problems)
     finally:
         _cleanup_uploads(uploaded)
 
@@ -320,6 +337,73 @@ def _column_values_from_previews(
     return buckets
 
 
+def _import_uploaded(
+    uploaded: list[tuple[str, Path]],
+    fields: dict[str, str],
+    problems: list[str],
+) -> dict[str, Any]:
+    try:
+        parsed = mapping_from_form(json.loads(fields.get("mapping") or ""))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Bảng chọn cột không đọc được.") from exc
+    if not any(_mapped(spec) for spec in parsed.values()):
+        raise HTTPException(status_code=400, detail="Hãy chọn ít nhất một cột dữ liệu.")
+    if not uploaded:
+        raise HTTPException(
+            status_code=400,
+            detail="Hãy chọn ít nhất một file Excel." + ((" " + " ".join(problems)) if problems else ""),
+        )
+    stored = db.list_customers(settings.db_path)
+    stats = _blank_import_stats()
+    stats["total"] = len(stored)
+    changed: list[dict[str, str]] = []
+    file_reports: list[dict[str, Any]] = []
+    first_width: int | None = None
+    now = utcnow()
+    incoming_total = 0
+    for name, payload in uploaded:
+        try:
+            first_width, mapped = iter_mapped_file(name, payload, parsed, first_width)
+            batch: list[dict[str, str]] = []
+            count = 0
+            for row in mapped:
+                batch.append(row)
+                count += 1
+                if len(batch) >= IMPORT_BATCH:
+                    stored, part, _removed = _fold_import_batch(stored, batch, now)
+                    _add_import_stats(stats, part)
+                    _collect_changed(changed, stored)
+                    batch = []
+            if batch:
+                stored, part, _removed = _fold_import_batch(stored, batch, now)
+                _add_import_stats(stats, part)
+                _collect_changed(changed, stored)
+            incoming_total += count
+            file_reports.append({"name": name, "rows": count})
+        except ValueError as exc:
+            file_reports.append({"name": name, "rows": 0, "error": str(exc)})
+    problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
+    problems = [item for item in problems if item]
+    if incoming_total == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Không đọc được dòng khách nào. " + " ".join(problems),
+        )
+    stats["total"] = db.customer_count(settings.db_path)
+    summary = (
+        f"Nạp Excel: thêm {stats['created']}, bổ sung {stats['updated']}, "
+        f"giữ {stats['unchanged']}, gộp {stats['absorbed']}."
+    )
+    _remember(summary, json.dumps({"files": file_reports, "stats": stats}, ensure_ascii=False))
+    return {
+        "stats": stats,
+        "files": file_reports,
+        "fileErrors": problems,
+        "items": changed[:200],
+        "total": stats["total"],
+    }
+
+
 @router.post("/v1/customers/import")
 async def customers_import(
     request: Request,
@@ -329,66 +413,8 @@ async def customers_import(
     db.init_db(settings.db_path)
     uploaded, fields, problems = await _read_customer_form(request)
     try:
-        try:
-            parsed = mapping_from_form(json.loads(fields.get("mapping") or ""))
-        except json.JSONDecodeError as exc:
-            raise HTTPException(status_code=400, detail="Bảng chọn cột không đọc được.") from exc
-        if not any(_mapped(spec) for spec in parsed.values()):
-            raise HTTPException(status_code=400, detail="Hãy chọn ít nhất một cột dữ liệu.")
-        if not uploaded:
-            raise HTTPException(
-                status_code=400,
-                detail="Hãy chọn ít nhất một file Excel." + ((" " + " ".join(problems)) if problems else ""),
-            )
-        stored = db.list_customers(settings.db_path)
-        stats = _blank_import_stats()
-        stats["total"] = len(stored)
-        changed: list[dict[str, str]] = []
-        file_reports: list[dict[str, Any]] = []
-        first_width: int | None = None
-        now = utcnow()
-        incoming_total = 0
-        for name, payload in uploaded:
-            try:
-                first_width, mapped = iter_mapped_file(name, payload, parsed, first_width)
-                batch: list[dict[str, str]] = []
-                count = 0
-                for row in mapped:
-                    batch.append(row)
-                    count += 1
-                    if len(batch) >= IMPORT_BATCH:
-                        stored, part, _removed = _fold_import_batch(stored, batch, now)
-                        _add_import_stats(stats, part)
-                        _collect_changed(changed, stored)
-                        batch = []
-                if batch:
-                    stored, part, _removed = _fold_import_batch(stored, batch, now)
-                    _add_import_stats(stats, part)
-                    _collect_changed(changed, stored)
-                incoming_total += count
-                file_reports.append({"name": name, "rows": count})
-            except ValueError as exc:
-                file_reports.append({"name": name, "rows": 0, "error": str(exc)})
-        problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
-        problems = [item for item in problems if item]
-        if incoming_total == 0:
-            raise HTTPException(
-                status_code=400,
-                detail="Không đọc được dòng khách nào. " + " ".join(problems),
-            )
-        stats["total"] = db.customer_count(settings.db_path)
-        summary = (
-            f"Nạp Excel: thêm {stats['created']}, bổ sung {stats['updated']}, "
-            f"giữ {stats['unchanged']}, gộp {stats['absorbed']}."
-        )
-        _remember(summary, json.dumps({"files": file_reports, "stats": stats}, ensure_ascii=False))
-        return {
-            "stats": stats,
-            "files": file_reports,
-            "fileErrors": problems,
-            "items": changed[:200],
-            "total": stats["total"],
-        }
+        async with _heavy_lock:
+            return await run_in_threadpool(_import_uploaded, uploaded, fields, problems)
     finally:
         _cleanup_uploads(uploaded)
 
@@ -417,17 +443,26 @@ def _lookup_payload(text: str, file_phones: list[str]) -> tuple[list[dict[str, A
     return items, stats
 
 
+def _lookup_uploaded(
+    uploaded: list[tuple[str, Path]],
+    text: str,
+    problems: list[str],
+) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
+    file_phones: list[str] = []
+    file_reports: list[dict[str, Any]] = []
+    if uploaded:
+        file_phones, file_reports = phones_from_files(uploaded)
+        problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
+    items, stats = _lookup_payload(text, file_phones)
+    stats["fileErrors"] = [item for item in problems if item]
+    return items, stats, file_reports
+
+
 async def _lookup_from_request(request: Request) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
     uploaded, fields, problems = await _read_customer_form(request)
     try:
-        file_phones: list[str] = []
-        file_reports: list[dict[str, Any]] = []
-        if uploaded:
-            file_phones, file_reports = phones_from_files(uploaded)
-            problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
-        items, stats = _lookup_payload(fields.get("text") or "", file_phones)
-        stats["fileErrors"] = [item for item in problems if item]
-        return items, stats, file_reports
+        async with _heavy_lock:
+            return await run_in_threadpool(_lookup_uploaded, uploaded, fields.get("text") or "", problems)
     finally:
         _cleanup_uploads(uploaded)
 

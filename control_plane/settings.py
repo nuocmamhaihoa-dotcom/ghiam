@@ -78,6 +78,9 @@ class ServerSettings:
         (self.data_dir / "sync").mkdir(parents=True, exist_ok=True)
         self.tmp_dir().mkdir(parents=True, exist_ok=True)
         self.uploads_dir().mkdir(parents=True, exist_ok=True)
+
+    def use_disk_temp(self) -> None:
+        self.ensure_dirs()
         os.environ["TMPDIR"] = str(self.tmp_dir())
         tempfile.tempdir = str(self.tmp_dir())
 
