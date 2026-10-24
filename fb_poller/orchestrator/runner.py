@@ -147,6 +147,7 @@ async def run_poller(settings: Settings) -> None:
             mark = "ok" if result.ok else "fail"
             console.log(f"[rotate-4g] {mark} {target.name} {result.message}")
             if result.ok:
+                await proxy_manager.revive_endpoint(target.endpoint)
                 n = pool.mark_recycle_for_endpoint(target.endpoint)
                 if n:
                     console.log(f"[rotate-4g] recycle {n} browser dùng {target.endpoint}")

@@ -71,6 +71,45 @@ def import_proxies_cmd() -> None:
     asyncio.run(_run())
 
 
+@app.command("check-4g")
+def check_4g_cmd() -> None:
+    """Kiểm tra 10 proxy 4G kq2 còn sống và lịch xoay."""
+    from fb_poller.workers.rotate_4g import build_loop, check_proxy_line
+
+    settings = get_settings()
+    loop = build_loop(settings)
+    if not loop.targets:
+        console.print("[yellow]Chưa có cặp proxy/link xoay 4G.[/yellow]")
+        raise typer.Exit(1)
+
+    async def _run() -> None:
+        table = Table(title="kq2 4G — kiểm tra sống")
+        table.add_column("#")
+        table.add_column("proxy")
+        table.add_column("IP ra")
+        table.add_column("ms")
+        table.add_column("xoay gần nhất")
+        live = 0
+        for t in loop.targets:
+            probe = await check_proxy_line(t.endpoint)
+            row = loop.state.get(str(t.index))
+            last = "-"
+            if row and row.last_ok_at:
+                last = time_fmt(row.last_ok_at) + (" ok" if row.last_ok else " fail")
+            if probe.get("ok"):
+                live += 1
+                ip = str(probe.get("exit_ip") or "")
+            else:
+                ip = str(probe.get("error") or "die")
+            table.add_row(str(t.index), t.endpoint, ip, str(probe.get("ms") or ""), last)
+        console.print(table)
+        console.print(f"Sống {live}/{len(loop.targets)}. Xoay tự động mỗi {int(loop.interval_sec)}s khi `fb-poller run`.")
+        if live < len(loop.targets):
+            raise typer.Exit(1)
+
+    asyncio.run(_run())
+
+
 @app.command("rotate-4g")
 def rotate_4g_cmd(
     now: bool = typer.Option(False, "--now", help="Ấn các key đã đến hạn"),

@@ -126,6 +126,9 @@ class RotateLoopTests(unittest.IsolatedAsyncioTestCase):
 
         self.now = 1_570
         await self.loop.run_due()
+        self.assertEqual(self.calls, [1, 2, 3])
+        for _ in range(7):
+            await self.loop.run_due()
         self.assertEqual(self.calls, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
     async def test_success_waits_full_5_minutes(self) -> None:
@@ -155,7 +158,9 @@ class RotateLoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.calls, [1])
         self.now = 1_330
         self.assertNotIn(1, [t.index for t in self.loop.due_targets()])
-        self.now = 1_360
+        self.now = 1_599
+        self.assertNotIn(1, [t.index for t in self.loop.due_targets()])
+        self.now = 1_600
         self.assertIn(1, [t.index for t in self.loop.due_targets()])
 
 

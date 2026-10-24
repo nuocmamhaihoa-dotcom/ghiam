@@ -105,6 +105,7 @@ class ProxyManager:
     async def load_for_worker(self, count: int) -> int:
         from fb_poller.workers.rotate_4g import rotate_map
 
+        await import_proxy_files(self.settings)
         urls = rotate_map(self.settings)
         async with session_scope() as session:
             repo = ProxyRepo(session)
@@ -139,3 +140,25 @@ class ProxyManager:
         async with session_scope() as session:
             await ProxyRepo(session).mark_sick(proxy_id)
         self._configs = [c for c in self._configs if c.id != proxy_id]
+
+    async def revive_endpoint(self, endpoint: str) -> None:
+        """Sau xoay IP thành công: gỡ sick để kq2 dùng lại key đó."""
+        from fb_poller.workers.rotate_4g import rotate_map
+
+        async with session_scope() as session:
+            proxy = await ProxyRepo(session).mark_ok(endpoint)
+            if proxy is None:
+                return
+            parsed = parse_proxy_line(proxy.endpoint)
+            if not parsed:
+                return
+            parsed.id = proxy.id
+            parsed.kind = proxy.proxy_type or "4g"
+            parsed.rotate_url = rotate_map(self.settings).get(proxy.endpoint)
+            if any(c.id == parsed.id for c in self._configs):
+                for c in self._configs:
+                    if c.id == parsed.id:
+                        c.kind = parsed.kind
+                        c.rotate_url = parsed.rotate_url
+                return
+            self._configs.append(parsed)

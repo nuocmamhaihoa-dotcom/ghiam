@@ -58,6 +58,19 @@ class AssignForScanTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(got[0].endpoint, "8.8.8.8:1")
         self.assertEqual(got[0].proxy_type, "static")
 
+    async def test_reimport_revives_sick_4g(self) -> None:
+        async with session_scope() as session:
+            repo = ProxyRepo(session)
+            await repo.upsert_endpoints(["103.125.189.149:8624:9rnbo:6wohm"], "4g")
+            got = await repo.assign_for_scan("kq2", 1)
+            await repo.mark_sick(got[0].id)
+        async with session_scope() as session:
+            repo = ProxyRepo(session)
+            await repo.upsert_endpoints(["103.125.189.149:8624:9rnbo:6wohm"], "4g")
+            got = await repo.assign_for_scan("kq2", 1)
+        self.assertEqual(got[0].health, "ok")
+        self.assertEqual(got[0].proxy_type, "4g")
+
     def test_parse_4g_user_pass(self) -> None:
         parsed = parse_proxy_line("103.125.189.149:8624:9rnbo:6wohm")
         assert parsed is not None

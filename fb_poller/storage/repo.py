@@ -306,6 +306,9 @@ class ProxyRepo:
                 continue
             existing = await self.session.scalar(select(Proxy).where(Proxy.endpoint == endpoint))
             if existing:
+                existing.proxy_type = proxy_type
+                if proxy_type == "4g":
+                    existing.health = "ok"
                 skipped += 1
                 continue
             self.session.add(Proxy(endpoint=endpoint, proxy_type=proxy_type))
@@ -365,3 +368,11 @@ class ProxyRepo:
         proxy.last_ban_at = utcnow()
         proxy.assigned_worker = None
         await self.session.flush()
+
+    async def mark_ok(self, endpoint: str) -> Proxy | None:
+        proxy = await self.session.scalar(select(Proxy).where(Proxy.endpoint == endpoint))
+        if not proxy:
+            return None
+        proxy.health = "ok"
+        await self.session.flush()
+        return proxy

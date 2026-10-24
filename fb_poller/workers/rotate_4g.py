@@ -6,8 +6,8 @@ import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Sequence
-from urllib.parse import urlparse
+from typing import Any, Awaitable, Callable
+from urllib.parse import quote, urlparse
 
 import httpx
 
@@ -212,7 +212,12 @@ class RotateLoop:
                 started_at=self.started_at,
             )
             if row.last_attempt_at and not row.last_ok:
-                when = max(when, row.last_attempt_at + self.retry_sec)
+                wait = (
+                    self.interval_sec
+                    if any(tok in (row.last_message or "").casefold() for tok in ("chờ", "cho ", "cooldown"))
+                    else self.retry_sec
+                )
+                when = max(when, row.last_attempt_at + wait)
             if at >= when:
                 due.append((when, target))
         due.sort(key=lambda item: (item[0], item[1].index))
@@ -230,26 +235,27 @@ class RotateLoop:
         save_state(self.state_path, self.state)
 
     async def run_due(self, hook: RotateHook | None = None) -> list[RotateResult]:
-        results: list[RotateResult] = []
-        for target in self.due_targets():
-            result = await self.press(target)
-            if not result.ok and "cần chờ" in (result.message or "").casefold():
-                # Nhà cung cấp chưa cho xoay — hẹn lại 60s, không tính là mốc 5 phút.
-                key = self._key(target)
-                row = self.state.get(key, RotateState())
-                row.last_attempt_at = self.now()
-                row.last_ok = False
-                row.last_message = result.message
-                self.state[key] = row
-                save_state(self.state_path, self.state)
-            else:
-                self.record(target, result)
-            if hook is not None:
-                maybe = hook(target, result)
-                if maybe is not None:
-                    await maybe
-            results.append(result)
-        return results
+        due = self.due_targets()
+        if not due:
+            return []
+        # Một key mỗi nhịp — giữ lệch 30s, không ấn 10 cái cùng lúc.
+        target = due[0]
+        result = await self.press(target)
+        if not result.ok and any(tok in (result.message or "").casefold() for tok in ("chờ", "cooldown")):
+            key = self._key(target)
+            row = self.state.get(key, RotateState())
+            row.last_attempt_at = self.now()
+            row.last_ok = False
+            row.last_message = result.message
+            self.state[key] = row
+            save_state(self.state_path, self.state)
+        else:
+            self.record(target, result)
+        if hook is not None:
+            maybe = hook(target, result)
+            if maybe is not None:
+                await maybe
+        return [result]
 
     async def run_forever(self, stop, hook: RotateHook | None = None, sleep: Callable[[float], Any] = None) -> None:
         sleeper = sleep or __import__("asyncio").sleep
@@ -258,12 +264,59 @@ class RotateLoop:
             await sleeper(1.0)
 
 
+async def check_proxy_line(endpoint: str, *, timeout_sec: float = 12.0) -> dict[str, Any]:
+    parsed = urlparse(endpoint) if "://" in endpoint else None
+    if parsed and parsed.hostname:
+        host, port, user, password = parsed.hostname, parsed.port, parsed.username or "", parsed.password or ""
+        proxy_url = endpoint
+    else:
+        parts = endpoint.split(":")
+        if len(parts) == 4:
+            host, port, user, password = parts[0], int(parts[1]), parts[2], parts[3]
+            proxy_url = f"http://{quote(user)}:{quote(password)}@{host}:{port}"
+        elif len(parts) == 2:
+            host, port, user, password = parts[0], int(parts[1]), "", ""
+            proxy_url = f"http://{host}:{port}"
+        else:
+            return {"endpoint": endpoint, "ok": False, "error": "invalid_endpoint"}
+    started = time.time()
+    try:
+        async with httpx.AsyncClient(
+            proxy=proxy_url, timeout=timeout_sec, follow_redirects=True, trust_env=False
+        ) as client:
+            resp = await client.get("http://api.ipify.org")
+            ip = (resp.text or "").strip()[:64]
+            return {
+                "endpoint": endpoint,
+                "ok": resp.status_code < 400 and bool(ip),
+                "exit_ip": ip or None,
+                "http_status": resp.status_code,
+                "ms": int((time.time() - started) * 1000),
+                "error": None if resp.status_code < 400 else f"http_{resp.status_code}",
+            }
+    except Exception as exc:
+        return {
+            "endpoint": endpoint,
+            "ok": False,
+            "exit_ip": None,
+            "http_status": None,
+            "ms": int((time.time() - started) * 1000),
+            "error": f"{type(exc).__name__}: {exc}"[:200],
+        }
+
+
 def build_loop(settings: Settings) -> RotateLoop:
+    timeout = float(settings.rotate_4g_timeout_sec)
+
+    async def _press(target: RotateTarget) -> RotateResult:
+        return await press_rotate(target, timeout_sec=timeout)
+
     return RotateLoop(
         targets=load_rotate_targets(settings),
         interval_sec=max(60.0, float(settings.rotate_4g_interval_sec)),
         state_path=settings.rotate_4g_state_file,
-        timeout_sec=float(settings.rotate_4g_timeout_sec),
+        timeout_sec=timeout,
+        press=_press,
     )
 
 
