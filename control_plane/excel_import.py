@@ -19,6 +19,7 @@ from control_plane.column_detect import (
     explain_mapping,
     header_field,
     looks_like_label_row,
+    looks_like_vn_phone,
     mapping_spec_chosen,
     suggested_payload,
     suggest_mapping as detect_mapping,
@@ -869,6 +870,8 @@ def rows_from_mapped_headers(
     line_specs = {field: _address_specs(mapping.get(field)) for field in LINE_FIELDS}
     extracted: list[dict[str, str]] = []
     for row in body:
+        if headers and len(row) < len(headers):
+            row = list(row) + [""] * (len(headers) - len(row))
         raw: dict[str, str] = {}
         for field in FIELDS:
             if field in LINE_FIELDS:
@@ -985,6 +988,8 @@ def rows_from_table(rows: list[list[str]], mapping: dict[str, Any], allow_index:
     line_specs = {field: _address_specs(mapping.get(field)) for field in LINE_FIELDS}
     extracted: list[dict[str, str]] = []
     for row in body:
+        if headers and len(row) < len(headers):
+            row = list(row) + [""] * (len(headers) - len(row))
         raw: dict[str, str] = {}
         for field in FIELDS:
             if field in LINE_FIELDS:
@@ -1011,10 +1016,14 @@ def _mapped_from_iter(
     rows: Iterator[list[str]],
     mapping: dict[str, Any],
     allow_index: bool = True,
+    counts: dict[str, int] | None = None,
 ) -> Iterator[dict[str, str]]:
     headers: list[str] | None = None
     indexes: dict[str, int | None] = {}
     line_specs: dict[str, list[dict[str, Any]]] = {}
+    tallies = counts if counts is not None else {}
+    tallies.setdefault("fileRows", 0)
+    tallies.setdefault("unmapped", 0)
     for row in rows:
         if not any(collapse(cell) for cell in row):
             continue
@@ -1031,6 +1040,9 @@ def _mapped_from_iter(
                 field: resolve_index(headers, mapping.get(field), allow_index=allow_index) for field in FIELDS
             }
             line_specs = {field: _address_specs(mapping.get(field)) for field in LINE_FIELDS}
+        if headers and len(row) < len(headers):
+            row = list(row) + [""] * (len(headers) - len(row))
+        tallies["fileRows"] += 1
         raw: dict[str, str] = {}
         for field in FIELDS:
             if field in LINE_FIELDS:
@@ -1050,6 +1062,8 @@ def _mapped_from_iter(
         cleaned = clean_row(raw)
         if has_data(cleaned):
             yield cleaned
+        else:
+            tallies["unmapped"] += 1
 
 
 def iter_mapped_rows(
@@ -1066,6 +1080,7 @@ def iter_mapped_file(
     data: TableSource,
     mapping: dict[str, Any],
     first_width: int | None,
+    counts: dict[str, int] | None = None,
 ) -> tuple[int | None, Iterator[dict[str, str]]]:
     raw = iter_raw_rows(filename, data)
     try:
@@ -1088,7 +1103,7 @@ def iter_mapped_file(
             finally:
                 raw.close()
 
-        return first_width, _mapped_from_iter(rows(), mapping, allow_index=True)
+        return first_width, _mapped_from_iter(rows(), mapping, allow_index=True, counts=counts)
     except Exception:
         raw.close()
         raise
@@ -1182,6 +1197,8 @@ def phones_from_files(files: Iterable[tuple[str, TableSource]]) -> tuple[list[st
         try:
             for row in iter_raw_rows(filename, data):
                 for cell in row:
+                    if not looks_like_vn_phone(cell):
+                        continue
                     phone = clean_phone(cell)
                     if phone:
                         found.append(phone)

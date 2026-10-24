@@ -791,6 +791,123 @@ def customers_by_phone(conn: sqlite3.Connection, phone: str) -> list[dict[str, s
     return [customer_from_sql_row(row) for row in rows]
 
 
+def _phone_variants(value: str) -> list[str]:
+    digits = "".join(character for character in str(value or "") if character.isdigit())
+    if not (8 <= len(digits) <= 15):
+        return []
+    keys = [digits]
+    if digits.startswith("0084") and len(digits) >= 13:
+        rest = digits[4:]
+        keys.append(rest if rest.startswith("0") else "0" + rest)
+        keys.append(rest[1:] if rest.startswith("0") else rest)
+    elif digits.startswith("084") and len(digits) >= 12:
+        rest = digits[3:]
+        keys.append(rest if rest.startswith("0") else "0" + rest)
+        keys.append(rest[1:] if rest.startswith("0") else rest)
+    elif digits.startswith("84") and len(digits) >= 11:
+        rest = digits[2:]
+        keys.append(rest if rest.startswith("0") else "0" + rest)
+        keys.append(rest[1:] if rest.startswith("0") else rest)
+    elif digits.startswith("0") and len(digits) >= 10:
+        rest = digits[1:]
+        keys.extend([rest, "84" + rest, "084" + rest, "0084" + rest])
+    elif len(digits) == 9:
+        keys.extend(["0" + digits, "84" + digits])
+    seen: set[str] = set()
+    unique: list[str] = []
+    for key in keys:
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        unique.append(key)
+    return unique
+
+
+def customers_for_phones(db_path: Path, phones: list[str]) -> dict[str, list[dict[str, str]]]:
+    """Tìm khách theo list số, không tải cả kho vào RAM."""
+    wanted: list[str] = []
+    seen: set[str] = set()
+    for phone in phones:
+        if not phone or phone in seen:
+            continue
+        seen.add(phone)
+        wanted.append(phone)
+    query_keys: list[str] = []
+    key_seen: set[str] = set()
+    for phone in wanted:
+        for key in _phone_variants(phone) or [phone]:
+            if key in key_seen:
+                continue
+            key_seen.add(key)
+            query_keys.append(key)
+    found: dict[str, list[dict[str, str]]] = {phone: [] for phone in wanted}
+    if not query_keys:
+        return found
+    with session(db_path) as conn:
+        for start in range(0, len(query_keys), 400):
+            chunk = query_keys[start : start + 400]
+            marks = ",".join("?" * len(chunk))
+            rows = conn.execute(
+                _CUSTOMER_SELECT + f" WHERE phone IN ({marks}) ORDER BY created_at ASC, id ASC",
+                chunk,
+            ).fetchall()
+            for row in rows:
+                item = customer_from_sql_row(row)
+                stored = item.get("phone") or ""
+                stored_keys = set(_phone_variants(stored) or [stored])
+                stored_keys.add(stored)
+                for phone in wanted:
+                    query_set = set(_phone_variants(phone) or [phone])
+                    query_set.add(phone)
+                    if stored_keys.isdisjoint(query_set):
+                        continue
+                    if any(existing.get("id") == item["id"] for existing in found[phone]):
+                        continue
+                    found[phone].append(item)
+    return found
+
+
+def search_customers(db_path: Path, query: str, limit: int = 2000) -> tuple[list[dict[str, str]], int]:
+    """Tìm khách bằng SQL, không tải cả kho vào RAM."""
+    needle = " ".join(str(query or "").replace("\u00a0", " ").split())
+    if not needle:
+        return [], 0
+    limit = max(1, int(limit))
+    escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    likes = [f"%{escaped}%"]
+    folded = needle.casefold()
+    if folded != needle:
+        folded_esc = folded.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        likes.append(f"%{folded_esc}%")
+    fields = (
+        "name",
+        "phone",
+        "address",
+        "admin_address",
+        "order_content",
+        "cod_amount",
+        "facebook_uid",
+        "tiktok_id",
+    )
+    clauses: list[str] = []
+    params: list[Any] = []
+    for pattern in likes:
+        clauses.append("(" + " OR ".join(f"{field} LIKE ? ESCAPE '\\'" for field in fields) + ")")
+        params.extend([pattern] * len(fields))
+    variants = _phone_variants(needle)
+    if variants:
+        clauses.append("phone IN (" + ",".join("?" * len(variants)) + ")")
+        params.extend(variants)
+    where = " OR ".join(clauses)
+    with session(db_path) as conn:
+        total = int(conn.execute(f"SELECT COUNT(*) AS n FROM customers WHERE {where}", params).fetchone()["n"])
+        rows = conn.execute(
+            _CUSTOMER_SELECT + f" WHERE {where} ORDER BY updated_at DESC, created_at DESC LIMIT ?",
+            (*params, limit),
+        ).fetchall()
+    return [customer_from_sql_row(row) for row in rows], total
+
+
 def write_customers(conn: sqlite3.Connection, rows: list[dict[str, Any]], removed_ids: list[str]) -> None:
     dirty = [row for row in rows if row.get("write", True)]
     if removed_ids:

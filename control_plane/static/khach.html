@@ -192,7 +192,7 @@
 
   <section>
     <h2>Tra cứu hàng loạt</h2>
-    <p class="note">Dán list số điện thoại, hoặc chọn file danh sách. Chọn thêm file là cộng vào, không giới hạn số file và dung lượng. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
+    <p class="note">Dán list số điện thoại, hoặc chọn file danh sách. Số 84, 0 hoặc thiếu số 0 vẫn khớp. File chỉ lấy ô số điện thoại Việt Nam, không lấy UID Facebook. Chọn thêm file là cộng vào. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
     <label for="lookupPaste">Danh sách số điện thoại</label>
     <textarea id="lookupPaste" placeholder="0901222333"></textarea>
     <p class="row" style="margin-top:0.7rem">
@@ -929,14 +929,19 @@
       var fileNote = (body.files || []).length + " file";
       if (body.fileErrors && body.fileErrors.length) fileNote += ", một số file lỗi bị bỏ qua";
       var emptyFiles = body.emptyFiles || [];
+      var unmapped = (body.files || []).reduce(function (sum, item) { return sum + (item.unmapped || 0); }, 0);
       var emptyNote = "";
       if (emptyFiles.length) {
         emptyNote = " " + emptyFiles.length + " file không lấy được dòng khách — hãy nạp lại các file đó.";
+      }
+      if (unmapped) {
+        emptyNote += " " + unmapped + " dòng trong file không lấy được tên/SĐT/địa chỉ — kiểm tra cột rồi nạp lại.";
       }
       setNote(
         "importNote",
         "Đã đọc " + (stats.incoming || 0) + " dòng từ " + fileNote +
           ". Thêm " + (stats.created || 0) + " khách mới, bổ sung " + (stats.updated || 0) +
+          ", giữ nguyên " + (stats.unchanged || 0) +
           ". Chỉ gộp khi trùng số điện thoại. Không có số hoặc khác số thì vẫn thêm khách mới." +
           emptyNote,
         emptyFiles.length || (body.fileErrors && body.fileErrors.length) ? "warn" : "ok"
@@ -994,24 +999,35 @@
       var sessions = body.sessions || [];
       var missing = sessions.filter(function (item) { return item.missing; }).length;
       var emptyCount = sessions.reduce(function (sum, item) { return sum + (item.emptyFiles || []).length; }, 0);
+      var readSum = sessions.reduce(function (sum, item) { return sum + (item.incoming || 0); }, 0);
       document.getElementById("sessionStats").innerHTML =
         stat(sessions.length, "Lần nạp") +
         stat(body.total || 0, "Khách trong kho") +
-        stat((body.needReupload || []).length, "File cần nạp lại");
+        stat(readSum, "Cộng dòng các lần nạp") +
+        stat((body.needReupload || []).length, "File còn thiếu");
       padSpaces(document.getElementById("sessionStats"));
       var html = "<table class='sheet sess'><thead><tr>" +
-        "<th>Thời gian</th><th>Dòng đọc</th><th>Thêm</th><th>Bổ sung</th><th>File 0 dòng</th><th>Tình trạng</th>" +
+        "<th>Thời gian</th><th>Dòng đọc</th><th>Thêm</th><th>Bổ sung</th><th>Giữ nguyên</th><th>File 0 dòng</th><th>Tình trạng</th>" +
         "</tr></thead><tbody>";
       sessions.forEach(function (item) {
         var empty = (item.emptyFiles || []).length;
-        var status = "Còn trong kho";
+        var resolved = (item.resolvedEmpty || []).length;
+        var status = "Đã đọc đủ";
+        var unmapped = item.unmapped || 0;
         if (item.missing) status = "Không còn đủ — nạp lại file";
         else if (empty) status = "Thiếu " + empty + " file 0 dòng — nạp lại";
-        html += "<tr" + (item.missing || empty ? " class='miss'" : "") + ">";
+        else if (unmapped) status = "Thiếu " + vnNum(unmapped) + " dòng không lấy được dữ liệu — kiểm tra cột";
+        else if (resolved) status = "Đã nạp lại file 0 dòng";
+        else if (item.readOk) status = "Đã đọc đủ " + vnNum(item.incoming || 0) + " dòng";
+        else if ((item.created || 0) + (item.updated || 0) + (item.unchanged || 0) < (item.incoming || 0)) {
+          status = "Chưa ghi đủ " + vnNum((item.created || 0) + (item.updated || 0) + (item.unchanged || 0)) + "/" + vnNum(item.incoming || 0);
+        }
+        html += "<tr" + (item.missing || empty || unmapped ? " class='miss'" : "") + ">";
         html += "<td>" + escapeHtml(vnTime(item.at)) + "</td>";
         html += "<td>" + escapeHtml(vnNum(item.incoming || 0)) + "</td>";
         html += "<td>" + escapeHtml(vnNum(item.created || 0)) + "</td>";
         html += "<td>" + escapeHtml(vnNum(item.updated || 0)) + "</td>";
+        html += "<td>" + escapeHtml(vnNum(item.unchanged || 0)) + "</td>";
         html += "<td>" + escapeHtml(vnNum(empty)) + "</td>";
         html += "<td>" + escapeHtml(status) + "</td>";
         html += "</tr>";
@@ -1025,13 +1041,17 @@
         setNote(
           "sessionNote",
           "Kho hiện " + (body.total || 0) + " khách. Còn " +
-            (body.needReupload || []).length + " file cần nạp lại để đủ các lần trước." +
-            (missing ? " Có lô đã nạp nhưng không còn trong kho." : "") +
-            (emptyCount ? " Có file bị 0 dòng." : ""),
+            (body.needReupload || []).length + " file chưa nạp lại được." +
+            (missing ? " Có lô cũ không còn trong kho." : "") +
+            (emptyCount ? " Còn file 0 dòng." : ""),
           "warn"
         );
       } else {
-        setNote("sessionNote", "Các lần nạp đã đối chiếu với kho. Lần nạp mới cộng vào, không xóa khách cũ.", "ok");
+        setNote(
+          "sessionNote",
+          "Mỗi dòng trong file đã đọc đều được ghi. Kho đếm một khách cho mỗi số điện thoại, nên tổng khách nhỏ hơn cộng dòng các lần nạp khi trùng số hoặc nạp lại cùng file. Cột Bổ sung / Giữ nguyên là dòng đã ghi vào khách sẵn có, không mất. File đã nạp lại thành công không còn bị đòi nạp nữa.",
+          "ok"
+        );
       }
     } catch (error) {
       setNote("sessionNote", "Không đọc được lịch sử nạp.", "warn");
@@ -1099,8 +1119,9 @@
       document.getElementById("lookupExport").hidden = true;
       return;
     }
+    var shown = items.slice(0, 2000);
     var html = "<table class='sheet'><colgroup><col class='col-query'><col class='col-flag'><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'><col class='col-id'><col class='col-id'></colgroup><thead><tr><th>Số tra cứu</th><th>Kho</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
-    items.forEach(function (item) {
+    shown.forEach(function (item) {
       var customer = item.customer || {};
       html += "<tr><td>" + escapeHtml(item.query) + "</td><td>" + (item.found ? "Có" : "Không") + "</td><td>" + escapeHtml(customer.name) + "</td><td>" + escapeHtml(customer.phone) + "</td><td class='addr'>" + escapeHtml(customer.address) + "</td><td class='addr'>" + escapeHtml(customer.adminAddress) + "</td><td class='addr'>" + escapeHtml(customer.orderContent) + "</td><td>" + escapeHtml(customer.codAmount) + "</td><td>" + escapeHtml(customer.facebookUid) + "</td><td>" + escapeHtml(customer.tiktokId) + "</td></tr>";
     });
@@ -1109,6 +1130,7 @@
     padSpaces(document.getElementById("lookupPeople"));
     document.getElementById("lookupExport").hidden = false;
     var note = "Đã đối chiếu " + (stats.queried || 0) + " số với kho.";
+    if (items.length > shown.length) note += " Đang hiện " + shown.length + "/" + items.length + ". Tải Excel để xem hết.";
     if (stats.truncated) note += " Danh sách quá dài, chỉ lấy phần đầu.";
     if (body.fileErrors && body.fileErrors.length) note += " File lỗi: " + body.fileErrors.join(" ");
     setNote("lookupNote", note, (body.fileErrors && body.fileErrors.length) || stats.missing ? "warn" : "ok");

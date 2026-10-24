@@ -97,6 +97,12 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("Máy đã tự chọn cột", home.text)
         self.assertIn("fileMaps", home.text)
         self.assertIn("Dòng đọc", home.text)
+        self.assertIn("Cộng dòng các lần nạp", home.text)
+        self.assertIn("Giữ nguyên", home.text)
+        self.assertIn("File còn thiếu", home.text)
+        self.assertIn("một khách cho mỗi số điện thoại", home.text)
+        self.assertIn("Số 84", home.text)
+        self.assertIn("không lấy UID Facebook", home.text)
         self.assertIn("map-card", home.text)
         self.assertNotIn("data-label", home.text)
         self.assertNotIn("#people thead", home.text)
@@ -471,6 +477,14 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(body["stats"]["invalid"], 1)
         self.assertEqual(body["items"][0]["customer"]["name"], "Lan")
         self.assertFalse(body["items"][1]["found"])
+        by_country = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            data={"text": "84901222333"},
+        )
+        self.assertEqual(by_country.status_code, 200, by_country.text)
+        self.assertEqual(by_country.json()["stats"]["found"], 1)
+        self.assertEqual(by_country.json()["items"][0]["customer"]["name"], "Lan")
 
         name, file_body = self._xlsx("so.xlsx", ["SĐT"], [["0901222333"], ["0901777666"]])
         from_file = self.client.post(
@@ -757,6 +771,12 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(history.status_code, 200, history.text)
         self.assertEqual(history.json()["total"], 1200)
         self.assertTrue(history.json()["sessions"])
+        latest = history.json()["sessions"][0]
+        self.assertEqual(latest["incoming"], 1200)
+        self.assertEqual(latest["created"], 1200)
+        self.assertEqual(latest["unchanged"], 0)
+        self.assertTrue(latest["readOk"])
+        self.assertTrue(history.json()["complete"])
 
     def test_import_keeps_all_unique_phones_across_batches(self) -> None:
         rows = [[f"K{index}", f"0905{index:06d}", f"Huế {index}"] for index in range(3500)]
@@ -928,6 +948,116 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(item["name"], "Nguyễn Lan")
         self.assertEqual(item["phone"], "0901222333")
         self.assertEqual(item["address"], "Huế")
+
+    def test_later_import_clears_old_empty_file(self) -> None:
+        db.record_action(
+            settings.db_path,
+            at="2026-10-24T04:33:56+00:00",
+            actor="me",
+            source="hub",
+            kind="note",
+            summary="Nạp Excel: thêm 0, bổ sung 0, giữ 0, gộp 0.",
+            detail=json.dumps(
+                {
+                    "stats": {"created": 0, "updated": 0, "unchanged": 0, "incoming": 0},
+                    "files": [{"name": "delivery_export_1.xlsx", "rows": 0}],
+                    "emptyFiles": ["delivery_export_1.xlsx"],
+                    "fileCount": 1,
+                    "okFiles": 0,
+                },
+                ensure_ascii=False,
+            ),
+        )
+        stale = self.client.get("/v1/customers/sessions", headers=self.headers)
+        self.assertEqual(stale.status_code, 200, stale.text)
+        self.assertIn("delivery_export_1.xlsx", stale.json()["needReupload"])
+        self.assertFalse(stale.json()["complete"])
+        imported = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={
+                "mapping": json.dumps(
+                    {
+                        "name": {"index": 0, "header": "Tên người nhận"},
+                        "phone": {"index": 1, "header": "SĐT người nhận"},
+                        "address": {"index": 2, "header": "Địa chỉ người nhận"},
+                    }
+                )
+            },
+            files=[
+                self._file(
+                    "delivery_export_1.xlsx",
+                    ["Tên người nhận", "SĐT người nhận", "Địa chỉ người nhận"],
+                    [["Nguyễn Lan", "0901222333", "Huế"]],
+                )
+            ],
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+        self.assertEqual(imported.json()["stats"]["created"], 1)
+        history = self.client.get("/v1/customers/sessions", headers=self.headers)
+        self.assertEqual(history.status_code, 200, history.text)
+        self.assertEqual(history.json()["needReupload"], [])
+        self.assertTrue(history.json()["complete"])
+        old = [item for item in history.json()["sessions"] if item["at"] == "2026-10-24T04:33:56+00:00"][0]
+        self.assertEqual(old["emptyFiles"], [])
+        self.assertEqual(old["resolvedEmpty"], ["delivery_export_1.xlsx"])
+
+    def test_lookup_file_skips_facebook_uid(self) -> None:
+        db.replace_customers(
+            settings.db_path,
+            [
+                {
+                    "id": "c1",
+                    "name": "Lan",
+                    "phone": "0901222333",
+                    "address": "Huế",
+                    "facebookUid": "1000123456789",
+                    "tiktokId": "",
+                    "createdAt": "2026-01-01T00:00:00+00:00",
+                    "updatedAt": "2026-01-01T00:00:00+00:00",
+                }
+            ],
+            [],
+        )
+        name, file_body = self._xlsx(
+            "so.xlsx",
+            ["SĐT", "UID Facebook"],
+            [["0901222333", "1000123456789"], ["", "1000999888777"]],
+        )
+        looked = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            data={"text": ""},
+            files=[("files", (name, file_body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(looked.status_code, 200, looked.text)
+        body = looked.json()
+        self.assertEqual(body["stats"]["queried"], 1)
+        self.assertEqual(body["stats"]["found"], 1)
+        self.assertEqual(body["stats"]["missing"], 0)
+        self.assertEqual(body["items"][0]["customer"]["name"], "Lan")
+
+    def test_search_phone_variant_does_not_need_full_warehouse(self) -> None:
+        db.replace_customers(
+            settings.db_path,
+            [
+                {
+                    "id": "c1",
+                    "name": "Lan",
+                    "phone": "0901222333",
+                    "address": "Huế",
+                    "facebookUid": "",
+                    "tiktokId": "",
+                    "createdAt": "2026-01-01T00:00:00+00:00",
+                    "updatedAt": "2026-01-01T00:00:00+00:00",
+                }
+            ],
+            [],
+        )
+        found = self.client.get("/v1/customers?q=84901222333", headers=self.headers)
+        self.assertEqual(found.status_code, 200, found.text)
+        self.assertEqual(found.json()["matched"], 1)
+        self.assertEqual(found.json()["items"][0]["name"], "Lan")
 
 
 if __name__ == "__main__":

@@ -99,6 +99,27 @@ def clean_phone(value: Any) -> str:
     return ("+" + digits) if leading_plus and not digits.startswith("84") else digits
 
 
+def phone_lookup_keys(value: Any) -> list[str]:
+    """Các dạng cùng một số Việt Nam: 0xx, 84xx, thiếu số 0."""
+    phone = clean_phone(value)
+    if not phone:
+        return []
+    keys = [phone]
+    if phone.startswith("0") and len(phone) >= 10:
+        rest = phone[1:]
+        keys.extend([rest, "84" + rest, "+84" + rest, "084" + rest, "0084" + rest])
+    elif len(phone) == 9 and phone[:1] in "35789":
+        keys.extend(["0" + phone, "84" + phone, "+84" + phone])
+    seen: set[str] = set()
+    unique: list[str] = []
+    for key in keys:
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        unique.append(key)
+    return unique
+
+
 def split_address_lines(value: Any) -> list[str]:
     text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
     lines: list[str] = []
@@ -604,15 +625,28 @@ def lookup_by_phones(
     """Đối chiếu list số với kho. Giữ đúng thứ tự số người dùng đưa vào."""
     index: dict[str, list[dict[str, str]]] = {}
     for row in stored:
-        phone = clean_phone(row.get("phone") or "")
-        if not phone:
+        public = public_customer(row)
+        keys = phone_lookup_keys(row.get("phone") or "")
+        if not keys:
             continue
-        index.setdefault(phone, []).append(public_customer(row))
+        for key in keys:
+            bucket = index.setdefault(key, [])
+            if any(item.get("id") == public["id"] for item in bucket):
+                continue
+            bucket.append(public)
     items: list[dict[str, Any]] = []
     found = 0
     missing = 0
     for phone in phones:
-        matches = index.get(phone) or []
+        matches: list[dict[str, str]] = []
+        seen_ids: set[str] = set()
+        for key in phone_lookup_keys(phone) or [phone]:
+            for customer in index.get(key) or []:
+                customer_id = str(customer.get("id") or "")
+                if customer_id in seen_ids:
+                    continue
+                seen_ids.add(customer_id)
+                matches.append(customer)
         if not matches:
             missing += 1
             items.append({"query": phone, "found": False, "customer": None})

@@ -14,6 +14,7 @@ from control_plane.customers import (
     clean_facebook_uid,
     clean_phone,
     clean_tiktok_id,
+    phone_lookup_keys,
     expand_scientific,
     fold_customers,
     ingest_customers,
@@ -45,6 +46,9 @@ class CustomerCleanTests(unittest.TestCase):
         self.assertEqual(clean_phone("084901234567"), "0901234567")
         self.assertEqual(clean_phone("84901234567"), "0901234567")
         self.assertEqual(clean_phone("abc"), "")
+        self.assertIn("0901234567", phone_lookup_keys("84901234567"))
+        self.assertIn("84901234567", phone_lookup_keys("0901234567"))
+        self.assertIn("0901234567", phone_lookup_keys("901234567"))
 
     def test_facebook_uid_from_url_and_scientific(self) -> None:
         self.assertEqual(clean_facebook_uid("https://www.facebook.com/profile.php?id=1000123456789"), "1000123456789")
@@ -215,6 +219,9 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(items[1]["customer"]["name"], "Minh")
         self.assertFalse(items[2]["found"])
         self.assertEqual(items[2]["query"], "0901999888")
+        items84, stats84 = lookup_by_phones(stored, ["84901222333"])
+        self.assertEqual(stats84["found"], 1)
+        self.assertEqual(items84[0]["customer"]["name"], "Lan")
 
     def test_search_matches_any_field(self) -> None:
         row = {"name": "Nguyễn A", "phone": "0901234567", "address": "Hà Nội", "facebookUid": "1", "tiktokId": "ban"}

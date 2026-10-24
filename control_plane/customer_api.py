@@ -30,7 +30,6 @@ from control_plane.customers import (
     fold_customers,
     ingest_customers,
     lookup_by_phones,
-    matches_query,
     phones_from_text,
     public_customer,
     repair_customer_rows,
@@ -167,8 +166,7 @@ def _parse_iso(value: str) -> datetime | None:
 
 def _import_sessions() -> dict[str, Any]:
     actions = db.list_actions(settings.db_path, limit=200, q="Nạp Excel")
-    sessions: list[dict[str, Any]] = []
-    need_reupload: list[str] = []
+    parsed: list[dict[str, Any]] = []
     for action in actions:
         if "Nạp Excel" not in str(action.get("summary") or ""):
             continue
@@ -184,12 +182,31 @@ def _import_sessions() -> dict[str, Any]:
         match = _NAP_SUMMARY.search(str(action.get("summary") or ""))
         created = int(stats.get("created") or (match.group(1) if match else 0) or 0)
         updated = int(stats.get("updated") or (match.group(2) if match else 0) or 0)
-        incoming = int(stats.get("incoming") or 0)
+        unchanged = int(stats.get("unchanged") or (match.group(3) if match else 0) or 0)
         files = payload.get("files") if isinstance(payload.get("files"), list) else []
-        empty = [str(item.get("name") or "") for item in files if isinstance(item, dict) and not item.get("rows") and not item.get("error")]
+        skipped = int(stats.get("skipped") or 0)
+        file_rows = int(
+            sum(int(item.get("fileRows") or item.get("rows") or 0) for item in files if isinstance(item, dict))
+        )
+        unmapped = int(sum(int(item.get("unmapped") or 0) for item in files if isinstance(item, dict)))
+        processed = created + updated + unchanged
+        incoming = int(stats.get("incoming") or 0) or file_rows or processed
+        if processed > incoming:
+            incoming = processed
+        empty = [
+            str(item.get("name") or "")
+            for item in files
+            if isinstance(item, dict) and not item.get("rows") and not item.get("error")
+        ]
         empty = [name for name in empty if name]
         if isinstance(payload.get("emptyFiles"), list) and not empty:
             empty = [str(name) for name in payload["emptyFiles"] if name]
+        ok_names = [
+            str(item.get("name") or "")
+            for item in files
+            if isinstance(item, dict) and item.get("name") and item.get("rows")
+        ]
+        names = [str(item.get("name") or "") for item in files if isinstance(item, dict) and item.get("name")]
         at = str(action.get("at") or "")
         stamp = str(payload.get("importedAt") or "") or at
         moment = _parse_iso(stamp)
@@ -200,29 +217,65 @@ def _import_sessions() -> dict[str, Any]:
             else:
                 start = (moment - timedelta(hours=6)).isoformat()
                 kept = db.customers_created_between(settings.db_path, start, at)
-        missing = created >= 1000 and kept < max(1, int(created * 0.1))
-        names = [str(item.get("name") or "") for item in files if isinstance(item, dict) and item.get("name")]
-        if missing:
-            need_reupload.extend(name for name in names or ["file lần nạp này"] if name)
-        need_reupload.extend(empty)
-        sessions.append(
+        parsed.append(
             {
                 "id": action.get("id"),
                 "at": at,
                 "summary": action.get("summary") or "",
                 "created": created,
                 "updated": updated,
-                "incoming": incoming or int(sum(
-                    int(item.get("rows") or 0)
-                    for item in files
-                    if isinstance(item, dict)
-                )),
+                "unchanged": unchanged,
+                "incoming": incoming,
+                "skipped": skipped,
+                "fileRows": file_rows,
+                "unmapped": unmapped,
                 "fileCount": int(payload.get("fileCount") or len(files) or 0),
-                "okFiles": int(payload.get("okFiles") or sum(1 for item in files if isinstance(item, dict) and item.get("rows"))),
+                "okFiles": int(payload.get("okFiles") or len(ok_names)),
                 "emptyFiles": empty,
+                "okNames": ok_names,
+                "names": names,
                 "keptInWarehouse": kept,
-                "missing": missing,
+                "missingRaw": created >= 1000 and kept < max(1, int(created * 0.1)),
                 "filesKept": payload.get("keptFiles") or [],
+            }
+        )
+    later_ok: set[str] = set()
+    sessions: list[dict[str, Any]] = []
+    need_reupload: list[str] = []
+    for item in parsed:
+        empty = [name for name in item["emptyFiles"] if name not in later_ok]
+        resolved = [name for name in item["emptyFiles"] if name in later_ok]
+        later_hit = bool(item["names"]) and all(name in later_ok for name in item["names"])
+        missing = bool(item["missingRaw"]) and not later_hit
+        if missing:
+            need_reupload.extend(name for name in (item["names"] or ["file lần nạp này"]) if name not in later_ok)
+        need_reupload.extend(empty)
+        later_ok.update(name for name in item["okNames"] if name)
+        processed = int(item["created"]) + int(item["updated"]) + int(item["unchanged"])
+        incoming = int(item["incoming"])
+        skipped = int(item["skipped"])
+        unmapped = int(item["unmapped"])
+        read_ok = incoming > 0 and (processed + skipped) >= incoming and unmapped == 0
+        sessions.append(
+            {
+                "id": item["id"],
+                "at": item["at"],
+                "summary": item["summary"],
+                "created": item["created"],
+                "updated": item["updated"],
+                "unchanged": item["unchanged"],
+                "incoming": incoming,
+                "skipped": skipped,
+                "fileRows": item["fileRows"],
+                "unmapped": unmapped,
+                "fileCount": item["fileCount"],
+                "okFiles": item["okFiles"],
+                "emptyFiles": empty,
+                "resolvedEmpty": resolved,
+                "keptInWarehouse": item["keptInWarehouse"],
+                "missing": missing,
+                "readOk": read_ok,
+                "filesKept": item["filesKept"],
             }
         )
     seen: set[str] = set()
@@ -362,11 +415,11 @@ def customers_list(
     db.init_db(settings.db_path)
     total = db.customer_count(settings.db_path)
     if collapse(q):
-        rows = [public_customer(row) for row in db.list_customers(settings.db_path) if matches_query(row, q)]
-        shown = rows[:LIST_LIMIT]
+        rows, matched = db.search_customers(settings.db_path, q, limit=LIST_LIMIT)
+        shown = [public_customer(row) for row in rows]
         return {
             "count": len(shown),
-            "matched": len(rows),
+            "matched": matched,
             "total": total,
             "items": shown,
             "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
@@ -514,9 +567,12 @@ def _import_uploaded(
     incoming_total = 0
     for name, payload in uploaded:
         mapped: Any = None
+        file_counts = {"fileRows": 0, "unmapped": 0}
         try:
             file_mapping = mapping_for_file(parsed, name, payload)
-            first_width, mapped = iter_mapped_file(name, payload, file_mapping, first_width)
+            first_width, mapped = iter_mapped_file(
+                name, payload, file_mapping, first_width, counts=file_counts
+            )
             part, preview = ingest_customers(
                 settings.db_path,
                 mapped,
@@ -529,7 +585,14 @@ def _import_uploaded(
                     break
                 changed.append(public_customer(row))
             incoming_total += int(part.get("incoming") or 0)
-            file_reports.append({"name": name, "rows": int(part.get("incoming") or 0)})
+            file_reports.append(
+                {
+                    "name": name,
+                    "rows": int(part.get("incoming") or 0),
+                    "fileRows": int(file_counts.get("fileRows") or 0),
+                    "unmapped": int(file_counts.get("unmapped") or 0),
+                }
+            )
         except ValueError as exc:
             file_reports.append({"name": name, "rows": 0, "error": str(exc)})
         finally:
@@ -619,10 +682,20 @@ def _lookup_payload(text: str, file_phones: list[str]) -> tuple[list[dict[str, A
     phones = _unique_phones(pasted, file_phones)
     if not phones:
         raise HTTPException(status_code=400, detail="Không thấy số điện thoại nào trong danh sách.")
-    stored = db.list_customers(settings.db_path)
+    by_phone = db.customers_for_phones(settings.db_path, phones)
+    stored: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for rows in by_phone.values():
+        for row in rows:
+            customer_id = str(row.get("id") or "")
+            if customer_id and customer_id in seen_ids:
+                continue
+            if customer_id:
+                seen_ids.add(customer_id)
+            stored.append(row)
     items, stats = lookup_by_phones(stored, phones)
     stats.update(parsed)
-    stats["total"] = len(stored)
+    stats["total"] = db.customer_count(settings.db_path)
     return items, stats
 
 
