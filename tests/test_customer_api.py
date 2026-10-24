@@ -97,13 +97,14 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("Máy đã tự chọn cột", home.text)
         self.assertIn("fileMaps", home.text)
         self.assertIn("Dòng đọc", home.text)
-        self.assertIn("Cộng dòng mọi lần nạp", home.text)
+        self.assertIn("Dòng đọc cộng dồn", home.text)
+        self.assertIn("Trùng SĐT hoặc nạp lại", home.text)
         self.assertIn("Giữ nguyên", home.text)
         self.assertIn("File còn thiếu", home.text)
         self.assertIn("Số điện thoại khác nhau", home.text)
         self.assertIn("Không có SĐT", home.text)
         self.assertIn("khach-build", home.text)
-        self.assertIn("một khách cho mỗi số điện thoại", home.text)
+        self.assertIn("mỗi số điện thoại một hàng", home.text)
         self.assertIn("ô trống được bổ sung", home.text)
         self.assertIn("Không có số điện thoại thì bỏ qua, không lưu", home.text)
         self.assertIn("Số trên dòng là chuẩn lọc trùng", home.text)
@@ -683,6 +684,12 @@ class CustomerApiTests(unittest.TestCase):
         listed = self.client.get("/v1/customers", headers=self.headers)
         self.assertEqual(listed.json()["total"], 1)
         self.assertEqual(listed.json()["items"][0]["address"], "Huế")
+        history = self.client.get("/v1/customers/sessions", headers=self.headers)
+        self.assertEqual(history.status_code, 200, history.text)
+        self.assertEqual(history.json()["total"], 1)
+        self.assertEqual(history.json()["uniquePhones"], 1)
+        self.assertEqual(history.json()["rowSum"], 2)
+        self.assertEqual(history.json()["repeatRows"], 1)
 
     def test_lookup_skips_bad_file_and_uses_text(self) -> None:
         db.replace_customers(
@@ -842,6 +849,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(history.json()["emptyPhone"], 0)
         self.assertEqual(history.json()["duplicatePhones"], 0)
         self.assertEqual(history.json()["rowSum"], 1200)
+        self.assertEqual(history.json()["repeatRows"], 0)
         self.assertTrue(history.json()["sessions"])
         latest = history.json()["sessions"][0]
         self.assertEqual(latest["incoming"], 1200)

@@ -289,15 +289,18 @@ def _import_sessions() -> dict[str, Any]:
         seen.add(name)
         unique_reupload.append(name)
     warehouse = db.warehouse_stats(settings.db_path)
+    row_sum = sum(int(item.get("incoming") or 0) for item in sessions)
+    unique_phones = int(warehouse["uniquePhones"] or 0)
     return {
         "total": warehouse["total"],
-        "uniquePhones": warehouse["uniquePhones"],
+        "uniquePhones": unique_phones,
         "emptyPhone": warehouse["emptyPhone"],
         "duplicatePhones": warehouse["duplicatePhones"],
         "sessions": sessions,
         "needReupload": unique_reupload[:80],
         "complete": not unique_reupload,
-        "rowSum": sum(int(item.get("incoming") or 0) for item in sessions),
+        "rowSum": row_sum,
+        "repeatRows": max(0, row_sum - unique_phones),
     }
 
 

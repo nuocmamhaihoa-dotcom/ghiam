@@ -1025,12 +1025,13 @@
       var readSum = body.rowSum != null ? body.rowSum : sessions.reduce(function (sum, item) { return sum + (item.incoming || 0); }, 0);
       var uniquePhones = body.uniquePhones != null ? body.uniquePhones : 0;
       var emptyPhone = body.emptyPhone != null ? body.emptyPhone : 0;
+      var repeatRows = body.repeatRows != null ? body.repeatRows : Math.max(0, readSum - uniquePhones);
       document.getElementById("sessionStats").innerHTML =
         stat(body.total || 0, "Khách trong kho") +
         stat(uniquePhones, "Số điện thoại khác nhau") +
         stat(emptyPhone, "Không có SĐT") +
-        stat(readSum, "Cộng dòng mọi lần nạp") +
-        stat((body.needReupload || []).length, "File còn thiếu");
+        stat(readSum, "Dòng đọc cộng dồn") +
+        stat(repeatRows, "Trùng SĐT hoặc nạp lại");
       padSpaces(document.getElementById("sessionStats"));
       var html = "<table class='sheet sess'><thead><tr>" +
         "<th>Thời gian</th><th>Dòng đọc</th><th>Thêm</th><th>Bổ sung</th><th>Giữ nguyên</th><th>File 0 dòng</th><th>Tình trạng</th>" +
@@ -1077,10 +1078,9 @@
       } else {
         setNote(
           "sessionNote",
-            "Kho đang có " + vnNum(body.total || 0) + " khách = " +
-            vnNum(uniquePhones) + " số điện thoại khác nhau + " +
-            vnNum(emptyPhone) + " khách không có SĐT (đã loại). một khách cho mỗi số điện thoại. File mới lấy số trên dòng làm chuẩn: trùng SĐT thì cùng hàng, mọi số trong file đều được thêm / bổ sung / giữ nguyên. Cộng dòng mọi lần nạp " +
-            vnNum(readSum) + " vì cùng file được nạp lại và trùng số thì gộp, không mất khách. Cột Bổ sung / Giữ nguyên là dòng đã ghi vào khách sẵn có. File còn thiếu: 0. Không cần nạp lại.",
+            "Kho đang có " + vnNum(body.total || 0) + " khách — mỗi số điện thoại một hàng. " +
+            vnNum(readSum) + " dòng đọc cộng dồn không phải " + vnNum(readSum) + " khách: cùng một file nạp lại vẫn cộng dòng, số trùng trong file hoặc giữa các file gộp một hàng. " +
+            vnNum(repeatRows) + " dòng là trùng SĐT hoặc nạp lại. Cột Thêm là khách mới; Bổ sung / Giữ nguyên là dòng đã khớp khách sẵn có. File còn thiếu: 0.",
           "ok"
         );
       }
