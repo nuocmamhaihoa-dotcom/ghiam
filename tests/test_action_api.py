@@ -150,7 +150,7 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("sao-luu-danh-ba", downloaded.headers["content-disposition"])
 
     def test_dashboard_is_the_video_queue(self) -> None:
-        response = self.client.get("/")
+        response = self.client.get("/video")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Đọc video danh bạ", response.text)
         self.assertIn("Thêm video", response.text)
@@ -400,7 +400,7 @@ class ActionApiTests(unittest.TestCase):
         listed = self.client.get("/v1/people", headers=self.headers)
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(listed.json()["count"], 1)
-        page = self.client.get("/")
+        page = self.client.get("/video")
         self.assertIn("Kết quả đã lưu", page.text)
         self.assertIn("Tải bản sao lưu về PC", page.text)
         sample = self.client.get("/sample-people")
@@ -441,7 +441,7 @@ class ActionApiTests(unittest.TestCase):
         body = manifest.json()
         self.assertEqual(body["start_url"], "/iphone")
         self.assertEqual(body["display"], "standalone")
-        home = self.client.get("/")
+        home = self.client.get("/video")
         self.assertIn("Đọc video danh bạ", home.text)
         self.assertIn("Tải bản sao lưu về PC", home.text)
         self.assertNotIn("Lướt trên iPhone", home.text)

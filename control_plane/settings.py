@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,8 +25,8 @@ class ServerSettings:
         self.data_dir = Path(os.environ.get("CONTROL_DATA_DIR", ROOT / "control_data"))
         self.packages_dir = Path(os.environ.get("CONTROL_PACKAGES_DIR", self.data_dir / "packages"))
         self.db_path = Path(os.environ.get("CONTROL_DB", self.data_dir / "server.db"))
-        # High-bandwidth defaults (LAN / multi-gigabit friendly)
-        self.max_upload_mb = int(os.environ.get("CONTROL_MAX_UPLOAD_MB", "4096"))
+        # 0 = không giới hạn dung lượng file tải lên.
+        self.max_upload_mb = int(os.environ.get("CONTROL_MAX_UPLOAD_MB", "0"))
         self.video_db_path = Path(os.environ.get("CONTROL_VIDEO_DB", self.data_dir / "video.db"))
         self.video_dir = Path(os.environ.get("CONTROL_VIDEO_DIR", self.data_dir / "videos"))
         self.video_disk_gb = int(os.environ.get("CONTROL_VIDEO_DISK_GB", "80"))
@@ -33,7 +34,7 @@ class ServerSettings:
         self.limit_concurrency = int(os.environ.get("CONTROL_LIMIT_CONCURRENCY", "200"))
         self.backlog = int(os.environ.get("CONTROL_BACKLOG", "2048"))
         self.keep_alive = int(os.environ.get("CONTROL_KEEPALIVE", "75"))
-        self.timeout_keep_alive = int(os.environ.get("CONTROL_TIMEOUT_KEEPALIVE", "75"))
+        self.timeout_keep_alive = int(os.environ.get("CONTROL_TIMEOUT_KEEPALIVE", "300"))
         self.h11_max_incomplete_size = int(
             os.environ.get("CONTROL_H11_MAX_INCOMPLETE", str(16 * 1024 * 1024))
         )
@@ -59,11 +60,48 @@ class ServerSettings:
         self.proxy_user = os.environ.get("CONTROL_PROXY_USER", "")
         self.proxy_pass = os.environ.get("CONTROL_PROXY_PASS", "")
 
+    def upload_limit_bytes(self) -> int | None:
+        if self.max_upload_mb <= 0:
+            return None
+        return self.max_upload_mb * 1024 * 1024
+
+    def tmp_dir(self) -> Path:
+        return self.data_dir / "tmp"
+
+    def uploads_dir(self) -> Path:
+        return self.data_dir / "uploads"
+
+    def imports_dir(self) -> Path:
+        return self.data_dir / "imports"
+
     def ensure_dirs(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.packages_dir.mkdir(parents=True, exist_ok=True)
         self.video_dir.mkdir(parents=True, exist_ok=True)
         (self.data_dir / "sync").mkdir(parents=True, exist_ok=True)
+        self.tmp_dir().mkdir(parents=True, exist_ok=True)
+        self.uploads_dir().mkdir(parents=True, exist_ok=True)
+        self.imports_dir().mkdir(parents=True, exist_ok=True)
+
+    def cleanup_import_temps(self) -> None:
+        """Xóa file tạm nạp khách còn sót khi lần trước bị tắt giữa chừng."""
+        self.ensure_dirs()
+        for folder in (self.tmp_dir(), self.uploads_dir()):
+            for path in folder.glob("khach-sst-*"):
+                try:
+                    path.unlink()
+                except OSError:
+                    continue
+            for path in folder.glob("khach-up-*"):
+                try:
+                    path.unlink()
+                except OSError:
+                    continue
+
+    def use_disk_temp(self) -> None:
+        self.ensure_dirs()
+        os.environ["TMPDIR"] = str(self.tmp_dir())
+        tempfile.tempdir = str(self.tmp_dir())
 
 
 settings = ServerSettings()

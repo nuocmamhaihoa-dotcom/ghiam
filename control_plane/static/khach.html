@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="vi" translate="no" class="notranslate">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="only light" />
+  <meta name="supported-color-schemes" content="light only" />
+  <meta name="google" content="notranslate" />
+  <meta http-equiv="content-language" content="vi" />
+  <meta name="khach-build" content="__KHACH_BUILD__" />
+  <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate" />
+  <title>Kho khách</title>
+  <style>
+    html { color-scheme: only light; }
+    :root { color-scheme: only light; --ink: #17202a; --muted: #5c6770; --line: #e4e7ec; --bg: #f4f6f8; --card: #fff; --blue: #0b6bcb; }
+    * { box-sizing: border-box; }
+    html, body, button, input, textarea, select {
+      color-scheme: only light;
+      forced-color-adjust: none;
+    }
+    html, body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: Tahoma, "Segoe UI", Arial, Helvetica, sans-serif;
+      font-size: 16px;
+      font-weight: 400;
+      line-height: 1.45;
+      letter-spacing: 0;
+      word-spacing: 0.14em;
+      font-kerning: none;
+      font-variant-ligatures: none;
+      text-autospace: no-autospace;
+      text-rendering: auto;
+    }
+    main { max-width: 960px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+    h1 { font-size: 1.7rem; margin: 0 0 0.25rem; font-weight: 700; }
+    h2 { font-size: 1.15rem; margin: 0 0 0.7rem; font-weight: 700; }
+    p { margin: 0; }
+    .lead { color: var(--muted); margin-bottom: 1rem; }
+    section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem; margin: 0 0 0.8rem; }
+    label { display: block; font-weight: 700; margin: 0 0 0.35rem; }
+    input[type="search"], select, textarea {
+      width: 100%; font: inherit; padding: 0.7rem 0.75rem; border: 1px solid #cfd5dc; border-radius: 10px; background: #fff;
+    }
+    textarea { min-height: 140px; resize: vertical; }
+    .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    button, .file {
+      font: inherit; font-weight: 700; border: 0; border-radius: 10px; min-height: 46px; padding: 0 1rem; cursor: pointer;
+    }
+    button.primary, .file { background: var(--blue); color: #fff; }
+    button.ghost { background: #eef1f4; color: var(--ink); }
+    button:disabled { opacity: 0.55; cursor: default; }
+    .drop {
+      margin-top: 0.7rem; padding: 1.1rem; border: 1.5px dashed #b7c0ca; border-radius: 12px; background: #fbfcfd; text-align: center;
+    }
+    .drop.over { background: #e8f2fc; border-color: var(--blue); }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.55rem; }
+    .stat { background: #f7f9fb; border-radius: 10px; padding: 0.7rem 0.75rem; }
+    .stat b { display: block; font-size: 1.35rem; }
+    .stat span { color: var(--muted); font-size: 0.92rem; }
+    table.sheet {
+      display: table;
+      width: auto;
+      min-width: 100%;
+      border-collapse: collapse;
+      border-spacing: 0;
+      table-layout: fixed;
+    }
+    table.sheet thead { display: table-header-group; }
+    table.sheet tbody { display: table-row-group; }
+    table.sheet tr { display: table-row; }
+    table.sheet th, table.sheet td {
+      display: table-cell;
+      text-align: left;
+      padding: 0.5rem 0.65rem;
+      border: 1px solid #d5dbe3;
+      vertical-align: top;
+      font-size: 0.92rem;
+      background: #fff;
+      overflow: hidden;
+    }
+    table.sheet th {
+      color: var(--ink);
+      font-weight: 700;
+      background: #eef2f6;
+      white-space: nowrap;
+    }
+    table.sheet td { white-space: nowrap; }
+    table.sheet col.col-name { width: 140px; }
+    table.sheet col.col-phone { width: 120px; }
+    table.sheet col.col-addr { width: 220px; }
+    table.sheet col.col-cod { width: 72px; }
+    table.sheet col.col-id { width: 110px; }
+    table.sheet col.col-flag { width: 56px; }
+    table.sheet col.col-query { width: 120px; }
+    #people table.sheet { width: 1212px; }
+    #lookupPeople table.sheet { width: 1388px; }
+    table.sheet td.addr {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      overflow: hidden;
+      max-width: 220px;
+    }
+    table.sheet tbody tr:nth-child(even) td { background: #f7f9fb; }
+    .picks { display: grid; gap: 0.35rem; margin: 0.2rem 0 0.4rem; }
+    .picks label { font-weight: 500; display: flex; gap: 0.45rem; align-items: center; }
+    .map-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.85rem;
+      background: #fbfcfd;
+    }
+    .map-card + .map-card { margin-top: 0.7rem; }
+    .map-card h3 { font-size: 1rem; margin: 0 0 0.35rem; }
+    .map-card .core { display: grid; gap: 0.55rem; }
+    details.extra { margin-top: 0.55rem; }
+    details.extra summary { cursor: pointer; font-weight: 700; }
+    .note { color: var(--muted); margin-top: 0.55rem; }
+    .warn { color: #8a2b2b; font-weight: 700; }
+    .ok { color: #0d6b3a; }
+    .map { display: grid; gap: 0.7rem; margin: 0.8rem 0; }
+    .files { margin: 0.4rem 0 0.8rem; padding: 0; }
+    .files li { margin: 0.25rem 0; }
+    .nav { margin: 0 0 1rem; }
+    .nav a { color: var(--blue); font-weight: 700; text-decoration: none; }
+    .scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      width: 100%;
+      max-width: 100%;
+    }
+    [hidden] { display: none !important; }
+    #file, #lookupFile { display: none; }
+    .words { display: inline; }
+    .w { display: inline; }
+    .w + .w { margin-left: 0.28em; }
+    .sp {
+      display: inline;
+      font-weight: 400;
+      padding: 0 0.02em;
+    }
+    table.sess { width: 100%; table-layout: auto; }
+    table.sess th, table.sess td { white-space: normal; overflow: visible; }
+    table.sess tr.miss td { background: #fdecec; }
+    #sessionList table.sheet { width: 100%; }
+    #translateWarn { margin: 0 0 0.8rem; padding: 0.65rem 0.75rem; background: #fdecec; border-radius: 10px; }
+  </style>
+</head>
+<body translate="no" class="notranslate">
+<main translate="no">
+  <p id="translateWarn" class="note warn" hidden>Google Dịch đang bật nên chữ bị dính. Tắt dịch trang này trên Chrome, rồi tải lại.</p>
+  <h1>Kho khách Excel</h1>
+    <p class="lead">Nhập khách bằng file Excel, không dùng video. Không giới hạn số file và dung lượng: chọn thêm là cộng vào lần nạp này. Khớp tên cột kho trước (tên, SĐT, địa chỉ, địa chỉ hành chính, hàng mua, giá COD, UID Facebook, ID TikTok). Nếu file không có tên cột, hoặc thiếu cột tên / SĐT, thì lấy cột có tên người, số điện thoại và địa chỉ. Cột lạ như giới tính, ngày sinh, link thì bỏ qua. Mỗi file tự khớp cột theo tiêu đề của file đó; lần nạp mới cộng vào kho, không xóa khách cũ. Mỗi dòng có số điện thoại là một khách. Số trên dòng là chuẩn lọc trùng: trùng SĐT thì cùng một hàng. Mọi dòng có số trong file mới đều được ghi — khách mới thì thêm, khách cũ thì bổ sung hoặc giữ nguyên. Không có số điện thoại thì bỏ qua, không lưu. Lần nạp sau: ô trống được bổ sung, địa chỉ / hàng mua mới thêm dòng, ô đã có mà không đổi thì giữ nguyên. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
+
+  <section>
+    <h2>Thêm file Excel</h2>
+    <div class="drop" id="drop">
+      <p>Kéo bao nhiêu file Excel cũng được, không giới hạn số file và dung lượng</p>
+      <p class="note">hoặc</p>
+      <button class="file" type="button" id="pick">Chọn file Excel</button>
+      <input id="file" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" multiple />
+    </div>
+    <p id="uploadNote" class="note"></p>
+  </section>
+
+  <section id="mapBox" hidden>
+    <h2>Cột nào là dữ liệu nào?</h2>
+    <p class="note" id="mapLead">Máy đã tự chọn cột theo tiêu đề từng kiểu file. Chỉ sửa nếu dòng mẫu bên dưới sai.</p>
+    <ul class="files" id="fileList"></ul>
+    <div class="map" id="mapFields"></div>
+    <div class="scroll" id="sampleBox"></div>
+    <p class="row" style="margin-top:0.9rem">
+      <button class="primary" type="button" id="confirm">Nạp khách vào kho</button>
+      <button class="ghost" type="button" id="addMore">Thêm file</button>
+      <button class="ghost" type="button" id="cancel">Bỏ hết, chọn lại</button>
+    </p>
+    <p id="mapNote" class="note"></p>
+  </section>
+
+  <section>
+    <h2>Kết quả lần nạp</h2>
+    <div class="stats" id="importStats"></div>
+    <p id="importNote" class="note">Chưa nạp file nào trong phiên này.</p>
+  </section>
+
+  <section>
+    <h2>Các lần nạp</h2>
+    <div class="stats" id="sessionStats"></div>
+    <div id="sessionList"></div>
+    <p id="sessionNote" class="note">Đang đối chiếu các lần nạp với kho.</p>
+  </section>
+
+  <section>
+    <h2>Tra cứu hàng loạt</h2>
+    <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. File chỉ lấy ô số điện thoại Việt Nam, không lấy UID Facebook. Chọn thêm file là cộng vào. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
+    <label for="lookupPaste">Danh sách số điện thoại</label>
+    <textarea id="lookupPaste" placeholder="0901222333"></textarea>
+    <p class="row" style="margin-top:0.7rem">
+      <button class="file" type="button" id="lookupPick">Chọn file danh sách</button>
+      <input id="lookupFile" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple />
+      <button class="primary" type="button" id="lookupGo">Tra cứu</button>
+      <button class="ghost" type="button" id="lookupExport" hidden>Tải kết quả Excel</button>
+    </p>
+    <p id="lookupFiles" class="note"></p>
+    <div class="stats" id="lookupStats"></div>
+    <div class="scroll" id="lookupPeople"></div>
+    <p id="lookupNote" class="note">Chưa tra cứu trong phiên này.</p>
+  </section>
+
+  <section>
+    <h2>Khách đã lưu</h2>
+    <div class="stats" id="storeStats"></div>
+    <p class="row" style="margin:0.8rem 0">
+      <input id="query" type="search" placeholder="Tìm tên, số, địa chỉ, hàng mua, COD, UID Facebook, ID TikTok" />
+      <button class="ghost" type="button" id="export">Tải Excel kho khách</button>
+    </p>
+    <div class="scroll" id="people"></div>
+    <p id="listNote" class="note"></p>
+  </section>
+</main>
+<script>
+  var serverToken = __CONTROL_TOKEN__;
+  var pendingFiles = [];
+  var pendingKeys = {};
+  var preview = null;
+  var fieldOrder = ["name", "phone", "address", "adminAddress", "orderContent", "codAmount", "facebookUid", "tiktokId"];
+  var lineFields = {
+    address: "addressColumns",
+    adminAddress: "adminAddressColumns",
+    orderContent: "orderContentColumns"
+  };
+  var lineLabels = {
+    address: "Địa chỉ khách (mỗi cột đã chọn thành một dòng)",
+    adminAddress: "Địa chỉ hành chính (mỗi cột đã chọn thành một dòng)",
+    orderContent: "Nội dung hàng mua (mỗi cột đã chọn thành một dòng)"
+  };
+  var lookupFiles = [];
+  var lookupKeys = {};
+  var lastLookup = null;
+
+  function token() { return serverToken; }
+
+  function apiUrl(path) {
+    try {
+      return new URL(path, window.location.origin).href;
+    } catch (error) {
+      return path;
+    }
+  }
+
+  function sleep(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function networkMessage(error) {
+    var name = error && error.name;
+    if (name === "AbortError") {
+      return "Gửi file quá lâu nên đã dừng. Giữ trang mở rồi thử lại.";
+    }
+    return "Không gửi được file. Máy chủ bị ngắt khi đọc file lớn — giữ trang mở rồi thử lại.";
+  }
+
+  function lookupError(error) {
+    var name = error && error.name;
+    if (name === "AbortError") {
+      return "Tra cứu quá lâu. Tải lại trang rồi bấm Tra cứu lại.";
+    }
+    return "Máy chủ vừa bận hoặc bị ngắt. Tải lại trang, rồi bấm Tra cứu lại — không cần chọn file.";
+  }
+
+  function fillWordWrap(wrap, text) {
+    wrap.setAttribute("data-words", text);
+    wrap.setAttribute("translate", "no");
+    wrap.classList.add("words");
+    wrap.textContent = "";
+    var parts = String(text).split(" ");
+    parts.forEach(function (part, index) {
+      if (index) {
+        var spacer = document.createElement("span");
+        spacer.className = "sp";
+        spacer.setAttribute("translate", "no");
+        spacer.textContent = "\u00A0";
+        wrap.appendChild(spacer);
+      }
+      if (part) {
+        var word = document.createElement("span");
+        word.className = "w";
+        word.setAttribute("translate", "no");
+        word.textContent = part;
+        wrap.appendChild(word);
+      }
+    });
+  }
+
+  function restoreWords(root) {
+    if (!root) return;
+    var nodes = [];
+    if (root.getAttribute && root.getAttribute("data-words")) nodes.push(root);
+    if (root.querySelectorAll) {
+      root.querySelectorAll("[data-words]").forEach(function (el) { nodes.push(el); });
+    }
+    nodes.forEach(function (el) {
+      var text = el.getAttribute("data-words") || "";
+      if (!text) return;
+      var words = el.querySelectorAll(".w");
+      var joined = Array.prototype.map.call(words, function (item) { return item.textContent; }).join(" ");
+      var spacers = el.querySelectorAll(".sp").length;
+      if (words.length && joined === text && spacers >= Math.max(0, text.split(" ").length - 1)) return;
+      fillWordWrap(el, text);
+    });
+  }
+
+  function padSpaces(root) {
+    if (!root) return;
+    restoreWords(root);
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (node) {
+        var parent = node.parentElement;
+        if (!parent || parent.classList.contains("sp") || parent.classList.contains("w")) return NodeFilter.FILTER_REJECT;
+        if (parent.closest && parent.closest(".words, [data-words]")) return NodeFilter.FILTER_REJECT;
+        if (/^(SCRIPT|STYLE|TEXTAREA|INPUT|SELECT|OPTION|COL|COLGROUP)$/.test(parent.tagName)) return NodeFilter.FILTER_REJECT;
+        if (parent.closest && parent.closest("#people tbody, #lookupPeople tbody, td.addr, .addr")) return NodeFilter.FILTER_REJECT;
+        if (!node.nodeValue || node.nodeValue.indexOf(" ") < 0) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(function (node) {
+      var wrap = document.createElement("span");
+      fillWordWrap(wrap, node.nodeValue);
+      node.parentNode.replaceChild(wrap, node);
+    });
+  }
+
+  function pageTranslated() {
+    return /translated/.test(document.documentElement.className) ||
+      !!document.querySelector(".goog-te-banner-frame, #goog-gt-tt");
+  }
+
+  function watchSpaces() {
+    var banner = document.getElementById("translateWarn");
+    function tick() {
+      if (banner) banner.hidden = !pageTranslated();
+      padSpaces(document.body);
+    }
+    tick();
+    var count = 0;
+    var timer = window.setInterval(function () {
+      tick();
+      count += 1;
+      if (count >= 20) window.clearInterval(timer);
+    }, 600);
+    if (window.MutationObserver) {
+      var obs = new MutationObserver(function () {
+        if (banner) banner.hidden = !pageTranslated();
+        if (pageTranslated()) padSpaces(document.body);
+      });
+      obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    }
+  }
+
+  function sendForm(url, form, headers, waitMs, onProgress) {
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open("POST", url);
+      xhr.responseType = "blob";
+      Object.keys(headers || {}).forEach(function (key) {
+        xhr.setRequestHeader(key, headers[key]);
+      });
+      xhr.timeout = waitMs;
+      xhr.withCredentials = true;
+      if (xhr.upload && onProgress) {
+        xhr.upload.onprogress = function (event) {
+          if (event.lengthComputable) onProgress(event.loaded, event.total);
+        };
+      }
+      xhr.onload = function () {
+        var blob = xhr.response || new Blob();
+        resolve({
+          ok: xhr.status >= 200 && xhr.status < 300,
+          status: xhr.status,
+          blob: function () { return Promise.resolve(blob); },
+          arrayBuffer: function () {
+            return blob.arrayBuffer ? blob.arrayBuffer() : new Response(blob).arrayBuffer();
+          },
+          json: function () {
+            return blob.text().then(function (text) {
+              try { return JSON.parse(text || "{}"); }
+              catch (error) { return {}; }
+            });
+          }
+        });
+      };
+      xhr.onerror = function () { reject(new Error("network")); };
+      xhr.ontimeout = function () {
+        var error = new Error("timeout");
+        error.name = "AbortError";
+        reject(error);
+      };
+      xhr.send(form);
+    });
+  }
+
+  async function api(path, options) {
+    var headers = options && options.headers ? Object.assign({}, options.headers) : {};
+    if (token()) headers.Authorization = "Bearer " + token();
+    var url = apiUrl(path);
+    var upload = !!(options && (options.body || options.makeBody));
+    var tries = (options && options.tries) || 2;
+    var lastError = null;
+    var index = 0;
+    while (index < tries) {
+      index += 1;
+      if (index > 1 && options && options.onRetry) options.onRetry(index, tries);
+      var body = options && options.makeBody ? options.makeBody() : (options && options.body);
+      var waitMs = (options && options.waitMs) || (upload ? 3 * 60 * 60 * 1000 : 60 * 1000);
+      try {
+        var response;
+        if (upload && typeof FormData !== "undefined" && body instanceof FormData) {
+          response = await sendForm(url, body, headers, waitMs, options.onProgress);
+        } else {
+          var ctrl = new AbortController();
+          var timer = window.setTimeout(function () { ctrl.abort(); }, waitMs);
+          try {
+            response = await fetch(url, Object.assign({}, options || {}, {
+              headers: headers,
+              body: body,
+              credentials: "same-origin",
+              signal: ctrl.signal,
+              cache: "no-store"
+            }));
+          } finally {
+            window.clearTimeout(timer);
+          }
+        }
+        if ((response.status === 502 || response.status === 503 || response.status === 504) && index < tries) {
+          lastError = new Error("busy");
+          await sleep(2500 * index);
+          continue;
+        }
+        return response;
+      } catch (error) {
+        lastError = error;
+        if (index >= tries) break;
+        await sleep(2500 * index);
+      }
+    }
+    throw lastError || new Error("network");
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function vnNum(value) {
+    var text = String(value == null ? "" : value);
+    if (!/^\d+$/.test(text)) return text;
+    return text.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  }
+
+  function stat(value, label) {
+    return "<div class='stat'><b>" + escapeHtml(vnNum(value)) + "</b><span class='words' data-words='" + escapeHtml(label) + "'></span></div>";
+  }
+
+  function setNote(id, text, kind) {
+    var node = document.getElementById(id);
+    node.textContent = text || "";
+    node.className = kind === "warn" ? "note warn" : kind === "ok" ? "note ok" : "note";
+    padSpaces(node);
+  }
+
+  function readFieldSpec(root, field) {
+    if (lineFields[field]) {
+      var columns = [];
+      var select = root.querySelector("[data-field='" + field + "'][data-kind='one']");
+      if (select && select.selectedOptions && select.selectedOptions[0] && select.selectedOptions[0].value) {
+        var option = select.selectedOptions[0];
+        var rawIndex = option.getAttribute("data-index");
+        var index = rawIndex === "" || rawIndex == null ? null : Number(rawIndex);
+        if (index !== index) index = null;
+        columns.push({ index: index, header: option.getAttribute("data-header") || "" });
+      }
+      root.querySelectorAll("[data-field='" + field + "'] input[type=checkbox]:checked").forEach(function (box) {
+        var header = box.getAttribute("data-header") || "";
+        var rawIndex = box.getAttribute("data-index");
+        var index = rawIndex === "" || rawIndex == null ? null : Number(rawIndex);
+        if (index !== index) index = null;
+        if (header || index !== null) columns.push({ index: index, header: header });
+      });
+      var first = columns[0] || { index: null, header: "" };
+      return { index: first.index, header: first.header, columns: columns };
+    }
+    var select = root.querySelector("select[data-field='" + field + "']");
+    var option = select && select.selectedOptions && select.selectedOptions[0];
+    var header = option && option.value ? option.getAttribute("data-header") || "" : "";
+    var rawIndex = option && option.getAttribute("data-index");
+    var index = rawIndex === "" || rawIndex == null ? null : Number(rawIndex);
+    if (index !== index) index = null;
+    return { index: index, header: header };
+  }
+
+  function currentMapping() {
+    var cards = document.querySelectorAll("#mapFields .map-card");
+    var mapping = {};
+    var fileMaps = {};
+    var first = cards[0] || document.getElementById("mapFields");
+    fieldOrder.forEach(function (field) {
+      mapping[field] = readFieldSpec(first, field);
+    });
+    cards.forEach(function (card) {
+      var spec = {};
+      fieldOrder.forEach(function (field) {
+        spec[field] = readFieldSpec(card, field);
+      });
+      String(card.getAttribute("data-files") || "").split("\n").forEach(function (name) {
+        if (name) fileMaps[name] = spec;
+      });
+    });
+    mapping.fileMaps = fileMaps;
+    return mapping;
+  }
+
+  function renderCustomerSample(rows) {
+    var html = "<table class='sheet'><colgroup><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'></colgroup><thead><tr>" +
+      "<th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th></tr></thead><tbody>";
+    if (!rows.length) {
+      html += "<tr><td class='addr' colspan='6'>Không có dòng khách mẫu.</td></tr>";
+    }
+    rows.slice(0, 5).forEach(function (row) {
+      html += "<tr>" +
+        "<td>" + escapeHtml(row.name || "—") + "</td>" +
+        "<td>" + escapeHtml(row.phone || "—") + "</td>" +
+        "<td class='addr'>" + escapeHtml(row.address || "—") + "</td>" +
+        "<td class='addr'>" + escapeHtml(row.adminAddress || "—") + "</td>" +
+        "<td class='addr'>" + escapeHtml(row.orderContent || "—") + "</td>" +
+        "<td>" + escapeHtml(row.codAmount || "—") + "</td>" +
+        "</tr>";
+    });
+    html += "</tbody></table>";
+    return html;
+  }
+
+  function addSkipOption(select) {
+    var skip = document.createElement("option");
+    skip.value = "";
+    skip.setAttribute("data-header", "");
+    skip.setAttribute("data-index", "");
+    skip.textContent = "Không dùng cột này";
+    select.appendChild(skip);
+  }
+
+  function addColumnOption(select, col, selected) {
+    var option = document.createElement("option");
+    option.value = "col-" + (col.letter || col.index || col.header);
+    option.setAttribute("data-header", col.header || "");
+    option.setAttribute("data-index", col.index == null ? "" : String(col.index));
+    option.textContent = col.title;
+    if (selected) option.selected = true;
+    select.appendChild(option);
+  }
+
+  function renderGroupCard(group, fields) {
+    var card = document.createElement("div");
+    card.className = "map-card";
+    card.setAttribute("data-group", group.id || "g0");
+    card.setAttribute("data-files", (group.files || []).map(function (item) { return item.name; }).join("\n"));
+    var names = (group.files || []).map(function (item) { return item.name; });
+    var title = document.createElement("h3");
+    title.textContent = names.length > 1
+      ? names.length + " file cùng cột · " + vnNum(group.rowCount || 0) + " dòng"
+      : (names[0] || "File Excel") + " · " + vnNum(group.rowCount || 0) + " dòng";
+    card.appendChild(title);
+    if (names.length > 1) {
+      var list = document.createElement("p");
+      list.className = "note";
+      list.textContent = names.slice(0, 8).join(", ") + (names.length > 8 ? " …" : "");
+      card.appendChild(list);
+    }
+    var columns = group.columns || [];
+    var picks = group.picks || {};
+    var core = document.createElement("div");
+    core.className = "core";
+    ["name", "phone", "address"].forEach(function (field) {
+      var meta = fields.find(function (item) { return item.id === field; }) || { id: field, label: field };
+      var label = document.createElement("label");
+      label.textContent = field === "address" ? "Địa chỉ khách" : meta.label;
+      var select = document.createElement("select");
+      select.setAttribute("data-field", field);
+      select.setAttribute("data-kind", "one");
+      addSkipOption(select);
+      var pick = picks[field] || {};
+      var allowed = pick.indexes && pick.indexes.length ? pick.indexes : columns.map(function (_col, index) { return index; });
+      var suggested = pick.suggested;
+      if (field === "address" && suggested && suggested.length) suggested = suggested[0];
+      allowed.forEach(function (index) {
+        var col = columns[index];
+        if (!col) return;
+        addColumnOption(select, col, suggested === index || suggested === col.index);
+      });
+      core.appendChild(label);
+      core.appendChild(select);
+      if (field === "address") {
+        var extras = (pick.indexes || []).filter(function (index) {
+          return index !== suggested;
+        });
+        if (extras.length) {
+          var extraBox = document.createElement("div");
+          extraBox.className = "picks";
+          extraBox.setAttribute("data-field", "address");
+          extras.forEach(function (index) {
+            var col = columns[index];
+            if (!col) return;
+            var row = document.createElement("label");
+            var boxInput = document.createElement("input");
+            boxInput.type = "checkbox";
+            boxInput.setAttribute("data-header", col.header || "");
+            boxInput.setAttribute("data-index", col.index == null ? "" : String(col.index));
+            boxInput.checked = Array.isArray(pick.suggested) && pick.suggested.indexOf(index) >= 0;
+            row.appendChild(boxInput);
+            row.appendChild(document.createTextNode("Thêm dòng: " + col.title));
+            extraBox.appendChild(row);
+          });
+          core.appendChild(extraBox);
+        }
+      }
+    });
+    card.appendChild(core);
+    var extraFields = ["adminAddress", "orderContent", "codAmount", "facebookUid", "tiktokId"];
+    var extraWrap = document.createElement("details");
+    extraWrap.className = "extra";
+    var hasExtra = false;
+    extraFields.forEach(function (field) {
+      var pick = picks[field] || {};
+      if (!(pick.indexes && pick.indexes.length)) return;
+      hasExtra = true;
+      var meta = fields.find(function (item) { return item.id === field; }) || { id: field, label: field };
+      var label = document.createElement("label");
+      label.textContent = lineLabels[field] || meta.label;
+      extraWrap.appendChild(label);
+      if (pick.kind === "many") {
+        var extraBox = document.createElement("div");
+        extraBox.className = "picks";
+        extraBox.setAttribute("data-field", field);
+        var chosen = {};
+        (Array.isArray(pick.suggested) ? pick.suggested : pick.suggested != null ? [pick.suggested] : []).forEach(function (index) {
+          chosen[index] = true;
+        });
+        pick.indexes.forEach(function (index) {
+          var col = columns[index];
+          if (!col) return;
+          var row = document.createElement("label");
+          var boxInput = document.createElement("input");
+          boxInput.type = "checkbox";
+          boxInput.setAttribute("data-header", col.header || "");
+          boxInput.setAttribute("data-index", col.index == null ? "" : String(col.index));
+          boxInput.checked = !!chosen[index];
+          row.appendChild(boxInput);
+          row.appendChild(document.createTextNode(col.title));
+          extraBox.appendChild(row);
+        });
+        extraWrap.appendChild(extraBox);
+        return;
+      }
+      var select = document.createElement("select");
+      select.setAttribute("data-field", field);
+      addSkipOption(select);
+      pick.indexes.forEach(function (index) {
+        var col = columns[index];
+        if (!col) return;
+        addColumnOption(select, col, pick.suggested === index);
+      });
+      extraWrap.appendChild(select);
+    });
+    if (hasExtra) {
+      var summary = document.createElement("summary");
+      summary.textContent = "Cột thêm: hành chính, hàng mua, COD, Facebook, TikTok";
+      extraWrap.insertBefore(summary, extraWrap.firstChild);
+      card.appendChild(extraWrap);
+    }
+    var note = document.createElement("p");
+    note.className = "note ok";
+    note.textContent = group.detectNote || "";
+    card.appendChild(note);
+    var sample = document.createElement("div");
+    sample.className = "scroll";
+    sample.innerHTML = renderCustomerSample(group.mappedSamples || []);
+    card.appendChild(sample);
+    return card;
+  }
+
+  function fallbackGroups(body) {
+    return [{
+      id: "g0",
+      headers: (body.columns || []).map(function (col) { return col.header; }),
+      columns: body.columns || [],
+      suggested: body.suggested || {},
+      picks: {},
+      detectNote: body.detectNote || "",
+      mappedSamples: [],
+      files: body.files || [],
+      rowCount: (body.files || []).reduce(function (sum, item) { return sum + (item.rowCount || 0); }, 0)
+    }];
+  }
+
+  function renderMap(body) {
+    preview = body;
+    var list = document.getElementById("fileList");
+    list.innerHTML = pendingFiles.map(function (file, index) {
+      var info = (body.files || []).find(function (item) { return item.name === file.name; });
+      var extra = info && info.truncated ? " · đang xem mẫu, nạp sẽ lấy hết" : "";
+      var rows = info ? " · " + info.rowCount + " dòng" : "";
+      return "<li>" + escapeHtml(file.name) + rows + extra +
+        " <button class='ghost' type='button' data-remove='" + index + "'>Bỏ</button></li>";
+    }).join("");
+    list.querySelectorAll("button[data-remove]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        removePending(Number(button.getAttribute("data-remove")));
+      });
+    });
+    var box = document.getElementById("mapFields");
+    box.innerHTML = "";
+    var groups = body.groups && body.groups.length ? body.groups : fallbackGroups(body);
+    groups.forEach(function (group) {
+      box.appendChild(renderGroupCard(group, body.fields || []));
+    });
+    document.getElementById("sampleBox").innerHTML = "";
+    document.getElementById("mapBox").hidden = false;
+    var lead = "Máy đã tự chọn cột theo tiêu đề từng kiểu file. Chỉ sửa nếu dòng mẫu bên dưới sai.";
+    if (groups.length > 1) {
+      lead += " Có " + groups.length + " kiểu cột khác nhau — mỗi kiểu chọn một lần, không lấy nhầm cột của file kia.";
+    }
+    setNote("mapLead", lead);
+    var note = body.detectNote || "Hãy xem dòng mẫu, rồi bấm nạp. Lần nạp sau sẽ hỏi lại.";
+    if (body.fileErrors && body.fileErrors.length) {
+      note += " File lỗi: " + body.fileErrors.join(" ");
+    }
+    setNote("mapNote", note, body.fileErrors && body.fileErrors.length ? "warn" : body.detectNote ? "ok" : "");
+    padSpaces(document.getElementById("mapBox"));
+  }
+
+  function fieldWasChosen(spec) {
+    if (!spec) return false;
+    if (spec.header) return true;
+    if (spec.index !== null && spec.index !== undefined && spec.index !== "") return true;
+    return !!(spec.columns && spec.columns.some(function (col) {
+      return col && (col.header || (col.index !== null && col.index !== undefined));
+    }));
+  }
+
+  function applySpecToRoot(root, mapping, allowIndex) {
+    if (!root || !mapping) return;
+    fieldOrder.forEach(function (field) {
+      var spec = mapping[field];
+      if (!spec || !fieldWasChosen(spec)) return;
+      if (lineFields[field]) {
+        var wanted = {};
+        (spec.columns || []).forEach(function (col) {
+          if (col.header) wanted["h:" + col.header] = true;
+          if (allowIndex && col.index !== null && col.index !== undefined) wanted["i:" + String(col.index)] = true;
+        });
+        if (spec.header) wanted["h:" + spec.header] = true;
+        var select = root.querySelector("select[data-field='" + field + "']");
+        if (select) {
+          var matched = null;
+          Array.prototype.forEach.call(select.options, function (option) {
+            if (spec.header && option.getAttribute("data-header") === spec.header) matched = option;
+            else if (allowIndex && matched == null && spec.index != null && option.getAttribute("data-index") === String(spec.index)) matched = option;
+          });
+          if (matched) select.value = matched.value;
+        }
+        root.querySelectorAll("[data-field='" + field + "'] input[type=checkbox]").forEach(function (box) {
+          var header = box.getAttribute("data-header") || "";
+          var rawIndex = box.getAttribute("data-index");
+          box.checked = !!(wanted["h:" + header] || (allowIndex && rawIndex !== "" && wanted["i:" + rawIndex]));
+        });
+        return;
+      }
+      var select = root.querySelector("select[data-field='" + field + "']");
+      if (!select) return;
+      var header = spec.header || "";
+      var index = spec.index;
+      var matched = null;
+      Array.prototype.forEach.call(select.options, function (option) {
+        if (header && option.getAttribute("data-header") === header) matched = option;
+        else if (allowIndex && matched == null && index != null && option.getAttribute("data-index") === String(index)) matched = option;
+      });
+      if (matched) select.value = matched.value;
+    });
+  }
+
+  function applyChosenMapping(mapping) {
+    if (!mapping) return;
+    var cards = document.querySelectorAll("#mapFields .map-card");
+    if (!cards.length) {
+      applySpecToRoot(document.getElementById("mapFields"), mapping, true);
+      return;
+    }
+    cards.forEach(function (card) {
+      var names = String(card.getAttribute("data-files") || "").split("\n");
+      var spec = null;
+      names.forEach(function (name) {
+        if (!spec && mapping.fileMaps && mapping.fileMaps[name]) spec = mapping.fileMaps[name];
+      });
+      if (spec) applySpecToRoot(card, spec, true);
+    });
+  }
+
+  function applyMapping(mapping) {
+    applyChosenMapping(mapping);
+  }
+
+  function fileKey(file) {
+    return [file.name, file.size, file.lastModified].join(":");
+  }
+
+  function addPendingFiles(fileList) {
+    Array.prototype.slice.call(fileList || []).forEach(function (file) {
+      var key = fileKey(file);
+      if (pendingKeys[key]) return;
+      pendingKeys[key] = true;
+      pendingFiles.push(file);
+    });
+  }
+
+  function clearPending() {
+    pendingFiles = [];
+    pendingKeys = {};
+    preview = null;
+    document.getElementById("file").value = "";
+  }
+
+  function removePending(index) {
+    var file = pendingFiles[index];
+    if (!file) return;
+    delete pendingKeys[fileKey(file)];
+    pendingFiles.splice(index, 1);
+    if (!pendingFiles.length) {
+      document.getElementById("mapBox").hidden = true;
+      clearPending();
+      setNote("uploadNote", "Đã bỏ hết file. Hãy chọn lại, không giới hạn số file và dung lượng.");
+      return;
+    }
+    previewPending();
+  }
+
+  function buildPendingForm(extra) {
+    var data = new FormData();
+    pendingFiles.forEach(function (file) { data.append("files", file, file.name); });
+    if (extra) Object.keys(extra).forEach(function (key) { data.append(key, extra[key]); });
+    return data;
+  }
+
+  function progressLabel(label, loaded, total) {
+    if (!total) return label;
+    var sent = Math.round(loaded / 1024 / 1024);
+    var all = Math.max(1, Math.round(total / 1024 / 1024));
+    return label + " " + sent + "/" + all + " MB";
+  }
+
+  async function previewPending() {
+    if (!pendingFiles.length) return;
+    var previous = document.getElementById("mapBox").hidden ? null : currentMapping();
+    setNote("uploadNote", "Đang đọc " + pendingFiles.length + " file…");
+    try {
+      var response = await api("/v1/customers/preview", {
+        method: "POST",
+        makeBody: function () { return buildPendingForm(); },
+        onProgress: function (loaded, total) {
+          setNote("uploadNote", progressLabel("Đang gửi " + pendingFiles.length + " file…", loaded, total));
+        },
+        onRetry: function (index, tries) {
+          setNote("uploadNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
+        }
+      });
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        setNote("uploadNote", body.detail || "Không đọc được file.", "warn");
+        return;
+      }
+      var extra = body.fileErrors && body.fileErrors.length ? " Một số file lỗi vẫn bị bỏ qua." : "";
+      setNote("uploadNote", "Đã đọc " + body.files.length + " file. Chọn thêm file là cộng vào lần này, không giới hạn số file và dung lượng." + extra);
+      renderMap(body);
+      if (previous) applyChosenMapping(previous);
+    } catch (error) {
+      setNote("uploadNote", networkMessage(error), "warn");
+    }
+  }
+
+  async function importNow() {
+    if (!pendingFiles.length) {
+      setNote("mapNote", "Hãy chọn file trước.", "warn");
+      return;
+    }
+    var mapping = currentMapping();
+    var used = fieldOrder.some(function (field) {
+      if (lineFields[field]) return mapping[field] && mapping[field].columns && mapping[field].columns.length;
+      return mapping[field].header || mapping[field].index !== null;
+    });
+    if (!used) {
+      setNote("mapNote", "Hãy chọn ít nhất một cột dữ liệu.", "warn");
+      return;
+    }
+    var hasName = mapping.name && (mapping.name.header || mapping.name.index !== null);
+    var hasPhone = mapping.phone && (mapping.phone.header || mapping.phone.index !== null);
+    if (!hasName || !hasPhone) {
+      setNote(
+        "mapNote",
+        "Chưa chọn đủ " + (!hasName && !hasPhone ? "tên và số điện thoại" : !hasName ? "tên khách" : "số điện thoại") +
+          ". Máy chủ sẽ tự lấy cột tên người / số điện thoại / địa chỉ còn thiếu khi nạp.",
+        "warn"
+      );
+    }
+    document.getElementById("confirm").disabled = true;
+    setNote("mapNote", "Đang nạp " + pendingFiles.length + " file và gộp khách trùng…");
+    try {
+      var response = await api("/v1/customers/import", {
+        method: "POST",
+        makeBody: function () { return buildPendingForm({ mapping: JSON.stringify(mapping) }); },
+        onProgress: function (loaded, total) {
+          setNote("mapNote", progressLabel("Đang gửi " + pendingFiles.length + " file…", loaded, total));
+        },
+        onRetry: function (index, tries) {
+          setNote("mapNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
+        }
+      });
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        setNote("mapNote", body.detail || "Không nạp được.", "warn");
+        return;
+      }
+      var stats = body.stats || {};
+      document.getElementById("importStats").innerHTML =
+        stat(stats.incoming || 0, "Dòng đã đọc") +
+        stat(stats.created || 0, "Khách mới") +
+        stat(stats.updated || 0, "Đã bổ sung") +
+        stat(stats.unchanged || 0, "Giữ nguyên") +
+        stat(stats.absorbed || 0, "Khách bị gộp") +
+        stat(stats.skipped || 0, "Dòng trống");
+      padSpaces(document.getElementById("importStats"));
+      var fileNote = (body.files || []).length + " file";
+      if (body.fileErrors && body.fileErrors.length) fileNote += ", một số file lỗi bị bỏ qua";
+      var emptyFiles = body.emptyFiles || [];
+      var unmapped = (body.files || []).reduce(function (sum, item) { return sum + (item.unmapped || 0); }, 0);
+      var phonesOnFile = (body.files || []).reduce(function (sum, item) { return sum + (item.phonesOnFile || 0); }, 0);
+      var applied = (stats.created || 0) + (stats.updated || 0) + (stats.unchanged || 0);
+      var emptyNote = "";
+      if (emptyFiles.length) {
+        emptyNote = " " + emptyFiles.length + " file không lấy được dòng khách — hãy nạp lại các file đó.";
+      }
+      if (unmapped) {
+        emptyNote += " " + unmapped + " dòng trong file không lấy được tên/SĐT/địa chỉ — kiểm tra cột rồi nạp lại.";
+      }
+      if (phonesOnFile && applied < phonesOnFile) {
+        emptyNote += " Chưa ghi đủ " + applied + "/" + phonesOnFile + " số điện thoại có trong file mới.";
+      }
+      setNote(
+        "importNote",
+        "Đã đọc " + (stats.incoming || 0) + " dòng có số điện thoại từ " + fileNote +
+          ". Thêm " + (stats.created || 0) + " khách mới, bổ sung " + (stats.updated || 0) +
+          ", giữ nguyên " + (stats.unchanged || 0) +
+          ". Số điện thoại trên dòng là chuẩn lọc trùng — một số một hàng. Mọi số trong file mới đều được ghi. Không có số điện thoại thì bỏ qua, không lưu." +
+          emptyNote,
+        emptyFiles.length || (body.fileErrors && body.fileErrors.length) || (phonesOnFile && applied < phonesOnFile) ? "warn" : "ok"
+      );
+      setNote("mapNote", "Xong. Lần nạp sau sẽ hỏi lại cột.", "ok");
+      document.getElementById("mapBox").hidden = true;
+      clearPending();
+      await loadCustomers();
+      await loadSessions();
+    } catch (error) {
+      setNote("mapNote", networkMessage(error), "warn");
+    } finally {
+      document.getElementById("confirm").disabled = false;
+    }
+  }
+
+  function renderRows(items) {
+    if (!items.length) {
+      document.getElementById("people").innerHTML = "<p class='note'>Chưa có khách, hoặc không khớp từ tìm.</p>";
+      return;
+    }
+    var html = "<table class='sheet'><colgroup><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'><col class='col-id'><col class='col-id'></colgroup><thead><tr><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
+    items.forEach(function (row) {
+      html += "<tr>" +
+        "<td>" + escapeHtml(row.name || "—") + "</td>" +
+        "<td>" + escapeHtml(row.phone || "—") + "</td>" +
+        "<td class='addr'>" + escapeHtml(row.address || "—") + "</td>" +
+        "<td class='addr'>" + escapeHtml(row.adminAddress || "—") + "</td>" +
+        "<td class='addr'>" + escapeHtml(row.orderContent || "—") + "</td>" +
+        "<td>" + escapeHtml(row.codAmount || "—") + "</td>" +
+        "<td>" + escapeHtml(row.facebookUid || "—") + "</td>" +
+        "<td>" + escapeHtml(row.tiktokId || "—") + "</td>" +
+        "</tr>";
+    });
+    html += "</tbody></table>";
+    document.getElementById("people").innerHTML = html;
+  }
+
+  function vnTime(iso) {
+    try {
+      return new Date(iso).toLocaleString("vi-VN", { timeZone: "Asia/Saigon" });
+    } catch (error) {
+      return iso || "";
+    }
+  }
+
+  async function loadSessions() {
+    try {
+      var response = await api("/v1/customers/sessions");
+      if (!response.ok) {
+        setNote("sessionNote", "Không đọc được lịch sử nạp.", "warn");
+        return;
+      }
+      var body = await response.json();
+      var sessions = body.sessions || [];
+      var missing = sessions.filter(function (item) { return item.missing; }).length;
+      var emptyCount = sessions.reduce(function (sum, item) { return sum + (item.emptyFiles || []).length; }, 0);
+      var readSum = body.rowSum != null ? body.rowSum : sessions.reduce(function (sum, item) { return sum + (item.incoming || 0); }, 0);
+      var uniquePhones = body.uniquePhones != null ? body.uniquePhones : 0;
+      var emptyPhone = body.emptyPhone != null ? body.emptyPhone : 0;
+      var repeatRows = body.repeatRows != null ? body.repeatRows : Math.max(0, readSum - uniquePhones);
+      document.getElementById("sessionStats").innerHTML =
+        stat(body.total || 0, "Khách trong kho") +
+        stat(uniquePhones, "Số điện thoại khác nhau") +
+        stat(emptyPhone, "Không có SĐT") +
+        stat(readSum, "Dòng đọc cộng dồn") +
+        stat(repeatRows, "Trùng SĐT hoặc nạp lại");
+      padSpaces(document.getElementById("sessionStats"));
+      var html = "<table class='sheet sess'><thead><tr>" +
+        "<th>Thời gian</th><th>Dòng đọc</th><th>Thêm</th><th>Bổ sung</th><th>Giữ nguyên</th><th>File 0 dòng</th><th>Tình trạng</th>" +
+        "</tr></thead><tbody>";
+      sessions.forEach(function (item) {
+        var empty = (item.emptyFiles || []).length;
+        var resolved = (item.resolvedEmpty || []).length;
+        var status = "Đã đọc đủ";
+        var unmapped = item.unmapped || 0;
+        var laterOk = !!item.laterOk;
+        if (item.missing) status = "Không còn đủ — nạp lại file";
+        else if (empty) status = "Thiếu " + empty + " file 0 dòng — nạp lại";
+        else if (unmapped) status = "Thiếu " + vnNum(unmapped) + " dòng không lấy được dữ liệu — kiểm tra cột";
+        else if (resolved) status = "Đã nạp lại file 0 dòng";
+        else if (laterOk && !item.readOk) status = "Đã nạp lại đủ ở lần sau";
+        else if (item.readOk) status = "Đã đọc đủ " + vnNum(item.incoming || 0) + " dòng";
+        else if ((item.created || 0) + (item.updated || 0) + (item.unchanged || 0) < (item.incoming || 0)) {
+          status = "Chưa ghi đủ " + vnNum((item.created || 0) + (item.updated || 0) + (item.unchanged || 0)) + "/" + vnNum(item.incoming || 0);
+        }
+        html += "<tr" + (item.missing || empty || unmapped ? " class='miss'" : "") + ">";
+        html += "<td>" + escapeHtml(vnTime(item.at)) + "</td>";
+        html += "<td>" + escapeHtml(vnNum(item.incoming || 0)) + "</td>";
+        html += "<td>" + escapeHtml(vnNum(item.created || 0)) + "</td>";
+        html += "<td>" + escapeHtml(vnNum(item.updated || 0)) + "</td>";
+        html += "<td>" + escapeHtml(vnNum(item.unchanged || 0)) + "</td>";
+        html += "<td>" + escapeHtml(vnNum(empty)) + "</td>";
+        html += "<td>" + escapeHtml(status) + "</td>";
+        html += "</tr>";
+      });
+      html += "</tbody></table>";
+      document.getElementById("sessionList").innerHTML = html;
+      padSpaces(document.getElementById("sessionList"));
+      if (!sessions.length) {
+        setNote("sessionNote", "Chưa có lần nạp nào.");
+      } else if (!body.complete) {
+        setNote(
+          "sessionNote",
+          "Kho hiện " + vnNum(body.total || 0) + " khách. Còn " +
+            (body.needReupload || []).length + " file chưa nạp lại được." +
+            (missing ? " Có lô cũ không còn trong kho." : "") +
+            (emptyCount ? " Còn file 0 dòng." : ""),
+          "warn"
+        );
+      } else {
+        setNote(
+          "sessionNote",
+            "Kho đang có " + vnNum(body.total || 0) + " khách — mỗi số điện thoại một hàng. " +
+            vnNum(readSum) + " dòng đọc cộng dồn không phải " + vnNum(readSum) + " khách: cùng một file nạp lại vẫn cộng dòng, số trùng trong file hoặc giữa các file gộp một hàng. " +
+            vnNum(repeatRows) + " dòng là trùng SĐT hoặc nạp lại. Cột Thêm là khách mới; Bổ sung / Giữ nguyên là dòng đã khớp khách sẵn có. File còn thiếu: 0.",
+          "ok"
+        );
+      }
+    } catch (error) {
+      setNote("sessionNote", "Không đọc được lịch sử nạp.", "warn");
+    }
+  }
+
+  async function loadCustomers() {
+    try {
+      var query = document.getElementById("query").value;
+      var response = await api("/v1/customers" + (query ? "?q=" + encodeURIComponent(query) : ""));
+      if (response.status === 401) {
+        setNote("listNote", "Trang chưa kết nối được máy chủ.", "warn");
+        return;
+      }
+      if (!response.ok) {
+        setNote("listNote", "Không tải được kho khách.", "warn");
+        return;
+      }
+      var body = await response.json();
+      var items = (body.items || []).slice(0, 200);
+      var shown = items.length;
+      var matched = body.matched != null ? body.matched : body.count;
+      document.getElementById("storeStats").innerHTML = stat(body.total, "Khách trong kho") + stat(shown, "Khách đang hiện");
+      padSpaces(document.getElementById("storeStats"));
+      renderRows(items);
+      padSpaces(document.getElementById("people"));
+      if (query) {
+        if (!matched) {
+          setNote("listNote", "Không khớp từ tìm.");
+        } else if (matched > shown) {
+          setNote("listNote", "Tìm thấy " + matched + " khách, đang hiện " + shown + ". Thu hẹp từ khóa nếu cần.");
+        } else {
+          setNote("listNote", "Tìm thấy " + matched + " khách.");
+        }
+      } else if (body.total > shown) {
+        setNote("listNote", "Đang hiện " + shown + "/" + body.total + " khách. Gõ tìm để thu hẹp.");
+      } else {
+        setNote("listNote", body.total ? "" : "Kho còn trống.");
+      }
+    } catch (error) {
+      setNote("listNote", "Không tải được kho khách.", "warn");
+    }
+  }
+
+  function lookupForm() {
+    var data = new FormData();
+    data.append("text", document.getElementById("lookupPaste").value || "");
+    lookupFiles.forEach(function (file) { data.append("files", file, file.name); });
+    return data;
+  }
+
+  function renderLookup(body) {
+    lastLookup = body;
+    var stats = body.stats || {};
+    document.getElementById("lookupStats").innerHTML =
+      stat(stats.queried || 0, "Số đã tra") +
+      stat(stats.found || 0, "Có trong kho") +
+      stat(stats.missing || 0, "Không có") +
+      stat(stats.invalid || 0, "Dòng không phải số");
+    padSpaces(document.getElementById("lookupStats"));
+    var items = body.items || [];
+    if (!items.length) {
+      document.getElementById("lookupPeople").innerHTML = "";
+      setNote("lookupNote", "Không có kết quả.", "warn");
+      document.getElementById("lookupExport").hidden = true;
+      return;
+    }
+    var shown = items.slice(0, 2000);
+    var html = "<table class='sheet'><colgroup><col class='col-query'><col class='col-flag'><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'><col class='col-id'><col class='col-id'></colgroup><thead><tr><th>Số tra cứu</th><th>Kho</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
+    shown.forEach(function (item) {
+      var customer = item.customer || {};
+      html += "<tr><td>" + escapeHtml(item.query) + "</td><td>" + (item.found ? "Có" : "Không") + "</td><td>" + escapeHtml(customer.name) + "</td><td>" + escapeHtml(customer.phone) + "</td><td class='addr'>" + escapeHtml(customer.address) + "</td><td class='addr'>" + escapeHtml(customer.adminAddress) + "</td><td class='addr'>" + escapeHtml(customer.orderContent) + "</td><td>" + escapeHtml(customer.codAmount) + "</td><td>" + escapeHtml(customer.facebookUid) + "</td><td>" + escapeHtml(customer.tiktokId) + "</td></tr>";
+    });
+    html += "</tbody></table>";
+    document.getElementById("lookupPeople").innerHTML = html;
+    padSpaces(document.getElementById("lookupPeople"));
+    document.getElementById("lookupExport").hidden = false;
+    var note = "Đã đối chiếu " + (stats.queried || 0) + " số với kho.";
+    if (items.length > shown.length) note += " Đang hiện " + shown.length + "/" + items.length + ". Tải Excel để xem hết.";
+    if (stats.truncated) note += " Danh sách quá dài, chỉ lấy phần đầu.";
+    if (body.fileErrors && body.fileErrors.length) note += " File lỗi: " + body.fileErrors.join(" ");
+    setNote("lookupNote", note, (body.fileErrors && body.fileErrors.length) || stats.missing ? "warn" : "ok");
+  }
+
+  function addLookupFiles(fileList) {
+    Array.prototype.slice.call(fileList || []).forEach(function (file) {
+      var key = fileKey(file);
+      if (lookupKeys[key]) return;
+      lookupKeys[key] = true;
+      lookupFiles.push(file);
+    });
+  }
+
+  function renderLookupFiles() {
+    var node = document.getElementById("lookupFiles");
+    if (!lookupFiles.length) {
+      node.textContent = "";
+      return;
+    }
+    node.innerHTML = lookupFiles.map(function (file, index) {
+      return escapeHtml(file.name) +
+        " <button class='ghost' type='button' data-lookup-remove='" + index + "'>Bỏ</button>";
+    }).join(" · ");
+    node.querySelectorAll("button[data-lookup-remove]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var index = Number(button.getAttribute("data-lookup-remove"));
+        var file = lookupFiles[index];
+        if (!file) return;
+        delete lookupKeys[fileKey(file)];
+        lookupFiles.splice(index, 1);
+        renderLookupFiles();
+      });
+    });
+  }
+
+  function lookupJsonBody() {
+    return JSON.stringify({ text: document.getElementById("lookupPaste").value || "" });
+  }
+
+  async function runLookup() {
+    var text = (document.getElementById("lookupPaste").value || "").trim();
+    if (!text && !lookupFiles.length) {
+      setNote("lookupNote", "Dán list số hoặc chọn file danh sách.", "warn");
+      return;
+    }
+    document.getElementById("lookupGo").disabled = true;
+    setNote("lookupNote", "Đang tra cứu trong kho…");
+    try {
+      var response = lookupFiles.length
+        ? await api("/v1/customers/lookup", {
+          method: "POST",
+          makeBody: lookupForm,
+          tries: 3,
+          onRetry: function (index, tries) {
+            setNote("lookupNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
+          }
+        })
+        : await api("/v1/customers/lookup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: lookupJsonBody(),
+          tries: 4,
+          waitMs: 60 * 1000,
+          onRetry: function (index, tries) {
+            setNote("lookupNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
+          }
+        });
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        setNote("lookupNote", body.detail || "Không tra cứu được.", "warn");
+        return;
+      }
+      renderLookup(body);
+    } catch (error) {
+      setNote("lookupNote", lookupError(error), "warn");
+    } finally {
+      document.getElementById("lookupGo").disabled = false;
+    }
+  }
+
+  async function exportLookup() {
+    if (!lastLookup) {
+      setNote("lookupNote", "Hãy tra cứu trước khi tải kết quả.", "warn");
+      return;
+    }
+    try {
+      var response = lookupFiles.length
+        ? await api("/v1/customers/lookup/export", {
+          method: "POST",
+          makeBody: lookupForm,
+          tries: 3,
+          waitMs: 3 * 60 * 60 * 1000
+        })
+        : await api("/v1/customers/lookup/export", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: lookupJsonBody(),
+          tries: 4,
+          waitMs: 3 * 60 * 60 * 1000
+        });
+      if (!response.ok) {
+        setNote("lookupNote", "Không tải được kết quả Excel.", "warn");
+        return;
+      }
+      var blob = response.blob ? await response.blob() : new Blob([await response.arrayBuffer()]);
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement("a");
+      link.href = url;
+      link.download = "tra-cuu-khach.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setNote("lookupNote", "Không tải được kết quả Excel.", "warn");
+    }
+  }
+
+  async function exportBook() {
+    setNote("listNote", "Đang tạo file Excel kho khách… kho lớn có thể mất vài phút.");
+    try {
+      var response = await api("/v1/customers/export", { waitMs: 3 * 60 * 60 * 1000, tries: 1 });
+      if (!response.ok) {
+        setNote("listNote", "Không tải được file Excel.", "warn");
+        return;
+      }
+      var blob = await response.blob();
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement("a");
+      link.href = url;
+      link.download = "kho-khach.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setNote("listNote", "Đã tải file Excel kho khách.");
+    } catch (error) {
+      setNote("listNote", "Không tải được file Excel.", "warn");
+    }
+  }
+
+  function bindDrop() {
+    var drop = document.getElementById("drop");
+    drop.addEventListener("dragover", function (event) {
+      event.preventDefault();
+      drop.classList.add("over");
+    });
+    drop.addEventListener("dragleave", function () { drop.classList.remove("over"); });
+    drop.addEventListener("drop", function (event) {
+      event.preventDefault();
+      drop.classList.remove("over");
+      addPendingFiles(event.dataTransfer.files);
+      previewPending();
+    });
+    document.getElementById("pick").addEventListener("click", function () {
+      document.getElementById("file").click();
+    });
+    document.getElementById("file").addEventListener("change", function (event) {
+      addPendingFiles(event.target.files);
+      event.target.value = "";
+      previewPending();
+    });
+  }
+
+  document.getElementById("confirm").addEventListener("click", importNow);
+  document.getElementById("addMore").addEventListener("click", function () {
+    document.getElementById("file").click();
+  });
+  document.getElementById("cancel").addEventListener("click", function () {
+    document.getElementById("mapBox").hidden = true;
+    clearPending();
+    setNote("uploadNote", "Đã bỏ hết file. Chọn lại, không giới hạn số file và dung lượng.");
+  });
+  document.getElementById("query").addEventListener("input", function () {
+    window.clearTimeout(window.__khachSearch);
+    window.__khachSearch = window.setTimeout(loadCustomers, 200);
+  });
+  document.getElementById("export").addEventListener("click", exportBook);
+  document.getElementById("lookupPick").addEventListener("click", function () {
+    document.getElementById("lookupFile").click();
+  });
+  document.getElementById("lookupFile").addEventListener("change", function (event) {
+    addLookupFiles(event.target.files);
+    event.target.value = "";
+    renderLookupFiles();
+  });
+  document.getElementById("lookupGo").addEventListener("click", runLookup);
+  document.getElementById("lookupExport").addEventListener("click", exportLookup);
+  bindDrop();
+  watchSpaces();
+  loadCustomers();
+  loadSessions();
+</script>
+</body>
+</html>

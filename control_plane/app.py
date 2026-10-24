@@ -24,6 +24,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.formparsers import MultiPartException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from control_plane import db
@@ -43,6 +44,7 @@ from control_plane.recordings import (
     steps_to_events,
 )
 from control_plane.settings import ROOT, settings
+from control_plane.customer_api import router as customer_router
 from control_plane.video_api import router as video_router
 from control_plane.video_store import init_db as init_video_db
 from control_plane.video_store import merge_close_results
@@ -57,6 +59,7 @@ app = FastAPI(
     openapi_url=None,
 )
 app.include_router(video_router)
+app.include_router(customer_router)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CORSMiddleware,
@@ -70,13 +73,29 @@ if STATIC_DIR.is_dir():
 
 class LimitUploadSizeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+        limit = settings.upload_limit_bytes()
+        if limit is None:
+            return await call_next(request)
         cl = request.headers.get("content-length")
-        if cl and int(cl) > settings.max_upload_mb * 1024 * 1024:
-            return JSONResponse({"detail": "upload too large"}, status_code=413)
+        if cl:
+            try:
+                size = int(cl)
+            except ValueError:
+                size = 0
+            if size > limit:
+                return JSONResponse({"detail": "upload too large"}, status_code=413)
         return await call_next(request)
 
 
 app.add_middleware(LimitUploadSizeMiddleware)
+
+
+@app.exception_handler(MultiPartException)
+async def _multipart_error(_request: Request, _exc: MultiPartException) -> JSONResponse:
+    return JSONResponse(
+        {"detail": "Không đọc được file tải lên. Không giới hạn số file và dung lượng; hãy thử lại."},
+        status_code=400,
+    )
 
 
 def utcnow() -> str:
@@ -105,6 +124,7 @@ def _remember_hub(kind: str, summary: str, detail: str | None = None, actor: str
 @app.on_event("startup")
 async def _startup() -> None:
     settings.ensure_dirs()
+    settings.cleanup_import_temps()
     db.init_db(settings.db_path)
     init_video_db(settings.video_db_path)
     merge_close_results(settings.video_db_path)
@@ -181,6 +201,9 @@ def health() -> dict[str, Any]:
         "danhbaBuild": DANHBA_BUILD,
         "danhba": "/danhba/",
         "delivery": "/tai",
+        "customers": "/",
+        "customersAlias": "/khach",
+        "videos": "/video",
     }
 
 
@@ -191,12 +214,27 @@ def _html(name: str) -> HTMLResponse:
     text = path.read_text(encoding="utf-8").replace("__IPHONE_BUILD__", str(IPHONE_BUILD))
     baked = json.dumps(settings.page_token or "").replace("<", "\\u003c")
     text = text.replace("__CONTROL_TOKEN__", baked)
-    return HTMLResponse(text, headers={"Cache-Control": "no-cache"})
+    headers = {"Cache-Control": "no-cache"}
+    if name == "khach.html":
+        text = text.replace("__KHACH_BUILD__", "20261024g")
+        headers = {
+            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Content-Language": "vi",
+        }
+    return HTMLResponse(text, headers=headers)
 
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard() -> HTMLResponse:
-    """Trang duy nhất: thêm video, xem thống kê, tải bản sao lưu."""
+    """Trang chính: nạp khách bằng Excel, tra cứu theo số điện thoại."""
+    return _html("khach.html")
+
+
+@app.get("/video", response_class=HTMLResponse)
+def video_queue() -> HTMLResponse:
+    """Hàng đợi đọc video danh bạ, không phải trang nhập khách."""
     return _html("video.html")
 
 
@@ -210,6 +248,12 @@ def phone() -> HTMLResponse:
 def iphone_app() -> HTMLResponse:
     """App trên iPhone: lướt để lưu tên, điều khiển để ghi và làm lại thao tác."""
     return _html("iphone.html")
+
+
+@app.get("/khach", response_class=HTMLResponse)
+def customer_book() -> HTMLResponse:
+    """Kho khách: nạp Excel, hỏi cột, gộp khách trùng."""
+    return _html("khach.html")
 
 
 @app.get("/tai", response_class=HTMLResponse)

@@ -13,8 +13,9 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
-    conn.execute("PRAGMA temp_store=MEMORY;")
-    conn.execute("PRAGMA cache_size=-128000;")  # ~128MB page cache
+    conn.execute("PRAGMA temp_store=FILE;")
+    conn.execute("PRAGMA cache_size=-8000;")
+    conn.execute("PRAGMA busy_timeout=8000;")
     return conn
 
 
@@ -103,9 +104,37 @@ def init_db(db_path: Path) -> None:
               username TEXT NOT NULL DEFAULT '',
               updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS customers (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL DEFAULT '',
+              phone TEXT NOT NULL DEFAULT '',
+              address TEXT NOT NULL DEFAULT '',
+              admin_address TEXT NOT NULL DEFAULT '',
+              order_content TEXT NOT NULL DEFAULT '',
+              cod_amount TEXT NOT NULL DEFAULT '',
+              facebook_uid TEXT NOT NULL DEFAULT '',
+              tiktok_id TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
+            CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+            CREATE INDEX IF NOT EXISTS idx_customers_facebook ON customers(facebook_uid);
+            CREATE INDEX IF NOT EXISTS idx_customers_tiktok ON customers(tiktok_id);
+            CREATE INDEX IF NOT EXISTS idx_customers_created ON customers(created_at);
             """
         )
+        _ensure_customer_columns(conn)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_created ON customers(created_at)")
         conn.commit()
+
+
+def _ensure_customer_columns(conn: sqlite3.Connection) -> None:
+    existing = {str(row[1]) for row in conn.execute("PRAGMA table_info(customers)").fetchall()}
+    for name in ("admin_address", "order_content", "cod_amount"):
+        if name in existing:
+            continue
+        conn.execute(f"ALTER TABLE customers ADD COLUMN {name} TEXT NOT NULL DEFAULT ''")
 
 
 @contextmanager
@@ -220,7 +249,7 @@ def record_action(
             INSERT INTO operator_actions(at, actor, source, kind, summary, detail)
             VALUES(?,?,?,?,?,?)
             """,
-            (at, actor[:80], source[:40], kind[:40], summary[:500], (detail[:2000] if detail else None)),
+            (at, actor[:80], source[:40], kind[:40], summary[:500], (detail[:50000] if detail else None)),
         )
         conn.execute(
             """
@@ -719,6 +748,286 @@ def list_people(db_path: Path) -> list[dict[str, str]]:
         }
         for row in rows
     ]
+
+
+_CUSTOMER_SELECT = """
+    SELECT id, name, phone, address, admin_address, order_content, cod_amount,
+           facebook_uid, tiktok_id, created_at, updated_at
+    FROM customers
+"""
+
+
+def customer_from_sql_row(row: sqlite3.Row) -> dict[str, str]:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "phone": row["phone"],
+        "address": row["address"],
+        "adminAddress": row["admin_address"],
+        "orderContent": row["order_content"],
+        "codAmount": row["cod_amount"],
+        "facebookUid": row["facebook_uid"],
+        "tiktokId": row["tiktok_id"],
+        "createdAt": row["created_at"],
+        "updatedAt": row["updated_at"],
+    }
+
+
+def list_customers(db_path: Path, limit: int | None = None) -> list[dict[str, str]]:
+    sql = _CUSTOMER_SELECT + " ORDER BY updated_at DESC, created_at DESC"
+    with session(db_path) as conn:
+        if limit is None:
+            rows = conn.execute(sql).fetchall()
+        else:
+            rows = conn.execute(sql + " LIMIT ?", (max(1, int(limit)),)).fetchall()
+    return [customer_from_sql_row(row) for row in rows]
+
+
+def iter_customers(db_path: Path, chunk: int = 500) -> Iterator[dict[str, str]]:
+    """Đọc kho từng lô. Không tải 1,3 triệu dòng vào RAM cùng lúc."""
+    sql = _CUSTOMER_SELECT + " ORDER BY updated_at DESC, created_at DESC"
+    size = max(50, int(chunk))
+    with session(db_path) as conn:
+        cursor = conn.execute(sql)
+        while True:
+            rows = cursor.fetchmany(size)
+            if not rows:
+                break
+            for row in rows:
+                yield customer_from_sql_row(row)
+
+
+def customers_by_phone(conn: sqlite3.Connection, phone: str) -> list[dict[str, str]]:
+    if not phone:
+        return []
+    keys = _phone_variants(phone) or [phone]
+    marks = ",".join("?" * len(keys))
+    rows = conn.execute(
+        _CUSTOMER_SELECT + f" WHERE phone IN ({marks}) ORDER BY created_at ASC, id ASC",
+        keys,
+    ).fetchall()
+    return [customer_from_sql_row(row) for row in rows]
+
+
+def _phone_variants(value: str) -> list[str]:
+    raw = "".join(character for character in str(value or "") if character.isdigit())
+    digits = raw
+    if not (8 <= len(digits) <= 15):
+        return []
+    if digits.startswith("00") and not digits.startswith("0084"):
+        trimmed = digits.lstrip("0")
+        if len(trimmed) == 9 and trimmed[:1] in "35789":
+            digits = "0" + trimmed
+    keys = [digits]
+    if raw and raw != digits:
+        keys.append(raw)
+    if digits.startswith("0084") and len(digits) >= 13:
+        rest = digits[4:]
+        keys.append(rest if rest.startswith("0") else "0" + rest)
+        keys.append(rest[1:] if rest.startswith("0") else rest)
+    elif digits.startswith("084") and len(digits) >= 12:
+        rest = digits[3:]
+        keys.append(rest if rest.startswith("0") else "0" + rest)
+        keys.append(rest[1:] if rest.startswith("0") else rest)
+    elif digits.startswith("84") and len(digits) >= 11:
+        rest = digits[2:]
+        keys.append(rest if rest.startswith("0") else "0" + rest)
+        keys.append(rest[1:] if rest.startswith("0") else rest)
+    elif digits.startswith("0") and len(digits) >= 10:
+        rest = digits[1:]
+        keys.extend([rest, "84" + rest, "084" + rest, "0084" + rest, "00" + rest, "00" + digits])
+    elif len(digits) == 9:
+        keys.extend(["0" + digits, "84" + digits])
+    seen: set[str] = set()
+    unique: list[str] = []
+    for key in keys:
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        unique.append(key)
+    return unique
+
+
+def customers_for_phones(db_path: Path, phones: list[str]) -> dict[str, list[dict[str, str]]]:
+    """Tìm khách theo list số, không tải cả kho vào RAM."""
+    wanted: list[str] = []
+    seen: set[str] = set()
+    for phone in phones:
+        if not phone or phone in seen:
+            continue
+        seen.add(phone)
+        wanted.append(phone)
+    query_keys: list[str] = []
+    key_seen: set[str] = set()
+    for phone in wanted:
+        for key in _phone_variants(phone) or [phone]:
+            if key in key_seen:
+                continue
+            key_seen.add(key)
+            query_keys.append(key)
+    found: dict[str, list[dict[str, str]]] = {phone: [] for phone in wanted}
+    if not query_keys:
+        return found
+    with session(db_path) as conn:
+        for start in range(0, len(query_keys), 400):
+            chunk = query_keys[start : start + 400]
+            marks = ",".join("?" * len(chunk))
+            rows = conn.execute(
+                _CUSTOMER_SELECT + f" WHERE phone IN ({marks}) ORDER BY created_at ASC, id ASC",
+                chunk,
+            ).fetchall()
+            for row in rows:
+                item = customer_from_sql_row(row)
+                stored = item.get("phone") or ""
+                stored_keys = set(_phone_variants(stored) or [stored])
+                stored_keys.add(stored)
+                for phone in wanted:
+                    query_set = set(_phone_variants(phone) or [phone])
+                    query_set.add(phone)
+                    if stored_keys.isdisjoint(query_set):
+                        continue
+                    if any(existing.get("id") == item["id"] for existing in found[phone]):
+                        continue
+                    found[phone].append(item)
+    return found
+
+
+def search_customers(db_path: Path, query: str, limit: int = 2000) -> tuple[list[dict[str, str]], int]:
+    """Tìm khách bằng SQL, không tải cả kho vào RAM."""
+    needle = " ".join(str(query or "").replace("\u00a0", " ").split())
+    if not needle:
+        return [], 0
+    limit = max(1, int(limit))
+    escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    likes = [f"%{escaped}%"]
+    folded = needle.casefold()
+    if folded != needle:
+        folded_esc = folded.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        likes.append(f"%{folded_esc}%")
+    fields = (
+        "name",
+        "phone",
+        "address",
+        "admin_address",
+        "order_content",
+        "cod_amount",
+        "facebook_uid",
+        "tiktok_id",
+    )
+    clauses: list[str] = []
+    params: list[Any] = []
+    for pattern in likes:
+        clauses.append("(" + " OR ".join(f"{field} LIKE ? ESCAPE '\\'" for field in fields) + ")")
+        params.extend([pattern] * len(fields))
+    variants = _phone_variants(needle)
+    if variants:
+        clauses.append("phone IN (" + ",".join("?" * len(variants)) + ")")
+        params.extend(variants)
+    where = " OR ".join(clauses)
+    with session(db_path) as conn:
+        total = int(conn.execute(f"SELECT COUNT(*) AS n FROM customers WHERE {where}", params).fetchone()["n"])
+        rows = conn.execute(
+            _CUSTOMER_SELECT + f" WHERE {where} ORDER BY updated_at DESC, created_at DESC LIMIT ?",
+            (*params, limit),
+        ).fetchall()
+    return [customer_from_sql_row(row) for row in rows], total
+
+
+def write_customers(conn: sqlite3.Connection, rows: list[dict[str, Any]], removed_ids: list[str]) -> None:
+    dirty = [row for row in rows if row.get("write", True)]
+    if removed_ids:
+        conn.executemany("DELETE FROM customers WHERE id=?", [(customer_id,) for customer_id in removed_ids])
+    if not dirty:
+        return
+    conn.executemany(
+        """
+        INSERT INTO customers(
+          id, name, phone, address, admin_address, order_content, cod_amount,
+          facebook_uid, tiktok_id, created_at, updated_at
+        )
+        VALUES(?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET
+          name=excluded.name,
+          phone=excluded.phone,
+          address=excluded.address,
+          admin_address=excluded.admin_address,
+          order_content=excluded.order_content,
+          cod_amount=excluded.cod_amount,
+          facebook_uid=excluded.facebook_uid,
+          tiktok_id=excluded.tiktok_id,
+          created_at=excluded.created_at,
+          updated_at=excluded.updated_at
+        """,
+        [
+            (
+                row["id"],
+                row.get("name") or "",
+                row.get("phone") or "",
+                row.get("address") or "",
+                row.get("adminAddress") or "",
+                row.get("orderContent") or "",
+                row.get("codAmount") or "",
+                row.get("facebookUid") or "",
+                row.get("tiktokId") or "",
+                row.get("createdAt") or "",
+                row.get("updatedAt") or "",
+            )
+            for row in dirty
+        ],
+    )
+
+
+def replace_customers(db_path: Path, rows: list[dict[str, Any]], removed_ids: list[str]) -> None:
+    with session(db_path) as conn:
+        write_customers(conn, rows, removed_ids)
+
+
+def delete_customers_without_phone(db_path: Path) -> int:
+    """Xóa các hàng không có số điện thoại. Không đụng khách đã có SĐT."""
+    with session(db_path) as conn:
+        row = conn.execute("SELECT COUNT(*) AS n FROM customers WHERE phone = ''").fetchone()
+        count = int(row["n"] or 0)
+        if count:
+            conn.execute("DELETE FROM customers WHERE phone = ''")
+    return count
+
+
+def customer_count(db_path: Path) -> int:
+    with session(db_path) as conn:
+        row = conn.execute("SELECT COUNT(*) AS n FROM customers").fetchone()
+    return int(row["n"] if row else 0)
+
+
+def warehouse_stats(db_path: Path) -> dict[str, int]:
+    """Đếm kho một lần: tổng hàng, SĐT khác nhau, hàng không có SĐT."""
+    with session(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT
+              COUNT(*) AS total,
+              SUM(CASE WHEN phone = '' THEN 1 ELSE 0 END) AS empty_phone,
+              COUNT(DISTINCT CASE WHEN phone != '' THEN phone END) AS unique_phones
+            FROM customers
+            """
+        ).fetchone()
+    total = int(row["total"] or 0)
+    empty = int(row["empty_phone"] or 0)
+    unique = int(row["unique_phones"] or 0)
+    return {
+        "total": total,
+        "uniquePhones": unique,
+        "emptyPhone": empty,
+        "duplicatePhones": max(0, total - unique - empty),
+    }
+
+
+def customers_created_between(db_path: Path, start: str, end: str) -> int:
+    with session(db_path) as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM customers WHERE created_at >= ? AND created_at <= ?",
+            (start, end),
+        ).fetchone()
+    return int(row["n"] if row else 0)
 
 
 def save_people(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> None:
