@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Iterator
@@ -9,6 +11,32 @@ from typing import Any, Iterable, Iterator
 
 PHONE_IN_CHUNK = 800
 PHONE_TEMP_KEYS = 1600
+PHONE_KEY_SYNC_ROWS = 200_000
+PHONE_KEY_BATCH = 50_000
+_PHONE_KEY_STARTED: set[str] = set()
+_PHONE_KEY_LOCK = threading.Lock()
+
+
+def phone_key(value: Any) -> str:
+    """Khóa so khớp một SĐT: 0901…, 84901…, +84 901…, 00901…, 901… cùng một khóa."""
+    text = str(value or "")
+    digits = text if text.isdigit() else "".join(character for character in text if character.isdigit())
+    if not (8 <= len(digits) <= 15):
+        return digits
+    if digits.startswith("0084") and len(digits) >= 13:
+        rest = digits[4:]
+    elif digits.startswith("084") and len(digits) >= 12:
+        rest = digits[3:]
+    elif digits.startswith("84") and len(digits) >= 11:
+        rest = digits[2:]
+    elif digits.startswith("00"):
+        trimmed = digits.lstrip("0")
+        return trimmed if len(trimmed) == 9 and trimmed[:1] in "35789" else digits
+    elif digits.startswith("0") and len(digits) >= 10:
+        return digits[1:]
+    else:
+        return digits
+    return rest[1:] if rest.startswith("0") else rest
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -136,19 +164,110 @@ def init_db(db_path: Path) -> None:
             CREATE INDEX IF NOT EXISTS idx_customers_facebook ON customers(facebook_uid);
             CREATE INDEX IF NOT EXISTS idx_customers_tiktok ON customers(tiktok_id);
             CREATE INDEX IF NOT EXISTS idx_customers_created ON customers(created_at);
+            CREATE TABLE IF NOT EXISTS kv_meta (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            );
             """
         )
         _ensure_customer_columns(conn)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_created ON customers(created_at)")
         conn.commit()
+        ready = _phone_key_flag(conn)
+    if not ready:
+        ensure_phone_keys(db_path)
 
 
 def _ensure_customer_columns(conn: sqlite3.Connection) -> None:
     existing = {str(row[1]) for row in conn.execute("PRAGMA table_info(customers)").fetchall()}
-    for name in ("admin_address", "order_content", "cod_amount"):
+    for name in ("admin_address", "order_content", "cod_amount", "phone_key"):
         if name in existing:
             continue
         conn.execute(f"ALTER TABLE customers ADD COLUMN {name} TEXT NOT NULL DEFAULT ''")
+
+
+def _phone_key_flag(conn: sqlite3.Connection) -> bool:
+    row = conn.execute("SELECT value FROM kv_meta WHERE key = 'phone_key_ready'").fetchone()
+    return bool(row) and str(row[0]) == "1"
+
+
+def phone_keys_ready(conn: sqlite3.Connection) -> bool:
+    try:
+        return _phone_key_flag(conn)
+    except sqlite3.OperationalError:
+        return False
+
+
+def backfill_phone_keys(db_path: Path, batch: int = PHONE_KEY_BATCH, pause: float = 0.0) -> int:
+    """Điền phone_key cho kho cũ theo từng lô rowid, commit từng lô để không khóa kho lâu."""
+    conn = connect(db_path)
+    changed = 0
+    try:
+        conn.execute("PRAGMA busy_timeout=60000;")
+        conn.create_function("khach_phone_key", 1, phone_key, deterministic=True)
+        top = int(conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM customers").fetchone()[0] or 0)
+        start = 0
+        while start < top:
+            cur = conn.execute(
+                "UPDATE customers SET phone_key = khach_phone_key(phone) "
+                "WHERE rowid > ? AND rowid <= ? AND phone_key != khach_phone_key(phone)",
+                (start, start + batch),
+            )
+            changed += max(0, cur.rowcount or 0)
+            conn.commit()
+            start += batch
+            if pause:
+                time.sleep(pause)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_phone_key ON customers(phone_key)")
+        conn.execute("INSERT OR REPLACE INTO kv_meta(key, value) VALUES('phone_key_ready', '1')")
+        conn.commit()
+    finally:
+        conn.close()
+    return changed
+
+
+def _backfill_in_background(db_path: Path) -> None:
+    try:
+        backfill_phone_keys(db_path, pause=0.05)
+    except Exception:
+        pass
+    finally:
+        with _PHONE_KEY_LOCK:
+            _PHONE_KEY_STARTED.discard(str(db_path))
+
+
+def ensure_phone_keys(db_path: Path) -> None:
+    """Kho nhỏ: điền phone_key ngay. Kho lớn: điền ở luồng nền; trong lúc đó tra theo biến thể số cũ."""
+    key = str(db_path)
+    with _PHONE_KEY_LOCK:
+        if key in _PHONE_KEY_STARTED:
+            return
+        _PHONE_KEY_STARTED.add(key)
+    background = False
+    try:
+        conn = connect(db_path)
+        try:
+            if _phone_key_flag(conn):
+                return
+            rows = int(conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0] or 0)
+        finally:
+            conn.close()
+        if rows <= PHONE_KEY_SYNC_ROWS:
+            backfill_phone_keys(db_path)
+            return
+        threading.Thread(
+            target=_backfill_in_background,
+            args=(db_path,),
+            name="khach-phone-key",
+            daemon=True,
+        ).start()
+        background = True
+    except Exception:
+        return
+    finally:
+        if not background:
+            with _PHONE_KEY_LOCK:
+                _PHONE_KEY_STARTED.discard(key)
 
 
 @contextmanager
@@ -926,6 +1045,33 @@ def _customers_for_phone_from_index(
     return matches
 
 
+def _fetch_by_phone_key(conn: sqlite3.Connection, keys: list[str]) -> list[sqlite3.Row]:
+    select = _CUSTOMER_SELECT.replace("SELECT id,", "SELECT phone_key, id,", 1)
+    if len(keys) >= PHONE_TEMP_KEYS:
+        conn.execute("CREATE TEMP TABLE IF NOT EXISTS _khach_key_q (k TEXT NOT NULL PRIMARY KEY)")
+        conn.execute("DELETE FROM _khach_key_q")
+        conn.executemany("INSERT OR IGNORE INTO _khach_key_q(k) VALUES (?)", ((key,) for key in keys))
+        return conn.execute(select + " WHERE phone_key IN (SELECT k FROM _khach_key_q)").fetchall()
+    rows: list[sqlite3.Row] = []
+    for start in range(0, len(keys), PHONE_IN_CHUNK):
+        chunk = keys[start : start + PHONE_IN_CHUNK]
+        marks = ",".join("?" * len(chunk))
+        rows.extend(conn.execute(select + f" WHERE phone_key IN ({marks})", chunk).fetchall())
+    return rows
+
+
+def _customers_by_phone_key(conn: sqlite3.Connection, wanted: list[str]) -> dict[str, list[dict[str, str]]]:
+    key_of = {phone: phone_key(phone) or phone for phone in wanted}
+    keys = list(dict.fromkeys(key_of.values()))
+    by_key: dict[str, list[dict[str, str]]] = {}
+    for row in _fetch_by_phone_key(conn, keys):
+        by_key.setdefault(str(row["phone_key"]), []).append(customer_from_sql_row(row))
+    for bucket in by_key.values():
+        if len(bucket) > 1:
+            bucket.sort(key=lambda item: (item.get("createdAt") or "", item.get("id") or ""))
+    return {phone: list(by_key.get(key_of[phone]) or []) for phone in wanted}
+
+
 def customers_matching_phones(
     conn: sqlite3.Connection,
     phones: list[str],
@@ -938,6 +1084,10 @@ def customers_matching_phones(
             continue
         seen.add(phone)
         wanted.append(phone)
+    if not wanted:
+        return {}
+    if phone_keys_ready(conn):
+        return _customers_by_phone_key(conn, wanted)
     found: dict[str, list[dict[str, str]]] = {phone: [] for phone in wanted}
     keys = _unique_phone_keys(wanted)
     if not keys:
@@ -955,12 +1105,38 @@ def customers_for_phones(db_path: Path, phones: list[str]) -> dict[str, list[dic
         return customers_matching_phones(conn, phones)
 
 
+@contextmanager
+def lookup_connection(db_path: Path) -> Iterator[sqlite3.Connection]:
+    """Kết nối đọc cho tra cứu nhiều lô; commit sau mỗi lô để không giữ ảnh chụp WAL quá lâu."""
+    conn = connect(db_path)
+    try:
+        apply_heavy_pragmas(conn)
+        yield conn
+    finally:
+        conn.close()
+
+
+def _phone_query(needle: str) -> str:
+    """Ô tìm chỉ gồm một số điện thoại (có thể có dấu cách, chấm, +84) thì trả về số đó."""
+    if not needle or any(not (character.isdigit() or character in " .-+()") for character in needle):
+        return ""
+    digits = "".join(character for character in needle if character.isdigit())
+    return digits if 9 <= len(digits) <= 15 else ""
+
+
 def search_customers(db_path: Path, query: str, limit: int = 2000) -> tuple[list[dict[str, str]], int]:
-    """Tìm khách bằng SQL, không tải cả kho vào RAM."""
-    needle = " ".join(str(query or "").replace("\u00a0", " ").split())
+    """Tìm khách bằng SQL, không tải cả kho vào RAM. Tìm bằng cả số điện thoại thì dò thẳng chỉ mục."""
+    needle = " ".join(str(query or "").split())
     if not needle:
         return [], 0
     limit = max(1, int(limit))
+    number = _phone_query(needle)
+    if number:
+        with session(db_path) as conn:
+            if phone_keys_ready(conn):
+                rows = customers_matching_phones(conn, [number]).get(number) or []
+                if rows:
+                    return rows[:limit], len(rows)
     escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     likes = [f"%{escaped}%"]
     folded = needle.casefold()
@@ -1005,13 +1181,14 @@ def write_customers(conn: sqlite3.Connection, rows: list[dict[str, Any]], remove
     conn.executemany(
         """
         INSERT INTO customers(
-          id, name, phone, address, admin_address, order_content, cod_amount,
+          id, name, phone, phone_key, address, admin_address, order_content, cod_amount,
           facebook_uid, tiktok_id, created_at, updated_at
         )
-        VALUES(?,?,?,?,?,?,?,?,?,?,?)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET
           name=excluded.name,
           phone=excluded.phone,
+          phone_key=excluded.phone_key,
           address=excluded.address,
           admin_address=excluded.admin_address,
           order_content=excluded.order_content,
@@ -1026,6 +1203,7 @@ def write_customers(conn: sqlite3.Connection, rows: list[dict[str, Any]], remove
                 row["id"],
                 row.get("name") or "",
                 row.get("phone") or "",
+                phone_key(row.get("phone") or ""),
                 row.get("address") or "",
                 row.get("adminAddress") or "",
                 row.get("orderContent") or "",
