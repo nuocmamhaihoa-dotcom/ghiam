@@ -106,8 +106,9 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("một khách cho mỗi số điện thoại", home.text)
         self.assertIn("ô trống được bổ sung", home.text)
         self.assertIn("Không có số điện thoại thì bỏ qua, không lưu", home.text)
-        self.assertIn("số điện thoại trên từng dòng là chuẩn lọc trùng", home.text)
-        self.assertIn("Mọi dòng có số điện thoại trong file mới đều được ghi", home.text)
+        self.assertIn("Số trên dòng là chuẩn lọc trùng", home.text)
+        self.assertIn("Mọi dòng có số trong file mới đều được ghi", home.text)
+        self.assertIn("Mỗi dòng có số điện thoại là một khách", home.text)
         self.assertIn("Số 84", home.text)
         self.assertIn("không lấy UID Facebook", home.text)
         self.assertIn("không bắt buộc chọn file", home.text)
@@ -1197,6 +1198,92 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(again_stats["incoming"], 3)
         self.assertEqual(again_stats["created"] + again_stats["updated"] + again_stats["unchanged"], 3)
         self.assertEqual(self.client.get("/v1/customers", headers=self.headers).json()["total"], 3)
+
+    def test_import_complete_scenarios_every_row_is_a_customer(self) -> None:
+        from control_plane.excel_import import write_xlsx_sheets
+
+        mapping = {
+            "name": {"index": 0, "header": "Tên"},
+            "phone": {"index": 1, "header": "SĐT"},
+            "address": {"index": 2, "header": "Địa chỉ"},
+        }
+        payload = write_xlsx_sheets(
+            [
+                (
+                    "Mot",
+                    [
+                        ["Tên", "SĐT", "Địa chỉ"],
+                        ["Lan", "0901111111", "Huế"],
+                        ["", "", ""],
+                        ["Minh", "LH 0902.222.222", "Đà Nẵng"],
+                    ],
+                ),
+                (
+                    "Hai",
+                    [
+                        ["Họ tên", "Số điện thoại", "Địa chỉ nhận"],
+                        ["Hoa", "84903333333", "Nha Trang"],
+                        ["An", "0901444444", "Quy Nhơn"],
+                    ],
+                ),
+                (
+                    "Ba",
+                    [
+                        ["Bình", "0901555555", "Hà Nội"],
+                        ["Lan lại", "0901111111", "Huế 2"],
+                    ],
+                ),
+            ]
+        )
+        imported = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={"mapping": json.dumps(mapping)},
+            files=[
+                (
+                    "files",
+                    (
+                        "du-kien.xlsx",
+                        payload,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    ),
+                )
+            ],
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+        stats = imported.json()["stats"]
+        self.assertEqual(stats["incoming"], 6)
+        self.assertEqual(stats["created"], 5)
+        self.assertEqual(stats["updated"], 1)
+        self.assertEqual(stats["created"] + stats["updated"] + stats["unchanged"], 6)
+        self.assertEqual(imported.json()["files"][0]["phonesOnFile"], 6)
+        items = {item["phone"]: item for item in self.client.get("/v1/customers", headers=self.headers).json()["items"]}
+        self.assertEqual(
+            set(items),
+            {"0901111111", "0902222222", "0903333333", "0901444444", "0901555555"},
+        )
+        self.assertEqual(items["0901111111"]["address"], "Huế\nHuế 2")
+        again = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={"mapping": json.dumps(mapping)},
+            files=[
+                (
+                    "files",
+                    (
+                        "du-kien-2.xlsx",
+                        payload,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    ),
+                )
+            ],
+        )
+        self.assertEqual(again.status_code, 200, again.text)
+        again_stats = again.json()["stats"]
+        self.assertEqual(again_stats["created"], 0)
+        self.assertEqual(again_stats["incoming"], 6)
+        self.assertEqual(again_stats["created"] + again_stats["updated"] + again_stats["unchanged"], 6)
+        self.assertEqual(self.client.get("/v1/customers", headers=self.headers).json()["total"], 5)
 
 
 if __name__ == "__main__":

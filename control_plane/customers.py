@@ -38,6 +38,8 @@ def expand_scientific(value: str) -> str:
     text = collapse(value)
     if not text:
         return text
+    if re.fullmatch(r"[+-]?\d+\.0+", text):
+        return text.lstrip("+").split(".", 1)[0]
     match = _SCI.fullmatch(text)
     if not match:
         return text
@@ -100,6 +102,8 @@ def clean_phone(value: Any) -> str:
         trimmed = digits.lstrip("0")
         if len(trimmed) == 9 and trimmed[:1] in "35789":
             return "0" + trimmed
+    if len(digits) == 9 and digits[:1] in "35789":
+        return "0" + digits
     return ("+" + digits) if leading_plus and not digits.startswith("84") else digits
 
 

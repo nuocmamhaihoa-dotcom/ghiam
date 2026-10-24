@@ -29,13 +29,16 @@ from control_plane.excel_import import (
     _combine_sheets,
     _fill_shared_strings,
     _shared_strings,
+    iter_mapped_file,
     iter_xlsx_rows,
     mapping_from_form,
+    phone_from_cell,
     phone_from_row_cells,
     preview_table,
     rows_from_files,
     rows_from_table,
     write_xlsx,
+    write_xlsx_sheets,
 )
 from control_plane.settings import settings
 
@@ -48,6 +51,7 @@ class CustomerCleanTests(unittest.TestCase):
         self.assertEqual(clean_phone("084901234567"), "0901234567")
         self.assertEqual(clean_phone("84901234567"), "0901234567")
         self.assertEqual(clean_phone("00352548360"), "0352548360")
+        self.assertEqual(clean_phone("901234567"), "0901234567")
         self.assertEqual(clean_phone("abc"), "")
         self.assertIn("0901234567", phone_lookup_keys("84901234567"))
         self.assertIn("84901234567", phone_lookup_keys("0901234567"))
@@ -58,6 +62,8 @@ class CustomerCleanTests(unittest.TestCase):
         self.assertEqual(clean_facebook_uid("1.000123456789e+12"), "1000123456789")
         self.assertEqual(clean_facebook_uid("1000123456789"), "1000123456789")
         self.assertEqual(expand_scientific("1.0001234567890123e+16"), "10001234567890123")
+        self.assertEqual(expand_scientific("901222333.0"), "901222333")
+        self.assertEqual(expand_scientific("9.01222333E8"), "901222333")
         self.assertEqual(clean_facebook_uid("1.0001234567890123e+16"), "10001234567890123")
 
     def test_cod_reads_k_and_plain_numbers(self) -> None:
@@ -671,6 +677,166 @@ class PhoneOnRowTests(unittest.TestCase):
         self.assertEqual(extracted[0]["name"], "Lan")
         self.assertEqual(extracted[0]["facebookUid"], "100007416894544")
         self.assertEqual(extracted[0]["address"], "Huế")
+
+    def test_phone_from_cell_reads_text_and_skips_facebook(self) -> None:
+        self.assertEqual(phone_from_cell("LH: 0901.222.333 gặp chiều"), "0901222333")
+        self.assertEqual(phone_from_cell("100007416894544"), "")
+        self.assertEqual(phone_from_cell("84901444555"), "0901444555")
+
+
+class CompleteRowImportTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.folder = tempfile.TemporaryDirectory(prefix="khach-complete-")
+        self.db_path = Path(self.folder.name) / "server.db"
+        db.init_db(self.db_path)
+
+    def tearDown(self) -> None:
+        self.folder.cleanup()
+
+    def _phones(self) -> set[str]:
+        conn = db.connect(self.db_path)
+        try:
+            rows = conn.execute("SELECT phone FROM customers").fetchall()
+        finally:
+            conn.close()
+        return {str(row["phone"]) for row in rows}
+
+    def test_every_row_with_phone_becomes_one_customer(self) -> None:
+        mapping = mapping_from_form(
+            {
+                "name": {"index": 0, "header": "Tên"},
+                "phone": {"index": 1, "header": "SĐT"},
+                "address": {"index": 2, "header": "Địa chỉ"},
+            }
+        )
+        payload = write_xlsx(
+            ["Tên", "SĐT", "Địa chỉ"],
+            [
+                ["Lan", "0901111111", "Huế"],
+                ["", "", ""],
+                ["Minh", "+84 902 222 222", "Đà Nẵng"],
+                ["Hoa", "84903333333", "Nha Trang"],
+                ["Không số", "", "Chỉ địa chỉ"],
+                ["An", "0901.444.444", "Quy Nhơn"],
+                ["Lan trùng", "0901111111", "Huế 2"],
+            ],
+        )
+        incoming, reports = rows_from_files([("du-kien.xlsx", payload)], mapping)
+        self.assertEqual(reports[0]["rows"], 5)
+        self.assertEqual([row["phone"] for row in incoming], [
+            "0901111111",
+            "0902222222",
+            "0903333333",
+            "0901444444",
+            "0901111111",
+        ])
+        stats, _preview = ingest_customers(self.db_path, iter(incoming), "2026-01-01T00:00:00+00:00")
+        self.assertEqual(stats["incoming"], 5)
+        self.assertEqual(stats["created"] + stats["updated"] + stats["unchanged"], 5)
+        self.assertEqual(stats["created"], 4)
+        self.assertEqual(stats["updated"], 1)
+        self.assertEqual(self._phones(), {"0901111111", "0902222222", "0903333333", "0901444444"})
+
+    def test_second_sheet_keeps_first_data_row_and_own_headers(self) -> None:
+        payload = write_xlsx_sheets(
+            [
+                (
+                    "Mot",
+                    [
+                        ["Tên", "SĐT", "Địa chỉ"],
+                        ["Lan", "0901111111", "Huế"],
+                    ],
+                ),
+                (
+                    "Hai",
+                    [
+                        ["Họ tên", "Số điện thoại", "Địa chỉ nhận"],
+                        ["Minh", "0902222222", "Đà Nẵng"],
+                        ["Hoa", "0903333333", "Nha Trang"],
+                    ],
+                ),
+                (
+                    "Ba",
+                    [
+                        ["An", "0904444444", "Quy Nhơn"],
+                        ["Bình", "0905555555", "Hà Nội"],
+                    ],
+                ),
+            ]
+        )
+        mapping = mapping_from_form(
+            {
+                "name": {"index": 0, "header": "Tên"},
+                "phone": {"index": 1, "header": "SĐT"},
+                "address": {"index": 2, "header": "Địa chỉ"},
+            }
+        )
+        counts = {"fileRows": 0, "unmapped": 0, "phonesOnFile": 0}
+        _width, mapped = iter_mapped_file("nhieu-sheet.xlsx", payload, mapping, None, counts)
+        incoming = list(mapped)
+        self.assertEqual(counts["phonesOnFile"], 5)
+        self.assertEqual({row["phone"] for row in incoming}, {
+            "0901111111",
+            "0902222222",
+            "0903333333",
+            "0904444444",
+            "0905555555",
+        })
+        stats, _preview = ingest_customers(self.db_path, iter(incoming), "2026-01-01T00:00:00+00:00")
+        self.assertEqual(stats["created"], 5)
+        self.assertEqual(self._phones(), {
+            "0901111111",
+            "0902222222",
+            "0903333333",
+            "0904444444",
+            "0905555555",
+        })
+
+    def test_messy_and_excel_number_phones_still_import(self) -> None:
+        mapping = mapping_from_form(
+            {
+                "name": {"index": 0, "header": "Tên"},
+                "phone": {"index": 1, "header": "Giới tính"},
+                "address": {"index": 2, "header": "Địa chỉ"},
+            }
+        )
+        rows = [
+            ["Tên", "Giới tính", "Ghi chú", "Địa chỉ"],
+            ["Lan", "Nữ", "LH: 0901.666.666 gặp chiều", "Huế"],
+            ["Minh", "Nam", "9.01222777E8", "Đà Nẵng"],
+            ["Hoa", "Nữ", "0901222888.0", "Nha Trang"],
+            ["Uid", "Nam", "100007416894544", "Hà Nội"],
+        ]
+        extracted = rows_from_table(rows, mapping)
+        self.assertEqual([row["phone"] for row in extracted], ["0901666666", "0901222777", "0901222888"])
+        stats, _preview = ingest_customers(self.db_path, iter(extracted), "2026-01-01T00:00:00+00:00")
+        self.assertEqual(stats["created"], 3)
+        self.assertEqual(self._phones(), {"0901666666", "0901222777", "0901222888"})
+
+    def test_csv_semicolon_keeps_every_phone_row(self) -> None:
+        text = "Tên;SĐT;Địa chỉ\nLan;0901111111;Huế\nMinh;0902222222;Đà Nẵng\n"
+        mapping = mapping_from_form(
+            {
+                "name": {"index": 0, "header": "Tên"},
+                "phone": {"index": 1, "header": "SĐT"},
+                "address": {"index": 2, "header": "Địa chỉ"},
+            }
+        )
+        incoming, reports = rows_from_files([("danh-ba.csv", text.encode("utf-8"))], mapping)
+        self.assertEqual(reports[0]["rows"], 2)
+        self.assertEqual({row["phone"] for row in incoming}, {"0901111111", "0902222222"})
+
+    def test_headerless_second_sheet_is_not_dropped_by_combine(self) -> None:
+        combined = _combine_sheets(
+            [
+                [["Tên khách", "SĐT"], ["Lan", "0901111111"]],
+                [["Minh", "0902222222"], ["Hoa", "0903333333"]],
+            ]
+        )
+        self.assertEqual(combined[0], ["Tên khách", "SĐT"])
+        self.assertIn(["Minh", "0902222222"], combined)
+        self.assertIn(["Hoa", "0903333333"], combined)
+        self.assertIn(["Lan", "0901111111"], combined)
 
 
 class SharedStringSpillTests(unittest.TestCase):

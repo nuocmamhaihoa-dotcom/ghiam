@@ -18,6 +18,7 @@ from control_plane.column_detect import (
     complete_core_mapping,
     explain_mapping,
     header_field,
+    looks_like_facebook_uid,
     looks_like_label_row,
     looks_like_vn_phone,
     mapping_spec_chosen,
@@ -44,6 +45,7 @@ SAMPLE_ROWS = 8
 DETECT_ROWS = 200
 PREVIEW_STORE = SAMPLE_ROWS + DETECT_ROWS + 1
 _COL_REF = re.compile(r"^([A-Z]+)(\d+)$")
+_PHONE_CHUNK = re.compile(r"(?:\+?84|0)?[3-9][\d.\-\s()]{7,18}")
 
 FIELD_LABELS = {
     "name": "Tên khách",
@@ -356,10 +358,17 @@ def _combine_sheets(tables: list[list[list[str]]]) -> list[list[str]]:
             prev.append("")
         return dest
 
-    for table in kept:
+    for index, table in enumerate(kept):
         other_header = [collapse(cell) for cell in table[0]]
         same = [header_key(item) for item in other_header] == [header_key(item) for item in header]
-        body = table[1:] if other_header and any(collapse(cell) for cell in other_header) else table
+        labeled = looks_like_label_row(table[0]) if table else False
+        if index == 0:
+            body = table[1:]
+        elif labeled:
+            body = table[1:]
+        else:
+            body = table
+            same = True
         if same:
             width = len(header)
             for row in body:
@@ -457,6 +466,8 @@ def iter_xlsx_rows(data: TableSource) -> Iterator[list[str]]:
                     header_key(title): index for index, title in enumerate(header) if header_key(title)
                 }
                 continue
+            if not looks_like_label_row(first):
+                continue
             for title in other_header:
                 if not header_key(title) or header_key(title) in header_index:
                     continue
@@ -465,22 +476,33 @@ def iter_xlsx_rows(data: TableSource) -> Iterator[list[str]]:
         if header is None:
             return
         yield list(header)
+        first_sheet = True
         for path, first in zip(paths, first_rows):
             if first is None:
+                first_sheet = False
                 continue
+            labeled = looks_like_label_row(first)
             other_header = [collapse(cell) for cell in first]
             same = [header_key(item) for item in other_header] == [header_key(item) for item in header]
+            skip_first = labeled or first_sheet
+            first_sheet = False
             with archive.open(path) as handle:
                 rows = _iter_sheet_rows(handle, shared)
-                next(rows, None)
-                for row in rows:
-                    if same:
-                        width = len(header)
-                        yield list(row[:width]) + [""] * max(0, width - len(row))
-                    else:
+                first_of_sheet = next(rows, None)
+
+                def sheet_body() -> Iterator[list[str]]:
+                    if first_of_sheet is not None and not skip_first:
+                        yield first_of_sheet
+                    yield from rows
+
+                for row in sheet_body():
+                    if labeled and not same:
                         aligned = _align_row(row, other_header, header, header_index)
                         if any(collapse(cell) for cell in aligned):
                             yield aligned
+                        continue
+                    width = len(header)
+                    yield list(row[:width]) + [""] * max(0, width - len(row))
     except ValueError:
         raise
     except (KeyError, ET.ParseError, zipfile.BadZipFile, OSError) as exc:
@@ -861,14 +883,47 @@ def _header_signature(headers: list[str]) -> str:
     return "\n".join(header_key(str(header or "")) for header in headers)
 
 
+def phone_from_cell(value: str) -> str:
+    """Lấy số Việt trong ô: cả ô, hoặc số lẫn trong chữ. Không lấy UID Facebook."""
+    text = expand_scientific(collapse(value))
+    if not text:
+        return ""
+    if looks_like_facebook_uid(text) and not looks_like_vn_phone(text):
+        return ""
+    if looks_like_vn_phone(text):
+        phone = clean_phone(text)
+        if phone:
+            return phone
+    for chunk in _PHONE_CHUNK.findall(text):
+        if looks_like_vn_phone(chunk):
+            phone = clean_phone(chunk)
+            if phone:
+                return phone
+        phone = clean_phone(chunk)
+        if phone and looks_like_vn_phone(phone):
+            return phone
+    return ""
+
+
+def _usable_mapped_phone(value: str) -> str:
+    extracted = phone_from_cell(value)
+    if extracted:
+        return extracted
+    phone = clean_phone(value)
+    if not phone:
+        return ""
+    digits = "".join(character for character in phone if character.isdigit())
+    if looks_like_facebook_uid(value) and len(digits) >= 14:
+        return ""
+    return phone
+
+
 def phone_from_row_cells(row: Iterable[str], skip_indexes: set[int] | None = None) -> str:
     """Số điện thoại trên dòng — chuẩn lọc trùng khi thêm file mới."""
     skip = skip_indexes or set()
     fallback = ""
     for index, cell in enumerate(row):
-        if not looks_like_vn_phone(cell):
-            continue
-        phone = clean_phone(cell)
+        phone = phone_from_cell(cell)
         if not phone:
             continue
         if index in skip:
@@ -893,11 +948,15 @@ def _with_row_phone(
     row: list[str],
     indexes: dict[str, int | None],
 ) -> dict[str, str]:
-    mapped = cleaned.get("phone") or ""
-    if mapped and looks_like_vn_phone(mapped):
-        return cleaned
+    mapped = _usable_mapped_phone(cleaned.get("phone") or "")
+    if mapped:
+        if mapped == (cleaned.get("phone") or ""):
+            return cleaned
+        updated = dict(cleaned)
+        updated["phone"] = mapped
+        return updated
     found = phone_from_row_cells(row, _phone_skip_indexes(indexes))
-    if found == mapped:
+    if not found:
         return cleaned
     updated = dict(cleaned)
     updated["phone"] = found
@@ -1088,12 +1147,63 @@ def _mapped_from_iter(
             tallies["unmapped"] += 1
 
 
+def _is_xlsx_source(filename: str, data: TableSource) -> bool:
+    name = (filename or "").casefold()
+    if name.endswith(".xls"):
+        return False
+    if name.endswith(".xlsx") or name.endswith(".xlsm"):
+        return True
+    if name.endswith(".csv") or name.endswith(".tsv") or name.endswith(".txt"):
+        return False
+    return _is_zip_bytes(data)
+
+
+def _mapped_from_xlsx(
+    data: TableSource,
+    mapping: dict[str, Any],
+    allow_index: bool = True,
+    counts: dict[str, int] | None = None,
+) -> Iterator[dict[str, str]]:
+    """Mỗi sheet tự đọc tiêu đề, không bỏ dòng khách đầu của sheet sau."""
+    archive = None
+    shared = SharedStringStore()
+    try:
+        archive = _open_xlsx(data)
+        if "xl/sharedStrings.xml" in archive.namelist():
+            with archive.open("xl/sharedStrings.xml") as handle:
+                _fill_shared_strings(handle, shared)
+        paths = _sheet_paths(archive)
+        if not paths:
+            raise ValueError("File Excel không có bảng tính.")
+        for path in paths:
+            with archive.open(path) as handle:
+                yield from _mapped_from_iter(
+                    _iter_sheet_rows(handle, shared),
+                    mapping,
+                    allow_index=allow_index,
+                    counts=counts,
+                )
+    except zipfile.BadZipFile as exc:
+        raise ValueError("File Excel bị hỏng hoặc không phải .xlsx.") from exc
+    except ValueError:
+        raise
+    except (KeyError, ET.ParseError, OSError) as exc:
+        raise ValueError("File Excel bị hỏng hoặc không đọc được.") from exc
+    finally:
+        shared.close()
+        if archive is not None:
+            archive.close()
+
+
 def iter_mapped_rows(
     filename: str,
     data: TableSource,
     mapping: dict[str, Any],
     allow_index: bool = True,
 ) -> Iterator[dict[str, str]]:
+    if _is_xlsx_source(filename, data):
+        yield from _mapped_from_xlsx(data, mapping, allow_index=allow_index)
+        return
     yield from _mapped_from_iter(iter_raw_rows(filename, data), mapping, allow_index)
 
 
@@ -1104,6 +1214,8 @@ def iter_mapped_file(
     first_width: int | None,
     counts: dict[str, int] | None = None,
 ) -> tuple[int | None, Iterator[dict[str, str]]]:
+    if _is_xlsx_source(filename, data):
+        return first_width, _mapped_from_xlsx(data, mapping, allow_index=True, counts=counts)
     raw = iter_raw_rows(filename, data)
     try:
         first: list[str] | None = None
@@ -1152,7 +1264,9 @@ def rows_from_files(
     return incoming, reports
 
 
-def write_xlsx(headers: list[str], rows: list[list[str]]) -> bytes:
+def write_xlsx_sheets(sheets: list[tuple[str, list[list[str]]]]) -> bytes:
+    """Nhiều sheet. Mỗi sheet là toàn bộ dòng (gồm tiêu đề nếu có)."""
+
     def xml_escape(value: str) -> str:
         return (
             str(value or "")
@@ -1168,47 +1282,74 @@ def write_xlsx(headers: list[str], rows: list[list[str]]) -> bytes:
             f'<is><t xml:space="preserve">{xml_escape(value)}</t></is></c>'
         )
 
-    lines = [
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
-        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>',
+    def sheet_xml(rows: list[list[str]]) -> str:
+        lines = [
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>',
+        ]
+        for row_number, row in enumerate(rows, start=1):
+            cells = "".join(cell_xml(index, row_number, cell) for index, cell in enumerate(row))
+            lines.append(f'<row r="{row_number}">{cells}</row>')
+        lines.append("</sheetData></worksheet>")
+        return "\n".join(lines)
+
+    if not sheets:
+        sheets = [("Khach", [])]
+    overrides = [
+        f'<Override PartName="/xl/worksheets/sheet{index}.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        for index in range(1, len(sheets) + 1)
     ]
-    all_rows = [headers, *rows]
-    for row_number, row in enumerate(all_rows, start=1):
-        cells = "".join(cell_xml(index, row_number, cell) for index, cell in enumerate(row))
-        lines.append(f'<row r="{row_number}">{cells}</row>')
-    lines.append("</sheetData></worksheet>")
-    sheet = "\n".join(lines)
-    content_types = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-</Types>
-"""
+    content_types = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n'
+        '  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>\n'
+        '  <Default Extension="xml" ContentType="application/xml"/>\n'
+        '  <Override PartName="/xl/workbook.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>\n'
+        + "\n".join(f"  {item}" for item in overrides)
+        + "\n</Types>\n"
+    )
     rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
 </Relationships>
 """
-    workbook = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <sheets><sheet name="Khach" sheetId="1" r:id="rId1"/></sheets>
-</workbook>
-"""
-    workbook_rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-</Relationships>
-"""
+    sheet_nodes = "".join(
+        f'<sheet name="{xml_escape(name or f"Sheet{index}")}" sheetId="{index}" r:id="rId{index}"/>'
+        for index, (name, _rows) in enumerate(sheets, start=1)
+    )
+    workbook = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">\n'
+        f"  <sheets>{sheet_nodes}</sheets>\n"
+        "</workbook>\n"
+    )
+    workbook_rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n'
+        + "".join(
+            f'  <Relationship Id="rId{index}" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+            f'Target="worksheets/sheet{index}.xml"/>\n'
+            for index in range(1, len(sheets) + 1)
+        )
+        + "</Relationships>\n"
+    )
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("[Content_Types].xml", content_types)
         archive.writestr("_rels/.rels", rels)
         archive.writestr("xl/workbook.xml", workbook)
         archive.writestr("xl/_rels/workbook.xml.rels", workbook_rels)
-        archive.writestr("xl/worksheets/sheet1.xml", sheet)
+        for index, (_name, rows) in enumerate(sheets, start=1):
+            archive.writestr(f"xl/worksheets/sheet{index}.xml", sheet_xml(rows))
     return buffer.getvalue()
+
+
+def write_xlsx(headers: list[str], rows: list[list[str]]) -> bytes:
+    return write_xlsx_sheets([("Khach", [headers, *rows])])
 
 
 def phones_from_files(files: Iterable[tuple[str, TableSource]]) -> tuple[list[str], list[dict[str, Any]]]:
@@ -1219,9 +1360,7 @@ def phones_from_files(files: Iterable[tuple[str, TableSource]]) -> tuple[list[st
         try:
             for row in iter_raw_rows(filename, data):
                 for cell in row:
-                    if not looks_like_vn_phone(cell):
-                        continue
-                    phone = clean_phone(cell)
+                    phone = phone_from_cell(cell)
                     if phone:
                         found.append(phone)
         except ValueError as exc:
