@@ -1,14 +1,26 @@
-"""Kho khách: chuẩn hoá, nhận diện trùng, bổ sung ô trống, không ghi đè ô đã có."""
+"""Kho khách: chuẩn hoá, nhận diện trùng, bổ sung ô trống.
+
+Địa chỉ mới thay địa chỉ cũ. Ô khác đã có thì giữ, ô trống thì điền thêm.
+"""
 
 from __future__ import annotations
 
 import re
+import unicodedata
 import uuid
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 from urllib.parse import parse_qs, urlparse
 
 from control_plane import db
-from control_plane.vietnam_places import fold_vietnamese, has_address_keyword, has_vietnam_place
+from control_plane.vietnam_places import (
+    address_content_rank,
+    address_header_rank,
+    address_piece_key,
+    fold_vietnamese,
+    has_address_keyword,
+    has_vietnam_place,
+    iter_address_pieces,
+)
 
 FIELDS = (
     "name",
@@ -25,21 +37,29 @@ _COD_THOUSAND = re.compile(r"(?i)(\d+(?:[.,]\d+)?)\s*k\b")
 _COD_MILLION = re.compile(r"(?i)(\d+(?:[.,]\d+)?)\s*tr(?:ieu)?\b")
 
 _SCI = re.compile(r"^([+-]?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$")
+_INT_DOT_ZERO = re.compile(r"[+-]?\d+\.0+")
 _DIGITS = re.compile(r"^\d{5,20}$")
 _PHONE_BREAK = set(" -().\t")
-_PHONE_CHUNK = re.compile(r"(?:\+?84|0)?[3-9][\d.\-\s()]{7,18}")
+_NUMBER_RUN = re.compile(r"\(?\+?\(?\d[\d \t.\-()]*\d")
+_DIGIT_GROUP = re.compile(r"\d+")
+_VN_PHONE = re.compile(r"0(?:[2-9]\d{8}|[12]\d{9})")
 
 
 def collapse(value: Any) -> str:
-    return " ".join(str(value or "").replace("\u00a0", " ").split())
+    if not value:
+        return ""
+    return " ".join(str(value).split())
 
 
 def expand_scientific(value: str) -> str:
     """Giữ nguyên chữ số UID/SĐT trong dạng 1.00e+15, không đi qua float."""
     text = collapse(value)
-    if not text:
+    if not text or text.isdigit():
         return text
-    if re.fullmatch(r"[+-]?\d+\.0+", text):
+    head = text[0]
+    if not (head.isdigit() or head in "+-"):
+        return text
+    if _INT_DOT_ZERO.fullmatch(text):
         return text.lstrip("+").split(".", 1)[0]
     match = _SCI.fullmatch(text)
     if not match:
@@ -58,7 +78,8 @@ def expand_scientific(value: str) -> str:
 
 
 def clean_name(value: Any) -> str:
-    return collapse(value)[:120]
+    text = collapse(value)
+    return text if len(text) <= 120 else text[:120].rstrip()
 
 
 def name_key(value: str) -> str:
@@ -67,25 +88,30 @@ def name_key(value: str) -> str:
 
 def clean_phone(value: Any) -> str:
     text = collapse(value)
-    if text.lower().startswith("tel:"):
-        text = text[4:].strip()
     if not text:
         return ""
-    digits = ""
     leading_plus = False
-    started = False
-    for character in text:
-        if not started and character == "+":
-            leading_plus = True
+    if text.isdigit():
+        digits = text
+    else:
+        if text[:4].lower() == "tel:":
+            text = text[4:].strip()
+            if not text:
+                return ""
+        digits = ""
+        started = False
+        for character in text:
+            if not started and character == "+":
+                leading_plus = True
+                started = True
+                continue
             started = True
-            continue
-        started = True
-        if character.isdigit():
-            digits += character
-            continue
-        if character in _PHONE_BREAK:
-            continue
-        break
+            if character.isdigit():
+                digits += character
+                continue
+            if character in _PHONE_BREAK:
+                continue
+            break
     if not (8 <= len(digits) <= 15):
         return ""
     if digits.startswith("0084") and len(digits) >= 13:
@@ -111,26 +137,110 @@ def clean_phone(value: Any) -> str:
 def is_facebook_id_digits(value: Any) -> bool:
     """UID Facebook 13–20 số, không phải SĐT 0xx/84xx."""
     text = expand_scientific(collapse(value))
+    return (
+        13 <= len(text) <= 20
+        and text.isdecimal()
+        and not text.startswith("0")
+        and not text.startswith("84")
+    )
+
+
+def is_vn_phone(value: str) -> bool:
+    """Số Việt Nam dạng chuẩn 0xx: di động 10 số, cố định / đầu 01x cũ 11 số."""
+    return bool(value) and _VN_PHONE.fullmatch(value) is not None
+
+
+def _national_len(rest: str) -> int | None:
+    head = rest[:1]
+    if head in ("3", "4", "5", "6", "7", "8", "9"):
+        return 9
+    if head in ("1", "2"):
+        return 10
+    return None
+
+
+def _target_len(digits: str) -> int | None:
+    """Một số đủ dài bao nhiêu chữ số, đoán từ đầu số: 09x 10 số, 02x 11 số, 84… thêm 2."""
+    for prefix in ("0084", "084", "84"):
+        if digits.startswith(prefix) and len(digits) > len(prefix):
+            rest = digits[len(prefix) :]
+            extra = 0
+            if rest.startswith("0"):
+                rest = rest[1:]
+                extra = 1
+            size = _national_len(rest)
+            return None if size is None else len(prefix) + extra + size
+    if digits.startswith("00"):
+        return None
+    if digits.startswith("0"):
+        if len(digits) == 1:
+            return None
+        size = _national_len(digits[1:])
+        return None if size is None else 1 + size
+    return _national_len(digits)
+
+
+def _phones_in_run(run: str) -> list[str]:
+    groups = _DIGIT_GROUP.findall(run)
+    digits = "".join(groups)
+    if not digits or is_facebook_id_digits(digits):
+        return []
+    whole = clean_phone(run)
+    if is_vn_phone(whole):
+        return [whole]
+    if len(groups) < 2:
+        return []
+    phones: list[str] = []
+    pending = ""
+    for group in groups:
+        candidate = pending + group
+        target = _target_len(candidate)
+        if target is not None and len(candidate) > target:
+            candidate = group
+            target = _target_len(candidate)
+            if target is not None and len(candidate) > target:
+                pending = ""
+                continue
+        if target is not None and len(candidate) == target:
+            phone = clean_phone(candidate)
+            if is_vn_phone(phone):
+                phones.append(phone)
+            pending = ""
+        else:
+            pending = candidate
+    if pending:
+        phone = clean_phone(pending)
+        if is_vn_phone(phone):
+            phones.append(phone)
+    return phones
+
+
+def phones_in_text(value: Any) -> list[str]:
+    """Mọi số Việt Nam trong chữ, theo thứ tự: "0901222333 - 0912345678" là hai số. Không cắt UID Facebook."""
+    text = collapse(value)
     if not text:
-        return False
-    digits = "".join(character for character in text if character.isdigit())
-    if not (13 <= len(digits) <= 20) or digits.startswith("0") or digits.startswith("84"):
-        return False
-    return bool(re.fullmatch(r"\d{13,20}", text))
+        return []
+    found: list[str] = []
+    for match in _NUMBER_RUN.finditer(text):
+        for phone in _phones_in_run(match.group(0)):
+            if phone not in found:
+                found.append(phone)
+    return found
 
 
 def extract_phone(value: Any) -> str:
-    """Lấy số khách từ ô: số chuẩn, số thiếu/thừa chữ số, số lẫn chữ. Không lấy UID Facebook."""
+    """Lấy số khách từ ô: số chuẩn, số thiếu/thừa chữ số, số lẫn chữ, ô có hai số. Không lấy UID Facebook."""
     text = expand_scientific(collapse(value))
     if not text or is_facebook_id_digits(text):
         return ""
     phone = clean_phone(text)
+    if is_vn_phone(phone):
+        return phone
+    found = phones_in_text(text)
+    if found:
+        return found[0]
     if phone and not is_facebook_id_digits(phone):
         return phone
-    for chunk in _PHONE_CHUNK.findall(text):
-        phone = clean_phone(chunk)
-        if phone and not is_facebook_id_digits(phone):
-            return phone
     return ""
 
 
@@ -156,18 +266,24 @@ def phone_lookup_keys(value: Any) -> list[str]:
 
 
 def split_address_lines(value: Any) -> list[str]:
-    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    if not value:
+        return []
+    text = str(value)
+    if "\r" in text:
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
     lines: list[str] = []
     seen: set[str] = set()
     for raw in text.split("\n"):
-        line = collapse(raw)
+        line = " ".join(raw.split())
         if not line:
             continue
-        key = line.casefold()
+        if len(line) > 200:
+            line = line[:200].rstrip()
+        key = line.casefold() if line.isascii() else unicodedata.normalize("NFC", line).casefold()
         if key in seen:
             continue
         seen.add(key)
-        lines.append(line[:200])
+        lines.append(line)
         if len(lines) >= 12:
             break
     return lines
@@ -178,7 +294,65 @@ def join_address_lines(*parts: Any) -> str:
 
 
 def clean_address(value: Any) -> str:
-    return join_address_lines(value)[:800]
+    """Một dòng địa chỉ giữ đến 400 ký tự. Nhiều dòng thì tối đa 12 dòng × 200 ký tự."""
+    if not value:
+        return ""
+    text = str(value).replace("\r\n", "\n").replace("\r", "\n")
+    if "\n" not in text:
+        return " ".join(text.split())[:400].rstrip()
+    return join_address_lines(text)
+
+
+def _address_richness(text: str) -> tuple[int, int]:
+    folded = fold_vietnamese(text)
+    words = set(folded.split())
+    full = len(words & {"tinh", "thanh", "phuong", "quan", "huyen", "xa", "thon", "xom", "thi"})
+    return full, len(text)
+
+
+def compose_address(parts: list[tuple[int, str, str]]) -> str:
+    """Gộp các ô thành một dòng: số nhà, thôn, xã, huyện, tỉnh.
+
+    Trong một ô, máy tách dấu phẩy và từ khóa hành chính rồi xếp lại.
+    «12 Đường Phú Thọ» giữ nguyên vì Phú Thọ nằm trong tên đường.
+    """
+    found: dict[str, tuple[int, int, int, str, tuple[int, int]]] = {}
+    for index, header, raw in parts:
+        forced = address_header_rank(header)
+        for seg_index, piece in enumerate(iter_address_pieces(raw)):
+            rank = address_content_rank(piece)
+            if rank == 0 and forced is not None:
+                rank = forced
+            key = address_piece_key(piece, rank, header)
+            if not key:
+                continue
+            richness = _address_richness(piece)
+            current = found.get(key)
+            if current is None:
+                found[key] = (rank, index, seg_index, piece, richness)
+                continue
+            _rank, index_c, seg_c, text_c, rich_c = current
+            if (index, seg_index) < (index_c, seg_c):
+                place = (index, seg_index)
+            else:
+                place = (index_c, seg_c)
+            if richness > rich_c:
+                text, rich = piece, richness
+            else:
+                text, rich = text_c, rich_c
+            found[key] = (rank, place[0], place[1], text, rich)
+    if not found:
+        return ""
+    ordered = sorted(found.values(), key=lambda item: (item[0], item[1], item[2]))
+    return ", ".join(item[3] for item in ordered)
+
+
+def arranged_address(value: str) -> str:
+    """Xếp một địa chỉ từ số nhà đến tỉnh. Rỗng nếu không còn mảnh dùng được."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return compose_address([(0, "", text)])
 
 
 def address_key(value: str) -> str:
@@ -186,11 +360,15 @@ def address_key(value: str) -> str:
 
 
 def clean_admin_address(value: Any) -> str:
-    return join_address_lines(value)[:800]
+    if not value:
+        return ""
+    return join_address_lines(value)
 
 
 def clean_order_content(value: Any) -> str:
-    return join_address_lines(value)[:800]
+    if not value:
+        return ""
+    return join_address_lines(value)
 
 
 def _cod_number(text: str) -> str:
@@ -265,9 +443,17 @@ def tiktok_key(value: str) -> str:
     return clean_tiktok_id(value).casefold()
 
 
+def clean_phone_field(value: Any) -> str:
+    """Ô SĐT: số chuẩn; ô lẫn chữ hoặc có hai số thì lấy số đầu tiên thay vì bỏ trống."""
+    phone = clean_phone(value)
+    if phone:
+        return phone
+    return extract_phone(value)
+
+
 _CLEANERS = {
     "name": clean_name,
-    "phone": clean_phone,
+    "phone": clean_phone_field,
     "address": clean_address,
     "adminAddress": clean_admin_address,
     "orderContent": clean_order_content,
@@ -355,6 +541,16 @@ class _UnionFind:
 
 
 def _pick(members: list[dict[str, Any]], field: str) -> str:
+    if field == "address":
+        incoming = [str(row.get(field) or "") for row in members if not row["existing"] and row.get(field)]
+        for text in reversed(incoming):
+            arranged = arranged_address(text)
+            if arranged:
+                return arranged
+        existing = [str(row.get(field) or "") for row in members if row["existing"] and row.get(field)]
+        if len(existing) <= 1:
+            return existing[0] if existing else ""
+        return compose_address([(index, "", text) for index, text in enumerate(existing)]) or existing[0]
     if field in LINE_FIELDS:
         existing = [str(row.get(field) or "") for row in members if row["existing"] and row.get(field)]
         incoming = [str(row.get(field) or "") for row in members if not row["existing"] and row.get(field)]
@@ -401,8 +597,9 @@ def fold_customers(
 ) -> tuple[list[dict[str, Any]], dict[str, int], list[str]]:
     """Ghép khách mới vào kho khi trùng số điện thoại.
 
-    Một số điện thoại là một hàng. Ô trống được bổ sung; địa chỉ / hàng mua /
-    địa chỉ hành chính mới thêm dòng; ô đã có mà không đổi thì giữ nguyên.
+    Một số điện thoại là một hàng. Ô trống được bổ sung. Địa chỉ mới thay
+    địa chỉ cũ; ô địa chỉ trống thì giữ địa chỉ đang có. Hàng mua và địa chỉ
+    hành chính mới thêm dòng. Ô đã có mà không đổi thì giữ nguyên.
     Không có số điện thoại thì bỏ qua, không lưu.
     """
     kept_incoming: list[dict[str, Any]] = []
@@ -473,22 +670,72 @@ def fold_customers(
     )
 
 
+def _merge_one(
+    current: dict[str, Any],
+    incoming: dict[str, str],
+    now: str,
+) -> tuple[dict[str, Any], list[str], str]:
+    """Một khách sẵn có + một dòng đã làm sạch.
+
+    Ô trống điền thêm. Địa chỉ mới thay địa chỉ cũ. Hàng mua và địa chỉ
+    hành chính mới nối thêm dòng. Ô đã có mà không đổi thì giữ.
+    """
+    merged: dict[str, Any] = {
+        "id": str(current.get("id") or "") or _new_id(),
+        "createdAt": str(current.get("createdAt") or "") or now,
+        "updatedAt": str(current.get("updatedAt") or "") or now,
+    }
+    changed = False
+    for field in FIELDS:
+        value = str(current.get(field) or "")
+        new = incoming.get(field) or ""
+        if field == "address":
+            arranged = arranged_address(new) if new else ""
+            if arranged and arranged != value:
+                value = arranged
+                changed = True
+            merged[field] = value
+            continue
+        if new and new != value:
+            if field in LINE_FIELDS:
+                joined = join_address_lines(value, new) if value else new
+                if joined != value:
+                    value = joined
+                    changed = True
+            elif not value:
+                value = new
+                changed = True
+        merged[field] = value
+    merged["write"] = changed
+    if changed:
+        merged["updatedAt"] = now
+        return merged, [], "updated"
+    return merged, [], "unchanged"
+
+
 def merge_existing_with_incoming(
     existing: list[dict[str, Any]],
     incoming: dict[str, Any],
     now: str,
+    incoming_clean: bool = False,
 ) -> tuple[dict[str, Any], list[str], str]:
     """Ghép một dòng file vào các khách cùng SĐT.
 
-    Ô trống điền thêm, dòng địa chỉ mới bổ sung, ô đã có không đổi thì giữ.
+    Ô trống điền thêm. Địa chỉ mới thay địa chỉ cũ. Ô đã có không đổi thì giữ.
     """
-    incoming_row = _as_customer(incoming, False)
+    cleaned = incoming if incoming_clean else clean_row(incoming)
+    if len(existing) == 1:
+        return _merge_one(existing[0], cleaned, now)
     if not existing:
-        incoming_row["createdAt"] = now
-        incoming_row["updatedAt"] = now
-        incoming_row["write"] = True
-        incoming_row.pop("existing", None)
-        return incoming_row, [], "created"
+        created = {"id": _new_id(), "createdAt": now, "updatedAt": now}
+        for field in FIELDS:
+            created[field] = cleaned.get(field) or ""
+        arranged = arranged_address(created["address"])
+        if arranged:
+            created["address"] = arranged
+        created["write"] = True
+        return created, [], "created"
+    incoming_row = _as_customer(cleaned, False)
     members = [_as_customer(row, True) for row in existing] + [incoming_row]
     merged = _merge_group(members, now)
     extra_ids = [str(row.get("id") or "") for row in existing if str(row.get("id") or "") != merged["id"]]
@@ -511,8 +758,13 @@ def ingest_customers(
     incoming: Iterator[dict[str, Any]],
     now: str,
     flush_every: int = 400,
+    cleaned: bool = False,
+    progress: Callable[[dict[str, int]], None] | None = None,
 ) -> tuple[dict[str, int], list[dict[str, Any]]]:
-    """Nạp từng dòng vào SQLite. Không tải cả kho vào RAM. Ghi từng lô để không mất dở."""
+    """Nạp từng dòng vào SQLite. Không tải cả kho vào RAM. Ghi từng lô để không mất dở.
+
+    cleaned=True: dòng đã qua clean_row và có SĐT chuẩn (từ đọc Excel), không làm sạch lại.
+    """
     created = 0
     updated = 0
     unchanged = 0
@@ -521,9 +773,11 @@ def ingest_customers(
     incoming_count = 0
     kept = 0
     pending: dict[str, dict[str, Any]] = {}
-    pending_phone: dict[str, str] = {}
+    pending_key: dict[str, str] = {}
     pending_deletes: list[str] = []
+    deleted: set[str] = set()
     preview: list[dict[str, Any]] = []
+    work: list[dict[str, Any]] = []
     flush_every = max(50, int(flush_every))
 
     def flush(conn: Any) -> None:
@@ -532,58 +786,101 @@ def ingest_customers(
         db.write_customers(conn, list(pending.values()), pending_deletes)
         conn.commit()
         pending.clear()
-        pending_phone.clear()
+        pending_key.clear()
         pending_deletes.clear()
+        deleted.clear()
+
+    def apply_row(existing: list[dict[str, Any]], row: dict[str, Any], key: str) -> None:
+        nonlocal created, updated, unchanged, absorbed
+        phone = str(row.get("phone") or "")
+        merged, extra_ids, kind = merge_existing_with_incoming(existing, row, now, incoming_clean=True)
+        for extra_id in extra_ids:
+            pending.pop(extra_id, None)
+            pending_deletes.append(extra_id)
+            deleted.add(extra_id)
+            absorbed += 1
+        if kind != "unchanged" or merged["id"] not in pending:
+            pending[merged["id"]] = merged
+        pending_key[key] = merged["id"]
+        merged_phone = str(merged.get("phone") or "")
+        if merged_phone and merged_phone != phone:
+            pending_key[db.phone_key(merged_phone) or merged_phone] = merged["id"]
+        if kind == "created":
+            created += 1
+        elif kind == "updated":
+            updated += 1
+        else:
+            unchanged += 1
+        if merged.get("write") and len(preview) < 200:
+            preview.append(merged)
+
+    def report() -> None:
+        if progress is not None:
+            progress(
+                {
+                    "incoming": incoming_count,
+                    "created": created,
+                    "updated": updated,
+                    "unchanged": unchanged,
+                    "skipped": skipped,
+                }
+            )
+
+    def process_work(conn: Any) -> None:
+        if not work:
+            return
+        loaded = db.customers_matching_phones(conn, [str(row.get("phone") or "") for row in work])
+        for row in work:
+            phone = str(row.get("phone") or "")
+            key = db.phone_key(phone) or phone
+            pending_id = pending_key.get(key) or ""
+            if pending_id and pending_id in pending:
+                existing = [pending[pending_id]]
+            else:
+                existing = [
+                    pending.get(str(item.get("id") or ""), item)
+                    for item in (loaded.get(phone) or [])
+                    if str(item.get("id") or "") not in deleted
+                ]
+            apply_row(existing, row, key)
+        work.clear()
+        flush(conn)
+        report()
 
     db.init_db(db_path)
     conn = db.connect(db_path)
     try:
+        db.apply_heavy_pragmas(conn)
         for raw in incoming:
             incoming_count += 1
-            row = clean_row(raw)
-            if not has_phone(row):
-                skipped += 1
-                continue
+            if cleaned:
+                row = raw
+                if not row.get("phone"):
+                    skipped += 1
+                    continue
+            else:
+                row = clean_row(raw)
+                if not has_phone(row):
+                    skipped += 1
+                    continue
             repaired, changed = repair_customer_row(row)
             if changed:
                 row = clean_row(repaired)
-            if not has_phone(row):
-                skipped += 1
-                continue
-            phone = extract_phone(row.get("phone") or "") or clean_phone(row.get("phone") or "")
-            if not phone or is_facebook_id_digits(phone):
-                skipped += 1
-                continue
-            row["phone"] = phone
+                if not has_phone(row):
+                    skipped += 1
+                    continue
+            if changed or not cleaned:
+                phone = extract_phone(row.get("phone") or "") or clean_phone(row.get("phone") or "")
+                if not phone or is_facebook_id_digits(phone):
+                    skipped += 1
+                    continue
+                row["phone"] = phone
             kept += 1
-            pending_id = ""
-            for key in phone_lookup_keys(phone) or [phone]:
-                pending_id = pending_phone.get(key) or ""
-                if pending_id:
-                    break
-            if pending_id and pending_id in pending:
-                existing = [pending[pending_id]]
-            else:
-                existing = db.customers_by_phone(conn, phone)
-            merged, extra_ids, kind = merge_existing_with_incoming(existing, row, now)
-            for extra_id in extra_ids:
-                pending.pop(extra_id, None)
-                pending_deletes.append(extra_id)
-                absorbed += 1
-            pending[merged["id"]] = merged
-            for key in phone_lookup_keys(merged.get("phone") or phone) or [phone]:
-                pending_phone[key] = merged["id"]
-            if kind == "created":
-                created += 1
-            elif kind == "updated":
-                updated += 1
-            else:
-                unchanged += 1
-            if merged.get("write") and len(preview) < 200:
-                preview.append(merged)
-            if len(pending) >= flush_every:
-                flush(conn)
-        flush(conn)
+            work.append(row)
+            if len(work) >= flush_every:
+                process_work(conn)
+        process_work(conn)
+        report()
         total = int(conn.execute("SELECT COUNT(*) AS n FROM customers").fetchone()["n"])
     finally:
         conn.close()
@@ -620,7 +917,7 @@ def public_customer(row: dict[str, Any]) -> dict[str, str]:
 
 
 MAX_LOOKUP = 1_000_000
-_SPLIT_FIELDS = re.compile(r"[,;\t|]+")
+LOOKUP_BATCH = 20_000
 
 
 def phones_from_text(text: str, limit: int = MAX_LOOKUP) -> tuple[list[str], dict[str, int]]:
@@ -637,25 +934,25 @@ def phones_from_text(text: str, limit: int = MAX_LOOKUP) -> tuple[list[str], dic
             continue
         raw += 1
         found: list[str] = []
-        whole = extract_phone(stripped) or clean_phone(stripped)
-        if whole and not is_facebook_id_digits(whole):
+        whole = extract_phone(stripped)
+        if whole:
             found.append(whole)
-        for piece in _SPLIT_FIELDS.split(stripped):
-            for token in piece.split():
-                phone = extract_phone(token) or clean_phone(token)
-                if phone and not is_facebook_id_digits(phone) and phone not in found:
+        if not stripped.isdigit():
+            for phone in phones_in_text(stripped):
+                if phone not in found:
                     found.append(phone)
         if not found:
             invalid += 1
             continue
         for phone in found:
-            if phone in seen:
+            key = db.phone_key(phone) or phone
+            if key in seen:
                 duplicate += 1
                 continue
             if len(phones) >= limit:
                 truncated = True
                 break
-            seen.add(phone)
+            seen.add(key)
             phones.append(phone)
         if truncated:
             break
@@ -712,6 +1009,82 @@ def lookup_by_phones(
     }
 
 
+def _lookup_batches(
+    db_path: Any,
+    phones: list[str],
+    batch: int,
+) -> Iterator[tuple[list[dict[str, Any]], dict[str, int]]]:
+    with db.lookup_connection(db_path) as conn:
+        for start in range(0, len(phones), batch):
+            chunk = phones[start : start + batch]
+            found = db.customers_matching_phones(conn, chunk)
+            conn.commit()
+            yield lookup_by_phone_map(found, chunk)
+
+
+def lookup_phones(
+    db_path: Any,
+    phones: list[str],
+    keep: int = 2000,
+    batch: int = LOOKUP_BATCH,
+    progress: Callable[[dict[str, int]], None] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Tra cứu theo lô: không giữ cả triệu dòng kết quả trong RAM, chỉ giữ `keep` dòng đầu để hiện."""
+    shown: list[dict[str, Any]] = []
+    found = 0
+    missing = 0
+    done = 0
+    rows = 0
+    for items, stats in _lookup_batches(db_path, phones, batch):
+        found += stats["found"]
+        missing += stats["missing"]
+        done += stats["queried"]
+        rows += len(items)
+        if len(shown) < keep:
+            shown.extend(items[: keep - len(shown)])
+        if progress is not None:
+            progress({"matched": done, "total": len(phones), "found": found})
+    return shown, {"queried": len(phones), "found": found, "missing": missing, "hits": found, "rows": rows}
+
+
+def iter_lookup_items(db_path: Any, phones: list[str], batch: int = LOOKUP_BATCH) -> Iterator[dict[str, Any]]:
+    """Từng dòng kết quả tra cứu theo đúng thứ tự số, đọc kho theo lô — dùng để ghi Excel."""
+    for items, _stats in _lookup_batches(db_path, phones, batch):
+        yield from items
+
+
+def lookup_by_phone_map(
+    by_phone: dict[str, list[dict[str, Any]]],
+    phones: list[str],
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Ghép kết quả tra cứu đã lấy từ SQLite, không lập chỉ mục lại."""
+    items: list[dict[str, Any]] = []
+    found = 0
+    missing = 0
+    for phone in phones:
+        matches = by_phone.get(phone) or []
+        if not matches:
+            missing += 1
+            items.append({"query": phone, "found": False, "customer": None})
+            continue
+        found += 1
+        seen_ids: set[str] = set()
+        for row in matches:
+            public = public_customer(row)
+            customer_id = str(public.get("id") or "")
+            if customer_id and customer_id in seen_ids:
+                continue
+            if customer_id:
+                seen_ids.add(customer_id)
+            items.append({"query": phone, "found": True, "customer": public})
+    return items, {
+        "queried": len(phones),
+        "found": found,
+        "missing": missing,
+        "hits": found,
+    }
+
+
 _GENDER_KEYS = frozenset(
     {
         "female",
@@ -726,6 +1099,9 @@ _GENDER_KEYS = frozenset(
 )
 _DATE_LINE = re.compile(r"^\d{1,2}[/.\-]\d{1,2}(?:[/.\-]\d{2,4})?$")
 _FB_HOST = re.compile(r"(?i)(?:facebook\.com|fb\.com|fb\.me)")
+_MAYBE_DUMP = re.compile(
+    r"(?i)facebook\.com|fb\.com|fb\.me|male|f.{1,2}mel|n[uúùủũụưứừửữự]|gi.{1,3}i[\W_]*t.{1,3}nh"
+)
 _LETTER_OR_MARK = re.compile(r"[^\W\d_]", re.UNICODE)
 
 
@@ -785,12 +1161,21 @@ def _dump_lines(address: str) -> list[str]:
     return split_address_lines(text)
 
 
+def _may_be_facebook_dump(name: str, address: str) -> bool:
+    """Điều kiện cần để là dữ liệu dán từ Facebook; sai thì bỏ qua bước tách dòng tốn thời gian."""
+    if len(name) <= 12 and is_gender_value(name):
+        return True
+    return bool(address) and _MAYBE_DUMP.search(address) is not None
+
+
 def repair_customer_row(row: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     """Đưa tên, SĐT, UID Facebook ra đúng cột; bỏ giới tính/ngày/link khỏi địa chỉ."""
+    if not _may_be_facebook_dump(str(row.get("name") or ""), str(row.get("address") or "")):
+        return row, False
     current = {field: str(row.get(field) or "") for field in FIELDS}
     lines = _dump_lines(current["address"])
     if not _is_facebook_dump(current["name"], lines):
-        return dict(row), False
+        return row, False
     found_name = ""
     found_phone = extract_phone(current["phone"]) or clean_phone(current["phone"])
     if is_facebook_id_digits(found_phone):
@@ -864,6 +1249,46 @@ def repair_stored_customers(db_path: Any) -> int:
     if dirty:
         db.replace_customers(db_path, dirty, [])
     return fixed_count
+
+
+def rewrite_stored_addresses(db_path: Any, now: str, batch: int = 2000) -> dict[str, int]:
+    """Xếp lại địa chỉ đang lưu: số nhà, thôn, xã, huyện, tỉnh.
+
+    Chỉ cập nhật ô địa chỉ khi chữ thay đổi. Không xóa khách, không đổi SĐT,
+    tên, địa chỉ hành chính, hàng mua hay COD.
+    """
+    conn = db.connect(db_path)
+    seen = 0
+    changed = 0
+    try:
+        conn.execute("PRAGMA busy_timeout=60000;")
+        top = int(conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM customers").fetchone()[0] or 0)
+        start = 0
+        size = max(200, int(batch))
+        while start < top:
+            rows = conn.execute(
+                "SELECT id, address FROM customers WHERE rowid > ? AND rowid <= ?",
+                (start, start + size),
+            ).fetchall()
+            updates: list[tuple[str, str, str, str]] = []
+            for row in rows:
+                seen += 1
+                current = str(row["address"] or "")
+                arranged = arranged_address(current)
+                if arranged and arranged != current:
+                    updates.append((arranged, now, str(row["id"]), current))
+            if updates:
+                before = conn.total_changes
+                conn.executemany(
+                    "UPDATE customers SET address=?, updated_at=? WHERE id=? AND address=?",
+                    updates,
+                )
+                changed += conn.total_changes - before
+            conn.commit()
+            start += size
+    finally:
+        conn.close()
+    return {"seen": seen, "changed": changed, "unchanged": seen - changed}
 
 
 def matches_query(row: dict[str, Any], query: str) -> bool:

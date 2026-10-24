@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import codecs
 import csv
 import io
 import os
 import re
 import tempfile
+import unicodedata
 import zipfile
+import zlib
 import xml.etree.ElementTree as ET
 from array import array
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator
 
 from control_plane.column_detect import (
     assign_fields,
@@ -36,17 +39,24 @@ from control_plane.customers import (
     has_data,
     has_phone,
     is_facebook_id_digits,
+    is_vn_phone,
+    compose_address,
     join_address_lines,
+    phones_in_text,
 )
-from control_plane.vietnam_places import fold_vietnamese
+from control_plane.settings import settings
+from control_plane.vietnam_places import address_content_rank, address_header_rank, fold_vietnamese
+from control_plane.xlsx_fast import LazySharedStrings, count_value_rows, iter_sheet_rows
 
 TableSource = bytes | bytearray | os.PathLike[str] | str
-IMPORT_BATCH = 2500
+IMPORT_BATCH = 10000
 SHARED_SPILL = 150_000
 SAMPLE_ROWS = 8
 DETECT_ROWS = 200
 PREVIEW_STORE = SAMPLE_ROWS + DETECT_ROWS + 1
 _COL_REF = re.compile(r"^([A-Z]+)(\d+)$")
+_DIGIT_RUN8 = re.compile(r"(?:\d[ .\-()]*){8}")
+_XLSX_ERRORS = (KeyError, ET.ParseError, zipfile.BadZipFile, OSError, zlib.error, EOFError)
 EXCEL_SHEET_ROWS = 1_000_000
 
 FIELD_LABELS = {
@@ -437,25 +447,26 @@ def _align_row(
     return aligned
 
 
+def _new_shared(archive: zipfile.ZipFile) -> LazySharedStrings:
+    folder = settings.tmp_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    return LazySharedStrings(archive, folder)
+
+
 def iter_xlsx_rows(data: TableSource) -> Iterator[list[str]]:
-    archive = None
-    shared = SharedStringStore()
     try:
         archive = _open_xlsx(data)
-    except zipfile.BadZipFile as exc:
-        shared.close()
+    except (zipfile.BadZipFile, OSError) as exc:
         raise ValueError("File Excel bị hỏng hoặc không phải .xlsx.") from exc
+    shared = _new_shared(archive)
     try:
-        if "xl/sharedStrings.xml" in archive.namelist():
-            with archive.open("xl/sharedStrings.xml") as handle:
-                _fill_shared_strings(handle, shared)
         paths = _sheet_paths(archive)
         if not paths:
             raise ValueError("File Excel không có bảng tính.")
         first_rows: list[list[str] | None] = []
         for path in paths:
             with archive.open(path) as handle:
-                first_rows.append(next(_iter_sheet_rows(handle, shared), None))
+                first_rows.append(next(iter_sheet_rows(handle, shared), None))
         header: list[str] | None = None
         header_index: dict[str, int] = {}
         for first in first_rows:
@@ -489,7 +500,7 @@ def iter_xlsx_rows(data: TableSource) -> Iterator[list[str]]:
             skip_first = labeled or first_sheet
             first_sheet = False
             with archive.open(path) as handle:
-                rows = _iter_sheet_rows(handle, shared)
+                rows = iter_sheet_rows(handle, shared)
                 first_of_sheet = next(rows, None)
 
                 def sheet_body() -> Iterator[list[str]]:
@@ -497,22 +508,24 @@ def iter_xlsx_rows(data: TableSource) -> Iterator[list[str]]:
                         yield first_of_sheet
                     yield from rows
 
+                width = len(header)
                 for row in sheet_body():
                     if labeled and not same:
                         aligned = _align_row(row, other_header, header, header_index)
-                        if any(collapse(cell) for cell in aligned):
+                        if any(aligned):
                             yield aligned
                         continue
-                    width = len(header)
-                    yield list(row[:width]) + [""] * max(0, width - len(row))
+                    if len(row) == width:
+                        yield row
+                    else:
+                        yield list(row[:width]) + [""] * max(0, width - len(row))
     except ValueError:
         raise
-    except (KeyError, ET.ParseError, zipfile.BadZipFile, OSError) as exc:
+    except _XLSX_ERRORS as exc:
         raise ValueError("File Excel bị hỏng hoặc không đọc được.") from exc
     finally:
         shared.close()
-        if archive is not None:
-            archive.close()
+        archive.close()
 
 
 def read_xlsx(data: TableSource, max_store: int | None = None) -> list[list[str]]:
@@ -530,16 +543,52 @@ def _read_xlsx(data: TableSource, max_store: int | None = None) -> tuple[list[li
     return rows, total
 
 
-def _decode_csv_text(data: bytes) -> str:
-    for encoding in ("utf-8-sig", "utf-8", "utf-16", "cp1258", "cp1252"):
+def _bom_encoding(head: bytes) -> str | None:
+    if head.startswith(codecs.BOM_UTF8):
+        return "utf-8-sig"
+    if head.startswith(codecs.BOM_UTF16_LE) or head.startswith(codecs.BOM_UTF16_BE):
+        return "utf-16"
+    return None
+
+
+def _csv_encoding_of_bytes(data: bytes) -> str:
+    found = _bom_encoding(data[:4])
+    if found:
+        return found
+    try:
+        data.decode("utf-8")
+        return "utf-8"
+    except UnicodeDecodeError:
+        return "cp1258"
+
+
+def _csv_encoding_of_path(path: Path) -> str:
+    """UTF-8 nếu cả file hợp lệ; file Excel CSV tiếng Việt kiểu cũ thì cp1258. Không đoán theo vài nghìn ký tự đầu."""
+    with path.open("rb") as handle:
+        found = _bom_encoding(handle.read(4))
+        if found:
+            return found
+        handle.seek(0)
+        decoder = codecs.getincrementaldecoder("utf-8")()
         try:
-            return data.decode(encoding)
+            while True:
+                chunk = handle.read(1 << 22)
+                if not chunk:
+                    decoder.decode(b"", final=True)
+                    return "utf-8"
+                decoder.decode(chunk)
         except UnicodeDecodeError:
-            continue
-    return data.decode("utf-8", errors="replace")
+            return "cp1258"
 
 
-def iter_csv_rows(data: TableSource) -> Iterator[list[str]]:
+def _decode_csv_text(data: bytes) -> str:
+    encoding = _csv_encoding_of_bytes(data)
+    text = data.decode(encoding, errors="replace")
+    return unicodedata.normalize("NFC", text) if encoding == "cp1258" else text
+
+
+def _iter_csv_cells(data: TableSource) -> Iterator[list[str]]:
+    """cp1258 (CSV Excel tiếng Việt kiểu cũ) ghi dấu thanh tách rời; gộp về dạng chuẩn NFC."""
     close = None
     if isinstance(data, (bytes, bytearray)):
         text = _decode_csv_text(bytes(data))
@@ -547,36 +596,26 @@ def iter_csv_rows(data: TableSource) -> Iterator[list[str]]:
         stream: Any = io.StringIO(text)
     else:
         path = Path(data)
-        text = ""
-        stream = None
-        for encoding in ("utf-8-sig", "utf-8", "utf-16", "cp1258", "cp1252"):
-            try:
-                handle = path.open("r", encoding=encoding, newline="")
-                sample = handle.read(4000)
-                handle.seek(0)
-                stream = handle
-                close = handle
-                break
-            except UnicodeDecodeError:
-                if stream is not None:
-                    stream.close()
-                stream = None
-        if stream is None:
-            handle = path.open("r", encoding="utf-8", errors="replace", newline="")
-            sample = handle.read(4000)
-            handle.seek(0)
-            stream = handle
-            close = handle
+        encoding = _csv_encoding_of_path(path)
+        handle = path.open("r", encoding=encoding, errors="replace", newline="")
+        sample = handle.read(4000)
+        handle.seek(0)
+        close = handle
+        stream = (unicodedata.normalize("NFC", line) for line in handle) if encoding == "cp1258" else handle
     try:
         try:
             dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
         except csv.Error:
             dialect = csv.excel
-        for row in csv.reader(stream, dialect):
-            yield [expand_scientific(collapse(cell)) for cell in row]
+        yield from csv.reader(stream, dialect)
     finally:
         if close is not None:
             close.close()
+
+
+def iter_csv_rows(data: TableSource) -> Iterator[list[str]]:
+    for row in _iter_csv_cells(data):
+        yield [expand_scientific(collapse(cell)) for cell in row]
 
 
 def read_csv(data: TableSource, max_store: int | None = None) -> list[list[str]]:
@@ -624,6 +663,91 @@ def _read_table(filename: str, data: TableSource, max_store: int | None = None) 
             if max_store is None or len(rows) < max_store:
                 rows.append(row)
         return rows, total
+    except ValueError:
+        raise
+    except Exception as exc:
+        label = filename or "Excel"
+        raise ValueError(f"Không đọc được file {label}.") from exc
+
+
+def _read_head(filename: str, data: TableSource, limit: int) -> tuple[list[list[str]], bool]:
+    """Đọc tối đa `limit` dòng đầu rồi dừng; True nếu file còn dòng phía sau."""
+    rows: list[list[str]] = []
+    stream = iter_raw_rows(filename, data)
+    try:
+        for row in stream:
+            if len(rows) >= limit:
+                return rows, True
+            rows.append(row)
+        return rows, False
+    except ValueError:
+        raise
+    except Exception as exc:
+        label = filename or "Excel"
+        raise ValueError(f"Không đọc được file {label}.") from exc
+    finally:
+        stream.close()
+
+
+def _first_filled_row(rows: Iterable[list[str]]) -> list[str] | None:
+    for row in rows:
+        if any(collapse(cell) for cell in row):
+            return row
+    return None
+
+
+def _count_xlsx_data_rows(data: TableSource, progress: Callable[[int], None] | None = None) -> int:
+    try:
+        archive = _open_xlsx(data)
+    except (zipfile.BadZipFile, OSError) as exc:
+        raise ValueError("File Excel bị hỏng hoặc không phải .xlsx.") from exc
+    shared = _new_shared(archive)
+    try:
+        total = 0
+        for path in _sheet_paths(archive):
+            with archive.open(path) as handle:
+                first = _first_filled_row(iter_sheet_rows(handle, shared))
+            if first is None:
+                continue
+            with archive.open(path) as handle:
+                done = total
+                count = count_value_rows(handle, (lambda seen: progress(done + seen)) if progress else None)
+            if looks_like_label_row(first):
+                count -= 1
+            total += max(0, count)
+        return total
+    except ValueError:
+        raise
+    except _XLSX_ERRORS as exc:
+        raise ValueError("File Excel bị hỏng hoặc không đọc được.") from exc
+    finally:
+        shared.close()
+        archive.close()
+
+
+def _count_csv_data_rows(data: TableSource) -> int:
+    count = 0
+    first: list[str] | None = None
+    for row in _iter_csv_cells(data):
+        if not any(cell.strip() for cell in row):
+            continue
+        if first is None:
+            first = [collapse(cell) for cell in row]
+        count += 1
+    if first is not None and looks_like_label_row(first):
+        count -= 1
+    return count
+
+
+def count_data_rows(filename: str, data: TableSource, progress: Callable[[int], None] | None = None) -> int:
+    """Số dòng khách đúng như lúc nạp: dòng có dữ liệu, trừ dòng tiêu đề đầu mỗi sheet."""
+    name = (filename or "").casefold()
+    if name.endswith(".xls"):
+        raise ValueError("Hãy lưu file .xls thành .xlsx rồi nạp lại.")
+    try:
+        if _is_xlsx_source(filename, data):
+            return _count_xlsx_data_rows(data, progress)
+        return _count_csv_data_rows(data)
     except ValueError:
         raise
     except Exception as exc:
@@ -774,31 +898,78 @@ def _chosen_mapping_for_file(mapping: dict[str, Any], filename: str) -> dict[str
     return _field_mapping_only(mapping)
 
 
+def chosen_mapping_for_file(mapping: dict[str, Any], filename: str) -> dict[str, Any]:
+    """Cột người dùng chọn cho file này (theo tên file), chưa tự bổ sung."""
+    return _chosen_mapping_for_file(mapping, filename)
+
+
+def _head_rows(rows: Iterator[list[str]], limit: int | None) -> list[list[str]]:
+    head: list[list[str]] = []
+    for row in rows:
+        head.append(row)
+        if limit is not None and len(head) >= limit:
+            break
+    return head
+
+
 def _read_first_xlsx_sheet(data: TableSource, max_store: int | None = None) -> tuple[list[list[str]], int]:
-    archive = None
-    shared = SharedStringStore()
-    rows: list[list[str]] = []
-    total = 0
     try:
         archive = _open_xlsx(data)
-        if "xl/sharedStrings.xml" in archive.namelist():
-            with archive.open("xl/sharedStrings.xml") as handle:
-                _fill_shared_strings(handle, shared)
+    except (zipfile.BadZipFile, OSError) as exc:
+        raise ValueError("File Excel bị hỏng hoặc không phải .xlsx.") from exc
+    shared = _new_shared(archive)
+    try:
         paths = _sheet_paths(archive)
         if not paths:
             return [], 0
         with archive.open(paths[0]) as handle:
-            for row in _iter_sheet_rows(handle, shared):
-                total += 1
-                if max_store is None or len(rows) < max_store:
-                    rows.append(row)
-        return rows, total
-    except (zipfile.BadZipFile, KeyError, ET.ParseError, OSError):
-        return _read_xlsx(data, max_store=max_store)
+            rows = _head_rows(iter_sheet_rows(handle, shared), max_store)
+        return rows, len(rows)
+    except ValueError:
+        raise
+    except _XLSX_ERRORS as exc:
+        raise ValueError("File Excel bị hỏng hoặc không đọc được.") from exc
     finally:
         shared.close()
-        if archive is not None:
-            archive.close()
+        archive.close()
+
+
+_GENERIC_HEADER = re.compile(r"^Cột [A-Z]{1,3}$")
+
+
+def _without_generic_headers(chosen: dict[str, Any]) -> dict[str, Any]:
+    """Bỏ lựa chọn kiểu "Cột A" (file không tiêu đề) khi áp sang bảng khác bố cục."""
+    kept: dict[str, Any] = {}
+    for field, spec in chosen.items():
+        if not isinstance(spec, dict):
+            continue
+        header = collapse(str(spec.get("header") or ""))
+        if header and not _GENERIC_HEADER.match(header):
+            kept[field] = spec
+    return kept
+
+
+def _mapping_from_head(rows: list[list[str]], chosen: dict[str, Any]) -> dict[str, Any] | None:
+    table = _trim_table(rows)
+    if not table:
+        return None
+    headers, body, _headerless = _split_header_row(table)
+    values = column_values_from_rows(body[:DETECT_ROWS], len(headers))
+    auto = _mapping_from_assign(headers, values)
+    user = _adapt_mapping_to_headers(chosen, headers)
+    merged = dict(auto)
+    merged.update(user)
+    return complete_core_mapping(merged, headers, values)
+
+
+def _head_signature(rows: list[list[str]]) -> str | None:
+    table = _trim_table(rows)
+    if not table:
+        return None
+    headers, _body, headerless = _split_header_row(table)
+    if headerless:
+        return f"#{len(headers)}"
+    return _header_signature(headers)
 
 
 def mapping_for_file(
@@ -807,20 +978,12 @@ def mapping_for_file(
     data: TableSource,
 ) -> dict[str, Any]:
     """Mỗi file tự khớp cột. Chỉ lấy lựa chọn tay khi trùng tên tiêu đề của file đó."""
+    chosen = _chosen_mapping_for_file(mapping, filename)
     if _is_xlsx_source(filename, data):
         stored, _total = _read_first_xlsx_sheet(data, max_store=PREVIEW_STORE)
     else:
-        stored, _total = _read_table(filename, data, max_store=PREVIEW_STORE)
-    rows = _trim_table(stored)
-    if not rows:
-        return _chosen_mapping_for_file(mapping, filename)
-    headers, body, _headerless = _split_header_row(rows)
-    values = column_values_from_rows(body[:DETECT_ROWS], len(headers))
-    auto = _mapping_from_assign(headers, values)
-    user = _adapt_mapping_to_headers(_chosen_mapping_for_file(mapping, filename), headers)
-    merged = dict(auto)
-    merged.update(user)
-    return complete_core_mapping(merged, headers, values)
+        stored, _more = _read_head(filename, data, PREVIEW_STORE)
+    return _mapping_from_head(stored, chosen) or chosen
 
 
 def fill_missing_core_mapping(
@@ -842,19 +1005,19 @@ def _split_header_row(rows: list[list[str]]) -> tuple[list[str], list[list[str]]
     return headers, rows, True
 
 
-def preview_table(filename: str, data: TableSource) -> dict[str, Any]:
-    stored, total = _read_table(filename, data, max_store=PREVIEW_STORE)
-    truncated = total > len(stored)
+def preview_table(
+    filename: str,
+    data: TableSource,
+    progress: Callable[[int], None] | None = None,
+) -> dict[str, Any]:
+    stored, truncated = _read_head(filename, data, PREVIEW_STORE)
     rows = _trim_table(stored)
     if not rows:
         raise ValueError("File không có dòng dữ liệu.")
-    headers, body, headerless = _split_header_row(rows)
+    headers, body, _headerless = _split_header_row(rows)
     samples = body[:SAMPLE_ROWS]
     detect_rows = body[:DETECT_ROWS]
-    if truncated:
-        row_count = total if headerless else max(len(body), total - 1)
-    else:
-        row_count = len(body)
+    row_count = count_data_rows(filename, data, progress) if truncated else len(body)
     return {
         "name": filename,
         "columns": describe_columns(headers),
@@ -921,6 +1084,8 @@ def phone_from_cell(value: str) -> str:
 
 
 def _usable_mapped_phone(value: str) -> str:
+    if is_vn_phone(value):
+        return value
     extracted = phone_from_cell(value)
     if extracted:
         return extracted
@@ -962,19 +1127,33 @@ def _with_row_phone(
     row: list[str],
     indexes: dict[str, int | None],
 ) -> dict[str, str]:
-    mapped = _usable_mapped_phone(cleaned.get("phone") or "")
-    if mapped:
-        if mapped == (cleaned.get("phone") or ""):
-            return cleaned
-        updated = dict(cleaned)
-        updated["phone"] = mapped
-        return updated
-    found = phone_from_row_cells(row, _phone_skip_indexes(indexes))
-    if not found:
+    """SĐT trên dòng: cột đã chọn nếu dùng được, không thì số đầu tiên trên dòng. Không có thì để trống."""
+    current = cleaned.get("phone") or ""
+    found = _usable_mapped_phone(current) or phone_from_row_cells(row, _phone_skip_indexes(indexes))
+    if found == current:
         return cleaned
     updated = dict(cleaned)
     updated["phone"] = found
     return updated
+
+
+def _line_indexes(
+    headers: list[str],
+    indexes: dict[str, int | None],
+    line_specs: dict[str, list[dict[str, Any]]],
+    allow_index: bool,
+) -> dict[str, list[int]]:
+    resolved: dict[str, list[int]] = {}
+    for field in LINE_FIELDS:
+        found = [
+            index
+            for index in (resolve_index(headers, spec, allow_index=allow_index) for spec in line_specs[field])
+            if index is not None
+        ]
+        if not found and indexes[field] is not None:
+            found = [int(indexes[field])]
+        resolved[field] = found
+    return resolved
 
 
 def _mapped_row(
@@ -983,25 +1162,28 @@ def _mapped_row(
     indexes: dict[str, int | None],
     line_specs: dict[str, list[dict[str, Any]]],
     allow_index: bool = True,
+    line_indexes: dict[str, list[int]] | None = None,
 ) -> dict[str, str]:
     if headers and len(row) < len(headers):
         row = list(row) + [""] * (len(headers) - len(row))
+    lines = line_indexes if line_indexes is not None else _line_indexes(headers, indexes, line_specs, allow_index)
+    size = len(row)
     raw: dict[str, str] = {}
     for field in FIELDS:
+        if field == "address":
+            pieces = [
+                (index, headers[index] if index < len(headers) else "", row[index])
+                for index in lines[field]
+                if index < size and row[index]
+            ]
+            raw[field] = compose_address(pieces)
+            continue
         if field in LINE_FIELDS:
-            parts = []
-            for spec in line_specs[field]:
-                index = resolve_index(headers, spec, allow_index=allow_index)
-                if index is not None and index < len(row):
-                    parts.append(row[index])
-            if not parts:
-                index = indexes[field]
-                if index is not None and index < len(row):
-                    parts.append(row[index])
-            raw[field] = join_address_lines(*parts)
+            parts = [row[index] for index in lines[field] if index < size and row[index]]
+            raw[field] = parts[0] if len(parts) == 1 else join_address_lines(*parts)
             continue
         index = indexes[field]
-        raw[field] = row[index] if index is not None and index < len(row) else ""
+        raw[field] = row[index] if index is not None and index < size else ""
     return _with_row_phone(clean_row(raw), row, indexes)
 
 
@@ -1021,10 +1203,74 @@ def rows_from_mapped_headers(
     return extracted
 
 
+def _headers_are_generic(headers: list[str]) -> bool:
+    return bool(headers) and all(_GENERIC_HEADER.match(collapse(str(header)) or "") for header in headers)
+
+
+def _layout_group_key(headers: list[str], payload: dict[str, Any]) -> str:
+    """File không tiêu đề cùng số cột nhưng khác cột tên/SĐT/địa chỉ là hai kiểu, chọn riêng."""
+    base = _header_signature(headers)
+    if not _headers_are_generic(headers):
+        return base
+    parts: list[str] = []
+    for field in ("name", "phone", "address"):
+        value = payload.get(field)
+        try:
+            parts.append("" if value is None or value == "" else str(int(value)))
+        except (TypeError, ValueError):
+            parts.append("")
+    return base + "\n#role:" + ",".join(parts)
+
+
+def _column_address_rank(header: str, samples: list[list[str]], index: int) -> int:
+    forced = address_header_rank(header)
+    if forced is not None:
+        return forced
+    counts = [0, 0, 0, 0, 0]
+    seen = 0
+    for row in samples:
+        if index >= len(row):
+            continue
+        text = collapse(str(row[index]))
+        if not text:
+            continue
+        counts[address_content_rank(text)] += 1
+        seen += 1
+        if seen >= 8:
+            break
+    if not seen:
+        return 0
+    return max(range(5), key=lambda rank: (counts[rank], -rank))
+
+
+def _choice_columns(headers: list[str], samples: list[list[str]]) -> list[dict[str, Any]]:
+    """Cột không có tên thật thì hiện một ô mẫu, để phân biệt cột E với cột F."""
+    columns = describe_columns(headers)
+    for column in columns:
+        header = str(column.get("header") or "")
+        index = int(column["index"])
+        column["addressRank"] = _column_address_rank(header, samples, index)
+        if not _GENERIC_HEADER.match(header):
+            continue
+        sample = ""
+        for row in samples:
+            if index < len(row):
+                sample = collapse(str(row[index]))
+                if sample:
+                    break
+        if not sample:
+            continue
+        if len(sample) > 42:
+            sample = sample[:41].rstrip() + "…"
+        column["title"] = f"Cột {column['letter']} — {sample}"
+    return columns
+
+
 def _layout_picks(
     headers: list[str],
     payload: dict[str, Any],
 ) -> dict[str, Any]:
+    """Mọi cột đều chọn được. Gợi ý chỉ là cột đang được chọn sẵn."""
     all_indexes = list(range(len(headers)))
     picks: dict[str, Any] = {}
     for field in FIELDS:
@@ -1037,29 +1283,9 @@ def _layout_picks(
             except (TypeError, ValueError):
                 pass
         chosen.extend(index for index in extra if index not in chosen)
-        matching = [index for index, header in enumerate(headers) if header_field(header) == field]
-        if field in ("name", "phone"):
-            indexes = all_indexes
-            kind = "one"
-        elif field == "address":
-            related = [
-                index
-                for index, header in enumerate(headers)
-                if header_field(header) in ("address", "adminAddress")
-            ]
-            indexes = [index for index in all_indexes if index in set(matching + chosen + related)]
-            if not indexes:
-                indexes = all_indexes
-            kind = "many"
-        elif field in LINE_FIELDS:
-            indexes = [index for index in all_indexes if index in set(matching + chosen)]
-            kind = "many"
-        else:
-            indexes = [index for index in all_indexes if index in set(matching + chosen)]
-            kind = "one"
         picks[field] = {
-            "kind": kind,
-            "indexes": indexes,
+            "kind": "many" if field in LINE_FIELDS else "one",
+            "indexes": all_indexes,
             "suggested": chosen if field in LINE_FIELDS else (chosen[0] if chosen else None),
         }
     return picks
@@ -1071,17 +1297,17 @@ def group_preview_layouts(previews: list[dict[str, Any]]) -> list[dict[str, Any]
     by_sig: dict[str, dict[str, Any]] = {}
     for preview in previews:
         headers = [str(item) for item in (preview.get("headers") or [])]
-        sig = _header_signature(headers)
+        values = column_values_from_rows(preview.get("detectRows") or preview.get("samples") or [], len(headers))
+        payload, details = suggested_payload(headers, values)
+        sig = _layout_group_key(headers, payload)
         group = by_sig.get(sig)
         if group is None:
-            values = column_values_from_rows(preview.get("detectRows") or preview.get("samples") or [], len(headers))
-            payload, details = suggested_payload(headers, values)
             mapping = _mapping_from_assign(headers, values)
             samples = rows_from_mapped_headers(headers, preview.get("samples") or [], mapping)
             group = {
                 "id": f"g{len(groups)}",
                 "headers": headers,
-                "columns": preview.get("columns") or describe_columns(headers),
+                "columns": _choice_columns(headers, preview.get("samples") or []),
                 "suggested": payload,
                 "picks": _layout_picks(headers, payload),
                 "detectNote": explain_mapping(details, headers),
@@ -1130,29 +1356,30 @@ def _mapped_from_iter(
     headers: list[str] | None = None
     indexes: dict[str, int | None] = {}
     line_specs: dict[str, list[dict[str, Any]]] = {}
+    lines: dict[str, list[int]] = {}
     tallies = counts if counts is not None else {}
     tallies.setdefault("fileRows", 0)
     tallies.setdefault("unmapped", 0)
     tallies.setdefault("phonesOnFile", 0)
     for row in rows:
-        if not any(collapse(cell) for cell in row):
+        if not any(row):
             continue
         if headers is None:
-            if looks_like_label_row(row):
+            labeled = looks_like_label_row(row)
+            if labeled:
                 headers = _titles_from_row(row)
-                indexes = {
-                    field: resolve_index(headers, mapping.get(field), allow_index=allow_index) for field in FIELDS
-                }
-                line_specs = {field: _address_specs(mapping.get(field)) for field in LINE_FIELDS}
-                continue
-            headers = [f"Cột {column_letter(index)}" for index in range(len(row))]
+            else:
+                headers = [f"Cột {column_letter(index)}" for index in range(len(row))]
             indexes = {
                 field: resolve_index(headers, mapping.get(field), allow_index=allow_index) for field in FIELDS
             }
             line_specs = {field: _address_specs(mapping.get(field)) for field in LINE_FIELDS}
+            lines = _line_indexes(headers, indexes, line_specs, allow_index)
+            if labeled:
+                continue
         tallies["fileRows"] += 1
-        cleaned = _mapped_row(row, headers, indexes, line_specs, allow_index=allow_index)
-        if has_phone(cleaned):
+        cleaned = _mapped_row(row, headers, indexes, line_specs, allow_index=allow_index, line_indexes=lines)
+        if cleaned["phone"]:
             tallies["phonesOnFile"] += 1
             yield cleaned
         elif has_data(cleaned):
@@ -1177,36 +1404,45 @@ def _mapped_from_xlsx(
     mapping: dict[str, Any],
     allow_index: bool = True,
     counts: dict[str, int] | None = None,
+    chosen: dict[str, Any] | None = None,
 ) -> Iterator[dict[str, str]]:
-    """Mỗi sheet tự đọc tiêu đề, không bỏ dòng khách đầu của sheet sau."""
-    archive = None
-    shared = SharedStringStore()
+    """Mỗi sheet tự đọc tiêu đề. Sheet khác bố cục sheet đầu thì tự khớp cột riêng, không áp cột theo vị trí."""
     try:
         archive = _open_xlsx(data)
-        if "xl/sharedStrings.xml" in archive.namelist():
-            with archive.open("xl/sharedStrings.xml") as handle:
-                _fill_shared_strings(handle, shared)
+    except (zipfile.BadZipFile, OSError) as exc:
+        raise ValueError("File Excel bị hỏng hoặc không phải .xlsx.") from exc
+    shared = _new_shared(archive)
+    try:
         paths = _sheet_paths(archive)
         if not paths:
             raise ValueError("File Excel không có bảng tính.")
+        base_signature: str | None = None
         for path in paths:
+            sheet_mapping = mapping
+            if chosen is not None and len(paths) > 1:
+                with archive.open(path) as handle:
+                    head = _head_rows(iter_sheet_rows(handle, shared), PREVIEW_STORE)
+                signature = _head_signature(head)
+                if signature is None:
+                    pass
+                elif base_signature is None:
+                    base_signature = signature
+                elif signature != base_signature:
+                    sheet_mapping = _mapping_from_head(head, _without_generic_headers(chosen)) or mapping
             with archive.open(path) as handle:
                 yield from _mapped_from_iter(
-                    _iter_sheet_rows(handle, shared),
-                    mapping,
+                    iter_sheet_rows(handle, shared),
+                    sheet_mapping,
                     allow_index=allow_index,
                     counts=counts,
                 )
-    except zipfile.BadZipFile as exc:
-        raise ValueError("File Excel bị hỏng hoặc không phải .xlsx.") from exc
     except ValueError:
         raise
-    except (KeyError, ET.ParseError, OSError) as exc:
+    except _XLSX_ERRORS as exc:
         raise ValueError("File Excel bị hỏng hoặc không đọc được.") from exc
     finally:
         shared.close()
-        if archive is not None:
-            archive.close()
+        archive.close()
 
 
 def iter_mapped_rows(
@@ -1227,9 +1463,10 @@ def iter_mapped_file(
     mapping: dict[str, Any],
     first_width: int | None,
     counts: dict[str, int] | None = None,
+    chosen: dict[str, Any] | None = None,
 ) -> tuple[int | None, Iterator[dict[str, str]]]:
     if _is_xlsx_source(filename, data):
-        return first_width, _mapped_from_xlsx(data, mapping, allow_index=True, counts=counts)
+        return first_width, _mapped_from_xlsx(data, mapping, allow_index=True, counts=counts, chosen=chosen)
     raw = iter_raw_rows(filename, data)
     try:
         first: list[str] | None = None
@@ -1441,22 +1678,79 @@ def write_xlsx_to_path(
     return dest
 
 
-def phones_from_files(files: Iterable[tuple[str, TableSource]]) -> tuple[list[str], list[dict[str, Any]]]:
+def _phone_columns(sample: list[list[str]]) -> set[int]:
+    """Cột SĐT của file tra cứu: tiêu đề là SĐT, hoặc ít nhất nửa số ô mẫu là số điện thoại."""
+    if not sample:
+        return set()
+    columns: set[int] = set()
+    body = sample
+    if looks_like_label_row(sample[0]):
+        columns.update(index for index, header in enumerate(sample[0]) if header_field(header) == "phone")
+        body = sample[1:]
+    width = max((len(row) for row in body), default=0)
+    filled = [0] * width
+    hits = [0] * width
+    for row in body:
+        for index, cell in enumerate(row[:width]):
+            if not cell:
+                continue
+            filled[index] += 1
+            if extract_phone(cell):
+                hits[index] += 1
+    columns.update(index for index in range(width) if filled[index] and hits[index] * 2 >= filled[index])
+    return columns
+
+
+def phones_in_row(row: list[str], phone_columns: set[int]) -> list[str]:
+    """Mọi SĐT trên dòng: cột SĐT lấy cả số lạ; cột khác chỉ lấy số Việt Nam; một ô nhiều số thì lấy hết."""
+    found: list[str] = []
+    for index, cell in enumerate(row):
+        if not cell:
+            continue
+        if index in phone_columns:
+            phones = phones_in_text(cell)
+            if not phones:
+                single = extract_phone(cell)
+                phones = [single] if single else []
+        elif _DIGIT_RUN8.search(cell):
+            phones = phones_in_text(cell)
+        else:
+            continue
+        for phone in phones:
+            if phone not in found:
+                found.append(phone)
+    return found
+
+
+def phones_from_files(
+    files: Iterable[tuple[str, TableSource]],
+    progress: Callable[[dict[str, Any]], None] | None = None,
+) -> tuple[list[str], list[dict[str, Any]]]:
     phones: list[str] = []
     reports: list[dict[str, Any]] = []
     for filename, data in files:
         found: list[str] = []
+        rows_seen = 0
         try:
-            for row in iter_raw_rows(filename, data):
-                for cell in row:
-                    phone = phone_from_cell(cell)
-                    if phone:
-                        found.append(phone)
+            stream = iter_raw_rows(filename, data)
+            try:
+                sample = _head_rows(stream, DETECT_ROWS)
+                columns = _phone_columns(sample)
+                for row in sample:
+                    rows_seen += 1
+                    found.extend(phones_in_row(row, columns))
+                for row in stream:
+                    rows_seen += 1
+                    found.extend(phones_in_row(row, columns))
+                    if progress is not None and rows_seen % 50000 == 0:
+                        progress({"file": filename, "rows": rows_seen, "phones": len(found)})
+            finally:
+                stream.close()
         except ValueError as exc:
-            reports.append({"name": filename, "phones": 0, "error": str(exc)})
+            reports.append({"name": filename, "phones": 0, "rows": rows_seen, "error": str(exc)})
             continue
         phones.extend(found)
-        reports.append({"name": filename, "phones": len(found)})
+        reports.append({"name": filename, "phones": len(found), "rows": rows_seen})
     return phones, reports
 
 

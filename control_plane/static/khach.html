@@ -106,6 +106,7 @@
     table.sheet tbody tr:nth-child(even) td { background: #f7f9fb; }
     .picks { display: grid; gap: 0.35rem; margin: 0.2rem 0 0.4rem; }
     .picks label { font-weight: 500; display: flex; gap: 0.45rem; align-items: center; }
+    .picks label[hidden] { display: none; }
     .map-card {
       border: 1px solid var(--line);
       border-radius: 12px;
@@ -152,12 +153,13 @@
 <main translate="no">
   <p id="translateWarn" class="note warn" hidden>Google Dịch đang bật nên chữ bị dính. Tắt dịch trang này trên Chrome, rồi tải lại.</p>
   <h1>Kho khách Excel</h1>
-    <p class="lead">Nhập khách bằng file Excel, không dùng video. Không giới hạn số file và dung lượng: chọn thêm là cộng vào lần nạp này. Khớp tên cột kho trước (tên, SĐT, địa chỉ, địa chỉ hành chính, hàng mua, giá COD, UID Facebook, ID TikTok). Nếu file không có tên cột, hoặc thiếu cột tên / SĐT, thì lấy cột có tên người, số điện thoại và địa chỉ. Cột lạ như giới tính, ngày sinh, link thì bỏ qua. Mỗi file tự khớp cột theo tiêu đề của file đó; lần nạp mới cộng vào kho, không xóa khách cũ. Mỗi dòng có số điện thoại là một khách. Số trên dòng là chuẩn lọc trùng: trùng SĐT thì cùng một hàng. Mọi dòng có số trong file mới đều được ghi — khách mới thì thêm, khách cũ thì bổ sung hoặc giữ nguyên. Không có số điện thoại thì bỏ qua, không lưu. Lần nạp sau: ô trống được bổ sung, địa chỉ / hàng mua mới thêm dòng, ô đã có mà không đổi thì giữ nguyên. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
+    <p class="lead">Nhập khách bằng file Excel, không dùng video. Không giới hạn số file và dung lượng: chọn thêm là cộng vào lần nạp này. Khớp tên cột kho trước (tên, SĐT, địa chỉ, địa chỉ hành chính, hàng mua, giá COD, UID Facebook, ID TikTok). Nếu file không có tên cột, hoặc thiếu cột tên / SĐT, thì lấy cột có tên người, số điện thoại và địa chỉ. Cột lạ như giới tính, ngày sinh, link thì bỏ qua. Mỗi file tự khớp cột theo tiêu đề của file đó; lần nạp mới cộng vào kho, không xóa khách cũ. Mỗi dòng có số điện thoại là một khách. Số trên dòng là chuẩn lọc trùng: trùng SĐT thì cùng một hàng. Mọi dòng có số trong file mới đều được ghi — khách mới thì thêm, khách cũ thì bổ sung hoặc giữ nguyên. Không có số điện thoại thì bỏ qua, không lưu. Lần nạp sau: ô trống được bổ sung, địa chỉ mới thay địa chỉ cũ, hàng mua và địa chỉ hành chính thêm dòng, ô đã có mà không đổi thì giữ nguyên. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
 
   <section>
     <h2>Thêm file Excel</h2>
     <div class="drop" id="drop">
       <p>Kéo bao nhiêu file Excel cũng được, không giới hạn số file và dung lượng</p>
+      <p class="note">File chỉ gửi lên một lần, chia mảnh 8 MB: rớt mạng thì tự gửi tiếp từ chỗ dừng. Nạp chạy trên máy chủ, tắt trang vẫn nạp tiếp; bấm lại không nạp trùng.</p>
       <p class="note">hoặc</p>
       <button class="file" type="button" id="pick">Chọn file Excel</button>
       <input id="file" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" multiple />
@@ -194,7 +196,7 @@
 
   <section>
     <h2>Tra cứu hàng loạt</h2>
-    <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. File chỉ lấy ô số điện thoại Việt Nam, không lấy UID Facebook. Chọn thêm file là cộng vào. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
+    <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì tra cả hai. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
     <label for="lookupPaste">Danh sách số điện thoại</label>
     <textarea id="lookupPaste" placeholder="0901222333"></textarea>
     <p class="row" style="margin-top:0.7rem">
@@ -225,6 +227,9 @@
   var pendingFiles = [];
   var pendingKeys = {};
   var preview = null;
+  var previewTurn = 0;
+  var uploadIds = {};
+  var UPLOAD_CHUNK = 8 * 1024 * 1024;
   var fieldOrder = ["name", "phone", "address", "adminAddress", "orderContent", "codAmount", "facebookUid", "tiktokId"];
   var lineFields = {
     address: "addressColumns",
@@ -485,14 +490,31 @@
         var rawIndex = option.getAttribute("data-index");
         var index = rawIndex === "" || rawIndex == null ? null : Number(rawIndex);
         if (index !== index) index = null;
-        columns.push({ index: index, header: option.getAttribute("data-header") || "" });
+        columns.push({
+          index: index,
+          header: option.getAttribute("data-header") || "",
+          rank: Number(option.getAttribute("data-address-rank") || "0")
+        });
       }
       root.querySelectorAll("[data-field='" + field + "'] input[type=checkbox]:checked").forEach(function (box) {
         var header = box.getAttribute("data-header") || "";
         var rawIndex = box.getAttribute("data-index");
         var index = rawIndex === "" || rawIndex == null ? null : Number(rawIndex);
         if (index !== index) index = null;
-        if (header || index !== null) columns.push({ index: index, header: header });
+        if (header || index !== null) {
+          columns.push({
+            index: index,
+            header: header,
+            rank: Number(box.getAttribute("data-address-rank") || "0")
+          });
+        }
+      });
+      var seen = {};
+      columns = columns.filter(function (col) {
+        var key = col.index == null ? "h:" + col.header : "i:" + String(col.index);
+        if (seen[key]) return false;
+        seen[key] = true;
+        return true;
       });
       var first = columns[0] || { index: null, header: "" };
       return { index: first.index, header: first.header, columns: columns };
@@ -561,9 +583,311 @@
     option.value = "col-" + (col.letter || col.index || col.header);
     option.setAttribute("data-header", col.header || "");
     option.setAttribute("data-index", col.index == null ? "" : String(col.index));
+    option.setAttribute("data-address-rank", col.addressRank == null ? "0" : String(col.addressRank));
     option.textContent = col.title;
     if (selected) option.selected = true;
     select.appendChild(option);
+  }
+
+  var PROVINCE = {};
+  "an giang|ba ria vung tau|bac giang|bac kan|bac lieu|bac ninh|ben tre|binh dinh|binh duong|binh phuoc|binh thuan|brvt|ca mau|can tho|cao bang|da nang|dak lak|dak nong|dien bien|dong nai|dong thap|gia lai|ha giang|ha nam|ha noi|ha tinh|hai duong|hai phong|hau giang|hcm|hn|ho chi minh|hoa binh|hue|hung yen|khanh hoa|kien giang|kon tum|lai chau|lam dong|lang son|lao cai|long an|nam dinh|nghe an|ninh binh|ninh thuan|phu tho|phu yen|quang binh|quang nam|quang ngai|quang ninh|quang tri|sai gon|saigon|soc trang|son la|tay ninh|thai binh|thai nguyen|thanh hoa|thanh pho ha noi|thanh pho ho chi minh|thanh pho hue|thua thien hue|tien giang|tp ha noi|tp hcm|tp ho chi minh|tp hue|tphcm|tra vinh|tuyen quang|vinh long|vinh phuc|vung tau|yen bai".split("|").forEach(function (name) { PROVINCE[name] = true; });
+  var DISTRICT = {};
+  "ba dinh|bac tu liem|bao loc|bien hoa|binh chanh|binh tan|binh thanh|binh thuy|buon ma thuot|cai rang|cam le|cam pha|cam ranh|can gio|cao lanh|cau giay|chau doc|cu chi|da lat|di an|do son|dong anh|dong da|dong hoi|duong kinh|gia lam|go cong|go vap|ha dong|ha long|ha tien|hai ba trung|hai chau|hoa vang|hoai duc|hoan kiem|hoang mai|hoc mon|hoi an|hong bang|kien an|le chan|lien chieu|long bien|long khanh|long xuyen|mong cai|my tho|nam tu liem|ngo quyen|ngu hanh son|nha be|nha trang|ninh kieu|o mon|phan rang|phan thiet|phu nhuan|phuc tho|pleiku|quan 1|quan 10|quan 11|quan 12|quan 2|quan 3|quan 4|quan 5|quan 6|quan 7|quan 8|quan 9|quy nhon|rach gia|sa dec|soc son|son tay|son tra|tam ky|tan an|tan binh|tan phu|tay ho|thanh khe|thanh oai|thanh tri|thanh xuan|thot not|thu dau mot|thu duc|thuan an|thuong tin|tuy hoa|uong bi|vi thanh|vinh".split("|").forEach(function (name) { DISTRICT[name] = true; });
+  var CANON = {"hn":"ha noi","ha noi":"ha noi","tp ha noi":"ha noi","thanh pho ha noi":"ha noi","hcm":"ho chi minh","tphcm":"ho chi minh","tp hcm":"ho chi minh","ho chi minh":"ho chi minh","thanh pho ho chi minh":"ho chi minh","tp ho chi minh":"ho chi minh","sai gon":"ho chi minh","saigon":"ho chi minh","hue":"hue","thua thien hue":"hue","thanh pho hue":"hue","tp hue":"hue","brvt":"ba ria vung tau","ba ria vung tau":"ba ria vung tau","vung tau":"ba ria vung tau"};
+  var CODE = {"hn":1,"hcm":1,"tphcm":1,"brvt":1};
+  var GLUE = {"duong":1,"pho":1,"ngo":1,"hem":1,"ngach":1,"kiet":1,"so":1,"lo":1,"toa":1,"tang":1,"can":1,"chung":1,"cu":1};
+  var ADMIN = [
+    [["to","dan","pho"],"to",true],[["khu","dan","cu"],"kdc",false],[["khu","pho"],"kp",true],
+    [["thanh","pho"],"tp",false],[["thi","tran"],"tt",false],[["thi","xa"],"tx",false],
+    [["phuong"],"p",true],[["huyen"],"h",true],[["quan"],"q",true],
+    [["thon"],"thon",false],[["xom"],"xom",false],[["buon"],"buon",false],[["soc"],"soc",false],[["khom"],"khom",false],
+    [["tinh"],"tinh",false],[["tdp"],"to",true],[["kp"],"kp",true],[["tx"],"tx",false],[["tt"],"tt",false],[["tp"],"tp",false],
+    [["q"],"q",true],[["p"],"p",true],[["x"],"x",true]
+  ];
+
+  function foldVi(value) {
+    return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+  }
+  function headerRank(header) {
+    var folded = foldVi(header);
+    if (!folded) return null;
+    var padded = " " + folded + " ";
+    if (padded.indexOf(" tinh ") >= 0) return 4;
+    if (/\s(thi xa|huyen|quan)\s/.test(padded)) return 3;
+    if (padded.indexOf(" thanh pho ") >= 0 || folded === "tp" || folded === "thanh pho") return null;
+    if (/\s(thi tran|phuong|xa)\s/.test(padded)) return 2;
+    if (/\s(to dan pho|khu pho|thon|xom|ap|lang|buon|soc|khom|ban|doi)\s/.test(padded)) return 1;
+    if (/\s(so nha|ten duong|duong|ngo|hem|ngach|kiet|pho)\s/.test(padded)) return 0;
+    return null;
+  }
+  function isProvince(folded) { return !!PROVINCE[folded] || !!CANON[folded] || !!CODE[folded]; }
+  function contentRank(value) {
+    var folded = foldVi(value);
+    if (!folded) return 0;
+    if (isProvince(folded) || folded.indexOf("tinh ") === 0) return 4;
+    if (folded.indexOf("thanh pho ") === 0 || folded.indexOf("tp ") === 0) {
+      var rest = folded.replace(/^(?:thanh pho|tp)\s+/, "");
+      return isProvince(rest) ? 4 : 3;
+    }
+    if (DISTRICT[folded]) return 3;
+    if (/^q\s*\d{1,2}$/.test(folded)) return 3;
+    if (/^(?:thi xa|tx|huyen|quan)\s+\S/.test(folded) || /^q\s+\S/.test(folded) || /^h\s+[a-z]{2}/.test(folded)) return 3;
+    if (/^p\s*\d{1,2}$/.test(folded)) return 2;
+    if (/^(?:kp|tdp)\s*\d{1,2}$/.test(folded)) return 1;
+    if (/^(?:thi tran|tt|phuong|xa)\s+\S/.test(folded) || /^[px]\s+\S/.test(folded)) return 2;
+    if (/^(?:to|doi|ban)\s+\d{1,2}$/.test(folded)) return 1;
+    if (/^(?:to dan pho|tdp|khu pho|kp|khu dan cu|thon|xom|ap|lang|buon|soc|khom|ban|doi)\s+\S/.test(folded)) return 1;
+    return 0;
+  }
+  function prefixKind(folded) {
+    if (folded.indexOf("to dan pho") === 0 || folded.indexOf("tdp") === 0 || /^to\s+\d/.test(folded)) return "to";
+    if (folded.indexOf("khu dan cu") === 0) return "kdc";
+    if (folded.indexOf("khu pho") === 0 || folded.indexOf("kp ") === 0 || (folded.indexOf("kp") === 0 && folded.length <= 3)) return "kp";
+    if (folded.indexOf("thanh pho ") === 0 || folded.indexOf("tp ") === 0 || CODE[folded]) return "tp";
+    if (folded.indexOf("thi xa") === 0 || folded.indexOf("tx ") === 0) return "tx";
+    if (folded.indexOf("huyen ") === 0 || /^h\s+[a-z]/.test(folded)) return "h";
+    if (folded.indexOf("quan ") === 0 || /^q(?:\s|\d)/.test(folded)) return "q";
+    if (folded.indexOf("thi tran") === 0 || folded.indexOf("tt ") === 0) return "tt";
+    if (folded.indexOf("phuong ") === 0 || /^p(?:\s|\d)/.test(folded)) return "p";
+    if (folded.indexOf("xa ") === 0 || /^x\s+\S/.test(folded)) return "x";
+    if (folded.indexOf("thon ") === 0) return "thon";
+    if (folded.indexOf("xom ") === 0) return "xom";
+    if (folded.indexOf("ap ") === 0) return "ap";
+    if (folded.indexOf("lang ") === 0) return "lang";
+    if (folded.indexOf("buon ") === 0) return "buon";
+    if (folded.indexOf("soc ") === 0) return "soc";
+    if (folded.indexOf("khom ") === 0) return "khom";
+    if (folded.indexOf("doi ") === 0 || folded.indexOf("ban ") === 0) return "to";
+    if (folded.indexOf("tinh ") === 0) return "tinh";
+    return "";
+  }
+  function kindFromHeader(header) {
+    var folded = foldVi(header);
+    if (!folded) return "";
+    if (folded.indexOf("to dan pho") >= 0 || folded === "tdp" || folded === "to") return "to";
+    if (folded.indexOf("khu pho") >= 0 || folded === "kp") return "kp";
+    if (folded.indexOf("thi xa") >= 0) return "tx";
+    if (folded.indexOf("huyen") >= 0) return "h";
+    if (folded.indexOf("quan") >= 0) return "q";
+    if (folded.indexOf("thi tran") >= 0) return "tt";
+    if (folded.indexOf("phuong") >= 0) return "p";
+    if (/(?:^| )xa(?: |$)/.test(folded)) return "x";
+    if (folded.indexOf("thon") >= 0) return "thon";
+    if (folded.indexOf("xom") >= 0) return "xom";
+    if (/(?:^| )ap(?: |$)/.test(folded)) return "ap";
+    if (folded.indexOf("lang") >= 0) return "lang";
+    if (folded.indexOf("tinh") >= 0) return "tinh";
+    if (folded.indexOf("thanh pho") >= 0) return "tp";
+    return "";
+  }
+  function pieceKey(text, rank, header) {
+    var folded = foldVi(text);
+    if (!folded || folded === "viet nam" || folded === "vietnam" || folded === "vn") return "";
+    if (rank === 4) {
+      var canon = CANON[folded] || CANON[folded.replace(/^(?:thanh pho|tinh|tp)\s+/, "")] || folded;
+      return "4:" + canon;
+    }
+    var kind = prefixKind(folded) || kindFromHeader(header);
+    var rest = folded.replace(/^(?:to dan pho|khu dan cu|khu pho|thanh pho|thi tran|thi xa|phuong|huyen|quan|thon|xom|buon|soc|khom|tinh|tdp|kp|tx|tt|tp|to|doi|ban|[pqhx])\s+/, "");
+    var short = folded.replace(/^(?:kp|tdp|[qp])(?=\d)/, "");
+    if (short !== folded && (!rest || rest === folded)) rest = short;
+    var body = rest || folded;
+    if (/^\d{1,2}$/.test(body) && kind) return rank + ":" + kind + "#" + String(parseInt(body, 10));
+    if ((rank === 1 || rank === 2) && kind) return rank + ":" + kind + ":" + body;
+    return rank + ":" + body;
+  }
+  function aligned(value) {
+    var text = String(value || "").replace(/\s+/g, " ").trim();
+    var folded = "";
+    for (var i = 0; i < text.length; i++) {
+      var one = text[i].normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toLowerCase();
+      folded += /^[a-z0-9]$/.test(one) ? one : " ";
+    }
+    return [text, folded];
+  }
+  function tokenSpans(folded) {
+    var spans = [];
+    var index = 0;
+    while (index < folded.length) {
+      if (folded[index] === " ") { index += 1; continue; }
+      var end = index + 1;
+      while (end < folded.length && folded[end] !== " ") end += 1;
+      spans.push([index, end, folded.slice(index, end)]);
+      index = end;
+    }
+    return spans;
+  }
+  function matchPrefix(tokens, index, codes) {
+    var token = tokens[index];
+    if (/^q\d{1,2}$/.test(token)) return [1, "q", true];
+    if (/^p\d{1,2}$/.test(token)) return [1, "p", true];
+    if (/^(?:kp|tdp)\d{1,2}$/.test(token)) return [1, token.indexOf("kp") === 0 ? "kp" : "to", true];
+    if (codes !== false && CODE[token]) return [1, "tp", false];
+    for (var i = 0; i < ADMIN.length; i++) {
+      var words = ADMIN[i][0];
+      var width = words.length;
+      var same = true;
+      for (var j = 0; j < width; j++) if (tokens[index + j] !== words[j]) same = false;
+      if (!same) continue;
+      var nxt = tokens[index + 1] || "";
+      if (words.length === 1 && words[0] === "h" && !/^[a-z]{2,}$/.test(nxt)) continue;
+      if ((words[0] === "to" && words.length === 1) || words[0] === "doi" || words[0] === "ban") {
+        if (!/^\d{1,2}$/.test(nxt)) continue;
+      }
+      if ((words[0] === "p" || words[0] === "x" || words[0] === "q") && words.length === 1 && !nxt) continue;
+      return [width, ADMIN[i][1], ADMIN[i][2]];
+    }
+    return null;
+  }
+  function segmentEnd(tokens, start, width, takesNumber) {
+    var cursor = start + width;
+    if (takesNumber && /^\d{1,2}$/.test(tokens[cursor] || "")) return cursor + 1;
+    if (/^\d/.test(tokens[cursor] || "")) return cursor;
+    var names = 0;
+    while (cursor < tokens.length && names < 4) {
+      if (matchPrefix(tokens, cursor, false)) break;
+      if (names > 0 && /^\d/.test(tokens[cursor])) break;
+      if (names > 0 && GLUE[tokens[cursor]]) break;
+      cursor += 1;
+      names += 1;
+    }
+    return cursor;
+  }
+  function splitPieces(text) {
+    var foldedName = foldVi(text);
+    if (!foldedName) return [];
+    if (PROVINCE[foldedName] || DISTRICT[foldedName] || CANON[foldedName]) return [text];
+    var pair = aligned(text);
+    var display = pair[0];
+    var spans = tokenSpans(pair[1]);
+    if (!spans.length) return [text];
+    var tokens = spans.map(function (item) { return item[2]; });
+    var pieces = [];
+    var index = 0;
+    while (index < tokens.length) {
+      var matched = matchPrefix(tokens, index, true);
+      var glued = index > 0 && CODE[tokens[index]] && GLUE[tokens[index - 1]];
+      var end;
+      if (matched && !glued) end = segmentEnd(tokens, index, matched[0], matched[2]);
+      else {
+        end = index + 1;
+        while (end < tokens.length && !matchPrefix(tokens, end, true)) end += 1;
+        if (end < tokens.length && CODE[tokens[end]] && GLUE[tokens[end - 1]]) {
+          end += 1;
+          while (end < tokens.length && !matchPrefix(tokens, end, true)) end += 1;
+        }
+      }
+      var chunk = display.slice(spans[index][0], spans[end - 1][1]).replace(/^[\s,;-]+|[\s,;-]+$/g, "");
+      if (chunk) pieces.push(chunk);
+      index = Math.max(end, index + 1);
+    }
+    return pieces.length ? pieces : [text];
+  }
+  function iterPieces(value) {
+    var raw = String(value || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n/g, ", ").replace(/\s+/g, " ").trim();
+    if (!raw) return [];
+    var whole = foldVi(raw);
+    if (PROVINCE[whole] || DISTRICT[whole] || CANON[whole]) return [raw];
+    var protectedText = raw.replace(/Bà Rịa - Vũng Tàu/g, "\uE000").replace(/Bà Rịa – Vũng Tàu/g, "\uE000").replace(/Thừa Thiên - Huế/g, "\uE001").replace(/Thừa Thiên – Huế/g, "\uE001");
+    protectedText = protectedText.replace(/\s+[-–—]\s+/g, ", ");
+    var rough = protectedText.split(/\s*[,;|]\s*/);
+    var pieces = [];
+    rough.forEach(function (part) {
+      part = part.replace(/^\s+|\s+$/g, "").replace(/^[,;]+|[,;]+$/g, "");
+      if (!part) return;
+      part = part.replace(/\uE000/g, "Bà Rịa - Vũng Tàu").replace(/\uE001/g, "Thừa Thiên - Huế");
+      var pair = aligned(part);
+      var folded = pair[1];
+      var lead = "";
+      ["dia chi ", "d c ", "dc "].forEach(function (item) { if (!lead && folded.indexOf(item) === 0) lead = item; });
+      if (lead) {
+        var cut = pair[0].slice(lead.length).replace(/^[\s:,-]+|[\s:,-]+$/g, "");
+        if (cut) part = cut;
+      }
+      splitPieces(part).forEach(function (piece) { pieces.push(piece); });
+    });
+    return pieces;
+  }
+  function arrangeAddress(parts) {
+    var found = {};
+    parts.forEach(function (part) {
+      var forced = headerRank(part.header || "");
+      iterPieces(part.text).forEach(function (piece, seg) {
+        var rank = contentRank(piece);
+        if (rank === 0 && forced != null) rank = forced;
+        var key = pieceKey(piece, rank, part.header || "");
+        if (!key) return;
+        var words = foldVi(piece).split(" ");
+        var full = 0;
+        words.forEach(function (word) { if ({tinh:1,thanh:1,phuong:1,quan:1,huyen:1,xa:1,thon:1,xom:1,thi:1}[word]) full += 1; });
+        var richness = full * 1000 + piece.length;
+        var current = found[key];
+        if (!current) {
+          found[key] = { rank: rank, index: part.index, seg: seg, text: piece, rich: richness };
+          return;
+        }
+        var placeIndex = part.index < current.index || (part.index === current.index && seg < current.seg) ? part.index : current.index;
+        var placeSeg = part.index < current.index || (part.index === current.index && seg < current.seg) ? seg : current.seg;
+        if (richness > current.rich) found[key] = { rank: rank, index: placeIndex, seg: placeSeg, text: piece, rich: richness };
+        else found[key] = { rank: current.rank, index: placeIndex, seg: placeSeg, text: current.text, rich: current.rich };
+      });
+    });
+    var rows = Object.keys(found).map(function (key) { return found[key]; });
+    rows.sort(function (left, right) {
+      if (left.rank !== right.rank) return left.rank - right.rank;
+      if (left.index !== right.index) return left.index - right.index;
+      return left.seg - right.seg;
+    });
+    return rows.map(function (item) { return item.text; }).join(", ");
+  }
+  function rowsFromChoice(card, rawRows) {
+    var spec = {};
+    fieldOrder.forEach(function (field) {
+      spec[field] = readFieldSpec(card, field);
+    });
+    function textAt(row, index) {
+      if (index == null || index < 0 || index >= row.length) return "";
+      return String(row[index] == null ? "" : row[index]).trim();
+    }
+    function joined(field, row) {
+      var cols = (spec[field] && spec[field].columns) || [];
+      var parts = [];
+      var seen = {};
+      cols.forEach(function (col) {
+        var key = col.index == null ? "" : String(col.index);
+        if (!key || seen[key]) return;
+        seen[key] = true;
+        var text = textAt(row, col.index);
+        if (text) parts.push({ text: text, index: col.index, header: col.header || "" });
+      });
+      if (field === "address") return arrangeAddress(parts);
+      return parts.map(function (item) { return item.text; }).join("\n");
+    }
+    var out = [];
+    (rawRows || []).forEach(function (row) {
+      if (out.length >= 5) return;
+      var item = {
+        name: textAt(row, spec.name && spec.name.index),
+        phone: textAt(row, spec.phone && spec.phone.index),
+        address: joined("address", row),
+        adminAddress: joined("adminAddress", row),
+        orderContent: joined("orderContent", row),
+        codAmount: textAt(row, spec.codAmount && spec.codAmount.index)
+      };
+      if (item.name || item.phone || item.address || item.adminAddress || item.orderContent) out.push(item);
+    });
+    return out;
+  }
+
+  function syncAddressExtras(card) {
+    var select = card.querySelector("select[data-field='address']");
+    var option = select && select.selectedOptions && select.selectedOptions[0];
+    var primary = option && option.value ? option.getAttribute("data-index") || "" : "";
+    card.querySelectorAll("[data-field='address'] input[type=checkbox]").forEach(function (box) {
+      var same = primary !== "" && box.getAttribute("data-index") === primary;
+      if (box.parentElement) box.parentElement.hidden = same;
+      if (same) box.checked = false;
+    });
   }
 
   function renderGroupCard(group, fields) {
@@ -596,7 +920,7 @@
       select.setAttribute("data-kind", "one");
       addSkipOption(select);
       var pick = picks[field] || {};
-      var allowed = pick.indexes && pick.indexes.length ? pick.indexes : columns.map(function (_col, index) { return index; });
+      var allowed = columns.map(function (_col, index) { return index; });
       var suggested = pick.suggested;
       if (field === "address" && suggested && suggested.length) suggested = suggested[0];
       allowed.forEach(function (index) {
@@ -606,29 +930,38 @@
       });
       core.appendChild(label);
       core.appendChild(select);
-      if (field === "address") {
-        var extras = (pick.indexes || []).filter(function (index) {
-          return index !== suggested;
-        });
-        if (extras.length) {
-          var extraBox = document.createElement("div");
-          extraBox.className = "picks";
-          extraBox.setAttribute("data-field", "address");
-          extras.forEach(function (index) {
-            var col = columns[index];
-            if (!col) return;
-            var row = document.createElement("label");
-            var boxInput = document.createElement("input");
-            boxInput.type = "checkbox";
+      if (field === "address" && allowed.length) {
+        var chosenExtra = {};
+        if (Array.isArray(pick.suggested)) {
+          pick.suggested.forEach(function (index) {
+            if (index !== suggested) chosenExtra[index] = true;
+          });
+        }
+        var more = document.createElement("details");
+        more.className = "extra";
+        if (Object.keys(chosenExtra).length) more.open = true;
+        var moreSummary = document.createElement("summary");
+        moreSummary.textContent = "Ghép thêm cột thành dòng địa chỉ, từ số nhà đến tỉnh. Trong một ô thì xếp lại số nhà, thôn, xã, huyện, rồi tỉnh.";
+        more.appendChild(moreSummary);
+        var extraBox = document.createElement("div");
+        extraBox.className = "picks";
+        extraBox.setAttribute("data-field", "address");
+        allowed.forEach(function (index) {
+          var col = columns[index];
+          if (!col) return;
+          var row = document.createElement("label");
+          var boxInput = document.createElement("input");
+          boxInput.type = "checkbox";
             boxInput.setAttribute("data-header", col.header || "");
             boxInput.setAttribute("data-index", col.index == null ? "" : String(col.index));
-            boxInput.checked = Array.isArray(pick.suggested) && pick.suggested.indexOf(index) >= 0;
-            row.appendChild(boxInput);
-            row.appendChild(document.createTextNode("Thêm dòng: " + col.title));
-            extraBox.appendChild(row);
-          });
-          core.appendChild(extraBox);
-        }
+            boxInput.setAttribute("data-address-rank", col.addressRank == null ? "0" : String(col.addressRank));
+            boxInput.checked = !!chosenExtra[index];
+          row.appendChild(boxInput);
+          row.appendChild(document.createTextNode("Thêm dòng: " + col.title));
+          extraBox.appendChild(row);
+        });
+        more.appendChild(extraBox);
+        core.appendChild(more);
       }
     });
     card.appendChild(core);
@@ -638,7 +971,9 @@
     var hasExtra = false;
     extraFields.forEach(function (field) {
       var pick = picks[field] || {};
-      if (!(pick.indexes && pick.indexes.length)) return;
+      var indexes = columns.map(function (_col, index) { return index; });
+      if (!indexes.length) return;
+      pick = { kind: pick.kind, indexes: indexes, suggested: pick.suggested };
       hasExtra = true;
       var meta = fields.find(function (item) { return item.id === field; }) || { id: field, label: field };
       var label = document.createElement("label");
@@ -690,8 +1025,22 @@
     card.appendChild(note);
     var sample = document.createElement("div");
     sample.className = "scroll";
-    sample.innerHTML = renderCustomerSample(group.mappedSamples || []);
+    var rawRows = [];
+    (group.files || []).some(function (item) {
+      if (item.samples && item.samples.length) {
+        rawRows = item.samples;
+        return true;
+      }
+      return false;
+    });
+    function refreshSample() {
+      syncAddressExtras(card);
+      var rows = rawRows.length ? rowsFromChoice(card, rawRows) : (group.mappedSamples || []);
+      sample.innerHTML = renderCustomerSample(rows);
+    }
+    card.addEventListener("change", refreshSample);
     card.appendChild(sample);
+    refreshSample();
     return card;
   }
 
@@ -732,7 +1081,7 @@
     });
     document.getElementById("sampleBox").innerHTML = "";
     document.getElementById("mapBox").hidden = false;
-    var lead = "Máy đã tự chọn cột theo tiêu đề từng kiểu file. Chỉ sửa nếu dòng mẫu bên dưới sai.";
+    var lead = "Máy đã tự chọn cột. Mỗi mục chọn được mọi cột trong file. Đổi cột thì bảng mẫu bên dưới đổi theo nội dung cột đó.";
     if (groups.length > 1) {
       lead += " Có " + groups.length + " kiểu cột khác nhau — mỗi kiểu chọn một lần, không lấy nhầm cột của file kia.";
     }
@@ -850,47 +1199,280 @@
     previewPending();
   }
 
-  function buildPendingForm(extra) {
-    var data = new FormData();
-    pendingFiles.forEach(function (file) { data.append("files", file, file.name); });
-    if (extra) Object.keys(extra).forEach(function (key) { data.append(key, extra[key]); });
-    return data;
+  function newRequestId() {
+    if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID().replace(/-/g, "");
+    var out = "";
+    for (var index = 0; index < 32; index += 1) out += Math.floor(Math.random() * 16).toString(16);
+    return out;
   }
 
-  function progressLabel(label, loaded, total) {
-    if (!total) return label;
-    var sent = Math.round(loaded / 1024 / 1024);
-    var all = Math.max(1, Math.round(total / 1024 / 1024));
-    return label + " " + sent + "/" + all + " MB";
+  function mb(bytes) {
+    var value = (bytes || 0) / 1024 / 1024;
+    return value >= 100 ? String(Math.round(value)) : value.toFixed(1).replace(".", ",");
+  }
+
+  function fatalError(message) {
+    var error = new Error(message);
+    error.fatal = true;
+    return error;
+  }
+
+  function sendChunk(url, blob, onProgress) {
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open("PUT", url);
+      xhr.responseType = "text";
+      if (token()) xhr.setRequestHeader("Authorization", "Bearer " + token());
+      xhr.setRequestHeader("Content-Type", "application/octet-stream");
+      xhr.timeout = 15 * 60 * 1000;
+      if (xhr.upload && onProgress) {
+        xhr.upload.onprogress = function (event) {
+          if (event.lengthComputable) onProgress(event.loaded);
+        };
+      }
+      xhr.onload = function () {
+        var body = {};
+        try { body = JSON.parse(xhr.responseText || "{}"); } catch (error) { body = {}; }
+        resolve({ status: xhr.status, body: body });
+      };
+      xhr.onerror = function () { reject(new Error("network")); };
+      xhr.ontimeout = function () {
+        var error = new Error("timeout");
+        error.name = "AbortError";
+        reject(error);
+      };
+      xhr.send(blob);
+    });
+  }
+
+  async function uploadStatus(id) {
+    try {
+      var response = await api("/v1/customers/uploads/" + id, { tries: 1, waitMs: 30000 });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async function uploadOne(file, onProgress, restarts) {
+    var key = fileKey(file);
+    if (uploadIds[key]) return uploadIds[key];
+    var created = await api("/v1/customers/uploads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: file.name, size: file.size, lastModified: file.lastModified || 0 }),
+      tries: 4,
+      waitMs: 60000
+    });
+    var info = await created.json().catch(function () { return {}; });
+    if (!created.ok) throw fatalError(info.detail || ("Không gửi được " + file.name + "."));
+    var id = info.uploadId;
+    var received = info.received || 0;
+    var failures = 0;
+    onProgress(received);
+    while (received < file.size) {
+      var start = received;
+      var end = Math.min(file.size, start + UPLOAD_CHUNK);
+      try {
+        var sent = await sendChunk(
+          apiUrl("/v1/customers/uploads/" + id + "?offset=" + start),
+          file.slice(start, end),
+          function (loaded) { onProgress(start + loaded); }
+        );
+        if (sent.status === 200) {
+          received = sent.body.received;
+          failures = 0;
+          onProgress(received);
+          continue;
+        }
+        if (sent.status === 409 && typeof sent.body.received === "number") {
+          received = sent.body.received;
+          if (sent.body.busy) await sleep(1500);
+          continue;
+        }
+        if (sent.status === 404 && (restarts || 0) < 2) {
+          return uploadOne(file, onProgress, (restarts || 0) + 1);
+        }
+        if (sent.status === 401) throw fatalError("Trang chưa kết nối được máy chủ. Tải lại trang.");
+        if (sent.status >= 400 && sent.status < 500) throw fatalError(sent.body.detail || ("Không gửi được " + file.name + "."));
+        throw new Error("busy");
+      } catch (error) {
+        if (error && error.fatal) throw error;
+        failures += 1;
+        if (failures > 40) throw error;
+        await sleep(Math.min(30000, 1000 * Math.pow(2, Math.min(failures, 5))));
+        var known = await uploadStatus(id);
+        if (known && typeof known.received === "number") received = known.received;
+      }
+    }
+    uploadIds[key] = id;
+    return id;
+  }
+
+  async function uploadFiles(files, noteId, label) {
+    var total = files.reduce(function (sum, file) { return sum + file.size; }, 0);
+    var done = 0;
+    var shownAt = 0;
+    var ids = [];
+    for (var index = 0; index < files.length; index += 1) {
+      var file = files[index];
+      var base = done;
+      var id = await uploadOne(file, function (sent) {
+        var now = Date.now();
+        if (now - shownAt < 250 && base + sent < total) return;
+        shownAt = now;
+        setNote(noteId, label + " " + mb(base + sent) + "/" + mb(total) + " MB — rớt mạng thì tự gửi tiếp, không gửi lại từ đầu.");
+      });
+      done += file.size;
+      ids.push(id);
+    }
+    return ids;
+  }
+
+  function rememberJob(job, kind, rows) {
+    try { localStorage.setItem("khach.job", JSON.stringify({ id: job.id, kind: kind, rows: rows || 0 })); } catch (error) { return; }
+  }
+
+  function forgetJob(id) {
+    try {
+      var saved = JSON.parse(localStorage.getItem("khach.job") || "null");
+      if (!id || (saved && saved.id === id)) localStorage.removeItem("khach.job");
+    } catch (error) {
+      return;
+    }
+  }
+
+  async function pollJob(job, onUpdate) {
+    var misses = 0;
+    while (true) {
+      if (job.status === "done") return job;
+      if (job.status === "error" || job.status === "interrupted") {
+        throw fatalError(job.error || "Máy chủ chưa xử lý xong, hãy bấm lại.");
+      }
+      if (onUpdate) onUpdate(job);
+      await sleep(job.status === "waiting" ? 2000 : 1000);
+      try {
+        var response = await api("/v1/customers/jobs/" + job.id, { tries: 1, waitMs: 30000 });
+        if (response.status === 404) throw fatalError("Không thấy việc này trên máy chủ, hãy chạy lại.");
+        if (!response.ok) throw new Error("busy");
+        job = (await response.json()).job;
+        misses = 0;
+      } catch (error) {
+        if (error && error.fatal) throw error;
+        misses += 1;
+        if (misses > 600) throw error;
+        await sleep(2000);
+      }
+    }
+  }
+
+  function importProgress(job, expected) {
+    var progress = job.progress || {};
+    if (job.status === "waiting") return "Đang chờ lần nạp khác ghi xong rồi nạp tiếp…";
+    var files = (progress.fileCount || 1) > 1 ? " · file " + ((progress.fileIndex || 0) + 1) + "/" + progress.fileCount : "";
+    if (!progress.incoming) return "Máy chủ đang đọc file" + files + "…";
+    var text = "Đang nạp" + files + ": đã đọc " + vnNum(progress.incoming) + (expected ? "/" + vnNum(expected) : "") +
+      " dòng — thêm " + vnNum(progress.created || 0) + ", bổ sung " + vnNum(progress.updated || 0) +
+      ", giữ nguyên " + vnNum(progress.unchanged || 0) + ".";
+    if (expected) text = Math.min(99, Math.floor(progress.incoming * 100 / expected)) + "% · " + text;
+    return text + " Có thể tắt trang, máy chủ vẫn nạp tiếp.";
+  }
+
+  function lookupProgress(job) {
+    var progress = job.progress || {};
+    if (progress.phase === "match") {
+      return "Đang đối chiếu " + vnNum(progress.matched || 0) + "/" + vnNum(progress.total || 0) + " số với kho…";
+    }
+    if (progress.phase === "read") {
+      return "Đang đọc file danh sách: " + vnNum(progress.rows || 0) + " dòng, " + vnNum(progress.phones || 0) + " số…";
+    }
+    return "Đang tra cứu trong kho…";
+  }
+
+  function pendingRows() {
+    var groups = preview && preview.groups ? preview.groups : [];
+    return groups.reduce(function (sum, group) { return sum + (group.rowCount || 0); }, 0);
   }
 
   async function previewPending() {
     if (!pendingFiles.length) return;
     var previous = document.getElementById("mapBox").hidden ? null : currentMapping();
-    setNote("uploadNote", "Đang đọc " + pendingFiles.length + " file…");
+    var files = pendingFiles.slice();
+    var turn = ++previewTurn;
     try {
+      var ids = await uploadFiles(files, "uploadNote", "Đang gửi " + files.length + " file:");
+      if (turn !== previewTurn) return;
+      setNote("uploadNote", "Đã gửi xong. Đang đọc " + files.length + " file…");
       var response = await api("/v1/customers/preview", {
         method: "POST",
-        makeBody: function () { return buildPendingForm(); },
-        onProgress: function (loaded, total) {
-          setNote("uploadNote", progressLabel("Đang gửi " + pendingFiles.length + " file…", loaded, total));
-        },
-        onRetry: function (index, tries) {
-          setNote("uploadNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
-        }
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uploads: ids }),
+        tries: 3,
+        waitMs: 30 * 60 * 1000
       });
       var body = await response.json().catch(function () { return {}; });
+      if (turn !== previewTurn) return;
       if (!response.ok) {
         setNote("uploadNote", body.detail || "Không đọc được file.", "warn");
         return;
       }
       var extra = body.fileErrors && body.fileErrors.length ? " Một số file lỗi vẫn bị bỏ qua." : "";
-      setNote("uploadNote", "Đã đọc " + body.files.length + " file. Chọn thêm file là cộng vào lần này, không giới hạn số file và dung lượng." + extra);
+      setNote("uploadNote", "Đã đọc " + body.files.length + " file. File đã gửi lên máy chủ, bấm nạp không phải gửi lại. Chọn thêm file là cộng vào lần này, không giới hạn số file và dung lượng." + extra);
       renderMap(body);
       if (previous) applyChosenMapping(previous);
     } catch (error) {
-      setNote("uploadNote", networkMessage(error), "warn");
+      setNote("uploadNote", error && error.fatal ? error.message : networkMessage(error), "warn");
     }
+  }
+
+  function showImportResult(body) {
+    var stats = body.stats || {};
+    document.getElementById("importStats").innerHTML =
+      stat(stats.incoming || 0, "Dòng đã đọc") +
+      stat(stats.created || 0, "Khách mới") +
+      stat(stats.updated || 0, "Đã bổ sung") +
+      stat(stats.unchanged || 0, "Giữ nguyên") +
+      stat(stats.absorbed || 0, "Khách bị gộp") +
+      stat(stats.skipped || 0, "Dòng trống");
+    padSpaces(document.getElementById("importStats"));
+    var fileNote = (body.files || []).length + " file";
+    if (body.fileErrors && body.fileErrors.length) fileNote += ", một số file lỗi bị bỏ qua";
+    var emptyFiles = body.emptyFiles || [];
+    var unmapped = (body.files || []).reduce(function (sum, item) { return sum + (item.unmapped || 0); }, 0);
+    var phonesOnFile = (body.files || []).reduce(function (sum, item) { return sum + (item.phonesOnFile || 0); }, 0);
+    var applied = (stats.created || 0) + (stats.updated || 0) + (stats.unchanged || 0);
+    var emptyNote = "";
+    if (emptyFiles.length) {
+      emptyNote = " " + emptyFiles.length + " file không lấy được dòng khách — hãy nạp lại các file đó.";
+    }
+    if (unmapped) {
+      emptyNote += " " + unmapped + " dòng trong file không lấy được tên/SĐT/địa chỉ — kiểm tra cột rồi nạp lại.";
+    }
+    if (phonesOnFile && applied < phonesOnFile) {
+      emptyNote += " Chưa ghi đủ " + applied + "/" + phonesOnFile + " số điện thoại có trong file mới.";
+    }
+    setNote(
+      "importNote",
+      "Đã đọc " + (stats.incoming || 0) + " dòng có số điện thoại từ " + fileNote +
+        ". Thêm " + (stats.created || 0) + " khách mới, bổ sung " + (stats.updated || 0) +
+        ", giữ nguyên " + (stats.unchanged || 0) +
+        ". Số điện thoại trên dòng là chuẩn lọc trùng — một số một hàng. Mọi số trong file mới đều được ghi. Không có số điện thoại thì bỏ qua, không lưu." +
+        emptyNote,
+      emptyFiles.length || (body.fileErrors && body.fileErrors.length) || (phonesOnFile && applied < phonesOnFile) ? "warn" : "ok"
+    );
+  }
+
+  async function finishImport(job, expected) {
+    rememberJob(job, "import", expected);
+    var done = await pollJob(job, function (current) { setNote("mapNote", importProgress(current, expected)); });
+    forgetJob(done.id);
+    showImportResult(done.result || {});
+    setNote("mapNote", "Xong. Lần nạp sau sẽ hỏi lại cột.", "ok");
+    document.getElementById("mapBox").hidden = true;
+    clearPending();
+    await loadCustomers();
+    await loadSessions();
   }
 
   async function importNow() {
@@ -918,64 +1500,26 @@
       );
     }
     document.getElementById("confirm").disabled = true;
-    setNote("mapNote", "Đang nạp " + pendingFiles.length + " file và gộp khách trùng…");
+    var files = pendingFiles.slice();
+    var expected = pendingRows();
     try {
+      var ids = await uploadFiles(files, "mapNote", "Đang gửi " + files.length + " file:");
+      setNote("mapNote", "Đang nạp " + files.length + " file và gộp khách trùng…");
       var response = await api("/v1/customers/import", {
         method: "POST",
-        makeBody: function () { return buildPendingForm({ mapping: JSON.stringify(mapping) }); },
-        onProgress: function (loaded, total) {
-          setNote("mapNote", progressLabel("Đang gửi " + pendingFiles.length + " file…", loaded, total));
-        },
-        onRetry: function (index, tries) {
-          setNote("mapNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
-        }
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uploads: ids, mapping: mapping, requestId: newRequestId(), expectedRows: expected }),
+        tries: 4,
+        waitMs: 120000
       });
       var body = await response.json().catch(function () { return {}; });
-      if (!response.ok) {
+      if (!response.ok || !body.job) {
         setNote("mapNote", body.detail || "Không nạp được.", "warn");
         return;
       }
-      var stats = body.stats || {};
-      document.getElementById("importStats").innerHTML =
-        stat(stats.incoming || 0, "Dòng đã đọc") +
-        stat(stats.created || 0, "Khách mới") +
-        stat(stats.updated || 0, "Đã bổ sung") +
-        stat(stats.unchanged || 0, "Giữ nguyên") +
-        stat(stats.absorbed || 0, "Khách bị gộp") +
-        stat(stats.skipped || 0, "Dòng trống");
-      padSpaces(document.getElementById("importStats"));
-      var fileNote = (body.files || []).length + " file";
-      if (body.fileErrors && body.fileErrors.length) fileNote += ", một số file lỗi bị bỏ qua";
-      var emptyFiles = body.emptyFiles || [];
-      var unmapped = (body.files || []).reduce(function (sum, item) { return sum + (item.unmapped || 0); }, 0);
-      var phonesOnFile = (body.files || []).reduce(function (sum, item) { return sum + (item.phonesOnFile || 0); }, 0);
-      var applied = (stats.created || 0) + (stats.updated || 0) + (stats.unchanged || 0);
-      var emptyNote = "";
-      if (emptyFiles.length) {
-        emptyNote = " " + emptyFiles.length + " file không lấy được dòng khách — hãy nạp lại các file đó.";
-      }
-      if (unmapped) {
-        emptyNote += " " + unmapped + " dòng trong file không lấy được tên/SĐT/địa chỉ — kiểm tra cột rồi nạp lại.";
-      }
-      if (phonesOnFile && applied < phonesOnFile) {
-        emptyNote += " Chưa ghi đủ " + applied + "/" + phonesOnFile + " số điện thoại có trong file mới.";
-      }
-      setNote(
-        "importNote",
-        "Đã đọc " + (stats.incoming || 0) + " dòng có số điện thoại từ " + fileNote +
-          ". Thêm " + (stats.created || 0) + " khách mới, bổ sung " + (stats.updated || 0) +
-          ", giữ nguyên " + (stats.unchanged || 0) +
-          ". Số điện thoại trên dòng là chuẩn lọc trùng — một số một hàng. Mọi số trong file mới đều được ghi. Không có số điện thoại thì bỏ qua, không lưu." +
-          emptyNote,
-        emptyFiles.length || (body.fileErrors && body.fileErrors.length) || (phonesOnFile && applied < phonesOnFile) ? "warn" : "ok"
-      );
-      setNote("mapNote", "Xong. Lần nạp sau sẽ hỏi lại cột.", "ok");
-      document.getElementById("mapBox").hidden = true;
-      clearPending();
-      await loadCustomers();
-      await loadSessions();
+      await finishImport(body.job, expected);
     } catch (error) {
-      setNote("mapNote", networkMessage(error), "warn");
+      setNote("mapNote", error && error.fatal ? error.message : networkMessage(error), "warn");
     } finally {
       document.getElementById("confirm").disabled = false;
     }
@@ -1127,13 +1671,6 @@
     }
   }
 
-  function lookupForm() {
-    var data = new FormData();
-    data.append("text", document.getElementById("lookupPaste").value || "");
-    lookupFiles.forEach(function (file) { data.append("files", file, file.name); });
-    return data;
-  }
-
   function renderLookup(body) {
     lastLookup = body;
     var stats = body.stats || {};
@@ -1151,6 +1688,7 @@
       return;
     }
     var shown = items.slice(0, 2000);
+    var queried = stats.queried || items.length;
     var html = "<table class='sheet'><colgroup><col class='col-query'><col class='col-flag'><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'><col class='col-id'><col class='col-id'></colgroup><thead><tr><th>Số tra cứu</th><th>Kho</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
     shown.forEach(function (item) {
       var customer = item.customer || {};
@@ -1160,8 +1698,11 @@
     document.getElementById("lookupPeople").innerHTML = html;
     padSpaces(document.getElementById("lookupPeople"));
     document.getElementById("lookupExport").hidden = false;
-    var note = "Đã đối chiếu " + (stats.queried || 0) + " số với kho.";
-    if (items.length > shown.length) note += " Đang hiện " + shown.length + "/" + items.length + ". Tải Excel để xem hết.";
+    var note = "Đã đối chiếu " + vnNum(queried) + " số với kho.";
+    var totalRows = Math.max(items.length, shown.length + (stats.hidden || 0));
+    if (totalRows > shown.length) {
+      note += " Đang hiện " + vnNum(shown.length) + "/" + vnNum(totalRows) + " dòng. Tải Excel để xem hết — không phải gửi lại file.";
+    }
     if (stats.truncated) note += " Danh sách quá dài, chỉ lấy phần đầu.";
     if (body.fileErrors && body.fileErrors.length) note += " File lỗi: " + body.fileErrors.join(" ");
     setNote("lookupNote", note, (body.fileErrors && body.fileErrors.length) || stats.missing ? "warn" : "ok");
@@ -1202,6 +1743,15 @@
     return JSON.stringify({ text: document.getElementById("lookupPaste").value || "" });
   }
 
+  async function finishLookup(job) {
+    rememberJob(job, "lookup", 0);
+    var done = await pollJob(job, function (current) { setNote("lookupNote", lookupProgress(current)); });
+    forgetJob(done.id);
+    var result = done.result || {};
+    result.jobId = done.id;
+    renderLookup(result);
+  }
+
   async function runLookup() {
     var text = (document.getElementById("lookupPaste").value || "").trim();
     if (!text && !lookupFiles.length) {
@@ -1211,33 +1761,27 @@
     document.getElementById("lookupGo").disabled = true;
     setNote("lookupNote", "Đang tra cứu trong kho…");
     try {
-      var response = lookupFiles.length
-        ? await api("/v1/customers/lookup", {
-          method: "POST",
-          makeBody: lookupForm,
-          tries: 3,
-          onRetry: function (index, tries) {
-            setNote("lookupNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
-          }
-        })
-        : await api("/v1/customers/lookup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: lookupJsonBody(),
-          tries: 4,
-          waitMs: 60 * 1000,
-          onRetry: function (index, tries) {
-            setNote("lookupNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
-          }
-        });
+      var files = lookupFiles.slice();
+      var ids = files.length ? await uploadFiles(files, "lookupNote", "Đang gửi file danh sách:") : [];
+      setNote("lookupNote", "Đang tra cứu trong kho…");
+      var response = await api("/v1/customers/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text, uploads: ids, requestId: newRequestId() }),
+        tries: 4,
+        waitMs: 120000,
+        onRetry: function (index, tries) {
+          setNote("lookupNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
+        }
+      });
       var body = await response.json().catch(function () { return {}; });
-      if (!response.ok) {
+      if (!response.ok || !body.job) {
         setNote("lookupNote", body.detail || "Không tra cứu được.", "warn");
         return;
       }
-      renderLookup(body);
+      await finishLookup(body.job);
     } catch (error) {
-      setNote("lookupNote", lookupError(error), "warn");
+      setNote("lookupNote", error && error.fatal ? error.message : lookupError(error), "warn");
     } finally {
       document.getElementById("lookupGo").disabled = false;
     }
@@ -1248,14 +1792,10 @@
       setNote("lookupNote", "Hãy tra cứu trước khi tải kết quả.", "warn");
       return;
     }
+    setNote("lookupNote", "Đang tạo file Excel kết quả…");
     try {
-      var response = lookupFiles.length
-        ? await api("/v1/customers/lookup/export", {
-          method: "POST",
-          makeBody: lookupForm,
-          tries: 3,
-          waitMs: 3 * 60 * 60 * 1000
-        })
+      var response = lastLookup.jobId
+        ? await api("/v1/customers/lookup/jobs/" + lastLookup.jobId + "/export", { tries: 2, waitMs: 3 * 60 * 60 * 1000 })
         : await api("/v1/customers/lookup/export", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1264,7 +1804,7 @@
           waitMs: 3 * 60 * 60 * 1000
         });
       if (!response.ok) {
-        setNote("lookupNote", "Không tải được kết quả Excel.", "warn");
+        setNote("lookupNote", "Không tải được kết quả Excel. Hãy tra cứu lại rồi tải.", "warn");
         return;
       }
       var blob = response.blob ? await response.blob() : new Blob([await response.arrayBuffer()]);
@@ -1276,8 +1816,36 @@
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      setNote("lookupNote", "Đã tải file Excel kết quả tra cứu.", "ok");
     } catch (error) {
       setNote("lookupNote", "Không tải được kết quả Excel.", "warn");
+    }
+  }
+
+  async function resumeJob() {
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem("khach.job") || "null"); } catch (error) { saved = null; }
+    if (!saved || !saved.id) return;
+    try {
+      var response = await api("/v1/customers/jobs/" + saved.id, { tries: 2, waitMs: 30000 });
+      if (!response.ok) {
+        forgetJob(saved.id);
+        return;
+      }
+      var job = (await response.json()).job;
+      if (saved.kind === "import") {
+        setNote("importNote", "Lần nạp trước vẫn chạy trên máy chủ, đang theo dõi tiếp…");
+        var done = await pollJob(job, function (current) { setNote("importNote", importProgress(current, saved.rows || 0)); });
+        forgetJob(done.id);
+        showImportResult(done.result || {});
+        await loadCustomers();
+        await loadSessions();
+      } else if (saved.kind === "lookup") {
+        await finishLookup(job);
+      }
+    } catch (error) {
+      forgetJob(saved.id);
+      if (saved.kind === "import") setNote("importNote", error && error.fatal ? error.message : networkMessage(error), "warn");
     }
   }
 
@@ -1355,6 +1923,7 @@
   watchSpaces();
   loadCustomers();
   loadSessions();
+  resumeJob();
 </script>
 </body>
 </html>
