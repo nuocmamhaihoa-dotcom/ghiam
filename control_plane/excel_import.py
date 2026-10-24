@@ -8,6 +8,7 @@ import io
 import os
 import re
 import tempfile
+import unicodedata
 import zipfile
 import zlib
 import xml.etree.ElementTree as ET
@@ -580,10 +581,13 @@ def _csv_encoding_of_path(path: Path) -> str:
 
 
 def _decode_csv_text(data: bytes) -> str:
-    return data.decode(_csv_encoding_of_bytes(data), errors="replace")
+    encoding = _csv_encoding_of_bytes(data)
+    text = data.decode(encoding, errors="replace")
+    return unicodedata.normalize("NFC", text) if encoding == "cp1258" else text
 
 
 def _iter_csv_cells(data: TableSource) -> Iterator[list[str]]:
+    """cp1258 (CSV Excel tiếng Việt kiểu cũ) ghi dấu thanh tách rời; gộp về dạng chuẩn NFC."""
     close = None
     if isinstance(data, (bytes, bytearray)):
         text = _decode_csv_text(bytes(data))
@@ -591,11 +595,12 @@ def _iter_csv_cells(data: TableSource) -> Iterator[list[str]]:
         stream: Any = io.StringIO(text)
     else:
         path = Path(data)
-        handle = path.open("r", encoding=_csv_encoding_of_path(path), errors="replace", newline="")
+        encoding = _csv_encoding_of_path(path)
+        handle = path.open("r", encoding=encoding, errors="replace", newline="")
         sample = handle.read(4000)
         handle.seek(0)
-        stream = handle
         close = handle
+        stream = (unicodedata.normalize("NFC", line) for line in handle) if encoding == "cp1258" else handle
     try:
         try:
             dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")

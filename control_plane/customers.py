@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 import uuid
 from typing import Any, Callable, Iterator
 from urllib.parse import parse_qs, urlparse
@@ -267,7 +268,7 @@ def split_address_lines(value: Any) -> list[str]:
             continue
         if len(line) > 200:
             line = line[:200].rstrip()
-        key = line.casefold()
+        key = line.casefold() if line.isascii() else unicodedata.normalize("NFC", line).casefold()
         if key in seen:
             continue
         seen.add(key)
@@ -376,9 +377,17 @@ def tiktok_key(value: str) -> str:
     return clean_tiktok_id(value).casefold()
 
 
+def clean_phone_field(value: Any) -> str:
+    """Ô SĐT: số chuẩn; ô lẫn chữ hoặc có hai số thì lấy số đầu tiên thay vì bỏ trống."""
+    phone = clean_phone(value)
+    if phone:
+        return phone
+    return extract_phone(value)
+
+
 _CLEANERS = {
     "name": clean_name,
-    "phone": clean_phone,
+    "phone": clean_phone_field,
     "address": clean_address,
     "adminAddress": clean_admin_address,
     "orderContent": clean_order_content,
@@ -699,7 +708,8 @@ def ingest_customers(
             pending_deletes.append(extra_id)
             deleted.add(extra_id)
             absorbed += 1
-        pending[merged["id"]] = merged
+        if kind != "unchanged" or merged["id"] not in pending:
+            pending[merged["id"]] = merged
         pending_key[key] = merged["id"]
         merged_phone = str(merged.get("phone") or "")
         if merged_phone and merged_phone != phone:
