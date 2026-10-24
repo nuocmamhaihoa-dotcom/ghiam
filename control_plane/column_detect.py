@@ -717,7 +717,11 @@ def explain_mapping(details: dict[str, dict[str, Any]], headers: list[str]) -> s
     missing = [label for field, label in (("name", "tên"), ("phone", "số điện thoại")) if field not in details]
     if missing:
         extra += " Chưa thấy cột " + " và ".join(missing) + " — hãy chọn tay trước khi nạp."
-    return "Khớp cột: " + "; ".join(parts) + "." + extra + " Cột không giống kho (giới tính, ngày sinh, link...) đã bỏ qua."
+    return (
+        "Khớp cột: " + "; ".join(parts) + "." + extra
+        + " Cột không giống kho (giới tính, ngày sinh, link...) không được chọn sẵn."
+        + " Mọi cột vẫn hiện trong danh sách để chọn tay."
+    )
 
 
 def _label(field: str) -> str:

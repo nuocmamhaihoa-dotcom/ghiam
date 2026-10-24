@@ -106,6 +106,7 @@
     table.sheet tbody tr:nth-child(even) td { background: #f7f9fb; }
     .picks { display: grid; gap: 0.35rem; margin: 0.2rem 0 0.4rem; }
     .picks label { font-weight: 500; display: flex; gap: 0.45rem; align-items: center; }
+    .picks label[hidden] { display: none; }
     .map-card {
       border: 1px solid var(--line);
       border-radius: 12px;
@@ -498,6 +499,13 @@
         if (index !== index) index = null;
         if (header || index !== null) columns.push({ index: index, header: header });
       });
+      var seen = {};
+      columns = columns.filter(function (col) {
+        var key = col.index == null ? "h:" + col.header : "i:" + String(col.index);
+        if (seen[key]) return false;
+        seen[key] = true;
+        return true;
+      });
       var first = columns[0] || { index: null, header: "" };
       return { index: first.index, header: first.header, columns: columns };
     }
@@ -570,6 +578,55 @@
     select.appendChild(option);
   }
 
+  function rowsFromChoice(card, rawRows) {
+    var spec = {};
+    fieldOrder.forEach(function (field) {
+      spec[field] = readFieldSpec(card, field);
+    });
+    function textAt(row, index) {
+      if (index == null || index < 0 || index >= row.length) return "";
+      return String(row[index] == null ? "" : row[index]).trim();
+    }
+    function joined(field, row) {
+      var cols = (spec[field] && spec[field].columns) || [];
+      var parts = [];
+      var seen = {};
+      cols.forEach(function (col) {
+        var key = col.index == null ? "" : String(col.index);
+        if (!key || seen[key]) return;
+        seen[key] = true;
+        var text = textAt(row, col.index);
+        if (text) parts.push(text);
+      });
+      return parts.join("\n");
+    }
+    var out = [];
+    (rawRows || []).forEach(function (row) {
+      if (out.length >= 5) return;
+      var item = {
+        name: textAt(row, spec.name && spec.name.index),
+        phone: textAt(row, spec.phone && spec.phone.index),
+        address: joined("address", row),
+        adminAddress: joined("adminAddress", row),
+        orderContent: joined("orderContent", row),
+        codAmount: textAt(row, spec.codAmount && spec.codAmount.index)
+      };
+      if (item.name || item.phone || item.address || item.adminAddress || item.orderContent) out.push(item);
+    });
+    return out;
+  }
+
+  function syncAddressExtras(card) {
+    var select = card.querySelector("select[data-field='address']");
+    var option = select && select.selectedOptions && select.selectedOptions[0];
+    var primary = option && option.value ? option.getAttribute("data-index") || "" : "";
+    card.querySelectorAll("[data-field='address'] input[type=checkbox]").forEach(function (box) {
+      var same = primary !== "" && box.getAttribute("data-index") === primary;
+      if (box.parentElement) box.parentElement.hidden = same;
+      if (same) box.checked = false;
+    });
+  }
+
   function renderGroupCard(group, fields) {
     var card = document.createElement("div");
     card.className = "map-card";
@@ -600,7 +657,7 @@
       select.setAttribute("data-kind", "one");
       addSkipOption(select);
       var pick = picks[field] || {};
-      var allowed = pick.indexes && pick.indexes.length ? pick.indexes : columns.map(function (_col, index) { return index; });
+      var allowed = columns.map(function (_col, index) { return index; });
       var suggested = pick.suggested;
       if (field === "address" && suggested && suggested.length) suggested = suggested[0];
       allowed.forEach(function (index) {
@@ -610,29 +667,37 @@
       });
       core.appendChild(label);
       core.appendChild(select);
-      if (field === "address") {
-        var extras = (pick.indexes || []).filter(function (index) {
-          return index !== suggested;
-        });
-        if (extras.length) {
-          var extraBox = document.createElement("div");
-          extraBox.className = "picks";
-          extraBox.setAttribute("data-field", "address");
-          extras.forEach(function (index) {
-            var col = columns[index];
-            if (!col) return;
-            var row = document.createElement("label");
-            var boxInput = document.createElement("input");
-            boxInput.type = "checkbox";
-            boxInput.setAttribute("data-header", col.header || "");
-            boxInput.setAttribute("data-index", col.index == null ? "" : String(col.index));
-            boxInput.checked = Array.isArray(pick.suggested) && pick.suggested.indexOf(index) >= 0;
-            row.appendChild(boxInput);
-            row.appendChild(document.createTextNode("Thêm dòng: " + col.title));
-            extraBox.appendChild(row);
+      if (field === "address" && allowed.length) {
+        var chosenExtra = {};
+        if (Array.isArray(pick.suggested)) {
+          pick.suggested.forEach(function (index) {
+            if (index !== suggested) chosenExtra[index] = true;
           });
-          core.appendChild(extraBox);
         }
+        var more = document.createElement("details");
+        more.className = "extra";
+        if (Object.keys(chosenExtra).length) more.open = true;
+        var moreSummary = document.createElement("summary");
+        moreSummary.textContent = "Ghép thêm cột thành dòng địa chỉ";
+        more.appendChild(moreSummary);
+        var extraBox = document.createElement("div");
+        extraBox.className = "picks";
+        extraBox.setAttribute("data-field", "address");
+        allowed.forEach(function (index) {
+          var col = columns[index];
+          if (!col) return;
+          var row = document.createElement("label");
+          var boxInput = document.createElement("input");
+          boxInput.type = "checkbox";
+          boxInput.setAttribute("data-header", col.header || "");
+          boxInput.setAttribute("data-index", col.index == null ? "" : String(col.index));
+          boxInput.checked = !!chosenExtra[index];
+          row.appendChild(boxInput);
+          row.appendChild(document.createTextNode("Thêm dòng: " + col.title));
+          extraBox.appendChild(row);
+        });
+        more.appendChild(extraBox);
+        core.appendChild(more);
       }
     });
     card.appendChild(core);
@@ -642,7 +707,9 @@
     var hasExtra = false;
     extraFields.forEach(function (field) {
       var pick = picks[field] || {};
-      if (!(pick.indexes && pick.indexes.length)) return;
+      var indexes = columns.map(function (_col, index) { return index; });
+      if (!indexes.length) return;
+      pick = { kind: pick.kind, indexes: indexes, suggested: pick.suggested };
       hasExtra = true;
       var meta = fields.find(function (item) { return item.id === field; }) || { id: field, label: field };
       var label = document.createElement("label");
@@ -694,8 +761,22 @@
     card.appendChild(note);
     var sample = document.createElement("div");
     sample.className = "scroll";
-    sample.innerHTML = renderCustomerSample(group.mappedSamples || []);
+    var rawRows = [];
+    (group.files || []).some(function (item) {
+      if (item.samples && item.samples.length) {
+        rawRows = item.samples;
+        return true;
+      }
+      return false;
+    });
+    function refreshSample() {
+      syncAddressExtras(card);
+      var rows = rawRows.length ? rowsFromChoice(card, rawRows) : (group.mappedSamples || []);
+      sample.innerHTML = renderCustomerSample(rows);
+    }
+    card.addEventListener("change", refreshSample);
     card.appendChild(sample);
+    refreshSample();
     return card;
   }
 
@@ -736,7 +817,7 @@
     });
     document.getElementById("sampleBox").innerHTML = "";
     document.getElementById("mapBox").hidden = false;
-    var lead = "Máy đã tự chọn cột theo tiêu đề từng kiểu file. Chỉ sửa nếu dòng mẫu bên dưới sai.";
+    var lead = "Máy đã tự chọn cột. Mỗi mục chọn được mọi cột trong file. Đổi cột thì bảng mẫu bên dưới đổi theo nội dung cột đó.";
     if (groups.length > 1) {
       lead += " Có " + groups.length + " kiểu cột khác nhau — mỗi kiểu chọn một lần, không lấy nhầm cột của file kia.";
     }

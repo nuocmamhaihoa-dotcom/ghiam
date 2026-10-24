@@ -1194,10 +1194,52 @@ def rows_from_mapped_headers(
     return extracted
 
 
+def _headers_are_generic(headers: list[str]) -> bool:
+    return bool(headers) and all(_GENERIC_HEADER.match(collapse(str(header)) or "") for header in headers)
+
+
+def _layout_group_key(headers: list[str], payload: dict[str, Any]) -> str:
+    """File không tiêu đề cùng số cột nhưng khác cột tên/SĐT/địa chỉ là hai kiểu, chọn riêng."""
+    base = _header_signature(headers)
+    if not _headers_are_generic(headers):
+        return base
+    parts: list[str] = []
+    for field in ("name", "phone", "address"):
+        value = payload.get(field)
+        try:
+            parts.append("" if value is None or value == "" else str(int(value)))
+        except (TypeError, ValueError):
+            parts.append("")
+    return base + "\n#role:" + ",".join(parts)
+
+
+def _choice_columns(headers: list[str], samples: list[list[str]]) -> list[dict[str, Any]]:
+    """Cột không có tên thật thì hiện một ô mẫu, để phân biệt cột E với cột F."""
+    columns = describe_columns(headers)
+    for column in columns:
+        header = str(column.get("header") or "")
+        if not _GENERIC_HEADER.match(header):
+            continue
+        index = int(column["index"])
+        sample = ""
+        for row in samples:
+            if index < len(row):
+                sample = collapse(str(row[index]))
+                if sample:
+                    break
+        if not sample:
+            continue
+        if len(sample) > 42:
+            sample = sample[:41].rstrip() + "…"
+        column["title"] = f"Cột {column['letter']} — {sample}"
+    return columns
+
+
 def _layout_picks(
     headers: list[str],
     payload: dict[str, Any],
 ) -> dict[str, Any]:
+    """Mọi cột đều chọn được. Gợi ý chỉ là cột đang được chọn sẵn."""
     all_indexes = list(range(len(headers)))
     picks: dict[str, Any] = {}
     for field in FIELDS:
@@ -1210,29 +1252,9 @@ def _layout_picks(
             except (TypeError, ValueError):
                 pass
         chosen.extend(index for index in extra if index not in chosen)
-        matching = [index for index, header in enumerate(headers) if header_field(header) == field]
-        if field in ("name", "phone"):
-            indexes = all_indexes
-            kind = "one"
-        elif field == "address":
-            related = [
-                index
-                for index, header in enumerate(headers)
-                if header_field(header) in ("address", "adminAddress")
-            ]
-            indexes = [index for index in all_indexes if index in set(matching + chosen + related)]
-            if not indexes:
-                indexes = all_indexes
-            kind = "many"
-        elif field in LINE_FIELDS:
-            indexes = [index for index in all_indexes if index in set(matching + chosen)]
-            kind = "many"
-        else:
-            indexes = [index for index in all_indexes if index in set(matching + chosen)]
-            kind = "one"
         picks[field] = {
-            "kind": kind,
-            "indexes": indexes,
+            "kind": "many" if field in LINE_FIELDS else "one",
+            "indexes": all_indexes,
             "suggested": chosen if field in LINE_FIELDS else (chosen[0] if chosen else None),
         }
     return picks
@@ -1244,17 +1266,17 @@ def group_preview_layouts(previews: list[dict[str, Any]]) -> list[dict[str, Any]
     by_sig: dict[str, dict[str, Any]] = {}
     for preview in previews:
         headers = [str(item) for item in (preview.get("headers") or [])]
-        sig = _header_signature(headers)
+        values = column_values_from_rows(preview.get("detectRows") or preview.get("samples") or [], len(headers))
+        payload, details = suggested_payload(headers, values)
+        sig = _layout_group_key(headers, payload)
         group = by_sig.get(sig)
         if group is None:
-            values = column_values_from_rows(preview.get("detectRows") or preview.get("samples") or [], len(headers))
-            payload, details = suggested_payload(headers, values)
             mapping = _mapping_from_assign(headers, values)
             samples = rows_from_mapped_headers(headers, preview.get("samples") or [], mapping)
             group = {
                 "id": f"g{len(groups)}",
                 "headers": headers,
-                "columns": preview.get("columns") or describe_columns(headers),
+                "columns": _choice_columns(headers, preview.get("samples") or []),
                 "suggested": payload,
                 "picks": _layout_picks(headers, payload),
                 "detectNote": explain_mapping(details, headers),

@@ -25,11 +25,15 @@ from control_plane.excel_import import (
     _fill_shared_strings,
     _iter_sheet_rows,
     count_data_rows,
+    group_preview_layouts,
     iter_csv_rows,
     iter_mapped_file,
     mapping_for_file,
+    mapping_from_form,
     phones_from_files,
     preview_table,
+    rows_from_files,
+    write_xlsx,
 )
 from control_plane.xlsx_fast import LazySharedStrings, iter_sheet_rows
 
@@ -359,6 +363,48 @@ class CountAndMappingTests(unittest.TestCase):
             rows = list(rows)
         self.assertEqual(counts["fileRows"], 253)
         self.assertEqual(len(rows), 253)
+
+    def test_headerless_columns_all_selectable_and_split_by_role(self) -> None:
+        street = [
+            ["1", "GHN", "Nguyễn Thị Nhàn", "0349757089", "12 Lê Lợi", "Phú Thọ", "ghi chú"],
+            ["2", "GHN", "Nguyễn Đức Toàn", "0865792883", "45 Trần Phú", "Hải Phòng", "ghi chú"],
+            ["3", "GHN", "Lê Thành Danh", "0907321063", "9 Nguyễn Trãi", "Cần Thơ", "ghi chú"],
+        ]
+        other = [
+            ["Nguyễn Văn An", "0912345678", "shop A", "mã", "22 Hai Bà Trưng", "Huế", "x"],
+            ["Trần Thị Bé", "0987654321", "shop B", "mã", "8 Lý Thường Kiệt", "Đà Nẵng", "x"],
+            ["Phạm Văn Cồ", "0901112233", "shop C", "mã", "3 Pasteur", "Hà Nội", "x"],
+        ]
+        first = preview_table("delivery_export_a.xlsx", write_xlsx(street[0], street[1:]))
+        twin = preview_table("delivery_export_c.xlsx", write_xlsx(street[0], street[1:]))
+        shifted = preview_table("delivery_export_b.xlsx", write_xlsx(other[0], other[1:]))
+        groups = group_preview_layouts([first, twin, shifted])
+        self.assertEqual(len(groups), 2)
+        wide = next(group for group in groups if any(item["name"] == "delivery_export_a.xlsx" for item in group["files"]))
+        self.assertEqual(
+            sorted(item["name"] for item in wide["files"]),
+            ["delivery_export_a.xlsx", "delivery_export_c.xlsx"],
+        )
+        for field in ("name", "phone", "address", "adminAddress", "orderContent", "codAmount", "facebookUid", "tiktokId"):
+            self.assertEqual(wide["picks"][field]["indexes"], list(range(7)), field)
+        self.assertIn(4, wide["picks"]["address"]["indexes"])
+        titles = {column["index"]: column["title"] for column in wide["columns"]}
+        self.assertIn("Lê Lợi", titles[4])
+        self.assertIn("Phú Thọ", titles[5])
+        self.assertIn("Mọi cột vẫn hiện", wide["detectNote"])
+        payload = write_xlsx(street[0], street[1:])
+        incoming, _reports = rows_from_files(
+            [("delivery_export_a.xlsx", payload)],
+            mapping_from_form(
+                {
+                    "name": {"index": 2, "header": "Cột C"},
+                    "phone": {"index": 3, "header": "Cột D"},
+                    "address": {"index": 4, "header": "Cột E", "columns": [{"index": 4, "header": "Cột E"}]},
+                }
+            ),
+        )
+        self.assertEqual(incoming[0]["address"], "12 Lê Lợi")
+        self.assertNotIn("Phú Thọ", incoming[0]["address"])
 
     def test_sheet_with_other_layout_maps_its_own_columns(self) -> None:
         first = sheet(
