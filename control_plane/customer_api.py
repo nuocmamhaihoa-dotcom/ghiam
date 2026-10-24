@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import gc
-import hmac
 import json
 import re
 import shutil
@@ -22,7 +21,8 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartException
 
-from control_plane import db, khach_jobs, khach_uploads
+from control_plane import accounts, db, khach_jobs, khach_uploads
+from control_plane.accounts_api import _actor, _manager
 from control_plane.column_detect import suggested_payload
 from control_plane.customers import (
     FIELDS,
@@ -57,19 +57,22 @@ router = APIRouter()
 _heavy_lock = asyncio.Lock()
 
 
-def _bearer_matches(authorization: str, token: str) -> bool:
-    expected = f"Bearer {token}"
-    if len(authorization) != len(expected):
-        return False
-    return hmac.compare_digest(authorization, expected)
+def _charge(actor: accounts.Actor, phones: list[str]) -> dict[str, Any]:
+    try:
+        return accounts.consume_lookup(settings.db_path, actor, phones, utcnow())
+    except accounts.LookupQuotaError as exc:
+        raise HTTPException(status_code=429, detail=exc.detail) from exc
 
 
-def _auth(authorization: str | None) -> None:
-    accepted = [token for token in (settings.token, settings.page_token) if token]
-    if not accepted:
-        return
-    if not authorization or not any(_bearer_matches(authorization, token) for token in accepted):
-        raise HTTPException(status_code=401, detail="unauthorized")
+def _visible_job(actor: accounts.Actor, job: dict[str, Any] | None) -> dict[str, Any]:
+    if job is None:
+        raise HTTPException(status_code=404, detail="Không thấy việc này, có thể đã quá hạn. Hãy chạy lại.")
+    if actor.is_manager:
+        return job
+    owner = str((job.get("info") or {}).get("accountId") or "")
+    if job.get("kind") == "lookup" and owner == actor.id:
+        return job
+    raise HTTPException(status_code=403, detail="Không xem được việc này.")
 
 
 def utcnow() -> str:
@@ -429,10 +432,11 @@ def _collect_changed(changed: list[dict[str, str]], folded: list[dict[str, Any]]
 
 @router.get("/v1/customers")
 def customers_list(
+    request: Request,
     q: str = Query(default=""),
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    _auth(authorization)
+    _manager(_actor(request))
     db.init_db(settings.db_path)
     total = db.customer_count(settings.db_path)
     if collapse(q):
@@ -530,7 +534,7 @@ async def customers_preview(
     request: Request,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    _auth(authorization)
+    _manager(_actor(request))
     if _is_json(request):
         payload = await _json_object(request)
         uploaded = _resolve_uploads(payload.get("uploads"))
@@ -754,7 +758,7 @@ async def customers_upload_start(
     request: Request,
     authorization: str | None = Header(default=None),
 ) -> Any:
-    _auth(authorization)
+    _actor(request)
     payload = await _json_object(request)
     try:
         size = int(payload.get("size") or 0)
@@ -768,8 +772,12 @@ async def customers_upload_start(
 
 
 @router.get("/v1/customers/uploads/{upload_id}")
-def customers_upload_status(upload_id: str, authorization: str | None = Header(default=None)) -> Any:
-    _auth(authorization)
+def customers_upload_status(
+    upload_id: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> Any:
+    _actor(request)
     try:
         return khach_uploads.status(upload_id)
     except khach_uploads.UploadError as exc:
@@ -783,7 +791,7 @@ async def customers_upload_chunk(
     offset: int = Query(default=0, ge=0),
     authorization: str | None = Header(default=None),
 ) -> Any:
-    _auth(authorization)
+    _actor(request)
     try:
         return await khach_uploads.append_chunk(upload_id, offset, request.stream())
     except khach_uploads.UploadError as exc:
@@ -791,12 +799,9 @@ async def customers_upload_chunk(
 
 
 @router.get("/v1/customers/jobs/{job_id}")
-def customers_job(job_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    _auth(authorization)
-    job = khach_jobs.get_job(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="Không thấy việc này, có thể đã quá hạn. Hãy chạy lại.")
-    return {"job": job}
+def customers_job(job_id: str, request: Request, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    actor = _actor(request)
+    return {"job": _visible_job(actor, khach_jobs.get_job(job_id))}
 
 
 @router.post("/v1/customers/import")
@@ -804,7 +809,7 @@ async def customers_import(
     request: Request,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    _auth(authorization)
+    _manager(_actor(request))
     db.init_db(settings.db_path)
     if _is_json(request):
         payload = await _json_object(request)
@@ -837,8 +842,8 @@ def _import_locked(uploaded: list[tuple[str, Path]], fields: dict[str, str], pro
 
 
 @router.get("/v1/customers/sessions")
-def customers_sessions(authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    _auth(authorization)
+def customers_sessions(request: Request, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _manager(_actor(request))
     db.init_db(settings.db_path)
     return _import_sessions()
 
@@ -900,12 +905,24 @@ def _lookup_result(
     return {"stats": stats, "files": file_reports, "fileErrors": errors, "items": shown}
 
 
-def _lookup_now(text: str, uploaded: list[tuple[str, Path]], problems: list[str]) -> dict[str, Any]:
+def _lookup_now(
+    text: str,
+    uploaded: list[tuple[str, Path]],
+    problems: list[str],
+    actor: accounts.Actor,
+) -> dict[str, Any]:
     phones, parsed, reports = _collect_lookup_phones(text, uploaded, problems)
-    return _lookup_result(phones, parsed, reports, problems)
+    result = _lookup_result(phones, parsed, reports, problems)
+    result["quota"] = _charge(actor, phones)
+    return result
 
 
-def _lookup_job(context: khach_jobs.JobContext, text: str, uploaded: list[tuple[str, Path]]) -> dict[str, Any]:
+def _lookup_job(
+    context: khach_jobs.JobContext,
+    text: str,
+    uploaded: list[tuple[str, Path]],
+    actor: accounts.Actor,
+) -> dict[str, Any]:
     problems: list[str] = []
     phones, parsed, reports = _collect_lookup_phones(
         text,
@@ -923,6 +940,7 @@ def _lookup_job(context: khach_jobs.JobContext, text: str, uploaded: list[tuple[
         progress=lambda progress: context.report({"phase": "match", **progress}),
     )
     result["lookupId"] = context.id
+    result["quota"] = _charge(actor, phones)
     return result
 
 
@@ -947,7 +965,7 @@ async def customers_lookup(
     request: Request,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    _auth(authorization)
+    actor = _actor(request)
     db.init_db(settings.db_path)
     try:
         text, uploaded, problems, request_id = await _lookup_request(request)
@@ -955,19 +973,19 @@ async def customers_lookup(
         spooled, fields, problems = await _read_customer_form(request)
         try:
             async with _heavy_lock:
-                return await run_in_threadpool(_lookup_now, fields.get("text") or "", spooled, problems)
+                return await run_in_threadpool(_lookup_now, fields.get("text") or "", spooled, problems, actor)
         finally:
             _cleanup_uploads(spooled)
     if request_id:
         job = khach_jobs.start_job(
             "lookup",
             request_id,
-            lambda context: _lookup_job(context, text, uploaded),
-            {"files": [name for name, _path in uploaded]},
+            lambda context: _lookup_job(context, text, uploaded, actor),
+            {"files": [name for name, _path in uploaded], "accountId": actor.id},
         )
         waited = await run_in_threadpool(khach_jobs.wait_job, job["id"], 2.0)
         return {"job": waited or job}
-    return await run_in_threadpool(_lookup_now, text, uploaded, problems)
+    return await run_in_threadpool(_lookup_now, text, uploaded, problems, actor)
 
 
 def _unlink_temp(path: str) -> None:
@@ -1017,8 +1035,14 @@ def _write_lookup_xlsx(phones: list[str]) -> Path:
     return dest
 
 
-def _export_phones(text: str, uploaded: list[tuple[str, Path]], problems: list[str]) -> Path:
+def _export_phones(
+    text: str,
+    uploaded: list[tuple[str, Path]],
+    problems: list[str],
+    actor: accounts.Actor,
+) -> Path:
     phones, _parsed, _reports = _collect_lookup_phones(text, uploaded, problems)
+    _charge(actor, phones)
     return _write_lookup_xlsx(phones)
 
 
@@ -1027,7 +1051,7 @@ async def customers_lookup_export(
     request: Request,
     authorization: str | None = Header(default=None),
 ) -> FileResponse:
-    _auth(authorization)
+    actor = _actor(request)
     db.init_db(settings.db_path)
     try:
         text, uploaded, problems, _request_id = await _lookup_request(request)
@@ -1035,21 +1059,27 @@ async def customers_lookup_export(
         spooled, fields, problems = await _read_customer_form(request)
         try:
             async with _heavy_lock:
-                dest = await run_in_threadpool(_export_phones, fields.get("text") or "", spooled, problems)
+                dest = await run_in_threadpool(
+                    _export_phones, fields.get("text") or "", spooled, problems, actor
+                )
         finally:
             _cleanup_uploads(spooled)
         return _xlsx_file_response(dest, "tra-cuu-khach.xlsx")
-    dest = await run_in_threadpool(_export_phones, text, uploaded, problems)
+    dest = await run_in_threadpool(_export_phones, text, uploaded, problems, actor)
     return _xlsx_file_response(dest, "tra-cuu-khach.xlsx")
 
 
 @router.get("/v1/customers/lookup/jobs/{job_id}/export")
-def customers_lookup_job_export(job_id: str, authorization: str | None = Header(default=None)) -> FileResponse:
+def customers_lookup_job_export(
+    job_id: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> FileResponse:
     """Tải Excel đúng danh sách số của lần tra cứu đã chạy, không gửi lại file."""
-    _auth(authorization)
+    actor = _actor(request)
     db.init_db(settings.db_path)
-    job = khach_jobs.get_job(job_id)
-    if job is None or job.get("kind") != "lookup":
+    job = _visible_job(actor, khach_jobs.get_job(job_id))
+    if job.get("kind") != "lookup":
         raise HTTPException(status_code=404, detail="Không thấy lần tra cứu này, hãy tra cứu lại.")
     if job.get("status") != "done":
         raise HTTPException(status_code=409, detail="Tra cứu chưa xong.")
@@ -1058,12 +1088,13 @@ def customers_lookup_job_export(job_id: str, authorization: str | None = Header(
     except (OSError, khach_jobs.JobError) as exc:
         raise HTTPException(status_code=404, detail="Kết quả tra cứu đã quá hạn, hãy tra cứu lại.") from exc
     phones = [line for line in text.split("\n") if line]
+    _charge(actor, phones)
     return _xlsx_file_response(_write_lookup_xlsx(phones), "tra-cuu-khach.xlsx")
 
 
 @router.get("/v1/customers/export")
-def customers_export(authorization: str | None = Header(default=None)) -> FileResponse:
-    _auth(authorization)
+def customers_export(request: Request, authorization: str | None = Header(default=None)) -> FileResponse:
+    _manager(_actor(request))
     db.init_db(settings.db_path)
     headers = [FIELD_LABELS[field] for field in FIELDS]
     dest = _new_xlsx_path("kho-khach-")

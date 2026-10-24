@@ -40,9 +40,11 @@
     .lead { color: var(--muted); margin-bottom: 1rem; }
     section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem; margin: 0 0 0.8rem; }
     label { display: block; font-weight: 700; margin: 0 0 0.35rem; }
-    input[type="search"], select, textarea {
+    input[type="search"], input[type="text"], input[type="password"], input[type="number"], select, textarea {
       width: 100%; font: inherit; padding: 0.7rem 0.75rem; border: 1px solid #cfd5dc; border-radius: 10px; background: #fff;
     }
+    input[type="text"], input[type="password"], input[type="number"] { margin: 0 0 0.7rem; }
+    input.limit { width: 8rem; margin: 0; }
     textarea { min-height: 140px; resize: vertical; }
     .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
     button, .file {
@@ -133,6 +135,8 @@
       max-width: 100%;
     }
     [hidden] { display: none !important; }
+    body.staff .manager-only { display: none !important; }
+    input.short { width: 11rem; margin: 0 0.35rem 0 0; }
     #file, #lookupFile { display: none; }
     .words { display: inline; }
     .w { display: inline; }
@@ -155,7 +159,41 @@
   <h1>Kho khách Excel</h1>
     <p class="lead">Nhập khách bằng file Excel, không dùng video. Không giới hạn số file và dung lượng: chọn thêm là cộng vào lần nạp này. Khớp tên cột kho trước (tên, SĐT, địa chỉ, địa chỉ hành chính, hàng mua, giá COD, UID Facebook, ID TikTok). Nếu file không có tên cột, hoặc thiếu cột tên / SĐT, thì lấy cột có tên người, số điện thoại và địa chỉ. Cột lạ như giới tính, ngày sinh, link thì bỏ qua. Mỗi file tự khớp cột theo tiêu đề của file đó; lần nạp mới cộng vào kho, không xóa khách cũ. Mỗi dòng có số điện thoại là một khách. Số trên dòng là chuẩn lọc trùng: trùng SĐT thì cùng một hàng. Mọi dòng có số trong file mới đều được ghi — khách mới thì thêm, khách cũ thì bổ sung hoặc giữ nguyên. Không có số điện thoại thì bỏ qua, không lưu. Lần nạp sau: ô trống được bổ sung, địa chỉ mới thay địa chỉ cũ, hàng mua và địa chỉ hành chính thêm dòng, ô đã có mà không đổi thì giữ nguyên. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
 
-  <section>
+  <section id="gate" hidden>
+    <h2 id="gateTitle">Đăng nhập</h2>
+    <p class="note" id="gateLead">Quản lý đăng nhập để nạp kho, tạo tài khoản nhân viên và cấp hạn mức tra cứu. Nhân viên chỉ tra cứu trong hạn mức mỗi ngày.</p>
+    <label for="gateUser">Tên đăng nhập</label>
+    <input id="gateUser" type="text" autocomplete="username" />
+    <label for="gatePass">Mật khẩu</label>
+    <input id="gatePass" type="password" autocomplete="current-password" />
+    <div id="gateNameWrap" hidden>
+      <label for="gateName">Tên hiển thị</label>
+      <input id="gateName" type="text" autocomplete="name" />
+    </div>
+    <p class="row">
+      <button class="primary" type="button" id="gateSubmit">Đăng nhập</button>
+    </p>
+    <p id="gateNote" class="note"></p>
+  </section>
+
+  <div id="appBody" hidden>
+  <p class="row" id="whoBar">
+    <span id="whoText"></span>
+    <button class="ghost" type="button" id="logout">Đăng xuất</button>
+  </p>
+  <section id="passwordBox">
+    <h2>Đổi mật khẩu</h2>
+    <label for="oldPass">Mật khẩu hiện tại</label>
+    <input id="oldPass" type="password" autocomplete="current-password" />
+    <label for="newPass">Mật khẩu mới</label>
+    <input id="newPass" type="password" autocomplete="new-password" />
+    <p class="row">
+      <button class="ghost" type="button" id="changePass">Đổi mật khẩu</button>
+    </p>
+    <p id="passNote" class="note"></p>
+  </section>
+
+  <section class="manager-only">
     <h2>Thêm file Excel</h2>
     <div class="drop" id="drop">
       <p>Kéo bao nhiêu file Excel cũng được, không giới hạn số file và dung lượng</p>
@@ -167,7 +205,7 @@
     <p id="uploadNote" class="note"></p>
   </section>
 
-  <section id="mapBox" hidden>
+  <section id="mapBox" class="manager-only" hidden>
     <h2>Cột nào là dữ liệu nào?</h2>
     <p class="note" id="mapLead">Máy đã tự chọn cột theo tiêu đề từng kiểu file. Chỉ sửa nếu dòng mẫu bên dưới sai.</p>
     <ul class="files" id="fileList"></ul>
@@ -181,13 +219,13 @@
     <p id="mapNote" class="note"></p>
   </section>
 
-  <section>
+  <section class="manager-only">
     <h2>Kết quả lần nạp</h2>
     <div class="stats" id="importStats"></div>
     <p id="importNote" class="note">Chưa nạp file nào trong phiên này.</p>
   </section>
 
-  <section>
+  <section class="manager-only">
     <h2>Các lần nạp</h2>
     <div class="stats" id="sessionStats"></div>
     <div id="sessionList"></div>
@@ -196,7 +234,8 @@
 
   <section>
     <h2>Tra cứu hàng loạt</h2>
-    <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì tra cả hai. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
+    <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì tra cả hai. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
+    <p id="quotaNote" class="note"></p>
     <label for="lookupPaste">Danh sách số điện thoại</label>
     <textarea id="lookupPaste" placeholder="0901222333"></textarea>
     <p class="row" style="margin-top:0.7rem">
@@ -211,7 +250,7 @@
     <p id="lookupNote" class="note">Chưa tra cứu trong phiên này.</p>
   </section>
 
-  <section>
+  <section class="manager-only">
     <h2>Khách đã lưu</h2>
     <div class="stats" id="storeStats"></div>
     <p class="row" style="margin:0.8rem 0">
@@ -221,9 +260,30 @@
     <div class="scroll" id="people"></div>
     <p id="listNote" class="note"></p>
   </section>
+
+  <section id="accountBox" class="manager-only">
+    <h2>Tài khoản nhân viên</h2>
+    <p class="note">Quản lý tạo tài khoản cho nhân viên và cấp hạn mức tra cứu mỗi ngày. Hạn mức tính theo số điện thoại mới trong ngày (giờ Việt Nam). Số đã tra hôm nay không bị trừ lần nữa. Quản lý không bị giới hạn.</p>
+    <div id="accountList"></div>
+    <p id="accountNote" class="note"></p>
+    <h2>Thêm nhân viên</h2>
+    <label for="staffUser">Tên đăng nhập</label>
+    <input id="staffUser" type="text" autocomplete="off" />
+    <label for="staffName">Tên hiển thị</label>
+    <input id="staffName" type="text" autocomplete="off" />
+    <label for="staffPass">Mật khẩu</label>
+    <input id="staffPass" type="password" autocomplete="new-password" />
+    <label for="staffLimit">Hạn mức tra cứu mỗi ngày</label>
+    <input id="staffLimit" class="limit" type="number" min="0" max="1000000" value="200" />
+    <p class="row">
+      <button class="primary" type="button" id="staffCreate">Tạo tài khoản</button>
+    </p>
+  </section>
+  </div>
 </main>
 <script>
-  var serverToken = __CONTROL_TOKEN__;
+  var serverToken = "";
+  var currentAccount = null;
   var pendingFiles = [];
   var pendingKeys = {};
   var preview = null;
@@ -1222,6 +1282,7 @@
       var xhr = new XMLHttpRequest();
       xhr.open("PUT", url);
       xhr.responseType = "text";
+      xhr.withCredentials = true;
       if (token()) xhr.setRequestHeader("Authorization", "Bearer " + token());
       xhr.setRequestHeader("Content-Type", "application/octet-stream");
       xhr.timeout = 15 * 60 * 1000;
@@ -1355,6 +1416,10 @@
       try {
         var response = await api("/v1/customers/jobs/" + job.id, { tries: 1, waitMs: 30000 });
         if (response.status === 404) throw fatalError("Không thấy việc này trên máy chủ, hãy chạy lại.");
+        if (response.status === 401 || response.status === 403) {
+          var denied = await response.json().catch(function () { return {}; });
+          throw fatalError(denied.detail || "Hãy đăng nhập lại.");
+        }
         if (!response.ok) throw new Error("busy");
         job = (await response.json()).job;
         misses = 0;
@@ -1638,7 +1703,8 @@
       var query = document.getElementById("query").value;
       var response = await api("/v1/customers" + (query ? "?q=" + encodeURIComponent(query) : ""));
       if (response.status === 401) {
-        setNote("listNote", "Trang chưa kết nối được máy chủ.", "warn");
+        showGate(false);
+        setNote("gateNote", "Hãy đăng nhập lại.", "warn");
         return;
       }
       if (!response.ok) {
@@ -1671,8 +1737,35 @@
     }
   }
 
+  function quotaSentence(account) {
+    if (!account) return "";
+    if (account.dailyLookupLimit == null) return "Hạn mức tra cứu: không giới hạn.";
+    var used = account.usedToday || 0;
+    var limit = account.dailyLookupLimit;
+    var remaining = account.remainingToday != null ? account.remainingToday : Math.max(0, limit - used);
+    return "Hạn mức hôm nay: đã dùng " + vnNum(used) + "/" + vnNum(limit) + " số, còn " + vnNum(remaining) + " số.";
+  }
+
+  function quotaExtra(body) {
+    var quota = body && body.quota;
+    if (!quota || quota.limit == null) return "";
+    if (quota.charged) return " Đã trừ " + vnNum(quota.charged) + " số mới.";
+    return " Không trừ thêm số đã tra hôm nay.";
+  }
+
+  function renderQuotaFromLookup(body) {
+    var quota = body && body.quota;
+    if (!quota || !currentAccount || currentAccount.role !== "staff") return;
+    currentAccount.dailyLookupLimit = quota.limit;
+    currentAccount.usedToday = quota.used || 0;
+    currentAccount.remainingToday = quota.remaining;
+    var note = document.getElementById("quotaNote");
+    if (note) note.textContent = quotaSentence(currentAccount);
+  }
+
   function renderLookup(body) {
     lastLookup = body;
+    renderQuotaFromLookup(body);
     var stats = body.stats || {};
     document.getElementById("lookupStats").innerHTML =
       stat(stats.queried || 0, "Số đã tra") +
@@ -1683,7 +1776,7 @@
     var items = body.items || [];
     if (!items.length) {
       document.getElementById("lookupPeople").innerHTML = "";
-      setNote("lookupNote", "Không có kết quả.", "warn");
+      setNote("lookupNote", "Không có kết quả." + quotaExtra(body), "warn");
       document.getElementById("lookupExport").hidden = true;
       return;
     }
@@ -1703,6 +1796,7 @@
     if (totalRows > shown.length) {
       note += " Đang hiện " + vnNum(shown.length) + "/" + vnNum(totalRows) + " dòng. Tải Excel để xem hết — không phải gửi lại file.";
     }
+    note += quotaExtra(body);
     if (stats.truncated) note += " Danh sách quá dài, chỉ lấy phần đầu.";
     if (body.fileErrors && body.fileErrors.length) note += " File lỗi: " + body.fileErrors.join(" ");
     setNote("lookupNote", note, (body.fileErrors && body.fileErrors.length) || stats.missing ? "warn" : "ok");
@@ -1775,6 +1869,11 @@
         }
       });
       var body = await response.json().catch(function () { return {}; });
+      if (response.status === 401) {
+        showGate(false);
+        setNote("gateNote", body.detail || "Hãy đăng nhập lại.", "warn");
+        return;
+      }
       if (!response.ok || !body.job) {
         setNote("lookupNote", body.detail || "Không tra cứu được.", "warn");
         return;
@@ -1828,11 +1927,21 @@
     if (!saved || !saved.id) return;
     try {
       var response = await api("/v1/customers/jobs/" + saved.id, { tries: 2, waitMs: 30000 });
+      if (response.status === 401) {
+        forgetJob(saved.id);
+        showGate(false);
+        setNote("gateNote", "Hãy đăng nhập lại.", "warn");
+        return;
+      }
       if (!response.ok) {
         forgetJob(saved.id);
         return;
       }
       var job = (await response.json()).job;
+      if (saved.kind === "import" && !(currentAccount && currentAccount.role === "manager")) {
+        forgetJob(saved.id);
+        return;
+      }
       if (saved.kind === "import") {
         setNote("importNote", "Lần nạp trước vẫn chạy trên máy chủ, đang theo dõi tiếp…");
         var done = await pollJob(job, function (current) { setNote("importNote", importProgress(current, saved.rows || 0)); });
@@ -1919,11 +2028,328 @@
   });
   document.getElementById("lookupGo").addEventListener("click", runLookup);
   document.getElementById("lookupExport").addEventListener("click", exportLookup);
+
+  function isManager() {
+    return !!(currentAccount && currentAccount.role === "manager");
+  }
+
+  function showGate(setup) {
+    currentAccount = null;
+    document.body.classList.remove("staff");
+    document.getElementById("appBody").hidden = true;
+    document.getElementById("gate").hidden = false;
+    document.getElementById("gateTitle").textContent = setup ? "Tạo tài khoản quản lý" : "Đăng nhập";
+    document.getElementById("gateLead").textContent = setup
+      ? "Kho chưa có tài khoản. Tạo tài khoản quản lý đầu tiên. Quản lý sẽ tạo thêm nhân viên và cấp hạn mức tra cứu."
+      : "Quản lý đăng nhập để nạp kho, tạo tài khoản nhân viên và cấp hạn mức tra cứu. Nhân viên chỉ tra cứu trong hạn mức mỗi ngày.";
+    document.getElementById("gateNameWrap").hidden = !setup;
+    document.getElementById("gatePass").setAttribute("autocomplete", setup ? "new-password" : "current-password");
+    document.getElementById("gateSubmit").textContent = setup ? "Tạo tài khoản quản lý" : "Đăng nhập";
+    document.getElementById("gateSubmit").setAttribute("data-setup", setup ? "1" : "");
+  }
+
+  function renderWho() {
+    var account = currentAccount;
+    var who = document.getElementById("whoText");
+    var quota = document.getElementById("quotaNote");
+    if (!account) {
+      who.textContent = "";
+      quota.textContent = "";
+      return;
+    }
+    var role = account.role === "manager" ? "Quản lý" : "Nhân viên";
+    who.textContent = role + ": " + (account.displayName || account.username);
+    quota.textContent = quotaSentence(account);
+  }
+
+  function showApp(account) {
+    currentAccount = account;
+    document.getElementById("gate").hidden = true;
+    document.getElementById("appBody").hidden = false;
+    document.body.classList.toggle("staff", !isManager());
+    renderWho();
+    if (isManager()) {
+      loadCustomers();
+      loadSessions();
+      loadAccounts();
+    }
+    resumeJob();
+  }
+
+  async function boot() {
+    try {
+      var response = await api("/v1/accounts/session", { tries: 2, waitMs: 20000 });
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        showGate(false);
+        setNote("gateNote", body.detail || "Không kết nối được máy chủ.", "warn");
+        return;
+      }
+      if (body.account) {
+        showApp(body.account);
+        return;
+      }
+      showGate(!!body.needsSetup);
+      setNote("gateNote", "");
+    } catch (error) {
+      showGate(false);
+      setNote("gateNote", "Không kết nối được máy chủ.", "warn");
+    }
+  }
+
+  async function submitGate() {
+    var setup = document.getElementById("gateSubmit").getAttribute("data-setup") === "1";
+    var payload = {
+      username: document.getElementById("gateUser").value.trim(),
+      password: document.getElementById("gatePass").value
+    };
+    if (setup) payload.displayName = document.getElementById("gateName").value.trim();
+    var button = document.getElementById("gateSubmit");
+    button.disabled = true;
+    setNote("gateNote", setup ? "Đang tạo tài khoản quản lý…" : "Đang đăng nhập…");
+    try {
+      var response = await api(setup ? "/v1/accounts/setup" : "/v1/accounts/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        tries: 1,
+        waitMs: 30000
+      });
+      var body = await response.json().catch(function () { return {}; });
+      if (response.status === 401) {
+        setNote("gateNote", body.detail || "Sai tên đăng nhập hoặc mật khẩu.", "warn");
+        return;
+      }
+      if (!response.ok || !body.account) {
+        setNote("gateNote", body.detail || "Không đăng nhập được.", "warn");
+        return;
+      }
+      document.getElementById("gatePass").value = "";
+      showApp(body.account);
+    } catch (error) {
+      setNote("gateNote", "Không kết nối được máy chủ.", "warn");
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function logout() {
+    try {
+      await api("/v1/accounts/logout", { method: "POST", tries: 1, waitMs: 15000 });
+    } catch (error) {
+      /* vẫn đưa về màn đăng nhập */
+    }
+    showGate(false);
+    setNote("gateNote", "Đã đăng xuất.");
+  }
+
+  function renderAccounts(items) {
+    var node = document.getElementById("accountList");
+    if (!items.length) {
+      node.innerHTML = "";
+      setNote("accountNote", "Chưa có tài khoản.");
+      return;
+    }
+    var html = "<table class='sess'><thead><tr><th>Tên đăng nhập</th><th>Tên hiển thị</th><th>Vai trò</th><th>Hạn mức/ngày</th><th>Đã dùng hôm nay</th><th>Trạng thái</th><th></th></tr></thead><tbody>";
+    items.forEach(function (item) {
+      var limit = item.dailyLookupLimit == null ? "Không giới hạn" : vnNum(item.dailyLookupLimit);
+      html += "<tr data-account='" + escapeHtml(item.id) + "'>";
+      html += "<td>" + escapeHtml(item.username) + "</td>";
+      html += "<td>" + escapeHtml(item.displayName) + "</td>";
+      html += "<td>" + (item.role === "manager" ? "Quản lý" : "Nhân viên") + "</td>";
+      html += "<td>" + limit + "</td>";
+      html += "<td>" + vnNum(item.usedToday || 0) + "</td>";
+      html += "<td>" + (item.active ? "Đang dùng" : "Đã khóa") + "</td><td>";
+      if (item.role === "staff") {
+        html += "<input class='limit' type='number' min='0' max='1000000' value='" + String(item.dailyLookupLimit == null ? 0 : item.dailyLookupLimit) + "' data-limit /> ";
+        html += "<button class='ghost' type='button' data-save>Lưu hạn mức</button> ";
+        html += "<button class='ghost' type='button' data-toggle>" + (item.active ? "Khóa" : "Mở lại") + "</button> ";
+        html += "<input class='short' type='password' data-pass placeholder='Mật khẩu mới' autocomplete='new-password' />";
+        html += "<button class='ghost' type='button' data-reset>Đặt lại mật khẩu</button>";
+      }
+      html += "</td></tr>";
+    });
+    html += "</tbody></table>";
+    node.innerHTML = html;
+    node.querySelectorAll("tr[data-account]").forEach(function (row) {
+      var id = row.getAttribute("data-account");
+      var save = row.querySelector("[data-save]");
+      if (save) save.addEventListener("click", function () { saveLimit(id, row); });
+      var toggle = row.querySelector("[data-toggle]");
+      if (toggle) toggle.addEventListener("click", function () { toggleAccount(id, toggle.textContent.indexOf("Khóa") === 0); });
+      var reset = row.querySelector("[data-reset]");
+      if (reset) reset.addEventListener("click", function () { resetStaffPassword(id, row); });
+    });
+  }
+
+  async function loadAccounts() {
+    if (!isManager()) return;
+    try {
+      var response = await api("/v1/accounts");
+      if (response.status === 401) {
+        showGate(false);
+        setNote("gateNote", "Hãy đăng nhập lại.", "warn");
+        return;
+      }
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        setNote("accountNote", body.detail || "Không tải được danh sách tài khoản.", "warn");
+        return;
+      }
+      renderAccounts(body.accounts || []);
+    } catch (error) {
+      setNote("accountNote", "Không tải được danh sách tài khoản.", "warn");
+    }
+  }
+
+  async function saveLimit(id, row) {
+    var input = row.querySelector("[data-limit]");
+    var limit = Number(input && input.value);
+    setNote("accountNote", "Đang lưu hạn mức…");
+    try {
+      var response = await api("/v1/accounts/" + encodeURIComponent(id), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dailyLookupLimit: limit }),
+        tries: 1
+      });
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        setNote("accountNote", body.detail || "Không lưu được hạn mức.", "warn");
+        return;
+      }
+      await loadAccounts();
+      setNote("accountNote", "Đã lưu hạn mức tra cứu cho " + (body.account && body.account.username ? body.account.username : "nhân viên") + ".", "ok");
+    } catch (error) {
+      setNote("accountNote", "Không lưu được hạn mức.", "warn");
+    }
+  }
+
+  async function toggleAccount(id, lock) {
+    setNote("accountNote", lock ? "Đang khóa tài khoản…" : "Đang mở lại tài khoản…");
+    try {
+      var response = await api("/v1/accounts/" + encodeURIComponent(id), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: !lock }),
+        tries: 1
+      });
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        setNote("accountNote", body.detail || "Không cập nhật được tài khoản.", "warn");
+        return;
+      }
+      await loadAccounts();
+      setNote("accountNote", lock ? "Đã khóa nhân viên. Tài khoản này không đăng nhập được nữa." : "Đã mở lại nhân viên.", "ok");
+    } catch (error) {
+      setNote("accountNote", "Không cập nhật được tài khoản.", "warn");
+    }
+  }
+
+  async function resetStaffPassword(id, row) {
+    var input = row.querySelector("[data-pass]");
+    var password = input ? input.value : "";
+    if (!password) {
+      setNote("accountNote", "Nhập mật khẩu mới rồi bấm Đặt lại mật khẩu.", "warn");
+      return;
+    }
+    setNote("accountNote", "Đang đặt lại mật khẩu…");
+    try {
+      var response = await api("/v1/accounts/" + encodeURIComponent(id), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: password }),
+        tries: 1
+      });
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        setNote("accountNote", body.detail || "Không đặt lại được mật khẩu.", "warn");
+        return;
+      }
+      if (input) input.value = "";
+      setNote("accountNote", "Đã đặt lại mật khẩu. Nhân viên phải đăng nhập bằng mật khẩu mới.", "ok");
+    } catch (error) {
+      setNote("accountNote", "Không đặt lại được mật khẩu.", "warn");
+    }
+  }
+
+  async function createStaff() {
+    var payload = {
+      username: document.getElementById("staffUser").value.trim(),
+      displayName: document.getElementById("staffName").value.trim(),
+      password: document.getElementById("staffPass").value,
+      dailyLookupLimit: Number(document.getElementById("staffLimit").value)
+    };
+    var button = document.getElementById("staffCreate");
+    button.disabled = true;
+    setNote("accountNote", "Đang tạo tài khoản nhân viên…");
+    try {
+      var response = await api("/v1/accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        tries: 1
+      });
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        setNote("accountNote", body.detail || "Không tạo được tài khoản.", "warn");
+        return;
+      }
+      document.getElementById("staffPass").value = "";
+      document.getElementById("staffUser").value = "";
+      document.getElementById("staffName").value = "";
+      await loadAccounts();
+      setNote("accountNote", "Đã tạo nhân viên " + (body.account && body.account.username ? body.account.username : "") + ".", "ok");
+    } catch (error) {
+      setNote("accountNote", "Không tạo được tài khoản.", "warn");
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function changeOwnPassword() {
+    var payload = {
+      password: document.getElementById("oldPass").value,
+      next: document.getElementById("newPass").value
+    };
+    var button = document.getElementById("changePass");
+    button.disabled = true;
+    setNote("passNote", "Đang đổi mật khẩu…");
+    try {
+      var response = await api("/v1/accounts/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        tries: 1
+      });
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        setNote("passNote", body.detail || "Không đổi được mật khẩu.", "warn");
+        return;
+      }
+      document.getElementById("oldPass").value = "";
+      document.getElementById("newPass").value = "";
+      showGate(false);
+      setNote("gateNote", "Đã đổi mật khẩu. Hãy đăng nhập lại.", "ok");
+    } catch (error) {
+      setNote("passNote", "Không đổi được mật khẩu.", "warn");
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  document.getElementById("gateSubmit").addEventListener("click", submitGate);
+  ["gateUser", "gatePass", "gateName"].forEach(function (id) {
+    document.getElementById(id).addEventListener("keydown", function (event) {
+      if (event.key === "Enter") submitGate();
+    });
+  });
+  document.getElementById("logout").addEventListener("click", logout);
+  document.getElementById("staffCreate").addEventListener("click", createStaff);
+  document.getElementById("changePass").addEventListener("click", changeOwnPassword);
   bindDrop();
   watchSpaces();
-  loadCustomers();
-  loadSessions();
-  resumeJob();
+  boot();
 </script>
 </body>
 </html>

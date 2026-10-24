@@ -168,6 +168,38 @@ def init_db(db_path: Path) -> None:
               key TEXT PRIMARY KEY,
               value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS staff_accounts (
+              id TEXT PRIMARY KEY,
+              username TEXT NOT NULL UNIQUE,
+              password_hash TEXT NOT NULL,
+              display_name TEXT NOT NULL DEFAULT '',
+              role TEXT NOT NULL,
+              daily_lookup_limit INTEGER,
+              active INTEGER NOT NULL DEFAULT 1,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS staff_sessions (
+              token TEXT PRIMARY KEY,
+              account_id TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              expires_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_staff_sessions_account ON staff_sessions(account_id);
+            CREATE TABLE IF NOT EXISTS lookup_usage (
+              account_id TEXT NOT NULL,
+              day TEXT NOT NULL,
+              phone_key TEXT NOT NULL,
+              at TEXT NOT NULL,
+              PRIMARY KEY (account_id, day, phone_key)
+            );
+            CREATE TABLE IF NOT EXISTS login_attempts (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              username TEXT NOT NULL,
+              at TEXT NOT NULL,
+              ok INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts(username, at);
             """
         )
         _ensure_customer_columns(conn)
