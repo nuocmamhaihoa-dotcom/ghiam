@@ -643,6 +643,20 @@ def suggest_mapping(
     return mapping
 
 
+def suggested_payload(
+    headers: list[str],
+    column_values: list[list[str]] | None = None,
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """Gợi ý cột + danh sách cột nhiều dòng (địa chỉ, hành chính, hàng mua)."""
+    suggested, details = assign_fields(headers, column_values or [[] for _ in headers])
+    payload: dict[str, Any] = dict(suggested)
+    for field in LINE_FIELDS:
+        indexes = (details.get(field) or {}).get("indexes") or []
+        if indexes:
+            payload[f"{field}Columns"] = indexes
+    return payload, details
+
+
 def explain_mapping(details: dict[str, dict[str, Any]], headers: list[str]) -> str:
     parts: list[str] = []
     for field in FIELDS:

@@ -16,7 +16,11 @@ from typing import Any, Iterable, Iterator
 from control_plane.column_detect import (
     assign_fields,
     complete_core_mapping,
+    explain_mapping,
+    header_field,
     looks_like_label_row,
+    mapping_spec_chosen,
+    suggested_payload,
     suggest_mapping as detect_mapping,
 )
 from control_plane.customers import (
@@ -730,21 +734,37 @@ def _mapping_from_assign(
     return detected
 
 
+def _field_mapping_only(mapping: dict[str, Any] | None) -> dict[str, Any]:
+    source = mapping or {}
+    return {field: source[field] for field in FIELDS if field in source}
+
+
+def _chosen_mapping_for_file(mapping: dict[str, Any], filename: str) -> dict[str, Any]:
+    maps = mapping.get("fileMaps") if isinstance(mapping, dict) else None
+    if isinstance(maps, dict):
+        chosen = maps.get(filename)
+        if isinstance(chosen, dict) and any(mapping_spec_chosen(chosen.get(field)) for field in FIELDS):
+            return _field_mapping_only(chosen)
+    return _field_mapping_only(mapping)
+
+
 def mapping_for_file(
     mapping: dict[str, Any],
     filename: str,
     data: TableSource,
 ) -> dict[str, Any]:
-    """Mỗi file tự khớp cột. File khác tiêu đề không lấy nhầm vị trí file đầu."""
+    """Mỗi file tự khớp cột. Chỉ lấy lựa chọn tay khi trùng tên tiêu đề của file đó."""
     stored, _total = _read_table(filename, data, max_store=PREVIEW_STORE)
     rows = _trim_table(stored)
     if not rows:
-        return mapping
+        return _chosen_mapping_for_file(mapping, filename)
     headers, body, _headerless = _split_header_row(rows)
     values = column_values_from_rows(body[:DETECT_ROWS], len(headers))
-    if _mapping_hits_headers(mapping, headers):
-        return complete_core_mapping(_adapt_mapping_to_headers(mapping, headers), headers, values)
-    return _mapping_from_assign(headers, values)
+    auto = _mapping_from_assign(headers, values)
+    user = _adapt_mapping_to_headers(_chosen_mapping_for_file(mapping, filename), headers)
+    merged = dict(auto)
+    merged.update(user)
+    return complete_core_mapping(merged, headers, values)
 
 
 def fill_missing_core_mapping(
@@ -833,6 +853,125 @@ def merge_preview_columns(previews: list[dict[str, Any]]) -> list[dict[str, Any]
                 item["index"] = None
             columns.append(item)
     return columns
+
+
+def _header_signature(headers: list[str]) -> str:
+    return "\n".join(header_key(str(header or "")) for header in headers)
+
+
+def rows_from_mapped_headers(
+    headers: list[str],
+    body: list[list[str]],
+    mapping: dict[str, Any],
+) -> list[dict[str, str]]:
+    """Áp cột đã chọn lên dòng mẫu, không đoán lại dòng tiêu đề."""
+    indexes = {field: resolve_index(headers, mapping.get(field), allow_index=True) for field in FIELDS}
+    line_specs = {field: _address_specs(mapping.get(field)) for field in LINE_FIELDS}
+    extracted: list[dict[str, str]] = []
+    for row in body:
+        raw: dict[str, str] = {}
+        for field in FIELDS:
+            if field in LINE_FIELDS:
+                parts = []
+                for spec in line_specs[field]:
+                    index = resolve_index(headers, spec, allow_index=True)
+                    if index is not None and index < len(row):
+                        parts.append(row[index])
+                if not parts:
+                    index = indexes[field]
+                    if index is not None and index < len(row):
+                        parts.append(row[index])
+                raw[field] = join_address_lines(*parts)
+                continue
+            index = indexes[field]
+            raw[field] = row[index] if index is not None and index < len(row) else ""
+        cleaned = clean_row(raw)
+        if has_data(cleaned):
+            extracted.append(cleaned)
+    return extracted
+
+
+def _layout_picks(
+    headers: list[str],
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    all_indexes = list(range(len(headers)))
+    picks: dict[str, Any] = {}
+    for field in FIELDS:
+        suggested = payload.get(field)
+        extra = [int(index) for index in (payload.get(f"{field}Columns") or []) if index is not None]
+        chosen: list[int] = []
+        if suggested is not None and suggested != "":
+            try:
+                chosen.append(int(suggested))
+            except (TypeError, ValueError):
+                pass
+        chosen.extend(index for index in extra if index not in chosen)
+        matching = [index for index, header in enumerate(headers) if header_field(header) == field]
+        if field in ("name", "phone"):
+            indexes = all_indexes
+            kind = "one"
+        elif field == "address":
+            related = [
+                index
+                for index, header in enumerate(headers)
+                if header_field(header) in ("address", "adminAddress")
+            ]
+            indexes = [index for index in all_indexes if index in set(matching + chosen + related)]
+            if not indexes:
+                indexes = all_indexes
+            kind = "many"
+        elif field in LINE_FIELDS:
+            indexes = [index for index in all_indexes if index in set(matching + chosen)]
+            kind = "many"
+        else:
+            indexes = [index for index in all_indexes if index in set(matching + chosen)]
+            kind = "one"
+        picks[field] = {
+            "kind": kind,
+            "indexes": indexes,
+            "suggested": chosen if field in LINE_FIELDS else (chosen[0] if chosen else None),
+        }
+    return picks
+
+
+def group_preview_layouts(previews: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Gom file cùng tiêu đề để chọn cột một lần, không trộn cột của file khác."""
+    groups: list[dict[str, Any]] = []
+    by_sig: dict[str, dict[str, Any]] = {}
+    for preview in previews:
+        headers = [str(item) for item in (preview.get("headers") or [])]
+        sig = _header_signature(headers)
+        group = by_sig.get(sig)
+        if group is None:
+            values = column_values_from_rows(preview.get("detectRows") or preview.get("samples") or [], len(headers))
+            payload, details = suggested_payload(headers, values)
+            mapping = _mapping_from_assign(headers, values)
+            samples = rows_from_mapped_headers(headers, preview.get("samples") or [], mapping)
+            group = {
+                "id": f"g{len(groups)}",
+                "headers": headers,
+                "columns": preview.get("columns") or describe_columns(headers),
+                "suggested": payload,
+                "picks": _layout_picks(headers, payload),
+                "detectNote": explain_mapping(details, headers),
+                "mappedSamples": samples,
+                "files": [],
+                "rowCount": 0,
+                "labelHits": sum(1 for item in details.values() if item.get("fromHeader")),
+            }
+            by_sig[sig] = group
+            groups.append(group)
+        group["files"].append(
+            {
+                "name": preview.get("name") or "",
+                "rowCount": preview.get("rowCount") or 0,
+                "truncated": bool(preview.get("truncated")),
+                "samples": preview.get("samples") or [],
+            }
+        )
+        group["rowCount"] += int(preview.get("rowCount") or 0)
+    return groups
 
 
 def rows_from_table(rows: list[list[str]], mapping: dict[str, Any], allow_index: bool = True) -> list[dict[str, str]]:
@@ -1054,9 +1193,9 @@ def phones_from_files(files: Iterable[tuple[str, TableSource]]) -> tuple[list[st
     return phones, reports
 
 
-def mapping_from_form(raw: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+def mapping_from_form(raw: dict[str, Any] | None, *, _nested: bool = False) -> dict[str, Any]:
     source = raw or {}
-    mapping: dict[str, dict[str, Any]] = {}
+    mapping: dict[str, Any] = {}
     for field in FIELDS:
         item = source.get(field) or {}
         if not isinstance(item, dict):
@@ -1071,6 +1210,12 @@ def mapping_from_form(raw: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
             mapping[field]["columns"] = columns or [
                 {"index": item.get("index"), "header": item.get("header") or ""}
             ]
+    if not _nested and isinstance(source.get("fileMaps"), dict):
+        mapping["fileMaps"] = {
+            str(name): mapping_from_form(spec, _nested=True)
+            for name, spec in source["fileMaps"].items()
+            if isinstance(spec, dict) and str(name).strip()
+        }
     return mapping
 
 

@@ -104,6 +104,17 @@
     table.sheet tbody tr:nth-child(even) td { background: #f7f9fb; }
     .picks { display: grid; gap: 0.35rem; margin: 0.2rem 0 0.4rem; }
     .picks label { font-weight: 500; display: flex; gap: 0.45rem; align-items: center; }
+    .map-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.85rem;
+      background: #fbfcfd;
+    }
+    .map-card + .map-card { margin-top: 0.7rem; }
+    .map-card h3 { font-size: 1rem; margin: 0 0 0.35rem; }
+    .map-card .core { display: grid; gap: 0.55rem; }
+    details.extra { margin-top: 0.55rem; }
+    details.extra summary { cursor: pointer; font-weight: 700; }
     .note { color: var(--muted); margin-top: 0.55rem; }
     .warn { color: #8a2b2b; font-weight: 700; }
     .ok { color: #0d6b3a; }
@@ -154,13 +165,12 @@
 
   <section id="mapBox" hidden>
     <h2>Cột nào là dữ liệu nào?</h2>
-    <p class="note" id="mapLead">Bạn chọn cột cho file đang xem. File khác tiêu đề sẽ được máy chủ tự khớp lại, không lấy nhầm vị trí cột.</p>
+    <p class="note" id="mapLead">Máy đã tự chọn cột theo tiêu đề từng kiểu file. Chỉ sửa nếu dòng mẫu bên dưới sai.</p>
     <ul class="files" id="fileList"></ul>
     <div class="map" id="mapFields"></div>
-    <p class="note">Dòng mẫu từ file đầu:</p>
     <div class="scroll" id="sampleBox"></div>
     <p class="row" style="margin-top:0.9rem">
-      <button class="primary" type="button" id="confirm">Nạp với cách chọn cột này</button>
+      <button class="primary" type="button" id="confirm">Nạp khách vào kho</button>
       <button class="ghost" type="button" id="addMore">Thêm file</button>
       <button class="ghost" type="button" id="cancel">Bỏ hết, chọn lại</button>
     </p>
@@ -448,51 +458,237 @@
     padSpaces(node);
   }
 
-  function currentMapping() {
-    var mapping = {};
-    fieldOrder.forEach(function (field) {
-      if (lineFields[field]) {
-        var columns = [];
-        document.querySelectorAll("#map-" + field + " input[type=checkbox]:checked").forEach(function (box) {
-          var header = box.getAttribute("data-header") || "";
-          var rawIndex = box.getAttribute("data-index");
-          var index = rawIndex === "" || rawIndex == null ? null : Number(rawIndex);
-          if (index !== index) index = null;
-          if (header || index !== null) columns.push({ index: index, header: header });
-        });
-        var first = columns[0] || { index: null, header: "" };
-        mapping[field] = { index: first.index, header: first.header, columns: columns };
-        return;
+  function readFieldSpec(root, field) {
+    if (lineFields[field]) {
+      var columns = [];
+      var select = root.querySelector("[data-field='" + field + "'][data-kind='one']");
+      if (select && select.selectedOptions && select.selectedOptions[0] && select.selectedOptions[0].value) {
+        var option = select.selectedOptions[0];
+        var rawIndex = option.getAttribute("data-index");
+        var index = rawIndex === "" || rawIndex == null ? null : Number(rawIndex);
+        if (index !== index) index = null;
+        columns.push({ index: index, header: option.getAttribute("data-header") || "" });
       }
-      var select = document.getElementById("map-" + field);
-      var option = select && select.selectedOptions && select.selectedOptions[0];
-      var header = option && option.value ? option.getAttribute("data-header") || "" : "";
-      var rawIndex = option && option.getAttribute("data-index");
-      var index = rawIndex === "" || rawIndex == null ? null : Number(rawIndex);
-      if (index !== index) index = null;
-      mapping[field] = { index: index, header: header };
+      root.querySelectorAll("[data-field='" + field + "'] input[type=checkbox]:checked").forEach(function (box) {
+        var header = box.getAttribute("data-header") || "";
+        var rawIndex = box.getAttribute("data-index");
+        var index = rawIndex === "" || rawIndex == null ? null : Number(rawIndex);
+        if (index !== index) index = null;
+        if (header || index !== null) columns.push({ index: index, header: header });
+      });
+      var first = columns[0] || { index: null, header: "" };
+      return { index: first.index, header: first.header, columns: columns };
+    }
+    var select = root.querySelector("select[data-field='" + field + "']");
+    var option = select && select.selectedOptions && select.selectedOptions[0];
+    var header = option && option.value ? option.getAttribute("data-header") || "" : "";
+    var rawIndex = option && option.getAttribute("data-index");
+    var index = rawIndex === "" || rawIndex == null ? null : Number(rawIndex);
+    if (index !== index) index = null;
+    return { index: index, header: header };
+  }
+
+  function currentMapping() {
+    var cards = document.querySelectorAll("#mapFields .map-card");
+    var mapping = {};
+    var fileMaps = {};
+    var first = cards[0] || document.getElementById("mapFields");
+    fieldOrder.forEach(function (field) {
+      mapping[field] = readFieldSpec(first, field);
     });
+    cards.forEach(function (card) {
+      var spec = {};
+      fieldOrder.forEach(function (field) {
+        spec[field] = readFieldSpec(card, field);
+      });
+      String(card.getAttribute("data-files") || "").split("\n").forEach(function (name) {
+        if (name) fileMaps[name] = spec;
+      });
+    });
+    mapping.fileMaps = fileMaps;
     return mapping;
   }
 
-  function renderSample(columns, samples) {
-    var html = "<table class='sheet'><thead><tr>";
-    columns.forEach(function (col) {
-      html += "<th>" + escapeHtml(col.title) + "</th>";
-    });
-    html += "</tr></thead><tbody>";
-    if (!samples.length) {
-      html += "<tr><td colspan='" + columns.length + "'>Không có dòng mẫu.</td></tr>";
+  function renderCustomerSample(rows) {
+    var html = "<table class='sheet'><colgroup><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'></colgroup><thead><tr>" +
+      "<th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th></tr></thead><tbody>";
+    if (!rows.length) {
+      html += "<tr><td class='addr' colspan='6'>Không có dòng khách mẫu.</td></tr>";
     }
-    samples.forEach(function (row) {
-      html += "<tr>";
-      columns.forEach(function (col, index) {
-        html += "<td class='addr'>" + escapeHtml(row[index] || "") + "</td>";
-      });
-      html += "</tr>";
+    rows.slice(0, 5).forEach(function (row) {
+      html += "<tr>" +
+        "<td>" + escapeHtml(row.name || "—") + "</td>" +
+        "<td>" + escapeHtml(row.phone || "—") + "</td>" +
+        "<td class='addr'>" + escapeHtml(row.address || "—") + "</td>" +
+        "<td class='addr'>" + escapeHtml(row.adminAddress || "—") + "</td>" +
+        "<td class='addr'>" + escapeHtml(row.orderContent || "—") + "</td>" +
+        "<td>" + escapeHtml(row.codAmount || "—") + "</td>" +
+        "</tr>";
     });
     html += "</tbody></table>";
-    document.getElementById("sampleBox").innerHTML = html;
+    return html;
+  }
+
+  function addSkipOption(select) {
+    var skip = document.createElement("option");
+    skip.value = "";
+    skip.setAttribute("data-header", "");
+    skip.setAttribute("data-index", "");
+    skip.textContent = "Không dùng cột này";
+    select.appendChild(skip);
+  }
+
+  function addColumnOption(select, col, selected) {
+    var option = document.createElement("option");
+    option.value = "col-" + (col.letter || col.index || col.header);
+    option.setAttribute("data-header", col.header || "");
+    option.setAttribute("data-index", col.index == null ? "" : String(col.index));
+    option.textContent = col.title;
+    if (selected) option.selected = true;
+    select.appendChild(option);
+  }
+
+  function renderGroupCard(group, fields) {
+    var card = document.createElement("div");
+    card.className = "map-card";
+    card.setAttribute("data-group", group.id || "g0");
+    card.setAttribute("data-files", (group.files || []).map(function (item) { return item.name; }).join("\n"));
+    var names = (group.files || []).map(function (item) { return item.name; });
+    var title = document.createElement("h3");
+    title.textContent = names.length > 1
+      ? names.length + " file cùng cột · " + vnNum(group.rowCount || 0) + " dòng"
+      : (names[0] || "File Excel") + " · " + vnNum(group.rowCount || 0) + " dòng";
+    card.appendChild(title);
+    if (names.length > 1) {
+      var list = document.createElement("p");
+      list.className = "note";
+      list.textContent = names.slice(0, 8).join(", ") + (names.length > 8 ? " …" : "");
+      card.appendChild(list);
+    }
+    var columns = group.columns || [];
+    var picks = group.picks || {};
+    var core = document.createElement("div");
+    core.className = "core";
+    ["name", "phone", "address"].forEach(function (field) {
+      var meta = fields.find(function (item) { return item.id === field; }) || { id: field, label: field };
+      var label = document.createElement("label");
+      label.textContent = field === "address" ? "Địa chỉ khách" : meta.label;
+      var select = document.createElement("select");
+      select.setAttribute("data-field", field);
+      select.setAttribute("data-kind", "one");
+      addSkipOption(select);
+      var pick = picks[field] || {};
+      var allowed = pick.indexes && pick.indexes.length ? pick.indexes : columns.map(function (_col, index) { return index; });
+      var suggested = pick.suggested;
+      if (field === "address" && suggested && suggested.length) suggested = suggested[0];
+      allowed.forEach(function (index) {
+        var col = columns[index];
+        if (!col) return;
+        addColumnOption(select, col, suggested === index || suggested === col.index);
+      });
+      core.appendChild(label);
+      core.appendChild(select);
+      if (field === "address") {
+        var extras = (pick.indexes || []).filter(function (index) {
+          return index !== suggested;
+        });
+        if (extras.length) {
+          var extraBox = document.createElement("div");
+          extraBox.className = "picks";
+          extraBox.setAttribute("data-field", "address");
+          extras.forEach(function (index) {
+            var col = columns[index];
+            if (!col) return;
+            var row = document.createElement("label");
+            var boxInput = document.createElement("input");
+            boxInput.type = "checkbox";
+            boxInput.setAttribute("data-header", col.header || "");
+            boxInput.setAttribute("data-index", col.index == null ? "" : String(col.index));
+            boxInput.checked = Array.isArray(pick.suggested) && pick.suggested.indexOf(index) >= 0;
+            row.appendChild(boxInput);
+            row.appendChild(document.createTextNode("Thêm dòng: " + col.title));
+            extraBox.appendChild(row);
+          });
+          core.appendChild(extraBox);
+        }
+      }
+    });
+    card.appendChild(core);
+    var extraFields = ["adminAddress", "orderContent", "codAmount", "facebookUid", "tiktokId"];
+    var extraWrap = document.createElement("details");
+    extraWrap.className = "extra";
+    var hasExtra = false;
+    extraFields.forEach(function (field) {
+      var pick = picks[field] || {};
+      if (!(pick.indexes && pick.indexes.length)) return;
+      hasExtra = true;
+      var meta = fields.find(function (item) { return item.id === field; }) || { id: field, label: field };
+      var label = document.createElement("label");
+      label.textContent = lineLabels[field] || meta.label;
+      extraWrap.appendChild(label);
+      if (pick.kind === "many") {
+        var extraBox = document.createElement("div");
+        extraBox.className = "picks";
+        extraBox.setAttribute("data-field", field);
+        var chosen = {};
+        (Array.isArray(pick.suggested) ? pick.suggested : pick.suggested != null ? [pick.suggested] : []).forEach(function (index) {
+          chosen[index] = true;
+        });
+        pick.indexes.forEach(function (index) {
+          var col = columns[index];
+          if (!col) return;
+          var row = document.createElement("label");
+          var boxInput = document.createElement("input");
+          boxInput.type = "checkbox";
+          boxInput.setAttribute("data-header", col.header || "");
+          boxInput.setAttribute("data-index", col.index == null ? "" : String(col.index));
+          boxInput.checked = !!chosen[index];
+          row.appendChild(boxInput);
+          row.appendChild(document.createTextNode(col.title));
+          extraBox.appendChild(row);
+        });
+        extraWrap.appendChild(extraBox);
+        return;
+      }
+      var select = document.createElement("select");
+      select.setAttribute("data-field", field);
+      addSkipOption(select);
+      pick.indexes.forEach(function (index) {
+        var col = columns[index];
+        if (!col) return;
+        addColumnOption(select, col, pick.suggested === index);
+      });
+      extraWrap.appendChild(select);
+    });
+    if (hasExtra) {
+      var summary = document.createElement("summary");
+      summary.textContent = "Cột thêm: hành chính, hàng mua, COD, Facebook, TikTok";
+      extraWrap.insertBefore(summary, extraWrap.firstChild);
+      card.appendChild(extraWrap);
+    }
+    var note = document.createElement("p");
+    note.className = "note ok";
+    note.textContent = group.detectNote || "";
+    card.appendChild(note);
+    var sample = document.createElement("div");
+    sample.className = "scroll";
+    sample.innerHTML = renderCustomerSample(group.mappedSamples || []);
+    card.appendChild(sample);
+    return card;
+  }
+
+  function fallbackGroups(body) {
+    return [{
+      id: "g0",
+      headers: (body.columns || []).map(function (col) { return col.header; }),
+      columns: body.columns || [],
+      suggested: body.suggested || {},
+      picks: {},
+      detectNote: body.detectNote || "",
+      mappedSamples: [],
+      files: body.files || [],
+      rowCount: (body.files || []).reduce(function (sum, item) { return sum + (item.rowCount || 0); }, 0)
+    }];
   }
 
   function renderMap(body) {
@@ -512,60 +708,18 @@
     });
     var box = document.getElementById("mapFields");
     box.innerHTML = "";
-    body.fields.forEach(function (field) {
-      var suggested = body.suggested[field.id];
-      var label = document.createElement("label");
-      label.setAttribute("for", "map-" + field.id);
-      label.textContent = lineLabels[field.id] || field.label;
-      box.appendChild(label);
-      if (lineFields[field.id]) {
-        var picks = document.createElement("div");
-        picks.id = "map-" + field.id;
-        picks.className = "picks";
-        var chosen = {};
-        (body.suggested[lineFields[field.id]] || []).forEach(function (index) { chosen[index] = true; });
-        if (suggested != null && suggested !== "") chosen[suggested] = true;
-        body.columns.forEach(function (col, colPos) {
-          var row = document.createElement("label");
-          var boxInput = document.createElement("input");
-          boxInput.type = "checkbox";
-          boxInput.setAttribute("data-header", col.header || "");
-          boxInput.setAttribute("data-index", col.index == null ? "" : String(col.index));
-          boxInput.checked = !!chosen[colPos];
-          row.appendChild(boxInput);
-          row.appendChild(document.createTextNode(col.title));
-          picks.appendChild(row);
-        });
-        box.appendChild(picks);
-        return;
-      }
-      var select = document.createElement("select");
-      select.id = "map-" + field.id;
-      var skip = document.createElement("option");
-      skip.value = "";
-      skip.setAttribute("data-header", "");
-      skip.setAttribute("data-index", "");
-      skip.textContent = "Không dùng cột này";
-      select.appendChild(skip);
-      body.columns.forEach(function (col, colPos) {
-        var option = document.createElement("option");
-        option.value = "col-" + colPos;
-        option.setAttribute("data-header", col.header || "");
-        option.setAttribute("data-index", col.index == null ? "" : String(col.index));
-        option.textContent = col.title;
-        if (suggested === colPos) option.selected = true;
-        select.appendChild(option);
-      });
-      box.appendChild(select);
+    var groups = body.groups && body.groups.length ? body.groups : fallbackGroups(body);
+    groups.forEach(function (group) {
+      box.appendChild(renderGroupCard(group, body.fields || []));
     });
-    renderSample(body.columns, body.files[0] ? body.files[0].samples : []);
+    document.getElementById("sampleBox").innerHTML = "";
     document.getElementById("mapBox").hidden = false;
-    var lead = "Cách chọn cột này áp dụng cho tất cả file trong lần nạp này.";
-    if (body.headerMismatch && body.headerMismatch.length) {
-      lead += " Một số file có tên cột khác file đầu: phần mềm tìm cùng tên cột, không có thì lấy cùng vị trí.";
+    var lead = "Máy đã tự chọn cột theo tiêu đề từng kiểu file. Chỉ sửa nếu dòng mẫu bên dưới sai.";
+    if (groups.length > 1) {
+      lead += " Có " + groups.length + " kiểu cột khác nhau — mỗi kiểu chọn một lần, không lấy nhầm cột của file kia.";
     }
     setNote("mapLead", lead);
-    var note = body.detectNote || "Hãy xem lại cột, rồi bấm nạp. Lần nạp sau sẽ hỏi lại.";
+    var note = body.detectNote || "Hãy xem dòng mẫu, rồi bấm nạp. Lần nạp sau sẽ hỏi lại.";
     if (body.fileErrors && body.fileErrors.length) {
       note += " File lỗi: " + body.fileErrors.join(" ");
     }
@@ -582,44 +736,66 @@
     }));
   }
 
-  function applyChosenMapping(mapping) {
-    if (!mapping) return;
-    var chosen = {};
-    fieldOrder.forEach(function (field) {
-      if (fieldWasChosen(mapping[field])) chosen[field] = mapping[field];
-    });
-    applyMapping(chosen);
-  }
-
-  function applyMapping(mapping) {
-    if (!mapping) return;
+  function applySpecToRoot(root, mapping, allowIndex) {
+    if (!root || !mapping) return;
     fieldOrder.forEach(function (field) {
       var spec = mapping[field];
-      if (!spec) return;
+      if (!spec || !fieldWasChosen(spec)) return;
       if (lineFields[field]) {
         var wanted = {};
         (spec.columns || []).forEach(function (col) {
           if (col.header) wanted["h:" + col.header] = true;
-          if (col.index !== null && col.index !== undefined) wanted["i:" + String(col.index)] = true;
+          if (allowIndex && col.index !== null && col.index !== undefined) wanted["i:" + String(col.index)] = true;
         });
-        document.querySelectorAll("#map-" + field + " input[type=checkbox]").forEach(function (box) {
+        if (spec.header) wanted["h:" + spec.header] = true;
+        var select = root.querySelector("select[data-field='" + field + "']");
+        if (select) {
+          var matched = null;
+          Array.prototype.forEach.call(select.options, function (option) {
+            if (spec.header && option.getAttribute("data-header") === spec.header) matched = option;
+            else if (allowIndex && matched == null && spec.index != null && option.getAttribute("data-index") === String(spec.index)) matched = option;
+          });
+          if (matched) select.value = matched.value;
+        }
+        root.querySelectorAll("[data-field='" + field + "'] input[type=checkbox]").forEach(function (box) {
           var header = box.getAttribute("data-header") || "";
           var rawIndex = box.getAttribute("data-index");
-          box.checked = !!(wanted["h:" + header] || (rawIndex !== "" && wanted["i:" + rawIndex]));
+          box.checked = !!(wanted["h:" + header] || (allowIndex && rawIndex !== "" && wanted["i:" + rawIndex]));
         });
         return;
       }
-      var select = document.getElementById("map-" + field);
+      var select = root.querySelector("select[data-field='" + field + "']");
       if (!select) return;
       var header = spec.header || "";
       var index = spec.index;
       var matched = null;
       Array.prototype.forEach.call(select.options, function (option) {
         if (header && option.getAttribute("data-header") === header) matched = option;
-        else if (matched == null && index != null && option.getAttribute("data-index") === String(index)) matched = option;
+        else if (allowIndex && matched == null && index != null && option.getAttribute("data-index") === String(index)) matched = option;
       });
       if (matched) select.value = matched.value;
     });
+  }
+
+  function applyChosenMapping(mapping) {
+    if (!mapping) return;
+    var cards = document.querySelectorAll("#mapFields .map-card");
+    if (!cards.length) {
+      applySpecToRoot(document.getElementById("mapFields"), mapping, true);
+      return;
+    }
+    cards.forEach(function (card) {
+      var names = String(card.getAttribute("data-files") || "").split("\n");
+      var spec = null;
+      names.forEach(function (name) {
+        if (!spec && mapping.fileMaps && mapping.fileMaps[name]) spec = mapping.fileMaps[name];
+      });
+      if (spec) applySpecToRoot(card, spec, true);
+    });
+  }
+
+  function applyMapping(mapping) {
+    applyChosenMapping(mapping);
   }
 
   function fileKey(file) {
@@ -824,7 +1000,7 @@
         stat((body.needReupload || []).length, "File cần nạp lại");
       padSpaces(document.getElementById("sessionStats"));
       var html = "<table class='sheet sess'><thead><tr>" +
-        "<th>Thời gian</th><th>Thêm</th><th>Bổ sung</th><th>File 0 dòng</th><th>Tình trạng</th>" +
+        "<th>Thời gian</th><th>Dòng đọc</th><th>Thêm</th><th>Bổ sung</th><th>File 0 dòng</th><th>Tình trạng</th>" +
         "</tr></thead><tbody>";
       sessions.forEach(function (item) {
         var empty = (item.emptyFiles || []).length;
@@ -833,6 +1009,7 @@
         else if (empty) status = "Thiếu " + empty + " file 0 dòng — nạp lại";
         html += "<tr" + (item.missing || empty ? " class='miss'" : "") + ">";
         html += "<td>" + escapeHtml(vnTime(item.at)) + "</td>";
+        html += "<td>" + escapeHtml(vnNum(item.incoming || 0)) + "</td>";
         html += "<td>" + escapeHtml(vnNum(item.created || 0)) + "</td>";
         html += "<td>" + escapeHtml(vnNum(item.updated || 0)) + "</td>";
         html += "<td>" + escapeHtml(vnNum(empty)) + "</td>";

@@ -94,6 +94,10 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("Google Dịch đang bật", home.text)
         self.assertIn("Thời gian", home.text)
         self.assertIn("Tình trạng", home.text)
+        self.assertIn("Máy đã tự chọn cột", home.text)
+        self.assertIn("fileMaps", home.text)
+        self.assertIn("Dòng đọc", home.text)
+        self.assertIn("map-card", home.text)
         self.assertNotIn("data-label", home.text)
         self.assertNotIn("#people thead", home.text)
         self.assertNotIn("content: attr(data-label)", home.text)
@@ -120,6 +124,91 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(data["suggested"]["name"], 0)
         self.assertIn("Mỗi file tự khớp", data["applyNote"])
         self.assertIn("Khớp cột", data["detectNote"])
+        self.assertEqual(len(data["groups"]), 1)
+        self.assertEqual(data["groups"][0]["suggested"]["name"], 0)
+        self.assertEqual(data["groups"][0]["mappedSamples"][0]["name"], "Lan")
+
+    def test_preview_mixed_headerless_and_delivery_keeps_two_layouts(self) -> None:
+        preview = self.client.post(
+            "/v1/customers/preview",
+            headers=self.headers,
+            files=[
+                self._file(
+                    "khong-tieu-de.xlsx",
+                    ["Nguyễn Lan", "0901222333", "12 Lê Lợi, Huế"],
+                    [],
+                ),
+                self._file(
+                    "delivery_export.xlsx",
+                    [
+                        "STT",
+                        "Mã vận đơn",
+                        "Đơn vị vận chuyển",
+                        "Tên người nhận",
+                        "SĐT người nhận",
+                        "Địa chỉ nhận",
+                        "Tỉnh/Thành phố nhận",
+                        "Phường/Xã nhận",
+                        "Tên hàng hóa",
+                        "Tiền thu hộ COD",
+                    ],
+                    [["1", "VD1", "GHN", "Trần Minh", "0901444555", "12 Lê Lợi", "Hồ Chí Minh", "Quận 1", "Nước mắm", "150000"]],
+                ),
+            ],
+        )
+        self.assertEqual(preview.status_code, 200, preview.text)
+        data = preview.json()
+        self.assertEqual(len(data["groups"]), 2)
+        by_name = {}
+        for group in data["groups"]:
+            for item in group["files"]:
+                by_name[item["name"]] = group
+        headerless = by_name["khong-tieu-de.xlsx"]
+        delivery = by_name["delivery_export.xlsx"]
+        self.assertEqual(delivery["headers"][3], "Tên người nhận")
+        self.assertEqual(delivery["suggested"]["name"], 3)
+        self.assertEqual(delivery["suggested"]["phone"], 4)
+        self.assertEqual(delivery["suggested"]["address"], 5)
+        self.assertEqual(delivery["mappedSamples"][0]["name"], "Trần Minh")
+        self.assertEqual(delivery["mappedSamples"][0]["phone"], "0901444555")
+        self.assertIn("Lê Lợi", delivery["mappedSamples"][0]["address"])
+        self.assertNotEqual(headerless["suggested"]["name"], delivery["suggested"]["name"])
+        merged_headers = [str(col.get("header") or "") for col in data["columns"]]
+        self.assertEqual(merged_headers[data["suggested"]["name"]], "Tên người nhận")
+
+    def test_import_wrong_shared_indexes_still_reads_each_file(self) -> None:
+        imported = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={
+                "mapping": json.dumps(
+                    {
+                        "name": {"index": 2, "header": "Cột C"},
+                        "phone": {"index": 3, "header": "Cột D"},
+                        "address": {"index": 4, "header": "Cột E"},
+                    }
+                )
+            },
+            files=[
+                self._file(
+                    "khong-tieu-de.xlsx",
+                    ["ghi chú", "mã", "Nguyễn Lan", "0901222333", "12 Lê Lợi, Huế"],
+                    [],
+                ),
+                self._file(
+                    "delivery_export.xlsx",
+                    ["STT", "Mã vận đơn", "Tên người nhận", "SĐT người nhận", "Địa chỉ nhận"],
+                    [["1", "VD1", "Trần Minh", "0901444555", "12 Lê Lợi, Quận 1"]],
+                ),
+            ],
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+        self.assertEqual(imported.json()["emptyFiles"], [])
+        self.assertEqual(imported.json()["stats"]["created"], 2)
+        items = {item["phone"]: item for item in self.client.get("/v1/customers", headers=self.headers).json()["items"]}
+        self.assertEqual(items["0901222333"]["name"], "Nguyễn Lan")
+        self.assertEqual(items["0901444555"]["name"], "Trần Minh")
+        self.assertIn("Lê Lợi", items["0901444555"]["address"])
 
     def test_preview_skips_unlabeled_and_gender_columns(self) -> None:
         name, body = self._xlsx(

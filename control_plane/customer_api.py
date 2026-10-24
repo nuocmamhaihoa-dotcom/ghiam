@@ -21,7 +21,7 @@ from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartException
 
 from control_plane import db
-from control_plane.column_detect import assign_fields, explain_mapping
+from control_plane.column_detect import suggested_payload
 from control_plane.customers import (
     FIELDS,
     LINE_FIELDS,
@@ -38,6 +38,7 @@ from control_plane.customers import (
 from control_plane.excel_import import (
     FIELD_LABELS,
     IMPORT_BATCH,
+    group_preview_layouts,
     header_key,
     mapping_for_file,
     iter_mapped_file,
@@ -72,11 +73,11 @@ def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _remember(summary: str, detail: str | None = None) -> None:
+def _remember(summary: str, detail: str | None = None, at: str | None = None) -> None:
     try:
         db.record_action(
             settings.db_path,
-            at=utcnow(),
+            at=at or utcnow(),
             actor="me",
             source="hub",
             kind="note",
@@ -190,11 +191,15 @@ def _import_sessions() -> dict[str, Any]:
         if isinstance(payload.get("emptyFiles"), list) and not empty:
             empty = [str(name) for name in payload["emptyFiles"] if name]
         at = str(action.get("at") or "")
-        moment = _parse_iso(at)
+        stamp = str(payload.get("importedAt") or "") or at
+        moment = _parse_iso(stamp)
         kept = 0
         if moment is not None:
-            start = (moment - timedelta(hours=6)).isoformat()
-            kept = db.customers_created_between(settings.db_path, start, at)
+            if payload.get("importedAt"):
+                kept = db.customers_created_between(settings.db_path, stamp, stamp)
+            else:
+                start = (moment - timedelta(hours=6)).isoformat()
+                kept = db.customers_created_between(settings.db_path, start, at)
         missing = created >= 1000 and kept < max(1, int(created * 0.1))
         names = [str(item.get("name") or "") for item in files if isinstance(item, dict) and item.get("name")]
         if missing:
@@ -207,7 +212,11 @@ def _import_sessions() -> dict[str, Any]:
                 "summary": action.get("summary") or "",
                 "created": created,
                 "updated": updated,
-                "incoming": incoming,
+                "incoming": incoming or int(sum(
+                    int(item.get("rows") or 0)
+                    for item in files
+                    if isinstance(item, dict)
+                )),
                 "fileCount": int(payload.get("fileCount") or len(files) or 0),
                 "okFiles": int(payload.get("okFiles") or sum(1 for item in files if isinstance(item, dict) and item.get("rows"))),
                 "emptyFiles": empty,
@@ -390,6 +399,7 @@ def _preview_uploaded(
     if not previews:
         raise HTTPException(status_code=400, detail="Không đọc được file nào. " + " ".join(problems))
     first = previews[0]
+    groups = group_preview_layouts(previews)
     columns = merge_preview_columns(previews)
     different = [
         item["name"]
@@ -398,12 +408,27 @@ def _preview_uploaded(
     ]
     headers = [str(column.get("header") or "") for column in columns]
     values = _column_values_from_previews(columns, previews)
-    suggested, details = assign_fields(headers, values)
-    payload = dict(suggested)
-    for field in LINE_FIELDS:
-        indexes = (details.get(field) or {}).get("indexes") or []
-        if indexes:
-            payload[f"{field}Columns"] = indexes
+    if len(groups) == 1:
+        payload = dict(groups[0]["suggested"])
+        detect_note = groups[0]["detectNote"]
+        columns = groups[0]["columns"]
+    else:
+        labeled = max(groups, key=lambda item: int(item.get("labelHits") or 0))
+        payload, details = suggested_payload(headers, values)
+        for field in FIELDS:
+            header = ""
+            spec = (labeled.get("suggested") or {}).get(field)
+            if spec is not None and 0 <= int(spec) < len(labeled.get("headers") or []):
+                header = str(labeled["headers"][int(spec)])
+            if not header:
+                continue
+            for index, title in enumerate(headers):
+                if header_key(title) == header_key(header):
+                    payload[field] = index
+                    if field in LINE_FIELDS:
+                        payload[f"{field}Columns"] = [index]
+                    break
+        detect_note = labeled.get("detectNote") or ""
     return {
         "files": [
             {
@@ -417,8 +442,9 @@ def _preview_uploaded(
         ],
         "fileErrors": problems,
         "columns": columns,
+        "groups": groups,
         "suggested": payload,
-        "detectNote": explain_mapping(details, headers),
+        "detectNote": detect_note,
         "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
         "applyNote": "Mỗi file tự khớp cột theo tiêu đề của file đó. Không giới hạn số file và dung lượng. File nạp thành công được giữ lại trên đĩa. Nạp từng dòng, ghi từng lô vào SQLite, cộng vào kho, không xóa khách cũ. Khớp tên cột trước; nếu thiếu tên hoặc SĐT thì lấy cột có tên người / số điện thoại / địa chỉ. Cột giới tính, ngày sinh, link thì bỏ qua.",
         "headerMismatch": different,
@@ -468,7 +494,12 @@ def _import_uploaded(
         parsed = mapping_from_form(json.loads(fields.get("mapping") or ""))
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=400, detail="Bảng chọn cột không đọc được.") from exc
-    if not any(_mapped(spec) for spec in parsed.values()):
+    if not any(_mapped(parsed.get(field) or {}) for field in FIELDS) and not any(
+        _mapped((spec or {}).get(field) or {})
+        for spec in (parsed.get("fileMaps") or {}).values()
+        if isinstance(spec, dict)
+        for field in FIELDS
+    ):
         raise HTTPException(status_code=400, detail="Hãy chọn ít nhất một cột dữ liệu.")
     if not uploaded:
         raise HTTPException(
@@ -527,6 +558,7 @@ def _import_uploaded(
         json.dumps(
             {
                 "stats": stats,
+                "importedAt": now,
                 "fileCount": len(file_reports),
                 "okFiles": sum(1 for item in file_reports if item.get("rows")),
                 "emptyFiles": empty_files,
@@ -535,6 +567,7 @@ def _import_uploaded(
             },
             ensure_ascii=False,
         ),
+        at=now,
     )
     return {
         "stats": stats,
