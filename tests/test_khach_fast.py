@@ -428,7 +428,7 @@ class CountAndMappingTests(unittest.TestCase):
                     (2, "Tỉnh", "Phú Thọ"),
                 ]
             ),
-            "12 Lê Lợi, Phú Thọ, xã An Bình",
+            "12 Lê Lợi, xã An Bình, Phú Thọ",
         )
         self.assertEqual(
             compose_address(
@@ -443,6 +443,55 @@ class CountAndMappingTests(unittest.TestCase):
         self.assertEqual(
             compose_address([(0, "Cột A", "12"), (2, "Cột C", "Lê Lợi"), (1, "Cột B", "ngõ 5")]),
             "12, ngõ 5, Lê Lợi",
+        )
+        self.assertEqual(
+            compose_address([(0, "Địa chỉ", "TP.HCM, Quận 1, P.Bến Nghé, 12 Lê Lợi, Việt Nam")]),
+            "12 Lê Lợi, P.Bến Nghé, Quận 1, TP.HCM",
+        )
+        self.assertEqual(
+            compose_address([(0, "Địa chỉ", "Tỉnh Vĩnh Long - Huyện Long Hồ - Xã An Bình - Thôn Trung - 12 Lê Lợi")]),
+            "12 Lê Lợi, Thôn Trung, Xã An Bình, Huyện Long Hồ, Tỉnh Vĩnh Long",
+        )
+        self.assertEqual(
+            compose_address([(0, "Địa chỉ", "12 Lê Lợi phường Bến Nghé quận 1 TP.HCM")]),
+            "12 Lê Lợi, phường Bến Nghé, quận 1, TP.HCM",
+        )
+        self.assertEqual(
+            compose_address([(0, "Số nhà", "12 Đường Phú Thọ"), (1, "Tỉnh", "Đồng Nai")]),
+            "12 Đường Phú Thọ, Đồng Nai",
+        )
+        self.assertEqual(compose_address([(0, "Địa chỉ", "12 Đường Huế")]), "12 Đường Huế")
+        self.assertEqual(
+            compose_address([(0, "Địa chỉ", "12 đường Lạng Sơn")]),
+            "12 đường Lạng Sơn",
+        )
+        self.assertEqual(
+            compose_address([(0, "Địa chỉ", "Bà Rịa - Vũng Tàu, 12 Lê Lợi")]),
+            "12 Lê Lợi, Bà Rịa - Vũng Tàu",
+        )
+        self.assertEqual(
+            compose_address([(0, "Địa chỉ", "Q.1, TP.HCM"), (1, "Địa chỉ", "Quận 1, Thành phố Hồ Chí Minh, Việt Nam")]),
+            "Quận 1, Thành phố Hồ Chí Minh",
+        )
+        self.assertEqual(
+            compose_address([(0, "Xã", "An Bình"), (1, "Số nhà", "12 Lê Lợi"), (2, "Huyện", "Long Hồ")]),
+            "12 Lê Lợi, An Bình, Long Hồ",
+        )
+        self.assertEqual(
+            compose_address([(0, "Địa chỉ", "12/5 Lê Lợi ngõ 4 phường 12 quận 3 TPHCM")]),
+            "12/5 Lê Lợi ngõ 4, phường 12, quận 3, TPHCM",
+        )
+        self.assertEqual(
+            compose_address([(0, "Địa chỉ", "HCM 12 Lê Lợi")]),
+            "12 Lê Lợi, HCM",
+        )
+        self.assertEqual(
+            compose_address([(0, "Địa chỉ", "12 Lê Lợi, bản Trung, xã An Bình")]),
+            "12 Lê Lợi, bản Trung, xã An Bình",
+        )
+        self.assertEqual(
+            compose_address([(1, "Bản", "Trung"), (0, "Số nhà", "12"), (2, "Xã", "An Bình")]),
+            "12, Trung, An Bình",
         )
 
     def test_sheet_with_other_layout_maps_its_own_columns(self) -> None:

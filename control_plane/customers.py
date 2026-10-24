@@ -12,11 +12,11 @@ from control_plane import db
 from control_plane.vietnam_places import (
     address_content_rank,
     address_header_rank,
-    address_levels_present,
+    address_piece_key,
     fold_vietnamese,
     has_address_keyword,
     has_vietnam_place,
-    is_complete_address,
+    iter_address_pieces,
 )
 
 FIELDS = (
@@ -300,46 +300,48 @@ def clean_address(value: Any) -> str:
     return join_address_lines(text)
 
 
+def _address_richness(text: str) -> tuple[int, int]:
+    folded = fold_vietnamese(text)
+    words = set(folded.split())
+    full = len(words & {"tinh", "thanh", "phuong", "quan", "huyen", "xa", "thon", "xom", "thi"})
+    return full, len(text)
+
+
 def compose_address(parts: list[tuple[int, str, str]]) -> str:
-    """Gộp các ô địa chỉ thành một dòng: chi tiết, thôn, xã, huyện, tỉnh."""
-    pieces: list[tuple[int, str, str]] = []
-    seen: set[str] = set()
+    """Gộp các ô thành một dòng: số nhà, thôn, xã, huyện, tỉnh.
+
+    Trong một ô, máy tách dấu phẩy và từ khóa hành chính rồi xếp lại.
+    «12 Đường Phú Thọ» giữ nguyên vì Phú Thọ nằm trong tên đường.
+    """
+    found: dict[str, tuple[int, int, int, str, tuple[int, int]]] = {}
     for index, header, raw in parts:
-        text = str(raw or "").replace("\r\n", "\n").replace("\r", "\n")
-        for raw_line in text.split("\n"):
-            line = " ".join(raw_line.split())
-            if not line:
+        forced = address_header_rank(header)
+        for seg_index, piece in enumerate(iter_address_pieces(raw)):
+            rank = address_content_rank(piece)
+            if rank == 0 and forced is not None:
+                rank = forced
+            key = address_piece_key(piece, rank, header)
+            if not key:
                 continue
-            key = unicodedata.normalize("NFC", line).casefold()
-            if key in seen:
+            richness = _address_richness(piece)
+            current = found.get(key)
+            if current is None:
+                found[key] = (rank, index, seg_index, piece, richness)
                 continue
-            seen.add(key)
-            pieces.append((index, header, line))
-    if not pieces:
+            _rank, index_c, seg_c, text_c, rich_c = current
+            if (index, seg_index) < (index_c, seg_c):
+                place = (index, seg_index)
+            else:
+                place = (index_c, seg_c)
+            if richness > rich_c:
+                text, rich = piece, richness
+            else:
+                text, rich = text_c, rich_c
+            found[key] = (rank, place[0], place[1], text, rich)
+    if not found:
         return ""
-    if len(pieces) == 1:
-        return pieces[0][2]
-
-    def rank_of(item: tuple[int, str, str]) -> int:
-        forced = address_header_rank(item[1])
-        if forced is not None:
-            return forced
-        return address_content_rank(item[2])
-
-    bundles = [item for item in pieces if is_complete_address(item[2])]
-    loose = [item for item in pieces if item not in bundles]
-    if bundles:
-        covered = address_levels_present(" ".join(item[2] for item in bundles))
-        blob = f" {fold_vietnamese(' '.join(item[2] for item in bundles))} "
-        kept = [
-            item
-            for item in loose
-            if f" {fold_vietnamese(item[2])} " not in blob and rank_of(item) not in covered
-        ]
-        kept.sort(key=lambda item: (rank_of(item), item[0]))
-        return ", ".join([item[2] for item in bundles] + [item[2] for item in kept])
-    ordered = sorted(pieces, key=lambda item: (rank_of(item), item[0]))
-    return ", ".join(item[2] for item in ordered)
+    ordered = sorted(found.values(), key=lambda item: (item[0], item[1], item[2]))
+    return ", ".join(item[3] for item in ordered)
 
 
 def address_key(value: str) -> str:

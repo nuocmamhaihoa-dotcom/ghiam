@@ -589,6 +589,257 @@
     select.appendChild(option);
   }
 
+  var PROVINCE = {};
+  "an giang|ba ria vung tau|bac giang|bac kan|bac lieu|bac ninh|ben tre|binh dinh|binh duong|binh phuoc|binh thuan|brvt|ca mau|can tho|cao bang|da nang|dak lak|dak nong|dien bien|dong nai|dong thap|gia lai|ha giang|ha nam|ha noi|ha tinh|hai duong|hai phong|hau giang|hcm|hn|ho chi minh|hoa binh|hue|hung yen|khanh hoa|kien giang|kon tum|lai chau|lam dong|lang son|lao cai|long an|nam dinh|nghe an|ninh binh|ninh thuan|phu tho|phu yen|quang binh|quang nam|quang ngai|quang ninh|quang tri|sai gon|saigon|soc trang|son la|tay ninh|thai binh|thai nguyen|thanh hoa|thanh pho ha noi|thanh pho ho chi minh|thanh pho hue|thua thien hue|tien giang|tp ha noi|tp hcm|tp ho chi minh|tp hue|tphcm|tra vinh|tuyen quang|vinh long|vinh phuc|vung tau|yen bai".split("|").forEach(function (name) { PROVINCE[name] = true; });
+  var DISTRICT = {};
+  "ba dinh|bac tu liem|bao loc|bien hoa|binh chanh|binh tan|binh thanh|binh thuy|buon ma thuot|cai rang|cam le|cam pha|cam ranh|can gio|cao lanh|cau giay|chau doc|cu chi|da lat|di an|do son|dong anh|dong da|dong hoi|duong kinh|gia lam|go cong|go vap|ha dong|ha long|ha tien|hai ba trung|hai chau|hoa vang|hoai duc|hoan kiem|hoang mai|hoc mon|hoi an|hong bang|kien an|le chan|lien chieu|long bien|long khanh|long xuyen|mong cai|my tho|nam tu liem|ngo quyen|ngu hanh son|nha be|nha trang|ninh kieu|o mon|phan rang|phan thiet|phu nhuan|phuc tho|pleiku|quan 1|quan 10|quan 11|quan 12|quan 2|quan 3|quan 4|quan 5|quan 6|quan 7|quan 8|quan 9|quy nhon|rach gia|sa dec|soc son|son tay|son tra|tam ky|tan an|tan binh|tan phu|tay ho|thanh khe|thanh oai|thanh tri|thanh xuan|thot not|thu dau mot|thu duc|thuan an|thuong tin|tuy hoa|uong bi|vi thanh|vinh".split("|").forEach(function (name) { DISTRICT[name] = true; });
+  var CANON = {"hn":"ha noi","ha noi":"ha noi","tp ha noi":"ha noi","thanh pho ha noi":"ha noi","hcm":"ho chi minh","tphcm":"ho chi minh","tp hcm":"ho chi minh","ho chi minh":"ho chi minh","thanh pho ho chi minh":"ho chi minh","tp ho chi minh":"ho chi minh","sai gon":"ho chi minh","saigon":"ho chi minh","hue":"hue","thua thien hue":"hue","thanh pho hue":"hue","tp hue":"hue","brvt":"ba ria vung tau","ba ria vung tau":"ba ria vung tau","vung tau":"ba ria vung tau"};
+  var CODE = {"hn":1,"hcm":1,"tphcm":1,"brvt":1};
+  var GLUE = {"duong":1,"pho":1,"ngo":1,"hem":1,"ngach":1,"kiet":1,"so":1,"lo":1,"toa":1,"tang":1,"can":1,"chung":1,"cu":1};
+  var ADMIN = [
+    [["to","dan","pho"],"to",true],[["khu","dan","cu"],"kdc",false],[["khu","pho"],"kp",true],
+    [["thanh","pho"],"tp",false],[["thi","tran"],"tt",false],[["thi","xa"],"tx",false],
+    [["phuong"],"p",true],[["huyen"],"h",true],[["quan"],"q",true],
+    [["thon"],"thon",false],[["xom"],"xom",false],[["buon"],"buon",false],[["soc"],"soc",false],[["khom"],"khom",false],
+    [["tinh"],"tinh",false],[["tdp"],"to",true],[["kp"],"kp",true],[["tx"],"tx",false],[["tt"],"tt",false],[["tp"],"tp",false],
+    [["q"],"q",true],[["p"],"p",true],[["x"],"x",true]
+  ];
+
+  function foldVi(value) {
+    return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+  }
+  function headerRank(header) {
+    var folded = foldVi(header);
+    if (!folded) return null;
+    var padded = " " + folded + " ";
+    if (padded.indexOf(" tinh ") >= 0) return 4;
+    if (/\s(thi xa|huyen|quan)\s/.test(padded)) return 3;
+    if (padded.indexOf(" thanh pho ") >= 0 || folded === "tp" || folded === "thanh pho") return null;
+    if (/\s(thi tran|phuong|xa)\s/.test(padded)) return 2;
+    if (/\s(to dan pho|khu pho|thon|xom|ap|lang|buon|soc|khom|ban|doi)\s/.test(padded)) return 1;
+    if (/\s(so nha|ten duong|duong|ngo|hem|ngach|kiet|pho)\s/.test(padded)) return 0;
+    return null;
+  }
+  function isProvince(folded) { return !!PROVINCE[folded] || !!CANON[folded] || !!CODE[folded]; }
+  function contentRank(value) {
+    var folded = foldVi(value);
+    if (!folded) return 0;
+    if (isProvince(folded) || folded.indexOf("tinh ") === 0) return 4;
+    if (folded.indexOf("thanh pho ") === 0 || folded.indexOf("tp ") === 0) {
+      var rest = folded.replace(/^(?:thanh pho|tp)\s+/, "");
+      return isProvince(rest) ? 4 : 3;
+    }
+    if (DISTRICT[folded]) return 3;
+    if (/^q\s*\d{1,2}$/.test(folded)) return 3;
+    if (/^(?:thi xa|tx|huyen|quan)\s+\S/.test(folded) || /^q\s+\S/.test(folded) || /^h\s+[a-z]{2}/.test(folded)) return 3;
+    if (/^p\s*\d{1,2}$/.test(folded)) return 2;
+    if (/^(?:kp|tdp)\s*\d{1,2}$/.test(folded)) return 1;
+    if (/^(?:thi tran|tt|phuong|xa)\s+\S/.test(folded) || /^[px]\s+\S/.test(folded)) return 2;
+    if (/^(?:to|doi|ban)\s+\d{1,2}$/.test(folded)) return 1;
+    if (/^(?:to dan pho|tdp|khu pho|kp|khu dan cu|thon|xom|ap|lang|buon|soc|khom|ban|doi)\s+\S/.test(folded)) return 1;
+    return 0;
+  }
+  function prefixKind(folded) {
+    if (folded.indexOf("to dan pho") === 0 || folded.indexOf("tdp") === 0 || /^to\s+\d/.test(folded)) return "to";
+    if (folded.indexOf("khu dan cu") === 0) return "kdc";
+    if (folded.indexOf("khu pho") === 0 || folded.indexOf("kp ") === 0 || (folded.indexOf("kp") === 0 && folded.length <= 3)) return "kp";
+    if (folded.indexOf("thanh pho ") === 0 || folded.indexOf("tp ") === 0 || CODE[folded]) return "tp";
+    if (folded.indexOf("thi xa") === 0 || folded.indexOf("tx ") === 0) return "tx";
+    if (folded.indexOf("huyen ") === 0 || /^h\s+[a-z]/.test(folded)) return "h";
+    if (folded.indexOf("quan ") === 0 || /^q(?:\s|\d)/.test(folded)) return "q";
+    if (folded.indexOf("thi tran") === 0 || folded.indexOf("tt ") === 0) return "tt";
+    if (folded.indexOf("phuong ") === 0 || /^p(?:\s|\d)/.test(folded)) return "p";
+    if (folded.indexOf("xa ") === 0 || /^x\s+\S/.test(folded)) return "x";
+    if (folded.indexOf("thon ") === 0) return "thon";
+    if (folded.indexOf("xom ") === 0) return "xom";
+    if (folded.indexOf("ap ") === 0) return "ap";
+    if (folded.indexOf("lang ") === 0) return "lang";
+    if (folded.indexOf("buon ") === 0) return "buon";
+    if (folded.indexOf("soc ") === 0) return "soc";
+    if (folded.indexOf("khom ") === 0) return "khom";
+    if (folded.indexOf("doi ") === 0 || folded.indexOf("ban ") === 0) return "to";
+    if (folded.indexOf("tinh ") === 0) return "tinh";
+    return "";
+  }
+  function kindFromHeader(header) {
+    var folded = foldVi(header);
+    if (!folded) return "";
+    if (folded.indexOf("to dan pho") >= 0 || folded === "tdp" || folded === "to") return "to";
+    if (folded.indexOf("khu pho") >= 0 || folded === "kp") return "kp";
+    if (folded.indexOf("thi xa") >= 0) return "tx";
+    if (folded.indexOf("huyen") >= 0) return "h";
+    if (folded.indexOf("quan") >= 0) return "q";
+    if (folded.indexOf("thi tran") >= 0) return "tt";
+    if (folded.indexOf("phuong") >= 0) return "p";
+    if (/(?:^| )xa(?: |$)/.test(folded)) return "x";
+    if (folded.indexOf("thon") >= 0) return "thon";
+    if (folded.indexOf("xom") >= 0) return "xom";
+    if (/(?:^| )ap(?: |$)/.test(folded)) return "ap";
+    if (folded.indexOf("lang") >= 0) return "lang";
+    if (folded.indexOf("tinh") >= 0) return "tinh";
+    if (folded.indexOf("thanh pho") >= 0) return "tp";
+    return "";
+  }
+  function pieceKey(text, rank, header) {
+    var folded = foldVi(text);
+    if (!folded || folded === "viet nam" || folded === "vietnam" || folded === "vn") return "";
+    if (rank === 4) {
+      var canon = CANON[folded] || CANON[folded.replace(/^(?:thanh pho|tinh|tp)\s+/, "")] || folded;
+      return "4:" + canon;
+    }
+    var kind = prefixKind(folded) || kindFromHeader(header);
+    var rest = folded.replace(/^(?:to dan pho|khu dan cu|khu pho|thanh pho|thi tran|thi xa|phuong|huyen|quan|thon|xom|buon|soc|khom|tinh|tdp|kp|tx|tt|tp|to|doi|ban|[pqhx])\s+/, "");
+    var short = folded.replace(/^(?:kp|tdp|[qp])(?=\d)/, "");
+    if (short !== folded && (!rest || rest === folded)) rest = short;
+    var body = rest || folded;
+    if (/^\d{1,2}$/.test(body) && kind) return rank + ":" + kind + "#" + String(parseInt(body, 10));
+    if ((rank === 1 || rank === 2) && kind) return rank + ":" + kind + ":" + body;
+    return rank + ":" + body;
+  }
+  function aligned(value) {
+    var text = String(value || "").replace(/\s+/g, " ").trim();
+    var folded = "";
+    for (var i = 0; i < text.length; i++) {
+      var one = text[i].normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toLowerCase();
+      folded += /^[a-z0-9]$/.test(one) ? one : " ";
+    }
+    return [text, folded];
+  }
+  function tokenSpans(folded) {
+    var spans = [];
+    var index = 0;
+    while (index < folded.length) {
+      if (folded[index] === " ") { index += 1; continue; }
+      var end = index + 1;
+      while (end < folded.length && folded[end] !== " ") end += 1;
+      spans.push([index, end, folded.slice(index, end)]);
+      index = end;
+    }
+    return spans;
+  }
+  function matchPrefix(tokens, index, codes) {
+    var token = tokens[index];
+    if (/^q\d{1,2}$/.test(token)) return [1, "q", true];
+    if (/^p\d{1,2}$/.test(token)) return [1, "p", true];
+    if (/^(?:kp|tdp)\d{1,2}$/.test(token)) return [1, token.indexOf("kp") === 0 ? "kp" : "to", true];
+    if (codes !== false && CODE[token]) return [1, "tp", false];
+    for (var i = 0; i < ADMIN.length; i++) {
+      var words = ADMIN[i][0];
+      var width = words.length;
+      var same = true;
+      for (var j = 0; j < width; j++) if (tokens[index + j] !== words[j]) same = false;
+      if (!same) continue;
+      var nxt = tokens[index + 1] || "";
+      if (words.length === 1 && words[0] === "h" && !/^[a-z]{2,}$/.test(nxt)) continue;
+      if ((words[0] === "to" && words.length === 1) || words[0] === "doi" || words[0] === "ban") {
+        if (!/^\d{1,2}$/.test(nxt)) continue;
+      }
+      if ((words[0] === "p" || words[0] === "x" || words[0] === "q") && words.length === 1 && !nxt) continue;
+      return [width, ADMIN[i][1], ADMIN[i][2]];
+    }
+    return null;
+  }
+  function segmentEnd(tokens, start, width, takesNumber) {
+    var cursor = start + width;
+    if (takesNumber && /^\d{1,2}$/.test(tokens[cursor] || "")) return cursor + 1;
+    if (/^\d/.test(tokens[cursor] || "")) return cursor;
+    var names = 0;
+    while (cursor < tokens.length && names < 4) {
+      if (matchPrefix(tokens, cursor, false)) break;
+      if (names > 0 && /^\d/.test(tokens[cursor])) break;
+      if (names > 0 && GLUE[tokens[cursor]]) break;
+      cursor += 1;
+      names += 1;
+    }
+    return cursor;
+  }
+  function splitPieces(text) {
+    var foldedName = foldVi(text);
+    if (!foldedName) return [];
+    if (PROVINCE[foldedName] || DISTRICT[foldedName] || CANON[foldedName]) return [text];
+    var pair = aligned(text);
+    var display = pair[0];
+    var spans = tokenSpans(pair[1]);
+    if (!spans.length) return [text];
+    var tokens = spans.map(function (item) { return item[2]; });
+    var pieces = [];
+    var index = 0;
+    while (index < tokens.length) {
+      var matched = matchPrefix(tokens, index, true);
+      var glued = index > 0 && CODE[tokens[index]] && GLUE[tokens[index - 1]];
+      var end;
+      if (matched && !glued) end = segmentEnd(tokens, index, matched[0], matched[2]);
+      else {
+        end = index + 1;
+        while (end < tokens.length && !matchPrefix(tokens, end, true)) end += 1;
+        if (end < tokens.length && CODE[tokens[end]] && GLUE[tokens[end - 1]]) {
+          end += 1;
+          while (end < tokens.length && !matchPrefix(tokens, end, true)) end += 1;
+        }
+      }
+      var chunk = display.slice(spans[index][0], spans[end - 1][1]).replace(/^[\s,;-]+|[\s,;-]+$/g, "");
+      if (chunk) pieces.push(chunk);
+      index = Math.max(end, index + 1);
+    }
+    return pieces.length ? pieces : [text];
+  }
+  function iterPieces(value) {
+    var raw = String(value || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n/g, ", ").replace(/\s+/g, " ").trim();
+    if (!raw) return [];
+    var whole = foldVi(raw);
+    if (PROVINCE[whole] || DISTRICT[whole] || CANON[whole]) return [raw];
+    var protectedText = raw.replace(/Bà Rịa - Vũng Tàu/g, "\uE000").replace(/Bà Rịa – Vũng Tàu/g, "\uE000").replace(/Thừa Thiên - Huế/g, "\uE001").replace(/Thừa Thiên – Huế/g, "\uE001");
+    protectedText = protectedText.replace(/\s+[-–—]\s+/g, ", ");
+    var rough = protectedText.split(/\s*[,;|]\s*/);
+    var pieces = [];
+    rough.forEach(function (part) {
+      part = part.replace(/^\s+|\s+$/g, "").replace(/^[,;]+|[,;]+$/g, "");
+      if (!part) return;
+      part = part.replace(/\uE000/g, "Bà Rịa - Vũng Tàu").replace(/\uE001/g, "Thừa Thiên - Huế");
+      var pair = aligned(part);
+      var folded = pair[1];
+      var lead = "";
+      ["dia chi ", "d c ", "dc "].forEach(function (item) { if (!lead && folded.indexOf(item) === 0) lead = item; });
+      if (lead) {
+        var cut = pair[0].slice(lead.length).replace(/^[\s:,-]+|[\s:,-]+$/g, "");
+        if (cut) part = cut;
+      }
+      splitPieces(part).forEach(function (piece) { pieces.push(piece); });
+    });
+    return pieces;
+  }
+  function arrangeAddress(parts) {
+    var found = {};
+    parts.forEach(function (part) {
+      var forced = headerRank(part.header || "");
+      iterPieces(part.text).forEach(function (piece, seg) {
+        var rank = contentRank(piece);
+        if (rank === 0 && forced != null) rank = forced;
+        var key = pieceKey(piece, rank, part.header || "");
+        if (!key) return;
+        var words = foldVi(piece).split(" ");
+        var full = 0;
+        words.forEach(function (word) { if ({tinh:1,thanh:1,phuong:1,quan:1,huyen:1,xa:1,thon:1,xom:1,thi:1}[word]) full += 1; });
+        var richness = full * 1000 + piece.length;
+        var current = found[key];
+        if (!current) {
+          found[key] = { rank: rank, index: part.index, seg: seg, text: piece, rich: richness };
+          return;
+        }
+        var placeIndex = part.index < current.index || (part.index === current.index && seg < current.seg) ? part.index : current.index;
+        var placeSeg = part.index < current.index || (part.index === current.index && seg < current.seg) ? seg : current.seg;
+        if (richness > current.rich) found[key] = { rank: rank, index: placeIndex, seg: placeSeg, text: piece, rich: richness };
+        else found[key] = { rank: current.rank, index: placeIndex, seg: placeSeg, text: current.text, rich: current.rich };
+      });
+    });
+    var rows = Object.keys(found).map(function (key) { return found[key]; });
+    rows.sort(function (left, right) {
+      if (left.rank !== right.rank) return left.rank - right.rank;
+      if (left.index !== right.index) return left.index - right.index;
+      return left.seg - right.seg;
+    });
+    return rows.map(function (item) { return item.text; }).join(", ");
+  }
   function rowsFromChoice(card, rawRows) {
     var spec = {};
     fieldOrder.forEach(function (field) {
@@ -607,15 +858,9 @@
         if (!key || seen[key]) return;
         seen[key] = true;
         var text = textAt(row, col.index);
-        if (text) parts.push({ text: text, rank: Number(col.rank || 0), index: col.index });
+        if (text) parts.push({ text: text, index: col.index, header: col.header || "" });
       });
-      if (field === "address") {
-        parts.sort(function (left, right) {
-          if (left.rank !== right.rank) return left.rank - right.rank;
-          return left.index - right.index;
-        });
-        return parts.map(function (item) { return item.text; }).join(", ");
-      }
+      if (field === "address") return arrangeAddress(parts);
       return parts.map(function (item) { return item.text; }).join("\n");
     }
     var out = [];
@@ -696,7 +941,7 @@
         more.className = "extra";
         if (Object.keys(chosenExtra).length) more.open = true;
         var moreSummary = document.createElement("summary");
-        moreSummary.textContent = "Ghép thêm cột thành dòng địa chỉ, từ số nhà đến tỉnh";
+        moreSummary.textContent = "Ghép thêm cột thành dòng địa chỉ, từ số nhà đến tỉnh. Trong một ô thì xếp lại số nhà, thôn, xã, huyện, rồi tỉnh.";
         more.appendChild(moreSummary);
         var extraBox = document.createElement("div");
         extraBox.className = "picks";
