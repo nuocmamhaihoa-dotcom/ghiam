@@ -11,6 +11,7 @@ import zipfile
 from pathlib import Path
 
 from control_plane import db, xlsx_fast
+from control_plane.column_detect import looks_like_name
 from control_plane.customers import (
     clean_address,
     extract_phone,
@@ -393,6 +394,32 @@ class CountAndMappingTests(unittest.TestCase):
         self.assertEqual(len(later), 4)
         self.assertTrue(all(row["name"].startswith("Chị Mai") for row in later), later)
         self.assertTrue(all("Lê Lợi" in row["address"] for row in later), later)
+
+    def test_name_column_is_people_not_repeated_labels(self) -> None:
+        surnames = ["Nguyễn", "Trần", "Lê", "Phạm", "Hoàng", "Vũ"]
+        given = ["Lan", "Minh", "Hoa", "Tú", "Nam Anh", "Thu Trang", "Quốc Bảo"]
+        labels = ["Áo thun trơn", "Bánh tráng trộn", "Nước mắm cốt"]
+        self.assertTrue(all(looks_like_name(label) for label in labels))
+        self.assertFalse(looks_like_name("Long An"))
+
+        def person(index: int) -> str:
+            return "Long An" if index % 15 == 0 else f"{surnames[index % 6]} {given[index % 7]}"
+
+        body = "".join(
+            f'<row r="{index}"><c r="A{index}"><v>90{index:07d}</v></c>'
+            f'<c r="B{index}" t="inlineStr"><is><t>{person(index)}</t></is></c>'
+            f'<c r="C{index}" t="inlineStr"><is><t>{index} Lê Lợi, phường {index % 9}, Huế</t></is></c>'
+            f'<c r="D{index}"><v>91{index:07d}</v></c>'
+            f'<c r="E{index}" t="inlineStr"><is><t>{labels[index % 3]}</t></is></c></row>'
+            for index in range(1, 120)
+        )
+        with tempfile.TemporaryDirectory(prefix="khach-name-") as folder:
+            path = Path(folder) / "tong.xlsx"
+            path.write_bytes(make_xlsx([sheet(body)]))
+            mapping = mapping_for_file({}, path.name, path)
+        self.assertEqual(mapping["name"]["header"], "Cột B")
+        self.assertEqual(mapping["phone"]["header"], "Cột A")
+        self.assertEqual(mapping["address"]["header"], "Cột C")
 
     def test_lookup_file_reads_every_phone_column(self) -> None:
         payload = make_xlsx(
