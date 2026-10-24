@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 import re
 import zipfile
 import xml.etree.ElementTree as ET
-from typing import Any, Iterable
+from pathlib import Path
+from typing import Any, Iterable, Iterator
 
 from control_plane.column_detect import suggest_mapping as detect_mapping
 from control_plane.customers import (
@@ -22,6 +24,8 @@ from control_plane.customers import (
 )
 from control_plane.vietnam_places import fold_vietnamese
 
+TableSource = bytes | bytearray | os.PathLike[str] | str
+IMPORT_BATCH = 2500
 SAMPLE_ROWS = 8
 DETECT_ROWS = 200
 PREVIEW_STORE = SAMPLE_ROWS + DETECT_ROWS + 1
@@ -253,14 +257,55 @@ def _combine_sheets(tables: list[list[list[str]]]) -> list[list[str]]:
     return combined
 
 
-def read_xlsx(data: bytes, max_store: int | None = None) -> list[list[str]]:
-    rows, _total = _read_xlsx(data, max_store=max_store)
-    return rows
+def _is_zip_bytes(data: TableSource) -> bool:
+    if isinstance(data, (bytes, bytearray)):
+        return bytes(data[:2]) == b"PK"
+    path = Path(data)
+    with path.open("rb") as handle:
+        return handle.read(2) == b"PK"
 
 
-def _read_xlsx(data: bytes, max_store: int | None = None) -> tuple[list[list[str]], int]:
+def _open_xlsx(data: TableSource) -> zipfile.ZipFile:
+    if isinstance(data, (bytes, bytearray)):
+        return zipfile.ZipFile(io.BytesIO(data))
+    return zipfile.ZipFile(os.fspath(data))
+
+
+def _iter_sheet_rows(source: Any, shared: list[str]) -> Iterator[list[str]]:
     try:
-        archive = zipfile.ZipFile(io.BytesIO(data))
+        for _event, elem in ET.iterparse(source, events=("end",)):
+            if _local(elem.tag) != "row":
+                continue
+            yield _parse_row(elem, shared)
+            elem.clear()
+    except ET.ParseError:
+        return
+
+
+def _align_row(
+    row: list[str],
+    other_header: list[str],
+    header: list[str],
+    header_index: dict[str, int],
+) -> list[str]:
+    aligned = [""] * len(header)
+    for index, cell in enumerate(row):
+        title = other_header[index] if index < len(other_header) else ""
+        if not header_key(title):
+            continue
+        dest = header_index.get(header_key(title))
+        if dest is None:
+            continue
+        if dest >= len(aligned):
+            aligned.extend([""] * (dest + 1 - len(aligned)))
+        aligned[dest] = cell
+    return aligned
+
+
+def iter_xlsx_rows(data: TableSource) -> Iterator[list[str]]:
+    archive = None
+    try:
+        archive = _open_xlsx(data)
     except zipfile.BadZipFile as exc:
         raise ValueError("File Excel bị hỏng hoặc không phải .xlsx.") from exc
     try:
@@ -271,73 +316,164 @@ def _read_xlsx(data: bytes, max_store: int | None = None) -> tuple[list[list[str
         paths = _sheet_paths(archive)
         if not paths:
             raise ValueError("File Excel không có bảng tính.")
-        tables: list[list[list[str]]] = []
-        total = 0
-        remaining = max_store
+        first_rows: list[list[str] | None] = []
         for path in paths:
             with archive.open(path) as handle:
-                rows, count = _sheet_rows_from(handle, shared, max_store=remaining)
-            tables.append(rows)
-            total += count
-            if remaining is not None:
-                remaining = max(0, remaining - len(rows))
-        combined = _combine_sheets(tables)
-        if max_store is not None:
-            combined = combined[:max_store]
-        return combined, total
+                first_rows.append(next(_iter_sheet_rows(handle, shared), None))
+        header: list[str] | None = None
+        header_index: dict[str, int] = {}
+        for first in first_rows:
+            if not first:
+                continue
+            other_header = [collapse(cell) for cell in first]
+            if header is None:
+                header = list(other_header)
+                header_index = {
+                    header_key(title): index for index, title in enumerate(header) if header_key(title)
+                }
+                continue
+            for title in other_header:
+                if not header_key(title) or header_key(title) in header_index:
+                    continue
+                header_index[header_key(title)] = len(header)
+                header.append(title)
+        if header is None:
+            return
+        yield list(header)
+        for path, first in zip(paths, first_rows):
+            if first is None:
+                continue
+            other_header = [collapse(cell) for cell in first]
+            same = [header_key(item) for item in other_header] == [header_key(item) for item in header]
+            with archive.open(path) as handle:
+                rows = _iter_sheet_rows(handle, shared)
+                next(rows, None)
+                for row in rows:
+                    if same:
+                        width = len(header)
+                        yield list(row[:width]) + [""] * max(0, width - len(row))
+                    else:
+                        aligned = _align_row(row, other_header, header, header_index)
+                        if any(collapse(cell) for cell in aligned):
+                            yield aligned
     except ValueError:
         raise
     except (KeyError, ET.ParseError, zipfile.BadZipFile, OSError) as exc:
         raise ValueError("File Excel bị hỏng hoặc không đọc được.") from exc
+    finally:
+        if archive is not None:
+            archive.close()
 
 
-def read_csv(data: bytes, max_store: int | None = None) -> list[list[str]]:
+def read_xlsx(data: TableSource, max_store: int | None = None) -> list[list[str]]:
+    rows, _total = _read_xlsx(data, max_store=max_store)
+    return rows
+
+
+def _read_xlsx(data: TableSource, max_store: int | None = None) -> tuple[list[list[str]], int]:
+    rows: list[list[str]] = []
+    total = 0
+    for row in iter_xlsx_rows(data):
+        total += 1
+        if max_store is None or len(rows) < max_store:
+            rows.append(row)
+    return rows, total
+
+
+def _decode_csv_text(data: bytes) -> str:
+    for encoding in ("utf-8-sig", "utf-8", "utf-16", "cp1258", "cp1252"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
+
+
+def iter_csv_rows(data: TableSource) -> Iterator[list[str]]:
+    close = None
+    if isinstance(data, (bytes, bytearray)):
+        text = _decode_csv_text(bytes(data))
+        sample = text[:4000]
+        stream: Any = io.StringIO(text)
+    else:
+        path = Path(data)
+        text = ""
+        stream = None
+        for encoding in ("utf-8-sig", "utf-8", "utf-16", "cp1258", "cp1252"):
+            try:
+                handle = path.open("r", encoding=encoding, newline="")
+                sample = handle.read(4000)
+                handle.seek(0)
+                stream = handle
+                close = handle
+                break
+            except UnicodeDecodeError:
+                if stream is not None:
+                    stream.close()
+                stream = None
+        if stream is None:
+            handle = path.open("r", encoding="utf-8", errors="replace", newline="")
+            sample = handle.read(4000)
+            handle.seek(0)
+            stream = handle
+            close = handle
+    try:
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+        except csv.Error:
+            dialect = csv.excel
+        for row in csv.reader(stream, dialect):
+            yield [expand_scientific(collapse(cell)) for cell in row]
+    finally:
+        if close is not None:
+            close.close()
+
+
+def read_csv(data: TableSource, max_store: int | None = None) -> list[list[str]]:
     rows, _total = _read_csv(data, max_store=max_store)
     return rows
 
 
-def _read_csv(data: bytes, max_store: int | None = None) -> tuple[list[list[str]], int]:
-    text = ""
-    for encoding in ("utf-8-sig", "utf-8", "utf-16", "cp1258", "cp1252"):
-        try:
-            text = data.decode(encoding)
-            break
-        except UnicodeDecodeError:
-            continue
-    if not text:
-        text = data.decode("utf-8", errors="replace")
-    sample = text[:4000]
-    try:
-        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
-    except csv.Error:
-        dialect = csv.excel
-    reader = csv.reader(io.StringIO(text), dialect)
+def _read_csv(data: TableSource, max_store: int | None = None) -> tuple[list[list[str]], int]:
     rows: list[list[str]] = []
     total = 0
-    for row in reader:
+    for row in iter_csv_rows(data):
         total += 1
         if max_store is None or len(rows) < max_store:
-            rows.append([expand_scientific(collapse(cell)) for cell in row])
+            rows.append(row)
     return rows, total
 
 
-def read_table(filename: str, data: bytes, max_store: int | None = None) -> list[list[str]]:
+def iter_raw_rows(filename: str, data: TableSource) -> Iterator[list[str]]:
+    name = (filename or "").casefold()
+    if name.endswith(".xls"):
+        raise ValueError("Hãy lưu file .xls thành .xlsx rồi nạp lại.")
+    if name.endswith(".xlsx") or name.endswith(".xlsm"):
+        yield from iter_xlsx_rows(data)
+        return
+    if name.endswith(".csv") or name.endswith(".tsv") or name.endswith(".txt"):
+        yield from iter_csv_rows(data)
+        return
+    if _is_zip_bytes(data):
+        yield from iter_xlsx_rows(data)
+        return
+    yield from iter_csv_rows(data)
+
+
+def read_table(filename: str, data: TableSource, max_store: int | None = None) -> list[list[str]]:
     rows, _total = _read_table(filename, data, max_store=max_store)
     return rows
 
 
-def _read_table(filename: str, data: bytes, max_store: int | None = None) -> tuple[list[list[str]], int]:
-    name = (filename or "").casefold()
+def _read_table(filename: str, data: TableSource, max_store: int | None = None) -> tuple[list[list[str]], int]:
     try:
-        if name.endswith(".xls"):
-            raise ValueError("Hãy lưu file .xls thành .xlsx rồi nạp lại.")
-        if name.endswith(".xlsx") or name.endswith(".xlsm"):
-            return _read_xlsx(data, max_store=max_store)
-        if name.endswith(".csv") or name.endswith(".tsv") or name.endswith(".txt"):
-            return _read_csv(data, max_store=max_store)
-        if data[:2] == b"PK":
-            return _read_xlsx(data, max_store=max_store)
-        return _read_csv(data, max_store=max_store)
+        rows: list[list[str]] = []
+        total = 0
+        for row in iter_raw_rows(filename, data):
+            total += 1
+            if max_store is None or len(rows) < max_store:
+                rows.append(row)
+        return rows, total
     except ValueError:
         raise
     except Exception as exc:
@@ -395,7 +531,7 @@ def describe_columns(headers: list[str]) -> list[dict[str, Any]]:
     return columns
 
 
-def preview_table(filename: str, data: bytes) -> dict[str, Any]:
+def preview_table(filename: str, data: TableSource) -> dict[str, Any]:
     stored, total = _read_table(filename, data, max_store=PREVIEW_STORE)
     truncated = total > len(stored)
     rows = _trim_table(stored)
@@ -498,21 +634,101 @@ def rows_from_table(rows: list[list[str]], mapping: dict[str, Any], allow_index:
     return extracted
 
 
-def rows_from_files(files: Iterable[tuple[str, bytes]], mapping: dict[str, Any]) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
+def _mapped_from_iter(
+    rows: Iterator[list[str]],
+    mapping: dict[str, Any],
+    allow_index: bool = True,
+) -> Iterator[dict[str, str]]:
+    headers: list[str] | None = None
+    indexes: dict[str, int | None] = {}
+    line_specs: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        if not any(collapse(cell) for cell in row):
+            continue
+        if headers is None:
+            headers = [collapse(cell) or f"Cột {column_letter(index)}" for index, cell in enumerate(row)]
+            indexes = {
+                field: resolve_index(headers, mapping.get(field), allow_index=allow_index) for field in FIELDS
+            }
+            line_specs = {field: _address_specs(mapping.get(field)) for field in LINE_FIELDS}
+            continue
+        raw: dict[str, str] = {}
+        for field in FIELDS:
+            if field in LINE_FIELDS:
+                parts = []
+                for spec in line_specs[field]:
+                    index = resolve_index(headers, spec, allow_index=allow_index)
+                    if index is not None and index < len(row):
+                        parts.append(row[index])
+                if not parts:
+                    index = indexes[field]
+                    if index is not None and index < len(row):
+                        parts.append(row[index])
+                raw[field] = join_address_lines(*parts)
+                continue
+            index = indexes[field]
+            raw[field] = row[index] if index is not None and index < len(row) else ""
+        cleaned = clean_row(raw)
+        if has_data(cleaned):
+            yield cleaned
+
+
+def iter_mapped_rows(
+    filename: str,
+    data: TableSource,
+    mapping: dict[str, Any],
+    allow_index: bool = True,
+) -> Iterator[dict[str, str]]:
+    yield from _mapped_from_iter(iter_raw_rows(filename, data), mapping, allow_index)
+
+
+def iter_mapped_file(
+    filename: str,
+    data: TableSource,
+    mapping: dict[str, Any],
+    first_width: int | None,
+) -> tuple[int | None, Iterator[dict[str, str]]]:
+    raw = iter_raw_rows(filename, data)
+    try:
+        first: list[str] | None = None
+        for row in raw:
+            if any(collapse(cell) for cell in row):
+                first = row
+                break
+        if first is None:
+            raw.close()
+            return first_width, iter(())
+        width = len(first)
+        if first_width is None:
+            first_width = width
+
+        def rows() -> Iterator[list[str]]:
+            try:
+                yield first
+                yield from raw
+            finally:
+                raw.close()
+
+        return first_width, _mapped_from_iter(rows(), mapping, allow_index=width == first_width)
+    except Exception:
+        raw.close()
+        raise
+
+
+def rows_from_files(
+    files: Iterable[tuple[str, TableSource]],
+    mapping: dict[str, Any],
+) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
     incoming: list[dict[str, str]] = []
     reports: list[dict[str, Any]] = []
     first_width: int | None = None
     for filename, data in files:
         try:
-            table = read_table(filename, data)
+            first_width, mapped = iter_mapped_file(filename, data, mapping, first_width)
+            rows = list(mapped)
         except ValueError as exc:
             reports.append({"name": filename, "rows": 0, "error": str(exc)})
             continue
-        trimmed = _trim_table(table)
-        width = len(trimmed[0]) if trimmed else 0
-        if first_width is None:
-            first_width = width
-        rows = rows_from_table(table, mapping, allow_index=width == first_width)
         incoming.extend(rows)
         reports.append({"name": filename, "rows": len(rows)})
     return incoming, reports
@@ -577,21 +793,20 @@ def write_xlsx(headers: list[str], rows: list[list[str]]) -> bytes:
     return buffer.getvalue()
 
 
-def phones_from_files(files: Iterable[tuple[str, bytes]]) -> tuple[list[str], list[dict[str, Any]]]:
+def phones_from_files(files: Iterable[tuple[str, TableSource]]) -> tuple[list[str], list[dict[str, Any]]]:
     phones: list[str] = []
     reports: list[dict[str, Any]] = []
     for filename, data in files:
+        found: list[str] = []
         try:
-            table = read_table(filename, data)
+            for row in iter_raw_rows(filename, data):
+                for cell in row:
+                    phone = clean_phone(cell)
+                    if phone:
+                        found.append(phone)
         except ValueError as exc:
             reports.append({"name": filename, "phones": 0, "error": str(exc)})
             continue
-        found: list[str] = []
-        for row in table:
-            for cell in row:
-                phone = clean_phone(cell)
-                if phone:
-                    found.append(phone)
         phones.extend(found)
         reports.append({"name": filename, "phones": len(found)})
     return phones, reports

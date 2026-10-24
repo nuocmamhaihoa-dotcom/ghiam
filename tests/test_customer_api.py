@@ -579,6 +579,71 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("spreadsheetml", response.headers["content-type"])
         self.assertGreater(len(response.content), 100)
 
+    def test_import_batches_keep_every_row(self) -> None:
+        from control_plane import customer_api as api
+
+        previous = api.IMPORT_BATCH
+        api.IMPORT_BATCH = 3
+        try:
+            rows = [[f"K{index}", f"0902{index:06d}", f"Địa chỉ {index}"] for index in range(11)]
+            imported = self.client.post(
+                "/v1/customers/import",
+                headers=self.headers,
+                data={
+                    "mapping": json.dumps(
+                        {
+                            "name": {"index": 0, "header": "Tên khách"},
+                            "phone": {"index": 1, "header": "SĐT"},
+                            "address": {"index": 2, "header": "Địa chỉ"},
+                        }
+                    )
+                },
+                files=[self._file("lo.xlsx", ["Tên khách", "SĐT", "Địa chỉ"], rows)],
+            )
+        finally:
+            api.IMPORT_BATCH = previous
+        self.assertEqual(imported.status_code, 200, imported.text)
+        body = imported.json()
+        self.assertEqual(body["stats"]["created"], 11)
+        self.assertEqual(body["files"][0]["rows"], 11)
+        listed = self.client.get("/v1/customers", headers=self.headers)
+        self.assertEqual(listed.json()["total"], 11)
+        phones = {item["phone"] for item in listed.json()["items"]}
+        self.assertEqual(len(phones), 11)
+
+    def test_preview_and_import_thousands_of_rows(self) -> None:
+        rows = [[f"K{index}", f"0903{index:06d}", f"Huế {index}"] for index in range(1200)]
+        name, body = self._xlsx("ngan.xlsx", ["Tên khách", "SĐT", "Địa chỉ"], rows)
+        preview = self.client.post(
+            "/v1/customers/preview",
+            headers=self.headers,
+            files=[("files", (name, body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(preview.status_code, 200, preview.text)
+        data = preview.json()
+        self.assertEqual(data["files"][0]["rowCount"], 1200)
+        self.assertTrue(data["files"][0]["truncated"])
+        self.assertIn("đĩa", data["applyNote"])
+        imported = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={
+                "mapping": json.dumps(
+                    {
+                        "name": {"index": 0, "header": "Tên khách"},
+                        "phone": {"index": 1, "header": "SĐT"},
+                        "address": {"index": 2, "header": "Địa chỉ"},
+                    }
+                )
+            },
+            files=[self._file("ngan.xlsx", ["Tên khách", "SĐT", "Địa chỉ"], rows)],
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+        self.assertEqual(imported.json()["stats"]["created"], 1200)
+        self.assertEqual(imported.json()["total"], 1200)
+        leftover = list((settings.data_dir / "uploads").glob("khach-up-*")) if (settings.data_dir / "uploads").exists() else []
+        self.assertEqual(leftover, [])
+
 
 if __name__ == "__main__":
     unittest.main()

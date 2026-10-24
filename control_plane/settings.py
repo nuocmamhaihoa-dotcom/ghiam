@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,11 +65,21 @@ class ServerSettings:
             return None
         return self.max_upload_mb * 1024 * 1024
 
+    def tmp_dir(self) -> Path:
+        return self.data_dir / "tmp"
+
+    def uploads_dir(self) -> Path:
+        return self.data_dir / "uploads"
+
     def ensure_dirs(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.packages_dir.mkdir(parents=True, exist_ok=True)
         self.video_dir.mkdir(parents=True, exist_ok=True)
         (self.data_dir / "sync").mkdir(parents=True, exist_ok=True)
+        self.tmp_dir().mkdir(parents=True, exist_ok=True)
+        self.uploads_dir().mkdir(parents=True, exist_ok=True)
+        os.environ["TMPDIR"] = str(self.tmp_dir())
+        tempfile.tempdir = str(self.tmp_dir())
 
 
 settings = ServerSettings()

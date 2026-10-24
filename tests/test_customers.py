@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from control_plane.customers import (
     clean_cod_amount,
@@ -246,6 +248,22 @@ class ExcelMappingTests(unittest.TestCase):
         self.assertTrue(preview["truncated"])
         self.assertLessEqual(len(preview["samples"]), 8)
         self.assertLessEqual(len(preview["detectRows"]), 200)
+
+    def test_preview_from_disk_path_matches_bytes(self) -> None:
+        payload = write_xlsx(
+            ["Tên khách", "SĐT", "Địa chỉ khách"],
+            [[f"K{index}", f"0901{index:06d}", f"Huế {index}"] for index in range(80)],
+        )
+        from_bytes = preview_table("dia.xlsx", payload)
+        with tempfile.TemporaryDirectory(prefix="khach-path-") as folder:
+            path = Path(folder) / "dia.xlsx"
+            path.write_bytes(payload)
+            from_path = preview_table("dia.xlsx", path)
+        self.assertEqual(from_path["rowCount"], 80)
+        self.assertEqual(from_path["rowCount"], from_bytes["rowCount"])
+        self.assertEqual(from_path["headers"], from_bytes["headers"])
+        self.assertEqual(from_path["samples"], from_bytes["samples"])
+        self.assertEqual(from_path["suggested"], from_bytes["suggested"])
 
     def test_same_mapping_applies_to_every_file_in_batch(self) -> None:
         first = write_xlsx(

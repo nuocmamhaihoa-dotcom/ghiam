@@ -5,7 +5,9 @@ from __future__ import annotations
 import hmac
 import json
 import sys
+import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
@@ -30,12 +32,13 @@ from control_plane.customers import (
 )
 from control_plane.excel_import import (
     FIELD_LABELS,
+    IMPORT_BATCH,
     header_key,
+    iter_mapped_file,
     mapping_from_form,
     merge_preview_columns,
     phones_from_files,
     preview_table,
-    rows_from_files,
     write_xlsx,
 )
 from control_plane.settings import settings
@@ -92,7 +95,42 @@ def _is_upload(value: object) -> bool:
     )
 
 
-async def _read_customer_form(request: Request) -> tuple[list[tuple[str, bytes]], dict[str, str], list[str]]:
+UPLOAD_CHUNK = 1024 * 1024
+
+
+def _cleanup_uploads(files: list[tuple[str, Path]]) -> None:
+    for _name, path in files:
+        try:
+            Path(path).unlink(missing_ok=True)
+        except OSError:
+            continue
+
+
+async def _spool_upload(value: Any) -> Path:
+    settings.ensure_dirs()
+    handle = tempfile.NamedTemporaryFile(
+        prefix="khach-up-",
+        suffix=".bin",
+        dir=settings.uploads_dir(),
+        delete=False,
+    )
+    path = Path(handle.name)
+    try:
+        while True:
+            chunk = await value.read(UPLOAD_CHUNK)
+            if not chunk:
+                break
+            handle.write(chunk)
+        handle.flush()
+    except Exception:
+        handle.close()
+        path.unlink(missing_ok=True)
+        raise
+    handle.close()
+    return path
+
+
+async def _read_customer_form(request: Request) -> tuple[list[tuple[str, Path]], dict[str, str], list[str]]:
     max_part = settings.upload_limit_bytes()
     try:
         form = await request.form(
@@ -105,24 +143,74 @@ async def _read_customer_form(request: Request) -> tuple[list[tuple[str, bytes]]
             status_code=400,
             detail="Không đọc được file tải lên. Không giới hạn số file và dung lượng; hãy thử lại hoặc gửi tiếp các file còn lại.",
         ) from exc
-    files: list[tuple[str, bytes]] = []
+    files: list[tuple[str, Path]] = []
     fields: dict[str, str] = {}
     problems: list[str] = []
     try:
         for key, value in form.multi_items():
             if _is_upload(value):
                 name = str(getattr(value, "filename", None) or "khach.xlsx")
-                payload = await value.read()
-                if not payload:
+                path = await _spool_upload(value)
+                if path.stat().st_size == 0:
+                    path.unlink(missing_ok=True)
                     problems.append(f"{name} đang trống.")
                     continue
-                files.append((name, payload))
+                files.append((name, path))
                 continue
             if key not in fields:
                 fields[key] = str(value or "")
+    except Exception:
+        _cleanup_uploads(files)
+        raise
     finally:
         await form.close()
     return files, fields, problems
+
+
+def _blank_import_stats() -> dict[str, int]:
+    return {
+        "created": 0,
+        "updated": 0,
+        "unchanged": 0,
+        "skipped": 0,
+        "absorbed": 0,
+        "incoming": 0,
+        "kept": 0,
+        "total": 0,
+        "removed": 0,
+    }
+
+
+def _add_import_stats(total: dict[str, int], part: dict[str, int]) -> None:
+    for key in ("created", "updated", "unchanged", "skipped", "absorbed", "incoming", "kept", "removed"):
+        total[key] += int(part.get(key) or 0)
+    total["total"] = int(part.get("total") or total["total"])
+
+
+def _fold_import_batch(
+    stored: list[dict[str, Any]],
+    incoming: list[dict[str, str]],
+    now: str,
+) -> tuple[list[dict[str, Any]], dict[str, int], list[str]]:
+    if not incoming:
+        stats = _blank_import_stats()
+        stats["total"] = len(stored)
+        return stored, stats, []
+    repair_customer_rows(incoming)
+    folded, stats, removed = fold_customers(stored, incoming, now)
+    db.replace_customers(settings.db_path, folded, removed)
+    return folded, stats, removed
+
+
+def _collect_changed(changed: list[dict[str, str]], folded: list[dict[str, Any]]) -> None:
+    if len(changed) >= 200:
+        return
+    for row in folded:
+        if not row.get("write"):
+            continue
+        changed.append(public_customer(row))
+        if len(changed) >= 200:
+            return
 
 
 @router.get("/v1/customers")
@@ -160,53 +248,56 @@ async def customers_preview(
 ) -> dict[str, Any]:
     _auth(authorization)
     uploaded, _fields, problems = await _read_customer_form(request)
-    if not uploaded:
-        raise HTTPException(
-            status_code=400,
-            detail="Hãy chọn ít nhất một file Excel." + ((" " + " ".join(problems)) if problems else ""),
-        )
-    previews: list[dict[str, Any]] = []
-    for name, payload in uploaded:
-        try:
-            previews.append(preview_table(name, payload))
-        except ValueError as exc:
-            problems.append(f"{name}: {exc}")
-    if not previews:
-        raise HTTPException(status_code=400, detail="Không đọc được file nào. " + " ".join(problems))
-    first = previews[0]
-    columns = merge_preview_columns(previews)
-    different = [
-        item["name"]
-        for item in previews[1:]
-        if item["headers"] != first["headers"]
-    ]
-    headers = [str(column.get("header") or "") for column in columns]
-    values = _column_values_from_previews(columns, previews)
-    suggested, details = assign_fields(headers, values)
-    payload = dict(suggested)
-    for field in LINE_FIELDS:
-        indexes = (details.get(field) or {}).get("indexes") or []
-        if indexes:
-            payload[f"{field}Columns"] = indexes
-    return {
-        "files": [
-            {
-                "name": item["name"],
-                "columns": item["columns"],
-                "samples": item["samples"],
-                "rowCount": item["rowCount"],
-                "truncated": item["truncated"],
-            }
-            for item in previews
-        ],
-        "fileErrors": problems,
-        "columns": columns,
-        "suggested": payload,
-        "detectNote": explain_mapping(details, headers),
-        "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
-        "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này. Không giới hạn số file và dung lượng. Cột không trùng tên kho thì bỏ qua, không đoán nội dung ô.",
-        "headerMismatch": different,
-    }
+    try:
+        if not uploaded:
+            raise HTTPException(
+                status_code=400,
+                detail="Hãy chọn ít nhất một file Excel." + ((" " + " ".join(problems)) if problems else ""),
+            )
+        previews: list[dict[str, Any]] = []
+        for name, payload in uploaded:
+            try:
+                previews.append(preview_table(name, payload))
+            except ValueError as exc:
+                problems.append(f"{name}: {exc}")
+        if not previews:
+            raise HTTPException(status_code=400, detail="Không đọc được file nào. " + " ".join(problems))
+        first = previews[0]
+        columns = merge_preview_columns(previews)
+        different = [
+            item["name"]
+            for item in previews[1:]
+            if item["headers"] != first["headers"]
+        ]
+        headers = [str(column.get("header") or "") for column in columns]
+        values = _column_values_from_previews(columns, previews)
+        suggested, details = assign_fields(headers, values)
+        payload = dict(suggested)
+        for field in LINE_FIELDS:
+            indexes = (details.get(field) or {}).get("indexes") or []
+            if indexes:
+                payload[f"{field}Columns"] = indexes
+        return {
+            "files": [
+                {
+                    "name": item["name"],
+                    "columns": item["columns"],
+                    "samples": item["samples"],
+                    "rowCount": item["rowCount"],
+                    "truncated": item["truncated"],
+                }
+                for item in previews
+            ],
+            "fileErrors": problems,
+            "columns": columns,
+            "suggested": payload,
+            "detectNote": explain_mapping(details, headers),
+            "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
+            "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này. Không giới hạn số file và dung lượng. File nằm trên đĩa khi đọc, không nhét cả file vào bộ nhớ. Cột không trùng tên kho thì bỏ qua, không đoán nội dung ô.",
+            "headerMismatch": different,
+        }
+    finally:
+        _cleanup_uploads(uploaded)
 
 
 def _column_values_from_previews(
@@ -238,41 +329,68 @@ async def customers_import(
     db.init_db(settings.db_path)
     uploaded, fields, problems = await _read_customer_form(request)
     try:
-        parsed = mapping_from_form(json.loads(fields.get("mapping") or ""))
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=400, detail="Bảng chọn cột không đọc được.") from exc
-    if not any(_mapped(spec) for spec in parsed.values()):
-        raise HTTPException(status_code=400, detail="Hãy chọn ít nhất một cột dữ liệu.")
-    if not uploaded:
-        raise HTTPException(
-            status_code=400,
-            detail="Hãy chọn ít nhất một file Excel." + ((" " + " ".join(problems)) if problems else ""),
+        try:
+            parsed = mapping_from_form(json.loads(fields.get("mapping") or ""))
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="Bảng chọn cột không đọc được.") from exc
+        if not any(_mapped(spec) for spec in parsed.values()):
+            raise HTTPException(status_code=400, detail="Hãy chọn ít nhất một cột dữ liệu.")
+        if not uploaded:
+            raise HTTPException(
+                status_code=400,
+                detail="Hãy chọn ít nhất một file Excel." + ((" " + " ".join(problems)) if problems else ""),
+            )
+        stored = db.list_customers(settings.db_path)
+        stats = _blank_import_stats()
+        stats["total"] = len(stored)
+        changed: list[dict[str, str]] = []
+        file_reports: list[dict[str, Any]] = []
+        first_width: int | None = None
+        now = utcnow()
+        incoming_total = 0
+        for name, payload in uploaded:
+            try:
+                first_width, mapped = iter_mapped_file(name, payload, parsed, first_width)
+                batch: list[dict[str, str]] = []
+                count = 0
+                for row in mapped:
+                    batch.append(row)
+                    count += 1
+                    if len(batch) >= IMPORT_BATCH:
+                        stored, part, _removed = _fold_import_batch(stored, batch, now)
+                        _add_import_stats(stats, part)
+                        _collect_changed(changed, stored)
+                        batch = []
+                if batch:
+                    stored, part, _removed = _fold_import_batch(stored, batch, now)
+                    _add_import_stats(stats, part)
+                    _collect_changed(changed, stored)
+                incoming_total += count
+                file_reports.append({"name": name, "rows": count})
+            except ValueError as exc:
+                file_reports.append({"name": name, "rows": 0, "error": str(exc)})
+        problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
+        problems = [item for item in problems if item]
+        if incoming_total == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Không đọc được dòng khách nào. " + " ".join(problems),
+            )
+        stats["total"] = db.customer_count(settings.db_path)
+        summary = (
+            f"Nạp Excel: thêm {stats['created']}, bổ sung {stats['updated']}, "
+            f"giữ {stats['unchanged']}, gộp {stats['absorbed']}."
         )
-    incoming, file_reports = rows_from_files(uploaded, parsed)
-    problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
-    problems = [item for item in problems if item]
-    if not incoming:
-        raise HTTPException(
-            status_code=400,
-            detail="Không đọc được dòng khách nào. " + " ".join(problems),
-        )
-    stored = db.list_customers(settings.db_path)
-    folded, stats, removed = fold_customers(stored, incoming, utcnow())
-    repair_customer_rows(folded)
-    db.replace_customers(settings.db_path, folded, removed)
-    summary = (
-        f"Nạp Excel: thêm {stats['created']}, bổ sung {stats['updated']}, "
-        f"giữ {stats['unchanged']}, gộp {stats['absorbed']}."
-    )
-    _remember(summary, json.dumps({"files": file_reports, "stats": stats}, ensure_ascii=False))
-    changed = [public_customer(row) for row in folded if row.get("write")]
-    return {
-        "stats": stats,
-        "files": file_reports,
-        "fileErrors": problems,
-        "items": changed[:200],
-        "total": stats["total"],
-    }
+        _remember(summary, json.dumps({"files": file_reports, "stats": stats}, ensure_ascii=False))
+        return {
+            "stats": stats,
+            "files": file_reports,
+            "fileErrors": problems,
+            "items": changed[:200],
+            "total": stats["total"],
+        }
+    finally:
+        _cleanup_uploads(uploaded)
 
 
 def _unique_phones(*groups: list[str]) -> list[str]:
@@ -301,14 +419,17 @@ def _lookup_payload(text: str, file_phones: list[str]) -> tuple[list[dict[str, A
 
 async def _lookup_from_request(request: Request) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
     uploaded, fields, problems = await _read_customer_form(request)
-    file_phones: list[str] = []
-    file_reports: list[dict[str, Any]] = []
-    if uploaded:
-        file_phones, file_reports = phones_from_files(uploaded)
-        problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
-    items, stats = _lookup_payload(fields.get("text") or "", file_phones)
-    stats["fileErrors"] = [item for item in problems if item]
-    return items, stats, file_reports
+    try:
+        file_phones: list[str] = []
+        file_reports: list[dict[str, Any]] = []
+        if uploaded:
+            file_phones, file_reports = phones_from_files(uploaded)
+            problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
+        items, stats = _lookup_payload(fields.get("text") or "", file_phones)
+        stats["fileErrors"] = [item for item in problems if item]
+        return items, stats, file_reports
+    finally:
+        _cleanup_uploads(uploaded)
 
 
 @router.post("/v1/customers/lookup")
