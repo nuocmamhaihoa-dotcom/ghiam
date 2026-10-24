@@ -381,6 +381,33 @@ def looks_like_name(value: str) -> bool:
     return True
 
 
+_SURNAMES = frozenset(
+    {
+        "nguyen", "tran", "le", "pham", "hoang", "huynh", "phan", "vu", "vo", "dang", "bui", "do", "ho",
+        "ngo", "duong", "ly", "dinh", "doan", "lam", "mai", "trinh", "truong", "ha", "cao", "luong", "chu",
+        "ta", "quach", "to", "thai", "kieu", "lai", "la", "luu", "tong", "phung", "tang", "thach", "khuc",
+        "chau", "giang", "lu", "trieu", "ung", "van", "vuong", "tieu", "mac", "nong", "quan", "son", "kim",
+    }
+)
+
+
+def name_column_score(cells: list[str]) -> float:
+    """Cột tên người: giá trị trông như tên, ít lặp lại, thường bắt đầu bằng họ.
+
+    Cột nhãn lặp lại (tên hàng, trạng thái, nhóm) cũng toàn chữ nhưng rất ít giá trị khác nhau — trừ điểm.
+    """
+    if not cells:
+        return 0.0
+    total = len(cells)
+    base = _ratio(sum(1 for item in cells if looks_like_name(item)), total)
+    if total >= 20:
+        distinct = len(set(item.casefold() for item in cells)) / total
+        if distinct < 0.3:
+            base *= distinct / 0.3
+    surname = _ratio(sum(1 for item in cells if fold_vietnamese(item).split(" ", 1)[0] in _SURNAMES), total)
+    return base + 0.3 * surname
+
+
 def header_key(value: str) -> str:
     return fold_vietnamese(value)
 
@@ -547,6 +574,12 @@ def _fill_core_from_values(
             values = column_values[index] if index < len(column_values) else []
             cells = [collapse(item) for item in values if collapse(item)]
             if not cells:
+                continue
+            if field == "name":
+                score = name_column_score(cells)
+                if score > best_score:
+                    best_score = score
+                    best_index = index
                 continue
             score = _ratio(sum(1 for item in cells if scorers[field](item)), len(cells))
             if score > best_score:

@@ -21,6 +21,7 @@ from control_plane.customers import (
     expand_scientific,
     fold_customers,
     ingest_customers,
+    lookup_by_phone_map,
     lookup_by_phones,
     matches_query,
     phones_from_text,
@@ -35,6 +36,7 @@ from control_plane.excel_import import (
     iter_mapped_file,
     iter_xlsx_rows,
     mapping_from_form,
+    phones_from_files,
     phone_from_cell,
     phone_from_row_cells,
     preview_table,
@@ -281,6 +283,16 @@ class CustomerMergeTests(unittest.TestCase):
         items84, stats84 = lookup_by_phones(stored, ["84901222333"])
         self.assertEqual(stats84["found"], 1)
         self.assertEqual(items84[0]["customer"]["name"], "Lan")
+        mapped_items, mapped_stats = lookup_by_phone_map(
+            {
+                "0901222333": [stored[0]],
+                "0901444555": [stored[1]],
+                "0901999888": [],
+            },
+            phones,
+        )
+        self.assertEqual(mapped_stats["found"], 2)
+        self.assertEqual(mapped_items[0]["customer"]["name"], "Lan")
 
     def test_search_matches_any_field(self) -> None:
         row = {"name": "Nguyễn A", "phone": "0901234567", "address": "Hà Nội", "facebookUid": "1", "tiktokId": "ban"}
@@ -311,6 +323,15 @@ class ExcelMappingTests(unittest.TestCase):
             b"<rPh><t>x</t></rPh></si></sst>"
         )
         self.assertEqual(_shared_strings(payload), ["Lan", "0901"])
+
+    def test_phones_from_files_reads_phone_column_first(self) -> None:
+        payload = write_xlsx(
+            ["Tên khách", "SĐT", "Ghi chú"],
+            [["Lan", "0901222333", "gọi lại"], ["Minh", "0901444555", ""]],
+        )
+        phones, reports = phones_from_files([("so.xlsx", payload)])
+        self.assertEqual(phones, ["0901222333", "0901444555"])
+        self.assertEqual(reports[0]["phones"], 2)
 
     def test_preview_counts_all_rows_without_storing_them(self) -> None:
         payload = write_xlsx(
@@ -582,6 +603,22 @@ class IngestSqlTests(unittest.TestCase):
         self.assertEqual(len(sample), 1)
         self.assertEqual(sample[0]["name"], "K12")
         self.assertEqual(sample[0]["address"], "Huế 12")
+
+    def test_ingest_one_roundtrip_for_thousands_of_phones(self) -> None:
+        now = "2026-01-01T00:00:00+00:00"
+        incoming = ({"name": f"K{index}", "phone": f"0906{index:07d}"} for index in range(2200))
+        stats, _preview = ingest_customers(self.db_path, incoming, now, flush_every=2200)
+        self.assertEqual(stats["created"], 2200)
+        self.assertEqual(stats["total"], 2200)
+        found = db.customers_for_phones(
+            self.db_path,
+            ["09060000003", "849060000004", "09069999999"],
+        )
+        self.assertEqual(len(found["09060000003"]), 1)
+        self.assertEqual(found["09060000003"][0]["name"], "K3")
+        self.assertEqual(len(found["849060000004"]), 1)
+        self.assertEqual(found["849060000004"][0]["name"], "K4")
+        self.assertEqual(found["09069999999"], [])
 
     def test_ingest_merges_same_phone_and_skips_no_phone(self) -> None:
         now = "2026-01-01T00:00:00+00:00"

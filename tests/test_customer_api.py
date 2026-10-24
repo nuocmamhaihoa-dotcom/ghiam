@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -21,14 +22,19 @@ Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from control_plane import customer_api as api  # noqa: E402
 from control_plane import db  # noqa: E402
 from control_plane.app import app  # noqa: E402
-from control_plane.excel_import import write_xlsx  # noqa: E402
+from control_plane.excel_import import iter_xlsx_rows, write_xlsx  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
 
 
 def tearDownModule() -> None:
     shutil.rmtree(_TMP, ignore_errors=True)
+
+
+def khach_upload_exists(upload_id: str) -> bool:
+    return (settings.data_dir / "khach-uploads" / upload_id / "data").exists()
 
 
 class CustomerApiTests(unittest.TestCase):
@@ -113,6 +119,13 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("Số 84", home.text)
         self.assertIn("không lấy UID Facebook", home.text)
         self.assertIn("không bắt buộc chọn file", home.text)
+        self.assertIn("Tra theo lô số", home.text)
+        self.assertIn("chia mảnh 8 MB", home.text)
+        self.assertIn("/v1/customers/uploads", home.text)
+        self.assertIn("requestId", home.text)
+        self.assertIn("resumeJob", home.text)
+        self.assertIn("Tải Excel kết quả không phải gửi lại file", home.text)
+        self.assertIn("Một ô có hai số", home.text)
         self.assertIn("lookupError", home.text)
         self.assertIn("không cần chọn file", home.text)
         self.assertIn("lookupJsonBody", home.text)
@@ -574,6 +587,24 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(exported.status_code, 200)
         self.assertIn("spreadsheetml", exported.headers["content-type"])
 
+        previous_limit = api.LOOKUP_RETURN_LIMIT
+        api.LOOKUP_RETURN_LIMIT = 1
+        try:
+            capped = self.client.post(
+                "/v1/customers/lookup",
+                headers=self.headers,
+                json={"text": "0375866792\n0901222333\n0985098234"},
+            )
+        finally:
+            api.LOOKUP_RETURN_LIMIT = previous_limit
+        self.assertEqual(capped.status_code, 200, capped.text)
+        capped_body = capped.json()
+        self.assertEqual(capped_body["stats"]["queried"], 3)
+        self.assertEqual(capped_body["stats"]["found"], 2)
+        self.assertEqual(len(capped_body["items"]), 1)
+        self.assertEqual(capped_body["stats"]["shown"], 1)
+        self.assertEqual(capped_body["stats"]["hidden"], 2)
+
     def test_preview_and_import_many_files(self) -> None:
         files = [
             self._file(f"f{index}.xlsx", ["Tên khách", "SĐT"], [[f"K{index}", f"0901000{index:03d}"]])
@@ -720,6 +751,170 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(looked.json()["stats"]["found"], 1)
         self.assertTrue(looked.json()["fileErrors"])
 
+    def _upload(self, name: str, payload: bytes, chunk: int = 4000, modified: int = 123) -> str:
+        created = self.client.post(
+            "/v1/customers/uploads",
+            headers=self.headers,
+            json={"name": name, "size": len(payload), "lastModified": modified},
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        upload_id = created.json()["uploadId"]
+        offset = created.json()["received"]
+        while offset < len(payload):
+            sent = self.client.put(
+                f"/v1/customers/uploads/{upload_id}?offset={offset}",
+                headers={**self.headers, "Content-Type": "application/octet-stream"},
+                content=payload[offset : offset + chunk],
+            )
+            self.assertEqual(sent.status_code, 200, sent.text)
+            offset = sent.json()["received"]
+        return upload_id
+
+    def _wait_job(self, job: dict) -> dict:
+        for _ in range(600):
+            if job["status"] in ("done", "error", "interrupted"):
+                return job
+            time.sleep(0.05)
+            polled = self.client.get(f"/v1/customers/jobs/{job['id']}", headers=self.headers)
+            self.assertEqual(polled.status_code, 200, polled.text)
+            job = polled.json()["job"]
+        self.fail(f"việc chưa xong: {job}")
+
+    def test_chunked_upload_resumes_and_is_reused(self) -> None:
+        payload = write_xlsx(["Tên khách", "SĐT"], [[f"K{index}", f"0907{index:06d}"] for index in range(400)])
+        created = self.client.post(
+            "/v1/customers/uploads",
+            headers=self.headers,
+            json={"name": "lon.xlsx", "size": len(payload), "lastModified": 99},
+        )
+        upload_id = created.json()["uploadId"]
+        self.assertEqual(created.json()["received"], 0)
+        first = self.client.put(
+            f"/v1/customers/uploads/{upload_id}?offset=0",
+            headers={**self.headers, "Content-Type": "application/octet-stream"},
+            content=payload[:1000],
+        )
+        self.assertEqual(first.json()["received"], 1000)
+        wrong = self.client.put(
+            f"/v1/customers/uploads/{upload_id}?offset=0",
+            headers={**self.headers, "Content-Type": "application/octet-stream"},
+            content=payload[:1000],
+        )
+        self.assertEqual(wrong.status_code, 409, wrong.text)
+        self.assertEqual(wrong.json()["received"], 1000)
+        resumed = self.client.post(
+            "/v1/customers/uploads",
+            headers=self.headers,
+            json={"name": "lon.xlsx", "size": len(payload), "lastModified": 99},
+        )
+        self.assertEqual(resumed.json()["uploadId"], upload_id)
+        self.assertEqual(resumed.json()["received"], 1000)
+        self.assertEqual(self._upload("lon.xlsx", payload, modified=99), upload_id)
+        again = self.client.post(
+            "/v1/customers/uploads",
+            headers=self.headers,
+            json={"name": "lon.xlsx", "size": len(payload), "lastModified": 99},
+        )
+        self.assertTrue(again.json()["complete"])
+        other = self.client.post(
+            "/v1/customers/uploads",
+            headers=self.headers,
+            json={"name": "lon.xlsx", "size": len(payload), "lastModified": 100},
+        )
+        self.assertNotEqual(other.json()["uploadId"], upload_id)
+        too_long = self.client.put(
+            f"/v1/customers/uploads/{upload_id}?offset={len(payload)}",
+            headers={**self.headers, "Content-Type": "application/octet-stream"},
+            content=b"xx",
+        )
+        self.assertEqual(too_long.status_code, 400, too_long.text)
+        missing = self.client.get("/v1/customers/uploads/../../etc", headers=self.headers)
+        self.assertIn(missing.status_code, (404, 405))
+        self.assertEqual(self.client.get("/v1/customers/uploads/" + "0" * 32, headers=self.headers).status_code, 404)
+
+    def test_import_job_from_uploaded_file_runs_once(self) -> None:
+        rows = [[f"Khách {index}", f"0908{index:06d}", f"Huế {index}"] for index in range(1500)]
+        rows += [["Khách 1", "0908000001", "Huế 1"]]
+        payload = write_xlsx(["Tên khách", "SĐT", "Địa chỉ"], rows)
+        upload_id = self._upload("nap.xlsx", payload, chunk=9000)
+        preview = self.client.post("/v1/customers/preview", headers=self.headers, json={"uploads": [upload_id]})
+        self.assertEqual(preview.status_code, 200, preview.text)
+        self.assertEqual(preview.json()["files"][0]["rowCount"], 1501)
+        body = {
+            "uploads": [upload_id],
+            "mapping": {
+                "name": {"index": 0, "header": "Tên khách"},
+                "phone": {"index": 1, "header": "SĐT"},
+                "address": {"index": 2, "header": "Địa chỉ", "columns": [{"index": 2, "header": "Địa chỉ"}]},
+            },
+            "requestId": "req-nap-mot-lan-0001",
+            "expectedRows": 1501,
+        }
+        started = self.client.post("/v1/customers/import", headers=self.headers, json=body)
+        self.assertEqual(started.status_code, 200, started.text)
+        job = self._wait_job(started.json()["job"])
+        self.assertEqual(job["status"], "done", job)
+        stats = job["result"]["stats"]
+        self.assertEqual((stats["incoming"], stats["created"], stats["unchanged"]), (1501, 1500, 1))
+        self.assertEqual(job["progress"]["incoming"], 1501)
+        repeat = self.client.post("/v1/customers/import", headers=self.headers, json=body)
+        self.assertEqual(repeat.json()["job"]["id"], job["id"])
+        sessions = self.client.get("/v1/customers/sessions", headers=self.headers).json()
+        self.assertEqual(len(sessions["sessions"]), 1)
+        self.assertEqual(sessions["total"], 1500)
+        kept = list((settings.data_dir / "imports").rglob("nap.xlsx"))
+        self.assertTrue(kept)
+        self.assertTrue(khach_upload_exists(upload_id))
+        missing = self.client.get("/v1/customers/jobs/" + "f" * 32, headers=self.headers)
+        self.assertEqual(missing.status_code, 404)
+        broken = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            json={"uploads": ["0" * 32], "mapping": body["mapping"], "requestId": "req-nap-loi-0002"},
+        )
+        self.assertEqual(broken.status_code, 404, broken.text)
+
+    def test_lookup_job_exports_without_resending(self) -> None:
+        now = "2026-01-01T00:00:00+00:00"
+        db.replace_customers(
+            settings.db_path,
+            [
+                {"id": f"c{index}", "name": f"Lan {index}", "phone": f"0909{index:06d}", "createdAt": now, "updatedAt": now}
+                for index in range(300)
+            ],
+            [],
+        )
+        payload = write_xlsx(
+            ["SĐT người nhận", "Ghi chú"],
+            [[f"84909{index:06d}", "gọi 0909000005 - 0901999888" if index == 0 else ""] for index in range(250)],
+        )
+        upload_id = self._upload("tra.xlsx", payload)
+        previous_limit = api.LOOKUP_RETURN_LIMIT
+        api.LOOKUP_RETURN_LIMIT = 100
+        try:
+            started = self.client.post(
+                "/v1/customers/lookup",
+                headers=self.headers,
+                json={"text": "0909000299\n0900111222", "uploads": [upload_id], "requestId": "req-tra-0001"},
+            )
+            self.assertEqual(started.status_code, 200, started.text)
+            job = self._wait_job(started.json()["job"])
+        finally:
+            api.LOOKUP_RETURN_LIMIT = previous_limit
+        self.assertEqual(job["status"], "done", job)
+        result = job["result"]
+        self.assertEqual(result["stats"]["queried"], 253)
+        self.assertEqual(result["stats"]["found"], 251)
+        self.assertEqual(result["stats"]["missing"], 2)
+        self.assertEqual(len(result["items"]), 100)
+        self.assertEqual(result["stats"]["hidden"], 153)
+        exported = self.client.get(f"/v1/customers/lookup/jobs/{job['id']}/export", headers=self.headers)
+        self.assertEqual(exported.status_code, 200)
+        rows = list(iter_xlsx_rows(exported.content))
+        self.assertEqual(len(rows), 254)
+        self.assertEqual(rows[1][:2], ["0909000299", "Có"])
+        self.assertEqual(sum(1 for row in rows[1:] if row[1] == "Không"), 2)
+
     def test_list_caps_visible_items_without_hiding_total(self) -> None:
         now = "2026-01-01T00:00:00+00:00"
         db.replace_customers(
@@ -777,8 +972,6 @@ class CustomerApiTests(unittest.TestCase):
         self.assertGreater(len(response.content), 100)
 
     def test_import_batches_keep_every_row(self) -> None:
-        from control_plane import customer_api as api
-
         previous = api.IMPORT_BATCH
         api.IMPORT_BATCH = 3
         try:

@@ -158,6 +158,7 @@
     <h2>Thêm file Excel</h2>
     <div class="drop" id="drop">
       <p>Kéo bao nhiêu file Excel cũng được, không giới hạn số file và dung lượng</p>
+      <p class="note">File chỉ gửi lên một lần, chia mảnh 8 MB: rớt mạng thì tự gửi tiếp từ chỗ dừng. Nạp chạy trên máy chủ, tắt trang vẫn nạp tiếp; bấm lại không nạp trùng.</p>
       <p class="note">hoặc</p>
       <button class="file" type="button" id="pick">Chọn file Excel</button>
       <input id="file" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" multiple />
@@ -194,7 +195,7 @@
 
   <section>
     <h2>Tra cứu hàng loạt</h2>
-    <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. File chỉ lấy ô số điện thoại Việt Nam, không lấy UID Facebook. Chọn thêm file là cộng vào. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
+    <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì tra cả hai. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
     <label for="lookupPaste">Danh sách số điện thoại</label>
     <textarea id="lookupPaste" placeholder="0901222333"></textarea>
     <p class="row" style="margin-top:0.7rem">
@@ -225,6 +226,9 @@
   var pendingFiles = [];
   var pendingKeys = {};
   var preview = null;
+  var previewTurn = 0;
+  var uploadIds = {};
+  var UPLOAD_CHUNK = 8 * 1024 * 1024;
   var fieldOrder = ["name", "phone", "address", "adminAddress", "orderContent", "codAmount", "facebookUid", "tiktokId"];
   var lineFields = {
     address: "addressColumns",
@@ -850,47 +854,280 @@
     previewPending();
   }
 
-  function buildPendingForm(extra) {
-    var data = new FormData();
-    pendingFiles.forEach(function (file) { data.append("files", file, file.name); });
-    if (extra) Object.keys(extra).forEach(function (key) { data.append(key, extra[key]); });
-    return data;
+  function newRequestId() {
+    if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID().replace(/-/g, "");
+    var out = "";
+    for (var index = 0; index < 32; index += 1) out += Math.floor(Math.random() * 16).toString(16);
+    return out;
   }
 
-  function progressLabel(label, loaded, total) {
-    if (!total) return label;
-    var sent = Math.round(loaded / 1024 / 1024);
-    var all = Math.max(1, Math.round(total / 1024 / 1024));
-    return label + " " + sent + "/" + all + " MB";
+  function mb(bytes) {
+    var value = (bytes || 0) / 1024 / 1024;
+    return value >= 100 ? String(Math.round(value)) : value.toFixed(1).replace(".", ",");
+  }
+
+  function fatalError(message) {
+    var error = new Error(message);
+    error.fatal = true;
+    return error;
+  }
+
+  function sendChunk(url, blob, onProgress) {
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open("PUT", url);
+      xhr.responseType = "text";
+      if (token()) xhr.setRequestHeader("Authorization", "Bearer " + token());
+      xhr.setRequestHeader("Content-Type", "application/octet-stream");
+      xhr.timeout = 15 * 60 * 1000;
+      if (xhr.upload && onProgress) {
+        xhr.upload.onprogress = function (event) {
+          if (event.lengthComputable) onProgress(event.loaded);
+        };
+      }
+      xhr.onload = function () {
+        var body = {};
+        try { body = JSON.parse(xhr.responseText || "{}"); } catch (error) { body = {}; }
+        resolve({ status: xhr.status, body: body });
+      };
+      xhr.onerror = function () { reject(new Error("network")); };
+      xhr.ontimeout = function () {
+        var error = new Error("timeout");
+        error.name = "AbortError";
+        reject(error);
+      };
+      xhr.send(blob);
+    });
+  }
+
+  async function uploadStatus(id) {
+    try {
+      var response = await api("/v1/customers/uploads/" + id, { tries: 1, waitMs: 30000 });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async function uploadOne(file, onProgress, restarts) {
+    var key = fileKey(file);
+    if (uploadIds[key]) return uploadIds[key];
+    var created = await api("/v1/customers/uploads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: file.name, size: file.size, lastModified: file.lastModified || 0 }),
+      tries: 4,
+      waitMs: 60000
+    });
+    var info = await created.json().catch(function () { return {}; });
+    if (!created.ok) throw fatalError(info.detail || ("Không gửi được " + file.name + "."));
+    var id = info.uploadId;
+    var received = info.received || 0;
+    var failures = 0;
+    onProgress(received);
+    while (received < file.size) {
+      var start = received;
+      var end = Math.min(file.size, start + UPLOAD_CHUNK);
+      try {
+        var sent = await sendChunk(
+          apiUrl("/v1/customers/uploads/" + id + "?offset=" + start),
+          file.slice(start, end),
+          function (loaded) { onProgress(start + loaded); }
+        );
+        if (sent.status === 200) {
+          received = sent.body.received;
+          failures = 0;
+          onProgress(received);
+          continue;
+        }
+        if (sent.status === 409 && typeof sent.body.received === "number") {
+          received = sent.body.received;
+          if (sent.body.busy) await sleep(1500);
+          continue;
+        }
+        if (sent.status === 404 && (restarts || 0) < 2) {
+          return uploadOne(file, onProgress, (restarts || 0) + 1);
+        }
+        if (sent.status === 401) throw fatalError("Trang chưa kết nối được máy chủ. Tải lại trang.");
+        if (sent.status >= 400 && sent.status < 500) throw fatalError(sent.body.detail || ("Không gửi được " + file.name + "."));
+        throw new Error("busy");
+      } catch (error) {
+        if (error && error.fatal) throw error;
+        failures += 1;
+        if (failures > 40) throw error;
+        await sleep(Math.min(30000, 1000 * Math.pow(2, Math.min(failures, 5))));
+        var known = await uploadStatus(id);
+        if (known && typeof known.received === "number") received = known.received;
+      }
+    }
+    uploadIds[key] = id;
+    return id;
+  }
+
+  async function uploadFiles(files, noteId, label) {
+    var total = files.reduce(function (sum, file) { return sum + file.size; }, 0);
+    var done = 0;
+    var shownAt = 0;
+    var ids = [];
+    for (var index = 0; index < files.length; index += 1) {
+      var file = files[index];
+      var base = done;
+      var id = await uploadOne(file, function (sent) {
+        var now = Date.now();
+        if (now - shownAt < 250 && base + sent < total) return;
+        shownAt = now;
+        setNote(noteId, label + " " + mb(base + sent) + "/" + mb(total) + " MB — rớt mạng thì tự gửi tiếp, không gửi lại từ đầu.");
+      });
+      done += file.size;
+      ids.push(id);
+    }
+    return ids;
+  }
+
+  function rememberJob(job, kind, rows) {
+    try { localStorage.setItem("khach.job", JSON.stringify({ id: job.id, kind: kind, rows: rows || 0 })); } catch (error) { return; }
+  }
+
+  function forgetJob(id) {
+    try {
+      var saved = JSON.parse(localStorage.getItem("khach.job") || "null");
+      if (!id || (saved && saved.id === id)) localStorage.removeItem("khach.job");
+    } catch (error) {
+      return;
+    }
+  }
+
+  async function pollJob(job, onUpdate) {
+    var misses = 0;
+    while (true) {
+      if (job.status === "done") return job;
+      if (job.status === "error" || job.status === "interrupted") {
+        throw fatalError(job.error || "Máy chủ chưa xử lý xong, hãy bấm lại.");
+      }
+      if (onUpdate) onUpdate(job);
+      await sleep(job.status === "waiting" ? 2000 : 1000);
+      try {
+        var response = await api("/v1/customers/jobs/" + job.id, { tries: 1, waitMs: 30000 });
+        if (response.status === 404) throw fatalError("Không thấy việc này trên máy chủ, hãy chạy lại.");
+        if (!response.ok) throw new Error("busy");
+        job = (await response.json()).job;
+        misses = 0;
+      } catch (error) {
+        if (error && error.fatal) throw error;
+        misses += 1;
+        if (misses > 600) throw error;
+        await sleep(2000);
+      }
+    }
+  }
+
+  function importProgress(job, expected) {
+    var progress = job.progress || {};
+    if (job.status === "waiting") return "Đang chờ lần nạp khác ghi xong rồi nạp tiếp…";
+    var files = (progress.fileCount || 1) > 1 ? " · file " + ((progress.fileIndex || 0) + 1) + "/" + progress.fileCount : "";
+    if (!progress.incoming) return "Máy chủ đang đọc file" + files + "…";
+    var text = "Đang nạp" + files + ": đã đọc " + vnNum(progress.incoming) + (expected ? "/" + vnNum(expected) : "") +
+      " dòng — thêm " + vnNum(progress.created || 0) + ", bổ sung " + vnNum(progress.updated || 0) +
+      ", giữ nguyên " + vnNum(progress.unchanged || 0) + ".";
+    if (expected) text = Math.min(99, Math.floor(progress.incoming * 100 / expected)) + "% · " + text;
+    return text + " Có thể tắt trang, máy chủ vẫn nạp tiếp.";
+  }
+
+  function lookupProgress(job) {
+    var progress = job.progress || {};
+    if (progress.phase === "match") {
+      return "Đang đối chiếu " + vnNum(progress.matched || 0) + "/" + vnNum(progress.total || 0) + " số với kho…";
+    }
+    if (progress.phase === "read") {
+      return "Đang đọc file danh sách: " + vnNum(progress.rows || 0) + " dòng, " + vnNum(progress.phones || 0) + " số…";
+    }
+    return "Đang tra cứu trong kho…";
+  }
+
+  function pendingRows() {
+    var groups = preview && preview.groups ? preview.groups : [];
+    return groups.reduce(function (sum, group) { return sum + (group.rowCount || 0); }, 0);
   }
 
   async function previewPending() {
     if (!pendingFiles.length) return;
     var previous = document.getElementById("mapBox").hidden ? null : currentMapping();
-    setNote("uploadNote", "Đang đọc " + pendingFiles.length + " file…");
+    var files = pendingFiles.slice();
+    var turn = ++previewTurn;
     try {
+      var ids = await uploadFiles(files, "uploadNote", "Đang gửi " + files.length + " file:");
+      if (turn !== previewTurn) return;
+      setNote("uploadNote", "Đã gửi xong. Đang đọc " + files.length + " file…");
       var response = await api("/v1/customers/preview", {
         method: "POST",
-        makeBody: function () { return buildPendingForm(); },
-        onProgress: function (loaded, total) {
-          setNote("uploadNote", progressLabel("Đang gửi " + pendingFiles.length + " file…", loaded, total));
-        },
-        onRetry: function (index, tries) {
-          setNote("uploadNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
-        }
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uploads: ids }),
+        tries: 3,
+        waitMs: 30 * 60 * 1000
       });
       var body = await response.json().catch(function () { return {}; });
+      if (turn !== previewTurn) return;
       if (!response.ok) {
         setNote("uploadNote", body.detail || "Không đọc được file.", "warn");
         return;
       }
       var extra = body.fileErrors && body.fileErrors.length ? " Một số file lỗi vẫn bị bỏ qua." : "";
-      setNote("uploadNote", "Đã đọc " + body.files.length + " file. Chọn thêm file là cộng vào lần này, không giới hạn số file và dung lượng." + extra);
+      setNote("uploadNote", "Đã đọc " + body.files.length + " file. File đã gửi lên máy chủ, bấm nạp không phải gửi lại. Chọn thêm file là cộng vào lần này, không giới hạn số file và dung lượng." + extra);
       renderMap(body);
       if (previous) applyChosenMapping(previous);
     } catch (error) {
-      setNote("uploadNote", networkMessage(error), "warn");
+      setNote("uploadNote", error && error.fatal ? error.message : networkMessage(error), "warn");
     }
+  }
+
+  function showImportResult(body) {
+    var stats = body.stats || {};
+    document.getElementById("importStats").innerHTML =
+      stat(stats.incoming || 0, "Dòng đã đọc") +
+      stat(stats.created || 0, "Khách mới") +
+      stat(stats.updated || 0, "Đã bổ sung") +
+      stat(stats.unchanged || 0, "Giữ nguyên") +
+      stat(stats.absorbed || 0, "Khách bị gộp") +
+      stat(stats.skipped || 0, "Dòng trống");
+    padSpaces(document.getElementById("importStats"));
+    var fileNote = (body.files || []).length + " file";
+    if (body.fileErrors && body.fileErrors.length) fileNote += ", một số file lỗi bị bỏ qua";
+    var emptyFiles = body.emptyFiles || [];
+    var unmapped = (body.files || []).reduce(function (sum, item) { return sum + (item.unmapped || 0); }, 0);
+    var phonesOnFile = (body.files || []).reduce(function (sum, item) { return sum + (item.phonesOnFile || 0); }, 0);
+    var applied = (stats.created || 0) + (stats.updated || 0) + (stats.unchanged || 0);
+    var emptyNote = "";
+    if (emptyFiles.length) {
+      emptyNote = " " + emptyFiles.length + " file không lấy được dòng khách — hãy nạp lại các file đó.";
+    }
+    if (unmapped) {
+      emptyNote += " " + unmapped + " dòng trong file không lấy được tên/SĐT/địa chỉ — kiểm tra cột rồi nạp lại.";
+    }
+    if (phonesOnFile && applied < phonesOnFile) {
+      emptyNote += " Chưa ghi đủ " + applied + "/" + phonesOnFile + " số điện thoại có trong file mới.";
+    }
+    setNote(
+      "importNote",
+      "Đã đọc " + (stats.incoming || 0) + " dòng có số điện thoại từ " + fileNote +
+        ". Thêm " + (stats.created || 0) + " khách mới, bổ sung " + (stats.updated || 0) +
+        ", giữ nguyên " + (stats.unchanged || 0) +
+        ". Số điện thoại trên dòng là chuẩn lọc trùng — một số một hàng. Mọi số trong file mới đều được ghi. Không có số điện thoại thì bỏ qua, không lưu." +
+        emptyNote,
+      emptyFiles.length || (body.fileErrors && body.fileErrors.length) || (phonesOnFile && applied < phonesOnFile) ? "warn" : "ok"
+    );
+  }
+
+  async function finishImport(job, expected) {
+    rememberJob(job, "import", expected);
+    var done = await pollJob(job, function (current) { setNote("mapNote", importProgress(current, expected)); });
+    forgetJob(done.id);
+    showImportResult(done.result || {});
+    setNote("mapNote", "Xong. Lần nạp sau sẽ hỏi lại cột.", "ok");
+    document.getElementById("mapBox").hidden = true;
+    clearPending();
+    await loadCustomers();
+    await loadSessions();
   }
 
   async function importNow() {
@@ -918,64 +1155,26 @@
       );
     }
     document.getElementById("confirm").disabled = true;
-    setNote("mapNote", "Đang nạp " + pendingFiles.length + " file và gộp khách trùng…");
+    var files = pendingFiles.slice();
+    var expected = pendingRows();
     try {
+      var ids = await uploadFiles(files, "mapNote", "Đang gửi " + files.length + " file:");
+      setNote("mapNote", "Đang nạp " + files.length + " file và gộp khách trùng…");
       var response = await api("/v1/customers/import", {
         method: "POST",
-        makeBody: function () { return buildPendingForm({ mapping: JSON.stringify(mapping) }); },
-        onProgress: function (loaded, total) {
-          setNote("mapNote", progressLabel("Đang gửi " + pendingFiles.length + " file…", loaded, total));
-        },
-        onRetry: function (index, tries) {
-          setNote("mapNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
-        }
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uploads: ids, mapping: mapping, requestId: newRequestId(), expectedRows: expected }),
+        tries: 4,
+        waitMs: 120000
       });
       var body = await response.json().catch(function () { return {}; });
-      if (!response.ok) {
+      if (!response.ok || !body.job) {
         setNote("mapNote", body.detail || "Không nạp được.", "warn");
         return;
       }
-      var stats = body.stats || {};
-      document.getElementById("importStats").innerHTML =
-        stat(stats.incoming || 0, "Dòng đã đọc") +
-        stat(stats.created || 0, "Khách mới") +
-        stat(stats.updated || 0, "Đã bổ sung") +
-        stat(stats.unchanged || 0, "Giữ nguyên") +
-        stat(stats.absorbed || 0, "Khách bị gộp") +
-        stat(stats.skipped || 0, "Dòng trống");
-      padSpaces(document.getElementById("importStats"));
-      var fileNote = (body.files || []).length + " file";
-      if (body.fileErrors && body.fileErrors.length) fileNote += ", một số file lỗi bị bỏ qua";
-      var emptyFiles = body.emptyFiles || [];
-      var unmapped = (body.files || []).reduce(function (sum, item) { return sum + (item.unmapped || 0); }, 0);
-      var phonesOnFile = (body.files || []).reduce(function (sum, item) { return sum + (item.phonesOnFile || 0); }, 0);
-      var applied = (stats.created || 0) + (stats.updated || 0) + (stats.unchanged || 0);
-      var emptyNote = "";
-      if (emptyFiles.length) {
-        emptyNote = " " + emptyFiles.length + " file không lấy được dòng khách — hãy nạp lại các file đó.";
-      }
-      if (unmapped) {
-        emptyNote += " " + unmapped + " dòng trong file không lấy được tên/SĐT/địa chỉ — kiểm tra cột rồi nạp lại.";
-      }
-      if (phonesOnFile && applied < phonesOnFile) {
-        emptyNote += " Chưa ghi đủ " + applied + "/" + phonesOnFile + " số điện thoại có trong file mới.";
-      }
-      setNote(
-        "importNote",
-        "Đã đọc " + (stats.incoming || 0) + " dòng có số điện thoại từ " + fileNote +
-          ". Thêm " + (stats.created || 0) + " khách mới, bổ sung " + (stats.updated || 0) +
-          ", giữ nguyên " + (stats.unchanged || 0) +
-          ". Số điện thoại trên dòng là chuẩn lọc trùng — một số một hàng. Mọi số trong file mới đều được ghi. Không có số điện thoại thì bỏ qua, không lưu." +
-          emptyNote,
-        emptyFiles.length || (body.fileErrors && body.fileErrors.length) || (phonesOnFile && applied < phonesOnFile) ? "warn" : "ok"
-      );
-      setNote("mapNote", "Xong. Lần nạp sau sẽ hỏi lại cột.", "ok");
-      document.getElementById("mapBox").hidden = true;
-      clearPending();
-      await loadCustomers();
-      await loadSessions();
+      await finishImport(body.job, expected);
     } catch (error) {
-      setNote("mapNote", networkMessage(error), "warn");
+      setNote("mapNote", error && error.fatal ? error.message : networkMessage(error), "warn");
     } finally {
       document.getElementById("confirm").disabled = false;
     }
@@ -1127,13 +1326,6 @@
     }
   }
 
-  function lookupForm() {
-    var data = new FormData();
-    data.append("text", document.getElementById("lookupPaste").value || "");
-    lookupFiles.forEach(function (file) { data.append("files", file, file.name); });
-    return data;
-  }
-
   function renderLookup(body) {
     lastLookup = body;
     var stats = body.stats || {};
@@ -1151,6 +1343,7 @@
       return;
     }
     var shown = items.slice(0, 2000);
+    var queried = stats.queried || items.length;
     var html = "<table class='sheet'><colgroup><col class='col-query'><col class='col-flag'><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'><col class='col-id'><col class='col-id'></colgroup><thead><tr><th>Số tra cứu</th><th>Kho</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
     shown.forEach(function (item) {
       var customer = item.customer || {};
@@ -1160,8 +1353,11 @@
     document.getElementById("lookupPeople").innerHTML = html;
     padSpaces(document.getElementById("lookupPeople"));
     document.getElementById("lookupExport").hidden = false;
-    var note = "Đã đối chiếu " + (stats.queried || 0) + " số với kho.";
-    if (items.length > shown.length) note += " Đang hiện " + shown.length + "/" + items.length + ". Tải Excel để xem hết.";
+    var note = "Đã đối chiếu " + vnNum(queried) + " số với kho.";
+    var totalRows = Math.max(items.length, shown.length + (stats.hidden || 0));
+    if (totalRows > shown.length) {
+      note += " Đang hiện " + vnNum(shown.length) + "/" + vnNum(totalRows) + " dòng. Tải Excel để xem hết — không phải gửi lại file.";
+    }
     if (stats.truncated) note += " Danh sách quá dài, chỉ lấy phần đầu.";
     if (body.fileErrors && body.fileErrors.length) note += " File lỗi: " + body.fileErrors.join(" ");
     setNote("lookupNote", note, (body.fileErrors && body.fileErrors.length) || stats.missing ? "warn" : "ok");
@@ -1202,6 +1398,15 @@
     return JSON.stringify({ text: document.getElementById("lookupPaste").value || "" });
   }
 
+  async function finishLookup(job) {
+    rememberJob(job, "lookup", 0);
+    var done = await pollJob(job, function (current) { setNote("lookupNote", lookupProgress(current)); });
+    forgetJob(done.id);
+    var result = done.result || {};
+    result.jobId = done.id;
+    renderLookup(result);
+  }
+
   async function runLookup() {
     var text = (document.getElementById("lookupPaste").value || "").trim();
     if (!text && !lookupFiles.length) {
@@ -1211,33 +1416,27 @@
     document.getElementById("lookupGo").disabled = true;
     setNote("lookupNote", "Đang tra cứu trong kho…");
     try {
-      var response = lookupFiles.length
-        ? await api("/v1/customers/lookup", {
-          method: "POST",
-          makeBody: lookupForm,
-          tries: 3,
-          onRetry: function (index, tries) {
-            setNote("lookupNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
-          }
-        })
-        : await api("/v1/customers/lookup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: lookupJsonBody(),
-          tries: 4,
-          waitMs: 60 * 1000,
-          onRetry: function (index, tries) {
-            setNote("lookupNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
-          }
-        });
+      var files = lookupFiles.slice();
+      var ids = files.length ? await uploadFiles(files, "lookupNote", "Đang gửi file danh sách:") : [];
+      setNote("lookupNote", "Đang tra cứu trong kho…");
+      var response = await api("/v1/customers/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text, uploads: ids, requestId: newRequestId() }),
+        tries: 4,
+        waitMs: 120000,
+        onRetry: function (index, tries) {
+          setNote("lookupNote", "Máy chủ chưa nhận, đang gửi lại lần " + index + "/" + tries + "…", "warn");
+        }
+      });
       var body = await response.json().catch(function () { return {}; });
-      if (!response.ok) {
+      if (!response.ok || !body.job) {
         setNote("lookupNote", body.detail || "Không tra cứu được.", "warn");
         return;
       }
-      renderLookup(body);
+      await finishLookup(body.job);
     } catch (error) {
-      setNote("lookupNote", lookupError(error), "warn");
+      setNote("lookupNote", error && error.fatal ? error.message : lookupError(error), "warn");
     } finally {
       document.getElementById("lookupGo").disabled = false;
     }
@@ -1248,14 +1447,10 @@
       setNote("lookupNote", "Hãy tra cứu trước khi tải kết quả.", "warn");
       return;
     }
+    setNote("lookupNote", "Đang tạo file Excel kết quả…");
     try {
-      var response = lookupFiles.length
-        ? await api("/v1/customers/lookup/export", {
-          method: "POST",
-          makeBody: lookupForm,
-          tries: 3,
-          waitMs: 3 * 60 * 60 * 1000
-        })
+      var response = lastLookup.jobId
+        ? await api("/v1/customers/lookup/jobs/" + lastLookup.jobId + "/export", { tries: 2, waitMs: 3 * 60 * 60 * 1000 })
         : await api("/v1/customers/lookup/export", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1264,7 +1459,7 @@
           waitMs: 3 * 60 * 60 * 1000
         });
       if (!response.ok) {
-        setNote("lookupNote", "Không tải được kết quả Excel.", "warn");
+        setNote("lookupNote", "Không tải được kết quả Excel. Hãy tra cứu lại rồi tải.", "warn");
         return;
       }
       var blob = response.blob ? await response.blob() : new Blob([await response.arrayBuffer()]);
@@ -1276,8 +1471,36 @@
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      setNote("lookupNote", "Đã tải file Excel kết quả tra cứu.", "ok");
     } catch (error) {
       setNote("lookupNote", "Không tải được kết quả Excel.", "warn");
+    }
+  }
+
+  async function resumeJob() {
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem("khach.job") || "null"); } catch (error) { saved = null; }
+    if (!saved || !saved.id) return;
+    try {
+      var response = await api("/v1/customers/jobs/" + saved.id, { tries: 2, waitMs: 30000 });
+      if (!response.ok) {
+        forgetJob(saved.id);
+        return;
+      }
+      var job = (await response.json()).job;
+      if (saved.kind === "import") {
+        setNote("importNote", "Lần nạp trước vẫn chạy trên máy chủ, đang theo dõi tiếp…");
+        var done = await pollJob(job, function (current) { setNote("importNote", importProgress(current, saved.rows || 0)); });
+        forgetJob(done.id);
+        showImportResult(done.result || {});
+        await loadCustomers();
+        await loadSessions();
+      } else if (saved.kind === "lookup") {
+        await finishLookup(job);
+      }
+    } catch (error) {
+      forgetJob(saved.id);
+      if (saved.kind === "import") setNote("importNote", error && error.fatal ? error.message : networkMessage(error), "warn");
     }
   }
 
@@ -1355,6 +1578,7 @@
   watchSpaces();
   loadCustomers();
   loadSessions();
+  resumeJob();
 </script>
 </body>
 </html>
