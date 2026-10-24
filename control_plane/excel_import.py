@@ -16,11 +16,7 @@ from typing import Any, Iterable, Iterator
 from control_plane.column_detect import (
     assign_fields,
     complete_core_mapping,
-    looks_like_address,
     looks_like_label_row,
-    looks_like_name,
-    looks_like_vn_phone,
-    mapping_spec_chosen,
     suggest_mapping as detect_mapping,
 )
 from control_plane.customers import (
@@ -672,28 +668,42 @@ def _mapping_hits_headers(mapping: dict[str, Any], headers: list[str]) -> bool:
     return any(_spec_hits_header(mapping.get(field), headers) for field in FIELDS)
 
 
-def _core_mapping_fits(
-    mapping: dict[str, Any],
+def _adapt_spec_to_headers(
+    spec: dict[str, Any] | None,
     headers: list[str],
-    column_values: list[list[str]],
-) -> bool:
-    scorers = {"phone": looks_like_vn_phone, "name": looks_like_name, "address": looks_like_address}
-    for field, scorer in scorers.items():
-        index = resolve_index(headers, mapping.get(field), allow_index=True)
-        if index is None or index >= len(column_values):
-            continue
-        cells = [collapse(item) for item in column_values[index] if collapse(item)]
-        if len(cells) < 2:
-            continue
-        if _ratio_hits(cells, scorer) < 0.25:
-            return False
-    return True
+    line_field: bool,
+) -> dict[str, Any] | None:
+    """Giữ cột khi trùng tên tiêu đề; bỏ số cột của file khác."""
+    if not spec:
+        return None
+    if line_field:
+        columns: list[dict[str, Any]] = []
+        for item in _address_specs(spec):
+            index = resolve_index(headers, item, allow_index=False)
+            if index is None:
+                continue
+            columns.append(
+                {
+                    "index": index,
+                    "header": collapse(headers[index]) if 0 <= index < len(headers) else "",
+                }
+            )
+        if not columns:
+            return None
+        return {"index": columns[0]["index"], "header": columns[0]["header"], "columns": columns}
+    index = resolve_index(headers, spec, allow_index=False)
+    if index is None:
+        return None
+    return {"index": index, "header": collapse(headers[index]) if 0 <= index < len(headers) else ""}
 
 
-def _ratio_hits(cells: list[str], scorer: Any) -> float:
-    if not cells:
-        return 0.0
-    return sum(1 for item in cells if scorer(item)) / len(cells)
+def _adapt_mapping_to_headers(mapping: dict[str, Any], headers: list[str]) -> dict[str, Any]:
+    adapted: dict[str, Any] = {}
+    for field in FIELDS:
+        spec = _adapt_spec_to_headers(mapping.get(field), headers, field in LINE_FIELDS)
+        if spec is not None:
+            adapted[field] = spec
+    return adapted
 
 
 def _mapping_from_assign(
@@ -732,8 +742,8 @@ def mapping_for_file(
         return mapping
     headers, body, _headerless = _split_header_row(rows)
     values = column_values_from_rows(body[:DETECT_ROWS], len(headers))
-    if _mapping_hits_headers(mapping, headers) and _core_mapping_fits(mapping, headers, values):
-        return complete_core_mapping(mapping, headers, values)
+    if _mapping_hits_headers(mapping, headers):
+        return complete_core_mapping(_adapt_mapping_to_headers(mapping, headers), headers, values)
     return _mapping_from_assign(headers, values)
 
 
