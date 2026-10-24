@@ -71,6 +71,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("padSpaces", home.text)
         self.assertIn("applyChosenMapping", home.text)
         self.assertIn("Máy chủ sẽ tự lấy cột tên người", home.text)
+        self.assertIn("file không lấy được dòng khách", home.text)
         self.assertNotIn("font-weight: 650", home.text)
         self.assertIn("không dùng video", home.text)
         self.assertIn("không giới hạn số file", home.text)
@@ -757,6 +758,46 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(item["name"], "Nguyễn Lan")
         self.assertEqual(item["phone"], "0901222333")
         self.assertEqual(item["address"], "Huế")
+
+    def test_import_second_file_with_different_layout_still_keeps_customers(self) -> None:
+        imported = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={
+                "mapping": json.dumps(
+                    {
+                        "name": {"index": 0, "header": "Tên khách"},
+                        "phone": {"index": 1, "header": "SĐT"},
+                        "address": {"index": 2, "header": "Địa chỉ"},
+                    }
+                )
+            },
+            files=[
+                self._file(
+                    "file-a.xlsx",
+                    ["Tên khách", "SĐT", "Địa chỉ"],
+                    [["Lan", "0901222333", "Huế"]],
+                ),
+                self._file(
+                    "file-b.xlsx",
+                    ["Số điện thoại", "Họ tên", "Địa chỉ giao"],
+                    [["0901444555", "Trần Minh", "12 Lê Lợi, Quận 1, TP.HCM"]],
+                ),
+                self._file(
+                    "file-c.xlsx",
+                    ["Nguyễn Hoa", "0901999888", "lô 41 đường số 2, Sơn Trà, Đà Nẵng"],
+                    [],
+                ),
+            ],
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+        self.assertEqual(imported.json()["stats"]["created"], 3)
+        self.assertEqual(imported.json()["emptyFiles"], [])
+        items = {item["phone"]: item for item in self.client.get("/v1/customers", headers=self.headers).json()["items"]}
+        self.assertEqual(items["0901222333"]["name"], "Lan")
+        self.assertEqual(items["0901444555"]["name"], "Trần Minh")
+        self.assertIn("Lê Lợi", items["0901444555"]["address"])
+        self.assertEqual(items["0901999888"]["name"], "Nguyễn Hoa")
 
     def test_import_receiver_headers_keeps_name_phone_address(self) -> None:
         imported = self.client.post(

@@ -14,8 +14,12 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from control_plane.column_detect import (
+    assign_fields,
     complete_core_mapping,
+    looks_like_address,
     looks_like_label_row,
+    looks_like_name,
+    looks_like_vn_phone,
     mapping_spec_chosen,
     suggest_mapping as detect_mapping,
 )
@@ -655,24 +659,90 @@ def _titles_from_row(row: list[str]) -> list[str]:
     return [collapse(cell) or f"Cột {column_letter(index)}" for index, cell in enumerate(row)]
 
 
-def fill_missing_core_mapping(
+def _spec_hits_header(spec: dict[str, Any] | None, headers: list[str]) -> bool:
+    if resolve_index(headers, spec, allow_index=False) is not None:
+        return True
+    for item in _address_specs(spec):
+        if resolve_index(headers, item, allow_index=False) is not None:
+            return True
+    return False
+
+
+def _mapping_hits_headers(mapping: dict[str, Any], headers: list[str]) -> bool:
+    return any(_spec_hits_header(mapping.get(field), headers) for field in FIELDS)
+
+
+def _core_mapping_fits(
+    mapping: dict[str, Any],
+    headers: list[str],
+    column_values: list[list[str]],
+) -> bool:
+    scorers = {"phone": looks_like_vn_phone, "name": looks_like_name, "address": looks_like_address}
+    for field, scorer in scorers.items():
+        index = resolve_index(headers, mapping.get(field), allow_index=True)
+        if index is None or index >= len(column_values):
+            continue
+        cells = [collapse(item) for item in column_values[index] if collapse(item)]
+        if len(cells) < 2:
+            continue
+        if _ratio_hits(cells, scorer) < 0.25:
+            return False
+    return True
+
+
+def _ratio_hits(cells: list[str], scorer: Any) -> float:
+    if not cells:
+        return 0.0
+    return sum(1 for item in cells if scorer(item)) / len(cells)
+
+
+def _mapping_from_assign(
+    headers: list[str],
+    column_values: list[list[str]],
+) -> dict[str, Any]:
+    suggested, details = assign_fields(headers, column_values)
+    detected: dict[str, Any] = {}
+    for field in FIELDS:
+        index = suggested.get(field)
+        if index is None:
+            continue
+        spec: dict[str, Any] = {"index": index, "header": collapse(headers[index]) if 0 <= index < len(headers) else ""}
+        if field in LINE_FIELDS:
+            indexes = (details.get(field) or {}).get("indexes") or [index]
+            spec["columns"] = [
+                {
+                    "index": item,
+                    "header": collapse(headers[item]) if 0 <= item < len(headers) else "",
+                }
+                for item in indexes
+            ]
+        detected[field] = spec
+    return detected
+
+
+def mapping_for_file(
     mapping: dict[str, Any],
     filename: str,
     data: TableSource,
 ) -> dict[str, Any]:
-    """Khi lần chọn cột thiếu tên / SĐT / địa chỉ, đọc mẫu file rồi tự điền."""
-    if all(mapping_spec_chosen(mapping.get(field)) for field in ("name", "phone", "address")):
-        return mapping
+    """Mỗi file tự khớp cột. File khác tiêu đề không lấy nhầm vị trí file đầu."""
     stored, _total = _read_table(filename, data, max_store=PREVIEW_STORE)
     rows = _trim_table(stored)
     if not rows:
         return mapping
     headers, body, _headerless = _split_header_row(rows)
-    return complete_core_mapping(
-        mapping,
-        headers,
-        column_values_from_rows(body[:DETECT_ROWS], len(headers)),
-    )
+    values = column_values_from_rows(body[:DETECT_ROWS], len(headers))
+    if _mapping_hits_headers(mapping, headers) and _core_mapping_fits(mapping, headers, values):
+        return complete_core_mapping(mapping, headers, values)
+    return _mapping_from_assign(headers, values)
+
+
+def fill_missing_core_mapping(
+    mapping: dict[str, Any],
+    filename: str,
+    data: TableSource,
+) -> dict[str, Any]:
+    return mapping_for_file(mapping, filename, data)
 
 
 def _split_header_row(rows: list[list[str]]) -> tuple[list[str], list[list[str]], bool]:
@@ -869,7 +939,7 @@ def iter_mapped_file(
             finally:
                 raw.close()
 
-        return first_width, _mapped_from_iter(rows(), mapping, allow_index=width == first_width)
+        return first_width, _mapped_from_iter(rows(), mapping, allow_index=True)
     except Exception:
         raw.close()
         raise
@@ -884,7 +954,9 @@ def rows_from_files(
     first_width: int | None = None
     for filename, data in files:
         try:
-            first_width, mapped = iter_mapped_file(filename, data, mapping, first_width)
+            first_width, mapped = iter_mapped_file(
+                filename, data, mapping_for_file(mapping, filename, data), first_width
+            )
             rows = list(mapped)
         except ValueError as exc:
             reports.append({"name": filename, "rows": 0, "error": str(exc)})

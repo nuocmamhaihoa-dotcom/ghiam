@@ -666,12 +666,18 @@
         stat(stats.skipped || 0, "Dòng trống");
       var fileNote = (body.files || []).length + " file";
       if (body.fileErrors && body.fileErrors.length) fileNote += ", một số file lỗi bị bỏ qua";
+      var emptyFiles = body.emptyFiles || [];
+      var emptyNote = "";
+      if (emptyFiles.length) {
+        emptyNote = " " + emptyFiles.length + " file không lấy được dòng khách — hãy nạp lại các file đó.";
+      }
       setNote(
         "importNote",
         "Đã đọc " + (stats.incoming || 0) + " dòng từ " + fileNote +
           ". Thêm " + (stats.created || 0) + " khách mới, bổ sung " + (stats.updated || 0) +
-          ". Chỉ gộp khi trùng số điện thoại. Không có số hoặc khác số thì vẫn thêm khách mới.",
-        "ok"
+          ". Chỉ gộp khi trùng số điện thoại. Không có số hoặc khác số thì vẫn thêm khách mới." +
+          emptyNote,
+        emptyFiles.length || (body.fileErrors && body.fileErrors.length) ? "warn" : "ok"
       );
       setNote("mapNote", "Xong. Lần nạp sau sẽ hỏi lại cột.", "ok");
       document.getElementById("mapBox").hidden = true;

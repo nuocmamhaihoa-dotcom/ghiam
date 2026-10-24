@@ -37,7 +37,7 @@ from control_plane.excel_import import (
     FIELD_LABELS,
     IMPORT_BATCH,
     header_key,
-    fill_missing_core_mapping,
+    mapping_for_file,
     iter_mapped_file,
     mapping_from_form,
     merge_preview_columns,
@@ -364,7 +364,7 @@ def _import_uploaded(
     for name, payload in uploaded:
         mapped: Any = None
         try:
-            file_mapping = fill_missing_core_mapping(parsed, name, payload)
+            file_mapping = mapping_for_file(parsed, name, payload)
             first_width, mapped = iter_mapped_file(name, payload, file_mapping, first_width)
             part, preview = ingest_customers(
                 settings.db_path,
@@ -396,15 +396,29 @@ def _import_uploaded(
             detail="Không đọc được dòng khách nào. " + " ".join(problems),
         )
     stats["total"] = db.customer_count(settings.db_path)
+    empty_files = [item["name"] for item in file_reports if not item.get("rows") and not item.get("error")]
     summary = (
         f"Nạp Excel: thêm {stats['created']}, bổ sung {stats['updated']}, "
         f"giữ {stats['unchanged']}, gộp {stats['absorbed']}."
     )
-    _remember(summary, json.dumps({"files": file_reports, "stats": stats}, ensure_ascii=False))
+    _remember(
+        summary,
+        json.dumps(
+            {
+                "stats": stats,
+                "fileCount": len(file_reports),
+                "okFiles": sum(1 for item in file_reports if item.get("rows")),
+                "emptyFiles": empty_files,
+                "files": file_reports,
+            },
+            ensure_ascii=False,
+        ),
+    )
     return {
         "stats": stats,
         "files": file_reports,
         "fileErrors": problems,
+        "emptyFiles": empty_files,
         "items": changed[:200],
         "total": stats["total"],
     }

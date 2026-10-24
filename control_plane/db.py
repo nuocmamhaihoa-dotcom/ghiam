@@ -247,7 +247,7 @@ def record_action(
             INSERT INTO operator_actions(at, actor, source, kind, summary, detail)
             VALUES(?,?,?,?,?,?)
             """,
-            (at, actor[:80], source[:40], kind[:40], summary[:500], (detail[:2000] if detail else None)),
+            (at, actor[:80], source[:40], kind[:40], summary[:500], (detail[:50000] if detail else None)),
         )
         conn.execute(
             """
